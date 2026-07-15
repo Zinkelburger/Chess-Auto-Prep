@@ -43,41 +43,54 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
     text: '$kDefaultGenerationEvalDepth',
   );
   late final TextEditingController _engineThreadsCtrl;
-  final TextEditingController _evalGuardCtrl =
-      TextEditingController(text: '30');
+  final TextEditingController _evalGuardCtrl = TextEditingController(
+    text: '30',
+  );
   late final TextEditingController _minEvalCtrl;
   late final TextEditingController _maxEvalCtrl;
-  final TextEditingController _maiaEloCtrl =
-      TextEditingController(text: '2200');
+  final TextEditingController _maiaEloCtrl = TextEditingController(
+    text: '2200',
+  );
 
   final TextEditingController _multipvCtrl = TextEditingController(text: '4');
-  final TextEditingController _oppMaxChildrenCtrl =
-      TextEditingController(text: '4');
-  final TextEditingController _oppMassTargetCtrl =
-      TextEditingController(text: '0.80');
-  final TextEditingController _leafConfidenceCtrl =
-      TextEditingController(text: '1.0');
-  final TextEditingController _ourAltDiscountCtrl =
-      TextEditingController(text: '0.25');
-  final TextEditingController _fastAltGapCtrl =
-      TextEditingController(text: '30');
-  final TextEditingController _maiaPriorGamesCtrl =
-      TextEditingController(text: '30');
-  final TextEditingController _coverMinProbCtrl =
-      TextEditingController(text: '0.05');
-  final TextEditingController _verifyDepthCtrl =
-      TextEditingController(text: '0');
+  final TextEditingController _oppMaxChildrenCtrl = TextEditingController(
+    text: '4',
+  );
+  final TextEditingController _oppMassTargetCtrl = TextEditingController(
+    text: '0.80',
+  );
+  final TextEditingController _leafConfidenceCtrl = TextEditingController(
+    text: '1.0',
+  );
+  final TextEditingController _ourAltDiscountCtrl = TextEditingController(
+    text: '0.25',
+  );
+  final TextEditingController _fastAltGapCtrl = TextEditingController(
+    text: '30',
+  );
+  final TextEditingController _maiaPriorGamesCtrl = TextEditingController(
+    text: '30',
+  );
+  final TextEditingController _coverMinProbCtrl = TextEditingController(
+    text: '0.05',
+  );
+  final TextEditingController _verifyDepthCtrl = TextEditingController(
+    text: '0',
+  );
   final TextEditingController _setupMovesCtrl = TextEditingController();
-  final TextEditingController _setupToleranceCtrl =
-      TextEditingController(text: '30');
+  final TextEditingController _setupToleranceCtrl = TextEditingController(
+    text: '30',
+  );
   SearchAlgorithm _searchAlgorithm = SearchAlgorithm.fast;
   bool _verifyFinal = true;
 
   final List<String> _pgnFilePaths = [];
-  final TextEditingController _dbMinGamesCtrl =
-      TextEditingController(text: '5');
-  final TextEditingController _dbMinProbCtrl =
-      TextEditingController(text: '0.05');
+  final TextEditingController _dbMinGamesCtrl = TextEditingController(
+    text: '5',
+  );
+  final TextEditingController _dbMinProbCtrl = TextEditingController(
+    text: '0.05',
+  );
   final TextEditingController _minEloCtrl = TextEditingController(text: '0');
 
   LichessDatabase? _lichessDbOverride;
@@ -88,8 +101,9 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
   bool _annotateMoveProbabilities = true;
   bool _annotateMaiaOnly = true;
 
-  final TextEditingController _lichessMinGamesCtrl =
-      TextEditingController(text: '10');
+  final TextEditingController _lichessMinGamesCtrl = TextEditingController(
+    text: '10',
+  );
   final Set<String> _lichessSpeeds = {'blitz', 'rapid', 'classical'};
   final Set<String> _lichessRatings = {'2000', '2200', '2500'};
 
@@ -166,8 +180,9 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
       ..clear()
       ..addAll(config.pgnFilePaths);
     if (config.useLichessDb) {
-      _lichessDbOverride =
-          config.useMasters ? LichessDatabase.masters : LichessDatabase.lichess;
+      _lichessDbOverride = config.useMasters
+          ? LichessDatabase.masters
+          : LichessDatabase.lichess;
     } else {
       _lichessDbOverride = null;
     }
@@ -209,10 +224,7 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
 
   /// Pre-configure DB Explorer mode with the given PGN file paths and
   /// minimum game count.
-  void seedDbExplorer({
-    required List<String> pgnPaths,
-    int minGames = 1,
-  }) {
+  void seedDbExplorer({required List<String> pgnPaths, int minGames = 1}) {
     setState(() {
       _buildMode = BuildMode.dbExplorer;
       _pgnFilePaths
@@ -224,11 +236,13 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
       final panelState = _pgnSourcesKey.currentState;
       if (panelState != null) {
         final sources = pgnPaths
-            .map((path) => PgnSource(
-                  id: PgnSource.generateId(),
-                  name: p.basenameWithoutExtension(path),
-                  filePath: path,
-                ))
+            .map(
+              (path) => PgnSource(
+                id: PgnSource.generateId(),
+                name: p.basenameWithoutExtension(path),
+                filePath: path,
+              ),
+            )
             .toList();
         panelState.seedSources(sources);
       }
@@ -273,9 +287,9 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
       final sources = _pgnSourcesKey.currentState?.sources ?? const [];
       return sources.isEmpty
           ? 'Add at least one PGN file first. Use the picker above to '
-              'attach .pgn files with your games.'
+                'attach .pgn files with your games.'
           : 'The added PGN sources have no local files. Re-add them as '
-              '.pgn files from disk.';
+                '.pgn files from disk.';
     }
     final evalSources = _evalSourcesKey.currentState;
     if (_buildMode == BuildMode.maiaDbExplore &&
@@ -292,7 +306,8 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
     required String startFen,
     required bool playAsWhite,
   }) {
-    final evalDepth = int.tryParse(_engineDepthCtrl.text.trim()) ??
+    final evalDepth =
+        int.tryParse(_engineDepthCtrl.text.trim()) ??
         kDefaultGenerationEvalDepth;
     final rawThreads = int.tryParse(_engineThreadsCtrl.text.trim());
     final engineThreads = rawThreads != null
@@ -331,8 +346,8 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
           : userMaxEvalLoss,
       minEvalCp: isTrappyMode
           ? (playAsWhite
-              ? (userMinEval > -100 ? -100 : userMinEval)
-              : (userMinEval > -300 ? -300 : userMinEval))
+                ? (userMinEval > -100 ? -100 : userMinEval)
+                : (userMinEval > -300 ? -300 : userMinEval))
           : userMinEval,
       maxEvalCp:
           int.tryParse(_maxEvalCtrl.text.trim()) ?? (playAsWhite ? 200 : 100),
@@ -345,21 +360,23 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
       oppMaxChildren: int.tryParse(_oppMaxChildrenCtrl.text.trim()) ?? 4,
       oppMassTarget: double.tryParse(_oppMassTargetCtrl.text.trim()) ?? 0.80,
       searchAlgorithm: _searchAlgorithm,
-      ourAltDiscount:
-          (double.tryParse(_ourAltDiscountCtrl.text.trim()) ?? 0.25)
-              .clamp(0.0, 1.0),
-      fastAltGapCp:
-          (int.tryParse(_fastAltGapCtrl.text.trim()) ?? 30).clamp(0, 500),
-      maiaPriorGames:
-          double.tryParse(_maiaPriorGamesCtrl.text.trim()) ?? 30.0,
+      ourAltDiscount: (double.tryParse(_ourAltDiscountCtrl.text.trim()) ?? 0.25)
+          .clamp(0.0, 1.0),
+      fastAltGapCp: (int.tryParse(_fastAltGapCtrl.text.trim()) ?? 30).clamp(
+        0,
+        500,
+      ),
+      maiaPriorGames: double.tryParse(_maiaPriorGamesCtrl.text.trim()) ?? 30.0,
       coverMinProb: (double.tryParse(_coverMinProbCtrl.text.trim()) ?? 0.05)
           .clamp(0.0, 1.0),
       verifyFinal: _verifyFinal,
-      verifyDepth:
-          (int.tryParse(_verifyDepthCtrl.text.trim()) ?? 0).clamp(0, 40),
+      verifyDepth: (int.tryParse(_verifyDepthCtrl.text.trim()) ?? 0).clamp(
+        0,
+        40,
+      ),
       setupMoves: _setupMovesCtrl.text.trim(),
-      setupToleranceCp:
-          (int.tryParse(_setupToleranceCtrl.text.trim()) ?? 30).clamp(0, 500),
+      setupToleranceCp: (int.tryParse(_setupToleranceCtrl.text.trim()) ?? 30)
+          .clamp(0, 500),
       useLichessDb: _lichessDbOverride != null,
       useMasters: _lichessDbOverride == LichessDatabase.masters,
       speeds: _lichessSpeeds.join(','),
@@ -432,8 +449,11 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
             ),
             child: Row(
               children: [
-                Icon(Icons.tips_and_updates_outlined,
-                    size: 14, color: Colors.amber[600]),
+                Icon(
+                  Icons.tips_and_updates_outlined,
+                  size: 14,
+                  color: Colors.amber[600],
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -460,9 +480,11 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
             onSourcesChanged: (sources) {
               _pgnFilePaths
                 ..clear()
-                ..addAll(sources
-                    .where((s) => s.filePath != null)
-                    .map((s) => s.filePath!));
+                ..addAll(
+                  sources
+                      .where((s) => s.filePath != null)
+                      .map((s) => s.filePath!),
+                );
             },
           ),
           const SizedBox(height: 8),
@@ -470,15 +492,27 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _numField(_dbMinGamesCtrl, 'Min Games per Move',
-                  tooltip: 'Opponent moves need at least this many games '
-                      'in your PGN database to be explored'),
-              _numField(_dbMinProbCtrl, 'Min Move Probability',
-                  tooltip: 'Minimum move frequency (0–1) to include '
-                      'an opponent reply'),
-              _numField(_minEloCtrl, 'Min Elo Filter',
-                  tooltip: 'Skip games where both players are below '
-                      'this Elo (0 = no filter)'),
+              _numField(
+                _dbMinGamesCtrl,
+                'Min Games per Move',
+                tooltip:
+                    'Opponent moves need at least this many games '
+                    'in your PGN database to be explored',
+              ),
+              _numField(
+                _dbMinProbCtrl,
+                'Min Move Probability',
+                tooltip:
+                    'Minimum move frequency (0–1) to include '
+                    'an opponent reply',
+              ),
+              _numField(
+                _minEloCtrl,
+                'Min Elo Filter',
+                tooltip:
+                    'Skip games where both players are below '
+                    'this Elo (0 = no filter)',
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -487,14 +521,19 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
           spacing: 8,
           runSpacing: 8,
           children: [
-            _numField(_maxPlyCtrl, 'Max Depth (ply)',
-                tooltip: 'How many half-moves deep to explore. '
-                    'Higher values find deeper lines but take longer.'),
+            _numField(
+              _maxPlyCtrl,
+              'Max Depth (ply)',
+              tooltip:
+                  'How many half-moves deep to explore. '
+                  'Higher values find deeper lines but take longer.',
+            ),
             if (_buildMode == BuildMode.stockfishExpectimax)
               _numField(
                 _engineDepthCtrl,
                 'Engine Depth',
-                tooltip: 'Stockfish search depth per position. '
+                tooltip:
+                    'Stockfish search depth per position. '
                     'Higher is more accurate but slower. '
                     'Default 14 is a good balance.',
               ),
@@ -520,8 +559,10 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                 color: Colors.grey[400],
               ),
               const SizedBox(width: 4),
-              Text('Advanced settings',
-                  style: TextStyle(fontSize: 13, color: Colors.grey[400])),
+              Text(
+                'Advanced settings',
+                style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+              ),
             ],
           ),
         ),
@@ -558,17 +599,23 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                         'never modified — if the opponent makes the setup\n'
                         'too costly, no move qualifies and the repertoire\n'
                         'deviates automatically.',
-                    child: Icon(Icons.info_outline,
-                        size: 16, color: Colors.grey[500]),
+                    child: Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color: Colors.grey[500],
+                    ),
                   ),
                 ),
                 style: const TextStyle(fontSize: 13),
               ),
               const SizedBox(height: 12),
-              _numField(_setupToleranceCtrl, 'Setup Tolerance (cp)',
-                  tooltip:
-                      'Max centipawns a preferred-setup move may lose vs the\n'
-                      'best candidate and still be chosen for consistency.'),
+              _numField(
+                _setupToleranceCtrl,
+                'Setup Tolerance (cp)',
+                tooltip:
+                    'Max centipawns a preferred-setup move may lose vs the\n'
+                    'best candidate and still be chosen for consistency.',
+              ),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -582,7 +629,8 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                     onTap: widget.isGenerating
                         ? null
                         : () => setState(
-                            () => _preferNovelties = !_preferNovelties),
+                            () => _preferNovelties = !_preferNovelties,
+                          ),
                     child: const Text(
                       'Prefer novelties',
                       style: TextStyle(fontSize: 13),
@@ -590,10 +638,14 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                   ),
                   const SizedBox(width: 4),
                   Tooltip(
-                    message: 'Favor less-played moves that are still sound.\n'
+                    message:
+                        'Favor less-played moves that are still sound.\n'
                         'Uses Maia/Lichess frequency data to boost unusual lines.',
-                    child: Icon(Icons.info_outline,
-                        size: 16, color: Colors.grey[500]),
+                    child: Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color: Colors.grey[500],
+                    ),
                   ),
                 ],
               ),
@@ -647,8 +699,11 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                         'evaluates candidate moves; line selection decides\n'
                         'which candidate becomes your repertoire move at\n'
                         'each position.',
-                    child: Icon(Icons.info_outline,
-                        size: 16, color: Colors.grey[500]),
+                    child: Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color: Colors.grey[500],
+                    ),
                   ),
                 ],
               ),
@@ -670,25 +725,34 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                 ],
               ),
               const SizedBox(height: 8),
-              _toggleSwitch('Relative Eval', _relativeEval, (v) {
-                setState(() => _relativeEval = v);
-              },
-                  tooltip:
-                      'Thresholds are relative to the root eval (default).\n'
-                      'Turn off to use absolute centipawn limits from Min/Max Eval.'),
+              _toggleSwitch(
+                'Relative Eval',
+                _relativeEval,
+                (v) {
+                  setState(() => _relativeEval = v);
+                },
+                tooltip:
+                    'Thresholds are relative to the root eval (default).\n'
+                    'Turn off to use absolute centipawn limits from Min/Max Eval.',
+              ),
               _sectionHeader('Opponent model'),
               Row(
                 children: [
-                  const Text('Opponent moves: Maia',
-                      style: TextStyle(fontSize: 13)),
+                  const Text(
+                    'Opponent moves: Maia',
+                    style: TextStyle(fontSize: 13),
+                  ),
                   const SizedBox(width: 4),
                   Tooltip(
                     message:
                         'Maia neural network is the default opponent model.\n'
                         'You can override this with a Lichess database\n'
                         'in the settings below.',
-                    child: Icon(Icons.info_outline,
-                        size: 16, color: Colors.grey[500]),
+                    child: Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color: Colors.grey[500],
+                    ),
                   ),
                   if (_lichessDbOverride != null) ...[
                     const SizedBox(width: 8),
@@ -712,16 +776,21 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  const Text('Opponent DB override',
-                      style: TextStyle(fontSize: 13)),
+                  const Text(
+                    'Opponent DB override',
+                    style: TextStyle(fontSize: 13),
+                  ),
                   const SizedBox(width: 4),
                   Tooltip(
                     message:
                         'Override Maia with a Lichess database for opponent\n'
                         'move frequencies. Maia remains the fallback for\n'
                         'positions with no database data.',
-                    child: Icon(Icons.info_outline,
-                        size: 16, color: Colors.grey[500]),
+                    child: Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color: Colors.grey[500],
+                    ),
                   ),
                   const SizedBox(width: 8),
                   ChoiceChip(
@@ -737,8 +806,10 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                     selected: _lichessDbOverride != null,
                     onSelected: widget.isGenerating
                         ? null
-                        : (_) => setState(() =>
-                            _lichessDbOverride ??= LichessDatabase.lichess),
+                        : (_) => setState(
+                            () =>
+                                _lichessDbOverride ??= LichessDatabase.lichess,
+                          ),
                   ),
                   const LichessDbInfoIcon(size: 14),
                 ],
@@ -803,70 +874,102 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                 onChanged: widget.isGenerating
                     ? null
                     : (v) => setState(
-                          () => _searchAlgorithm = v ?? SearchAlgorithm.fast,
-                        ),
+                        () => _searchAlgorithm = v ?? SearchAlgorithm.fast,
+                      ),
               ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _numField(_multipvCtrl, 'MultiPV',
-                      tooltip: 'Candidate moves evaluated per our-move node'),
-                  _numField(_oppMaxChildrenCtrl, 'Opp Max Children',
-                      tooltip:
-                          'Maximum opponent replies explored per position'),
-                  _numField(_oppMassTargetCtrl, 'Opp Mass Target',
-                      tooltip:
-                          'Stop adding opponent moves after this probability mass is covered'),
-                  _numField(_leafConfidenceCtrl, 'Leaf Confidence (0-1)',
-                      tooltip:
-                          'Trust in engine eval at leaves; lower blends toward 0.5'),
-                  _numField(_ourAltDiscountCtrl, 'Alt Discount (0-1)',
-                      tooltip:
-                          'Best-first priority multiplier for our non-best candidates.\n'
-                          'Lower = more budget on the mainline, less on alternatives.'),
-                  _numField(_fastAltGapCtrl, 'Alt Gap (cp)',
-                      tooltip:
-                          'Fast Expectimax only: our alternatives more than this\n'
-                          'many centipawns behind the best candidate stay as\n'
-                          'evaluated leaves instead of growing a subtree.\n'
-                          '0 disables. Ignored in trappy selection mode.'),
-                  _numField(_maiaPriorGamesCtrl, 'Maia Prior (games)',
-                      tooltip:
-                          'Dirichlet prior weight λ blending DB opponent frequencies\n'
-                          'with Maia: p = (count + λ·maia) / (N + λ). 0 disables.'),
-                  _numField(_coverMinProbCtrl, 'Cover Min Prob (0-1)',
-                      tooltip:
-                          'No-silent-holes floor: every opponent reply at/above this\n'
-                          'local probability gets a repertoire answer, even in lines\n'
-                          'the search budget would otherwise skip. 0 disables.'),
+                  _numField(
+                    _multipvCtrl,
+                    'MultiPV',
+                    tooltip: 'Candidate moves evaluated per our-move node',
+                  ),
+                  _numField(
+                    _oppMaxChildrenCtrl,
+                    'Opp Max Children',
+                    tooltip: 'Maximum opponent replies explored per position',
+                  ),
+                  _numField(
+                    _oppMassTargetCtrl,
+                    'Opp Mass Target',
+                    tooltip:
+                        'Stop adding opponent moves after this probability mass is covered',
+                  ),
+                  _numField(
+                    _leafConfidenceCtrl,
+                    'Leaf Confidence (0-1)',
+                    tooltip:
+                        'Trust in engine eval at leaves; lower blends toward 0.5',
+                  ),
+                  _numField(
+                    _ourAltDiscountCtrl,
+                    'Alt Discount (0-1)',
+                    tooltip:
+                        'Best-first priority multiplier for our non-best candidates.\n'
+                        'Lower = more budget on the mainline, less on alternatives.',
+                  ),
+                  _numField(
+                    _fastAltGapCtrl,
+                    'Alt Gap (cp)',
+                    tooltip:
+                        'Fast Expectimax only: our alternatives more than this\n'
+                        'many centipawns behind the best candidate stay as\n'
+                        'evaluated leaves instead of growing a subtree.\n'
+                        '0 disables. Ignored in trappy selection mode.',
+                  ),
+                  _numField(
+                    _maiaPriorGamesCtrl,
+                    'Maia Prior (games)',
+                    tooltip:
+                        'Dirichlet prior weight λ blending DB opponent frequencies\n'
+                        'with Maia: p = (count + λ·maia) / (N + λ). 0 disables.',
+                  ),
+                  _numField(
+                    _coverMinProbCtrl,
+                    'Cover Min Prob (0-1)',
+                    tooltip:
+                        'No-silent-holes floor: every opponent reply at/above this\n'
+                        'local probability gets a repertoire answer, even in lines\n'
+                        'the search budget would otherwise skip. 0 disables.',
+                  ),
                 ],
               ),
               _sectionHeader('Verification'),
               Row(
                 children: [
-                  _toggleSwitch('Verify Final Output', _verifyFinal, (v) {
-                    setState(() => _verifyFinal = v);
-                  },
-                      tooltip:
-                          'Re-check every selected repertoire move at the verify\n'
-                          'depth after selection; moves that lose more than Max Eval\n'
-                          'Loss vs a deep-checked alternative are replaced. Gives the\n'
-                          'export a depth guarantee at the cost of extra engine time.'),
+                  _toggleSwitch(
+                    'Verify Final Output',
+                    _verifyFinal,
+                    (v) {
+                      setState(() => _verifyFinal = v);
+                    },
+                    tooltip:
+                        'Re-check every selected repertoire move at the verify\n'
+                        'depth after selection; moves that lose more than Max Eval\n'
+                        'Loss vs a deep-checked alternative are replaced. Gives the\n'
+                        'export a depth guarantee at the cost of extra engine time.',
+                  ),
                   const SizedBox(width: 16),
-                  _numField(_verifyDepthCtrl, 'Verify Depth (0=auto)',
-                      tooltip:
-                          'Stockfish depth for the final verification pass.\n'
-                          '0 = automatic (eval depth + 6, at least 20).'),
+                  _numField(
+                    _verifyDepthCtrl,
+                    'Verify Depth (0=auto)',
+                    tooltip:
+                        'Stockfish depth for the final verification pass.\n'
+                        '0 = automatic (eval depth + 6, at least 20).',
+                  ),
                 ],
               ),
               _sectionHeader('PGN export'),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 dense: true,
-                title: const Text('Rank lines by cumulative probability',
-                    style: TextStyle(fontSize: 13)),
+                title: const Text(
+                  'Rank lines by cumulative probability',
+                  style: TextStyle(fontSize: 13),
+                ),
                 value: _rankLinesByImportance,
                 onChanged: widget.isGenerating
                     ? null
@@ -875,8 +978,10 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 dense: true,
-                title: const Text('Annotate move probabilities',
-                    style: TextStyle(fontSize: 13)),
+                title: const Text(
+                  'Annotate move probabilities',
+                  style: TextStyle(fontSize: 13),
+                ),
                 value: _annotateMoveProbabilities,
                 onChanged: widget.isGenerating
                     ? null
@@ -893,10 +998,7 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                       isDense: true,
                     ),
                     items: const [
-                      DropdownMenuItem(
-                        value: true,
-                        child: Text('Maia only'),
-                      ),
+                      DropdownMenuItem(value: true, child: Text('Maia only')),
                       DropdownMenuItem(
                         value: false,
                         child: Text('Lichess DB + Maia fallback'),
@@ -925,9 +1027,9 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
   }
 
   Widget _sectionHeader(String title) => Padding(
-        padding: const EdgeInsets.only(top: 20, bottom: 8),
-        child: Text(title, style: Theme.of(context).textTheme.titleSmall),
-      );
+    padding: const EdgeInsets.only(top: 20, bottom: 8),
+    child: Text(title, style: Theme.of(context).textTheme.titleSmall),
+  );
 
   Widget _numField(
     TextEditingController controller,
@@ -952,17 +1054,18 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
     return Tooltip(message: tooltip, child: field);
   }
 
-  Widget _toggleSwitch(String label, bool value, ValueChanged<bool> onChanged,
-      {String? tooltip}) {
+  Widget _toggleSwitch(
+    String label,
+    bool value,
+    ValueChanged<bool> onChanged, {
+    String? tooltip,
+  }) {
     final row = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(label, style: const TextStyle(fontSize: 13)),
         const SizedBox(width: 4),
-        Switch(
-          value: value,
-          onChanged: widget.isGenerating ? null : onChanged,
-        ),
+        Switch(value: value, onChanged: widget.isGenerating ? null : onChanged),
       ],
     );
     if (tooltip == null) return row;

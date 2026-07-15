@@ -74,8 +74,7 @@ void main() {
     });
 
     test('oppMaxChildren caps unforced replies', () {
-      final resp = _response(
-          [('a3', 25), ('b3', 25), ('c3', 25), ('d3', 25)]);
+      final resp = _response([('a3', 25), ('b3', 25), ('c3', 25), ('d3', 25)]);
       final selected = BuildByPlayingController.selectOpponentReplies(
         resp.moves,
         coverMinProb: 0.90,
@@ -115,8 +114,7 @@ void main() {
   group('ExplorerSourceConfig', () {
     test('cache key separates masters from lichess filters', () {
       const masters = ExplorerSourceConfig(useMasters: true);
-      const lichess = ExplorerSourceConfig(
-          speeds: 'blitz', ratings: '2000');
+      const lichess = ExplorerSourceConfig(speeds: 'blitz', ratings: '2000');
       expect(masters.cacheKeyPrefix, 'masters');
       expect(lichess.cacheKeyPrefix, 'lichess|blitz|2000');
       expect(masters.cacheKeyPrefix == lichess.cacheKeyPrefix, isFalse);
@@ -134,7 +132,10 @@ void main() {
   group('BuildByPlayingConfig', () {
     test('source reflects the database selection', () {
       const config = BuildByPlayingConfig(
-          useMasters: true, speeds: 'blitz', ratings: '1600');
+        useMasters: true,
+        speeds: 'blitz',
+        ratings: '1600',
+      );
       expect(config.source.useMasters, isTrue);
       const lichess = BuildByPlayingConfig(speeds: 'blitz', ratings: '1600');
       expect(lichess.source.cacheKeyPrefix, 'lichess|blitz|1600');
@@ -165,16 +166,20 @@ void main() {
       final filePath = '${tempDir.path}/test.pgn';
       await File(filePath).writeAsString('// Color: Black\n');
       repertoire = RepertoireController();
-      await repertoire.setRepertoire(RepertoireMetadata(
-        name: 'Test',
-        filePath: filePath,
-        lastModified: DateTime(2026, 1, 1),
-      ));
-      final explorer = ExplorerCacheService.forTesting(_FakeLichessClient({
-        startBoard: _response([('e4', 900), ('d4', 100)]),
-        afterE4Board: _response([('e5', 60), ('c5', 40)]),
-        afterE4E5Board: _response([('Nf3', 100)]),
-      }));
+      await repertoire.setRepertoire(
+        RepertoireMetadata(
+          name: 'Test',
+          filePath: filePath,
+          lastModified: DateTime(2026, 1, 1),
+        ),
+      );
+      final explorer = ExplorerCacheService.forTesting(
+        _FakeLichessClient({
+          startBoard: _response([('e4', 900), ('d4', 100)]),
+          afterE4Board: _response([('e5', 60), ('c5', 40)]),
+          afterE4E5Board: _response([('Nf3', 100)]),
+        }),
+      );
       session = BuildByPlayingController(
         repertoire: repertoire,
         explorer: explorer,

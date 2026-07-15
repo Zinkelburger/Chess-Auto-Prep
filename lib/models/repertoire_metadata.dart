@@ -22,11 +22,11 @@ class RepertoireMetadata {
   /// Convert to the legacy `Map<String, dynamic>` shape for backward compat
   /// during incremental migration.
   Map<String, dynamic> toMap() => {
-        'filePath': filePath,
-        'name': name,
-        'gameCount': gameCount,
-        'lastModified': lastModified,
-      };
+    'filePath': filePath,
+    'name': name,
+    'gameCount': gameCount,
+    'lastModified': lastModified,
+  };
 
   /// Create from the legacy `Map<String, dynamic>` shape.
   factory RepertoireMetadata.fromMap(Map<String, dynamic> map) {

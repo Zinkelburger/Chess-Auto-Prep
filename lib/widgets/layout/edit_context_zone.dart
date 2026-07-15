@@ -159,8 +159,9 @@ class _EditContextZoneState extends State<EditContextZone> {
   }
 
   void _notifySelection() {
-    widget.selectedViewsNotifier?.value =
-        Set<EditContextView>.from(_selectedViews);
+    widget.selectedViewsNotifier?.value = Set<EditContextView>.from(
+      _selectedViews,
+    );
     widget.onViewsChanged?.call(Set<EditContextView>.from(_selectedViews));
   }
 
@@ -227,12 +228,12 @@ class _EditContextZoneState extends State<EditContextZone> {
             onPressed: widget.tabsLocked
                 ? null
                 : () => showEditContextLayoutSheet(
-                      context: context,
-                      layout: _layout,
-                      visibleViews: _selectedViews,
-                      tabs: _tabs,
-                      onLayoutChanged: _setLayout,
-                    ),
+                    context: context,
+                    layout: _layout,
+                    visibleViews: _selectedViews,
+                    tabs: _tabs,
+                    onLayoutChanged: _setLayout,
+                  ),
           ),
         ],
       ),
@@ -242,8 +243,9 @@ class _EditContextZoneState extends State<EditContextZone> {
   Widget _chip(BuildContext context, EditContextTabSpec spec) {
     final isSelected = _selectedViews.contains(spec.view);
     return GestureDetector(
-      onLongPress:
-          widget.tabsLocked ? null : () => _showPlaceMenu(context, spec),
+      onLongPress: widget.tabsLocked
+          ? null
+          : () => _showPlaceMenu(context, spec),
       child: FilterChip(
         key: ValueKey('edit_context_chip_${spec.view.name}'),
         label: Row(
@@ -338,11 +340,8 @@ class _EditContextZoneState extends State<EditContextZone> {
               if (i > 0)
                 EditContextSplitHandle(
                   axis: EditContextSplitAxis.horizontal,
-                  onDrag: (dx) => _resizeHorizontal(
-                    i - 1,
-                    dx,
-                    constraints.maxWidth,
-                  ),
+                  onDrag: (dx) =>
+                      _resizeHorizontal(i - 1, dx, constraints.maxWidth),
                 ),
               Expanded(
                 flex: (hFlex[i] * 1000).round().clamp(1, 10000),
@@ -369,8 +368,9 @@ class _EditContextZoneState extends State<EditContextZone> {
     final shift = deltaPx / totalWidth * pairSum * cols.length;
     final newLeft = (left + shift).clamp(pairSum * 0.12, pairSum * 0.88);
     cols[leftIndex] = cols[leftIndex].copyWith(horizontalFlex: newLeft);
-    cols[leftIndex + 1] =
-        cols[leftIndex + 1].copyWith(horizontalFlex: pairSum - newLeft);
+    cols[leftIndex + 1] = cols[leftIndex + 1].copyWith(
+      horizontalFlex: pairSum - newLeft,
+    );
     _setLayout(EditContextLayout(columns: cols));
   }
 
@@ -411,9 +411,7 @@ class _EditContextZoneState extends State<EditContextZone> {
     }
 
     final vFlexAll = col.normalizedVerticalFlex();
-    final vFlex = [
-      for (final v in views) vFlexAll[col.views.indexOf(v)],
-    ];
+    final vFlex = [for (final v in views) vFlexAll[col.views.indexOf(v)]];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -421,12 +419,8 @@ class _EditContextZoneState extends State<EditContextZone> {
           if (i > 0)
             EditContextSplitHandle(
               axis: EditContextSplitAxis.vertical,
-              onDrag: (dy) => _resizeVertical(
-                columnIndex,
-                i - 1,
-                dy,
-                maxHeight,
-              ),
+              onDrag: (dy) =>
+                  _resizeVertical(columnIndex, i - 1, dy, maxHeight),
             ),
           Expanded(
             flex: (vFlex[i] * 1000).round().clamp(1, 10000),
@@ -438,8 +432,10 @@ class _EditContextZoneState extends State<EditContextZone> {
   }
 
   Widget _panelShell(EditContextView view, Widget child) {
-    final label =
-        _tabs.where((t) => t.view == view).map((t) => t.label).firstOrNull;
+    final label = _tabs
+        .where((t) => t.view == view)
+        .map((t) => t.label)
+        .firstOrNull;
     if (label == null) return child;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -467,10 +463,7 @@ class _EditContextZoneState extends State<EditContextZone> {
   Widget _panelFor(EditContextView view) {
     // Rebuild [child] each zone update so tree/generation props stay current.
     // [AutomaticKeepAliveClientMixin] on the shell preserves panel state.
-    return _ContextKeepAliveTab(
-      key: ValueKey(view),
-      child: _contentFor(view),
-    );
+    return _ContextKeepAliveTab(key: ValueKey(view), child: _contentFor(view));
   }
 
   Widget _contentFor(EditContextView view) {
@@ -536,7 +529,8 @@ class _EditContextZoneState extends State<EditContextZone> {
     return UnifiedEnginePane(
       fen: controller.fen,
       isActive: !widget.isGenerating || widget.isGenerationPaused,
-      isUserTurn: controller.position.turn ==
+      isUserTurn:
+          controller.position.turn ==
           (controller.isRepertoireWhite ? Side.white : Side.black),
       currentMoveSequence: controller.currentMoveSequence,
       isWhiteRepertoire: controller.isRepertoireWhite,

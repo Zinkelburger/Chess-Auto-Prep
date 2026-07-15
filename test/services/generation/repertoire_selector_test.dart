@@ -15,17 +15,18 @@ BuildTreeNode _node({
   bool hasExpectimax = true,
   double cumulativeProbability = 1.0,
 }) {
-  final node = BuildTreeNode(
-    fen: fen,
-    moveSan: san,
-    moveUci: uci,
-    ply: ply,
-    isWhiteToMove: isWhiteToMove,
-    nodeId: '$san@$ply'.hashCode,
-    cumulativeProbability: cumulativeProbability,
-  )
-    ..expectimaxValue = expectimax
-    ..hasExpectimax = hasExpectimax;
+  final node =
+      BuildTreeNode(
+          fen: fen,
+          moveSan: san,
+          moveUci: uci,
+          ply: ply,
+          isWhiteToMove: isWhiteToMove,
+          nodeId: '$san@$ply'.hashCode,
+          cumulativeProbability: cumulativeProbability,
+        )
+        ..expectimaxValue = expectimax
+        ..hasExpectimax = hasExpectimax;
   if (evalCp != null) {
     node.engineEvalCp = evalCp;
   }
@@ -108,25 +109,27 @@ List<BuildTreeNode> _markedOurMoves(BuildTree tree) {
 
 void main() {
   group('RepertoireSelector', () {
-    test('select with expectimax mode marks highest-V child at our-move nodes',
-        () {
-      final tree = _twoBranchTree();
-      final config = const TreeBuildConfig(
-        startFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-        playAsWhite: true,
-        selectionMode: SelectionMode.expectimax,
-      );
-      final selector = RepertoireSelector(
-        config: config,
-        ecaCalc: ExpectimaxCalculator(config: config),
-      );
+    test(
+      'select with expectimax mode marks highest-V child at our-move nodes',
+      () {
+        final tree = _twoBranchTree();
+        final config = const TreeBuildConfig(
+          startFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+          playAsWhite: true,
+          selectionMode: SelectionMode.expectimax,
+        );
+        final selector = RepertoireSelector(
+          config: config,
+          ecaCalc: ExpectimaxCalculator(config: config),
+        );
 
-      selector.select(tree);
+        selector.select(tree);
 
-      final marked = _markedOurMoves(tree);
-      expect(marked.map((n) => n.moveSan), ['e4']);
-      expect(marked.single.repertoireScore, closeTo(0.72, 0.0001));
-    });
+        final marked = _markedOurMoves(tree);
+        expect(marked.map((n) => n.moveSan), ['e4']);
+        expect(marked.single.repertoireScore, closeTo(0.72, 0.0001));
+      },
+    );
 
     test('select with engineOnly mode marks best-eval child', () {
       final tree = _twoBranchTree();
@@ -207,10 +210,7 @@ void main() {
         config: base,
         ecaCalc: ExpectimaxCalculator(config: base),
       ).select(covered);
-      expect(
-        _markedOurMoves(covered).map((n) => n.moveSan),
-        contains('Nf3'),
-      );
+      expect(_markedOurMoves(covered).map((n) => n.moveSan), contains('Nf3'));
 
       // Coverage floor disabled: legacy prune drops the sideline.
       final uncovered = makeTree();
@@ -225,8 +225,7 @@ void main() {
       );
     });
 
-    test('preferred setup: tie-break within tolerance, deviate beyond it',
-        () {
+    test('preferred setup: tie-break within tolerance, deviate beyond it', () {
       // Root (our turn, White): e4 has the better expectimax, h4 is the
       // setup move.  Within tolerance → h4 preferred; beyond → e4 stands.
       BuildTree makeTree({required int h4Cp}) {
@@ -307,14 +306,14 @@ void main() {
       );
 
       selector.select(tree);
-      final firstPass = _markedOurMoves(tree)
-          .map((n) => (n.moveSan, n.repertoireScore))
-          .toList();
+      final firstPass = _markedOurMoves(
+        tree,
+      ).map((n) => (n.moveSan, n.repertoireScore)).toList();
 
       selector.select(tree);
-      final secondPass = _markedOurMoves(tree)
-          .map((n) => (n.moveSan, n.repertoireScore))
-          .toList();
+      final secondPass = _markedOurMoves(
+        tree,
+      ).map((n) => (n.moveSan, n.repertoireScore)).toList();
 
       expect(secondPass, firstPass);
     });

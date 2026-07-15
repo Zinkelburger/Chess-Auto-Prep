@@ -93,8 +93,9 @@ Future<(int?, int, int)> evalAfterMoveCached(
 
     final result = await pool.evaluateFen(newFen, depth);
     final isWhiteAfter = newPos.turn == Side.white;
-    final whiteCp =
-        isWhiteAfter ? (result.scoreCp ?? 0) : -(result.scoreCp ?? 0);
+    final whiteCp = isWhiteAfter
+        ? (result.scoreCp ?? 0)
+        : -(result.scoreCp ?? 0);
 
     cache.putEvalCpWhite(newFen, whiteCp, depth);
 

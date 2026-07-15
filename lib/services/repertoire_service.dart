@@ -55,8 +55,10 @@ class RepertoireService {
       try {
         final game = PgnGame.parsePgn(gameText);
 
-        final mainlineMoves =
-            game.moves.mainline().map((node) => node.san).toList();
+        final mainlineMoves = game.moves
+            .mainline()
+            .map((node) => node.san)
+            .toList();
 
         if (mainlineMoves.isEmpty) continue;
 
@@ -82,18 +84,20 @@ class RepertoireService {
         final startPosition = extractStartPosition(game);
         final importance = _extractImportance(game, gameText);
 
-        lines.add(RepertoireLine(
-          id: lineId,
-          name: lineName,
-          moves: mainlineMoves,
-          color: color,
-          startPosition: startPosition,
-          fullPgn: gameText,
-          comments: comments,
-          variations: variations,
-          headers: Map<String, String>.from(game.headers),
-          importance: importance,
-        ));
+        lines.add(
+          RepertoireLine(
+            id: lineId,
+            name: lineName,
+            moves: mainlineMoves,
+            color: color,
+            startPosition: startPosition,
+            fullPgn: gameText,
+            comments: comments,
+            variations: variations,
+            headers: Map<String, String>.from(game.headers),
+            importance: importance,
+          ),
+        );
       } catch (e) {
         if (kDebugMode) {
           debugPrint('Error parsing game $gameIndex: $e');
@@ -176,8 +180,11 @@ class RepertoireService {
         event != 'Edited Line') {
       return event;
     } else {
-      final moves =
-          game.moves.mainline().take(3).map((node) => node.san).toList();
+      final moves = game.moves
+          .mainline()
+          .take(3)
+          .map((node) => node.san)
+          .toList();
       if (moves.isNotEmpty) {
         return 'Line: ${moves.join(' ')}';
       } else {
@@ -254,15 +261,13 @@ class RepertoireService {
 
     flushCurrentGame();
 
-    return (
-      preamble: preambleLines.join('\n').trimRight(),
-      games: games,
-    );
+    return (preamble: preambleLines.join('\n').trimRight(), games: games);
   }
 
   /// Extract a stable line identifier, preferring a PGN header if present.
   String _extractLineId(PgnGame game, List<String> moves, int index) {
-    final headerId = game.headers['LineID'] ??
+    final headerId =
+        game.headers['LineID'] ??
         game.headers['LineId'] ??
         game.headers['Id'] ??
         game.headers['Line'] ??
@@ -297,10 +302,7 @@ class RepertoireService {
 
   /// Reassemble a PGN document from preamble + game list.
   String _reassembleDocument(String preamble, List<String> games) {
-    final sections = <String>[
-      if (preamble.isNotEmpty) preamble,
-      ...games,
-    ];
+    final sections = <String>[if (preamble.isNotEmpty) preamble, ...games];
     return '${sections.join('\n\n').trimRight()}\n';
   }
 
@@ -311,8 +313,10 @@ class RepertoireService {
   }
 
   /// Creates training questions from repertoire lines for a specific color
-  List<TrainingQuestion> createTrainingQuestions(List<RepertoireLine> lines,
-      {String? colorFilter}) {
+  List<TrainingQuestion> createTrainingQuestions(
+    List<RepertoireLine> lines, {
+    String? colorFilter,
+  }) {
     final questions = <TrainingQuestion>[];
 
     for (final line in lines) {
@@ -322,7 +326,8 @@ class RepertoireService {
 
       for (int moveIndex = 0; moveIndex < line.moves.length; moveIndex++) {
         final isWhiteMove = moveIndex % 2 == 0;
-        final shouldIncludeMove = (line.color == 'white' && isWhiteMove) ||
+        final shouldIncludeMove =
+            (line.color == 'white' && isWhiteMove) ||
             (line.color == 'black' && !isWhiteMove);
 
         if (shouldIncludeMove) {
@@ -395,12 +400,18 @@ class RepertoireService {
 
     mutate(games, matchIndex);
 
-    await writeTextFileAtomically(file, _reassembleDocument(document.preamble, games));
+    await writeTextFileAtomically(
+      file,
+      _reassembleDocument(document.preamble, games),
+    );
     return true;
   }
 
   Future<bool> updateLineTitle(
-      String filePath, String lineId, String newTitle) {
+    String filePath,
+    String lineId,
+    String newTitle,
+  ) {
     return _editLineInFile(filePath, lineId, (games, matchIndex) {
       final gameText = games[matchIndex];
       final eventRegex = RegExp(r'\[Event\s+"[^"]*"\]');
@@ -421,8 +432,10 @@ class RepertoireService {
     String newGamePgn,
   ) {
     return _editLineInFile(filePath, lineId, (games, matchIndex) {
-      games[matchIndex] =
-          _mergeMissingHeaders(games[matchIndex], newGamePgn.trimRight());
+      games[matchIndex] = _mergeMissingHeaders(
+        games[matchIndex],
+        newGamePgn.trimRight(),
+      );
     });
   }
 
@@ -450,9 +463,9 @@ class RepertoireService {
       return result;
     }
 
-    final newKeys = headerLines(newGame)
-        .map((h) => keyPattern.firstMatch(h)!.group(1)!)
-        .toSet();
+    final newKeys = headerLines(
+      newGame,
+    ).map((h) => keyPattern.firstMatch(h)!.group(1)!).toSet();
     final missing = headerLines(oldGame)
         .where((h) => !newKeys.contains(keyPattern.firstMatch(h)!.group(1)!))
         .toList();
@@ -606,11 +619,13 @@ class RepertoireService {
       );
     } else {
       final fullPath = [...pathFromRoot, san];
-      games.add(buildMinimalGamePgn(
-        fullPath,
-        startingFen: startingFen,
-        isWhiteRepertoire: isWhiteRepertoire,
-      ));
+      games.add(
+        buildMinimalGamePgn(
+          fullPath,
+          startingFen: startingFen,
+          isWhiteRepertoire: isWhiteRepertoire,
+        ),
+      );
     }
 
     final sections = <String>[];

@@ -53,10 +53,14 @@ class TrainerKeyboardScope extends StatelessWidget {
     this.focusNode,
     this.shortcuts,
     this.actions,
-  }) : assert(!holdsFocus || focusNode != null,
-            'holdsFocus requires a focusNode for tap-to-refocus'),
-        assert((shortcuts == null) == (actions == null),
-            'shortcuts and actions must be provided together');
+  }) : assert(
+         !holdsFocus || focusNode != null,
+         'holdsFocus requires a focusNode for tap-to-refocus',
+       ),
+       assert(
+         (shortcuts == null) == (actions == null),
+         'shortcuts and actions must be provided together',
+       );
 
   @override
   Widget build(BuildContext context) {

@@ -113,10 +113,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
             children: [
               const Icon(Icons.error_outline, size: 64, color: Colors.red),
               const SizedBox(height: 16),
-              Text(
-                _loadError!,
-                textAlign: TextAlign.center,
-              ),
+              Text(_loadError!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
               FilledButton.icon(
                 onPressed: _loadCachedPlayers,
@@ -144,10 +141,9 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
             Text(
               'Download games for a player, or import PGN files,'
               ' to get started',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
-                  ?.copyWith(color: Colors.grey[600]),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
             ),
             const SizedBox(height: 32),
             Row(
@@ -184,13 +180,13 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     final platformIcon = player.isImported
         ? Icons.file_open
         : player.platform == 'chesscom'
-            ? Icons.language
-            : Icons.bolt;
+        ? Icons.language
+        : Icons.bolt;
     final platformColor = player.isImported
         ? Colors.orange
         : player.platform == 'chesscom'
-            ? Colors.green
-            : Colors.blue;
+        ? Colors.green
+        : Colors.blue;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -323,10 +319,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     );
 
     if (confirmed == true) {
-      await _gamesService.deletePlayerData(
-        player.platform,
-        player.username,
-      );
+      await _gamesService.deletePlayerData(player.platform, player.username);
       await _loadCachedPlayers();
     }
   }

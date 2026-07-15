@@ -20,10 +20,10 @@ import 'external_eval_provider.dart';
 typedef _InitializeNative = Pointer<Void> Function(Pointer<Utf8> path);
 typedef _InitializeDart = Pointer<Void> Function(Pointer<Utf8> path);
 
-typedef _GetNative = Pointer<Utf8> Function(
-    Pointer<Void> handle, Pointer<Utf8> fen);
-typedef _GetDart = Pointer<Utf8> Function(
-    Pointer<Void> handle, Pointer<Utf8> fen);
+typedef _GetNative =
+    Pointer<Utf8> Function(Pointer<Void> handle, Pointer<Utf8> fen);
+typedef _GetDart =
+    Pointer<Utf8> Function(Pointer<Void> handle, Pointer<Utf8> fen);
 
 typedef _SizeNative = IntPtr Function(Pointer<Void> handle);
 typedef _SizeDart = int Function(Pointer<Void> handle);
@@ -66,10 +66,7 @@ class CdbDirectEvalProvider implements ExternalEvalProvider {
   final String path;
   final CdbDirectLookupFn? lookupOverride;
 
-  CdbDirectEvalProvider({
-    required this.path,
-    this.lookupOverride,
-  });
+  CdbDirectEvalProvider({required this.path, this.lookupOverride});
 
   /// Whether the native reader can be loaded on this machine (cached after [probeAvailability]).
   static bool get isAvailable => _libraryLoadable ?? false;
@@ -160,24 +157,28 @@ class CdbDirectEvalProvider implements ExternalEvalProvider {
     };
     for (final root in projectRoots) {
       yield p.join(
-          root, 'tree_builder', 'deps', 'install', 'lib', 'libcdbdirect.so');
+        root,
+        'tree_builder',
+        'deps',
+        'install',
+        'lib',
+        'libcdbdirect.so',
+      );
     }
 
     try {
       final exeDir = p.dirname(Platform.resolvedExecutable);
       yield p.join(exeDir, 'lib', 'libcdbdirect.so');
       yield p.join(exeDir, '..', 'lib', 'libcdbdirect.so');
-    } catch (_) {/* resolvedExecutable may throw on some platforms */}
+    } catch (_) {
+      /* resolvedExecutable may throw on some platforms */
+    }
   }
 
   static Future<DynamicLibrary?> _tryLoadDevLibrary() async {
     if (!Platform.isLinux) return null;
 
-    const names = [
-      'libcdbdirect.so',
-      'libcdbdirect.dylib',
-      'cdbdirect.dll',
-    ];
+    const names = ['libcdbdirect.so', 'libcdbdirect.dylib', 'cdbdirect.dll'];
     for (final name in names) {
       final lib = _openLibraryPath(name);
       if (lib != null) return lib;
@@ -201,11 +202,13 @@ class CdbDirectEvalProvider implements ExternalEvalProvider {
 
     try {
       _initialize = _lib!.lookupFunction<_InitializeNative, _InitializeDart>(
-          'cdbdirect_initialize');
+        'cdbdirect_initialize',
+      );
       _get = _lib!.lookupFunction<_GetNative, _GetDart>('cdbdirect_get');
       _size = _lib!.lookupFunction<_SizeNative, _SizeDart>('cdbdirect_size');
-      _finalize = _lib!
-          .lookupFunction<_FinalizeNative, _FinalizeDart>('cdbdirect_finalize');
+      _finalize = _lib!.lookupFunction<_FinalizeNative, _FinalizeDart>(
+        'cdbdirect_finalize',
+      );
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[CdbDirectEvalProvider] symbol load failed: $e');
@@ -266,11 +269,9 @@ class CdbDirectEvalProvider implements ExternalEvalProvider {
       final whiteCp = isWhiteStm ? parsed.cp : -parsed.cp;
       if (parsed.depth < minDepth) return const EvalLookupResult.shallow();
 
-      return EvalLookupResult.found(EvalHit(
-        cp: whiteCp,
-        depth: parsed.depth,
-        bestMove: parsed.bestMove,
-      ));
+      return EvalLookupResult.found(
+        EvalHit(cp: whiteCp, depth: parsed.depth, bestMove: parsed.bestMove),
+      );
     } catch (e) {
       if (kDebugMode) debugPrint('[CdbDirectEvalProvider] lookup failed: $e');
       return const EvalLookupResult.miss();

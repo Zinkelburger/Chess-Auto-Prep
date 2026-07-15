@@ -24,7 +24,7 @@ enum CreatorStep { setup, recordSolution, details }
 
 class PuzzleCreatorController extends ChangeNotifier {
   PuzzleCreatorController({String? initialFen})
-      : editor = BoardEditorController(initialFen: initialFen);
+    : editor = BoardEditorController(initialFen: initialFen);
 
   final BoardEditorController editor;
 

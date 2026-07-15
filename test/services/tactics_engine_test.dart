@@ -126,12 +126,7 @@ void main() {
         correctLine: const ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4'],
       );
 
-      final result = engine.checkMoveAtIndex(
-        position,
-        'e2e4',
-        _startFen,
-        0,
-      );
+      final result = engine.checkMoveAtIndex(position, 'e2e4', _startFen, 0);
 
       expect(result, TacticsResult.correct);
     });
@@ -169,10 +164,7 @@ void main() {
     });
 
     test('returns incorrect for illegal move string', () {
-      final position = _position(
-        fen: _startFen,
-        correctLine: const ['e4'],
-      );
+      final position = _position(fen: _startFen, correctLine: const ['e4']);
 
       expect(
         engine.checkMoveAtIndex(position, 'e2e9', _startFen, 0),
@@ -189,10 +181,7 @@ void main() {
         fen: _startFen,
         correctLine: const ['e2e4'],
       );
-      final sanPosition = _position(
-        fen: _startFen,
-        correctLine: const ['e4'],
-      );
+      final sanPosition = _position(fen: _startFen, correctLine: const ['e4']);
 
       expect(
         engine.checkMoveAtIndex(uciPosition, 'e2e4', _startFen, 0),
@@ -218,19 +207,18 @@ void main() {
       }
     });
 
-    test('moveIndex out of range always returns incorrect without side effects',
-        () {
-      final position = _position(
-        fen: _startFen,
-        correctLine: const ['e4'],
-      );
+    test(
+      'moveIndex out of range always returns incorrect without side effects',
+      () {
+        final position = _position(fen: _startFen, correctLine: const ['e4']);
 
-      expect(
-        engine.checkMoveAtIndex(position, 'e2e4', _startFen, 1),
-        TacticsResult.incorrect,
-      );
-      expect(position.correctLine, ['e4']);
-    });
+        expect(
+          engine.checkMoveAtIndex(position, 'e2e4', _startFen, 1),
+          TacticsResult.incorrect,
+        );
+        expect(position.correctLine, ['e4']);
+      },
+    );
   });
 
   group('TacticsEngine SAN normalization via checkMoveAtIndex', () {
@@ -239,10 +227,7 @@ void main() {
           'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2';
 
       for (final annotated in ['Nf3+', 'Nf3#', 'Nf3!', 'Nf3?', 'Nf3!?']) {
-        final position = _position(
-          fen: fenAfterE4E5,
-          correctLine: [annotated],
-        );
+        final position = _position(fen: fenAfterE4E5, correctLine: [annotated]);
 
         expect(
           engine.checkMoveAtIndex(position, 'g1f3', fenAfterE4E5, 0),
@@ -256,10 +241,7 @@ void main() {
       const fenAfterE4E5 =
           'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2';
 
-      final position = _position(
-        fen: fenAfterE4E5,
-        correctLine: const ['Nf3'],
-      );
+      final position = _position(fen: fenAfterE4E5, correctLine: const ['Nf3']);
 
       expect(
         engine.checkMoveAtIndex(position, 'g1f3', fenAfterE4E5, 0),
@@ -271,18 +253,17 @@ void main() {
       );
     });
 
-    test('getSolution returns full line after user has finished the puzzle',
-        () {
-      final position = _position(
-        fen: _scholarsMateFen,
-        correctLine: const ['Qxf7#'],
-      );
+    test(
+      'getSolution returns full line after user has finished the puzzle',
+      () {
+        final position = _position(
+          fen: _scholarsMateFen,
+          correctLine: const ['Qxf7#'],
+        );
 
-      expect(
-        engine.getSolution(position, fromIndex: 1),
-        'Qxf7#',
-      );
-    });
+        expect(engine.getSolution(position, fromIndex: 1), 'Qxf7#');
+      },
+    );
 
     test('correctLineToSan converts UCI and SAN tokens', () {
       final position = _position(
@@ -294,10 +275,7 @@ void main() {
     });
 
     test('empty expected SAN never matches a legal move', () {
-      final position = _position(
-        fen: _startFen,
-        correctLine: const [''],
-      );
+      final position = _position(fen: _startFen, correctLine: const ['']);
 
       expect(
         engine.checkMoveAtIndex(position, 'e2e4', _startFen, 0),
@@ -396,11 +374,7 @@ void main() {
       final stubWorker = _StubEvalWorker();
       // After e4 d5, Stockfish says best reply is e4e5 → but let's say
       // exd5 is best. UCI for exd5 from e4 capturing on d5 is e4d5.
-      stubWorker.enqueue(EvalResult(
-        scoreCp: 50,
-        pv: ['e4d5'],
-        depth: 14,
-      ));
+      stubWorker.enqueue(EvalResult(scoreCp: 50, pv: ['e4d5'], depth: 14));
 
       final line = await TacticsEngine.buildTrainableLine(
         ['e4', 'e5', 'Nf3'],

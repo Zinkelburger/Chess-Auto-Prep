@@ -27,8 +27,9 @@ mixin MoveNavigation {
 
   /// Step forward along the mainline (`children[0]`). No-op at a leaf.
   void goForward() {
-    final children =
-        path.isEmpty ? tree.roots : (tree.nodeAt(path)?.children ?? const []);
+    final children = path.isEmpty
+        ? tree.roots
+        : (tree.nodeAt(path)?.children ?? const []);
     if (children.isNotEmpty) jump(path.child(0));
   }
 

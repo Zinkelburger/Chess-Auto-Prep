@@ -24,9 +24,7 @@ class PgnOpeningTreePanel extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: Colors.grey[700]!),
-            ),
+            border: Border(bottom: BorderSide(color: Colors.grey[700]!)),
           ),
           child: Row(
             children: [
@@ -98,7 +96,8 @@ class PgnOpeningTreePanel extends StatelessWidget {
                     SizedBox(
                       width: 220,
                       child: LinearProgressIndicator(
-                        value: controller.treeBuildProcessed /
+                        value:
+                            controller.treeBuildProcessed /
                             controller.treeBuildTotal,
                       ),
                     ),
@@ -174,12 +173,17 @@ class _TreeGamesList extends StatelessWidget {
                 return InkWell(
                   onTap: () => controller.loadGameFromTree(gi),
                   child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 5,
+                    ),
                     child: Row(
                       children: [
-                        Icon(Icons.play_arrow,
-                            size: 14, color: Colors.blue[300]),
+                        Icon(
+                          Icons.play_arrow,
+                          size: 14,
+                          color: Colors.blue[300],
+                        ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
@@ -191,8 +195,10 @@ class _TreeGamesList extends StatelessWidget {
                         ),
                         if (game.studyRating > 0) ...[
                           const Icon(Icons.star, size: 12, color: Colors.amber),
-                          Text('${game.studyRating}',
-                              style: const TextStyle(fontSize: 10)),
+                          Text(
+                            '${game.studyRating}',
+                            style: const TextStyle(fontSize: 10),
+                          ),
                         ],
                       ],
                     ),

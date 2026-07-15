@@ -117,7 +117,8 @@ class _CoverageSummaryBar extends StatelessWidget {
     final deep = countDeepLines(lineCoverage);
     final totalUnaccounted = totalUnaccountedMoves(lineCoverage);
 
-    final hasGaps = coverageResult.tooShallowLeaves.isNotEmpty ||
+    final hasGaps =
+        coverageResult.tooShallowLeaves.isNotEmpty ||
         coverageResult.unaccountedMoves.isNotEmpty;
 
     return Container(
@@ -133,25 +134,32 @@ class _CoverageSummaryBar extends StatelessWidget {
           Row(
             children: [
               _CoverageStat(
-                  label: 'Covered',
-                  percent: pct(covered),
-                  color: const Color(0xFF4CAF50)),
+                label: 'Covered',
+                percent: pct(covered),
+                color: const Color(0xFF4CAF50),
+              ),
               const SizedBox(width: 4),
-              Text('|',
-                  style: TextStyle(fontSize: 10, color: Colors.grey[600])),
-              const SizedBox(width: 4),
-              _CoverageStat(
-                  label: 'Shallow',
-                  percent: pct(shallow),
-                  color: const Color(0xFFFFA726)),
-              const SizedBox(width: 4),
-              Text('|',
-                  style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+              Text(
+                '|',
+                style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+              ),
               const SizedBox(width: 4),
               _CoverageStat(
-                  label: 'Deep',
-                  percent: pct(deep),
-                  color: const Color(0xFF42A5F5)),
+                label: 'Shallow',
+                percent: pct(shallow),
+                color: const Color(0xFFFFA726),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                '|',
+                style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+              ),
+              const SizedBox(width: 4),
+              _CoverageStat(
+                label: 'Deep',
+                percent: pct(deep),
+                color: const Color(0xFF42A5F5),
+              ),
               if (totalUnaccounted > 0) ...[
                 const Spacer(),
                 Row(

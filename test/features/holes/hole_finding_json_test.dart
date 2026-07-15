@@ -1,8 +1,7 @@
 import 'package:chess_auto_prep/features/audit/models/audit_finding.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const someFen =
-    'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+const someFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
 
 void main() {
   test('uncoveredStrongMove round-trips', () {

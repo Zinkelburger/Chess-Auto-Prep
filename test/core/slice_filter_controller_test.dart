@@ -20,7 +20,10 @@ void main() {
         positionInput: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -',
         headerFilters: [
           HeaderFilterConfig(
-              field: 'White', mode: MatchMode.contains, value: 'Carlsen'),
+            field: 'White',
+            mode: MatchMode.contains,
+            value: 'Carlsen',
+          ),
         ],
         sequencePattern: 'e4 e5',
         sequenceGap: 2,
@@ -62,7 +65,8 @@ void main() {
     expect(c.hasPositionFilter, isTrue);
     // Re-capture with a different position replaces, never toggles off.
     c.setPositionFen(
-        'rnbqkbnr/pp1ppppp/2p5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -');
+      'rnbqkbnr/pp1ppppp/2p5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+    );
     expect(c.hasPositionFilter, isTrue);
     expect(c.positionFen, contains('2p5'));
     c.dispose();
@@ -111,8 +115,11 @@ void main() {
     final c = SliceFilterController();
     c.addHeaderRow(); // defaults: Black / contains
     c.setHeaderField(1, 'WhiteElo');
-    expect(c.headerRows[1].mode, MatchMode.after,
-        reason: 'contains is meaningless for Elo; switches to ≥');
+    expect(
+      c.headerRows[1].mode,
+      MatchMode.after,
+      reason: 'contains is meaningless for Elo; switches to ≥',
+    );
     c.dispose();
   });
 

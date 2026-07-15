@@ -39,8 +39,10 @@ class AuditFindingsList extends StatelessWidget {
     if (findings.isEmpty) {
       if (isAuditing) {
         return Center(
-          child: Text('Auditing...',
-              style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+          child: Text(
+            'Auditing...',
+            style: TextStyle(color: Colors.grey[500], fontSize: 12),
+          ),
         );
       }
       return Center(
@@ -49,11 +51,14 @@ class AuditFindingsList extends StatelessWidget {
           children: [
             Icon(Icons.verified_outlined, size: 40, color: Colors.grey[700]),
             const SizedBox(height: 12),
-            Text('No audit findings',
-                style: TextStyle(
-                    color: Colors.grey[400],
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600)),
+            Text(
+              'No audit findings',
+              style: TextStyle(
+                color: Colors.grey[400],
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             const SizedBox(height: 6),
             Text(
               'Run an audit to check your repertoire for gaps, '

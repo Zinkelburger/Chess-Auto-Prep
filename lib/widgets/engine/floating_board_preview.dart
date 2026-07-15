@@ -61,7 +61,8 @@ class _FloatingBoardPreviewState extends State<FloatingBoardPreview> {
 
   void _onPreviewChanged() {
     final ctrl = widget.controller;
-    final shouldShow = ctrl.isPreview &&
+    final shouldShow =
+        ctrl.isPreview &&
         ctrl.target == BoardPreviewTarget.floating &&
         ctrl.previewFen != null &&
         ctrl.anchorGlobal != null &&

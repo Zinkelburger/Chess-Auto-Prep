@@ -21,10 +21,9 @@ extension GenerationPhaseFlags on GenerationPhase {
   /// Whether the pipeline honors pause requests during this phase.
   /// The remaining phases are synchronous tree walks that finish quickly.
   bool get isPausable => switch (this) {
-        GenerationPhase.buildingTree ||
-        GenerationPhase.enrichingEvals ||
-        GenerationPhase.verifying =>
-          true,
-        _ => false,
-      };
+    GenerationPhase.buildingTree ||
+    GenerationPhase.enrichingEvals ||
+    GenerationPhase.verifying => true,
+    _ => false,
+  };
 }

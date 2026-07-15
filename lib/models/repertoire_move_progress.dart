@@ -13,10 +13,7 @@ class RepertoireMoveProgress {
     required this.learned,
   });
 
-  RepertoireMoveProgress copyWith({
-    int? correctStreak,
-    bool? learned,
-  }) {
+  RepertoireMoveProgress copyWith({int? correctStreak, bool? learned}) {
     return RepertoireMoveProgress(
       repertoireId: repertoireId,
       lineId: lineId,

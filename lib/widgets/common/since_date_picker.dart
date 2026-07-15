@@ -24,7 +24,8 @@ class SinceDatePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final displayDate = date ?? DateTime.now().subtract(const Duration(days: 7));
+    final displayDate =
+        date ?? DateTime.now().subtract(const Duration(days: 7));
     return Row(
       children: [
         Expanded(
@@ -74,8 +75,18 @@ class SinceDatePicker extends StatelessWidget {
 
   static String formatDate(DateTime d) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${months[d.month - 1]} ${d.day}, ${d.year}';
   }

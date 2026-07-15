@@ -26,13 +26,16 @@ void main() {
       expect(pos.moves.firstWhere((x) => x.uci == 'd2d4').count, 1);
     });
 
-    test('get() resolves via canonical 4-field FEN (ignores move counters)', () {
-      final m = PgnFreqMap();
-      m.recordMove(canonicalizeFen4(_fen), 'e2e4', 'e4');
-      // Query with different counters — same position.
-      final other = _fen.replaceAll('0 1', '3 9');
-      expect(m.get(other), isNotNull);
-    });
+    test(
+      'get() resolves via canonical 4-field FEN (ignores move counters)',
+      () {
+        final m = PgnFreqMap();
+        m.recordMove(canonicalizeFen4(_fen), 'e2e4', 'e4');
+        // Query with different counters — same position.
+        final other = _fen.replaceAll('0 1', '3 9');
+        expect(m.get(other), isNotNull);
+      },
+    );
   });
 
   group('PgnFreqMap.recordReach', () {

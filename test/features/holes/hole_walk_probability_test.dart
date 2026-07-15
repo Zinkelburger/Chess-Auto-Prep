@@ -22,8 +22,10 @@ Map<String, double> propagate(OpeningTreeNode root, bool isWhiteRepertoire) {
     out[node.fen] = cumProb;
     final isWhiteTurn = node.fen.contains(' w ');
     final isOwnerTurn = isWhiteTurn == isWhiteRepertoire;
-    final parentTotal =
-        node.children.values.fold<int>(0, (sum, c) => sum + c.gamesPlayed);
+    final parentTotal = node.children.values.fold<int>(
+      0,
+      (sum, c) => sum + c.gamesPlayed,
+    );
     for (final child in node.children.values) {
       visit(
         child,

@@ -139,8 +139,10 @@ void main() {
           '[Event "G1"]\n1. e4 *\n\n[Event "G2"]\n1. d4 *\n\n[Event "G3"]\n1. c4 *\n',
       'back-to-back':
           '[Event "L1"]\n1. e4 *\n[Event "L2"]\n1. d4 *\n[Event "L3"]\n1. c4 *\n',
-      'brace-preamble': '{Build stats}\n[Event "L1"]\n1. e4 *\n[Event "L2"]\n1. d4 *\n',
-      'comment-preamble': '// My Repertoire\n// Color: White\n\n[Event "L1"]\n1. e4 *\n',
+      'brace-preamble':
+          '{Build stats}\n[Event "L1"]\n1. e4 *\n[Event "L2"]\n1. d4 *\n',
+      'comment-preamble':
+          '// My Repertoire\n// Color: White\n\n[Event "L1"]\n1. e4 *\n',
       'header-less': '1. e4 e5 2. Nf3 *\n',
       'empty': '',
       'blank-only': '\n\n  \n',

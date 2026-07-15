@@ -27,8 +27,10 @@ void main() {
 
   group('RepertoireAuthoring.defaultLineTitle', () {
     test('uses first three moves when long enough', () {
-      expect(authoring.defaultLineTitle(['e4', 'e5', 'Nf3', 'Nc6']),
-          'Line: e4 e5 Nf3');
+      expect(
+        authoring.defaultLineTitle(['e4', 'e5', 'Nf3', 'Nc6']),
+        'Line: e4 e5 Nf3',
+      );
     });
     test('falls back for short lines', () {
       expect(authoring.defaultLineTitle(['e4']), 'Repertoire Line');
@@ -45,8 +47,10 @@ void main() {
     });
     test('returns null when no exact match', () {
       expect(authoring.findLineIndexForPrefix(lines, ['e4']), isNull);
-      expect(authoring.findLineIndexForPrefix(lines, ['e4', 'e5', 'Nf3']),
-          isNull);
+      expect(
+        authoring.findLineIndexForPrefix(lines, ['e4', 'e5', 'Nf3']),
+        isNull,
+      );
     });
   });
 
@@ -79,8 +83,10 @@ void main() {
 
   group('RepertoireAuthoring.extendLine', () {
     test('appends a move and preserves identity fields', () {
-      final original = _line('keep-id', ['e4', 'e5'],
-          pgn: '[Event "x"]\n\n1. e4 e5 *');
+      final original = _line('keep-id', [
+        'e4',
+        'e5',
+      ], pgn: '[Event "x"]\n\n1. e4 e5 *');
       final extended = authoring.extendLine(original, 'Nf3');
       expect(extended.id, 'keep-id');
       expect(extended.moves, ['e4', 'e5', 'Nf3']);

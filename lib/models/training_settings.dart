@@ -11,13 +11,12 @@ enum ReviewOrder {
 
 extension ReviewOrderLabel on ReviewOrder {
   String get label => switch (this) {
-        ReviewOrder.byImportance =>
-          'By cumulative probability (most likely first)',
-        ReviewOrder.random => 'Random',
-        ReviewOrder.weakestFirst => 'Weakest first',
-        ReviewOrder.hardestFirst => 'Hardest to play first',
-        ReviewOrder.sequential => 'Sequential',
-      };
+    ReviewOrder.byImportance => 'By cumulative probability (most likely first)',
+    ReviewOrder.random => 'Random',
+    ReviewOrder.weakestFirst => 'Weakest first',
+    ReviewOrder.hardestFirst => 'Hardest to play first',
+    ReviewOrder.sequential => 'Sequential',
+  };
 
   static ReviewOrder fromStorage(String? value) {
     switch (value) {
@@ -35,12 +34,12 @@ extension ReviewOrderLabel on ReviewOrder {
   }
 
   String get storageValue => switch (this) {
-        ReviewOrder.byImportance => 'byImportance',
-        ReviewOrder.random => 'random',
-        ReviewOrder.weakestFirst => 'weakestFirst',
-        ReviewOrder.hardestFirst => 'hardestFirst',
-        ReviewOrder.sequential => 'sequential',
-      };
+    ReviewOrder.byImportance => 'byImportance',
+    ReviewOrder.random => 'random',
+    ReviewOrder.weakestFirst => 'weakestFirst',
+    ReviewOrder.hardestFirst => 'hardestFirst',
+    ReviewOrder.sequential => 'sequential',
+  };
 }
 
 class TrainingSettings {
@@ -111,8 +110,9 @@ class TrainingSettings {
       learnRequiresClick: prefs.getBool(_keyLearnRequiresClick) ?? true,
       learnDelaySec: prefs.getInt(_keyLearnDelaySec) ?? 3,
       showRatingButtons: prefs.getBool(_keyShowRatingButtons) ?? true,
-      reviewOrder:
-          ReviewOrderLabel.fromStorage(prefs.getString(_keyReviewOrder)),
+      reviewOrder: ReviewOrderLabel.fromStorage(
+        prefs.getString(_keyReviewOrder),
+      ),
       moveSpeedMs: prefs.getInt(_keyMoveSpeedMs) ?? 700,
       skipToFirstComment: prefs.getBool(_keySkipToFirstComment) ?? true,
       introSpeedMs: prefs.getInt(_keyIntroSpeedMs) ?? 600,

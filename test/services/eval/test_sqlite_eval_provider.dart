@@ -40,35 +40,35 @@ void main() {
         'cp': 30,
         'mate': null,
         'depth': 22,
-        'move': 'e2e4'
+        'move': 'e2e4',
       },
       {
         'fen': canonicalizeFen4(fens[1]),
         'cp': -15,
         'mate': null,
         'depth': 20,
-        'move': 'e7e5'
+        'move': 'e7e5',
       },
       {
         'fen': canonicalizeFen4(fens[2]),
         'cp': null,
         'mate': 3,
         'depth': 24,
-        'move': 'g1f3'
+        'move': 'g1f3',
       },
       {
         'fen': canonicalizeFen4(fens[3]),
         'cp': 10,
         'mate': null,
         'depth': 12,
-        'move': 'b1c3'
+        'move': 'b1c3',
       },
       {
         'fen': canonicalizeFen4(fens[4]),
         'cp': null,
         'mate': null,
         'depth': 0,
-        'move': null
+        'move': null,
       },
     ];
     for (final row in rows) {

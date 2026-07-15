@@ -66,7 +66,8 @@ class HeaderFilters extends StatelessWidget {
       hintText = 'Value...';
     }
 
-    final showEcoWarn = f.field == 'ECO' &&
+    final showEcoWarn =
+        f.field == 'ECO' &&
         f.mode == MatchMode.exact &&
         f.value.isNotEmpty &&
         !_isValidEco(f.value);
@@ -87,14 +88,19 @@ class HeaderFilters extends StatelessWidget {
                   isExpanded: true,
                   decoration: const InputDecoration(
                     isDense: true,
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
                     border: OutlineInputBorder(),
                   ),
                   items: kHeaderFieldOptions
-                      .map((s) => DropdownMenuItem(
+                      .map(
+                        (s) => DropdownMenuItem(
                           value: s,
-                          child: Text(s, style: const TextStyle(fontSize: 12))))
+                          child: Text(s, style: const TextStyle(fontSize: 12)),
+                        ),
+                      )
                       .toList(),
                   onChanged: (v) => controller.setHeaderField(index, v!),
                 ),
@@ -108,18 +114,22 @@ class HeaderFilters extends StatelessWidget {
                   isExpanded: true,
                   decoration: const InputDecoration(
                     isDense: true,
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
                     border: OutlineInputBorder(),
                   ),
                   items: availableModes
-                      .map((m) => DropdownMenuItem(
-                            value: m,
-                            child: Text(
-                                matchModeLabel(m,
-                                    numeric: isNumericField(f.field)),
-                                style: const TextStyle(fontSize: 12)),
-                          ))
+                      .map(
+                        (m) => DropdownMenuItem(
+                          value: m,
+                          child: Text(
+                            matchModeLabel(m, numeric: isNumericField(f.field)),
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      )
                       .toList(),
                   onChanged: (v) => controller.setHeaderMode(index, v!),
                 ),
@@ -132,18 +142,25 @@ class HeaderFilters extends StatelessWidget {
                     hintText: hintText,
                     hintStyle: TextStyle(color: Colors.grey[600], fontSize: 12),
                     isDense: true,
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 10,
+                    ),
                     border: const OutlineInputBorder(),
                     suffixIcon: showEcoWarn
                         ? Tooltip(
                             message: 'Not a standard ECO code (A00–E99)',
-                            child: Icon(Icons.warning_amber,
-                                size: 16, color: Colors.orange[400]),
+                            child: Icon(
+                              Icons.warning_amber,
+                              size: 16,
+                              color: Colors.orange[400],
+                            ),
                           )
                         : null,
-                    suffixIconConstraints:
-                        const BoxConstraints(minWidth: 28, minHeight: 28),
+                    suffixIconConstraints: const BoxConstraints(
+                      minWidth: 28,
+                      minHeight: 28,
+                    ),
                   ),
                   style: const TextStyle(fontSize: 12),
                   onChanged: (v) => controller.setHeaderValue(index, v),

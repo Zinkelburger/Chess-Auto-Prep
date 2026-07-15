@@ -66,8 +66,7 @@ class RepertoireAnalyzePane {
               boardPreview: props.boardPreview,
               onTrapSelected: props.onTrapSelected,
               metrics: TrapIndexService(props.traps).metrics,
-              repertoireLineMoves:
-                  props.lines.map((l) => l.moves).toList(),
+              repertoireLineMoves: props.lines.map((l) => l.moves).toList(),
               onStartTour: props.onStartTrapTour,
             )
           : null,
@@ -80,8 +79,9 @@ class RepertoireAnalyzePane {
               onPositionSelected: props.onEvalTreePositionSelected,
             )
           : null,
-      metricsContent:
-          props.hasMetricsContent ? _AnalyzeMetricsView(props: props) : null,
+      metricsContent: props.hasMetricsContent
+          ? _AnalyzeMetricsView(props: props)
+          : null,
     );
   }
 }
@@ -177,10 +177,7 @@ class _AnalyzeMetricsView extends StatelessWidget {
 }
 
 class _CoverageDetailView extends StatelessWidget {
-  const _CoverageDetailView({
-    required this.result,
-    this.onNavigateToPosition,
-  });
+  const _CoverageDetailView({required this.result, this.onNavigateToPosition});
 
   final CoverageResult result;
   final void Function(List<String> moveSequence)? onNavigateToPosition;
@@ -196,13 +193,14 @@ class _CoverageDetailView extends StatelessWidget {
           _CoverageSection(
             title: 'Too shallow (${result.tooShallowLeaves.length})',
             color: AppColors.warning,
-            items:
-                result.tooShallowLeaves.map((leaf) => leaf.moveString).toList(),
+            items: result.tooShallowLeaves
+                .map((leaf) => leaf.moveString)
+                .toList(),
             onItemTap: onNavigateToPosition == null
                 ? null
                 : (index) => onNavigateToPosition!(
-                      result.tooShallowLeaves[index].moves,
-                    ),
+                    result.tooShallowLeaves[index].moves,
+                  ),
           ),
         if (result.tooDeepLeaves.isNotEmpty) ...[
           const SizedBox(height: 12),
@@ -212,9 +210,8 @@ class _CoverageDetailView extends StatelessWidget {
             items: result.tooDeepLeaves.map((leaf) => leaf.moveString).toList(),
             onItemTap: onNavigateToPosition == null
                 ? null
-                : (index) => onNavigateToPosition!(
-                      result.tooDeepLeaves[index].moves,
-                    ),
+                : (index) =>
+                      onNavigateToPosition!(result.tooDeepLeaves[index].moves),
           ),
         ],
         if (result.unaccountedMoves.isNotEmpty) ...[
@@ -257,10 +254,7 @@ class _CoverageOverviewCard extends StatelessWidget {
         children: [
           Text(
             '${result.coveragePercent.toStringAsFixed(1)}% covered',
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           Text(
@@ -332,10 +326,7 @@ class _CoverageSection extends StatelessWidget {
             const SizedBox(width: 6),
             Text(
               title,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
           ],
         ),

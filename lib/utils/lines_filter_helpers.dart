@@ -5,30 +5,13 @@ import 'package:chess_auto_prep/services/line_metrics_helpers.dart';
 import '../utils/pgn_utils.dart' as pgn_utils;
 
 /// Coverage category filter for the lines browser.
-enum CoverageFilter {
-  all,
-  covered,
-  tooShallow,
-  tooDeep,
-  unaccounted,
-}
+enum CoverageFilter { all, covered, tooShallow, tooDeep, unaccounted }
 
 /// Sortable columns in the lines browser table.
-enum LineSortBy {
-  name,
-  moves,
-  ease,
-  coherence,
-  traps,
-  coverage,
-}
+enum LineSortBy { name, moves, ease, coherence, traps, coverage }
 
 /// Per-line quality toggles. Active filters are ANDed together.
-enum LineMetricsFilter {
-  hardMoves,
-  trappy,
-  lowCoherence,
-}
+enum LineMetricsFilter { hardMoves, trappy, lowCoherence }
 
 /// A move whose ease falls below this is flagged as hard to find.
 const double hardMoveEaseThreshold = 0.3;
@@ -57,13 +40,11 @@ class LineDisplayData {
 
 /// Builds the display/search index for [lines]. O(total PGN size); call it
 /// when the repertoire changes, not per filter run.
-Map<String, LineDisplayData> buildLineDisplayIndex(
-    List<RepertoireLine> lines) {
+Map<String, LineDisplayData> buildLineDisplayIndex(List<RepertoireLine> lines) {
   final index = <String, LineDisplayData>{};
   for (final line in lines) {
     final eventTitle = pgn_utils.extractEventTitle(line.fullPgn);
-    final title =
-        !isPlaceholderLineTitle(eventTitle) ? eventTitle : line.name;
+    final title = !isPlaceholderLineTitle(eventTitle) ? eventTitle : line.name;
     final searchText = [
       line.name,
       eventTitle,
@@ -114,7 +95,8 @@ List<RepertoireLine> filterAndSortLines({
     }
 
     if (normalizedSearch.isNotEmpty) {
-      final searchText = displayIndex?[line.id]?.searchText ??
+      final searchText =
+          displayIndex?[line.id]?.searchText ??
           [
             line.name,
             pgn_utils.extractEventTitle(line.fullPgn),
@@ -149,8 +131,9 @@ List<RepertoireLine> filterAndSortLines({
       if (m == null) return false;
       for (final filter in metricsFilters) {
         final passes = switch (filter) {
-          LineMetricsFilter.hardMoves => m.bottleneckQuality != null &&
-              m.bottleneckQuality! < hardMoveEaseThreshold,
+          LineMetricsFilter.hardMoves =>
+            m.bottleneckQuality != null &&
+                m.bottleneckQuality! < hardMoveEaseThreshold,
           LineMetricsFilter.trappy => m.trapCount > 0,
           LineMetricsFilter.lowCoherence =>
             m.coherence != null && m.coherence! < lowCoherenceThreshold,
@@ -164,13 +147,13 @@ List<RepertoireLine> filterAndSortLines({
 
   // Sort key per line; null keys always sort last regardless of direction.
   num? keyOf(RepertoireLine line) => switch (sortBy) {
-        LineSortBy.name => null,
-        LineSortBy.moves => line.moves.length,
-        LineSortBy.ease => lineMetrics[line.id]?.playability,
-        LineSortBy.coherence => lineMetrics[line.id]?.coherence,
-        LineSortBy.traps => lineMetrics[line.id]?.trapCount,
-        LineSortBy.coverage => coverageSortRank(lineCoverage[line.id]),
-      };
+    LineSortBy.name => null,
+    LineSortBy.moves => line.moves.length,
+    LineSortBy.ease => lineMetrics[line.id]?.playability,
+    LineSortBy.coherence => lineMetrics[line.id]?.coherence,
+    LineSortBy.traps => lineMetrics[line.id]?.trapCount,
+    LineSortBy.coverage => coverageSortRank(lineCoverage[line.id]),
+  };
 
   int byName(RepertoireLine a, RepertoireLine b) =>
       a.name.toLowerCase().compareTo(b.name.toLowerCase());

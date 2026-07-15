@@ -42,21 +42,22 @@ BuildTree _trapFixtureTree() {
   )..engineEvalCp = 28;
   e4.children.add(c6);
 
-  final trapNode = BuildTreeNode(
-    fen: _trapFen,
-    moveSan: 'd4',
-    moveUci: 'd2d4',
-    ply: 3,
-    isWhiteToMove: false,
-    nodeId: 3,
-    parent: c6,
-    moveProbability: 1.0,
-    cumulativeProbability: 1.0,
-  )
-    ..engineEvalCp = 20
-    ..openingName = 'Caro-Kann Defense'
-    ..hasExpectimax = true
-    ..expectimaxValue = 0.55;
+  final trapNode =
+      BuildTreeNode(
+          fen: _trapFen,
+          moveSan: 'd4',
+          moveUci: 'd2d4',
+          ply: 3,
+          isWhiteToMove: false,
+          nodeId: 3,
+          parent: c6,
+          moveProbability: 1.0,
+          cumulativeProbability: 1.0,
+        )
+        ..engineEvalCp = 20
+        ..openingName = 'Caro-Kann Defense'
+        ..hasExpectimax = true
+        ..expectimaxValue = 0.55;
   c6.children.add(trapNode);
 
   final popularReply = BuildTreeNode(

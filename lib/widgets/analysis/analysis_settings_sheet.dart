@@ -131,8 +131,9 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
           const SizedBox(width: 10),
           Text(
             title,
-            style: theme.textTheme.titleLarge
-                ?.copyWith(fontWeight: FontWeight.w600),
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const Spacer(),
           IconButton(
@@ -245,7 +246,8 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
       child: SettingsSection(
         icon: Icons.view_column,
         title: 'Analysis panels',
-        subtitle: 'Live analysis shown above the PGN notation. '
+        subtitle:
+            'Live analysis shown above the PGN notation. '
             'You can also tap a column header in the move table '
             'to dim it without hiding it.',
         showDivider: false,
@@ -253,7 +255,8 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
           children: [
             SettingsSwitchRow(
               label: 'Stockfish PV',
-              tooltip: 'Show the Stockfish principal variation panel — '
+              tooltip:
+                  'Show the Stockfish principal variation panel — '
                   'top engine moves, eval, and continuation for the '
                   'current board position.',
               value: _settings.showEngineDock,
@@ -261,7 +264,8 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
             ),
             SettingsSwitchRow(
               label: 'Expectimax PV',
-              tooltip: 'Show the Expectimax panel — best practical lines '
+              tooltip:
+                  'Show the Expectimax panel — best practical lines '
                   'that account for likely human opponent replies.',
               value: _settings.showExpectimaxDock,
               onChanged: (v) {
@@ -281,7 +285,8 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
             ),
             SettingsSwitchRow(
               label: 'Stockfish evals in move table',
-              tooltip: 'Run Stockfish to evaluate candidate moves in the '
+              tooltip:
+                  'Run Stockfish to evaluate candidate moves in the '
                   'move table. Turn off to rely on Maia/database only.',
               value: _settings.showStockfish,
               onChanged: (v) => _settings.showStockfish = v,
@@ -308,9 +313,7 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
           Navigator.pop(context);
           Navigator.push(
             context,
-            MaterialPageRoute<void>(
-              builder: (_) => const SettingsScreen(),
-            ),
+            MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
           );
         },
       ),

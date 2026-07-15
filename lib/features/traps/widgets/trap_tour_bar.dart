@@ -70,8 +70,9 @@ class TrapTourBarState extends State<TrapTourBar> {
     super.initState();
     _sortedTraps = TrapTourBar.sortedTraps(widget.trapIndex.allTraps);
     final initial = widget.initialTrap;
-    _currentIndex =
-        initial != null ? TrapTourBar.indexOfTrap(_sortedTraps, initial) : 0;
+    _currentIndex = initial != null
+        ? TrapTourBar.indexOfTrap(_sortedTraps, initial)
+        : 0;
     if (_currentIndex < 0) _currentIndex = 0;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _showCurrent();
@@ -84,14 +85,19 @@ class TrapTourBarState extends State<TrapTourBar> {
     if (identical(oldWidget.trapIndex, widget.trapIndex)) return;
     // Traps regenerated mid-tour: rebuild the list, stay on the same trap
     // when it survived, otherwise clamp.
-    final current =
-        _sortedTraps.isNotEmpty ? _sortedTraps[_currentIndex] : null;
+    final current = _sortedTraps.isNotEmpty
+        ? _sortedTraps[_currentIndex]
+        : null;
     _sortedTraps = TrapTourBar.sortedTraps(widget.trapIndex.allTraps);
-    final idx =
-        current != null ? TrapTourBar.indexOfTrap(_sortedTraps, current) : -1;
+    final idx = current != null
+        ? TrapTourBar.indexOfTrap(_sortedTraps, current)
+        : -1;
     _currentIndex = idx >= 0
         ? idx
-        : _currentIndex.clamp(0, _sortedTraps.isEmpty ? 0 : _sortedTraps.length - 1);
+        : _currentIndex.clamp(
+            0,
+            _sortedTraps.isEmpty ? 0 : _sortedTraps.length - 1,
+          );
   }
 
   TrapLineInfo get _currentTrap => _sortedTraps[_currentIndex];
@@ -158,13 +164,17 @@ class TrapTourBarState extends State<TrapTourBar> {
                   color: AppColors.warning,
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 28, minHeight: 28),
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
                   onPressed: _currentIndex > 0 ? previous : null,
                 ),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.warning.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
@@ -184,20 +194,27 @@ class TrapTourBarState extends State<TrapTourBar> {
                   color: AppColors.warning,
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 28, minHeight: 28),
-                  onPressed:
-                      _currentIndex < _sortedTraps.length - 1 ? next : null,
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
+                  onPressed: _currentIndex < _sortedTraps.length - 1
+                      ? next
+                      : null,
                 ),
                 const SizedBox(width: 10),
                 Expanded(child: _TrapTourNarrative(trap: trap)),
                 const SizedBox(width: 6),
                 Tooltip(
-                  message: 'The trap line is loaded in the PGN tab — click '
+                  message:
+                      'The trap line is loaded in the PGN tab — click '
                       'any move to step through it.\n'
                       'Shift+←/→ jumps between traps inside the line.',
-                  child: Icon(Icons.help_outline,
-                      size: 14, color: Colors.grey[600]),
+                  child: Icon(
+                    Icons.help_outline,
+                    size: 14,
+                    color: Colors.grey[600],
+                  ),
                 ),
                 const SizedBox(width: 2),
                 ShortcutIconButton(

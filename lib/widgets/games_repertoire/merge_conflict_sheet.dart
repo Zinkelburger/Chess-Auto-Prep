@@ -64,7 +64,9 @@ class _MergeConflictSheetState extends State<MergeConflictSheet> {
                       '$total decision${total == 1 ? '' : 's'} to make'
                       '  ·  $done resolved',
                       style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w600),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   TextButton(
@@ -79,8 +81,7 @@ class _MergeConflictSheetState extends State<MergeConflictSheet> {
               child: Text(
                 'Your games introduced a different move where you already had '
                 'prep. Pick which one is your main line.',
-                style: TextStyle(
-                    fontSize: 12, color: AppColors.onSurfaceMuted),
+                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
               ),
             ),
             const SizedBox(height: 8),
@@ -116,14 +117,19 @@ class _MergeConflictSheetState extends State<MergeConflictSheet> {
                 if (resolved)
                   const Padding(
                     padding: EdgeInsets.only(right: 6),
-                    child: Icon(Icons.check_circle,
-                        size: 16, color: AppColors.success),
+                    child: Icon(
+                      Icons.check_circle,
+                      size: 16,
+                      color: AppColors.success,
+                    ),
                   ),
                 Expanded(
                   child: Text(
                     lineLabel.isEmpty ? 'Starting position' : lineLabel,
                     style: const TextStyle(
-                        fontSize: 12, color: AppColors.onSurfaceMuted),
+                      fontSize: 12,
+                      color: AppColors.onSurfaceMuted,
+                    ),
                   ),
                 ),
               ],
@@ -138,8 +144,7 @@ class _MergeConflictSheetState extends State<MergeConflictSheet> {
                     san: children[idx].san,
                     isMainline: idx == 0,
                     isFromGames: children[idx].san == conflict.draftSan,
-                    onTap: () =>
-                        _makeMainline(conflict.parentPath, idx, i),
+                    onTap: () => _makeMainline(conflict.parentPath, idx, i),
                   ),
               ],
             ),
@@ -157,8 +162,9 @@ class _MergeConflictSheetState extends State<MergeConflictSheet> {
   }) {
     return ActionChip(
       onPressed: onTap,
-      backgroundColor:
-          isMainline ? AppColors.success.withValues(alpha: 0.18) : null,
+      backgroundColor: isMainline
+          ? AppColors.success.withValues(alpha: 0.18)
+          : null,
       avatar: Icon(
         isMainline ? Icons.star : Icons.star_border,
         size: 16,
@@ -167,14 +173,14 @@ class _MergeConflictSheetState extends State<MergeConflictSheet> {
       label: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(san,
-              style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text(san, style: const TextStyle(fontWeight: FontWeight.w600)),
           if (isFromGames)
             const Padding(
               padding: EdgeInsets.only(left: 4),
-              child: Text('· yours',
-                  style: TextStyle(
-                      fontSize: 10, color: AppColors.onSurfaceDim)),
+              child: Text(
+                '· yours',
+                style: TextStyle(fontSize: 10, color: AppColors.onSurfaceDim),
+              ),
             ),
         ],
       ),

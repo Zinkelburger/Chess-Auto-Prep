@@ -46,12 +46,15 @@ class AnalysisService {
   final Map<int, String> _workerCurrentMoves = {};
 
   // ── Public notifiers ──────────────────────────────────────────────────
-  final ValueNotifier<DiscoveryResult> discoveryResult =
-      ValueNotifier(const DiscoveryResult());
-  final ValueNotifier<Map<String, MoveAnalysisResult>> results =
-      ValueNotifier({});
-  final ValueNotifier<PoolStatus> poolStatus =
-      ValueNotifier(const PoolStatus());
+  final ValueNotifier<DiscoveryResult> discoveryResult = ValueNotifier(
+    const DiscoveryResult(),
+  );
+  final ValueNotifier<Map<String, MoveAnalysisResult>> results = ValueNotifier(
+    {},
+  );
+  final ValueNotifier<PoolStatus> poolStatus = ValueNotifier(
+    const PoolStatus(),
+  );
 
   int get workerCount => _pool.workerCount;
 
@@ -85,8 +88,10 @@ class AnalysisService {
     _enginePaneFen = fen;
     _enginePaneDone = Completer<void>();
     if (kDebugMode) {
-      debugPrint('[Analysis] Engine-pane pipeline BLOCKING expectimax for '
-          '${fen.split(' ').take(2).join(' ')}');
+      debugPrint(
+        '[Analysis] Engine-pane pipeline BLOCKING expectimax for '
+        '${fen.split(' ').take(2).join(' ')}',
+      );
     }
   }
 
@@ -123,19 +128,24 @@ class AnalysisService {
         final done = _enginePaneDone;
         if (done != null) {
           if (kDebugMode) {
-            debugPrint('[Analysis] Expectimax waiting for engine-pane pipeline '
-                '(${fen.split(' ').take(2).join(' ')})');
+            debugPrint(
+              '[Analysis] Expectimax waiting for engine-pane pipeline '
+              '(${fen.split(' ').take(2).join(' ')})',
+            );
           }
           try {
             await done.future.timeout(maxGateWait);
             if (kDebugMode) {
               debugPrint(
-                  '[Analysis] Expectimax may proceed — engine-pane done');
+                '[Analysis] Expectimax may proceed — engine-pane done',
+              );
             }
           } on TimeoutException {
             if (kDebugMode) {
-              debugPrint('[Analysis] Expectimax proceeding — engine-pane '
-                  'pipeline still busy after ${maxGateWait.inSeconds}s');
+              debugPrint(
+                '[Analysis] Expectimax proceeding — engine-pane '
+                'pipeline still busy after ${maxGateWait.inSeconds}s',
+              );
             }
           }
           return;
@@ -145,8 +155,10 @@ class AnalysisService {
     }
 
     if (kDebugMode && _enginePaneFen != fen) {
-      debugPrint('[Analysis] Expectimax proceeding without engine-pane gate '
-          '(timed out waiting for ${fen.split(' ').take(2).join(' ')})');
+      debugPrint(
+        '[Analysis] Expectimax proceeding without engine-pane gate '
+        '(timed out waiting for ${fen.split(' ').take(2).join(' ')})',
+      );
     }
   }
 
@@ -191,9 +203,11 @@ class AnalysisService {
     });
 
     if (kDebugMode) {
-      debugPrint('[Analysis] Discovery START — MultiPV=$multiPv, depth=$depth, '
-          'workers=${_pool.workerCount}, '
-          'fen=${fen.split(' ').take(2).join(' ')}');
+      debugPrint(
+        '[Analysis] Discovery START — MultiPV=$multiPv, depth=$depth, '
+        'workers=${_pool.workerCount}, '
+        'fen=${fen.split(' ').take(2).join(' ')}',
+      );
     }
 
     var lastLoggedDiscoveryDepth = 0;
@@ -222,9 +236,10 @@ class AnalysisService {
               intermediate.lines.isNotEmpty) {
             lastLoggedDiscoveryDepth = intermediate.depth;
             debugPrint(
-                '[Analysis] Discovery depth ${intermediate.depth}/$depth '
-                '— ${intermediate.lines.length} lines, '
-                '${intermediate.nodes} nodes');
+              '[Analysis] Discovery depth ${intermediate.depth}/$depth '
+              '— ${intermediate.lines.length} lines, '
+              '${intermediate.nodes} nodes',
+            );
           }
         },
       );
@@ -233,8 +248,10 @@ class AnalysisService {
 
       _publishUi(() => discoveryResult.value = result);
       if (kDebugMode) {
-        debugPrint('[Analysis] Discovery DONE — ${result.lines.length} lines, '
-            'depth ${result.depth}');
+        debugPrint(
+          '[Analysis] Discovery DONE — ${result.lines.length} lines, '
+          'depth ${result.depth}',
+        );
       }
       return result;
     } catch (e) {
@@ -298,8 +315,10 @@ class AnalysisService {
     });
 
     if (kDebugMode) {
-      debugPrint('[Analysis] Evaluation START — ${moveUcis.length} moves, '
-          'depth=$evalDepth, workers=${_pool.workerCount}');
+      debugPrint(
+        '[Analysis] Evaluation START — ${moveUcis.length} moves, '
+        'depth=$evalDepth, workers=${_pool.workerCount}',
+      );
     }
 
     _startWorkerLoops(myGen);

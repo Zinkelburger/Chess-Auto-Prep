@@ -55,8 +55,9 @@ class ExplorerCacheService {
   ExplorerCacheService._(this._client);
 
   /// Application-wide shared instance (main thread).
-  static final ExplorerCacheService instance =
-      ExplorerCacheService._(LichessApiClient.instance);
+  static final ExplorerCacheService instance = ExplorerCacheService._(
+    LichessApiClient.instance,
+  );
 
   /// Independent instance with an injectable client (unit tests).
   ExplorerCacheService.forTesting(LichessApiClient client) : this._(client);
@@ -77,10 +78,7 @@ class ExplorerCacheService {
 
   /// Cached Explorer stats for [fen], or `null` on network/rate-limit
   /// failure (not cached; retry re-fetches).
-  Future<ExplorerResponse?> fetch(
-    String fen,
-    ExplorerSourceConfig source,
-  ) {
+  Future<ExplorerResponse?> fetch(String fen, ExplorerSourceConfig source) {
     final key = _key(fen, source);
 
     final cached = _cache.remove(key);
@@ -94,25 +92,26 @@ class ExplorerCacheService {
 
     final future = _client
         .fetchExplorer(
-      fen,
-      speeds: source.speeds,
-      ratings: source.ratings,
-      useMasters: source.useMasters,
-    )
+          fen,
+          speeds: source.speeds,
+          ratings: source.ratings,
+          useMasters: source.useMasters,
+        )
         .then((response) {
-      if (response != null) {
-        _cache[key] = response;
-        while (_cache.length > _maxEntries) {
-          _cache.remove(_cache.keys.first);
-        }
-      }
-      return response;
-    }).whenComplete(() {
-      // Block body, not `=> _inFlight.remove(key)`: remove() returns this
-      // very future, and whenComplete awaits a returned future — the arrow
-      // form deadlocks every fetch against itself.
-      _inFlight.remove(key);
-    });
+          if (response != null) {
+            _cache[key] = response;
+            while (_cache.length > _maxEntries) {
+              _cache.remove(_cache.keys.first);
+            }
+          }
+          return response;
+        })
+        .whenComplete(() {
+          // Block body, not `=> _inFlight.remove(key)`: remove() returns this
+          // very future, and whenComplete awaits a returned future — the arrow
+          // form deadlocks every fetch against itself.
+          _inFlight.remove(key);
+        });
 
     _inFlight[key] = future;
     return future;

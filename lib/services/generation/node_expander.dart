@@ -180,11 +180,10 @@ abstract class NodeExpander {
   ///
   /// `BuildMode.dbExplorer` never reaches here — it has its own entry point
   /// driven by the PGN frequency map rather than per-node move sources.
-  factory NodeExpander.forRun(BuildRun run) =>
-      switch (run.config.buildMode) {
-        BuildMode.maiaDbExplore => MaiaDbExpander(run),
-        _ => StockfishExpander(run),
-      };
+  factory NodeExpander.forRun(BuildRun run) => switch (run.config.buildMode) {
+    BuildMode.maiaDbExplore => MaiaDbExpander(run),
+    _ => StockfishExpander(run),
+  };
 
   TreeBuildConfig get config => run.config;
 
@@ -273,8 +272,9 @@ abstract class NodeExpander {
       candidates: candidates,
       smoothing: smoothing,
       minGames: config.minGames,
-      maxChildren:
-          config.effectiveOppMaxChildren(effectiveSearchPriority(node)),
+      maxChildren: config.effectiveOppMaxChildren(
+        effectiveSearchPriority(node),
+      ),
       massTarget: config.oppMassTarget,
       attachStats: true,
     );
@@ -318,8 +318,9 @@ abstract class NodeExpander {
       ],
       smoothing: false,
       minMoveProb: config.maiaMinProb,
-      maxChildren:
-          config.effectiveOppMaxChildren(effectiveSearchPriority(node)),
+      maxChildren: config.effectiveOppMaxChildren(
+        effectiveSearchPriority(node),
+      ),
       massTarget: config.oppMassTarget,
     );
 
@@ -408,12 +409,13 @@ abstract class NodeExpander {
         final result = await run.pool.evaluateFen(childFen, config.evalDepth);
         run.stats.sfMultipvCalls++;
         final childIsWhite = isWhiteToMove(childFen);
-        childCpWhite =
-            childIsWhite ? result.effectiveCp : -result.effectiveCp;
+        childCpWhite = childIsWhite ? result.effectiveCp : -result.effectiveCp;
         evalDepthUsed = config.evalDepth;
       } else {
-        final dbEval =
-            await run.evalResolver.lookupDbEvalWhite(childFen, config);
+        final dbEval = await run.evalResolver.lookupDbEvalWhite(
+          childFen,
+          config,
+        );
         if (dbEval == null) continue;
         childCpWhite = dbEval.$1;
         evalDepthUsed = dbEval.$2;
@@ -497,12 +499,15 @@ abstract class NodeExpander {
 
     final setupSans = parseSetupMoves(config.setupMoves).toSet();
     final incumbentCp = incumbent.evalForUs(config.playAsWhite);
-    final alts = [
-      for (final c in children)
-        if (!identical(c, incumbent)) c,
-    ]..sort((a, b) => b
-        .evalForUs(config.playAsWhite)
-        .compareTo(a.evalForUs(config.playAsWhite)));
+    final alts =
+        [
+          for (final c in children)
+            if (!identical(c, incumbent)) c,
+        ]..sort(
+          (a, b) => b
+              .evalForUs(config.playAsWhite)
+              .compareTo(a.evalForUs(config.playAsWhite)),
+        );
 
     final expand = <BuildTreeNode>[incumbent];
     var altsTaken = 0;
@@ -592,8 +597,9 @@ class StockfishExpander extends NodeExpander {
 
     for (final line in discovery.lines) {
       if (line.moveUci.isEmpty) continue;
-      final evalLoss =
-          whiteToMove ? bestCp - line.effectiveCp : line.effectiveCp - bestCp;
+      final evalLoss = whiteToMove
+          ? bestCp - line.effectiveCp
+          : line.effectiveCp - bestCp;
       if (evalLoss > evalLossWindow) continue;
 
       final childFen = playUciMove(node.fen, line.moveUci);
@@ -602,8 +608,9 @@ class StockfishExpander extends NodeExpander {
       // Get SAN from Lichess data or compute it
       String san = line.moveUci;
       if (lichess != null) {
-        final lichessMove =
-            lichess.moves.where((m) => m.uci == line.moveUci).firstOrNull;
+        final lichessMove = lichess.moves
+            .where((m) => m.uci == line.moveUci)
+            .firstOrNull;
         if (lichessMove != null) {
           san = lichessMove.san;
         }
@@ -626,13 +633,17 @@ class StockfishExpander extends NodeExpander {
       child.moveProbability = 1.0;
       child.cumulativeProbability = node.cumulativeProbability;
       child.engineEvalCp = childEvalStm;
-      run.evalResolver.cacheEvalWhite(childFen,
-          childIsWhite ? childEvalStm : -childEvalStm, config.evalDepth);
+      run.evalResolver.cacheEvalWhite(
+        childFen,
+        childIsWhite ? childEvalStm : -childEvalStm,
+        config.evalDepth,
+      );
 
       // Enrich with Lichess stats
       if (lichess != null) {
-        final lm =
-            lichess.moves.where((m) => m.uci == line.moveUci).firstOrNull;
+        final lm = lichess.moves
+            .where((m) => m.uci == line.moveUci)
+            .firstOrNull;
         if (lm != null) {
           child.setLichessStats(lm.white, lm.black, lm.draws);
         }
@@ -746,8 +757,10 @@ class MaiaDbExpander extends NodeExpander {
       if (childFen == null) continue;
 
       // Child eval from DB only — skip candidates with no database coverage.
-      final childEval =
-          await run.evalResolver.lookupDbEvalWhite(childFen, config);
+      final childEval = await run.evalResolver.lookupDbEvalWhite(
+        childFen,
+        config,
+      );
       if (childEval == null) continue;
 
       final childIsWhite = isWhiteToMove(childFen);

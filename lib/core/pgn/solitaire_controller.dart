@@ -198,12 +198,14 @@ class SolitaireController extends ChangeNotifier {
     if (isCorrect) {
       _totalUserMoves++;
       if (_currentAttempts == 0) _correctFirstTry++;
-      _guessLog.add(SolitaireGuess(
-        ply: _revealedPly,
-        expectedSan: expectedSan,
-        wrongAttempts: List.of(_pendingWrongAttempts),
-        correctSan: san,
-      ));
+      _guessLog.add(
+        SolitaireGuess(
+          ply: _revealedPly,
+          expectedSan: expectedSan,
+          wrongAttempts: List.of(_pendingWrongAttempts),
+          correctSan: san,
+        ),
+      );
       _pendingWrongAttempts.clear();
       _currentAttempts = 0;
       _feedback = SolitaireFeedback.correct;
@@ -232,13 +234,15 @@ class SolitaireController extends ChangeNotifier {
     if (!_active || !waitingForUser) return;
     _totalUserMoves++;
     _revealedCount++;
-    _guessLog.add(SolitaireGuess(
-      ply: _revealedPly,
-      expectedSan: expectedSan,
-      wrongAttempts: List.of(_pendingWrongAttempts),
-      correctSan: expectedSan,
-      wasRevealed: true,
-    ));
+    _guessLog.add(
+      SolitaireGuess(
+        ply: _revealedPly,
+        expectedSan: expectedSan,
+        wrongAttempts: List.of(_pendingWrongAttempts),
+        correctSan: expectedSan,
+        wasRevealed: true,
+      ),
+    );
     _pendingWrongAttempts.clear();
     _currentAttempts = 0;
     _revealedPly++;

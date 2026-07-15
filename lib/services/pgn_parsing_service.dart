@@ -75,7 +75,8 @@ List<String> splitPgnIntoGames(String content) {
       currentGame.write('$line\n');
     } else if (trimmedLine.isNotEmpty) {
       currentGame.write(
-          '[Event "Repertoire Line"]\n[White "Training"]\n[Black "Me"]\n\n');
+        '[Event "Repertoire Line"]\n[White "Training"]\n[Black "Me"]\n\n',
+      );
       inGame = true;
       currentGame.write('$line\n');
     }
@@ -274,7 +275,10 @@ List<List<String>> parseSequenceGroups(String pattern) {
 /// Check whether a game's mainline matches the sequence groups with the
 /// given max gap (in ply) between groups.
 bool gameMatchesSequence(
-    String pgnText, List<List<String>> groups, int maxGap) {
+  String pgnText,
+  List<List<String>> groups,
+  int maxGap,
+) {
   if (groups.isEmpty) return true;
   try {
     final game = PgnGame.parsePgn(pgnText);
@@ -329,7 +333,8 @@ String? parseTargetFen(String? input) {
 ///
 /// Isolate-safe: no instance state captured.
 Map<String, List<int>> buildFenIndex(
-    List<({Map<String, String> headers, String pgnText})> games) {
+  List<({Map<String, String> headers, String pgnText})> games,
+) {
   final index = <String, List<int>>{};
 
   void record(String fen, int gameIdx) {
@@ -399,11 +404,13 @@ Future<List<int>> computeSliceMatches({
     if (!hasOtherFilters) return Future.value(List<int>.from(candidates));
 
     final candidateData = candidates
-        .map((i) => (
-              origIdx: i,
-              headers: Map<String, String>.from(games[i].headers),
-              pgnText: games[i].pgnText,
-            ))
+        .map(
+          (i) => (
+            origIdx: i,
+            headers: Map<String, String>.from(games[i].headers),
+            pgnText: games[i].pgnText,
+          ),
+        )
         .toList();
     final filterData = filters
         .map((f) => (field: f.field, modeName: f.mode.name, value: f.value))
@@ -414,7 +421,12 @@ Future<List<int>> computeSliceMatches({
       final result = <int>[];
       for (final c in candidateData) {
         if (!_passesNonPositionFilters(
-            c.headers, c.pgnText, filterData, seqCopy, seqGap)) {
+          c.headers,
+          c.pgnText,
+          filterData,
+          seqCopy,
+          seqGap,
+        )) {
           continue;
         }
         result.add(c.origIdx);
@@ -428,8 +440,10 @@ Future<List<int>> computeSliceMatches({
       .map((f) => (field: f.field, modeName: f.mode.name, value: f.value))
       .toList();
   final gameData = games
-      .map((g) =>
-          (headers: Map<String, String>.from(g.headers), pgnText: g.pgnText))
+      .map(
+        (g) =>
+            (headers: Map<String, String>.from(g.headers), pgnText: g.pgnText),
+      )
       .toList();
   final seqCopy = seqGroups.map((g) => List<String>.from(g)).toList();
 
@@ -445,7 +459,12 @@ Future<List<int>> computeSliceMatches({
 
       if (matches &&
           !_passesNonPositionFilters(
-              game.headers, game.pgnText, filterData, seqCopy, seqGap)) {
+            game.headers,
+            game.pgnText,
+            filterData,
+            seqCopy,
+            seqGap,
+          )) {
         matches = false;
       }
 
@@ -470,8 +489,10 @@ bool _passesNonPositionFilters(
   for (final f in filterData) {
     if (f.value.isEmpty) continue;
     final headerVal = headers[f.field] ?? '';
-    final mode = MatchMode.values.firstWhere((m) => m.name == f.modeName,
-        orElse: () => MatchMode.contains);
+    final mode = MatchMode.values.firstWhere(
+      (m) => m.name == f.modeName,
+      orElse: () => MatchMode.contains,
+    );
     if (!matchesField(headerVal, f.value, mode)) return false;
   }
   return true;
@@ -554,7 +575,12 @@ Map<String, List<int>>? deserializeFenIndex(
 }
 
 bool _matchGroupsAt(
-    List<String> moves, List<List<String>> groups, int gi, int mi, int maxGap) {
+  List<String> moves,
+  List<List<String>> groups,
+  int gi,
+  int mi,
+  int maxGap,
+) {
   if (gi >= groups.length) return true;
   final group = groups[gi];
   if (group.length > moves.length) return false;

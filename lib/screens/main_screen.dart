@@ -140,14 +140,12 @@ class _TacticsModeView extends StatelessWidget {
           create: (_) => TacticsDatabase(),
         ),
         ChangeNotifierProvider<TacticsSessionController>(
-          create: (ctx) => TacticsSessionController(
-            database: ctx.read<TacticsDatabase>(),
-          ),
+          create: (ctx) =>
+              TacticsSessionController(database: ctx.read<TacticsDatabase>()),
         ),
         ChangeNotifierProvider<TacticsImportCoordinator>(
-          create: (ctx) => TacticsImportCoordinator(
-            database: ctx.read<TacticsDatabase>(),
-          ),
+          create: (ctx) =>
+              TacticsImportCoordinator(database: ctx.read<TacticsDatabase>()),
         ),
       ],
       child: const _TacticsModeScaffold(),
@@ -173,9 +171,7 @@ class _TacticsModeScaffold extends StatelessWidget {
       appBar: AppBar(
         titleSpacing: 16,
         title: const Text('Tactics'),
-        actions: const [
-          AppModeMenuButton(),
-        ],
+        actions: const [AppModeMenuButton()],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
@@ -204,10 +200,7 @@ class _TacticsModeScaffold extends StatelessWidget {
                       flex: 5,
                       child: _TacticsBoardPane(appState: appState),
                     ),
-                    Container(
-                      width: 1,
-                      color: Colors.grey[700],
-                    ),
+                    Container(width: 1, color: Colors.grey[700]),
                     Expanded(
                       flex: 5,
                       child: Padding(
@@ -232,10 +225,10 @@ class _TacticsBoardPane extends StatelessWidget {
   /// free-play analysis, decided by the session controller).
   void _attemptMove(BuildContext context, String uci) {
     context.read<TacticsSessionController>().handleMoveAttempted(
-          moveUci: uci,
-          boardFen: appState.currentPosition.fen,
-          inAnalysisMode: appState.isAnalysisMode,
-        );
+      moveUci: uci,
+      boardFen: appState.currentPosition.fen,
+      inAnalysisMode: appState.isAnalysisMode,
+    );
   }
 
   @override

@@ -75,18 +75,11 @@ class _GamesListWidgetState extends State<GamesListWidget> {
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface,
-            border: Border(
-              bottom: BorderSide(
-                color: Colors.grey.shade700,
-              ),
-            ),
+            border: Border(bottom: BorderSide(color: Colors.grey.shade700)),
           ),
           child: Text(
             '${widget.games.length} game${widget.games.length == 1 ? '' : 's'} with this position',
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             textAlign: TextAlign.center,
           ),
         ),
@@ -101,11 +94,14 @@ class _GamesListWidgetState extends State<GamesListWidget> {
 
               return ListTile(
                 selected: isSelected,
-                selectedTileColor:
-                    Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                selectedTileColor: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: 0.3),
                 dense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
                 trailing: game.gameUrl != null
                     ? IconButton(
                         icon: const Icon(Icons.open_in_new, size: 16),
@@ -128,8 +124,11 @@ class _GamesListWidgetState extends State<GamesListWidget> {
                       const SizedBox(height: 2),
                       Row(
                         children: [
-                          Icon(Icons.bar_chart, size: 12,
-                              color: Colors.amber.shade300),
+                          Icon(
+                            Icons.bar_chart,
+                            size: 12,
+                            color: Colors.amber.shade300,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             game.eloDisplay,
@@ -144,10 +143,7 @@ class _GamesListWidgetState extends State<GamesListWidget> {
                     ],
                     if (game.subtitle.isNotEmpty) ...[
                       const SizedBox(height: 2),
-                      Text(
-                        game.subtitle,
-                        style: const TextStyle(fontSize: 11),
-                      ),
+                      Text(game.subtitle, style: const TextStyle(fontSize: 11)),
                     ],
                     if (game.site.isNotEmpty) ...[
                       const SizedBox(height: 2),

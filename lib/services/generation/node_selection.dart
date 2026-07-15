@@ -13,8 +13,10 @@ import '../../utils/eval_constants.dart';
 
 /// Highest [BuildTreeNode.evalForUs] among [children] that have an engine
 /// eval, or [kWorstEvalCp] when none do.
-int bestSiblingEvalCp(List<BuildTreeNode> children,
-    {required bool playAsWhite}) {
+int bestSiblingEvalCp(
+  List<BuildTreeNode> children, {
+  required bool playAsWhite,
+}) {
   var best = kWorstEvalCp;
   for (final child in children) {
     if (!child.hasEngineEval) continue;

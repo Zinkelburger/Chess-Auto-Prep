@@ -2,12 +2,10 @@ import 'package:chess_auto_prep/models/opening_tree.dart';
 import 'package:chess_auto_prep/utils/chess_move_utils.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const startFen =
-    'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+const startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
 // After 1.e4:
-const afterE4Fen =
-    'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+const afterE4Fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
 
 void main() {
   group('uciToSan', () {
@@ -37,24 +35,22 @@ void main() {
 
   group('uciPvToSan', () {
     test('converts a full PV', () {
-      expect(
-        uciPvToSan(startFen, ['e2e4', 'e7e5', 'g1f3']),
-        ['e4', 'e5', 'Nf3'],
-      );
+      expect(uciPvToSan(startFen, ['e2e4', 'e7e5', 'g1f3']), [
+        'e4',
+        'e5',
+        'Nf3',
+      ]);
     });
 
     test('caps at maxPlies', () {
-      expect(
-        uciPvToSan(startFen, ['e2e4', 'e7e5', 'g1f3'], maxPlies: 2),
-        ['e4', 'e5'],
-      );
+      expect(uciPvToSan(startFen, ['e2e4', 'e7e5', 'g1f3'], maxPlies: 2), [
+        'e4',
+        'e5',
+      ]);
     });
 
     test('stops at first invalid move, keeping the prefix', () {
-      expect(
-        uciPvToSan(startFen, ['e2e4', 'e2e4', 'g1f3']),
-        ['e4'],
-      );
+      expect(uciPvToSan(startFen, ['e2e4', 'e2e4', 'g1f3']), ['e4']);
     });
 
     test('empty on bad fen', () {

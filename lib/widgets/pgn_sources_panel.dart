@@ -103,9 +103,9 @@ class PgnSourcesPanelState extends State<PgnSourcesPanel> {
       _notify();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error picking file: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error picking file: $e')));
       }
     }
   }
@@ -160,20 +160,14 @@ class PgnSourcesPanelState extends State<PgnSourcesPanel> {
               ),
             ),
             const Spacer(),
-            _AddPgnButton(
-              onPickFile: _addFromFile,
-              onPaste: _showPasteDialog,
-            ),
+            _AddPgnButton(onPickFile: _addFromFile, onPaste: _showPasteDialog),
           ],
         ),
         const SizedBox(height: 8),
 
         // Source list
         if (_sources.isEmpty)
-          _EmptyState(
-            onPickFile: _addFromFile,
-            onPaste: _showPasteDialog,
-          )
+          _EmptyState(onPickFile: _addFromFile, onPaste: _showPasteDialog)
         else
           ..._sources.asMap().entries.map((entry) {
             final idx = entry.key;
@@ -310,8 +304,9 @@ class _SourceRow extends StatelessWidget {
               borderRadius: isExpanded
                   ? const BorderRadius.vertical(top: Radius.circular(8))
                   : BorderRadius.circular(8),
-              border:
-                  Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.3),
+              ),
             ),
             child: Row(
               children: [
@@ -348,7 +343,9 @@ class _SourceRow extends StatelessWidget {
                       Text(
                         source.name,
                         style: const TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w500),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -356,7 +353,9 @@ class _SourceRow extends StatelessWidget {
                         Text(
                           p.basename(source.filePath!),
                           style: TextStyle(
-                              fontSize: 10, color: cs.onSurfaceVariant),
+                            fontSize: 10,
+                            color: cs.onSurfaceVariant,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -368,8 +367,10 @@ class _SourceRow extends StatelessWidget {
                 GestureDetector(
                   onTap: onToggleSlice,
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: source.isSliced
                           ? cs.tertiaryContainer
@@ -420,10 +421,7 @@ class _SourceRow extends StatelessWidget {
                 // Game count
                 Text(
                   '${source.totalGames}',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: cs.onSurfaceVariant,
-                  ),
+                  style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
                 ),
                 const SizedBox(width: 4),
                 // Remove
@@ -509,8 +507,10 @@ class _EmptyState extends StatelessWidget {
                 icon: const Icon(Icons.file_open, size: 14),
                 label: const Text('Pick file', style: TextStyle(fontSize: 11)),
                 style: OutlinedButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -519,8 +519,10 @@ class _EmptyState extends StatelessWidget {
                 icon: const Icon(Icons.paste, size: 14),
                 label: const Text('Paste PGN', style: TextStyle(fontSize: 11)),
                 style: OutlinedButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                 ),
               ),
             ],
@@ -607,8 +609,10 @@ class _CompactPasteDialogState extends State<_CompactPasteDialog> {
                 labelText: 'Name',
                 isDense: true,
                 border: OutlineInputBorder(),
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 10,
+                ),
               ),
               style: const TextStyle(fontSize: 12),
             ),
@@ -622,9 +626,10 @@ class _CompactPasteDialogState extends State<_CompactPasteDialog> {
                 hintText:
                     '[Event "Opening"]\n[Result "*"]\n\n1. e4 e5 2. Nf3 *',
                 hintStyle: TextStyle(
-                    color: cs.onSurfaceVariant.withValues(alpha: 0.4),
-                    fontFamily: 'monospace',
-                    fontSize: 12),
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                ),
                 border: const OutlineInputBorder(),
                 contentPadding: const EdgeInsets.all(10),
               ),
@@ -636,8 +641,10 @@ class _CompactPasteDialogState extends State<_CompactPasteDialog> {
                 children: [
                   Icon(Icons.warning_amber, size: 14, color: cs.error),
                   const SizedBox(width: 6),
-                  Text(_error!,
-                      style: TextStyle(fontSize: 11, color: cs.error)),
+                  Text(
+                    _error!,
+                    style: TextStyle(fontSize: 11, color: cs.error),
+                  ),
                 ],
               )
             else if (_gameCount > 0)
@@ -648,9 +655,10 @@ class _CompactPasteDialogState extends State<_CompactPasteDialog> {
                   Text(
                     '$_gameCount line${_gameCount == 1 ? '' : 's'} found',
                     style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: cs.primary),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: cs.primary,
+                    ),
                   ),
                 ],
               ),

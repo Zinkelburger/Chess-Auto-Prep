@@ -36,8 +36,11 @@ class EngineGate {
   /// warning snackbar and returns false.
   static bool ensureAvailable(BuildContext context) {
     if (!isLocked) return true;
-    showAppSnackBar(context, lockedMessage,
-        duration: const Duration(seconds: 4));
+    showAppSnackBar(
+      context,
+      lockedMessage,
+      duration: const Duration(seconds: 4),
+    );
     return false;
   }
 }
@@ -90,17 +93,20 @@ class EngineBusyNotice extends StatelessWidget {
             const SizedBox(height: 10),
             Text(
               'Engine Busy',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleSmall
-                  ?.copyWith(fontWeight: FontWeight.w600),
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
             Text(
               'Stockfish is building your repertoire.\n'
               'Pause the build or let it finish to analyze again.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: Colors.grey[400], height: 1.5),
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.grey[400],
+                height: 1.5,
+              ),
             ),
           ],
         ),

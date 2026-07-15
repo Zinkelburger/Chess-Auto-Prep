@@ -12,11 +12,7 @@ import '../tactics_engine.dart';
 
 /// Board updates the UI must apply after session logic runs.
 class TacticsBoardUpdate {
-  const TacticsBoardUpdate({
-    this.applyMoveUci,
-    this.setFen,
-    this.san,
-  });
+  const TacticsBoardUpdate({this.applyMoveUci, this.setFen, this.san});
 
   final String? applyMoveUci;
   final String? setFen;
@@ -27,10 +23,7 @@ class TacticsBoardUpdate {
 
 /// FEN and orientation for loading a tactic onto the main board.
 class TacticsPositionSetup {
-  const TacticsPositionSetup({
-    required this.fen,
-    required this.flipBoard,
-  });
+  const TacticsPositionSetup({required this.fen, required this.flipBoard});
 
   final String fen;
   final bool flipBoard;
@@ -62,8 +55,8 @@ class TacticsSessionController extends ChangeNotifier {
     TacticsDatabase? database,
     TacticsEngine? engine,
     this.onBoardUpdate,
-  })  : database = database ?? TacticsDatabase(),
-        engine = engine ?? TacticsEngine();
+  }) : database = database ?? TacticsDatabase(),
+       engine = engine ?? TacticsEngine();
 
   final TacticsDatabase database;
   final TacticsEngine engine;
@@ -211,7 +204,9 @@ class TacticsSessionController extends ChangeNotifier {
     }
 
     sessionOutcomes.putIfAbsent(
-        position.fen, () => SessionPuzzleOutcome.unattempted);
+      position.fen,
+      () => SessionPuzzleOutcome.unattempted,
+    );
     return _loadPosition(position);
   }
 
@@ -230,29 +225,26 @@ class TacticsSessionController extends ChangeNotifier {
     notifyListeners();
 
     final isWhiteToMove = position.positionContext.contains('White');
-    return TacticsPositionSetup(
-      fen: position.fen,
-      flipBoard: !isWhiteToMove,
-    );
+    return TacticsPositionSetup(fen: position.fen, flipBoard: !isWhiteToMove);
   }
 
   /// Whether Previous has anywhere to go — the button grays out otherwise
   /// (the first puzzle of a session or a browse walk has no "previous").
   bool get hasPrevious => switch (playSource) {
-        TacticsPlaySource.browse => _browseIndex > 0,
-        TacticsPlaySource.session => database.sessionQueuePosition > 0,
-        TacticsPlaySource.none => false,
-      };
+    TacticsPlaySource.browse => _browseIndex > 0,
+    TacticsPlaySource.session => database.sessionQueuePosition > 0,
+    TacticsPlaySource.none => false,
+  };
 
   /// Whether Skip/Next has anywhere to go. In a session this is always true
   /// while a puzzle is loaded — at the last puzzle Next *finishes* the
   /// session (recap). A browse walk at its last item has nothing next; the
   /// back button is the way out.
   bool get hasNext => switch (playSource) {
-        TacticsPlaySource.browse => _browseIndex < _browseQueue.length - 1,
-        TacticsPlaySource.session => true,
-        TacticsPlaySource.none => false,
-      };
+    TacticsPlaySource.browse => _browseIndex < _browseQueue.length - 1,
+    TacticsPlaySource.session => true,
+    TacticsPlaySource.none => false,
+  };
 
   /// True when a session sits on its final queued puzzle — Next will finish
   /// the session rather than load another position (UI relabels it "Finish").
@@ -309,8 +301,9 @@ class TacticsSessionController extends ChangeNotifier {
     _browseQueue = browseQueue == null || browseQueue.isEmpty
         ? [position]
         : browseQueue;
-    _browseIndex =
-        _browseQueue.indexWhere((p) => p.fen == position.fen).clamp(0, _browseQueue.length - 1);
+    _browseIndex = _browseQueue
+        .indexWhere((p) => p.fen == position.fen)
+        .clamp(0, _browseQueue.length - 1);
     return _loadPosition(_browseQueue[_browseIndex]);
   }
 
@@ -365,8 +358,9 @@ class TacticsSessionController extends ChangeNotifier {
 
   void refreshCurrentPosition() {
     if (currentPosition == null) return;
-    final index =
-        database.positions.indexWhere((p) => p.fen == currentPosition!.fen);
+    final index = database.positions.indexWhere(
+      (p) => p.fen == currentPosition!.fen,
+    );
     if (index != -1) {
       currentPosition = database.positions[index];
       notifyListeners();
@@ -536,8 +530,8 @@ class TacticsSessionController extends ChangeNotifier {
       database
           .recordAttempt(currentPosition!, TacticsResult.correct, timeTaken)
           .then((_) {
-        if (isMounted()) refreshCurrentPosition();
-      });
+            if (isMounted()) refreshCurrentPosition();
+          });
     }
 
     if (autoAdvance) {
@@ -566,14 +560,10 @@ class TacticsSessionController extends ChangeNotifier {
       attemptRecorded = true;
       _recordOutcome(SessionPuzzleOutcome.incorrect);
       database
-          .recordAttempt(
-        currentPosition!,
-        TacticsResult.incorrect,
-        timeTaken,
-      )
+          .recordAttempt(currentPosition!, TacticsResult.incorrect, timeTaken)
           .then((_) {
-        if (isMounted()) refreshCurrentPosition();
-      });
+            if (isMounted()) refreshCurrentPosition();
+          });
     }
 
     schedule(const Duration(milliseconds: 600), () {

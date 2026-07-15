@@ -21,10 +21,12 @@ class PgnGameEntry {
     final b = headers['Black'] ?? '?';
     final wElo = headers['WhiteElo'];
     final bElo = headers['BlackElo'];
-    final wStr =
-        wElo != null && wElo.isNotEmpty && wElo != '?' ? '$w ($wElo)' : w;
-    final bStr =
-        bElo != null && bElo.isNotEmpty && bElo != '?' ? '$b ($bElo)' : b;
+    final wStr = wElo != null && wElo.isNotEmpty && wElo != '?'
+        ? '$w ($wElo)'
+        : w;
+    final bStr = bElo != null && bElo.isNotEmpty && bElo != '?'
+        ? '$b ($bElo)'
+        : b;
     final d = formatPgnDate(headers['Date']);
     return d.isEmpty ? '$wStr vs $bStr' : '$wStr vs $bStr  $d';
   }

@@ -185,9 +185,10 @@ class JobsTabContent extends StatelessWidget {
         children: [
           Icon(icon, size: 16),
           const SizedBox(width: 6),
-          Text(title,
-              style:
-                  const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          Text(
+            title,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
           const Spacer(),
           IconButton(
             icon: const Icon(Icons.close, size: 18),

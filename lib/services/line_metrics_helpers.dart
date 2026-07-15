@@ -87,10 +87,7 @@ Map<String, LineQualityInfo> computeLineMetricsMap({
   return map;
 }
 
-List<BuildTreeNode> walkTreeForLine(
-  BuildTreeNode root,
-  List<String> moves,
-) {
+List<BuildTreeNode> walkTreeForLine(BuildTreeNode root, List<String> moves) {
   final path = <BuildTreeNode>[root];
   var current = root;
   for (final move in moves) {

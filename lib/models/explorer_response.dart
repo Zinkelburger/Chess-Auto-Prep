@@ -74,14 +74,16 @@ class ExplorerResponse {
       final moveTotal = w + d + b;
       final playRate = totalGames > 0 ? (moveTotal / totalGames) * 100 : 0.0;
 
-      moves.add(ExplorerMove(
-        san: move['san'] as String? ?? '',
-        uci: move['uci'] as String? ?? '',
-        white: w,
-        draws: d,
-        black: b,
-        playRate: playRate,
-      ));
+      moves.add(
+        ExplorerMove(
+          san: move['san'] as String? ?? '',
+          uci: move['uci'] as String? ?? '',
+          white: w,
+          draws: d,
+          black: b,
+          playRate: playRate,
+        ),
+      );
     }
 
     moves.sort((a, b) => b.playRate.compareTo(a.playRate));

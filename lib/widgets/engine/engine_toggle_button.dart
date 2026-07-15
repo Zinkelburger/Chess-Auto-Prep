@@ -34,14 +34,14 @@ class EngineToggleButton extends StatelessWidget {
                   color: isGenerating
                       ? Colors.grey
                       : isOn
-                          ? Theme.of(context).colorScheme.primary
-                          : Colors.grey,
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.grey,
                 ),
           tooltip: isGenerating
               ? 'Engine busy — repertoire generation in progress'
               : isOn
-                  ? 'Disable engine analysis'
-                  : 'Enable engine analysis',
+              ? 'Disable engine analysis'
+              : 'Enable engine analysis',
           onPressed: isGenerating
               ? null
               : () {

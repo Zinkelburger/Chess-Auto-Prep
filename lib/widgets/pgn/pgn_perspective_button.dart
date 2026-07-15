@@ -36,65 +36,81 @@ class PgnPerspectiveButton extends StatelessWidget {
         if (bothPlayers != null) ...[
           PopupMenuItem(
             value: Perspective(
-                mode: PerspectiveMode.player, playerName: bothPlayers.player1),
-            child: Row(children: [
-              if (isPlayerMode &&
-                  controller.perspective.playerName == bothPlayers.player1)
-                const Icon(Icons.check, size: 16)
-              else
-                const SizedBox(width: 16),
-              const SizedBox(width: 8),
-              Text(bothPlayers.player1),
-            ]),
+              mode: PerspectiveMode.player,
+              playerName: bothPlayers.player1,
+            ),
+            child: Row(
+              children: [
+                if (isPlayerMode &&
+                    controller.perspective.playerName == bothPlayers.player1)
+                  const Icon(Icons.check, size: 16)
+                else
+                  const SizedBox(width: 16),
+                const SizedBox(width: 8),
+                Text(bothPlayers.player1),
+              ],
+            ),
           ),
           PopupMenuItem(
             value: Perspective(
-                mode: PerspectiveMode.player, playerName: bothPlayers.player2),
-            child: Row(children: [
-              if (isPlayerMode &&
-                  controller.perspective.playerName == bothPlayers.player2)
-                const Icon(Icons.check, size: 16)
-              else
-                const SizedBox(width: 16),
-              const SizedBox(width: 8),
-              Text(bothPlayers.player2),
-            ]),
+              mode: PerspectiveMode.player,
+              playerName: bothPlayers.player2,
+            ),
+            child: Row(
+              children: [
+                if (isPlayerMode &&
+                    controller.perspective.playerName == bothPlayers.player2)
+                  const Icon(Icons.check, size: 16)
+                else
+                  const SizedBox(width: 16),
+                const SizedBox(width: 8),
+                Text(bothPlayers.player2),
+              ],
+            ),
           ),
         ] else if (protagonist != null)
           PopupMenuItem(
             value: Perspective(
-                mode: PerspectiveMode.player, playerName: protagonist),
-            child: Row(children: [
-              if (isPlayerMode &&
-                  controller.perspective.playerName == protagonist)
+              mode: PerspectiveMode.player,
+              playerName: protagonist,
+            ),
+            child: Row(
+              children: [
+                if (isPlayerMode &&
+                    controller.perspective.playerName == protagonist)
+                  const Icon(Icons.check, size: 16)
+                else
+                  const SizedBox(width: 16),
+                const SizedBox(width: 8),
+                Text(protagonist),
+              ],
+            ),
+          ),
+        PopupMenuItem(
+          value: const Perspective(mode: PerspectiveMode.white),
+          child: Row(
+            children: [
+              if (isWhiteMode)
                 const Icon(Icons.check, size: 16)
               else
                 const SizedBox(width: 16),
               const SizedBox(width: 8),
-              Text(protagonist),
-            ]),
+              const Text('Always White'),
+            ],
           ),
-        PopupMenuItem(
-          value: const Perspective(mode: PerspectiveMode.white),
-          child: Row(children: [
-            if (isWhiteMode)
-              const Icon(Icons.check, size: 16)
-            else
-              const SizedBox(width: 16),
-            const SizedBox(width: 8),
-            const Text('Always White'),
-          ]),
         ),
         PopupMenuItem(
           value: const Perspective(mode: PerspectiveMode.black),
-          child: Row(children: [
-            if (isBlackMode)
-              const Icon(Icons.check, size: 16)
-            else
-              const SizedBox(width: 16),
-            const SizedBox(width: 8),
-            const Text('Always Black'),
-          ]),
+          child: Row(
+            children: [
+              if (isBlackMode)
+                const Icon(Icons.check, size: 16)
+              else
+                const SizedBox(width: 16),
+              const SizedBox(width: 8),
+              const Text('Always Black'),
+            ],
+          ),
         ),
       ],
       child: Container(

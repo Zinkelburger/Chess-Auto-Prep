@@ -104,15 +104,17 @@ class ClickableMoveLineWidget extends StatelessWidget {
     final spans = <InlineSpan>[];
 
     if (label != null) {
-      spans.add(TextSpan(
-        text: label,
-        style: TextStyle(
-          fontSize: fontSize,
-          color: Colors.grey[600],
-          fontFamily: 'monospace',
-          fontWeight: FontWeight.bold,
+      spans.add(
+        TextSpan(
+          text: label,
+          style: TextStyle(
+            fontSize: fontSize,
+            color: Colors.grey[600],
+            fontFamily: 'monospace',
+            fontWeight: FontWeight.bold,
+          ),
         ),
-      ));
+      );
     }
 
     final hasCallback = onMoveTapped != null;
@@ -122,21 +124,27 @@ class ClickableMoveLineWidget extends StatelessWidget {
       final isFirst = i == startIndex;
 
       if (isWhite) {
-        spans.add(TextSpan(
-          text: '$moveNum.',
-          style: TextStyle(
+        spans.add(
+          TextSpan(
+            text: '$moveNum.',
+            style: TextStyle(
               fontSize: fontSize,
               color: Colors.grey[600],
-              fontFamily: 'monospace'),
-        ));
+              fontFamily: 'monospace',
+            ),
+          ),
+        );
       } else if (isFirst) {
-        spans.add(TextSpan(
-          text: '$moveNum...',
-          style: TextStyle(
+        spans.add(
+          TextSpan(
+            text: '$moveNum...',
+            style: TextStyle(
               fontSize: fontSize,
               color: Colors.grey[600],
-              fontFamily: 'monospace'),
-        ));
+              fontFamily: 'monospace',
+            ),
+          ),
+        );
       }
 
       final isActive = activeMoveIndex == i;
@@ -148,89 +156,106 @@ class ClickableMoveLineWidget extends StatelessWidget {
             : null;
 
         if (annotation?.prefixIcon != null) {
-          spans.add(WidgetSpan(
-            alignment: PlaceholderAlignment.baseline,
-            baseline: TextBaseline.alphabetic,
-            child: Icon(annotation!.prefixIcon,
+          spans.add(
+            WidgetSpan(
+              alignment: PlaceholderAlignment.baseline,
+              baseline: TextBaseline.alphabetic,
+              child: Icon(
+                annotation!.prefixIcon,
                 size: annotation.iconSize,
-                color: annotation.prefixIconColor ?? Colors.grey),
-          ));
+                color: annotation.prefixIconColor ?? Colors.grey,
+              ),
+            ),
+          );
         }
 
-        spans.add(WidgetSpan(
-          alignment: PlaceholderAlignment.baseline,
-          baseline: TextBaseline.alphabetic,
-          child: Builder(
-            builder: (anchorContext) {
-              return MouseRegion(
-                cursor: SystemMouseCursors.click,
-                onEnter: onMoveHovered != null
-                    ? (_) {
-                        final box =
-                            anchorContext.findRenderObject() as RenderBox?;
-                        if (box == null) return;
-                        final anchor = box.localToGlobal(
-                          Offset(box.size.width / 2, box.size.height),
-                        );
-                        onMoveHovered!(idx, anchor);
-                      }
-                    : null,
-                onExit: onHoverExit != null ? (_) => onHoverExit!() : null,
-                child: GestureDetector(
-                  onTap: () => onMoveTapped!(idx),
-                  child: Container(
-                    padding: movePadding,
-                    decoration: isActive
-                        ? BoxDecoration(
-                            color: AppColors.expectimax,
-                            borderRadius: BorderRadius.circular(2),
-                          )
-                        : null,
-                    child: Text(
-                      sanMoves[i],
-                      style: TextStyle(
-                        fontSize: fontSize,
-                        color: isActive ? Colors.white : AppColors.expectimax,
-                        fontFamily: 'monospace',
-                        fontWeight:
-                            isActive ? FontWeight.bold : FontWeight.normal,
-                        decoration: isActive ? null : TextDecoration.underline,
-                        decorationColor:
-                            AppColors.expectimax.withValues(alpha: 0.5),
-                        decorationStyle: TextDecorationStyle.dotted,
+        spans.add(
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: Builder(
+              builder: (anchorContext) {
+                return MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  onEnter: onMoveHovered != null
+                      ? (_) {
+                          final box =
+                              anchorContext.findRenderObject() as RenderBox?;
+                          if (box == null) return;
+                          final anchor = box.localToGlobal(
+                            Offset(box.size.width / 2, box.size.height),
+                          );
+                          onMoveHovered!(idx, anchor);
+                        }
+                      : null,
+                  onExit: onHoverExit != null ? (_) => onHoverExit!() : null,
+                  child: GestureDetector(
+                    onTap: () => onMoveTapped!(idx),
+                    child: Container(
+                      padding: movePadding,
+                      decoration: isActive
+                          ? BoxDecoration(
+                              color: AppColors.expectimax,
+                              borderRadius: BorderRadius.circular(2),
+                            )
+                          : null,
+                      child: Text(
+                        sanMoves[i],
+                        style: TextStyle(
+                          fontSize: fontSize,
+                          color: isActive ? Colors.white : AppColors.expectimax,
+                          fontFamily: 'monospace',
+                          fontWeight: isActive
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          decoration: isActive
+                              ? null
+                              : TextDecoration.underline,
+                          decorationColor: AppColors.expectimax.withValues(
+                            alpha: 0.5,
+                          ),
+                          decorationStyle: TextDecorationStyle.dotted,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
-        ));
+        );
 
         if (annotation?.suffix != null) {
-          spans.add(TextSpan(
-            text: annotation!.suffix,
-            style: TextStyle(
-              fontSize: fontSize - 1,
-              color: annotation.suffixColor ?? Colors.grey[500],
-              fontWeight: annotation.suffixFontWeight,
-              fontFamily: 'monospace',
+          spans.add(
+            TextSpan(
+              text: annotation!.suffix,
+              style: TextStyle(
+                fontSize: fontSize - 1,
+                color: annotation.suffixColor ?? Colors.grey[500],
+                fontWeight: annotation.suffixFontWeight,
+                fontFamily: 'monospace',
+              ),
             ),
-          ));
+          );
         }
 
-        spans.add(TextSpan(
-          text: ' ',
-          style: TextStyle(fontSize: fontSize, fontFamily: 'monospace'),
-        ));
+        spans.add(
+          TextSpan(
+            text: ' ',
+            style: TextStyle(fontSize: fontSize, fontFamily: 'monospace'),
+          ),
+        );
       } else {
-        spans.add(TextSpan(
-          text: '${sanMoves[i]} ',
-          style: TextStyle(
+        spans.add(
+          TextSpan(
+            text: '${sanMoves[i]} ',
+            style: TextStyle(
               fontSize: fontSize,
               color: Colors.grey[500],
-              fontFamily: 'monospace'),
-        ));
+              fontFamily: 'monospace',
+            ),
+          ),
+        );
       }
 
       if (!isWhite) moveNum++;

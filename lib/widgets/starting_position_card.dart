@@ -45,8 +45,8 @@ class StartingPositionCard extends StatelessWidget {
     final movesText = moveSans.isNotEmpty
         ? movesToPgnMoveText(moveSans)
         : _isStandardStart
-            ? 'Initial position — no moves played'
-            : 'Repertoire starting position';
+        ? 'Initial position — no moves played'
+        : 'Repertoire starting position';
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),

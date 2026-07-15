@@ -83,8 +83,10 @@ class AuditStatusRow extends StatelessWidget {
                 ),
               ] else ...[
                 if (totalMatching > visibleCount) ...[
-                  Text('Top',
-                      style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                  Text(
+                    'Top',
+                    style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                  ),
                   const SizedBox(width: 3),
                   SizedBox(
                     width: 34,
@@ -98,21 +100,29 @@ class AuditStatusRow extends StatelessWidget {
                       decoration: InputDecoration(
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 4, vertical: 2),
+                          horizontal: 4,
+                          vertical: 2,
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(4),
-                          borderSide:
-                              BorderSide(color: Colors.grey[700]!, width: 0.5),
+                          borderSide: BorderSide(
+                            color: Colors.grey[700]!,
+                            width: 0.5,
+                          ),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(4),
-                          borderSide:
-                              BorderSide(color: Colors.grey[700]!, width: 0.5),
+                          borderSide: BorderSide(
+                            color: Colors.grey[700]!,
+                            width: 0.5,
+                          ),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(4),
-                          borderSide:
-                              BorderSide(color: Colors.grey[500]!, width: 1),
+                          borderSide: BorderSide(
+                            color: Colors.grey[500]!,
+                            width: 1,
+                          ),
                         ),
                       ),
                       onSubmitted: (_) => onApplyCap(),
@@ -123,17 +133,25 @@ class AuditStatusRow extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 3),
-                  Text('of $totalMatching',
-                      style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                  Text(
+                    'of $totalMatching',
+                    style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                  ),
                   if (reachThreshold != null) ...[
                     const SizedBox(width: 4),
-                    Text('· ≥ $reachThreshold reach',
-                        style: TextStyle(
-                            fontSize: 11, color: Colors.blueGrey[300])),
+                    Text(
+                      '· ≥ $reachThreshold reach',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.blueGrey[300],
+                      ),
+                    ),
                   ],
                 ] else ...[
-                  Text('$visibleCount findings',
-                      style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                  Text(
+                    '$visibleCount findings',
+                    style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                  ),
                   if (resultTimestamp != null) ...[
                     const SizedBox(width: 6),
                     Text(
@@ -155,13 +173,18 @@ class AuditStatusRow extends StatelessWidget {
                 Tooltip(
                   message: 'New audit with different settings',
                   child: IconButton(
-                    icon:
-                        const Icon(Icons.refresh, size: 14, color: Colors.grey),
+                    icon: const Icon(
+                      Icons.refresh,
+                      size: 14,
+                      color: Colors.grey,
+                    ),
                     onPressed: onRerunAudit,
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 24, minHeight: 24),
+                    constraints: const BoxConstraints(
+                      minWidth: 24,
+                      minHeight: 24,
+                    ),
                   ),
                 ),
               Tooltip(
@@ -177,8 +200,10 @@ class AuditStatusRow extends StatelessWidget {
                   onPressed: onToggleHideDismissed,
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 24, minHeight: 24),
+                  constraints: const BoxConstraints(
+                    minWidth: 24,
+                    minHeight: 24,
+                  ),
                 ),
               ),
             ],

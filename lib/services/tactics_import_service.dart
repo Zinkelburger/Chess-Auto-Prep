@@ -17,12 +17,13 @@ import 'storage/storage_factory.dart';
 import '../utils/chesscom_lichess_elo.dart';
 import '../utils/log.dart';
 import 'tactics_parallel_analyzer_stub.dart'
-    if (dart.library.io) 'tactics_parallel_analyzer.dart' as parallel;
+    if (dart.library.io) 'tactics_parallel_analyzer.dart'
+    as parallel;
 
 /// Callback for when a new tactics position is found during import.
 /// Returns a Future so callers can await persistence before proceeding.
-typedef OnPositionFoundCallback = Future<void> Function(
-    TacticsPosition position);
+typedef OnPositionFoundCallback =
+    Future<void> Function(TacticsPosition position);
 
 /// Callback for progress updates during import
 typedef ProgressCallback = void Function(String message);
@@ -36,9 +37,10 @@ typedef ImportResult = ({
 
 class TacticsImportService {
   TacticsImportService({TacticsDatabase? database})
-      : _database = database ?? TacticsDatabase();
+    : _database = database ?? TacticsDatabase();
 
   final TacticsDatabase _database;
+
   /// Whether to skip games that have already been analyzed
   bool skipAnalyzedGames = true;
 
@@ -55,7 +57,8 @@ class TacticsImportService {
 
   /// Check if engine-based analysis is available on this platform
   bool get isAnalysisAvailable =>
-      StockfishPool.instance.workerCount > 0 || parallel.isParallelAnalysisAvailable;
+      StockfishPool.instance.workerCount > 0 ||
+      parallel.isParallelAnalysisAvailable;
 
   /// Whether parallel multi-core analysis is available (desktop only).
   static bool get isParallelAvailable => parallel.isParallelAnalysisAvailable;
@@ -147,8 +150,10 @@ class TacticsImportService {
 
     await StorageFactory.instance.saveImportedPgns(kept.join('\n\n'));
     if (kDebugMode) {
-      log.i('Pruned ${games.length - kept.length} stored PGNs '
-          '(${kept.length} kept)');
+      log.i(
+        'Pruned ${games.length - kept.length} stored PGNs '
+        '(${kept.length} kept)',
+      );
     }
     return games.length - kept.length;
   }
@@ -157,8 +162,9 @@ class TacticsImportService {
   /// granularity). Games without a parseable date pass the filter — better
   /// to analyze one game too many than silently drop it.
   static bool _isGameBefore(String gameText, DateTime cutoff) {
-    final match = RegExp(r'\[(?:Date|UTCDate) "(\d{4})\.(\d{2})\.(\d{2})"\]')
-        .firstMatch(gameText);
+    final match = RegExp(
+      r'\[(?:Date|UTCDate) "(\d{4})\.(\d{2})\.(\d{2})"\]',
+    ).firstMatch(gameText);
     if (match == null) return false;
     final gameDate = DateTime(
       int.parse(match.group(1)!),
@@ -186,7 +192,11 @@ class TacticsImportService {
   }) async {
     final content = await StorageFactory.instance.readImportedPgns();
     if (content == null || content.isEmpty) {
-      return (positions: <TacticsPosition>[], gamesAnalyzed: 0, gamesSkipped: 0);
+      return (
+        positions: <TacticsPosition>[],
+        gamesAnalyzed: 0,
+        gamesSkipped: 0,
+      );
     }
 
     final games = splitPgnIntoGames(content);
@@ -272,7 +282,6 @@ class TacticsImportService {
     Function(String)? progressCallback,
     OnPositionFoundCallback? onPositionFound,
   }) async {
-
     final params = <String, String>{
       'evals': 'false',
       'clocks': 'false',
@@ -287,7 +296,8 @@ class TacticsImportService {
     }
     final query = params.entries.map((e) => '${e.key}=${e.value}').join('&');
     final url = Uri.parse(
-        'https://lichess.org/api/games/user/$username?$query');
+      'https://lichess.org/api/games/user/$username?$query',
+    );
 
     progressCallback?.call('Downloading games from Lichess...');
     final response = await LichessApiClient.instance.get(
@@ -300,7 +310,8 @@ class TacticsImportService {
     }
     if (response.statusCode != 200) {
       throw Exception(
-          'Failed to fetch games from Lichess: ${response.statusCode}');
+        'Failed to fetch games from Lichess: ${response.statusCode}',
+      );
     }
 
     await _savePgns(response.body);
@@ -376,9 +387,11 @@ class TacticsImportService {
     }
 
     // Walk backwards from the most recent archive.
-    for (int i = archives.length - 1;
-        i >= startArchiveIndex && allGames.length < targetGames;
-        i--) {
+    for (
+      int i = archives.length - 1;
+      i >= startArchiveIndex && allGames.length < targetGames;
+      i--
+    ) {
       progressCallback?.call(
         'Downloading Chess.com games (${allGames.length}/$targetGames)…',
       );
@@ -434,8 +447,9 @@ class TacticsImportService {
       // Collect GameIds already in storage to avoid duplicates
       final existingIds = <String>{};
       if (existing.isNotEmpty) {
-        for (final match
-            in RegExp(r'\[GameId "([^"]+)"\]').allMatches(existing)) {
+        for (final match in RegExp(
+          r'\[GameId "([^"]+)"\]',
+        ).allMatches(existing)) {
           existingIds.add(match.group(1)!);
         }
       }
@@ -449,7 +463,8 @@ class TacticsImportService {
       if (newGames.isEmpty) {
         if (kDebugMode) {
           log.i(
-              'All ${games.length} PGNs already in storage, nothing to append');
+            'All ${games.length} PGNs already in storage, nothing to append',
+          );
         }
         return;
       }
@@ -461,7 +476,8 @@ class TacticsImportService {
 
       if (kDebugMode) {
         log.w(
-            'Appended ${newGames.length} new PGNs to storage (${games.length - newGames.length} duplicates skipped)');
+          'Appended ${newGames.length} new PGNs to storage (${games.length - newGames.length} duplicates skipped)',
+        );
       }
     } catch (e) {
       if (kDebugMode) {
@@ -485,8 +501,9 @@ class TacticsImportService {
     // 1. A GameId header — ours from a previous import, or Lichess's own:
     //    their PGN exports natively carry the bare game ID in [GameId].
     //    Only trust it as-is when it already has a platform prefix.
-    final rawHeaderId =
-        RegExp(r'\[GameId "([^"]+)"\]').firstMatch(gameText)?.group(1);
+    final rawHeaderId = RegExp(
+      r'\[GameId "([^"]+)"\]',
+    ).firstMatch(gameText)?.group(1);
     if (rawHeaderId != null &&
         (rawHeaderId.startsWith('lichess_') ||
             rawHeaderId.startsWith('chesscom_'))) {
@@ -515,8 +532,9 @@ class TacticsImportService {
       final site = siteMatch.group(1)!;
       if (site.toLowerCase().contains('lichess.org/')) {
         final parts = site.split('/');
-        final gameId =
-            parts.where((p) => p.isNotEmpty && !p.contains('.')).lastOrNull;
+        final gameId = parts
+            .where((p) => p.isNotEmpty && !p.contains('.'))
+            .lastOrNull;
         if (gameId != null && gameId.length >= 6) {
           return 'lichess_$gameId';
         }
@@ -694,12 +712,13 @@ class TacticsImportService {
 
     if (pool.workerCount == 0) {
       throw Exception(
-          'Tactics analysis requires Stockfish, which is not available '
-          'on this platform.\n\n'
-          'You can:\n'
-          '• Import tactics from a CSV file (exported from desktop)\n'
-          '• Use the desktop app to generate tactics\n'
-          '• Practice existing tactics positions');
+        'Tactics analysis requires Stockfish, which is not available '
+        'on this platform.\n\n'
+        'You can:\n'
+        '• Import tactics from a CSV file (exported from desktop)\n'
+        '• Use the desktop app to generate tactics\n'
+        '• Practice existing tactics positions',
+      );
     }
 
     // The pool is a shared singleton; other features (e.g. tree generation)
@@ -727,47 +746,46 @@ class TacticsImportService {
     int completedGames = 0;
     int totalPositionsFound = 0;
 
-    await pool.forEachParallel<Map<String, dynamic>>(
-      gameTasks,
-      (worker, task) async {
-        final gameText = task['gameText'] as String;
-        final gameId = task['gameId'] as String;
+    await pool.forEachParallel<Map<String, dynamic>>(gameTasks, (
+      worker,
+      task,
+    ) async {
+      final gameText = task['gameText'] as String;
+      final gameId = task['gameId'] as String;
 
-        try {
-          final positions = await _analyzeGameWithWorker(
-            worker: worker,
-            gameText: gameText,
-            username: usernameLower,
-            depth: depth,
-            gameId: gameId,
-            maia: maia,
-            maiaElo: maiaElo,
-          );
-          if (_cancelled) return;
-          gamePositions[gameId] = positions;
-          totalPositionsFound += positions.length;
-
-          // Persist positions BEFORE marking game analyzed so a
-          // mid-analysis app close doesn't permanently skip this game.
-          if (positions.isNotEmpty && onPositionFound != null) {
-            for (final pos in positions) {
-              await onPositionFound(pos);
-            }
-          }
-          await _database.markGameAnalyzed(gameId);
-        } catch (e) {
-          if (_cancelled) return;
-          if (kDebugMode) log.e('Error analyzing game $gameId: $e');
-        }
-
-        completedGames++;
-        progressCallback?.call(
-          'Analyzed $completedGames/${gameTasks.length} games '
-          '($totalPositionsFound tactics found)...',
+      try {
+        final positions = await _analyzeGameWithWorker(
+          worker: worker,
+          gameText: gameText,
+          username: usernameLower,
+          depth: depth,
+          gameId: gameId,
+          maia: maia,
+          maiaElo: maiaElo,
         );
-      },
-      stopWhen: () => _cancelled,
-    );
+        if (_cancelled) return;
+        gamePositions[gameId] = positions;
+        totalPositionsFound += positions.length;
+
+        // Persist positions BEFORE marking game analyzed so a
+        // mid-analysis app close doesn't permanently skip this game.
+        if (positions.isNotEmpty && onPositionFound != null) {
+          for (final pos in positions) {
+            await onPositionFound(pos);
+          }
+        }
+        await _database.markGameAnalyzed(gameId);
+      } catch (e) {
+        if (_cancelled) return;
+        if (kDebugMode) log.e('Error analyzing game $gameId: $e');
+      }
+
+      completedGames++;
+      progressCallback?.call(
+        'Analyzed $completedGames/${gameTasks.length} games '
+        '($totalPositionsFound tactics found)...',
+      );
+    }, stopWhen: () => _cancelled);
 
     // ── Assemble results in original game order ──────────────
     final sortedGameIds = gamePositions.keys.toList()
@@ -884,8 +902,9 @@ class TacticsImportService {
             tempPos = newPos;
           }
 
-          final solutionPv =
-              allPvSan.take(TacticsEngine.maxSolutionPvPlies).toList();
+          final solutionPv = allPvSan
+              .take(TacticsEngine.maxSolutionPvPlies)
+              .toList();
           final correctLine = await TacticsEngine.buildTrainableLine(
             allPvSan,
             maia: maia,
@@ -902,8 +921,8 @@ class TacticsImportService {
           final mistakeType = isBlunder
               ? '??'
               : isMistake
-                  ? '?'
-                  : '?!';
+              ? '?'
+              : '?!';
           // Note shown as the flashcard back, deliberately terse:
           // "h5 +0.5 → -2.1, Qf3 +0.5" — the played move with the eval arc,
           // then the best move keeping the pre-move eval. Evals are from the
@@ -911,28 +930,36 @@ class TacticsImportService {
           // already shows as ??/?/?!, and wordier phrasings collided with
           // filterDisplayComment's Lichess-classification stripper.
           final evalBest = _formatEval(
-              scoreCp: evalA.scoreCp, scoreMate: evalA.scoreMate);
+            scoreCp: evalA.scoreCp,
+            scoreMate: evalA.scoreMate,
+          );
           final evalAfterMove = _formatEval(
-              scoreCp: evalB.scoreCp, scoreMate: evalB.scoreMate, negate: true);
+            scoreCp: evalB.scoreCp,
+            scoreMate: evalB.scoreMate,
+            negate: true,
+          );
           final analysis =
               '$san $evalBest → $evalAfterMove, $bestMoveSan $evalBest';
 
-          positions.add(TacticsPosition(
-            fen: fenBefore,
-            userMove: san,
-            correctLine: correctLine,
-            solutionPv: solutionPv,
-            mistakeType: mistakeType,
-            mistakeAnalysis: analysis,
-            opponentBestResponse: opponentResponse,
-            positionContext: 'Move $moveNumber, '
-                '${userColor == Side.white ? 'White' : 'Black'} to play',
-            gameWhite: game.headers['White'] ?? '',
-            gameBlack: game.headers['Black'] ?? '',
-            gameResult: game.headers['Result'] ?? '*',
-            gameDate: game.headers['Date'] ?? '',
-            gameId: gameId,
-          ));
+          positions.add(
+            TacticsPosition(
+              fen: fenBefore,
+              userMove: san,
+              correctLine: correctLine,
+              solutionPv: solutionPv,
+              mistakeType: mistakeType,
+              mistakeAnalysis: analysis,
+              opponentBestResponse: opponentResponse,
+              positionContext:
+                  'Move $moveNumber, '
+                  '${userColor == Side.white ? 'White' : 'Black'} to play',
+              gameWhite: game.headers['White'] ?? '',
+              gameBlack: game.headers['Black'] ?? '',
+              gameResult: game.headers['Result'] ?? '*',
+              gameDate: game.headers['Date'] ?? '',
+              gameId: gameId,
+            ),
+          );
         }
       } else {
         final move = pos.parseSan(san);
@@ -946,7 +973,9 @@ class TacticsImportService {
   }
 
   (String? san, Position newPos) _makeUciMoveAndGetSan(
-      Position pos, String uci) {
+    Position pos,
+    String uci,
+  ) {
     final move = Move.parse(uci);
     if (move == null) return (null, pos);
     try {

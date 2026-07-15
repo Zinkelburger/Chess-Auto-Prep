@@ -110,8 +110,7 @@ void main() {
         _line(id: 'mid', name: 'Mid', moves: const ['d4']),
       ];
 
-      final result =
-          _run(lines, sortBy: LineSortBy.ease, sortAscending: false);
+      final result = _run(lines, sortBy: LineSortBy.ease, sortAscending: false);
 
       expect(result.map((l) => l.id), ['high', 'mid', 'low']);
     });
@@ -130,8 +129,11 @@ void main() {
           sortAscending: ascending,
           lineMetrics: metrics,
         );
-        expect(result.last.id, 'nometrics',
-            reason: 'ascending=$ascending should keep null keys last');
+        expect(
+          result.last.id,
+          'nometrics',
+          reason: 'ascending=$ascending should keep null keys last',
+        );
       }
     });
 
@@ -153,13 +155,16 @@ void main() {
         _line(id: 'short', name: 'Short', moves: const ['e4']),
       ];
 
+      expect(_run(lines, sortBy: LineSortBy.moves).map((l) => l.id), [
+        'short',
+        'long',
+      ]);
       expect(
-        _run(lines, sortBy: LineSortBy.moves).map((l) => l.id),
-        ['short', 'long'],
-      );
-      expect(
-        _run(lines, sortBy: LineSortBy.moves, sortAscending: false)
-            .map((l) => l.id),
+        _run(
+          lines,
+          sortBy: LineSortBy.moves,
+          sortAscending: false,
+        ).map((l) => l.id),
         ['long', 'short'],
       );
     });
@@ -171,8 +176,7 @@ void main() {
       ];
       final snapshot = List<RepertoireLine>.from(lines);
 
-      final result =
-          _run(lines, metricsFilters: {LineMetricsFilter.trappy});
+      final result = _run(lines, metricsFilters: {LineMetricsFilter.trappy});
 
       expect(result.map((l) => l.id), ['trappy']);
       expect(lines.map((l) => l.id), snapshot.map((l) => l.id));
@@ -186,10 +190,7 @@ void main() {
       // Trappy but no hard move: both filters together should exclude it.
       final result = _run(
         lines,
-        metricsFilters: {
-          LineMetricsFilter.trappy,
-          LineMetricsFilter.hardMoves,
-        },
+        metricsFilters: {LineMetricsFilter.trappy, LineMetricsFilter.hardMoves},
       );
 
       expect(result, isEmpty);

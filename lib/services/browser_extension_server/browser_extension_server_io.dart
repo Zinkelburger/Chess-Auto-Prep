@@ -39,7 +39,8 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
   Future<bool> start({int port = 9812}) async {
     if (_server != null) {
       debugPrint(
-          '[BrowserExtensionServer] Server already running on port $_port');
+        '[BrowserExtensionServer] Server already running on port $_port',
+      );
       return true;
     }
 
@@ -53,12 +54,15 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
       _port = port;
 
       debugPrint(
-          '[BrowserExtensionServer] Server started on http://localhost:$port');
+        '[BrowserExtensionServer] Server started on http://localhost:$port',
+      );
       debugPrint('[BrowserExtensionServer] Endpoints:');
       debugPrint(
-          '[BrowserExtensionServer]   GET  /list-repertoires - List repertoires');
+        '[BrowserExtensionServer]   GET  /list-repertoires - List repertoires',
+      );
       debugPrint(
-          '[BrowserExtensionServer]   POST /add-line - Add line to repertoire');
+        '[BrowserExtensionServer]   POST /add-line - Add line to repertoire',
+      );
       debugPrint('[BrowserExtensionServer]   GET  /health - Health check');
 
       _server!.listen(_handleRequest);
@@ -82,10 +86,14 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
   void _handleRequest(HttpRequest request) async {
     // Add CORS headers for browser extension
     request.response.headers.add('Access-Control-Allow-Origin', '*');
-    request.response.headers
-        .add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    request.response.headers
-        .add('Access-Control-Allow-Headers', 'Content-Type');
+    request.response.headers.add(
+      'Access-Control-Allow-Methods',
+      'GET, POST, OPTIONS',
+    );
+    request.response.headers.add(
+      'Access-Control-Allow-Headers',
+      'Content-Type',
+    );
 
     // Handle preflight requests
     if (request.method == 'OPTIONS') {
@@ -108,20 +116,23 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
           await _handleHealth(request);
           break;
         default:
-          _sendJson(request, {'error': 'Not found'},
-              status: HttpStatus.notFound);
+          _sendJson(request, {
+            'error': 'Not found',
+          }, status: HttpStatus.notFound);
       }
     } catch (e, stack) {
       debugPrint('[BrowserExtensionServer] Error handling request: $e\n$stack');
-      _sendJson(request, {'error': e.toString()},
-          status: HttpStatus.internalServerError);
+      _sendJson(request, {
+        'error': e.toString(),
+      }, status: HttpStatus.internalServerError);
     }
   }
 
   Future<void> _handleListRepertoires(HttpRequest request) async {
     if (request.method != 'GET') {
-      _sendJson(request, {'error': 'Method not allowed'},
-          status: HttpStatus.methodNotAllowed);
+      _sendJson(request, {
+        'error': 'Method not allowed',
+      }, status: HttpStatus.methodNotAllowed);
       return;
     }
 
@@ -160,21 +171,24 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
       }
 
       // Sort by modification time (most recent first)
-      repertoires.sort((a, b) =>
-          (b['modified'] as double).compareTo(a['modified'] as double));
+      repertoires.sort(
+        (a, b) => (b['modified'] as double).compareTo(a['modified'] as double),
+      );
 
       _sendJson(request, {'repertoires': repertoires});
     } catch (e) {
       debugPrint('[BrowserExtensionServer] Error listing repertoires: $e');
-      _sendJson(request, {'error': e.toString()},
-          status: HttpStatus.internalServerError);
+      _sendJson(request, {
+        'error': e.toString(),
+      }, status: HttpStatus.internalServerError);
     }
   }
 
   Future<void> _handleAddLine(HttpRequest request) async {
     if (request.method != 'POST') {
-      _sendJson(request, {'error': 'Method not allowed'},
-          status: HttpStatus.methodNotAllowed);
+      _sendJson(request, {
+        'error': 'Method not allowed',
+      }, status: HttpStatus.methodNotAllowed);
       return;
     }
 
@@ -184,16 +198,18 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
 
       // Validate data
       if (!data.containsKey('moves') || (data['moves'] as List).isEmpty) {
-        _sendJson(request, {'error': 'No moves provided'},
-            status: HttpStatus.badRequest);
+        _sendJson(request, {
+          'error': 'No moves provided',
+        }, status: HttpStatus.badRequest);
         return;
       }
 
       // Get target repertoire file
       String? targetFilename = data['targetRepertoire'] as String?;
       if (targetFilename == null || targetFilename.isEmpty) {
-        _sendJson(request, {'error': 'No target repertoire specified'},
-            status: HttpStatus.badRequest);
+        _sendJson(request, {
+          'error': 'No target repertoire specified',
+        }, status: HttpStatus.badRequest);
         return;
       }
 
@@ -228,7 +244,8 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
       final name = p.basenameWithoutExtension(targetFilename);
 
       debugPrint(
-          '[BrowserExtensionServer] Added line to $targetFilename (total: $lineCount)');
+        '[BrowserExtensionServer] Added line to $targetFilename (total: $lineCount)',
+      );
 
       _sendJson(request, {
         'status': 'success',
@@ -237,15 +254,17 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
       });
     } catch (e) {
       debugPrint('[BrowserExtensionServer] Error adding line: $e');
-      _sendJson(request, {'error': e.toString()},
-          status: HttpStatus.internalServerError);
+      _sendJson(request, {
+        'error': e.toString(),
+      }, status: HttpStatus.internalServerError);
     }
   }
 
   Future<void> _handleHealth(HttpRequest request) async {
     if (request.method != 'GET') {
-      _sendJson(request, {'error': 'Method not allowed'},
-          status: HttpStatus.methodNotAllowed);
+      _sendJson(request, {
+        'error': 'Method not allowed',
+      }, status: HttpStatus.methodNotAllowed);
       return;
     }
 
@@ -268,13 +287,17 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
         'platform': Platform.operatingSystem,
       });
     } catch (e) {
-      _sendJson(request, {'error': e.toString()},
-          status: HttpStatus.internalServerError);
+      _sendJson(request, {
+        'error': e.toString(),
+      }, status: HttpStatus.internalServerError);
     }
   }
 
-  void _sendJson(HttpRequest request, Map<String, dynamic> data,
-      {int status = HttpStatus.ok}) {
+  void _sendJson(
+    HttpRequest request,
+    Map<String, dynamic> data, {
+    int status = HttpStatus.ok,
+  }) {
     request.response.statusCode = status;
     request.response.headers.contentType = ContentType.json;
     request.response.write(jsonEncode(data));
@@ -290,7 +313,8 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
   /// Generate a signature for a line based on moves (for duplicate detection)
   String _getLineSignature(Map<String, dynamic> data) {
     final moves = data['moves'] as List;
-    final startFen = data['startFen'] as String? ??
+    final startFen =
+        data['startFen'] as String? ??
         'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
     final variant = data['variant'] as String? ?? 'standard';
 
@@ -341,8 +365,9 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
 
     // Extract variant
     String variant = 'standard';
-    final variantMatch =
-        RegExp(r'\[Variant\s+"([^"]+)"\]').firstMatch(gameText);
+    final variantMatch = RegExp(
+      r'\[Variant\s+"([^"]+)"\]',
+    ).firstMatch(gameText);
     if (variantMatch != null) {
       variant = variantMatch.group(1)!.toLowerCase();
     }
@@ -370,8 +395,9 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
     final movesText = gameText.substring(headerEnd + 1).trim();
 
     // Simple regex to extract moves (not perfect but works for basic cases)
-    final movePattern =
-        RegExp(r'([KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](=[QRBN])?|O-O-O|O-O)[+#]?');
+    final movePattern = RegExp(
+      r'([KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](=[QRBN])?|O-O-O|O-O)[+#]?',
+    );
 
     for (final match in movePattern.allMatches(movesText)) {
       moves.add(match.group(0)!);

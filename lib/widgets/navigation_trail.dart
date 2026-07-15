@@ -41,8 +41,11 @@ class NavigationTrail extends StatelessWidget {
                   itemCount: stack.length,
                   separatorBuilder: (_, __) => Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 2),
-                    child: Icon(Icons.chevron_right,
-                        size: 14, color: Colors.grey[500]),
+                    child: Icon(
+                      Icons.chevron_right,
+                      size: 14,
+                      color: Colors.grey[500],
+                    ),
                   ),
                   itemBuilder: (context, i) {
                     final entry = stack.entries[i];
@@ -55,12 +58,13 @@ class NavigationTrail extends StatelessWidget {
                         },
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .primaryContainer
-                                .withAlpha(120),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.primaryContainer.withAlpha(120),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Row(

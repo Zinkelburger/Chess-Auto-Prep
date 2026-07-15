@@ -30,10 +30,7 @@ String serializeTree(BuildTree tree) {
 }
 
 Map<String, dynamic> _nodeToJson(BuildTreeNode node) {
-  final obj = <String, dynamic>{
-    'id': node.nodeId,
-    'depth': node.ply,
-  };
+  final obj = <String, dynamic>{'id': node.nodeId, 'depth': node.ply};
 
   if (node.moveSan.isNotEmpty) obj['move_san'] = node.moveSan;
   if (node.moveUci.isNotEmpty) obj['move_uci'] = node.moveUci;
@@ -157,12 +154,14 @@ BuildTree deserializeTree(String jsonStr, {FenMap? fenMap}) {
   tree.sortAllChildren();
   final metadataMs = sw.elapsedMilliseconds;
 
-  debugPrint('[deserializeTree] jsonParse=${jsonParseMs}ms, '
-      'nodeBuild=${nodeBuiltMs}ms, '
-      'metadata+sort=${metadataMs}ms, '
-      'version=$version, '
-      'nodeIndex=${tree.nodeIndex.length} entries, '
-      'totalNodes=$totalNodes');
+  debugPrint(
+    '[deserializeTree] jsonParse=${jsonParseMs}ms, '
+    'nodeBuild=${nodeBuiltMs}ms, '
+    'metadata+sort=${metadataMs}ms, '
+    'version=$version, '
+    'nodeIndex=${tree.nodeIndex.length} entries, '
+    'totalNodes=$totalNodes',
+  );
 
   return tree;
 }
@@ -174,14 +173,16 @@ BuildTreeNode _nodeFromJson(
 ) {
   final nodeId = (obj['id'] as num?)?.toInt() ?? 0;
   final fen = obj['fen'] as String? ?? '';
-  final isWhiteToMove = obj['is_white_to_move'] as bool? ??
+  final isWhiteToMove =
+      obj['is_white_to_move'] as bool? ??
       (fen.isNotEmpty ? fen_utils.isWhiteToMove(fen) : true);
 
   final node = BuildTreeNode(
     fen: fen,
     moveSan: obj['move_san'] as String? ?? '',
     moveUci: obj['move_uci'] as String? ?? '',
-    ply: (obj['depth'] as num?)?.toInt() ??
+    ply:
+        (obj['depth'] as num?)?.toInt() ??
         (parent != null ? parent.ply + 1 : 0),
     isWhiteToMove: isWhiteToMove,
     nodeId: nodeId,

@@ -33,7 +33,8 @@ import 'repertoire_writer.dart';
 // ---------------------------------------------------------------------------
 
 List<RepertoireLine> _parseRepertoireInIsolate(
-    ({String pgn, String color}) args) {
+  ({String pgn, String color}) args,
+) {
   final service = RepertoireService();
   return service.parseRepertoirePgn(args.pgn, trainingColor: args.color);
 }
@@ -344,12 +345,15 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
 
     final previousPgn = _repertoirePgn ?? '';
     final movePath = _tree.sanSequenceAt(target);
-    writer.pushUndo(UndoOperation(
-      previousPgn: previousPgn,
-      treePathBeforeAdd:
-          movePath.isEmpty ? [] : movePath.sublist(0, movePath.length - 1),
-      moveAdded: movePath.isNotEmpty ? movePath.last : '',
-    ));
+    writer.pushUndo(
+      UndoOperation(
+        previousPgn: previousPgn,
+        treePathBeforeAdd: movePath.isEmpty
+            ? []
+            : movePath.sublist(0, movePath.length - 1),
+        moveAdded: movePath.isNotEmpty ? movePath.last : '',
+      ),
+    );
 
     final newCursor = target.parent;
     _tree.deleteAt(target);
@@ -364,10 +368,7 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
     // After promotion the node is now at index 0 among siblings.
     if (target.isNotEmpty && target.last != 0) {
       // Recompute cursor if it pointed at the promoted node.
-      final promoted = TreePath([
-        ...target.parent.toList(),
-        0,
-      ]);
+      final promoted = TreePath([...target.parent.toList(), 0]);
       if (_path == target) _path = promoted;
     }
     notifyListeners();
@@ -601,12 +602,13 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
     try {
       final pgnContent = _repertoirePgn!;
       final color = _isRepertoireWhite ? 'white' : 'black';
-      _repertoireLines = await compute(
-        _parseRepertoireInIsolate,
-        (pgn: pgnContent, color: color),
-      );
+      _repertoireLines = await compute(_parseRepertoireInIsolate, (
+        pgn: pgnContent,
+        color: color,
+      ));
       debugPrint(
-          'Parsed ${_repertoireLines.length} repertoire lines for PGN browser');
+        'Parsed ${_repertoireLines.length} repertoire lines for PGN browser',
+      );
     } catch (e) {
       debugPrint('Failed to parse repertoire lines: $e');
       _repertoireLines = [];
@@ -680,7 +682,8 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
       );
 
       debugPrint(
-          'Built opening tree with ${_openingTree?.totalGames} total games');
+        'Built opening tree with ${_openingTree?.totalGames} total games',
+      );
     } catch (e) {
       debugPrint('Failed to build opening tree: $e');
       _openingTree = OpeningTree();
@@ -778,13 +781,15 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
       _openingTree?.appendLineFromFen(startFen, moves);
     }
 
-    _repertoireLines.add(_authoring.buildNewLine(
-      moves: moves,
-      title: title,
-      pgnContent: pgnContent,
-      index: _repertoireLines.length,
-      isWhite: _isRepertoireWhite,
-    ));
+    _repertoireLines.add(
+      _authoring.buildNewLine(
+        moves: moves,
+        title: title,
+        pgnContent: pgnContent,
+        index: _repertoireLines.length,
+        isWhite: _isRepertoireWhite,
+      ),
+    );
 
     if (_currentRepertoire != null) {
       _currentRepertoire = _currentRepertoire!.copyWith(
@@ -822,10 +827,15 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
     final startFen = startingFen ?? kStandardStartFen;
     _openingTree?.appendLineFromFen(startFen, [...prefix, newMove]);
 
-    final lineIndex = _authoring.findLineIndexForPrefix(_repertoireLines, prefix);
+    final lineIndex = _authoring.findLineIndexForPrefix(
+      _repertoireLines,
+      prefix,
+    );
     if (lineIndex != null) {
-      _repertoireLines[lineIndex] =
-          _authoring.extendLine(_repertoireLines[lineIndex], newMove);
+      _repertoireLines[lineIndex] = _authoring.extendLine(
+        _repertoireLines[lineIndex],
+        newMove,
+      );
       notifyListeners();
       return;
     }
@@ -861,8 +871,8 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
     final separator = existing.endsWith('\n\n')
         ? ''
         : existing.endsWith('\n')
-            ? '\n'
-            : '\n\n';
+        ? '\n'
+        : '\n\n';
     await storage.writeFile(filePath, '$existing$separator$pgnContent\n');
 
     await loadRepertoire();

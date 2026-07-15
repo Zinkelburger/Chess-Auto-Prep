@@ -83,8 +83,10 @@ class FindingTile extends StatelessWidget {
                       ),
                       Text(
                         finding.movePathString,
-                        style:
-                            const TextStyle(fontSize: 11, color: Colors.grey),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -101,8 +103,10 @@ class FindingTile extends StatelessWidget {
                   onPressed: onToggleDismiss,
                   visualDensity: VisualDensity.compact,
                   padding: const EdgeInsets.all(4),
-                  constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
                   hoverColor: Colors.grey.withAlpha(40),
                   splashRadius: 16,
                 ),

@@ -40,13 +40,13 @@ class WinDrawLossBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final (winColor, lossColor) = switch (perspective) {
       WdlPerspective.playerIsWhite => (
-          AppColors.evalPositive,
-          AppColors.evalNegative
-        ),
+        AppColors.evalPositive,
+        AppColors.evalNegative,
+      ),
       WdlPerspective.playerIsBlack => (
-          AppColors.evalNegative,
-          AppColors.evalPositive
-        ),
+        AppColors.evalNegative,
+        AppColors.evalPositive,
+      ),
       WdlPerspective.whiteBlack => (_whiteSegment, _blackSegment),
     };
 
@@ -61,11 +61,20 @@ class WinDrawLossBar extends StatelessWidget {
         child: Row(
           children: [
             if (wins > 0)
-              Expanded(flex: wins, child: Container(color: winColor)),
+              Expanded(
+                flex: wins,
+                child: Container(color: winColor),
+              ),
             if (draws > 0)
-              Expanded(flex: draws, child: Container(color: Colors.grey[600])),
+              Expanded(
+                flex: draws,
+                child: Container(color: Colors.grey[600]),
+              ),
             if (losses > 0)
-              Expanded(flex: losses, child: Container(color: lossColor)),
+              Expanded(
+                flex: losses,
+                child: Container(color: lossColor),
+              ),
           ],
         ),
       ),

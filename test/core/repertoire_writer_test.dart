@@ -29,11 +29,13 @@ void main() {
 ''');
 
       controller = RepertoireController();
-      await controller.setRepertoire(RepertoireMetadata(
-        name: 'Test',
-        filePath: filePath,
-        lastModified: DateTime(2026, 1, 1),
-      ));
+      await controller.setRepertoire(
+        RepertoireMetadata(
+          name: 'Test',
+          filePath: filePath,
+          lastModified: DateTime(2026, 1, 1),
+        ),
+      );
       writer = controller.writer;
     });
 
@@ -43,52 +45,58 @@ void main() {
       }
     });
 
-    test('addMoveAtPosition extends matching line on disk and in memory',
-        () async {
-      controller.loadMoveHistory(['e4', 'e5']);
+    test(
+      'addMoveAtPosition extends matching line on disk and in memory',
+      () async {
+        controller.loadMoveHistory(['e4', 'e5']);
 
-      final path = await writer.addMoveAtPosition(
-        fen: controller.fen,
-        san: 'Nf3',
-        pathFromRoot: ['e4', 'e5'],
-      );
+        final path = await writer.addMoveAtPosition(
+          fen: controller.fen,
+          san: 'Nf3',
+          pathFromRoot: ['e4', 'e5'],
+        );
 
-      expect(path, ['e4', 'e5', 'Nf3']);
-      expect(controller.openingTree!.hasMove(controller.fen, 'Nf3'), isTrue);
-      expect(controller.repertoireLines.first.moves, ['e4', 'e5', 'Nf3']);
+        expect(path, ['e4', 'e5', 'Nf3']);
+        expect(controller.openingTree!.hasMove(controller.fen, 'Nf3'), isTrue);
+        expect(controller.repertoireLines.first.moves, ['e4', 'e5', 'Nf3']);
 
-      final disk = await File(filePath).readAsString();
-      expect(disk, contains('Nf3'));
-    });
+        final disk = await File(filePath).readAsString();
+        expect(disk, contains('Nf3'));
+      },
+    );
 
-    test('addMoveAtPosition is no-op when move already in repertoire',
-        () async {
-      controller.loadMoveHistory(['e4']);
+    test(
+      'addMoveAtPosition is no-op when move already in repertoire',
+      () async {
+        controller.loadMoveHistory(['e4']);
 
-      final before = await File(filePath).readAsString();
-      final path = await writer.addMoveAtPosition(
-        fen: controller.fen,
-        san: 'e5',
-        pathFromRoot: ['e4'],
-      );
+        final before = await File(filePath).readAsString();
+        final path = await writer.addMoveAtPosition(
+          fen: controller.fen,
+          san: 'e5',
+          pathFromRoot: ['e4'],
+        );
 
-      expect(path, ['e4', 'e5']);
-      expect(await File(filePath).readAsString(), before);
-    });
+        expect(path, ['e4', 'e5']);
+        expect(await File(filePath).readAsString(), before);
+      },
+    );
 
-    test('appendMoveAtPath creates new game when no exact prefix match',
-        () async {
-      final service = RepertoireService();
-      final result = await service.appendMoveAtPath(
-        filePath,
-        ['e4', 'c5'],
-        'Nf3',
-        isWhiteRepertoire: true,
-      );
+    test(
+      'appendMoveAtPath creates new game when no exact prefix match',
+      () async {
+        final service = RepertoireService();
+        final result = await service.appendMoveAtPath(
+          filePath,
+          ['e4', 'c5'],
+          'Nf3',
+          isWhiteRepertoire: true,
+        );
 
-      expect(result.success, isTrue);
-      expect(result.updatedContent, contains('[Event "Repertoire Line"]'));
-      expect(result.updatedContent, contains('Nf3'));
-    });
+        expect(result.success, isTrue);
+        expect(result.updatedContent, contains('[Event "Repertoire Line"]'));
+        expect(result.updatedContent, contains('Nf3'));
+      },
+    );
   });
 }

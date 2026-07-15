@@ -11,10 +11,7 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 
 /// Where the active preview is rendered.
-enum BoardPreviewTarget {
-  mainBoard,
-  floating,
-}
+enum BoardPreviewTarget { mainBoard, floating }
 
 class BoardPreviewController extends ChangeNotifier {
   String? _previewFen;

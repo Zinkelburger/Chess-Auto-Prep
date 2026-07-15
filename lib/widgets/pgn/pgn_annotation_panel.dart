@@ -87,8 +87,9 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
 
   void _focusComment() {
     _focusNode.requestFocus();
-    _controller.selection =
-        TextSelection.collapsed(offset: _controller.text.length);
+    _controller.selection = TextSelection.collapsed(
+      offset: _controller.text.length,
+    );
   }
 
   @override
@@ -173,17 +174,21 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
                   ? 'Comment on ${widget.moveLabel}…  (C to type, Esc to leave)'
                   : 'Click or play a move to annotate it',
               hintStyle: TextStyle(fontSize: 12, color: Colors.grey[600]),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 8,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
-                borderSide:
-                    BorderSide(color: theme.dividerColor.withValues(alpha: 0.6)),
+                borderSide: BorderSide(
+                  color: theme.dividerColor.withValues(alpha: 0.6),
+                ),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
-                borderSide:
-                    BorderSide(color: theme.dividerColor.withValues(alpha: 0.6)),
+                borderSide: BorderSide(
+                  color: theme.dividerColor.withValues(alpha: 0.6),
+                ),
               ),
             ),
           ),

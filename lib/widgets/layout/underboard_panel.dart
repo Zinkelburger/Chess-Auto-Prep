@@ -123,10 +123,7 @@ class UnderboardPanelState extends State<UnderboardPanel>
               ? const SizedBox.shrink()
               : TabBarView(
                   controller: _tabController,
-                  children: [
-                    widget.jobsContent,
-                    widget.findingsContent,
-                  ],
+                  children: [widget.jobsContent, widget.findingsContent],
                 ),
         ),
       ],
@@ -139,8 +136,10 @@ class UnderboardPanelState extends State<UnderboardPanel>
       onVerticalDragUpdate: (d) {
         if (!_resizing) return;
         setState(() {
-          _panelHeight = (_panelHeight - d.delta.dy)
-              .clamp(kUnderboardMinHeight, kUnderboardMaxHeight);
+          _panelHeight = (_panelHeight - d.delta.dy).clamp(
+            kUnderboardMinHeight,
+            kUnderboardMaxHeight,
+          );
           if (_collapsed) _collapsed = false;
         });
       },
@@ -153,9 +152,7 @@ class UnderboardPanelState extends State<UnderboardPanel>
         height: kDragHandleHeight,
         decoration: BoxDecoration(
           color: theme.colorScheme.surfaceContainerHigh,
-          border: Border(
-            top: BorderSide(color: theme.dividerColor),
-          ),
+          border: Border(top: BorderSide(color: theme.dividerColor)),
         ),
         child: Row(
           children: [
@@ -168,14 +165,22 @@ class UnderboardPanelState extends State<UnderboardPanel>
                 labelPadding: const EdgeInsets.symmetric(horizontal: 12),
                 indicatorSize: TabBarIndicatorSize.label,
                 dividerHeight: 0,
-                labelStyle:
-                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                labelStyle: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
                 unselectedLabelStyle: const TextStyle(fontSize: 12),
                 tabs: [
                   _tabWithStatus(
-                      'Jobs', widget.jobsStatus, theme.colorScheme.primary),
-                  _tabWithBadge('Findings', widget.findingsCount,
-                      theme.colorScheme.error),
+                    'Jobs',
+                    widget.jobsStatus,
+                    theme.colorScheme.primary,
+                  ),
+                  _tabWithBadge(
+                    'Findings',
+                    widget.findingsCount,
+                    theme.colorScheme.error,
+                  ),
                 ],
               ),
             ),
@@ -194,7 +199,9 @@ class UnderboardPanelState extends State<UnderboardPanel>
               tooltip: _collapsed ? 'Expand (`)' : 'Collapse (`)',
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(
-                  minWidth: 28, minHeight: kDragHandleHeight),
+                minWidth: 28,
+                minHeight: kDragHandleHeight,
+              ),
             ),
           ],
         ),
@@ -220,9 +227,10 @@ class UnderboardPanelState extends State<UnderboardPanel>
               child: Text(
                 '$count',
                 style: const TextStyle(
-                    fontSize: 10,
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold),
+                  fontSize: 10,
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],

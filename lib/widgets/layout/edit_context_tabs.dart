@@ -17,7 +17,7 @@ const kEditContextTabs = <EditContextTabSpec>[
   (
     view: EditContextView.expectimax,
     label: 'Expectimax',
-    icon: Icons.analytics
+    icon: Icons.analytics,
   ),
   (view: EditContextView.lines, label: 'Lines', icon: Icons.library_books),
   (view: EditContextView.tree, label: 'Tree', icon: Icons.account_tree),

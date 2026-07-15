@@ -72,10 +72,7 @@ PgnFreqMap? loadPgnFreqCache(String cachePath, String expectedManifestJson) {
 
     for (var pi = 0; pi < positionCount; pi++) {
       final fenKeyBytes = raf.readSync(_fenKeyBytes);
-      final fenKey = utf8
-          .decode(fenKeyBytes)
-          .replaceAll('\x00', '')
-          .trim();
+      final fenKey = utf8.decode(fenKeyBytes).replaceAll('\x00', '').trim();
       final reachCount = _readUint64(raf);
       final moveCount = _readUint32(raf);
 
@@ -101,11 +98,7 @@ PgnFreqMap? loadPgnFreqCache(String cachePath, String expectedManifestJson) {
   }
 }
 
-bool savePgnFreqCache(
-  PgnFreqMap map,
-  String cachePath,
-  String manifestJson,
-) {
+bool savePgnFreqCache(PgnFreqMap map, String cachePath, String manifestJson) {
   io.RandomAccessFile? raf;
   try {
     final file = io.File(cachePath);

@@ -78,16 +78,15 @@ class FullscreenGameView extends StatelessWidget {
             right: 0,
             child: _OverlayBar(
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withAlpha(180),
-                      Colors.transparent,
-                    ],
+                    colors: [Colors.black.withAlpha(180), Colors.transparent],
                   ),
                 ),
                 child: Row(
@@ -127,16 +126,15 @@ class FullscreenGameView extends StatelessWidget {
             right: 0,
             child: _OverlayBar(
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.bottomCenter,
                     end: Alignment.topCenter,
-                    colors: [
-                      Colors.black.withAlpha(180),
-                      Colors.transparent,
-                    ],
+                    colors: [Colors.black.withAlpha(180), Colors.transparent],
                   ),
                 ),
                 child: Row(
@@ -144,14 +142,18 @@ class FullscreenGameView extends StatelessWidget {
                   children: [
                     IconButton(
                       onPressed: currentIndex > 0 ? onPrev : null,
-                      icon: Icon(Icons.skip_previous,
-                          color: Colors.white.withAlpha(180)),
+                      icon: Icon(
+                        Icons.skip_previous,
+                        color: Colors.white.withAlpha(180),
+                      ),
                       tooltip: 'Previous game (P)',
                     ),
                     IconButton(
                       onPressed: onGoBack,
-                      icon: Icon(Icons.chevron_left,
-                          color: Colors.white.withAlpha(180)),
+                      icon: Icon(
+                        Icons.chevron_left,
+                        color: Colors.white.withAlpha(180),
+                      ),
                       tooltip: 'Back (←)',
                     ),
                     const SizedBox(width: 8),
@@ -173,21 +175,28 @@ class FullscreenGameView extends StatelessWidget {
                     const SizedBox(width: 8),
                     IconButton(
                       onPressed: onGoForward,
-                      icon: Icon(Icons.chevron_right,
-                          color: Colors.white.withAlpha(180)),
+                      icon: Icon(
+                        Icons.chevron_right,
+                        color: Colors.white.withAlpha(180),
+                      ),
                       tooltip: 'Forward (→)',
                     ),
                     IconButton(
                       onPressed: currentIndex < totalGames - 1 ? onNext : null,
-                      icon: Icon(Icons.skip_next,
-                          color: Colors.white.withAlpha(180)),
+                      icon: Icon(
+                        Icons.skip_next,
+                        color: Colors.white.withAlpha(180),
+                      ),
                       tooltip: 'Next game (N)',
                     ),
                     const SizedBox(width: 12),
                     PopupMenuButton<double>(
                       tooltip: 'Auto-play speed',
-                      icon: Icon(Icons.speed,
-                          size: 20, color: Colors.white.withAlpha(160)),
+                      icon: Icon(
+                        Icons.speed,
+                        size: 20,
+                        color: Colors.white.withAlpha(160),
+                      ),
                       color: Colors.grey[900],
                       onSelected: onSetSpeed,
                       itemBuilder: (ctx) => [
@@ -197,14 +206,21 @@ class FullscreenGameView extends StatelessWidget {
                             child: Row(
                               children: [
                                 if (s == autoPlayDelaySec)
-                                  const Icon(Icons.check,
-                                      size: 16, color: Colors.amber)
+                                  const Icon(
+                                    Icons.check,
+                                    size: 16,
+                                    color: Colors.amber,
+                                  )
                                 else
                                   const SizedBox(width: 16),
                                 const SizedBox(width: 8),
-                                Text('${s}s / move',
-                                    style: const TextStyle(
-                                        color: Colors.white, fontSize: 13)),
+                                Text(
+                                  '${s}s / move',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -216,7 +232,9 @@ class FullscreenGameView extends StatelessWidget {
                         onTap: () => onSetAutoNext?.call(!autoNextGame),
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(12),
                             color: autoNextGame
@@ -254,8 +272,11 @@ class FullscreenGameView extends StatelessWidget {
             right: 8,
             child: IconButton(
               onPressed: onExit,
-              icon: Icon(Icons.fullscreen_exit,
-                  color: Colors.white.withAlpha(120), size: 28),
+              icon: Icon(
+                Icons.fullscreen_exit,
+                color: Colors.white.withAlpha(120),
+                size: 28,
+              ),
               tooltip: 'Exit fullscreen (Esc)',
             ),
           ),
@@ -313,10 +334,7 @@ class _OverlayBarState extends State<_OverlayBar> {
       child: AnimatedOpacity(
         opacity: _visible ? 1.0 : 0.0,
         duration: const Duration(milliseconds: 400),
-        child: IgnorePointer(
-          ignoring: !_visible,
-          child: widget.child,
-        ),
+        child: IgnorePointer(ignoring: !_visible, child: widget.child),
       ),
     );
   }

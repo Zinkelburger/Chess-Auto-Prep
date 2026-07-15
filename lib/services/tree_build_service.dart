@@ -231,10 +231,7 @@ class TreeBuildService {
         isWhiteToMove: isWhiteToMove(rootFen),
         nodeId: nextNodeId++,
       );
-      tree = BuildTree(
-        root: root,
-        configSnapshot: config.toJson(),
-      );
+      tree = BuildTree(root: root, configSnapshot: config.toJson());
       tree.registerNode(root);
     }
 
@@ -247,8 +244,10 @@ class TreeBuildService {
       onProgress: onProgress,
       nextNodeId: nextNodeId,
     );
-    _log('Build start: resume=${existingTree != null}, '
-        'config=${jsonEncode(config.toJson())}');
+    _log(
+      'Build start: resume=${existingTree != null}, '
+      'config=${jsonEncode(config.toJson())}',
+    );
 
     try {
       await Future.wait([
@@ -314,16 +313,20 @@ class TreeBuildService {
       final pruned = pruneEvalTooLow(tree, removedLines: prunedLines);
       lastPrunedTooLow = prunedLines;
       if (pruned > 0) {
-        _log('Pruned $pruned eval-too-low nodes '
-            '(${prunedLines.length} subtree roots)');
+        _log(
+          'Pruned $pruned eval-too-low nodes '
+          '(${prunedLines.length} subtree roots)',
+        );
       }
 
       // Complete = frontier exhausted (neither cancelled nor finished early).
       tree.buildComplete = !run.isCancelled && !run.finishNow();
 
-      _log('Build complete: ${tree.totalNodes} nodes, '
-          'ply ${tree.maxPlyReached}, '
-          '${run.stopwatch.elapsedMilliseconds}ms');
+      _log(
+        'Build complete: ${tree.totalNodes} nodes, '
+        'ply ${tree.maxPlyReached}, '
+        '${run.stopwatch.elapsedMilliseconds}ms',
+      );
       _log('Stats: ${jsonEncode(_stats.toJson())}');
 
       return tree;
@@ -366,10 +369,7 @@ class TreeBuildService {
       isWhiteToMove: isWhiteToMove(rootFen),
       nodeId: nextNodeId++,
     );
-    final tree = BuildTree(
-      root: root,
-      configSnapshot: config.toJson(),
-    );
+    final tree = BuildTree(root: root, configSnapshot: config.toJson());
     tree.registerNode(root);
     root.cumulativeProbability = 1.0;
     root.searchPriority = 1.0;
@@ -387,8 +387,7 @@ class TreeBuildService {
 
     try {
       // Phase 0: Parse PGN files into frequency map (isolate)
-      onStatusChanged?.call(
-          'Parsing PGN files...', GenerationPhase.parsingPgn);
+      onStatusChanged?.call('Parsing PGN files...', GenerationPhase.parsingPgn);
       final hasStartMoves = startMoves != null && startMoves.isNotEmpty;
       final pgnCustomFen = !_fenKeysEqual(config.startFen, kDefaultStartFen);
       final (freqMap, freqStats) = await parsePgnFiles(
@@ -400,11 +399,13 @@ class TreeBuildService {
           minElo: config.minElo,
         ),
         onProgress: (games, file) {
-          onProgress(BuildProgress(
-            totalNodes: 0,
-            maxPlyConfig: config.maxPly,
-            elapsedMs: run.stopwatch.elapsedMilliseconds,
-          ));
+          onProgress(
+            BuildProgress(
+              totalNodes: 0,
+              maxPlyConfig: config.maxPly,
+              elapsedMs: run.stopwatch.elapsedMilliseconds,
+            ),
+          );
         },
       );
 
@@ -412,11 +413,13 @@ class TreeBuildService {
         throw const BuildCancelledException('Cancelled during PGN parsing.');
       }
 
-      _log('Freq map: ${freqStats.totalGames} games, '
-          '${freqStats.positions} positions, '
-          '${freqStats.skippedElo} elo-filtered, '
-          '${freqStats.parseErrors} movetext errors, '
-          '${freqStats.fileReadErrors} file read errors');
+      _log(
+        'Freq map: ${freqStats.totalGames} games, '
+        '${freqStats.positions} positions, '
+        '${freqStats.skippedElo} elo-filtered, '
+        '${freqStats.parseErrors} movetext errors, '
+        '${freqStats.fileReadErrors} file read errors',
+      );
 
       if (freqStats.totalGames == 0) {
         final parts = <String>[
@@ -474,8 +477,10 @@ class TreeBuildService {
 
       tree.buildComplete = !run.isCancelled && !run.finishNow();
 
-      _log('DB Explorer tree: ${tree.totalNodes} nodes, '
-          'ply ${tree.maxPlyReached}');
+      _log(
+        'DB Explorer tree: ${tree.totalNodes} nodes, '
+        'ply ${tree.maxPlyReached}',
+      );
 
       // Phase 1.5: Eval enrichment.  Runs on finish-now too — a tree without
       // evals is useless to the selection phases downstream.
@@ -507,8 +512,10 @@ class TreeBuildService {
         }
       }
 
-      _log('DB Explorer complete: ${tree.totalNodes} nodes, '
-          '${run.stopwatch.elapsedMilliseconds}ms');
+      _log(
+        'DB Explorer complete: ${tree.totalNodes} nodes, '
+        '${run.stopwatch.elapsedMilliseconds}ms',
+      );
       _log('Stats: ${jsonEncode(_stats.toJson())}');
 
       return tree;
@@ -583,8 +590,9 @@ class TreeBuildService {
 
         child.moveProbability = 1.0;
         child.cumulativeProbability = node.cumulativeProbability;
-        child.searchPriority =
-            reach > 0 ? basePri * (m.count / reach) : basePri;
+        child.searchPriority = reach > 0
+            ? basePri * (m.count / reach)
+            : basePri;
         queue.add(child);
       }
     } else {
@@ -595,8 +603,7 @@ class TreeBuildService {
         return;
       }
 
-      final maiaPolicy =
-          await maiaPolicyForSmoothing(run, node.fen, reach);
+      final maiaPolicy = await maiaPolicyForSmoothing(run, node.fen, reach);
       final smoothing = maiaPolicy.isNotEmpty;
 
       final candidates = smoothOpponentMoves(
@@ -850,7 +857,8 @@ class TreeBuildService {
     // answer whenever that move's LOCAL probability clears coverMinProb —
     // even below the search floor, past maxPly, or past the node budget.
     // Such nodes get a coverage-only expansion: evaluated answer, no subtree.
-    final owesAnswer = isOurMove &&
+    final owesAnswer =
+        isOurMove &&
         node.ply > 0 &&
         node.children.isEmpty &&
         config.coverMinProb > 0.0 &&
@@ -990,9 +998,12 @@ class TreeBuildService {
       // else the most-reachable member (registered for future resolution).
       final rep = (canonical != null && group.contains(canonical))
           ? canonical
-          : (group..sort((a, b) =>
-              b.cumulativeProbability.compareTo(a.cumulativeProbability)))
-              .first;
+          : (group..sort(
+                  (a, b) => b.cumulativeProbability.compareTo(
+                    a.cumulativeProbability,
+                  ),
+                ))
+                .first;
       run.fenMap.putCanonical(rep.fen, rep);
 
       // The hole is worth answering if any path into this position carries
@@ -1006,7 +1017,8 @@ class TreeBuildService {
       }
 
       if (maxProb >= config.coverMinProb) {
-        final canExpand = config.buildMode == BuildMode.maiaDbExplore ||
+        final canExpand =
+            config.buildMode == BuildMode.maiaDbExplore ||
             _pool.workerCount > 0;
         if (config.buildMode == BuildMode.maiaDbExplore) {
           await _evalResolver.ensureEval(
@@ -1018,11 +1030,7 @@ class TreeBuildService {
           );
         }
         if (canExpand) {
-          await expander.expandOurMove(
-            rep,
-            throwawayQueue,
-            coverageOnly: true,
-          );
+          await expander.expandOurMove(rep, throwawayQueue, coverageOnly: true);
         }
         rep.explored = true;
         if (rep.children.isNotEmpty) {
@@ -1042,8 +1050,10 @@ class TreeBuildService {
     }
 
     if (answered > 0 || removed > 0) {
-      _log('Coverage sweep: $answered holes answered, '
-          '$removed uncovered leaves removed');
+      _log(
+        'Coverage sweep: $answered holes answered, '
+        '$removed uncovered leaves removed',
+      );
     }
     return answered + removed;
   }

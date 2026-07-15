@@ -32,8 +32,8 @@ class TrainingSessionController extends ChangeNotifier {
   TrainingSessionController({
     RepertoireService? repertoireService,
     RepertoireReviewService? reviewService,
-  })  : repertoireService = repertoireService ?? RepertoireService(),
-        reviewService = reviewService ?? RepertoireReviewService() {
+  }) : repertoireService = repertoireService ?? RepertoireService(),
+       reviewService = reviewService ?? RepertoireReviewService() {
     session.addListener(_onSessionChanged);
   }
 
@@ -67,6 +67,7 @@ class TrainingSessionController extends ChangeNotifier {
   int currentMoveIndex = 0;
   TrainingPhase phase = TrainingPhase.drilling;
   bool lineHadMistake = false;
+
   /// True when this line session started with the learn walkthrough (new line).
   bool? _hadLearnPhaseThisSession;
   bool get hadLearnPhaseThisSession => _hadLearnPhaseThisSession ?? false;
@@ -171,10 +172,12 @@ class TrainingSessionController extends ChangeNotifier {
 
       final allEntries = await reviewService.loadAll();
       final moveProgress = await reviewService.loadMoveProgress();
-      _otherRepertoireEntries =
-          allEntries.where((e) => e.repertoireId != filePath).toList();
-      final currentEntries =
-          allEntries.where((e) => e.repertoireId == filePath).toList();
+      _otherRepertoireEntries = allEntries
+          .where((e) => e.repertoireId != filePath)
+          .toList();
+      final currentEntries = allEntries
+          .where((e) => e.repertoireId == filePath)
+          .toList();
       final merged = reviewService.syncEntries(
         repertoireId: filePath,
         lines: parsedLines,
@@ -257,8 +260,10 @@ class TrainingSessionController extends ChangeNotifier {
     if (lines.isEmpty) return;
     RepertoireLine? initial;
     if (startLineId != null) {
-      initial = lines.firstWhere((l) => l.id == startLineId,
-          orElse: () => lines.first);
+      initial = lines.firstWhere(
+        (l) => l.id == startLineId,
+        orElse: () => lines.first,
+      );
     } else if (dueQueue.isNotEmpty) {
       initial = dueQueue.first;
     } else {
@@ -424,7 +429,10 @@ class TrainingSessionController extends ChangeNotifier {
 
     final annotation = currentLine!.comments[currentMoveIndex.toString()];
     final isUserMove = _isUserMove(currentMoveIndex);
-    final display = _buildMoveDisplay(currentMoveIndex, isOpponent: !isUserMove);
+    final display = _buildMoveDisplay(
+      currentMoveIndex,
+      isOpponent: !isUserMove,
+    );
 
     currentAnnotation = annotation;
     feedback = null;
@@ -517,8 +525,9 @@ class TrainingSessionController extends ChangeNotifier {
   bool _isUserMove(int moveIndex) {
     if (currentLine == null) return false;
     final startIsWhite = currentLine!.startPosition.turn == Side.white;
-    final isWhiteMove =
-        startIsWhite ? (moveIndex % 2 == 0) : (moveIndex % 2 == 1);
+    final isWhiteMove = startIsWhite
+        ? (moveIndex % 2 == 0)
+        : (moveIndex % 2 == 1);
     return (isWhiteLine && isWhiteMove) || (!isWhiteLine && !isWhiteMove);
   }
 
@@ -747,7 +756,8 @@ class TrainingSessionController extends ChangeNotifier {
   Future<void> rateLine(ReviewRating rating) async {
     if (currentLine == null) return;
 
-    final existing = reviewMap[currentLine!.id] ??
+    final existing =
+        reviewMap[currentLine!.id] ??
         RepertoireReviewEntry(
           repertoireId: repertoireId,
           lineId: currentLine!.id,
@@ -755,14 +765,18 @@ class TrainingSessionController extends ChangeNotifier {
         );
 
     final hadMistake = lineHadMistake;
-    final updated = reviewService.applyRating(existing, rating).copyWith(
+    final updated = reviewService
+        .applyRating(existing, rating)
+        .copyWith(
           passCount: hadMistake ? existing.passCount : existing.passCount + 1,
           failCount: hadMistake ? existing.failCount + 1 : existing.failCount,
         );
     reviewMap[currentLine!.id] = updated;
 
-    await reviewService
-        .saveAll([..._otherRepertoireEntries, ...reviewMap.values]);
+    await reviewService.saveAll([
+      ..._otherRepertoireEntries,
+      ...reviewMap.values,
+    ]);
     await reviewService.saveMoveProgress(
       moveProgressMap.values.toList(),
       repertoireId: repertoireId,
@@ -775,7 +789,7 @@ class TrainingSessionController extends ChangeNotifier {
         rating: rating.name,
         hadMistake: hadMistake,
         sessionType: 'trainer',
-      )
+      ),
     ]);
 
     repertoireService.updateLineReviewHeaders(
@@ -831,8 +845,9 @@ class TrainingSessionController extends ChangeNotifier {
 
     int nextIndex = 0;
     if (currentLine != null) {
-      final currentQueueIndex =
-          dueQueue.indexWhere((l) => l.id == currentLine!.id);
+      final currentQueueIndex = dueQueue.indexWhere(
+        (l) => l.id == currentLine!.id,
+      );
       if (currentQueueIndex >= 0) {
         nextIndex = (currentQueueIndex + 1) % dueQueue.length;
       }
@@ -842,25 +857,19 @@ class TrainingSessionController extends ChangeNotifier {
 
   /// Start the next unseen/new line from the queue.
   void startNextNew() {
-    final line = dueQueue.firstWhere(
-      (l) {
-        final entry = reviewMap[l.id];
-        return entry == null || entry.isNew;
-      },
-      orElse: () => dueQueue.first,
-    );
+    final line = dueQueue.firstWhere((l) {
+      final entry = reviewMap[l.id];
+      return entry == null || entry.isNew;
+    }, orElse: () => dueQueue.first);
     startLine(line);
   }
 
   /// Start the next due-for-review (not new) line from the queue.
   void startNextDue() {
-    final line = dueQueue.firstWhere(
-      (l) {
-        final entry = reviewMap[l.id];
-        return entry != null && !entry.isNew && entry.isDue;
-      },
-      orElse: () => dueQueue.first,
-    );
+    final line = dueQueue.firstWhere((l) {
+      final entry = reviewMap[l.id];
+      return entry != null && !entry.isNew && entry.isDue;
+    }, orElse: () => dueQueue.first);
     startLine(line);
   }
 
@@ -869,8 +878,11 @@ class TrainingSessionController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updateMoveProgress(RepertoireLine line, int moveIndex,
-      {required bool wasCorrect}) {
+  void updateMoveProgress(
+    RepertoireLine line,
+    int moveIndex, {
+    required bool wasCorrect,
+  }) {
     final key = '${line.id}:$moveIndex';
     final existing = moveProgressMap[key];
     final threshold = settings.correctStreakThreshold;
@@ -977,7 +989,6 @@ class TrainingSessionController extends ChangeNotifier {
       }
     });
   }
-
 }
 
 /// Information about a move to display in the Chessable-style panel.

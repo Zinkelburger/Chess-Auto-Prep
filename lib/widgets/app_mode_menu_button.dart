@@ -4,10 +4,7 @@ import 'package:provider/provider.dart';
 import '../core/app_state.dart';
 
 class AppModeMenuButton extends StatelessWidget {
-  const AppModeMenuButton({
-    super.key,
-    this.tooltip = 'Switch mode',
-  });
+  const AppModeMenuButton({super.key, this.tooltip = 'Switch mode'});
 
   final String tooltip;
 

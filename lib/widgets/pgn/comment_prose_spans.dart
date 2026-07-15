@@ -31,7 +31,8 @@ List<InlineSpan> commentProseSpans(
   bool bookFormatting = false,
 }) {
   final filtered = filterDisplayComment(
-      rawComment.replaceAll('{', '').replaceAll('}', ''));
+    rawComment.replaceAll('{', '').replaceAll('}', ''),
+  );
   if (filtered.isEmpty) return const [];
 
   final proseStyle = TextStyle(

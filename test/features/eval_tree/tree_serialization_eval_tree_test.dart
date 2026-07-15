@@ -24,9 +24,9 @@ void main() {
   });
 
   test(
-      'deserializeTree treats missing build_complete as a completed legacy tree',
-      () {
-    final restored = deserializeTree('''
+    'deserializeTree treats missing build_complete as a completed legacy tree',
+    () {
+      final restored = deserializeTree('''
 {
   "format": "opening_tree",
   "version": 3,
@@ -39,6 +39,7 @@ void main() {
 }
 ''');
 
-    expect(restored.buildComplete, isTrue);
-  });
+      expect(restored.buildComplete, isTrue);
+    },
+  );
 }

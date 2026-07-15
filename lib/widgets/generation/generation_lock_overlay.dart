@@ -53,10 +53,9 @@ class GenerationLockOverlay extends StatelessWidget {
               const SizedBox(height: 14),
               Text(
                 isCancelling ? 'Cancelling...' : 'Generating Repertoire...',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w600),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 8),
               Text(
@@ -169,8 +168,11 @@ class GenerationPausedBanner extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Icon(Icons.pause_circle_filled,
-                size: 18, color: AppColors.warning),
+            const Icon(
+              Icons.pause_circle_filled,
+              size: 18,
+              color: AppColors.warning,
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(

@@ -92,11 +92,13 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     final appState = context.read<AppState>();
     if (appState.pendingRepertoirePath != null &&
         appState.currentMode == AppMode.repertoireTrainer) {
-      _training.setRepertoire(RepertoireMetadata(
-        filePath: appState.pendingRepertoirePath!,
-        name: p.basenameWithoutExtension(appState.pendingRepertoirePath!),
-        lastModified: DateTime.now(),
-      ));
+      _training.setRepertoire(
+        RepertoireMetadata(
+          filePath: appState.pendingRepertoirePath!,
+          name: p.basenameWithoutExtension(appState.pendingRepertoirePath!),
+          lastModified: DateTime.now(),
+        ),
+      );
       final lineId = appState.pendingLineId;
       appState.pendingRepertoirePath = null;
       appState.pendingLineId = null;
@@ -121,16 +123,16 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   void _openInBuilder() {
     if (_training.repertoire == null) return;
     context.read<AppState>().switchToBuilder(
-          repertoirePath: _training.repertoire!.filePath,
-          lineId: _training.currentLine?.id,
-        );
+      repertoirePath: _training.repertoire!.filePath,
+      lineId: _training.currentLine?.id,
+    );
   }
 
   void _scoreInBuilder() {
     if (_training.repertoire == null) return;
     context.read<AppState>().switchToBuilder(
-          repertoirePath: _training.repertoire!.filePath,
-        );
+      repertoirePath: _training.repertoire!.filePath,
+    );
   }
 
   String _formatRelativeDate(DateTime date) {
@@ -149,10 +151,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     // _onKeyEvent to advance the Learn step.
     return TrainerKeyboardScope(
       onKeyEvent: _onKeyEvent,
-      child: Scaffold(
-        appBar: _buildAppBar(),
-        body: _buildBody(),
-      ),
+      child: Scaffold(appBar: _buildAppBar(), body: _buildBody()),
     );
   }
 
@@ -470,8 +469,8 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   void _ensureSettingsControllers() {
     if (_settingsInitialized) return;
     _settingsInitialized = true;
-    _repetitionsController.text =
-        _training.settings.correctStreakThreshold.toString();
+    _repetitionsController.text = _training.settings.correctStreakThreshold
+        .toString();
     _depthController.text = _training.settings.trainingDepth?.toString() ?? '';
     _delayController.text = _training.settings.learnDelaySec.toString();
   }

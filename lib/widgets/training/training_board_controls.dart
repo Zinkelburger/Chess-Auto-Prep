@@ -219,14 +219,16 @@ class _MoveLine extends StatelessWidget {
     final theme = Theme.of(context);
     final isOpponent = display.isOpponentMove;
     // Scraped PGNs carry engine tokens and stray double spaces — show prose only.
-    final comment =
-        display.comment == null ? '' : filterDisplayComment(display.comment!);
+    final comment = display.comment == null
+        ? ''
+        : filterDisplayComment(display.comment!);
     final sideLabel = display.isWhiteMove ? "White's" : "Black's";
     final headerText = isOpponent
         ? '$sideLabel move ${display.notation}'
         : 'Your move ${display.notation}';
-    final headerColor =
-        isOpponent ? theme.colorScheme.onSurfaceVariant : theme.colorScheme.primary;
+    final headerColor = isOpponent
+        ? theme.colorScheme.onSurfaceVariant
+        : theme.colorScheme.primary;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -294,9 +296,7 @@ class _MovePairCard extends StatelessWidget {
               color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
             ),
           ],
-          if (user != null) ...[
-            _MoveLine(display: user!),
-          ],
+          if (user != null) ...[_MoveLine(display: user!)],
         ],
       ),
     );
@@ -354,10 +354,7 @@ class _NextButtonState extends State<_NextButton>
           icon: const Icon(Icons.arrow_forward, size: 20),
           label: const Text(
             'Next',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
           ),
           style: FilledButton.styleFrom(
             minimumSize: const Size.fromHeight(44),
@@ -374,8 +371,9 @@ class _NextButtonState extends State<_NextButton>
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: theme.colorScheme.primary
-                      .withValues(alpha: 0.25 + glow * 0.3),
+                  color: theme.colorScheme.primary.withValues(
+                    alpha: 0.25 + glow * 0.3,
+                  ),
                   blurRadius: 8 + glow * 8,
                   spreadRadius: glow * 3,
                 ),
@@ -517,8 +515,8 @@ class _LearnContent extends StatelessWidget {
                 color: feedback != null && feedback!.startsWith('Wrong')
                     ? theme.colorScheme.error
                     : feedback == 'Correct!'
-                        ? Colors.green
-                        : null,
+                    ? Colors.green
+                    : null,
               ),
             ),
           ],
@@ -546,10 +544,7 @@ class _LearnContent extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _MovePairCard(
-              opponent: currentPairOpponent,
-              user: currentPairUser,
-            ),
+            _MovePairCard(opponent: currentPairOpponent, user: currentPairUser),
             const SizedBox(height: 12),
             _NextButton(onPressed: onLearnAcknowledged),
           ],
@@ -681,8 +676,9 @@ class _ReplayContent extends StatelessWidget {
             children: [
               Text(
                 'Replaying missed moves',
-                style: theme.textTheme.titleSmall
-                    ?.copyWith(color: Colors.orange[700]),
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: Colors.orange[700],
+                ),
               ),
               const SizedBox(height: 4),
               Text(

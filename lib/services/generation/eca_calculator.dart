@@ -275,8 +275,5 @@ class ScoredChild {
   final BuildTreeNode child;
   final double expectimaxValue;
 
-  const ScoredChild({
-    required this.child,
-    required this.expectimaxValue,
-  });
+  const ScoredChild({required this.child, required this.expectimaxValue});
 }

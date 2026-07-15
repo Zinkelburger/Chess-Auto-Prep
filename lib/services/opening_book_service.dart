@@ -42,7 +42,8 @@ class OpeningBook {
 ///
 /// Isolate-safe: no instance state captured.
 Map<String, OpeningBookEntry> buildOpeningBookFromTsv(
-    List<String> tsvContents) {
+  List<String> tsvContents,
+) {
   final map = <String, OpeningBookEntry>{};
   for (final content in tsvContents) {
     for (final line in const LineSplitter().convert(content)) {
@@ -113,8 +114,9 @@ class OpeningBookService {
   Future<OpeningBook> _load() async {
     final contents = <String>[];
     for (final volume in const ['a', 'b', 'c', 'd', 'e']) {
-      contents
-          .add(await rootBundle.loadString('assets/data/openings/$volume.tsv'));
+      contents.add(
+        await rootBundle.loadString('assets/data/openings/$volume.tsv'),
+      );
     }
     final map = await compute(buildOpeningBookFromTsv, contents);
     return OpeningBook(map);

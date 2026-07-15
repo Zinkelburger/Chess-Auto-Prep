@@ -496,8 +496,7 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
         Expanded(
           child: _FetchModeRow(
             selected: isSince,
-            onTap: () =>
-                widget.onFetchModeChanged(TacticsImportMode.sinceDate),
+            onTap: () => widget.onFetchModeChanged(TacticsImportMode.sinceDate),
             child: Row(
               children: [
                 Text(

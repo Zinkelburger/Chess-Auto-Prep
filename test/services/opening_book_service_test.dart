@@ -18,8 +18,7 @@ void main() {
 
   test('parses TSV lines, skipping the column header', () {
     expect(book.byFen.length, 4);
-    expect(book.byFen.values.map((e) => e.name),
-        contains('Benoni Defense'));
+    expect(book.byFen.values.map((e) => e.name), contains('Benoni Defense'));
   });
 
   test('classifies by position, so transposed move orders match', () {
@@ -37,9 +36,7 @@ void main() {
   });
 
   test('deepest book match wins over shallower ones', () {
-    final games = [
-      _game('1. e4 c5 2. Nf3 g6 3. c3 Bg7'),
-    ];
+    final games = [_game('1. e4 c5 2. Nf3 g6 3. c3 Bg7')];
     final index = buildFenIndex(games);
     final result = classifyGamesFromIndex(book, index, games.length);
 

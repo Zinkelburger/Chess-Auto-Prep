@@ -164,8 +164,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           if (_isAnalyzing)
             LinearProgressIndicator(
               minHeight: 2,
-              value:
-                  _analysisTotal > 0 ? _analysisCurrent / _analysisTotal : null,
+              value: _analysisTotal > 0
+                  ? _analysisCurrent / _analysisTotal
+                  : null,
             ),
           Expanded(child: _buildBody(context)),
         ],
@@ -312,8 +313,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       holesProgress: huntOnDisplayedColor ? _holesProgress : null,
       holesTrapPassSkipped: _trapPassSkipped && _huntIsWhite == _playerIsWhite,
       onHolesResultChanged: _onHolesResultChanged,
-      onStartHoleHunt:
-          _isHunting || _isAnalyzing ? null : _showHoleHuntConfig,
+      onStartHoleHunt: _isHunting || _isAnalyzing ? null : _showHoleHuntConfig,
     );
   }
 
@@ -322,7 +322,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   String get _metadataSubtitle {
     final p = _currentPlayer;
     if (p == null) return '';
-    final dl = p.downloadedAt != null ? ' · downloaded ${p.downloadTimeAgo}' : '';
+    final dl = p.downloadedAt != null
+        ? ' · downloaded ${p.downloadTimeAgo}'
+        : '';
     final base =
         '${p.gameCount} games · ${p.platformDisplayName} (${p.username})'
         ' · ${p.rangeDescription}$dl';
@@ -571,16 +573,20 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       stats.evalDepth = r.depth;
 
       if (kDebugMode && (matched + created) <= 5) {
-        debugPrint('[EvalMerge] ${r.evalDisplay} '
-            '(${r.gamesPlayed}g, ${(r.winRate * 100).toStringAsFixed(0)}%) '
-            'FEN=$key');
+        debugPrint(
+          '[EvalMerge] ${r.evalDisplay} '
+          '(${r.gamesPlayed}g, ${(r.winRate * 100).toStringAsFixed(0)}%) '
+          'FEN=$key',
+        );
       }
     }
 
     if (kDebugMode) {
       final forColor = _playerIsWhite ? 'white' : 'black';
-      debugPrint('[EvalMerge] $forColor: $matched matched, '
-          '$created created, ${_engineEvals.length} total evals');
+      debugPrint(
+        '[EvalMerge] $forColor: $matched matched, '
+        '$created created, ${_engineEvals.length} total evals',
+      );
     }
 
     setState(() {});
@@ -611,7 +617,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       if (data != null && mounted) {
         _engineEvals = data
             .map(
-                (e) => EngineWeaknessResult.fromJson(e as Map<String, dynamic>))
+              (e) => EngineWeaknessResult.fromJson(e as Map<String, dynamic>),
+            )
             .toList();
         _mergeEvalsIntoAnalysis();
       }
@@ -629,8 +636,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     // The hunt shares the generation engine state; refuse to overlap with a
     // running generation rather than contend for the same workers.
     if (EngineLifecycle.instance.state == EngineState.generating) {
-      _showError('Another engine job is running — '
-          'wait for it to finish first.');
+      _showError(
+        'Another engine job is running — '
+        'wait for it to finish first.',
+      );
       return;
     }
 
@@ -684,7 +693,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       // switched players meanwhile (partial reports included).
       HoleHuntPersistence.instance.save(
         await _gamesService.holesReportPath(
-            player.platform, player.username, isWhite),
+          player.platform,
+          player.username,
+          isWhite,
+        ),
         result,
         config,
         isComplete: !_huntCancelled,
@@ -724,7 +736,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     setState(() => _holesResults[isWhite] = result);
     await HoleHuntPersistence.instance.saveResult(
       await _gamesService.holesReportPath(
-          player.platform, player.username, isWhite),
+        player.platform,
+        player.username,
+        isWhite,
+      ),
       result,
       config: _holesConfigs[isWhite],
     );
@@ -737,7 +752,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     for (final isWhite in [true, false]) {
       final snapshot = await HoleHuntPersistence.instance.load(
         await _gamesService.holesReportPath(
-            player.platform, player.username, isWhite),
+          player.platform,
+          player.username,
+          isWhite,
+        ),
       );
       // Guard: the user may have switched players during the async load.
       if (!mounted || _currentPlayer != player) return;
@@ -781,11 +799,19 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
     try {
       final pgnPath = await _gamesService.analysisPgnPath(
-          player.platform, player.username);
+        player.platform,
+        player.username,
+      );
       final whiteCachePath = await _gamesService.cachedAnalysisPath(
-          player.platform, player.username, true);
+        player.platform,
+        player.username,
+        true,
+      );
       final blackCachePath = await _gamesService.cachedAnalysisPath(
-          player.platform, player.username, false);
+        player.platform,
+        player.username,
+        false,
+      );
 
       if (!await File(pgnPath).exists()) {
         if (mounted) {

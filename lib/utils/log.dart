@@ -28,15 +28,31 @@ class Log {
   void i(String message, {String? name}) =>
       _emit(LogLevel.info, message, name: name);
 
-  void w(String message,
-          {String? name, Object? error, StackTrace? stackTrace}) =>
-      _emit(LogLevel.warning, message,
-          name: name, error: error, stackTrace: stackTrace);
+  void w(
+    String message, {
+    String? name,
+    Object? error,
+    StackTrace? stackTrace,
+  }) => _emit(
+    LogLevel.warning,
+    message,
+    name: name,
+    error: error,
+    stackTrace: stackTrace,
+  );
 
-  void e(String message,
-          {String? name, Object? error, StackTrace? stackTrace}) =>
-      _emit(LogLevel.error, message,
-          name: name, error: error, stackTrace: stackTrace);
+  void e(
+    String message, {
+    String? name,
+    Object? error,
+    StackTrace? stackTrace,
+  }) => _emit(
+    LogLevel.error,
+    message,
+    name: name,
+    error: error,
+    stackTrace: stackTrace,
+  );
 
   void _emit(
     LogLevel level,
@@ -46,8 +62,7 @@ class Log {
     StackTrace? stackTrace,
   }) {
     // In release builds, drop debug/info noise but keep warnings/errors.
-    if (kReleaseMode &&
-        (level == LogLevel.debug || level == LogLevel.info)) {
+    if (kReleaseMode && (level == LogLevel.debug || level == LogLevel.info)) {
       return;
     }
     developer.log(

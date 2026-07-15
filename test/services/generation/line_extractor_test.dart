@@ -9,10 +9,10 @@ import 'generation_test_helpers.dart';
 const _startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
 TreeBuildConfig _config({bool playAsWhite = true}) => TreeBuildConfig(
-      startFen: _startFen,
-      playAsWhite: playAsWhite,
-      minProbability: 0.01,
-    );
+  startFen: _startFen,
+  playAsWhite: playAsWhite,
+  minProbability: 0.01,
+);
 
 void main() {
   group('LineExtractor', () {

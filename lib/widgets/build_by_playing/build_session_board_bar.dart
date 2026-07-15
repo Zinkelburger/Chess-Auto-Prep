@@ -29,8 +29,9 @@ class BuildSessionBoardBar extends StatelessWidget {
           decoration: BoxDecoration(
             color: exploring
                 ? AppColors.warningSurface.withValues(alpha: 0.25)
-                : theme.colorScheme.surfaceContainerHighest
-                    .withValues(alpha: 0.5),
+                : theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.5,
+                  ),
             border: Border(top: BorderSide(color: theme.dividerColor)),
           ),
           child: Row(
@@ -54,8 +55,10 @@ class BuildSessionBoardBar extends StatelessWidget {
               TextButton.icon(
                 onPressed: exploring ? session.backToDecisionPoint : null,
                 icon: const Icon(Icons.undo, size: 14),
-                label: const Text('Back to decision point',
-                    style: TextStyle(fontSize: 11)),
+                label: const Text(
+                  'Back to decision point',
+                  style: TextStyle(fontSize: 11),
+                ),
                 style: TextButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   visualDensity: VisualDensity.compact,
@@ -85,9 +88,10 @@ class _ScratchTrail extends StatelessWidget {
       reverse: true, // keep the newest move in view
       child: Row(
         children: [
-          Text('Exploring: ',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.hintColor)),
+          Text(
+            'Exploring: ',
+            style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+          ),
           for (var i = 0; i < trail.length; i++)
             Padding(
               padding: const EdgeInsets.only(right: 2),
@@ -95,8 +99,10 @@ class _ScratchTrail extends StatelessWidget {
                 onTap: () => session.scratchJumpTo(i),
                 borderRadius: BorderRadius.circular(4),
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: i == trail.length - 1
                         ? theme.colorScheme.surfaceContainerHighest

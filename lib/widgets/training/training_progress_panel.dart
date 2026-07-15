@@ -86,10 +86,7 @@ class TrainingBottomControls extends StatelessWidget {
         const SizedBox(width: 8),
         SizedBox(
           height: 24,
-          child: Switch(
-            value: settings.autoNext,
-            onChanged: onAutoNextChanged,
-          ),
+          child: Switch(value: settings.autoNext, onChanged: onAutoNextChanged),
         ),
         const Spacer(),
         Text(
@@ -164,16 +161,23 @@ class RepertoireProgressBar extends StatelessWidget {
             style: theme.textTheme.bodySmall!,
             child: Row(
               children: [
-                Text('$practiced practiced',
-                    style: const TextStyle(color: Colors.green, fontSize: 11)),
+                Text(
+                  '$practiced practiced',
+                  style: const TextStyle(color: Colors.green, fontSize: 11),
+                ),
                 const SizedBox(width: 8),
-                Text('$due due',
-                    style: const TextStyle(color: Colors.orange, fontSize: 11)),
+                Text(
+                  '$due due',
+                  style: const TextStyle(color: Colors.orange, fontSize: 11),
+                ),
                 const SizedBox(width: 8),
-                Text('$unseen unseen',
-                    style: TextStyle(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontSize: 11)),
+                Text(
+                  '$unseen unseen',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontSize: 11,
+                  ),
+                ),
               ],
             ),
           ),
@@ -210,14 +214,30 @@ class SessionStatsBar extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _StatItem(Icons.check_circle_outline, '$sessionCorrect', Colors.green,
-              theme),
           _StatItem(
-              Icons.cancel_outlined, '$sessionIncorrect', Colors.red, theme),
+            Icons.check_circle_outline,
+            '$sessionCorrect',
+            Colors.green,
+            theme,
+          ),
           _StatItem(
-              Icons.percent, '$accuracy%', theme.colorScheme.onSurface, theme),
-          _StatItem(Icons.local_fire_department, '$sessionStreak',
-              Colors.orange, theme),
+            Icons.cancel_outlined,
+            '$sessionIncorrect',
+            Colors.red,
+            theme,
+          ),
+          _StatItem(
+            Icons.percent,
+            '$accuracy%',
+            theme.colorScheme.onSurface,
+            theme,
+          ),
+          _StatItem(
+            Icons.local_fire_department,
+            '$sessionStreak',
+            Colors.orange,
+            theme,
+          ),
         ],
       ),
     );
@@ -275,14 +295,20 @@ class LineProgressIndicator extends StatelessWidget {
             ),
             const Spacer(),
             if (phase == TrainingPhase.learning)
-              Text('Learning',
-                  style: TextStyle(color: Colors.blue[400], fontSize: 12)),
+              Text(
+                'Learning',
+                style: TextStyle(color: Colors.blue[400], fontSize: 12),
+              ),
             if (phase == TrainingPhase.drilling)
-              Text('Drilling',
-                  style: TextStyle(color: Colors.orange[400], fontSize: 12)),
+              Text(
+                'Drilling',
+                style: TextStyle(color: Colors.orange[400], fontSize: 12),
+              ),
             if (phase == TrainingPhase.replaying)
-              Text('Replaying',
-                  style: TextStyle(color: Colors.red[400], fontSize: 12)),
+              Text(
+                'Replaying',
+                style: TextStyle(color: Colors.red[400], fontSize: 12),
+              ),
           ],
         ),
         const SizedBox(height: 4),

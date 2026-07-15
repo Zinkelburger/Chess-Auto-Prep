@@ -17,11 +17,7 @@ class PositionFilter extends StatelessWidget {
   /// Current board FEN (for the "Board position" chip).
   final String? currentFen;
 
-  const PositionFilter({
-    super.key,
-    required this.controller,
-    this.currentFen,
-  });
+  const PositionFilter({super.key, required this.controller, this.currentFen});
 
   @override
   Widget build(BuildContext context) {
@@ -60,8 +56,10 @@ class PositionFilter extends StatelessWidget {
                   hintText: 'FEN or moves, e.g. 1. e4 c6',
                   hintStyle: TextStyle(color: Colors.grey[600], fontSize: 12),
                   isDense: true,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 10,
+                  ),
                   border: const OutlineInputBorder(),
                   suffixIcon: showOk || showError
                       ? Icon(
@@ -70,8 +68,10 @@ class PositionFilter extends StatelessWidget {
                           color: showOk ? Colors.green : Colors.red,
                         )
                       : null,
-                  suffixIconConstraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 28),
+                  suffixIconConstraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 28,
+                  ),
                 ),
                 style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
               ),
@@ -84,8 +84,10 @@ class PositionFilter extends StatelessWidget {
                 child: IconButton(
                   icon: const Icon(Icons.close, size: 16),
                   padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 28, minHeight: 28),
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
                   onPressed: controller.clearPosition,
                   tooltip: 'Clear position filter',
                 ),
@@ -110,7 +112,8 @@ class PositionFilter extends StatelessWidget {
           _BoardPositionChip(
             currentFen: currentFen!,
             isActive:
-                hasFilter && controller.positionFen == normalizeFen(currentFen!),
+                hasFilter &&
+                controller.positionFen == normalizeFen(currentFen!),
             onTap: () => controller.setPositionFen(currentFen!),
           ),
         ],
@@ -140,8 +143,8 @@ class _BoardPositionChip extends StatelessWidget {
       message: isStart
           ? 'Navigate to a position on the board first'
           : isActive
-              ? 'Filtering on the current board position'
-              : 'Filter games through the current board position',
+          ? 'Filtering on the current board position'
+          : 'Filter games through the current board position',
       child: GestureDetector(
         onTap: isStart ? null : onTap,
         child: Container(
@@ -150,8 +153,8 @@ class _BoardPositionChip extends StatelessWidget {
             color: isStart
                 ? Colors.grey[800]
                 : isActive
-                    ? Colors.blue[700]
-                    : Colors.grey[800],
+                ? Colors.blue[700]
+                : Colors.grey[800],
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: isActive ? Colors.blue[400]! : Colors.grey[700]!,
@@ -167,8 +170,8 @@ class _BoardPositionChip extends StatelessWidget {
                 color: isStart
                     ? Colors.grey[600]
                     : isActive
-                        ? Colors.blue[100]
-                        : Colors.grey[400],
+                    ? Colors.blue[100]
+                    : Colors.grey[400],
               ),
               const SizedBox(width: 4),
               Text(
@@ -179,8 +182,8 @@ class _BoardPositionChip extends StatelessWidget {
                   color: isStart
                       ? Colors.grey[600]
                       : isActive
-                          ? Colors.blue[100]
-                          : Colors.grey[400],
+                      ? Colors.blue[100]
+                      : Colors.grey[400],
                 ),
               ),
             ],

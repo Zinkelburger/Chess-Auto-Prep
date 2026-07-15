@@ -26,9 +26,7 @@ class AuditResumeBanner extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: Colors.amber.withAlpha(20),
-        border: Border(
-          bottom: BorderSide(color: Colors.amber.withAlpha(60)),
-        ),
+        border: Border(bottom: BorderSide(color: Colors.amber.withAlpha(60))),
       ),
       child: Row(
         children: [

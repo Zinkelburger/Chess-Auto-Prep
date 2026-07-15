@@ -43,8 +43,9 @@ class EvalTreeToolbar extends StatelessWidget {
           _toolButton(
             icon: Icons.arrow_upward,
             tooltip: 'Go to parent',
-            onPressed:
-                currentNode.parentId == null ? null : controller.goParent,
+            onPressed: currentNode.parentId == null
+                ? null
+                : controller.goParent,
           ),
           _toolButton(
             icon: Icons.center_focus_strong,
@@ -52,8 +53,9 @@ class EvalTreeToolbar extends StatelessWidget {
             onPressed: () => controller.requestFocusSelection(),
           ),
           _toolButton(
-            icon:
-                controller.showAncestorSpine ? Icons.account_tree : Icons.park,
+            icon: controller.showAncestorSpine
+                ? Icons.account_tree
+                : Icons.park,
             tooltip: controller.showAncestorSpine
                 ? 'Hide path to root'
                 : 'Show path to root',
@@ -91,15 +93,14 @@ class EvalTreeToolbar extends StatelessWidget {
                   padding: WidgetStatePropertyAll(
                     EdgeInsets.symmetric(horizontal: 8, vertical: 0),
                   ),
-                  textStyle: WidgetStatePropertyAll(
-                    TextStyle(fontSize: 10),
-                  ),
+                  textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 10)),
                 ),
               ),
               const SizedBox(width: 4),
               Tooltip(
                 richMessage: TextSpan(
-                  children: controller.metricDisplayMode ==
+                  children:
+                      controller.metricDisplayMode ==
                           EvalTreeMetricDisplayMode.cpl
                       ? const [
                           TextSpan(
@@ -147,10 +148,12 @@ class EvalTreeToolbar extends StatelessWidget {
                 child: SliderTheme(
                   data: SliderThemeData(
                     trackHeight: 3,
-                    thumbShape:
-                        const RoundSliderThumbShape(enabledThumbRadius: 6),
-                    overlayShape:
-                        const RoundSliderOverlayShape(overlayRadius: 12),
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 6,
+                    ),
+                    overlayShape: const RoundSliderOverlayShape(
+                      overlayRadius: 12,
+                    ),
                     activeTrackColor: Colors.blue[400],
                     inactiveTrackColor: Colors.grey[700],
                     thumbColor: Colors.blue[300],
@@ -222,8 +225,8 @@ class EvalTreeToolbar extends StatelessWidget {
           color: onPressed == null
               ? Colors.grey[700]
               : active
-                  ? Colors.blue[300]
-                  : Colors.grey[400],
+              ? Colors.blue[300]
+              : Colors.grey[400],
         ),
         padding: EdgeInsets.zero,
         tooltip: tooltip,

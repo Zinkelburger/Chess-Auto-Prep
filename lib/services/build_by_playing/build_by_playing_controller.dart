@@ -111,10 +111,10 @@ class BuildByPlayingController extends ChangeNotifier {
   BuildByPlayingController({
     required RepertoireController repertoire,
     ExplorerCacheService? explorer,
-  })  // Private fields can't be named initializing formals.
-      // ignore: prefer_initializing_formals
-      : _repertoire = repertoire,
-        _explorer = explorer ?? ExplorerCacheService.instance;
+  }) // Private fields can't be named initializing formals.
+    // ignore: prefer_initializing_formals
+    : _repertoire = repertoire,
+       _explorer = explorer ?? ExplorerCacheService.instance;
 
   final RepertoireController _repertoire;
   final ExplorerCacheService _explorer;
@@ -248,8 +248,9 @@ class BuildByPlayingController extends ChangeNotifier {
       _repertoire.navigateToLineMove(cleanSanTokens(_repertoire.rootMoves));
     }
     _sessionRootLen = _repertoire.currentMoveSequence.length;
-    final (committed, suffix) =
-        _splitByCoverage(_repertoire.currentMoveSequence);
+    final (committed, suffix) = _splitByCoverage(
+      _repertoire.currentMoveSequence,
+    );
     _lastCommittedPath = committed;
     _uncommittedSuffix = suffix;
 
@@ -365,7 +366,7 @@ class BuildByPlayingController extends ChangeNotifier {
           _explorer.isRateLimited
               ? 'Lichess rate limit hit — wait a moment, then resume'
               : 'Opening database unavailable — check your connection, '
-                  'then resume',
+                    'then resume',
           fromDecision: false,
         );
         return;
@@ -401,15 +402,17 @@ class BuildByPlayingController extends ChangeNotifier {
       final basePath = List.of(_repertoire.currentMoveSequence);
       for (final r in playable.skip(1).toList().reversed) {
         if (r.cum < _config.minCumulativeProbability) continue;
-        _pendingBranches.add(PendingBranch(
-          pathFromRoot: basePath,
-          opponentSan: r.move.san,
-          opponentUci: r.move.uci,
-          probability: r.move.playFraction,
-          cumulativeProbability: r.cum,
-          games: r.move.total,
-          epdAfter: r.epd,
-        ));
+        _pendingBranches.add(
+          PendingBranch(
+            pathFromRoot: basePath,
+            opponentSan: r.move.san,
+            opponentUci: r.move.uci,
+            probability: r.move.playFraction,
+            cumulativeProbability: r.cum,
+            games: r.move.total,
+            epdAfter: r.epd,
+          ),
+        );
       }
 
       final first = playable.first;
@@ -567,8 +570,10 @@ class BuildByPlayingController extends ChangeNotifier {
     } catch (e) {
       if (epoch != _epoch) return;
       debugPrint('[BuildByPlaying] Commit failed: $e');
-      _pause('Failed to save the move — resume to return to the decision '
-          'point');
+      _pause(
+        'Failed to save the move — resume to return to the decision '
+        'point',
+      );
       return;
     }
 
@@ -608,8 +613,9 @@ class BuildByPlayingController extends ChangeNotifier {
     }
 
     final stalePrefix = [...info.decisionPath, info.san];
-    _pendingBranches
-        .removeWhere((b) => _startsWith(b.pathFromRoot, stalePrefix));
+    _pendingBranches.removeWhere(
+      (b) => _startsWith(b.pathFromRoot, stalePrefix),
+    );
     _lastCommitInfo = null;
     _commitCount = _commitCount > 0 ? _commitCount - 1 : 0;
     _cumProb = info.cumProb;
@@ -637,9 +643,11 @@ class BuildByPlayingController extends ChangeNotifier {
     if (_pausedFromDecision) {
       _pausedFromDecision = false;
       _repertoire.navigateToLineMove(_decisionPath!);
-      _setPhase(_scratchTree != null
-          ? BuildByPlayingPhase.exploring
-          : BuildByPlayingPhase.awaitingUserMove);
+      _setPhase(
+        _scratchTree != null
+            ? BuildByPlayingPhase.exploring
+            : BuildByPlayingPhase.awaitingUserMove,
+      );
       if (_candidates.isEmpty && !_candidatesLoading) {
         _candidatesLoading = true;
         unawaited(_loadCandidates());
@@ -661,8 +669,10 @@ class BuildByPlayingController extends ChangeNotifier {
       return;
     }
     if (_decisionFen != null && _repertoire.fen != _decisionFen) {
-      _pause('Board moved away from the decision point — resume to return',
-          fromDecision: true);
+      _pause(
+        'Board moved away from the decision point — resume to return',
+        fromDecision: true,
+      );
     }
   }
 

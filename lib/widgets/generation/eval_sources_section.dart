@@ -30,10 +30,12 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
   final TextEditingController _localChessDbPathCtrl = TextEditingController();
   bool? _localChessDbValid;
   bool _enableChessDbApi = false;
-  final TextEditingController _chessDbQuotaCtrl =
-      TextEditingController(text: '5000');
-  final TextEditingController _chessDbConcurrencyCtrl =
-      TextEditingController(text: '2');
+  final TextEditingController _chessDbQuotaCtrl = TextEditingController(
+    text: '5000',
+  );
+  final TextEditingController _chessDbConcurrencyCtrl = TextEditingController(
+    text: '2',
+  );
   bool _enableExtEvalSubtreeSkip = true;
   final TextEditingController _minAcceptableEvalDepthCtrl =
       TextEditingController(text: '');
@@ -157,10 +159,7 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
       children: [
         Text(label, style: const TextStyle(fontSize: 13)),
         const SizedBox(width: 4),
-        Switch(
-          value: value,
-          onChanged: widget.isGenerating ? null : onChanged,
-        ),
+        Switch(value: value, onChanged: widget.isGenerating ? null : onChanged),
       ],
     );
     if (tooltip == null) return row;
@@ -182,8 +181,9 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
         child: Icon(
           _localChessDbValid! ? Icons.check_circle : Icons.warning_amber,
           size: 18,
-          color:
-              _localChessDbValid! ? AppColors.evalPositive : AppColors.danger,
+          color: _localChessDbValid!
+              ? AppColors.evalPositive
+              : AppColors.danger,
         ),
       );
     }
@@ -198,12 +198,15 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
             Tooltip(
               message: widget.cdbDirectAvailable
                   ? 'Optional eval lookup chain before Stockfish:\n'
-                      'project cache → cdbdirect full dump → local SQLite → API → engine.\n'
-                      'On HDD, enable read-ahead and batch lookups for cdbdirect.'
+                        'project cache → cdbdirect full dump → local SQLite → API → engine.\n'
+                        'On HDD, enable read-ahead and batch lookups for cdbdirect.'
                   : 'Optional eval lookup chain before Stockfish:\n'
-                      'project cache → local SQLite → API → engine.',
-              child:
-                  Icon(Icons.info_outline, size: 16, color: Colors.grey[500]),
+                        'project cache → local SQLite → API → engine.',
+              child: Icon(
+                Icons.info_outline,
+                size: 16,
+                color: Colors.grey[500],
+              ),
             ),
           ],
         ),
@@ -222,8 +225,10 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
                       ? AppColors.evalPositive
                       : Colors.grey,
                 ),
-                title: const Text('Local ChessDB (full dump)',
-                    style: TextStyle(fontSize: 13)),
+                title: const Text(
+                  'Local ChessDB (full dump)',
+                  style: TextStyle(fontSize: 13),
+                ),
                 subtitle: Text(
                   dbSettings.enableCdbDirect &&
                           dbSettings.cdbDirectPath.isNotEmpty
@@ -255,7 +260,8 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
           'Local ChessDB file',
           _enableLocalChessDb,
           (v) => _update(() => _enableLocalChessDb = v),
-          tooltip: 'Use a local ChessDB SQLite slice for eval lookups.\n'
+          tooltip:
+              'Use a local ChessDB SQLite slice for eval lookups.\n'
               'Positions missing from the file can trigger subtree skip.',
         ),
         const SizedBox(height: 6),
@@ -291,9 +297,9 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
                   onPressed: widget.isGenerating
                       ? null
                       : () => _update(() {
-                            _localChessDbPathCtrl.clear();
-                            _localChessDbValid = null;
-                          }),
+                          _localChessDbPathCtrl.clear();
+                          _localChessDbValid = null;
+                        }),
                   icon: const Icon(Icons.clear),
                 ),
               ),
@@ -304,7 +310,8 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
           'ChessDB API',
           _enableChessDbApi,
           (v) => _update(() => _enableChessDbApi = v),
-          tooltip: 'Query chessdb.cn for positions not in local cache.\n'
+          tooltip:
+              'Query chessdb.cn for positions not in local cache.\n'
               'Subject to a configurable daily request quota.',
         ),
         const SizedBox(height: 6),
@@ -336,14 +343,16 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
           'Skip external eval for off-book subtrees',
           _enableExtEvalSubtreeSkip,
           (v) => _update(() => _enableExtEvalSubtreeSkip = v),
-          tooltip: 'When a position is absent from the local ChessDB file,\n'
+          tooltip:
+              'When a position is absent from the local ChessDB file,\n'
               'skip further external lookups for that subtree and use Stockfish.',
         ),
         const SizedBox(height: 8),
         _numField(
           _minAcceptableEvalDepthCtrl,
           'Min eval depth (0 = engine depth)',
-          tooltip: 'Minimum search depth required from external sources.\n'
+          tooltip:
+              'Minimum search depth required from external sources.\n'
               'Shallower hits fall through to the next source.',
           enabled: !widget.isGenerating,
         ),

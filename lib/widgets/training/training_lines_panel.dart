@@ -18,10 +18,10 @@ enum LineSortMode {
 
 extension LineSortModeLabel on LineSortMode {
   String get label => switch (this) {
-        LineSortMode.smart => 'Smart',
-        LineSortMode.probability => 'Probability',
-        LineSortMode.ease => 'Ease (hardest first)',
-      };
+    LineSortMode.smart => 'Smart',
+    LineSortMode.probability => 'Probability',
+    LineSortMode.ease => 'Ease (hardest first)',
+  };
 }
 
 /// Training-aware lines browser with Learn/Review action buttons and
@@ -332,7 +332,9 @@ class _ActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final disabled = onPressed == null;
-    final fg = disabled ? theme.colorScheme.onSurface.withValues(alpha: 0.3) : color;
+    final fg = disabled
+        ? theme.colorScheme.onSurface.withValues(alpha: 0.3)
+        : color;
     return Material(
       color: color.withValues(alpha: disabled ? 0.05 : 0.12),
       borderRadius: BorderRadius.circular(10),
@@ -585,13 +587,16 @@ class _LineRow extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 1,
+                  ),
                   decoration: BoxDecoration(
-                    color: (line.color.toLowerCase() == 'white'
-                            ? Colors.white
-                            : Colors.black)
-                        .withValues(alpha: 0.15),
+                    color:
+                        (line.color.toLowerCase() == 'white'
+                                ? Colors.white
+                                : Colors.black)
+                            .withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -599,8 +604,7 @@ class _LineRow extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
-                      color:
-                          theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                   ),
                 ),
@@ -642,17 +646,11 @@ class _LineRow extends StatelessWidget {
                 ],
                 if (!isNew && entry != null) ...[
                   const SizedBox(width: 12),
-                  _PassFailChip(
-                    pass: entry!.passCount,
-                    fail: entry!.failCount,
-                  ),
+                  _PassFailChip(pass: entry!.passCount, fail: entry!.failCount),
                 ],
                 if (!isNew && mastery > 0) ...[
                   const Spacer(),
-                  SizedBox(
-                    width: 50,
-                    child: _MasteryBar(value: mastery),
-                  ),
+                  SizedBox(width: 50, child: _MasteryBar(value: mastery)),
                 ],
               ],
             ),
@@ -694,13 +692,7 @@ class _PassFailChip extends StatelessWidget {
             color: Colors.green,
           ),
         ),
-        Text(
-          '/',
-          style: TextStyle(
-            fontSize: 11,
-            color: Colors.grey[600],
-          ),
-        ),
+        Text('/', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
         Text(
           '$fail',
           style: TextStyle(
@@ -727,8 +719,9 @@ class _MasteryBar extends StatelessWidget {
         height: 4,
         child: LinearProgressIndicator(
           value: value.clamp(0.0, 1.0),
-          backgroundColor:
-              Theme.of(context).colorScheme.surfaceContainerHighest,
+          backgroundColor: Theme.of(
+            context,
+          ).colorScheme.surfaceContainerHighest,
           valueColor: AlwaysStoppedAnimation(
             value >= 1.0 ? Colors.green : Colors.blue.withValues(alpha: 0.7),
           ),
@@ -763,7 +756,8 @@ class _PlayabilityChip extends StatelessWidget {
     }
 
     return Tooltip(
-      message: 'Line playability: ${(value * 100).toStringAsFixed(0)}%\n'
+      message:
+          'Line playability: ${(value * 100).toStringAsFixed(0)}%\n'
           'How natural your moves are to find',
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
@@ -816,10 +810,7 @@ class _BottleneckHint extends StatelessWidget {
         children: [
           const Icon(Icons.warning_amber_rounded, size: 11, color: Colors.red),
           const SizedBox(width: 3),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 10, color: Colors.red),
-          ),
+          Text(label, style: const TextStyle(fontSize: 10, color: Colors.red)),
         ],
       ),
     );
@@ -875,12 +866,17 @@ class _NeedsScoringBanner extends StatelessWidget {
             FilledButton.tonal(
               onPressed: onScoreInBuilder,
               style: FilledButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: const Text('Score in Builder', style: TextStyle(fontSize: 12)),
+              child: const Text(
+                'Score in Builder',
+                style: TextStyle(fontSize: 12),
+              ),
             ),
           ],
         ],

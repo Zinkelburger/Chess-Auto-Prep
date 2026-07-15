@@ -45,8 +45,11 @@ class IOStorageService implements StorageService {
 
     final content = await readTextFile(file);
     final count = content.trim().isEmpty ? 0 : pgn.countPgnGamesFast(content);
-    _countCache[file.path] =
-        (size: stat.size, modifiedMs: modifiedMs, count: count);
+    _countCache[file.path] = (
+      size: stat.size,
+      modifiedMs: modifiedMs,
+      count: count,
+    );
     return count;
   }
 
@@ -126,15 +129,17 @@ class IOStorageService implements StorageService {
           entity,
     ];
 
-    return Future.wait(files.map((file) async {
-      final stat = await file.stat();
-      return RepertoireMetadata(
-        filePath: file.path,
-        name: p.basenameWithoutExtension(file.path),
-        gameCount: await _cachedGameCount(file, stat),
-        lastModified: stat.modified,
-      );
-    }));
+    return Future.wait(
+      files.map((file) async {
+        final stat = await file.stat();
+        return RepertoireMetadata(
+          filePath: file.path,
+          name: p.basenameWithoutExtension(file.path),
+          gameCount: await _cachedGameCount(file, stat),
+          lastModified: stat.modified,
+        );
+      }),
+    );
   }
 
   @override
@@ -154,18 +159,21 @@ class IOStorageService implements StorageService {
           entity,
     ];
 
-    final entries = await Future.wait(files.map((file) async {
-      final stat = await file.stat();
-      return RepertoireMetadata(
-        filePath: file.path,
-        name: p.basenameWithoutExtension(file.path),
-        gameCount: await _cachedGameCount(file, stat),
-        lastModified: stat.modified,
-      );
-    }));
+    final entries = await Future.wait(
+      files.map((file) async {
+        final stat = await file.stat();
+        return RepertoireMetadata(
+          filePath: file.path,
+          name: p.basenameWithoutExtension(file.path),
+          gameCount: await _cachedGameCount(file, stat),
+          lastModified: stat.modified,
+        );
+      }),
+    );
 
     entries.sort(
-        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
     return entries;
   }
 
@@ -186,18 +194,21 @@ class IOStorageService implements StorageService {
           entity,
     ];
 
-    final entries = await Future.wait(files.map((file) async {
-      final stat = await file.stat();
-      return TacticsSetMetadata(
-        filePath: file.path,
-        name: p.basenameWithoutExtension(file.path),
-        positionCount: await _cachedGameCount(file, stat),
-        lastModified: stat.modified,
-      );
-    }));
+    final entries = await Future.wait(
+      files.map((file) async {
+        final stat = await file.stat();
+        return TacticsSetMetadata(
+          filePath: file.path,
+          name: p.basenameWithoutExtension(file.path),
+          positionCount: await _cachedGameCount(file, stat),
+          lastModified: stat.modified,
+        );
+      }),
+    );
 
     entries.sort(
-        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
     return entries;
   }
 
@@ -218,8 +229,10 @@ class IOStorageService implements StorageService {
     final entries = <({String name, String path})>[];
     await for (final entity in dir.list()) {
       if (!entity.path.toLowerCase().endsWith('.csv')) continue;
-      entries.add(
-          (name: p.basenameWithoutExtension(entity.path), path: entity.path));
+      entries.add((
+        name: p.basenameWithoutExtension(entity.path),
+        path: entity.path,
+      ));
     }
     return entries;
   }

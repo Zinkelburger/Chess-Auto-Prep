@@ -25,10 +25,7 @@ class _SlotWaitInfo {
   final int backoffMs;
   final int politenessMs;
 
-  const _SlotWaitInfo({
-    required this.backoffMs,
-    required this.politenessMs,
-  });
+  const _SlotWaitInfo({required this.backoffMs, required this.politenessMs});
 }
 
 class LichessApiClient {
@@ -43,18 +40,18 @@ class LichessApiClient {
   LichessApiClient.fresh() : this._internal();
 
   LichessApiClient._internal()
-      : _httpClient = http.Client(),
-        _authToken = null,
-        _useAuthService = true;
+    : _httpClient = http.Client(),
+      _authToken = null,
+      _useAuthService = true;
 
   /// Create a standalone instance for use inside a Dart [Isolate].
   ///
   /// Owns its own [http.Client] and rate-limit state.  Call [close] when
   /// done to release the TCP connection pool.
   LichessApiClient.withToken(String? token)
-      : _httpClient = http.Client(),
-        _authToken = token,
-        _useAuthService = false;
+    : _httpClient = http.Client(),
+      _authToken = token,
+      _useAuthService = false;
 
   // ── Configuration ───────────────────────────────────────────────────
 
@@ -146,9 +143,11 @@ class LichessApiClient {
     final backoff = _baseBackoffSeconds * (1 << attempt);
     _earliestNextRequest = DateTime.now().add(Duration(seconds: backoff));
     if (kDebugMode) {
-      debugPrint('[LichessAPI] 429 — backing off ${backoff}s  '
-          '(attempt ${attempt + 1}/$maxRetries)  '
-          'Retry-After: ${response.headers['retry-after'] ?? 'none'}');
+      debugPrint(
+        '[LichessAPI] 429 — backing off ${backoff}s  '
+        '(attempt ${attempt + 1}/$maxRetries)  '
+        'Retry-After: ${response.headers['retry-after'] ?? 'none'}',
+      );
     }
   }
 
@@ -177,26 +176,32 @@ class LichessApiClient {
         final netSw = Stopwatch()..start();
         final response = await _httpClient.get(url, headers: headers);
         final netMs = netSw.elapsedMilliseconds;
-        _profile('GET attempt=${attempt + 1}/${maxRetries + 1} '
-            'status=${response.statusCode} '
-            'wait=${afterWaitMs}ms(backoff=${waitInfo.backoffMs}ms,'
-            'polite=${waitInfo.politenessMs}ms) '
-            'headers=${headerMs}ms net=${netMs}ms '
-            'attemptTotal=${attemptSw.elapsedMilliseconds}ms');
+        _profile(
+          'GET attempt=${attempt + 1}/${maxRetries + 1} '
+          'status=${response.statusCode} '
+          'wait=${afterWaitMs}ms(backoff=${waitInfo.backoffMs}ms,'
+          'polite=${waitInfo.politenessMs}ms) '
+          'headers=${headerMs}ms net=${netMs}ms '
+          'attemptTotal=${attemptSw.elapsedMilliseconds}ms',
+        );
 
         if (response.statusCode == 429) {
           _handle429(attempt, maxRetries, response);
           if (attempt < maxRetries) continue;
-          _profile('GET exhausted after 429 '
-              'total=${opSw.elapsedMilliseconds}ms');
+          _profile(
+            'GET exhausted after 429 '
+            'total=${opSw.elapsedMilliseconds}ms',
+          );
           return null;
         }
 
         _profile('GET done total=${opSw.elapsedMilliseconds}ms');
         return response;
       } catch (e) {
-        _profile('GET error attempt=${attempt + 1}/${maxRetries + 1} '
-            'elapsed=${attemptSw.elapsedMilliseconds}ms err=$e');
+        _profile(
+          'GET error attempt=${attempt + 1}/${maxRetries + 1} '
+          'elapsed=${attemptSw.elapsedMilliseconds}ms err=$e',
+        );
         if (kDebugMode) {
           debugPrint('[LichessAPI] GET error (attempt ${attempt + 1}): $e');
         }
@@ -233,29 +238,38 @@ class LichessApiClient {
         final headers = await _resolveHeaders(extraHeaders);
         final headerMs = headerSw.elapsedMilliseconds;
         final netSw = Stopwatch()..start();
-        final response =
-            await _httpClient.post(url, headers: headers, body: body);
+        final response = await _httpClient.post(
+          url,
+          headers: headers,
+          body: body,
+        );
         final netMs = netSw.elapsedMilliseconds;
-        _profile('POST attempt=${attempt + 1}/${maxRetries + 1} '
-            'status=${response.statusCode} '
-            'wait=${afterWaitMs}ms(backoff=${waitInfo.backoffMs}ms,'
-            'polite=${waitInfo.politenessMs}ms) '
-            'headers=${headerMs}ms net=${netMs}ms '
-            'attemptTotal=${attemptSw.elapsedMilliseconds}ms');
+        _profile(
+          'POST attempt=${attempt + 1}/${maxRetries + 1} '
+          'status=${response.statusCode} '
+          'wait=${afterWaitMs}ms(backoff=${waitInfo.backoffMs}ms,'
+          'polite=${waitInfo.politenessMs}ms) '
+          'headers=${headerMs}ms net=${netMs}ms '
+          'attemptTotal=${attemptSw.elapsedMilliseconds}ms',
+        );
 
         if (response.statusCode == 429) {
           _handle429(attempt, maxRetries, response);
           if (attempt < maxRetries) continue;
-          _profile('POST exhausted after 429 '
-              'total=${opSw.elapsedMilliseconds}ms');
+          _profile(
+            'POST exhausted after 429 '
+            'total=${opSw.elapsedMilliseconds}ms',
+          );
           return null;
         }
 
         _profile('POST done total=${opSw.elapsedMilliseconds}ms');
         return response;
       } catch (e) {
-        _profile('POST error attempt=${attempt + 1}/${maxRetries + 1} '
-            'elapsed=${attemptSw.elapsedMilliseconds}ms err=$e');
+        _profile(
+          'POST error attempt=${attempt + 1}/${maxRetries + 1} '
+          'elapsed=${attemptSw.elapsedMilliseconds}ms err=$e',
+        );
         if (kDebugMode) {
           debugPrint('[LichessAPI] POST error (attempt ${attempt + 1}): $e');
         }
@@ -290,20 +304,25 @@ class LichessApiClient {
     bool useMasters = false,
   }) async {
     final totalSw = Stopwatch()..start();
-    final fenShort =
-        fen.contains(' ') ? fen.substring(0, fen.indexOf(' ')) : fen;
+    final fenShort = fen.contains(' ')
+        ? fen.substring(0, fen.indexOf(' '))
+        : fen;
 
     final encodedFen = Uri.encodeComponent(fen);
     final Uri url;
     if (useMasters) {
-      url = Uri.parse('https://explorer.lichess.ovh/masters?'
-          'fen=$encodedFen');
+      url = Uri.parse(
+        'https://explorer.lichess.ovh/masters?'
+        'fen=$encodedFen',
+      );
     } else {
-      url = Uri.parse('https://explorer.lichess.ovh/lichess?'
-          'variant=$variant&'
-          'speeds=$speeds&'
-          'ratings=$ratings&'
-          'fen=$encodedFen');
+      url = Uri.parse(
+        'https://explorer.lichess.ovh/lichess?'
+        'variant=$variant&'
+        'speeds=$speeds&'
+        'ratings=$ratings&'
+        'fen=$encodedFen',
+      );
     }
 
     _profile('Explorer start fen=$fenShort');
@@ -312,17 +331,22 @@ class LichessApiClient {
     final getMs = getSw.elapsedMilliseconds;
 
     if (response == null) {
-      _profile('Explorer null response fen=$fenShort '
-          'total=${totalSw.elapsedMilliseconds}ms get=${getMs}ms');
+      _profile(
+        'Explorer null response fen=$fenShort '
+        'total=${totalSw.elapsedMilliseconds}ms get=${getMs}ms',
+      );
       return null;
     }
     if (response.statusCode != 200) {
       if (kDebugMode) {
         debugPrint(
-            '[LichessAPI] Explorer HTTP ${response.statusCode} for $fenShort…');
+          '[LichessAPI] Explorer HTTP ${response.statusCode} for $fenShort…',
+        );
       }
-      _profile('Explorer HTTP ${response.statusCode} fen=$fenShort '
-          'total=${totalSw.elapsedMilliseconds}ms get=${getMs}ms');
+      _profile(
+        'Explorer HTTP ${response.statusCode} fen=$fenShort '
+        'total=${totalSw.elapsedMilliseconds}ms get=${getMs}ms',
+      );
       return null;
     }
 
@@ -333,10 +357,12 @@ class LichessApiClient {
     final parsed = ExplorerResponse.fromJson(data, fen: fen);
     final parseMs = parseSw.elapsedMilliseconds;
 
-    _profile('Explorer done fen=$fenShort status=200 get=${getMs}ms '
-        'decode=${decodeMs}ms parse=${parseMs}ms '
-        'total=${totalSw.elapsedMilliseconds}ms '
-        'moves=${parsed.moves.length} games=${parsed.totalGames}');
+    _profile(
+      'Explorer done fen=$fenShort status=200 get=${getMs}ms '
+      'decode=${decodeMs}ms parse=${parseMs}ms '
+      'total=${totalSw.elapsedMilliseconds}ms '
+      'moves=${parsed.moves.length} games=${parsed.totalGames}',
+    );
     return parsed;
   }
 

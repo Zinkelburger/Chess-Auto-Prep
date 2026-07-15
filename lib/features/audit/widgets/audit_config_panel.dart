@@ -58,16 +58,20 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
       widget.auditService ?? (_ownedService ??= RepertoireAuditService());
 
   final TextEditingController _mistakeCtrl = TextEditingController(text: '100');
-  final TextEditingController _inaccuracyCtrl =
-      TextEditingController(text: '40');
+  final TextEditingController _inaccuracyCtrl = TextEditingController(
+    text: '40',
+  );
   final TextEditingController _minGamesCtrl = TextEditingController(text: '50');
-  final TextEditingController _minMaiaProbCtrl =
-      TextEditingController(text: '0.10');
-  final TextEditingController _evalDepthCtrl =
-      TextEditingController(text: '14');
+  final TextEditingController _minMaiaProbCtrl = TextEditingController(
+    text: '0.10',
+  );
+  final TextEditingController _evalDepthCtrl = TextEditingController(
+    text: '14',
+  );
   final TextEditingController _maxPlyCtrl = TextEditingController(text: '30');
-  final TextEditingController _maiaEloCtrl =
-      TextEditingController(text: '2200');
+  final TextEditingController _maiaEloCtrl = TextEditingController(
+    text: '2200',
+  );
 
   // Mothballed: Lichess Explorer disabled.
   final bool _useLichessDb = false;
@@ -204,8 +208,8 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
   Widget build(BuildContext context) {
     final scopeLabel =
         _auditSubtreeOnly && widget.currentMoveSequence.isNotEmpty
-            ? 'Subtree from ${_moveSequenceLabel(widget.currentMoveSequence)}'
-            : 'Full repertoire';
+        ? 'Subtree from ${_moveSequenceLabel(widget.currentMoveSequence)}'
+        : 'Full repertoire';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -216,17 +220,24 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
           // Scope toggle + label
           Row(
             children: [
-              Icon(Icons.account_tree_outlined,
-                  size: 14, color: Colors.grey[500]),
+              Icon(
+                Icons.account_tree_outlined,
+                size: 14,
+                color: Colors.grey[500],
+              ),
               const SizedBox(width: 6),
-              Text(scopeLabel,
-                  style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              Text(
+                scopeLabel,
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
               const Spacer(),
               SizedBox(
                 height: 28,
                 child: FilterChip(
-                  label: const Text('Subtree only',
-                      style: TextStyle(fontSize: 11)),
+                  label: const Text(
+                    'Subtree only',
+                    style: TextStyle(fontSize: 11),
+                  ),
                   selected: _auditSubtreeOnly,
                   onSelected: _isAuditing
                       ? null
@@ -245,8 +256,10 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
             children: [
               Icon(Icons.memory, size: 13, color: Colors.grey[500]),
               const SizedBox(width: 4),
-              Text('Stockfish + Maia',
-                  style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+              Text(
+                'Stockfish + Maia',
+                style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -274,8 +287,10 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
                   color: Colors.grey[500],
                 ),
                 const SizedBox(width: 4),
-                Text('More thresholds',
-                    style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                Text(
+                  'More thresholds',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                ),
               ],
             ),
           ),
@@ -296,19 +311,19 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
           // Repertoire Clashes
           Row(
             children: [
-              Icon(Icons.menu_book_outlined,
-                  size: 14, color: Colors.grey[500]),
+              Icon(Icons.menu_book_outlined, size: 14, color: Colors.grey[500]),
               const SizedBox(width: 6),
-              Text('Repertoire Clashes',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[400])),
+              Text(
+                'Repertoire Clashes',
+                style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+              ),
               const Spacer(),
               SizedBox(
                 height: 26,
                 child: TextButton.icon(
                   onPressed: _isAuditing ? null : _addClashPgns,
                   icon: const Icon(Icons.add, size: 14),
-                  label:
-                      const Text('Add PGN', style: TextStyle(fontSize: 11)),
+                  label: const Text('Add PGN', style: TextStyle(fontSize: 11)),
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     minimumSize: Size.zero,
@@ -343,8 +358,10 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
           ] else
             Padding(
               padding: const EdgeInsets.only(left: 20),
-              child: Text('Check against book & course lines',
-                  style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+              child: Text(
+                'Check against book & course lines',
+                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+              ),
             ),
           const SizedBox(height: 10),
 
@@ -357,8 +374,10 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
                   icon: const Icon(Icons.play_arrow, size: 16),
                   label: const Text('Start', style: TextStyle(fontSize: 13)),
                   style: FilledButton.styleFrom(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
                     minimumSize: Size.zero,
                   ),
                 )
@@ -368,8 +387,10 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
                   icon: const Icon(Icons.stop, size: 16),
                   label: const Text('Cancel', style: TextStyle(fontSize: 13)),
                   style: FilledButton.styleFrom(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
                     minimumSize: Size.zero,
                   ),
                 ),
@@ -388,8 +409,10 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
                       Text(
                         '${_progress!.nodesChecked}/${_progress!.totalNodes} · '
                         '$_liveFindingCount findings',
-                        style:
-                            const TextStyle(fontSize: 10, color: Colors.grey),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey,
+                        ),
                       ),
                     ],
                   ),

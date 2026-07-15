@@ -47,9 +47,7 @@ class RepertoireModeSwitcher extends StatelessWidget {
           style: ButtonStyle(
             visualDensity: VisualDensity.compact,
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            textStyle: WidgetStatePropertyAll(
-              theme.textTheme.labelSmall,
-            ),
+            textStyle: WidgetStatePropertyAll(theme.textTheme.labelSmall),
           ),
         ),
       ),

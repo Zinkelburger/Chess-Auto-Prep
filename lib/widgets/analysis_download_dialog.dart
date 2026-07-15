@@ -94,7 +94,9 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
   Future<void> _savePrefs() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
-        _keyMode, _mode == _DownloadMode.games ? 'games' : 'months');
+      _keyMode,
+      _mode == _DownloadMode.games ? 'games' : 'months',
+    );
     await prefs.setInt(_keyMonths, _months);
     await prefs.setInt(_keyMaxGames, _maxGames);
   }
@@ -266,10 +268,7 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        FilledButton(
-          onPressed: _onDownload,
-          child: const Text('Download'),
-        ),
+        FilledButton(onPressed: _onDownload, child: const Text('Download')),
       ],
     );
   }
@@ -317,8 +316,10 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
                 decoration: InputDecoration(
                   labelText: 'Months',
                   border: const OutlineInputBorder(),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
                   errorText: _mode == _DownloadMode.months ? _rangeError : null,
                 ),
                 onChanged: (value) {
@@ -386,8 +387,10 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
                 decoration: InputDecoration(
                   labelText: 'Games',
                   border: const OutlineInputBorder(),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
                   errorText: _mode == _DownloadMode.games ? _rangeError : null,
                 ),
                 onChanged: (value) {

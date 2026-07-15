@@ -27,9 +27,9 @@ class AnalyzeMainZone extends StatefulWidget {
     this.initialView = AnalyzeMainView.lines,
     this.onViewChanged,
   }) : assert(
-          linesContent != null || linesBuilder != null,
-          'Provide linesContent or linesBuilder',
-        );
+         linesContent != null || linesBuilder != null,
+         'Provide linesContent or linesBuilder',
+       );
 
   /// Default lines tab wraps [RepertoireLinesBrowser]; coverage slot is optional.
   factory AnalyzeMainZone.withLinesBrowser({
@@ -169,15 +169,16 @@ class _AnalyzeMainZoneState extends State<AnalyzeMainZone> {
     return switch (_view) {
       AnalyzeMainView.lines =>
         widget.linesContent ?? widget.linesBuilder!(context),
-      AnalyzeMainView.coverage => widget.coverageContent ??
-          widget.coverageBuilder?.call(context) ??
-          const EmptyStatePlaceholder(
-            icon: Icons.pie_chart_outline,
-            title: 'No coverage view',
-            subtitle:
-                'Provide coverageContent or coverageBuilder for this tab.',
-            iconSize: 36,
-          ),
+      AnalyzeMainView.coverage =>
+        widget.coverageContent ??
+            widget.coverageBuilder?.call(context) ??
+            const EmptyStatePlaceholder(
+              icon: Icons.pie_chart_outline,
+              title: 'No coverage view',
+              subtitle:
+                  'Provide coverageContent or coverageBuilder for this tab.',
+              iconSize: 36,
+            ),
     };
   }
 }

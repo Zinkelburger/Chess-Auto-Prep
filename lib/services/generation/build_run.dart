@@ -31,7 +31,7 @@ class BuildCancellation {
   bool _stopRequested = false;
 
   BuildCancellation({bool Function()? isCancelledExternally})
-      : _external = isCancelledExternally ?? (() => false);
+    : _external = isCancelledExternally ?? (() => false);
 
   /// True once `stopBuild()` was called on the owning service.
   bool get stopRequested => _stopRequested;

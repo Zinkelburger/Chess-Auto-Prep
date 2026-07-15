@@ -104,8 +104,9 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
     final studies = _studies;
     final filtered = _filtered;
     final query = _query.trim();
-    final hasExactMatch = filtered
-        .any((s) => s.name.toLowerCase() == query.toLowerCase());
+    final hasExactMatch = filtered.any(
+      (s) => s.name.toLowerCase() == query.toLowerCase(),
+    );
 
     return AlertDialog(
       title: const Text('Add line to study'),
@@ -167,8 +168,10 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
                         for (final s in filtered)
                           ListTile(
                             dense: true,
-                            leading:
-                                const Icon(Icons.menu_book_outlined, size: 20),
+                            leading: const Icon(
+                              Icons.menu_book_outlined,
+                              size: 20,
+                            ),
                             title: Text(s.name),
                             subtitle: Text(
                               '${s.gameCount} chapter'

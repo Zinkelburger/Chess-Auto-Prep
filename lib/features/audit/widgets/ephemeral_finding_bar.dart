@@ -35,8 +35,11 @@ class EphemeralFindingBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.visibility_off_outlined,
-              size: 14, color: Colors.blue),
+          const Icon(
+            Icons.visibility_off_outlined,
+            size: 14,
+            color: Colors.blue,
+          ),
           const SizedBox(width: 6),
           Expanded(
             child: Text(

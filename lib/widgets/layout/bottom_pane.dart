@@ -127,10 +127,13 @@ class BottomPaneState extends State<BottomPane>
       onVerticalDragUpdate: (details) {
         setState(() {
           final currentPx = screenHeight * _heightFraction;
-          final newPx =
-              (currentPx - details.delta.dy).clamp(_minHeight, maxHeight);
-          _heightFraction =
-              screenHeight > 0 ? newPx / screenHeight : _defaultFraction;
+          final newPx = (currentPx - details.delta.dy).clamp(
+            _minHeight,
+            maxHeight,
+          );
+          _heightFraction = screenHeight > 0
+              ? newPx / screenHeight
+              : _defaultFraction;
         });
       },
       onDoubleTap: () {
@@ -168,9 +171,7 @@ class BottomPaneState extends State<BottomPane>
       height: _tabBarHeight,
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLow,
-        border: Border(
-          bottom: BorderSide(color: theme.dividerColor),
-        ),
+        border: Border(bottom: BorderSide(color: theme.dividerColor)),
       ),
       child: Row(
         children: [
@@ -182,8 +183,10 @@ class BottomPaneState extends State<BottomPane>
               labelPadding: const EdgeInsets.symmetric(horizontal: 12),
               indicatorSize: TabBarIndicatorSize.label,
               dividerHeight: 0,
-              labelStyle:
-                  const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+              labelStyle: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
               unselectedLabelStyle: const TextStyle(fontSize: 11),
               tabs: [
                 _buildTab('Findings', widget.findingsBadge, Colors.orange),

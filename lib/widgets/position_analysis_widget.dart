@@ -290,8 +290,10 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
         children: [
           TextButton.icon(
             icon: const Icon(Icons.menu_book_outlined, size: 16),
-            label: const Text('Add Line to Study',
-                style: TextStyle(fontSize: 12)),
+            label: const Text(
+              'Add Line to Study',
+              style: TextStyle(fontSize: 12),
+            ),
             onPressed: hasFen ? _addCurrentLineToStudy : null,
           ),
           TextButton.icon(
@@ -301,10 +303,13 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
           ),
           TextButton.icon(
             icon: const Icon(Icons.open_in_new, size: 16),
-            label: const Text('Open Games in PGN Viewer',
-                style: TextStyle(fontSize: 12)),
-            onPressed:
-                widget.analysisPgnPath != null ? _openGamesInPgnViewer : null,
+            label: const Text(
+              'Open Games in PGN Viewer',
+              style: TextStyle(fontSize: 12),
+            ),
+            onPressed: widget.analysisPgnPath != null
+                ? _openGamesInPgnViewer
+                : null,
           ),
         ],
       ),
@@ -325,10 +330,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
           ),
           Expanded(
             child: TabBarView(
-              children: [
-                _buildLeftPanel(),
-                _buildRightPanel(),
-              ],
+              children: [_buildLeftPanel(), _buildRightPanel()],
             ),
           ),
         ],
@@ -413,10 +415,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text(
-              'Analyzing positions…',
-              style: TextStyle(color: Colors.grey),
-            ),
+            Text('Analyzing positions…', style: TextStyle(color: Colors.grey)),
           ],
         ),
       );
@@ -552,7 +551,8 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
 
   /// " (n)" suffix for the Holes tab label, or empty when nothing to count.
   String _holesCountLabel() {
-    final count = (widget.holesResult?.activeFindingCount ?? 0) +
+    final count =
+        (widget.holesResult?.activeFindingCount ?? 0) +
         widget.holesLiveFindings.length;
     return count > 0 ? ' ($count)' : '';
   }
@@ -590,12 +590,16 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
             children: [
               TextButton.icon(
                 icon: const Icon(Icons.menu_book_outlined, size: 16),
-                label: const Text('Save Analysis to Study',
-                    style: TextStyle(fontSize: 12)),
+                label: const Text(
+                  'Save Analysis to Study',
+                  style: TextStyle(fontSize: 12),
+                ),
                 onPressed: _scratchTree.isEmpty ? null : _addScratchToStudy,
                 style: TextButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
@@ -685,7 +689,9 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
       final indices = target.toList();
       for (int depth = 0; depth < indices.length; depth++) {
         if (indices[depth] != 0) {
-          _scratchTree.promoteVariation(TreePath(indices.sublist(0, depth + 1)));
+          _scratchTree.promoteVariation(
+            TreePath(indices.sublist(0, depth + 1)),
+          );
           indices[depth] = 0;
         }
       }
@@ -713,7 +719,8 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
       builder: (ctx) => AlertDialog(
         title: const Text('Clear Analysis'),
         content: const Text(
-            'Discard all moves in the Analysis tab? This cannot be undone.'),
+          'Discard all moves in the Analysis tab? This cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
@@ -795,8 +802,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
       // Only replay the book SANs when the roots actually match — grafting a
       // from-the-start line onto a re-rooted (mid-game) tree could splice in
       // moves that happen to be legal but mean something entirely different.
-      var ok =
-          normalizeFen(_scratchTree.startingFen) == normalizeFen(startFen);
+      var ok = normalizeFen(_scratchTree.startingFen) == normalizeFen(startFen);
       var path = TreePath.empty;
       if (ok) {
         for (final san in sans) {
@@ -881,11 +887,12 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
     final color = widget.playerIsWhite == null
         ? ''
         : (widget.playerIsWhite! ? ' as White' : ' as Black');
-    final stats =
-        fen == null ? null : widget.analysis?.positionStats[normalizeFen(fen)];
+    final stats = fen == null
+        ? null
+        : widget.analysis?.positionStats[normalizeFen(fen)];
     final statsPart = (stats != null && stats.games > 0)
         ? ' — ${stats.winRatePercent.toStringAsFixed(0)}% in '
-            '${stats.games} game${stats.games == 1 ? '' : 's'}'
+              '${stats.games} game${stats.games == 1 ? '' : 's'}'
         : '';
     return '$who$color$statsPart';
   }
@@ -959,7 +966,9 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
   }
 
   Future<void> _saveTreeToStudy(
-      MoveTree lineTree, String suggestedChapter) async {
+    MoveTree lineTree,
+    String suggestedChapter,
+  ) async {
     final result = await showDialog<AddToStudyResult>(
       context: context,
       builder: (_) => AddToStudyDialog(initialChapterName: suggestedChapter),
@@ -969,7 +978,8 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
     final study = context.read<StudyController>();
     final appState = context.read<AppState>();
     try {
-      final path = result.existingPath ??
+      final path =
+          result.existingPath ??
           await StorageFactory.instance.studyFilePath(result.newStudyName!);
       final pgn = lineTree.toPgn(event: result.chapterName, result: '*');
       await study.addChapterToStudyFile(path, result.chapterName, pgn);
@@ -987,8 +997,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
     } catch (e) {
       debugPrint('Add line to study failed: $e');
       if (mounted) {
-        showAppSnackBar(context, 'Failed to add line to study.',
-            isError: true);
+        showAppSnackBar(context, 'Failed to add line to study.', isError: true);
       }
     }
   }
@@ -1004,9 +1013,9 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
     if (path == null) return;
     final fen = _currentFen;
     context.read<AppState>().switchToPgnViewer(
-          path: path,
-          sliceFen: fen == null ? null : normalizeFen(fen),
-        );
+      path: path,
+      sliceFen: fen == null ? null : normalizeFen(fen),
+    );
   }
 
   // =====================================================================

@@ -44,8 +44,9 @@ void main() {
   });
 
   test('loadPersistedState keeps engine off when pref is false', () async {
-    SharedPreferences.setMockInitialValues(
-        {'engine_lifecycle.toggle_on': false});
+    SharedPreferences.setMockInitialValues({
+      'engine_lifecycle.toggle_on': false,
+    });
     await lifecycle.loadPersistedState();
     expect(lifecycle.state, EngineState.off);
   });
@@ -87,29 +88,28 @@ void main() {
     expect(notificationCount, 0);
   });
 
-  test('onPositionChanged transitions idle to analyzing and notifies once',
-      () async {
-    await lifecycle.toggleOn();
-    notificationCount = 0;
-
-    lifecycle.onPositionChanged(_startFen);
-    expect(lifecycle.state, EngineState.analyzing);
-    expect(notificationCount, 1);
-  });
-
   test(
-    'onPositionChanged is idempotent when already analyzing '
-    '(prevents analysis-pane feedback loop)',
+    'onPositionChanged transitions idle to analyzing and notifies once',
     () async {
       await lifecycle.toggleOn();
-      lifecycle.onPositionChanged(_startFen);
       notificationCount = 0;
 
       lifecycle.onPositionChanged(_startFen);
       expect(lifecycle.state, EngineState.analyzing);
-      expect(notificationCount, 0);
+      expect(notificationCount, 1);
     },
   );
+
+  test('onPositionChanged is idempotent when already analyzing '
+      '(prevents analysis-pane feedback loop)', () async {
+    await lifecycle.toggleOn();
+    lifecycle.onPositionChanged(_startFen);
+    notificationCount = 0;
+
+    lifecycle.onPositionChanged(_startFen);
+    expect(lifecycle.state, EngineState.analyzing);
+    expect(notificationCount, 0);
+  });
 
   test('onPositionChanged is ignored while generating', () async {
     await lifecycle.toggleOn();
@@ -140,35 +140,41 @@ void main() {
     expect(notificationCount, 0);
   });
 
-  test('listener notify count stays bounded for a typical analysis cycle',
-      () async {
-    await lifecycle.toggleOn();
-    lifecycle.onPositionChanged(_startFen);
-    lifecycle.onPositionChanged(_startFen);
-    lifecycle.onAnalysisComplete();
-    await lifecycle.toggleOff();
+  test(
+    'listener notify count stays bounded for a typical analysis cycle',
+    () async {
+      await lifecycle.toggleOn();
+      lifecycle.onPositionChanged(_startFen);
+      lifecycle.onPositionChanged(_startFen);
+      lifecycle.onAnalysisComplete();
+      await lifecycle.toggleOff();
 
-    expect(notificationCount, 4);
-  });
+      expect(notificationCount, 4);
+    },
+  );
 
-  test('pauseGeneration hands the engine back as idle when it was on',
-      () async {
-    await lifecycle.toggleOn();
-    await lifecycle.enterGeneration(1);
-    notificationCount = 0;
+  test(
+    'pauseGeneration hands the engine back as idle when it was on',
+    () async {
+      await lifecycle.toggleOn();
+      await lifecycle.enterGeneration(1);
+      notificationCount = 0;
 
-    await lifecycle.pauseGeneration();
-    expect(lifecycle.state, EngineState.idle);
-    expect(notificationCount, 1);
-  });
+      await lifecycle.pauseGeneration();
+      expect(lifecycle.state, EngineState.idle);
+      expect(notificationCount, 1);
+    },
+  );
 
-  test('pauseGeneration restores off when the engine was off before the build',
-      () async {
-    await lifecycle.enterGeneration(1);
+  test(
+    'pauseGeneration restores off when the engine was off before the build',
+    () async {
+      await lifecycle.enterGeneration(1);
 
-    await lifecycle.pauseGeneration();
-    expect(lifecycle.state, EngineState.off);
-  });
+      await lifecycle.pauseGeneration();
+      expect(lifecycle.state, EngineState.off);
+    },
+  );
 
   test('pauseGeneration is a no-op when not generating', () async {
     await lifecycle.toggleOn();
@@ -191,15 +197,17 @@ void main() {
     expect(lifecycle.state, EngineState.idle);
   });
 
-  test('pause–resume cycle preserves an off toggle across exitGeneration',
-      () async {
-    await lifecycle.enterGeneration(1);
-    await lifecycle.pauseGeneration();
-    await lifecycle.enterGeneration(1);
+  test(
+    'pause–resume cycle preserves an off toggle across exitGeneration',
+    () async {
+      await lifecycle.enterGeneration(1);
+      await lifecycle.pauseGeneration();
+      await lifecycle.enterGeneration(1);
 
-    await lifecycle.exitGeneration();
-    expect(lifecycle.state, EngineState.off);
-  });
+      await lifecycle.exitGeneration();
+      expect(lifecycle.state, EngineState.off);
+    },
+  );
 
   test(
     'full state machine cycle: off → on → analyze → complete → off',

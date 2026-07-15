@@ -139,7 +139,8 @@ class EvalCache {
     final db = _db;
     if (db == null) return;
     try {
-      await db.execute('''
+      await db.execute(
+        '''
         INSERT INTO evals(fen, eval_cp_white, depth, created_at)
         VALUES(?, ?, ?, ?)
         ON CONFLICT(fen) DO UPDATE SET
@@ -147,7 +148,9 @@ class EvalCache {
           depth         = excluded.depth,
           created_at    = excluded.created_at
         WHERE excluded.depth >= evals.depth
-      ''', [fen, cpWhite, depth, DateTime.now().millisecondsSinceEpoch]);
+      ''',
+        [fen, cpWhite, depth, DateTime.now().millisecondsSinceEpoch],
+      );
     } catch (e) {
       if (kDebugMode) debugPrint('[EvalCache] write failed: $e');
     }
@@ -196,7 +199,9 @@ class MaiaCache {
   String _key(String fen, int elo) => '$fen|$elo';
 
   Future<({Map<String, double> policy, double winProb})?> get(
-      String fen, int elo) async {
+    String fen,
+    int elo,
+  ) async {
     final k = _key(fen, elo);
     if (_mem.containsKey(k)) {
       return (policy: _mem[k]!, winProb: _winMem[k] ?? 0.0);
@@ -226,7 +231,11 @@ class MaiaCache {
   }
 
   Future<void> put(
-      String fen, int elo, Map<String, double> policy, double winProb) async {
+    String fen,
+    int elo,
+    Map<String, double> policy,
+    double winProb,
+  ) async {
     final k = _key(fen, elo);
     _mem[k] = policy;
     _winMem[k] = winProb;
@@ -235,14 +244,17 @@ class MaiaCache {
     if (db == null) return;
     try {
       final json = _encodePolicyJson(policy);
-      await db.execute('''
+      await db.execute(
+        '''
         INSERT INTO maia_cache(fen, elo, policy_json, win_prob, created_at)
         VALUES(?, ?, ?, ?, ?)
         ON CONFLICT(fen, elo) DO UPDATE SET
           policy_json = excluded.policy_json,
           win_prob    = excluded.win_prob,
           created_at  = excluded.created_at
-      ''', [fen, elo, json, winProb, DateTime.now().millisecondsSinceEpoch]);
+      ''',
+        [fen, elo, json, winProb, DateTime.now().millisecondsSinceEpoch],
+      );
     } catch (e) {
       if (kDebugMode) debugPrint('[MaiaCache] write failed: $e');
     }

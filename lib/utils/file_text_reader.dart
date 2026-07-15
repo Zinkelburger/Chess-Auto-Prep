@@ -5,10 +5,7 @@ class TextDecodeResult {
   final String text;
   final bool usedLatin1Fallback;
 
-  const TextDecodeResult({
-    required this.text,
-    this.usedLatin1Fallback = false,
-  });
+  const TextDecodeResult({required this.text, this.usedLatin1Fallback = false});
 }
 
 Future<String> readTextFile(File file) async {

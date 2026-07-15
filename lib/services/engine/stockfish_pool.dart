@@ -54,10 +54,7 @@ class StockfishPool {
   /// [threadsPerWorker] sets Stockfish UCI Threads on each worker (MultiPV
   /// searches benefit strongly from >1 thread).  Existing workers are
   /// reconfigured when [threadsPerWorker] differs from the current value.
-  Future<void> ensureWorkers([
-    int? count,
-    int? threadsPerWorker,
-  ]) async {
+  Future<void> ensureWorkers([int? count, int? threadsPerWorker]) async {
     if (!StockfishConnectionFactory.isAvailable) return;
 
     if (threadsPerWorker != null && threadsPerWorker > 0) {
@@ -79,9 +76,11 @@ class StockfishPool {
     }
 
     if (kDebugMode && _workers.isNotEmpty) {
-      log.i('[Pool] ${_workers.length} workers ready '
-          '($kPoolHashPerWorkerMb MB hash, '
-          '$_threadsPerWorker thread(s) each)');
+      log.i(
+        '[Pool] ${_workers.length} workers ready '
+        '($kPoolHashPerWorkerMb MB hash, '
+        '$_threadsPerWorker thread(s) each)',
+      );
     }
   }
 
@@ -89,9 +88,7 @@ class StockfishPool {
   Future<void> reconfigureAllWorkers(int threads) async {
     if (threads < 1) threads = 1;
     _threadsPerWorker = threads;
-    await Future.wait([
-      for (final w in _workers) w.setThreads(threads),
-    ]);
+    await Future.wait([for (final w in _workers) w.setThreads(threads)]);
   }
 
   /// Prepare the pool for tree building: ensure at least one worker and
@@ -137,9 +134,7 @@ class StockfishPool {
   ///
   /// Times out after [timeout] (default 60 s) to prevent deadlocks when a
   /// worker hangs.
-  Future<EvalWorker> acquire({
-    Duration timeout = const Duration(seconds: 60),
-  }) {
+  Future<EvalWorker> acquire({Duration timeout = const Duration(seconds: 60)}) {
     if (_workers.isEmpty) {
       return Future.error(StateError('No workers available'));
     }
@@ -151,10 +146,13 @@ class StockfishPool {
     }
     final c = Completer<EvalWorker>();
     _waiters.add(c);
-    return c.future.timeout(timeout, onTimeout: () {
-      _waiters.remove(c);
-      throw TimeoutException('Timed out waiting for a free worker', timeout);
-    });
+    return c.future.timeout(
+      timeout,
+      onTimeout: () {
+        _waiters.remove(c);
+        throw TimeoutException('Timed out waiting for a free worker', timeout);
+      },
+    );
   }
 
   /// Return a worker to the free set (or hand it to the next waiter).

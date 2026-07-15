@@ -58,12 +58,12 @@ class _FenListWidgetState extends State<FenListWidget> {
   final Map<String, int?> _moveNumberCache = {};
 
   Map<String, String> get _sortMap => {
-        if (widget.hasEvals) 'Bad Eval': _evalSortKey,
-        'Lowest Win Rate': 'win_rate',
-        'Highest Win Rate': 'win_rate_desc',
-        'Most Games': 'games',
-        'Most Losses': 'losses',
-      };
+    if (widget.hasEvals) 'Bad Eval': _evalSortKey,
+    'Lowest Win Rate': 'win_rate',
+    'Highest Win Rate': 'win_rate_desc',
+    'Most Games': 'games',
+    'Most Losses': 'losses',
+  };
 
   String get _evalSortKey =>
       widget.playerIsWhite ? 'eval_bad_white' : 'eval_bad_black';
@@ -201,11 +201,15 @@ class _FenListWidgetState extends State<FenListWidget> {
                   value: _sortBy,
                   isExpanded: true,
                   items: _sortMap.keys
-                      .map((key) => DropdownMenuItem(
-                            value: key,
-                            child:
-                                Text(key, style: const TextStyle(fontSize: 12)),
-                          ))
+                      .map(
+                        (key) => DropdownMenuItem(
+                          value: key,
+                          child: Text(
+                            key,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      )
                       .toList(),
                   onChanged: (value) {
                     if (value != null) {
@@ -244,8 +248,10 @@ class _FenListWidgetState extends State<FenListWidget> {
               style: const TextStyle(fontSize: 13),
               decoration: InputDecoration(
                 isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 8,
+                ),
                 border: const OutlineInputBorder(),
                 errorText: errorText,
                 errorStyle: const TextStyle(fontSize: 10),
@@ -305,8 +311,9 @@ class _FenListWidgetState extends State<FenListWidget> {
 
     Color? backgroundColor;
     if (showingEval && stats.hasEval) {
-      final bad =
-          widget.playerIsWhite ? (stats.evalCp! < -50) : (stats.evalCp! > 100);
+      final bad = widget.playerIsWhite
+          ? (stats.evalCp! < -50)
+          : (stats.evalCp! > 100);
       if (bad) {
         backgroundColor = Colors.red.withValues(alpha: 0.15);
       }
@@ -326,17 +333,18 @@ class _FenListWidgetState extends State<FenListWidget> {
 
     return ListTile(
       selected: isSelected,
-      selectedTileColor:
-          Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+      selectedTileColor: Theme.of(
+        context,
+      ).colorScheme.primary.withValues(alpha: 0.3),
       tileColor: backgroundColor,
       dense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       title: Text(
         showingEval && stats.hasEval
             ? '#$rank: ${stats.evalDisplay}  '
-                '(${stats.winRatePercent.toStringAsFixed(0)}% in ${stats.games}g)'
+                  '(${stats.winRatePercent.toStringAsFixed(0)}% in ${stats.games}g)'
             : '#$rank: ${stats.winRatePercent.toStringAsFixed(1)}%$evalTag '
-                '(${stats.wins}-${stats.losses}-${stats.draws} in ${stats.games})',
+                  '(${stats.wins}-${stats.losses}-${stats.draws} in ${stats.games})',
         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
       ),
       subtitle: Text(

@@ -49,8 +49,9 @@ class _HolesReportPanelState extends State<HolesReportPanel> {
   static const int _defaultCap = 10;
 
   final ScrollController _scrollController = ScrollController();
-  late final TextEditingController _capCtrl =
-      TextEditingController(text: '$_defaultCap');
+  late final TextEditingController _capCtrl = TextEditingController(
+    text: '$_defaultCap',
+  );
 
   /// Empty = all types.
   final Set<AuditFindingType> _activeFilters = {};
@@ -65,18 +66,20 @@ class _HolesReportPanelState extends State<HolesReportPanel> {
   }
 
   List<AuditFinding> get _allFindings => [
-        ...(widget.result?.findings ?? const <AuditFinding>[]),
-        ...widget.liveFindings,
-      ];
+    ...(widget.result?.findings ?? const <AuditFinding>[]),
+    ...widget.liveFindings,
+  ];
 
   List<AuditFinding> _visibleFindings() {
-    final ranked = rankByExploitScore(_allFindings.where((f) {
-      if (f.dismissed) return false;
-      if (_activeFilters.isNotEmpty && !_activeFilters.contains(f.type)) {
-        return false;
-      }
-      return true;
-    }).toList());
+    final ranked = rankByExploitScore(
+      _allFindings.where((f) {
+        if (f.dismissed) return false;
+        if (_activeFilters.isNotEmpty && !_activeFilters.contains(f.type)) {
+          return false;
+        }
+        return true;
+      }).toList(),
+    );
     return ranked.length > _maxVisible
         ? ranked.sublist(0, _maxVisible)
         : ranked;
@@ -167,8 +170,10 @@ class _HolesReportPanelState extends State<HolesReportPanel> {
                 const Spacer(),
                 TextButton(
                   onPressed: _restoreAll,
-                  child: const Text('Restore all',
-                      style: TextStyle(fontSize: 11)),
+                  child: const Text(
+                    'Restore all',
+                    style: TextStyle(fontSize: 11),
+                  ),
                 ),
               ],
             ),
@@ -228,8 +233,8 @@ class _HolesReportPanelState extends State<HolesReportPanel> {
                 border: OutlineInputBorder(),
               ),
               keyboardType: TextInputType.number,
-              onSubmitted: (v) => setState(
-                  () => _maxVisible = int.tryParse(v) ?? _defaultCap),
+              onSubmitted: (v) =>
+                  setState(() => _maxVisible = int.tryParse(v) ?? _defaultCap),
             ),
           ),
         ],
@@ -266,11 +271,14 @@ class _HolesReportPanelState extends State<HolesReportPanel> {
         children: [
           Icon(Icons.gps_fixed, size: 40, color: Colors.grey[700]),
           const SizedBox(height: 12),
-          Text('No hole report yet',
-              style: TextStyle(
-                  color: Colors.grey[400],
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600)),
+          Text(
+            'No hole report yet',
+            style: TextStyle(
+              color: Colors.grey[400],
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 6),
           Text(
             'Run Find Holes to search these lines for uncovered '

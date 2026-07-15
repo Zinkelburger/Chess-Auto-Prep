@@ -68,8 +68,7 @@ class GeneratedRepertoire {
       playAsWhite: playAsWhite,
     );
     final metricsCache = EvalTreeLineMetricsCache.fromSnapshot(snapshot);
-    final extracted =
-        TrapExtractor(playAsWhite: playAsWhite).extract(tree);
+    final extracted = TrapExtractor(playAsWhite: playAsWhite).extract(tree);
     final traps = TrapIndexService(extracted);
 
     return GeneratedRepertoire(

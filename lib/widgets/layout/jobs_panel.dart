@@ -189,7 +189,8 @@ class JobsPanel extends StatelessWidget {
       bestFirst: gc.progressBestFirst,
       priorityProgress: gc.progressPriorityFraction,
     );
-    final depthBars = phase == GenerationPhase.buildingTree &&
+    final depthBars =
+        phase == GenerationPhase.buildingTree &&
             gc.progressDepthTotals.isNotEmpty
         ? DepthProgressBars(
             totals: gc.progressDepthTotals,
@@ -230,7 +231,7 @@ class JobsPanel extends StatelessWidget {
                   message: gc.isSnapshotExporting
                       ? (gc.snapshotStatus ?? 'Exporting snapshot…')
                       : 'Save the lines found so far to a new repertoire — '
-                          'the run keeps going',
+                            'the run keeps going',
                   child: TextButton(
                     onPressed: gc.isSnapshotExporting
                         ? null
@@ -246,7 +247,8 @@ class JobsPanel extends StatelessWidget {
                 ),
               if (onFinishNowGeneration != null)
                 Tooltip(
-                  message: 'Stop exploring and build lines from '
+                  message:
+                      'Stop exploring and build lines from '
                       'what\'s been found so far',
                   child: TextButton(
                     onPressed: onFinishNowGeneration,
@@ -263,16 +265,14 @@ class JobsPanel extends StatelessWidget {
 
   Widget _buildAuditJobCard(BuildContext context, RepertoireJob job) {
     final ac = auditController;
-    final fraction = ac.totalNodes > 0
-        ? ac.nodesChecked / ac.totalNodes
-        : null;
+    final fraction = ac.totalNodes > 0 ? ac.nodesChecked / ac.totalNodes : null;
     final statParts = [
       ac.totalNodes > 0
           ? '${ac.nodesChecked} / ${ac.totalNodes} positions checked'
           : 'Starting audit…',
     ];
-    final configSummary = ac.lastConfig?.summaryLabel ??
-        _auditConfigFromJob(job)?.summaryLabel;
+    final configSummary =
+        ac.lastConfig?.summaryLabel ?? _auditConfigFromJob(job)?.summaryLabel;
     final accent = Theme.of(context).colorScheme.tertiary;
 
     return _ActiveJobCard(
@@ -323,7 +323,8 @@ class JobsPanel extends StatelessWidget {
     try {
       return TreeBuildConfig.fromJson(
         snap,
-        startFen: job.subtreeFen ??
+        startFen:
+            job.subtreeFen ??
             'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
       );
     } catch (_) {
@@ -392,8 +393,8 @@ class JobsPanel extends StatelessWidget {
         job.status == JobStatus.completed
             ? Icons.check_circle_outline
             : job.status == JobStatus.failed
-                ? Icons.error_outline
-                : Icons.cancel_outlined,
+            ? Icons.error_outline
+            : Icons.cancel_outlined,
         size: 16,
         color: statusColor,
       ),
@@ -461,8 +462,11 @@ class _ActiveJobCard extends StatelessWidget {
                 width: 16,
                 height: 16,
                 child: isPaused
-                    ? Icon(Icons.pause_circle_filled,
-                        size: 16, color: Colors.orange[300])
+                    ? Icon(
+                        Icons.pause_circle_filled,
+                        size: 16,
+                        color: Colors.orange[300],
+                      )
                     : CircularProgressIndicator(
                         strokeWidth: 1.5,
                         color: accent,
@@ -556,8 +560,10 @@ class _ActiveJobCard extends StatelessWidget {
             children: [
               for (final part in statParts)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.grey[850],
                     borderRadius: BorderRadius.circular(5),
@@ -573,10 +579,7 @@ class _ActiveJobCard extends StatelessWidget {
                 ),
             ],
           ),
-          if (detail != null) ...[
-            const SizedBox(height: 6),
-            detail!,
-          ],
+          if (detail != null) ...[const SizedBox(height: 6), detail!],
           if (progress != null) ...[
             const SizedBox(height: 6),
             ClipRRect(

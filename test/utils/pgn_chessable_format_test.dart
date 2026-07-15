@@ -5,7 +5,10 @@ void main() {
   group('hasChessableFormatting', () {
     test('detects @@ markers', () {
       expect(hasChessableFormatting('@@HeaderStart@@Title@@HeaderEnd@@'), true);
-      expect(hasChessableFormatting('@@StartBracket@@note@@EndBracket@@'), true);
+      expect(
+        hasChessableFormatting('@@StartBracket@@note@@EndBracket@@'),
+        true,
+      );
     });
 
     test('detects double-space paragraphs in long text', () {
@@ -25,7 +28,8 @@ void main() {
   group('parseRichComment', () {
     test('parses header segments', () {
       final segs = parseRichComment(
-        '@@HeaderStart@@How to improve@@HeaderEnd@@Some text.');
+        '@@HeaderStart@@How to improve@@HeaderEnd@@Some text.',
+      );
       expect(segs.length, 2);
       expect(segs[0].type, RichSegmentType.header);
       expect(segs[0].content, 'How to improve');
@@ -35,7 +39,8 @@ void main() {
 
     test('parses blockquote', () {
       final segs = parseRichComment(
-        'Before. @@StartBlockQuote@@Quoted text.@@EndBlockQuote@@ After.');
+        'Before. @@StartBlockQuote@@Quoted text.@@EndBlockQuote@@ After.',
+      );
       expect(segs.any((s) => s.type == RichSegmentType.blockQuote), true);
       final bq = segs.firstWhere((s) => s.type == RichSegmentType.blockQuote);
       expect(bq.content, 'Quoted text.');
@@ -43,7 +48,8 @@ void main() {
 
     test('parses bracket/editorial notes', () {
       final segs = parseRichComment(
-        'The game @@StartBracket@@Alekhine@@EndBracket@@ was brilliant.');
+        'The game @@StartBracket@@Alekhine@@EndBracket@@ was brilliant.',
+      );
       expect(segs.any((s) => s.type == RichSegmentType.bracket), true);
       final br = segs.firstWhere((s) => s.type == RichSegmentType.bracket);
       expect(br.content, 'Alekhine');
@@ -51,14 +57,16 @@ void main() {
 
     test('parses square brackets same as bracket', () {
       final segs = parseRichComment(
-        'Black @@StartSquare@@Editor@@EndSquare@@ played.');
+        'Black @@StartSquare@@Editor@@EndSquare@@ played.',
+      );
       expect(segs.any((s) => s.type == RichSegmentType.bracket), true);
     });
 
     test('parses FEN segments', () {
       final fen = '8/p3np1p/6p1/1N6/1Pk5/7P/P4PP1/6K1 w - - 3 8';
       final segs = parseRichComment(
-        'Position: @@StartFEN@@$fen@@EndFEN@@ continues.');
+        'Position: @@StartFEN@@$fen@@EndFEN@@ continues.',
+      );
       expect(segs.any((s) => s.type == RichSegmentType.fen), true);
       final fenSeg = segs.firstWhere((s) => s.type == RichSegmentType.fen);
       expect(fenSeg.content, fen);
@@ -66,7 +74,8 @@ void main() {
 
     test('parses link segments', () {
       final segs = parseRichComment(
-        'Visit @@LinkStart@@www.ruchess.ru@@LinkEnd@@ for info.');
+        'Visit @@LinkStart@@www.ruchess.ru@@LinkEnd@@ for info.',
+      );
       expect(segs.any((s) => s.type == RichSegmentType.link), true);
       final link = segs.firstWhere((s) => s.type == RichSegmentType.link);
       expect(link.content, 'www.ruchess.ru');
@@ -74,7 +83,8 @@ void main() {
 
     test('handles double-space paragraph breaks in text segments', () {
       final segs = parseRichComment(
-        'First paragraph about chess.  Second paragraph about endgames.');
+        'First paragraph about chess.  Second paragraph about endgames.',
+      );
       expect(segs.length, 1);
       expect(segs[0].type, RichSegmentType.text);
       expect(segs[0].content, contains('\n'));
@@ -85,7 +95,8 @@ void main() {
     });
 
     test('handles mixed markers and text', () {
-      final raw = '@@HeaderStart@@Title@@HeaderEnd@@Intro text.  '
+      final raw =
+          '@@HeaderStart@@Title@@HeaderEnd@@Intro text.  '
           '@@StartBlockQuote@@A quote.@@EndBlockQuote@@ '
           'Then @@StartBracket@@note@@EndBracket@@ end.';
       final segs = parseRichComment(raw);
@@ -97,8 +108,9 @@ void main() {
 
   group('parseCommentTokens', () {
     test('classifies a simple inline alternative line', () {
-      final tokens =
-          parseCommentTokens('Or  40.cxb5  c4!-+  , winning the pawn ending.');
+      final tokens = parseCommentTokens(
+        'Or  40.cxb5  c4!-+  , winning the pawn ending.',
+      );
       expect(tokens[0], isA<CommentProse>());
       expect((tokens[0] as CommentProse).text, 'Or');
 
@@ -119,7 +131,8 @@ void main() {
 
     test('keeps a line together through interspersed prose', () {
       final tokens = parseCommentTokens(
-          'Editor\'s Note:  42...Kc3?  is a draw:  43.Rxc4+  Kxb3  44.Rxc5  Ra7');
+        'Editor\'s Note:  42...Kc3?  is a draw:  43.Rxc4+  Kxb3  44.Rxc5  Ra7',
+      );
       final moves = tokens.whereType<CommentMove>().toList();
 
       // 42...Kc3? -> Black move 42.
@@ -148,7 +161,8 @@ void main() {
 
     test('starts a new line when analysis jumps back to a different move', () {
       final tokens = parseCommentTokens(
-          '42...Kc3?  43.Rxc4+  Kxb3  However  42...Ke3  43.Rxc4  Ra5');
+        '42...Kc3?  43.Rxc4+  Kxb3  However  42...Ke3  43.Rxc4  Ra5',
+      );
       final moves = tokens.whereType<CommentMove>().toList();
       // First line: 42...Kc3 43.Rxc4 Kxb3
       final line1 = moves[0].runId;
@@ -184,19 +198,26 @@ void main() {
   });
 
   group('parseCommentTokens — bare FEN anchors (book PGNs)', () {
-    const fen = 'r1bqkbnr/pp1ppp1p/2n3p1/8/3NP3/8/PPP2PPP/RNBQKB1R w KQkq - 1 5';
+    const fen =
+        'r1bqkbnr/pp1ppp1p/2n3p1/8/3NP3/8/PPP2PPP/RNBQKB1R w KQkq - 1 5';
 
     test('hides the FEN and anchors the following run to it', () {
       final tokens = parseCommentTokens(
-          'The next part is about more normal Dragon play after $fen\n'
-          '5.Nc3\nBg7\n6.Be3');
+        'The next part is about more normal Dragon play after $fen\n'
+        '5.Nc3\nBg7\n6.Be3',
+      );
 
       // FEN itself is never emitted as a token.
-      expect(tokens.whereType<CommentProse>().any((p) => p.text.contains('/')),
-          false);
+      expect(
+        tokens.whereType<CommentProse>().any((p) => p.text.contains('/')),
+        false,
+      );
       // Surrounding prose survives.
       expect(tokens.first, isA<CommentProse>());
-      expect((tokens.first as CommentProse).text, contains('Dragon play after'));
+      expect(
+        (tokens.first as CommentProse).text,
+        contains('Dragon play after'),
+      );
 
       final moves = tokens.whereType<CommentMove>().toList();
       expect(moves.map((m) => m.san), ['Nc3', 'Bg7', 'Be3']);
@@ -222,31 +243,40 @@ void main() {
     test('non-FEN inline lines keep a null anchor', () {
       final tokens = parseCommentTokens('Or  40.cxb5  c4!-+  , winning.');
       expect(
-          tokens.whereType<CommentMove>().every((m) => m.anchorFen == null),
-          true);
+        tokens.whereType<CommentMove>().every((m) => m.anchorFen == null),
+        true,
+      );
     });
 
     test('an invalid FEN-looking token stays as prose', () {
       // 9 ranks — not a legal FEN, must not be swallowed.
       const bad = 'r1bqkbnr/pp/pp/pp/pp/pp/pp/pp/pp w KQkq - 1 5';
       final tokens = parseCommentTokens('see $bad here');
-      expect(tokens.whereType<CommentProse>().any((p) => p.text.contains('r1bqkbnr')),
-          true);
-      expect(tokens.whereType<CommentMove>().every((m) => m.anchorFen == null),
-          true);
+      expect(
+        tokens.whereType<CommentProse>().any(
+          (p) => p.text.contains('r1bqkbnr'),
+        ),
+        true,
+      );
+      expect(
+        tokens.whereType<CommentMove>().every((m) => m.anchorFen == null),
+        true,
+      );
     });
   });
 
   group('filterDisplayComment', () {
     test('strips @@ markers but keeps content', () {
       final result = filterDisplayComment(
-        '@@StartBracket@@Alekhine@@EndBracket@@ played well.');
+        '@@StartBracket@@Alekhine@@EndBracket@@ played well.',
+      );
       expect(result, 'Alekhine played well.');
     });
 
     test('strips all marker types', () {
       final result = filterDisplayComment(
-        '@@HeaderStart@@Title@@HeaderEnd@@ @@StartFEN@@fen@@EndFEN@@');
+        '@@HeaderStart@@Title@@HeaderEnd@@ @@StartFEN@@fen@@EndFEN@@',
+      );
       expect(result, 'Title fen');
     });
   });

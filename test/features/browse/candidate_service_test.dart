@@ -20,21 +20,22 @@ BuildTreeNode _makeNode(
   int? evalCp,
   int ply = 1,
 }) {
-  final node = BuildTreeNode(
-    fen: fen,
-    moveSan: san,
-    moveUci: uci,
-    ply: ply,
-    isWhiteToMove: ply % 2 == 0,
-    nodeId: fen.hashCode,
-  )
-    ..ease = ease
-    ..myEase = myEase
-    ..expectimaxValue = expectimax
-    ..isRepertoireMove = isRepertoire
-    ..totalGames = totalGames
-    ..moveProbability = moveProbability
-    ..trapScore = trapScore;
+  final node =
+      BuildTreeNode(
+          fen: fen,
+          moveSan: san,
+          moveUci: uci,
+          ply: ply,
+          isWhiteToMove: ply % 2 == 0,
+          nodeId: fen.hashCode,
+        )
+        ..ease = ease
+        ..myEase = myEase
+        ..expectimaxValue = expectimax
+        ..isRepertoireMove = isRepertoire
+        ..totalGames = totalGames
+        ..moveProbability = moveProbability
+        ..trapScore = trapScore;
 
   if (evalCp != null) {
     node.engineEvalCp = evalCp;
@@ -58,10 +59,21 @@ void main() {
   group('CandidateService', () {
     test('getTreeCandidates returns children of matching node', () {
       final root = _makeRoot('startpos');
-      final child1 = _makeNode('fen1', 'e4', 'e2e4',
-          expectimax: 0.6, isRepertoire: true, evalCp: 30);
-      final child2 =
-          _makeNode('fen2', 'd4', 'd2d4', expectimax: 0.55, evalCp: 25);
+      final child1 = _makeNode(
+        'fen1',
+        'e4',
+        'e2e4',
+        expectimax: 0.6,
+        isRepertoire: true,
+        evalCp: 30,
+      );
+      final child2 = _makeNode(
+        'fen2',
+        'd4',
+        'd2d4',
+        expectimax: 0.55,
+        evalCp: 25,
+      );
 
       root.children.addAll([child1, child2]);
 
@@ -81,12 +93,27 @@ void main() {
 
     test('sorts by expectimax on our turn (repertoire first)', () {
       final root = _makeRoot('startpos');
-      final child1 =
-          _makeNode('f1', 'Nf3', 'g1f3', expectimax: 0.7, isRepertoire: false);
-      final child2 =
-          _makeNode('f2', 'e4', 'e2e4', expectimax: 0.65, isRepertoire: true);
-      final child3 =
-          _makeNode('f3', 'd4', 'd2d4', expectimax: 0.8, isRepertoire: false);
+      final child1 = _makeNode(
+        'f1',
+        'Nf3',
+        'g1f3',
+        expectimax: 0.7,
+        isRepertoire: false,
+      );
+      final child2 = _makeNode(
+        'f2',
+        'e4',
+        'e2e4',
+        expectimax: 0.65,
+        isRepertoire: true,
+      );
+      final child3 = _makeNode(
+        'f3',
+        'd4',
+        'd2d4',
+        expectimax: 0.8,
+        isRepertoire: false,
+      );
 
       root.children.addAll([child1, child2, child3]);
 
@@ -105,12 +132,27 @@ void main() {
 
     test('sorts by frequency on opponent turn', () {
       final root = _makeRoot('startpos');
-      final child1 =
-          _makeNode('f1', 'e5', 'e7e5', moveProbability: 0.4, totalGames: 400);
-      final child2 =
-          _makeNode('f2', 'd5', 'd7d5', moveProbability: 0.3, totalGames: 300);
-      final child3 =
-          _makeNode('f3', 'c5', 'c7c5', moveProbability: 0.2, totalGames: 200);
+      final child1 = _makeNode(
+        'f1',
+        'e5',
+        'e7e5',
+        moveProbability: 0.4,
+        totalGames: 400,
+      );
+      final child2 = _makeNode(
+        'f2',
+        'd5',
+        'd7d5',
+        moveProbability: 0.3,
+        totalGames: 300,
+      );
+      final child3 = _makeNode(
+        'f3',
+        'c5',
+        'c7c5',
+        moveProbability: 0.2,
+        totalGames: 200,
+      );
 
       root.children.addAll([child1, child2, child3]);
 
@@ -216,20 +258,17 @@ void main() {
         dbFrequency: 0.5,
       );
 
-      final explorer = ExplorerResponse.fromJson(
-        {
-          'moves': [
-            {
-              'san': 'e4',
-              'uci': 'e2e4',
-              'white': 400,
-              'draws': 100,
-              'black': 400,
-            },
-          ],
-        },
-        fen: kStandardStartFen,
-      );
+      final explorer = ExplorerResponse.fromJson({
+        'moves': [
+          {
+            'san': 'e4',
+            'uci': 'e2e4',
+            'white': 400,
+            'draws': 100,
+            'black': 400,
+          },
+        ],
+      }, fen: kStandardStartFen);
 
       final merged = CandidateService.mergeWithExplorer(
         treeCandidates: [treeMove],
@@ -256,27 +295,12 @@ void main() {
         evalSource: 'tree',
       );
 
-      final explorer = ExplorerResponse.fromJson(
-        {
-          'moves': [
-            {
-              'san': 'e4',
-              'uci': 'e2e4',
-              'white': 400,
-              'draws': 50,
-              'black': 350,
-            },
-            {
-              'san': 'd4',
-              'uci': 'd2d4',
-              'white': 300,
-              'draws': 30,
-              'black': 270,
-            },
-          ],
-        },
-        fen: kStandardStartFen,
-      );
+      final explorer = ExplorerResponse.fromJson({
+        'moves': [
+          {'san': 'e4', 'uci': 'e2e4', 'white': 400, 'draws': 50, 'black': 350},
+          {'san': 'd4', 'uci': 'd2d4', 'white': 300, 'draws': 30, 'black': 270},
+        ],
+      }, fen: kStandardStartFen);
 
       final merged = CandidateService.mergeWithExplorer(
         treeCandidates: [treeMove],
@@ -297,20 +321,11 @@ void main() {
     });
 
     test('returns explorer-only list when tree is empty', () {
-      final explorer = ExplorerResponse.fromJson(
-        {
-          'moves': [
-            {
-              'san': 'e4',
-              'uci': 'e2e4',
-              'white': 400,
-              'draws': 50,
-              'black': 350,
-            },
-          ],
-        },
-        fen: kStandardStartFen,
-      );
+      final explorer = ExplorerResponse.fromJson({
+        'moves': [
+          {'san': 'e4', 'uci': 'e2e4', 'white': 400, 'draws': 50, 'black': 350},
+        ],
+      }, fen: kStandardStartFen);
 
       final merged = CandidateService.mergeWithExplorer(
         treeCandidates: const [],
@@ -366,8 +381,13 @@ void main() {
 
     test('skips explorer when tree has DB stats', () async {
       final root = _makeRoot(kStandardStartFen);
-      final child =
-          _makeNode('f1', 'e4', 'e2e4', totalGames: 800, moveProbability: 0.6);
+      final child = _makeNode(
+        'f1',
+        'e4',
+        'e2e4',
+        totalGames: 800,
+        moveProbability: 0.6,
+      );
       root.children.add(child);
 
       final mockService = _MockCoverageService({

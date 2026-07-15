@@ -169,14 +169,25 @@ class RepertoireShortcuts extends StatelessWidget {
   Widget build(BuildContext context) {
     return CallbackShortcuts(
       bindings: {
-        const SingleActivator(LogicalKeyboardKey.keyV,
-            control: true, shift: true): onPasteFenFromClipboard,
+        const SingleActivator(
+          LogicalKeyboardKey.keyV,
+          control: true,
+          shift: true,
+        ): onPasteFenFromClipboard,
         const SingleActivator(LogicalKeyboardKey.keyV, meta: true, shift: true):
             onPasteFenFromClipboard,
-        const SingleActivator(LogicalKeyboardKey.keyZ,
-            control: true, shift: false): () => _invokeWhenNotTyping(onUndo),
-        const SingleActivator(LogicalKeyboardKey.keyZ,
-            meta: true, shift: false): () => _invokeWhenNotTyping(onUndo),
+        const SingleActivator(
+          LogicalKeyboardKey.keyZ,
+          control: true,
+          shift: false,
+        ): () =>
+            _invokeWhenNotTyping(onUndo),
+        const SingleActivator(
+          LogicalKeyboardKey.keyZ,
+          meta: true,
+          shift: false,
+        ): () =>
+            _invokeWhenNotTyping(onUndo),
       },
       child: Focus(
         focusNode: focusNode,

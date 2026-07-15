@@ -64,10 +64,7 @@ class EmptyStatePlaceholder extends StatelessWidget {
                 label: Text(actionLabel!),
               ),
             ],
-            if (trailing != null) ...[
-              const SizedBox(height: 24),
-              trailing!,
-            ],
+            if (trailing != null) ...[const SizedBox(height: 24), trailing!],
           ],
         ),
       ),

@@ -28,10 +28,7 @@ class RepertoireTabBar extends StatelessWidget {
       padding: const EdgeInsets.all(8.0),
       child: Column(
         children: [
-          NavigationTrail(
-            stack: navigationStack,
-            onJumpTo: onNavigationJump,
-          ),
+          NavigationTrail(stack: navigationStack, onJumpTo: onNavigationJump),
           TabBar(
             controller: tabController,
             isScrollable: true,
@@ -53,10 +50,7 @@ class RepertoireTabBar extends StatelessWidget {
 
   static List<Tab> _tabsForCompact(bool isCompactLayout) {
     return const [
-      Tab(
-        text: 'PGN',
-        icon: Icon(Icons.description, size: 16),
-      ),
+      Tab(text: 'PGN', icon: Icon(Icons.description, size: 16)),
       Tab(
         text: 'Context',
         icon: Icon(Icons.dashboard_customize_outlined, size: 16),

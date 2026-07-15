@@ -269,12 +269,7 @@ class RepertoireGenerationStatusChip extends StatelessWidget {
 
 /// A repertoire action the user can pick from the runner dropdown.
 class _RepAction {
-  const _RepAction(
-    this.id,
-    this.label,
-    this.icon,
-    this.onRun,
-  );
+  const _RepAction(this.id, this.label, this.icon, this.onRun);
 
   final String id;
   final String label;
@@ -314,25 +309,49 @@ class _RepertoireActionRunnerState extends State<RepertoireActionRunner> {
   String? _selectedId;
 
   List<_RepAction> get _actions => [
-        if (widget.onGenerate != null)
-          _RepAction('generate', 'Generate', Icons.auto_awesome,
-              widget.onGenerate!),
-        if (widget.onBuildByPlaying != null)
-          _RepAction('build_by_playing', 'Build by playing',
-              Icons.sports_esports, widget.onBuildByPlaying!),
-        if (widget.onBuildFromGames != null)
-          _RepAction('from_games', 'From my games',
-              Icons.download_for_offline_outlined, widget.onBuildFromGames!),
-        if (widget.onImportPgnFile != null)
-          _RepAction('import_pgn_file', 'Import PGN file', Icons.file_open,
-              widget.onImportPgnFile!),
-        if (widget.onImportPgnPaste != null)
-          _RepAction('import_pgn_paste', 'Paste PGN', Icons.paste,
-              widget.onImportPgnPaste!),
-        if (widget.onOpenAudit != null)
-          _RepAction('audit', 'Audit for gaps', Icons.policy_outlined,
-              widget.onOpenAudit!),
-      ];
+    if (widget.onGenerate != null)
+      _RepAction(
+        'generate',
+        'Generate',
+        Icons.auto_awesome,
+        widget.onGenerate!,
+      ),
+    if (widget.onBuildByPlaying != null)
+      _RepAction(
+        'build_by_playing',
+        'Build by playing',
+        Icons.sports_esports,
+        widget.onBuildByPlaying!,
+      ),
+    if (widget.onBuildFromGames != null)
+      _RepAction(
+        'from_games',
+        'From my games',
+        Icons.download_for_offline_outlined,
+        widget.onBuildFromGames!,
+      ),
+    if (widget.onImportPgnFile != null)
+      _RepAction(
+        'import_pgn_file',
+        'Import PGN file',
+        Icons.file_open,
+        widget.onImportPgnFile!,
+      ),
+    if (widget.onImportPgnPaste != null)
+      _RepAction(
+        'import_pgn_paste',
+        'Paste PGN',
+        Icons.paste,
+        widget.onImportPgnPaste!,
+      ),
+    if (widget.onOpenAudit != null)
+      _RepAction(
+        'audit',
+        'Audit for gaps',
+        Icons.policy_outlined,
+        widget.onOpenAudit!,
+      ),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -423,10 +442,7 @@ class _RepertoireActionRunnerState extends State<RepertoireActionRunner> {
 }
 
 class RepertoireTrainButton extends StatelessWidget {
-  const RepertoireTrainButton({
-    super.key,
-    required this.onPressed,
-  });
+  const RepertoireTrainButton({super.key, required this.onPressed});
 
   final VoidCallback? onPressed;
 

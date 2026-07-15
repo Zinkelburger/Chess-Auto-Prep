@@ -64,11 +64,12 @@ class PiecePalette extends StatelessWidget {
                 PieceBrush(piece: final p) => p == piece,
                 _ => false,
               };
-              controller.selectTool(
-                  alreadySelected ? null : PieceBrush(piece));
+              controller.selectTool(alreadySelected ? null : PieceBrush(piece));
             },
             child: PieceImage(
-                piece: Piece(color: side, role: role), size: 30),
+              piece: Piece(color: side, role: role),
+              size: 30,
+            ),
           ),
         // Eraser only on the white row's trailing edge would look lopsided;
         // show it on both rows' end for symmetry? One is enough — white row.
@@ -76,9 +77,9 @@ class PiecePalette extends StatelessWidget {
           _PaletteButton(
             selected: controller.tool is EraserTool,
             onTap: () {
-              controller.selectTool(controller.tool is EraserTool
-                  ? null
-                  : const EraserTool());
+              controller.selectTool(
+                controller.tool is EraserTool ? null : const EraserTool(),
+              );
             },
             child: const Icon(Icons.delete_outline, size: 22),
           )

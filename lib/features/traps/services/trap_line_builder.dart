@@ -48,10 +48,12 @@ class TrapLineBuilder {
     }
 
     // Stepping forward from the trap position should walk into the blunder.
-    final trapChildren =
-        cursor.isEmpty ? tree.roots : tree.nodeAt(cursor)?.children ?? const [];
-    final popularIdx =
-        trapChildren.indexWhere((c) => c.san == trap.popularMove);
+    final trapChildren = cursor.isEmpty
+        ? tree.roots
+        : tree.nodeAt(cursor)?.children ?? const [];
+    final popularIdx = trapChildren.indexWhere(
+      (c) => c.san == trap.popularMove,
+    );
     if (popularIdx > 0) {
       tree.promoteVariation(cursor.child(popularIdx));
     }
@@ -61,19 +63,19 @@ class TrapLineBuilder {
 
   /// Fallback replies for legacy trap files without `all_replies`.
   static List<TrapReply> _syntheticReplies(TrapLineInfo trap) => [
-        TrapReply(
-          san: trap.popularMove,
-          probability: trap.popularProb,
-          evalAfterCp: trap.popularEvalCp,
-          classification: TrapReplyClass.blunder,
-        ),
-        TrapReply(
-          san: trap.bestMove,
-          probability: 0,
-          evalAfterCp: trap.bestEvalCp,
-          classification: TrapReplyClass.good,
-        ),
-      ];
+    TrapReply(
+      san: trap.popularMove,
+      probability: trap.popularProb,
+      evalAfterCp: trap.popularEvalCp,
+      classification: TrapReplyClass.blunder,
+    ),
+    TrapReply(
+      san: trap.bestMove,
+      probability: 0,
+      evalAfterCp: trap.bestEvalCp,
+      classification: TrapReplyClass.good,
+    ),
+  ];
 
   static String _trapComment(TrapLineInfo trap) {
     final prob = (trap.popularProb * 100).toStringAsFixed(0);
@@ -99,10 +101,10 @@ class TrapLineBuilder {
 
   /// Standard NAG codes: $4 = ??, $2 = ?, $6 = ?!, $1 = !.
   static List<int>? _nagsFor(TrapReplyClass cls) => switch (cls) {
-        TrapReplyClass.blunder => [4],
-        TrapReplyClass.mistake => [2],
-        TrapReplyClass.inaccuracy => [6],
-        TrapReplyClass.acceptable => null,
-        TrapReplyClass.good => [1],
-      };
+    TrapReplyClass.blunder => [4],
+    TrapReplyClass.mistake => [2],
+    TrapReplyClass.inaccuracy => [6],
+    TrapReplyClass.acceptable => null,
+    TrapReplyClass.good => [1],
+  };
 }

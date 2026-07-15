@@ -80,8 +80,9 @@ class _TacticsEditDialogState extends State<TacticsEditDialog> {
     _blackCtrl = TextEditingController(text: pos.gameBlack);
     _dateCtrl = TextEditingController(text: pos.gameDate);
     _urlCtrl = TextEditingController(text: pos.gameUrl);
-    _mistakeType =
-        _mistakeTypes.containsKey(pos.mistakeType) ? pos.mistakeType : '?';
+    _mistakeType = _mistakeTypes.containsKey(pos.mistakeType)
+        ? pos.mistakeType
+        : '?';
     _validate();
   }
 
@@ -105,18 +106,16 @@ class _TacticsEditDialogState extends State<TacticsEditDialog> {
       _correctLineError == null &&
       _solutionPvError == null;
 
-  List<String> _splitLine(String text) => text
-      .split('|')
-      .map((s) => s.trim())
-      .where((s) => s.isNotEmpty)
-      .toList();
+  List<String> _splitLine(String text) =>
+      text.split('|').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
 
   static final _uciPattern = RegExp(r'^[a-h][1-8][a-h][1-8][qrbn]?$');
 
   /// Parse one move token (UCI or SAN — imports store both) against [pos].
   static Move? _parseMoveToken(Position pos, String token) {
-    final move =
-        _uciPattern.hasMatch(token) ? Move.parse(token) : pos.parseSan(token);
+    final move = _uciPattern.hasMatch(token)
+        ? Move.parse(token)
+        : pos.parseSan(token);
     if (move == null || !pos.isLegal(move)) return null;
     return move;
   }
@@ -158,7 +157,8 @@ class _TacticsEditDialogState extends State<TacticsEditDialog> {
     }
 
     final userMove = _userMoveCtrl.text.trim();
-    _userMoveError = userMove.isEmpty || _parseMoveToken(start, userMove) != null
+    _userMoveError =
+        userMove.isEmpty || _parseMoveToken(start, userMove) != null
         ? null
         : 'Not a legal move from this FEN';
 
@@ -179,8 +179,11 @@ class _TacticsEditDialogState extends State<TacticsEditDialog> {
       if (mounted) showAppSnackBar(context, message);
     } catch (_) {
       if (mounted) {
-        showAppSnackBar(context, AppMessages.clipboardWriteFailed,
-            isError: true);
+        showAppSnackBar(
+          context,
+          AppMessages.clipboardWriteFailed,
+          isError: true,
+        );
       }
     }
   }
@@ -234,8 +237,10 @@ class _TacticsEditDialogState extends State<TacticsEditDialog> {
                 ],
               ),
               const SizedBox(height: 16),
-              const Text('Puzzle',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const Text(
+                'Puzzle',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
               const SizedBox(height: 8),
               _textField(
                 controller: _fenCtrl,
@@ -278,7 +283,9 @@ class _TacticsEditDialogState extends State<TacticsEditDialog> {
                 items: [
                   for (final entry in _mistakeTypes.entries)
                     DropdownMenuItem(
-                        value: entry.key, child: Text(entry.value)),
+                      value: entry.key,
+                      child: Text(entry.value),
+                    ),
                 ],
                 onChanged: (v) => setState(() => _mistakeType = v ?? '?'),
               ),
@@ -289,33 +296,43 @@ class _TacticsEditDialogState extends State<TacticsEditDialog> {
                 maxLines: 3,
               ),
               const SizedBox(height: 16),
-              const Text('Game info',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const Text(
+                'Game info',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
               const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(
-                      child: _textField(
-                          controller: _whiteCtrl, label: 'White player')),
+                    child: _textField(
+                      controller: _whiteCtrl,
+                      label: 'White player',
+                    ),
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
-                      child: _textField(
-                          controller: _blackCtrl, label: 'Black player')),
+                    child: _textField(
+                      controller: _blackCtrl,
+                      label: 'Black player',
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
-                      child: _textField(
-                          controller: _dateCtrl,
-                          label: 'Date',
-                          hint: 'YYYY.MM.DD')),
+                    child: _textField(
+                      controller: _dateCtrl,
+                      label: 'Date',
+                      hint: 'YYYY.MM.DD',
+                    ),
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
-                      flex: 2,
-                      child:
-                          _textField(controller: _urlCtrl, label: 'Game URL')),
+                    flex: 2,
+                    child: _textField(controller: _urlCtrl, label: 'Game URL'),
+                  ),
                 ],
               ),
               if (pos.gameId.isNotEmpty || pos.reviewCount > 0) ...[
@@ -323,8 +340,10 @@ class _TacticsEditDialogState extends State<TacticsEditDialog> {
                 if (pos.gameId.isNotEmpty)
                   _readOnlyField('Game ID', pos.gameId),
                 if (pos.reviewCount > 0)
-                  _readOnlyField('Stats',
-                      '${pos.successCount}/${pos.reviewCount} (${(pos.successRate * 100).toStringAsFixed(0)}%)'),
+                  _readOnlyField(
+                    'Stats',
+                    '${pos.successCount}/${pos.reviewCount} (${(pos.successRate * 100).toStringAsFixed(0)}%)',
+                  ),
               ],
             ],
           ),
@@ -332,8 +351,9 @@ class _TacticsEditDialogState extends State<TacticsEditDialog> {
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
         ElevatedButton(
           onPressed: _isValid ? _save : null,
           child: const Text('Save'),
@@ -376,8 +396,10 @@ class _TacticsEditDialogState extends State<TacticsEditDialog> {
         children: [
           SizedBox(
             width: 80,
-            child: Text('$label:',
-                style: const TextStyle(color: Colors.grey, fontSize: 12)),
+            child: Text(
+              '$label:',
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            ),
           ),
           Expanded(
             child: SelectableText(

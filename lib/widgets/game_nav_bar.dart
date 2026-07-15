@@ -86,9 +86,7 @@ class GameNavBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        border: Border(
-          top: BorderSide(color: Colors.grey[700]!),
-        ),
+        border: Border(top: BorderSide(color: Colors.grey[700]!)),
       ),
       child: isSolitaireMode
           ? _buildSolitaireLayout(context)
@@ -153,8 +151,8 @@ class GameNavBar extends StatelessWidget {
             description: canReveal
                 ? 'Give up and show the correct move'
                 : countdown > 0
-                    ? 'Available in ${countdown}s'
-                    : 'Available on your turn',
+                ? 'Available in ${countdown}s'
+                : 'Available on your turn',
             shortcut: 'R',
             child: ActionChip(
               onPressed: canReveal ? onReveal : null,
@@ -305,14 +303,11 @@ class GameNavBar extends StatelessWidget {
           children: [
             Icon(Icons.sort, size: 16, color: Colors.grey[400]),
             const SizedBox(width: 4),
-            Text(
-              switch (sortMode) {
-                GameSortMode.fileOrder => 'File order',
-                GameSortMode.ratingDesc => 'Stars ↓',
-                GameSortMode.ratingAsc => 'Stars ↑',
-              },
-              style: const TextStyle(fontSize: 11),
-            ),
+            Text(switch (sortMode) {
+              GameSortMode.fileOrder => 'File order',
+              GameSortMode.ratingDesc => 'Stars ↓',
+              GameSortMode.ratingAsc => 'Stars ↑',
+            }, style: const TextStyle(fontSize: 11)),
           ],
         ),
       ),
@@ -399,11 +394,13 @@ class GameNavBar extends StatelessWidget {
           onPressed: games.isNotEmpty && hasEphemeralAnnotations
               ? onClearAnnotations
               : null,
-          icon: Icon(Icons.layers_clear_outlined,
-              size: 20,
-              color: hasEphemeralAnnotations
-                  ? Colors.grey[400]
-                  : Colors.grey[700]),
+          icon: Icon(
+            Icons.layers_clear_outlined,
+            size: 20,
+            color: hasEphemeralAnnotations
+                ? Colors.grey[400]
+                : Colors.grey[700],
+          ),
           tooltip: 'Clear analysis annotations',
           visualDensity: VisualDensity.compact,
         ),
