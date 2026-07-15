@@ -15,8 +15,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pinned so the formatter can't drift between stable releases and
+      # start flagging files that are clean locally. Bump deliberately,
+      # re-running `dart format` in the same commit if output changes.
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: 3.44.2
           channel: stable
           cache: true
 
@@ -44,6 +48,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: 3.44.2
           channel: stable
           cache: true
 
