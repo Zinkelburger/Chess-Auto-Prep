@@ -1,9 +1,8 @@
 /// Jobs tab body for the repertoire bottom pane.
 ///
-/// Shows one of four surfaces: the inline generation config, the inline
-/// audit config, the inline hole-hunt config, or the jobs list. The host
-/// owns the inline-config flags and the pane; this widget only renders and
-/// forwards intents.
+/// Shows one of three surfaces: the inline generation config, the inline
+/// audit config, or the jobs list. The host owns the inline-config flags
+/// and the pane; this widget only renders and forwards intents.
 library;
 
 import 'package:flutter/material.dart';
@@ -11,13 +10,10 @@ import 'package:flutter/material.dart';
 import '../../constants/chess_constants.dart';
 import '../../core/audit_session_controller.dart';
 import '../../core/generation_session_controller.dart';
-import '../../core/hole_hunt_session_controller.dart';
 import '../../core/repertoire_controller.dart';
 import '../../features/audit/models/audit_finding.dart';
 import '../../features/audit/models/audit_result.dart';
 import '../../features/audit/widgets/audit_config_panel.dart';
-import '../../features/holes/services/hole_hunt_service.dart';
-import '../../features/holes/widgets/hole_hunt_config_panel.dart';
 import '../../services/jobs/repertoire_job.dart';
 import '../../utils/app_messages.dart';
 import '../generation/snapshot_export_dialog.dart';
@@ -27,11 +23,9 @@ import 'jobs_panel.dart';
 class JobsTabContent extends StatelessWidget {
   final bool showInlineGenConfig;
   final bool showInlineAuditConfig;
-  final bool showInlineHoleHuntConfig;
   final RepertoireController controller;
   final GenerationSessionController generationController;
   final AuditSessionController auditController;
-  final HoleHuntSessionController holeHuntController;
   final JobManager jobManager;
 
   /// Lets the host seed the DB explorer after opening the generation config.
@@ -39,7 +33,6 @@ class JobsTabContent extends StatelessWidget {
 
   final VoidCallback onCloseInlineGenConfig;
   final VoidCallback onCloseInlineAuditConfig;
-  final VoidCallback onCloseInlineHoleHuntConfig;
   final VoidCallback onOpenGenerationDialog;
 
   /// Open the audit config (forceConfig) from the jobs list.
@@ -48,9 +41,6 @@ class JobsTabContent extends StatelessWidget {
   /// Open the coverage config dialog and start a coverage run.
   final VoidCallback? onOpenCoverageDialog;
 
-  /// Open the hole-hunt config (forceConfig) from the jobs list.
-  final VoidCallback? onOpenHoleHuntConfig;
-
   // Audit lifecycle callbacks stay host-owned so they can guard on `mounted`
   // (the audit service reports asynchronously and may outlive this widget).
   final void Function(bool auditing) onAuditingChanged;
@@ -58,38 +48,24 @@ class JobsTabContent extends StatelessWidget {
   final void Function(AuditFinding finding) onAuditLiveFinding;
   final void Function(int checked, int total) onAuditProgress;
 
-  // Hole-hunt lifecycle callbacks, host-owned for the same reason.
-  final void Function(bool hunting) onHoleHuntingChanged;
-  final void Function(AuditResult result) onHoleHuntResultReady;
-  final void Function(AuditFinding finding) onHoleHuntLiveFinding;
-  final void Function(HoleHuntProgress progress) onHoleHuntProgress;
-
   const JobsTabContent({
     super.key,
     required this.showInlineGenConfig,
     required this.showInlineAuditConfig,
-    required this.showInlineHoleHuntConfig,
     required this.controller,
     required this.generationController,
     required this.auditController,
-    required this.holeHuntController,
     required this.jobManager,
     this.generationTabKey,
     required this.onCloseInlineGenConfig,
     required this.onCloseInlineAuditConfig,
-    required this.onCloseInlineHoleHuntConfig,
     required this.onOpenGenerationDialog,
     required this.onOpenAuditConfig,
     this.onOpenCoverageDialog,
-    this.onOpenHoleHuntConfig,
     required this.onAuditingChanged,
     required this.onAuditResultReady,
     required this.onAuditLiveFinding,
     required this.onAuditProgress,
-    required this.onHoleHuntingChanged,
-    required this.onHoleHuntResultReady,
-    required this.onHoleHuntLiveFinding,
-    required this.onHoleHuntProgress,
   });
 
   @override
@@ -118,32 +94,6 @@ class JobsTabContent extends StatelessWidget {
                     (moves: l.moves, title: l.title, pgn: l.pgn),
                 ]);
               },
-            ),
-          ),
-        ],
-      );
-    }
-
-    if (showInlineHoleHuntConfig && !holeHuntController.isHunting) {
-      return Column(
-        children: [
-          _inlineConfigHeader(
-            icon: Icons.gps_fixed,
-            title: 'Find Holes',
-            onClose: onCloseInlineHoleHuntConfig,
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: HoleHuntConfigPanel(
-              openingTree: controller.openingTree,
-              isWhiteRepertoire: controller.isRepertoireWhite,
-              repertoireFilePath: controller.currentRepertoire?.filePath,
-              huntService: holeHuntController.service,
-              onConfigChanged: holeHuntController.onConfigChanged,
-              onHuntingChanged: onHoleHuntingChanged,
-              onResultReady: onHoleHuntResultReady,
-              onLiveFinding: onHoleHuntLiveFinding,
-              onProgress: onHoleHuntProgress,
             ),
           ),
         ],
@@ -180,25 +130,18 @@ class JobsTabContent extends StatelessWidget {
 
     final gc = generationController;
     return ListenableBuilder(
-      listenable: Listenable.merge(
-          [jobManager, gc, auditController, holeHuntController]),
+      listenable: Listenable.merge([jobManager, gc, auditController]),
       builder: (context, _) => JobsPanel(
         jobManager: jobManager,
         generationController: gc,
         auditController: auditController,
-        holeHuntController: holeHuntController,
         onOpenGenerationDialog: onOpenGenerationDialog,
         onOpenAuditDialog: onOpenAuditConfig,
         onOpenCoverageDialog: onOpenCoverageDialog,
-        onOpenHoleHuntDialog: onOpenHoleHuntConfig,
         onPauseAudit: auditController.pause,
         onResumeAudit: auditController.resume,
         onCancelAudit: () =>
             auditController.cancel(controller.currentRepertoire?.filePath),
-        onPauseHoleHunt: holeHuntController.pause,
-        onResumeHoleHunt: holeHuntController.resume,
-        onCancelHoleHunt: () =>
-            holeHuntController.cancel(controller.currentRepertoire?.filePath),
         onPauseGeneration: gc.pauseBuild,
         onResumeGeneration: gc.resumeBuild,
         onCancelGeneration: gc.cancelBuild,

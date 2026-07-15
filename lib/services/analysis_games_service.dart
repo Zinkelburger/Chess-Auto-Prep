@@ -248,6 +248,21 @@ class AnalysisGamesService {
     );
   }
 
+  /// Absolute path of the hole-hunt report for one colour's game tree,
+  /// written and read via [HoleHuntPersistence].
+  Future<String> holesReportPath(
+    String platform,
+    String username,
+    bool isWhite,
+  ) async {
+    final directory = await _getAnalysisDirectory();
+    final colour = isWhite ? 'white' : 'black';
+    return p.join(
+      directory.path,
+      '${_playerKey(platform, username)}_holes_$colour.json',
+    );
+  }
+
   /// Load the raw PGN for [username] on [platform]. Returns `null` on miss.
   Future<String?> loadAnalysisGames(String platform, String username) async {
     try {
@@ -313,6 +328,8 @@ class AnalysisGamesService {
       '_white_analysis.json',
       '_black_analysis.json',
       '_engine_evals.json',
+      '_holes_white.json',
+      '_holes_black.json',
     ]) {
       final file = File(p.join(directory.path, '$key$suffix'));
       if (await file.exists()) await file.delete();
@@ -327,11 +344,17 @@ class AnalysisGamesService {
   // this service only handles invalidation.
 
   /// Remove cached analysis for both colours (e.g. after a re-download).
+  /// Hole-hunt reports are built from the same games, so they go stale (and
+  /// are removed) together with the analysis.
   Future<void> clearCachedAnalysis(String platform, String username) async {
     for (final isWhite in [true, false]) {
-      final file =
-          File(await cachedAnalysisPath(platform, username, isWhite));
-      if (await file.exists()) await file.delete();
+      for (final path in [
+        await cachedAnalysisPath(platform, username, isWhite),
+        await holesReportPath(platform, username, isWhite),
+      ]) {
+        final file = File(path);
+        if (await file.exists()) await file.delete();
+      }
     }
   }
 

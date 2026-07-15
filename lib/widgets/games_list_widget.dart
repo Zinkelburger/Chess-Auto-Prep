@@ -3,7 +3,10 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import '../models/position_analysis.dart';
+import '../utils/app_messages.dart';
 
 class GamesListWidget extends StatefulWidget {
   final List<GameInfo> games;
@@ -23,6 +26,20 @@ class GamesListWidget extends StatefulWidget {
 
 class _GamesListWidgetState extends State<GamesListWidget> {
   int? _selectedIndex;
+
+  Future<void> _openGameUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    bool ok;
+    try {
+      // launchUrl throws (rather than returning false) on some platforms.
+      ok = uri != null && await launchUrl(uri);
+    } catch (_) {
+      ok = false;
+    }
+    if (!ok && mounted) {
+      showAppSnackBar(context, 'Could not open $url', isError: true);
+    }
+  }
 
   @override
   void didUpdateWidget(GamesListWidget oldWidget) {
@@ -89,6 +106,14 @@ class _GamesListWidgetState extends State<GamesListWidget> {
                 dense: true,
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                trailing: game.gameUrl != null
+                    ? IconButton(
+                        icon: const Icon(Icons.open_in_new, size: 16),
+                        tooltip: 'Open game in browser',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => _openGameUrl(game.gameUrl!),
+                      )
+                    : null,
                 title: Text(
                   game.title,
                   style: const TextStyle(

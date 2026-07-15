@@ -78,7 +78,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _controller.loadSolitaireSettings();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        context.read<AppState>().addListener(_onAppStateChanged);
+        final appState = context.read<AppState>();
+        appState.addListener(_onAppStateChanged);
+        // The screen may have been created by the very mode switch that set
+        // the pending file (listener not registered yet) — consume it now.
+        _consumePendingViewerFile(appState);
       }
     });
   }
@@ -90,8 +94,43 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   void _onAppStateChanged() {
     final appState = context.read<AppState>();
     if (appState.currentMode == AppMode.pgnViewer) {
+      _consumePendingViewerFile(appState);
       _reclaimFocus();
     }
+  }
+
+  /// "Open Games in PGN Viewer" hook (Player Analysis): open the pending
+  /// file and, when a FEN is given, slice to games containing that position.
+  void _consumePendingViewerFile(AppState appState) {
+    final path = appState.pendingPgnViewerPath;
+    if (path == null) return;
+    final sliceFen = appState.pendingPgnViewerSliceFen;
+    appState.pendingPgnViewerPath = null;
+    appState.pendingPgnViewerSliceFen = null;
+    _openFileWithPositionSlice(path, sliceFen);
+  }
+
+  Future<void> _openFileWithPositionSlice(String path, String? sliceFen) async {
+    await _loadFile(path);
+    // Bail if the load failed (the old file's games would still be in the
+    // controller and the slice would silently target the wrong collection).
+    if (!mounted ||
+        _controller.errorMessage != null ||
+        _controller.filePath != path ||
+        _controller.allGames.isEmpty ||
+        sliceFen == null) {
+      return;
+    }
+    await _controller
+        .recomputeAndApplyConfig(SliceConfig(positionInput: sliceFen));
+    if (!mounted) return;
+    final count = _controller.filteredGames.length;
+    showAppSnackBar(
+      context,
+      'Showing $count game${count == 1 ? '' : 's'} containing the position',
+      actionLabel: 'Show All',
+      onAction: () => _controller.resetFilters(),
+    );
   }
 
   void _onAnalysisUpdate() {
@@ -162,21 +201,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     final error = _controller.errorMessage;
     if (error != null) {
       showAppSnackBar(context, error, duration: const Duration(seconds: 5));
-      return;
     }
-    _showPendingSliceRestoreSnackBar();
-  }
-
-  void _showPendingSliceRestoreSnackBar() {
-    final info = _controller.pendingSliceRestore;
-    if (info == null || !mounted) return;
-    _controller.clearPendingSliceRestore();
-    showAppSnackBar(
-      context,
-      'Restored last slice (${info.filteredCount}/${info.totalCount} games)',
-      actionLabel: 'Undo',
-      onAction: _controller.resetFilters,
-    );
   }
 
   void _openSliceDialog() {
@@ -654,23 +679,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         children: [
           const Text('PGN Viewer'),
           const SizedBox(width: 12),
-          Flexible(
-            child: OutlinedButton.icon(
-              onPressed: _pickFile,
-              icon: const Icon(Icons.folder_open, size: 18),
-              label: Text(
-                fileName.isEmpty ? 'Open PGN' : fileName,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ),
-          const SizedBox(width: 4),
-          IconButton(
-            onPressed: _pastePgn,
-            icon: const Icon(Icons.content_paste, size: 18),
-            tooltip: 'Paste PGN from clipboard (Ctrl+V)',
-            visualDensity: VisualDensity.compact,
-          ),
+          Flexible(child: _buildOpenPgnMenuButton(fileName)),
           if (_controller.allGames.isNotEmpty &&
               !_controller.isSolitaireMode) ...[
             const SizedBox(width: 8),
@@ -791,6 +800,80 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         ],
         const AppModeMenuButton(),
       ],
+    );
+  }
+
+  /// App-bar file button: shows the loaded file name and opens a menu with
+  /// recent files, a file browser, and paste-from-clipboard.
+  Widget _buildOpenPgnMenuButton(String fileName) {
+    return PopupMenuButton<String>(
+      tooltip: 'Open PGN — recent files, browse, or paste',
+      onSelected: (value) {
+        if (value == 'browse') {
+          _pickFile();
+        } else if (value == 'paste') {
+          _pastePgn();
+        } else if (value.startsWith('recent:')) {
+          _loadFile(value.substring('recent:'.length));
+        }
+      },
+      onCanceled: _reclaimFocus,
+      itemBuilder: (_) => [
+        for (final path in _controller.recentFiles)
+          PopupMenuItem(
+            value: 'recent:$path',
+            enabled: path != _controller.filePath,
+            child: Tooltip(
+              message: path,
+              waitDuration: const Duration(milliseconds: 600),
+              child: ListTile(
+                leading: Icon(
+                  path == _controller.filePath
+                      ? Icons.check
+                      : Icons.description_outlined,
+                  size: 20,
+                ),
+                title: Text(
+                  p.basename(path),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ),
+        if (_controller.recentFiles.isNotEmpty) const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: 'browse',
+          child: ListTile(
+            leading: Icon(Icons.folder_open, size: 20),
+            title: Text('Browse for file…'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'paste',
+          child: ListTile(
+            leading: Icon(Icons.content_paste, size: 20),
+            title: Text('Paste PGN from clipboard (Ctrl+V)'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+      ],
+      // IgnorePointer lets the PopupMenuButton's own tap region handle the
+      // click while keeping the outlined-button look.
+      child: IgnorePointer(
+        child: OutlinedButton.icon(
+          onPressed: () {},
+          icon: const Icon(Icons.folder_open, size: 18),
+          label: Text(
+            fileName.isEmpty ? 'Open PGN' : fileName,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ),
     );
   }
 

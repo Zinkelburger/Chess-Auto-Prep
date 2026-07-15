@@ -49,17 +49,6 @@ class Perspective {
   }
 }
 
-/// Set when a saved slice is restored so the UI can show a snackbar.
-class SliceRestoreInfo {
-  final int filteredCount;
-  final int totalCount;
-
-  const SliceRestoreInfo({
-    required this.filteredCount,
-    required this.totalCount,
-  });
-}
-
 // ---------------------------------------------------------------------------
 // Top-level helpers used inside Isolate.run closures.
 // Must NOT be class statics — Dart captures the enclosing class context
@@ -381,8 +370,6 @@ class PgnViewerController extends ChangeNotifier {
 
   Timer? persistDebounce;
 
-  SliceRestoreInfo? pendingSliceRestore;
-
   String? errorMessage;
 
   int get currentPly => pgnWidgetController.mainLineIndex;
@@ -641,14 +628,8 @@ class PgnViewerController extends ChangeNotifier {
     activeSliceConfig = config;
     _activeSliceIndices = List<int>.from(indices);
     currentGameIndex = 0;
-    pendingSliceRestore = SliceRestoreInfo(
-      filteredCount: filteredGames.length,
-      totalCount: allGames.length,
-    );
     notifyListeners();
   }
-
-  void clearPendingSliceRestore() => pendingSliceRestore = null;
 
   void orientBoardForCurrentGame() {
     if (filteredGames.isEmpty) return;

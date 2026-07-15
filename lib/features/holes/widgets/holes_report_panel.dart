@@ -273,7 +273,7 @@ class _HolesReportPanelState extends State<HolesReportPanel> {
                   fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
           Text(
-            'Run Find Holes to search this repertoire for uncovered '
+            'Run Find Holes to search these lines for uncovered '
             'strong moves, refutations, and practical traps.',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.grey[600], fontSize: 12),

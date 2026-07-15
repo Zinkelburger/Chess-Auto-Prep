@@ -13,12 +13,20 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../features/audit/models/audit_finding.dart';
+import '../features/audit/models/audit_result.dart';
+import '../features/holes/services/hole_hunt_config.dart';
+import '../features/holes/services/hole_hunt_persistence.dart';
+import '../features/holes/services/hole_hunt_service.dart';
+import '../features/holes/widgets/hole_hunt_config_dialog.dart';
 import '../models/analysis_player_info.dart';
 import '../models/engine_weakness_result.dart';
 import '../models/position_analysis.dart';
 import '../utils/fen_utils.dart';
 import '../models/opening_tree.dart';
 import '../services/analysis_games_service.dart';
+import '../services/engine/engine_lifecycle.dart';
+import '../services/engine/stockfish_pool.dart';
 import '../services/engine_weakness_service.dart';
 import '../services/unified_analysis_builder.dart';
 import '../widgets/engine/engine_gate.dart';
@@ -38,6 +46,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   final AnalysisGamesService _gamesService = AnalysisGamesService();
 
   AnalysisPlayerInfo? _currentPlayer;
+
+  /// Path to the current player's downloaded games PGN (enables the
+  /// "Open Games in PGN Viewer" handoff).
+  String? _analysisPgnPath;
 
   // Displayed colour's analysis/tree, plus both colours kept in memory so a
   // colour switch is an instant swap instead of a rebuild.
@@ -64,6 +76,20 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
   bool get _hasEvals => _engineEvals.isNotEmpty;
 
+  // ── Hole hunt state ─────────────────────────────────────────────────
+  //
+  // Reports are kept per colour (keyed by "player is white"), mirroring the
+  // two game trees, and persisted per player + colour.
+  final HoleHuntService _holeService = HoleHuntService();
+  final Map<bool, AuditResult?> _holesResults = {true: null, false: null};
+  final Map<bool, HoleHuntConfig?> _holesConfigs = {true: null, false: null};
+  List<AuditFinding> _holesLive = [];
+  HoleHuntProgress? _holesProgress;
+  bool _isHunting = false;
+  bool _huntIsWhite = true;
+  bool _huntCancelled = false;
+  bool _trapPassSkipped = false;
+
   @override
   void initState() {
     super.initState();
@@ -77,6 +103,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   @override
   void dispose() {
     _evalService?.dispose();
+    // The pending hunt future notices the flag and releases the engine.
+    if (_isHunting) _holeService.cancel();
     super.dispose();
   }
 
@@ -106,13 +134,23 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         title: titleBlock,
         actions: [
           if (_evalRunning) _buildEvalProgress(theme),
+          if (_isHunting) _buildHuntProgress(theme),
           if (_currentPlayer != null) ..._buildColorControls(),
-          if (_openingTree != null && !_isAnalyzing && !_evalRunning)
+          if (_openingTree != null &&
+              !_isAnalyzing &&
+              !_evalRunning &&
+              !_isHunting) ...[
             TextButton.icon(
               icon: const Icon(Icons.psychology, size: 18),
               label: Text(_hasEvals ? 'Re-analyze' : 'Analyze with Engine'),
               onPressed: _showWeaknessConfig,
             ),
+            TextButton.icon(
+              icon: const Icon(Icons.gps_fixed, size: 18),
+              label: const Text('Find Holes'),
+              onPressed: _showHoleHuntConfig,
+            ),
+          ],
           IconButton(
             icon: const Icon(Icons.person_search),
             tooltip: 'Select Player',
@@ -167,6 +205,39 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         ),
       ),
     ];
+  }
+
+  Widget _buildHuntProgress(ThemeData theme) {
+    final progress = _holesProgress;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            value: progress?.fraction,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          _huntCancelled
+              ? 'Cancelling hunt…'
+              : 'Holes: ${progress?.message ?? 'starting…'}',
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(width: 4),
+        IconButton(
+          icon: const Icon(Icons.close, size: 16),
+          tooltip: 'Cancel',
+          onPressed: _huntCancelled ? null : _cancelHoleHunt,
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+        ),
+      ],
+    );
   }
 
   Widget _buildEvalProgress(ThemeData theme) {
@@ -225,6 +296,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       );
     }
 
+    final huntOnDisplayedColor = _isHunting && _huntIsWhite == _playerIsWhite;
     return PositionAnalysisWidget(
       analysis: _positionAnalysis,
       openingTree: _openingTree,
@@ -232,6 +304,16 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       isLoading: _isAnalyzing,
       onAnalyze: _analyzeBothColors,
       hasEvals: _hasEvals,
+      playerName: _currentPlayer?.username,
+      analysisPgnPath: _analysisPgnPath,
+      holesResult: _holesResults[_playerIsWhite],
+      holesLiveFindings: huntOnDisplayedColor ? _holesLive : const [],
+      isHoleHunting: huntOnDisplayedColor,
+      holesProgress: huntOnDisplayedColor ? _holesProgress : null,
+      holesTrapPassSkipped: _trapPassSkipped && _huntIsWhite == _playerIsWhite,
+      onHolesResultChanged: _onHolesResultChanged,
+      onStartHoleHunt:
+          _isHunting || _isAnalyzing ? null : _showHoleHuntConfig,
     );
   }
 
@@ -259,6 +341,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
     if (result != null && mounted) {
       _cancelEvalAnalysis();
+      if (_isHunting) _cancelHoleHunt();
       setState(() {
         _currentPlayer = result;
         _resetAnalysisState();
@@ -267,8 +350,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     }
   }
 
-  /// Clear all per-player analysis state (both colours + evals).
+  /// Clear all per-player analysis state (both colours + evals + holes).
   void _resetAnalysisState() {
+    _analysisPgnPath = null;
     _positionAnalysis = null;
     _openingTree = null;
     _whiteAnalysis = null;
@@ -277,6 +361,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     _blackTree = null;
     _playerIsWhite = true;
     _engineEvals = [];
+    _holesResults[true] = null;
+    _holesResults[false] = null;
+    _holesConfigs[true] = null;
+    _holesConfigs[false] = null;
+    _holesLive = [];
+    _holesProgress = null;
+    _trapPassSkipped = false;
   }
 
   // ── Re-download games ───────────────────────────────────────────
@@ -286,6 +377,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   Future<bool> _redownloadGames(int monthsBack) async {
     final player = _currentPlayer;
     if (player == null) return false;
+    // Imported game-sets have no source to re-download from.
+    if (player.isImported) return false;
 
     _cancelEvalAnalysis();
 
@@ -527,6 +620,136 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     }
   }
 
+  // ── Hole hunt (adversarial attack on the displayed colour's tree) ──
+
+  Future<void> _showHoleHuntConfig() async {
+    final player = _currentPlayer;
+    if (player == null || _openingTree == null || _isHunting) return;
+    if (!EngineGate.ensureAvailable(context)) return;
+    // The hunt shares the generation engine state; refuse to overlap with a
+    // running generation rather than contend for the same workers.
+    if (EngineLifecycle.instance.state == EngineState.generating) {
+      _showError('Another engine job is running — '
+          'wait for it to finish first.');
+      return;
+    }
+
+    final config = await showDialog<HoleHuntConfig>(
+      context: context,
+      builder: (_) => HoleHuntConfigDialog(
+        playerName: player.username,
+        treeIsWhite: _playerIsWhite,
+        initialConfig: _holesConfigs[_playerIsWhite],
+      ),
+    );
+    if (config == null || !mounted) return;
+
+    _runHoleHunt(config);
+  }
+
+  Future<void> _runHoleHunt(HoleHuntConfig config) async {
+    final player = _currentPlayer;
+    final tree = _openingTree;
+    if (player == null || tree == null) return;
+    final isWhite = _playerIsWhite;
+
+    setState(() {
+      _isHunting = true;
+      _huntIsWhite = isWhite;
+      _huntCancelled = false;
+      _holesLive = [];
+      _holesProgress = null;
+      _holesResults[isWhite] = null;
+      _holesConfigs[isWhite] = config;
+      _trapPassSkipped = false;
+    });
+
+    await EngineLifecycle.instance.enterGeneration(1);
+    await StockfishPool.instance.ensureWorkers(1);
+
+    try {
+      final result = await _holeService.hunt(
+        tree: tree,
+        isWhiteRepertoire: isWhite,
+        config: config,
+        onProgress: (p) {
+          if (mounted) setState(() => _holesProgress = p);
+        },
+        onFinding: (f) {
+          if (mounted) setState(() => _holesLive = [..._holesLive, f]);
+        },
+      );
+
+      // Persist to the player the hunt was started for, even if the user
+      // switched players meanwhile (partial reports included).
+      HoleHuntPersistence.instance.save(
+        await _gamesService.holesReportPath(
+            player.platform, player.username, isWhite),
+        result,
+        config,
+        isComplete: !_huntCancelled,
+      );
+
+      if (mounted && _currentPlayer == player) {
+        setState(() {
+          _holesResults[isWhite] = result;
+          _holesLive = [];
+          _trapPassSkipped = _holeService.trapPassSkipped;
+        });
+      }
+    } catch (e) {
+      if (mounted) _showError('Hole hunt failed: $e');
+    } finally {
+      EngineLifecycle.instance.exitGeneration();
+      _isHunting = false;
+      _huntCancelled = false;
+      _holesProgress = null;
+      if (mounted) setState(() {});
+    }
+  }
+
+  /// Flags the hunt to stop; the run's cleanup handles the rest, and the
+  /// partial report is saved.
+  void _cancelHoleHunt() {
+    if (!_isHunting) return;
+    _holeService.cancel();
+    if (mounted) setState(() => _huntCancelled = true);
+  }
+
+  /// Re-persist after dismissal edits from the report panel.
+  Future<void> _onHolesResultChanged(AuditResult result) async {
+    final player = _currentPlayer;
+    if (player == null) return;
+    final isWhite = _playerIsWhite;
+    setState(() => _holesResults[isWhite] = result);
+    await HoleHuntPersistence.instance.saveResult(
+      await _gamesService.holesReportPath(
+          player.platform, player.username, isWhite),
+      result,
+      config: _holesConfigs[isWhite],
+    );
+  }
+
+  /// Restore saved hole reports for both colours of the current player.
+  Future<void> _loadHolesReports() async {
+    final player = _currentPlayer;
+    if (player == null) return;
+    for (final isWhite in [true, false]) {
+      final snapshot = await HoleHuntPersistence.instance.load(
+        await _gamesService.holesReportPath(
+            player.platform, player.username, isWhite),
+      );
+      // Guard: the user may have switched players during the async load.
+      if (!mounted || _currentPlayer != player) return;
+      if (snapshot != null) {
+        setState(() {
+          _holesResults[isWhite] = snapshot.result;
+          _holesConfigs[isWhite] = snapshot.config;
+        });
+      }
+    }
+  }
+
   // ── Analysis ─────────────────────────────────────────────────────
 
   /// Switch the displayed colour. Both colours are kept in memory after a
@@ -573,6 +796,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         }
         return;
       }
+      _analysisPgnPath = pgnPath;
 
       // Fast path: both colours restored from the stat-validated disk cache.
       var bundle = await UnifiedAnalysisBuilder.loadCachedBundle(
@@ -611,8 +835,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         _analysisTotal = 0;
       });
 
-      // Merge previously computed engine evals into the displayed analysis.
+      // Merge previously computed engine evals into the displayed analysis,
+      // and restore any saved hole reports.
       await _loadEngineEvals();
+      await _loadHolesReports();
     } catch (e) {
       if (mounted) {
         _showError('Failed to analyze positions: $e');
