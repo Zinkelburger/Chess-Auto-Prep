@@ -12,6 +12,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/repertoire_line.dart';
 import 'fp_growth.dart';
+import '../utils/safe_change_notifier.dart';
 
 /// Serializable input for FP-Growth mining in a background isolate.
 class FpGrowthInput {
@@ -166,7 +167,7 @@ class CoherenceResult {
   });
 }
 
-class CoherenceService extends ChangeNotifier {
+class CoherenceService extends ChangeNotifier with SafeChangeNotifier {
   CoherenceResult? _result;
   CoherenceResult? get result => _result;
   bool _computing = false;

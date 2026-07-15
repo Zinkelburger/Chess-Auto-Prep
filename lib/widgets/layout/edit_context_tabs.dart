@@ -3,7 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 
-import 'repertoire_mode.dart';
+import '../../models/repertoire_mode.dart';
 
 typedef EditContextTabSpec = ({
   EditContextView view,

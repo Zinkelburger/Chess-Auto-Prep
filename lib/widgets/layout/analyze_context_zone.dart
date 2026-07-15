@@ -7,7 +7,7 @@ library;
 import 'package:flutter/material.dart';
 
 import 'empty_state_placeholder.dart';
-import 'repertoire_mode.dart';
+import '../../models/repertoire_mode.dart';
 
 class AnalyzeContextZone extends StatefulWidget {
   const AnalyzeContextZone({

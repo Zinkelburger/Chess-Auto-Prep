@@ -15,7 +15,7 @@ import '../../services/generation/fen_map.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
 import '../repertoire_lines_browser.dart';
 import 'empty_state_placeholder.dart';
-import 'repertoire_mode.dart';
+import '../../models/repertoire_mode.dart';
 
 class AnalyzeMainZone extends StatefulWidget {
   const AnalyzeMainZone({

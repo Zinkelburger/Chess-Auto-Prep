@@ -3,8 +3,9 @@ library;
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/safe_change_notifier.dart';
 
-class EvalDatabaseSettings extends ChangeNotifier {
+class EvalDatabaseSettings extends ChangeNotifier with SafeChangeNotifier {
   EvalDatabaseSettings._();
   static final EvalDatabaseSettings instance = EvalDatabaseSettings._();
 

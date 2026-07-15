@@ -12,9 +12,10 @@ import '../../models/repertoire_move_progress.dart';
 import '../../models/repertoire_review_entry.dart'
     show RepertoireReviewEntry, ReviewRating;
 import '../../models/repertoire_review_history_entry.dart';
+import '../../models/completed_move.dart';
 import '../../models/training_settings.dart';
-import '../../widgets/chess_board_widget.dart';
 import '../../utils/pgn_comment_utils.dart' show filterDisplayComment;
+import '../../utils/safe_change_notifier.dart';
 import '../generation/tree_my_ease.dart' show computeLinePlayability;
 import '../generation/tree_serialization.dart' show deserializeTree;
 import '../line_metrics_helpers.dart' show walkTreeForLine;
@@ -25,7 +26,7 @@ import 'training_phase.dart';
 
 /// Manages repertoire training session state: phases, line queue, move validation,
 /// progress persistence, and session statistics.
-class TrainingSessionController extends ChangeNotifier {
+class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   final RepertoireService repertoireService;
   final RepertoireReviewService reviewService;
 

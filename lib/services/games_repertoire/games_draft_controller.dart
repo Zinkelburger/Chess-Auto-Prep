@@ -8,12 +8,13 @@ library;
 import 'package:flutter/foundation.dart';
 
 import '../../models/move_tree.dart';
-import '../../widgets/games_repertoire/games_source_form.dart';
 import '../games_library/games_library_service.dart';
 import '../unified_analysis_builder.dart';
 import 'games_draft.dart';
+import 'games_source_config.dart';
+import '../../utils/safe_change_notifier.dart';
 
-class GamesDraftController extends ChangeNotifier {
+class GamesDraftController extends ChangeNotifier with SafeChangeNotifier {
   GamesDraftController({GamesLibraryService? gamesLibrary})
     : _gamesLibrary = gamesLibrary ?? GamesLibraryService();
 

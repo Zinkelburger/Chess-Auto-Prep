@@ -8,28 +8,12 @@ import 'package:flutter/material.dart';
 
 import '../../services/games_library/game_filter.dart';
 import '../../services/games_library/games_library_service.dart';
+import '../../services/games_repertoire/games_source_config.dart';
 import '../common/since_date_picker.dart';
 import '../starting_position_card.dart';
 
-/// What the user chose on the source form.
-class GamesSourceConfig {
-  const GamesSourceConfig({
-    required this.platform,
-    required this.username,
-    required this.isWhite,
-    required this.selection,
-    this.startMoves = const [],
-  });
-
-  final GamesPlatform platform;
-  final String username;
-  final bool isWhite;
-  final GameSelection selection;
-
-  /// When non-empty, only draft from games that follow these SAN moves from
-  /// the game start (the board position when the form was opened).
-  final List<String> startMoves;
-}
+export '../../services/games_repertoire/games_source_config.dart'
+    show GamesSourceConfig;
 
 /// Show the form; resolves to the chosen config, or null if cancelled.
 ///

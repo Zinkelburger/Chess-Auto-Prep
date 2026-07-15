@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../explorer_cache_service.dart';
+import '../../utils/safe_change_notifier.dart';
 
 class BuildByPlayingConfig {
   const BuildByPlayingConfig({
@@ -90,7 +91,7 @@ class BuildByPlayingConfig {
 }
 
 /// Persisted defaults for the Build-by-Playing start form.
-class BuildByPlayingSettings extends ChangeNotifier {
+class BuildByPlayingSettings extends ChangeNotifier with SafeChangeNotifier {
   static const String _prefix = 'build_by_playing.';
 
   /// Application-wide shared instance.

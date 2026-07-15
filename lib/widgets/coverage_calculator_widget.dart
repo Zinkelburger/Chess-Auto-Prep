@@ -3,31 +3,13 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:chess_auto_prep/features/coverage/models/coverage_config.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../services/maia_factory.dart';
 import 'lichess_db_selector.dart';
 
-/// Configuration returned by the coverage dialog
-class CoverageConfig {
-  final double targetPercent;
-  final LichessDatabase database;
-  final Set<String> selectedRatings;
-  final Set<String> selectedSpeeds;
-  final bool useMaia;
-  final int maiaElo;
-
-  const CoverageConfig({
-    required this.targetPercent,
-    required this.database,
-    required this.selectedRatings,
-    required this.selectedSpeeds,
-    required this.useMaia,
-    required this.maiaElo,
-  });
-
-  String get ratingsString => (selectedRatings.toList()..sort()).join(',');
-  String get speedsString => selectedSpeeds.join(',');
-}
+export 'package:chess_auto_prep/features/coverage/models/coverage_config.dart'
+    show CoverageConfig;
 
 /// Shows the coverage config dialog and returns the config, or null if cancelled.
 Future<CoverageConfig?> showCoverageConfigDialog(BuildContext context) {

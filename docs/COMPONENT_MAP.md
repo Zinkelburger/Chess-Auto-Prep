@@ -639,6 +639,19 @@ AuditSessionController._launchAuditConfig() (via screen)
 
 Implements principles from `docs/tree-display-architecture.md` (focused window, flat index, pre-sorted children).
 
+### `lib/features/holes/`
+
+Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.dart`), which keys results per player + colour. Walks the loaded tree (a player's games, or an imported repertoire PGN) from the ATTACKER's side — the colour opposite the tree's own — and emits exploitable findings: `uncoveredStrongMove` (engine-strong attacker moves with no reply on file), `refutation` (owner moves that concretely lose, with verified refutation PV), `practicalTrap` (end-of-line positions whose expectimax eval is far better for the attacker than the raw engine eval). Unlike the defensive audit this is not a breadth checklist: findings carry an `exploitScore` (reach probability × gain) and the report surfaces a handful of killer holes. Reuses the audit's `AuditFinding` model and the shared `EvalCache`/`StockfishPool` infrastructure.
+
+| File | Purpose |
+|------|---------|
+| **services/hole_hunt_config.dart** | `HoleHuntConfig` — hunt thresholds/knobs for a hunt over an opening tree |
+| **services/hole_hunt_service.dart** | Adversarial walker: attacker-side BFS, Stockfish refutation verification, end-of-line expectimax trap pass |
+| **services/hole_scoring.dart** | Pure scoring/ranking helpers (exploit score, `LeafEntry` for the trap pass); engine/widget-free for unit tests |
+| **services/hole_hunt_persistence.dart** | `HoleHuntSnapshot` JSON save/load at a caller-supplied path; no resume state — cancels save partial reports |
+| **widgets/hole_hunt_config_dialog.dart** | Config dialog; pops with a `HoleHuntConfig`, the host screen owns the hunt lifecycle |
+| **widgets/holes_report_panel.dart** | Lean ranked report for the Findings tab: flat list sorted by exploit score, per-type filter chips, simple dismissal |
+
 ### `lib/screens/`
 
 | File | Purpose |
@@ -926,6 +939,10 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `test/features/traps/trap_index_service_test.dart` | FEN index, line traps |
 | `test/features/traps/trap_navigation_buttons_test.dart` | Trap jump UI |
 | `test/features/traps/trap_walkthrough_test.dart` | Walkthrough navigation |
+| `test/features/holes/hole_hunt_config_test.dart` | `HoleHuntConfig` defaults/serialization |
+| `test/features/holes/hole_finding_json_test.dart` | Hole finding JSON round-trip |
+| `test/features/holes/exploit_ranking_test.dart` | Exploit-score ranking/capping |
+| `test/features/holes/hole_walk_probability_test.dart` | Reach-probability propagation in the attacker walk |
 | `test/features/eval_tree/eval_tree_controller_test.dart` | Graph controller |
 | `test/features/eval_tree/eval_tree_tab_test.dart` | Tab widget |
 | `test/features/eval_tree/eval_tree_line_metrics_test.dart` | Line metrics |

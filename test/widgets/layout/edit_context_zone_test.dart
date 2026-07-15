@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chess_auto_prep/widgets/layout/edit_context_zone.dart';
-import 'package:chess_auto_prep/widgets/layout/repertoire_mode.dart';
+import 'package:chess_auto_prep/models/repertoire_mode.dart';
 
 void main() {
   setUp(() {

@@ -17,8 +17,9 @@ import 'package:chess_auto_prep/widgets/pgn/add_to_study_dialog.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_movetext_view.dart';
 import 'package:chess_auto_prep/core/pgn/pgn_variation_extractor.dart';
+import 'package:chess_auto_prep/core/pgn/pgn_viewer_handle.dart';
 
-class PgnViewerWidgetController {
+class PgnViewerWidgetController implements PgnViewerHandle {
   _PgnViewerWidgetState? _state;
 
   void _attach(_PgnViewerWidgetState state) {
@@ -31,24 +32,30 @@ class PgnViewerWidgetController {
     }
   }
 
+  @override
   void goBack() {
     _state?._goBack();
   }
 
+  @override
   void goForward() {
     _state?._goForward();
   }
 
+  @override
   void addEphemeralMove(String san) {
     _state?._addAnalysisMove(san);
   }
 
+  @override
   String? get currentFen => _state?._currentPosition.fen;
 
+  @override
   void clearEphemeralMoves() {
     _state?._clearAnalysis();
   }
 
+  @override
   void jumpToMove(int moveNumber, bool isWhiteToPlay) {
     final state = _state;
     if (state == null) return;
@@ -58,6 +65,7 @@ class PgnViewerWidgetController {
 
   /// Navigate directly to a mainline position by half-move index (0-based
   /// number of moves played from the start).
+  @override
   void goToMainLineIndex(int moveIndex) {
     _state?._goToMainLineMove(moveIndex);
   }
@@ -84,13 +92,16 @@ class PgnViewerWidgetController {
     return false;
   }
 
+  @override
   int get mainLineIndex => _state?._mainLineIndex ?? 0;
 
   int get currentMainLineIndex => mainLineIndex;
 
+  @override
   int get mainLineLength => _state?._moveHistory.length ?? 0;
 
   /// Mainline move SANs in order (for solitaire mode validation).
+  @override
   List<String> get mainLineMoves =>
       _state?._moveHistory.map((m) => m.san).toList() ?? const [];
 
@@ -98,6 +109,7 @@ class PgnViewerWidgetController {
   int get variationDepth => _state?._analysisPath.length ?? 0;
 
   /// True when navigation is inside a variation / inline preview (off mainline).
+  @override
   bool get inVariation => _state?._isInVariation ?? false;
 
   /// Jump from the current variation back to the mainline branch point.
@@ -126,11 +138,13 @@ class PgnViewerWidgetController {
 
   /// Record [san] as an ephemeral variation at the current mainline position
   /// without navigating into it (solitaire wrong attempts, shown live).
+  @override
   void recordVariationMove(String san) => _state?._recordVariationMove(san);
 
   /// Append solitaire guess notes to mainline move comments ([notes] keyed by
   /// 0-based move index) and persist through the standard movetext serializer,
   /// keeping the game's own annotations intact.
+  @override
   void addGuessAnnotations(Map<int, String> notes) =>
       _state?._addGuessAnnotations(notes);
 }

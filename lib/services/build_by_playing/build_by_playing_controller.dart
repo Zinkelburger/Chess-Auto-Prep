@@ -32,6 +32,7 @@ import '../../utils/san_token_utils.dart';
 import '../explorer_cache_service.dart';
 import '../generation/fen_map.dart';
 import 'build_by_playing_config.dart';
+import '../../utils/safe_change_notifier.dart';
 
 enum BuildByPlayingPhase {
   /// No session running.
@@ -107,7 +108,7 @@ class _CommitInfo {
   final double cumProb;
 }
 
-class BuildByPlayingController extends ChangeNotifier {
+class BuildByPlayingController extends ChangeNotifier with SafeChangeNotifier {
   BuildByPlayingController({
     required RepertoireController repertoire,
     ExplorerCacheService? explorer,

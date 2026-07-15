@@ -3,9 +3,12 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:dartchess/dartchess.dart';
 
+import '../models/completed_move.dart';
 import '../utils/chess_utils.dart'
     show parseSquare, toAlgebraic, castlingKingDestination;
 import 'common/piece_image.dart';
+
+export '../models/completed_move.dart' show CompletedMove;
 
 // ── Board annotations (arrows, circles, labels) ─────────────────────────
 
@@ -42,28 +45,6 @@ class BoardAnnotation {
 
   bool get isArrow => dest != null && dest != orig;
   bool get isCircle => !isArrow;
-}
-
-/// Rich move object that contains complete information about a move
-class CompletedMove {
-  final String from;
-  final String to;
-  final String san;
-  final String fenBefore;
-  final String fenAfter;
-  final String uci;
-
-  CompletedMove({
-    required this.from,
-    required this.to,
-    required this.san,
-    required this.fenBefore,
-    required this.fenAfter,
-    required this.uci,
-  });
-
-  @override
-  String toString() => 'Move($uci -> $san, $fenBefore -> $fenAfter)';
 }
 
 /// A professional chess board widget that properly scales and handles interaction.
