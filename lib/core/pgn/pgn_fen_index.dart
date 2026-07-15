@@ -29,9 +29,22 @@ class PgnFenIndex {
   /// Returns null while the index is being built.
   Map<String, List<int>>? get value => _value;
 
+  /// Drop the current index and invalidate any in-flight [build].
+  ///
+  /// Must be called when a new game collection replaces the old one:
+  /// otherwise the previous file's index stays in [value] (so consumers keep
+  /// slicing/classifying the new games with the old file's indices) and a
+  /// still-running build for the old file would pass its generation check
+  /// and clobber whatever [tryLoadPersisted] loads for the new one.
+  void reset() {
+    _generation++;
+    _value = null;
+  }
+
   /// Try to load a persisted `<pgn>.fenidx` companion file, validating it
   /// against the current file's stats. Leaves [value] null on any mismatch.
   Future<void> tryLoadPersisted(String pgnPath, int gameCount) async {
+    final generation = _generation;
     try {
       final storage = StorageFactory.instance;
       final stat = await storage.fileStat(pgnPath);
@@ -48,6 +61,9 @@ class PgnFenIndex {
         expectedModifiedMs: stat.modified.millisecondsSinceEpoch,
       );
       if (index == null) return;
+      // A reset() (new file) may have happened during the reads above —
+      // installing this index would hand the new file the old file's index.
+      if (generation != _generation) return;
       _value = index;
     } catch (_) {
       // Corrupt or unreadable — fall through to building from scratch.

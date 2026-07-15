@@ -18,6 +18,29 @@ import 'storage/app_paths.dart';
 ///   • `<key>.json` – [AnalysisPlayerInfo] metadata
 ///   • `<key>_white_analysis.json` / `<key>_black_analysis.json` – cached analysis
 class AnalysisGamesService {
+  /// Every file suffix a player's storage key may carry. `.json` (the
+  /// metadata file) must stay last so [deletePlayerData] and the legacy-key
+  /// migration handle the data files before the record that points at them.
+  static const _playerFileSuffixes = [
+    '.pgn',
+    '_white_analysis.json',
+    '_black_analysis.json',
+    '_engine_evals.json',
+    '_holes_white.json',
+    '_holes_black.json',
+    '.json',
+  ];
+
+  /// Suffixes of per-player cache files that live next to the metadata and
+  /// would otherwise be mistaken for it when scanning the directory.
+  static const _cacheFileSuffixes = [
+    '_white_analysis.json',
+    '_black_analysis.json',
+    '_engine_evals.json',
+    '_holes_white.json',
+    '_holes_black.json',
+  ];
+
   /// Resolve (and create if needed) the on-disk directory for analysis data.
   Future<Directory> _getAnalysisDirectory() async {
     return AppPaths.analysisGamesDirectory(create: true);
@@ -264,6 +287,29 @@ class AnalysisGamesService {
     );
   }
 
+  /// Metadata of the already-stored player that [username] on [platform]
+  /// would overwrite, or `null` if the slot is free. Matches by storage key,
+  /// so names that merely sanitize to the same key also count.
+  Future<AnalysisPlayerInfo?> findExistingPlayer(
+    String platform,
+    String username,
+  ) async {
+    try {
+      final directory = await _getAnalysisDirectory();
+      final file = File(
+        p.join(directory.path, '${_playerKey(platform, username)}.json'),
+      );
+      if (!await file.exists()) return null;
+      return AnalysisPlayerInfo.fromJson(
+        json.decode(await file.readAsString()) as Map<String, dynamic>,
+      );
+    } catch (_) {
+      // Unreadable metadata still means data exists on disk; report a
+      // minimal record so callers warn before overwriting it.
+      return AnalysisPlayerInfo(platform: platform, username: username);
+    }
+  }
+
   /// Load the raw PGN for [username] on [platform]. Returns `null` on miss.
   Future<String?> loadAnalysisGames(String platform, String username) async {
     try {
@@ -278,11 +324,13 @@ class AnalysisGamesService {
   Future<List<AnalysisPlayerInfo>> getAllCachedPlayers() async {
     try {
       final directory = await _getAnalysisDirectory();
+      // Cache companions are excluded by exact suffix (a substring test
+      // would hide real players whose username contains e.g. "_holes_").
       final metadataFiles = <File>[
         await for (final entity in directory.list())
           if (entity is File &&
               entity.path.endsWith('.json') &&
-              !entity.path.contains('_analysis.json'))
+              !_cacheFileSuffixes.any(entity.path.endsWith))
             entity,
       ];
 
@@ -290,9 +338,23 @@ class AnalysisGamesService {
         metadataFiles.map((file) async {
           try {
             final content = await file.readAsString();
-            return AnalysisPlayerInfo.fromJson(
-              json.decode(content) as Map<String, dynamic>,
-            );
+            final decoded = json.decode(content) as Map<String, dynamic>;
+            // Every field of AnalysisPlayerInfo.fromJson has a fallback, so
+            // any cache file that happens to hold a JSON map would "parse"
+            // into a phantom unknown/unknown player — one that Delete can't
+            // even remove, since it targets unknown_unknown* files. Require
+            // the identity fields so only real metadata files qualify.
+            if (decoded['platform'] is! String ||
+                decoded['username'] is! String) {
+              return null;
+            }
+            final info = AnalysisPlayerInfo.fromJson(decoded);
+            // Imports saved before key sanitization can sit under a stale
+            // key (e.g. "import_carlsen, magnus"); selecting or deleting
+            // them would target the sanitized key and miss. Rename them
+            // into place once.
+            await _migrateLegacyKeyFiles(directory, file, info);
+            return info;
           } catch (_) {
             // Skip corrupt metadata files.
             return null;
@@ -313,6 +375,31 @@ class AnalysisGamesService {
     }
   }
 
+  /// Move a player's files from a pre-sanitization storage key to the
+  /// current one. No-op when the metadata file already sits under the
+  /// current key. On collision the current-key file wins and the legacy
+  /// copy is dropped.
+  Future<void> _migrateLegacyKeyFiles(
+    Directory directory,
+    File metadataFile,
+    AnalysisPlayerInfo info,
+  ) async {
+    final legacyBase = p.basenameWithoutExtension(metadataFile.path);
+    final key = info.playerKey;
+    if (legacyBase == key) return;
+
+    for (final suffix in _playerFileSuffixes) {
+      final legacy = File(p.join(directory.path, '$legacyBase$suffix'));
+      if (!await legacy.exists()) continue;
+      final target = File(p.join(directory.path, '$key$suffix'));
+      if (await target.exists()) {
+        await legacy.delete();
+      } else {
+        await legacy.rename(target.path);
+      }
+    }
+  }
+
   /// Remove **all** on-disk data for a player (PGN, metadata, cached analysis).
   Future<void> deletePlayerData(String platform, String username) async {
     final directory = await _getAnalysisDirectory();
@@ -321,15 +408,7 @@ class AnalysisGamesService {
       username: username,
     ).playerKey;
 
-    for (final suffix in [
-      '.pgn',
-      '.json',
-      '_white_analysis.json',
-      '_black_analysis.json',
-      '_engine_evals.json',
-      '_holes_white.json',
-      '_holes_black.json',
-    ]) {
+    for (final suffix in _playerFileSuffixes) {
       final file = File(p.join(directory.path, '$key$suffix'));
       if (await file.exists()) await file.delete();
     }

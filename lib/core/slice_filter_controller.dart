@@ -69,8 +69,11 @@ PositionParseResult _parseSanSequence(String input) {
 
 // ── Header filter rows ───────────────────────────────────────────────────────
 
-/// Available PGN header field options.
+/// Available PGN header field options. [kPlayerHeaderField] is a pseudo
+/// field (matches either colour, `;`-separated names); the rest are real
+/// PGN headers.
 const kHeaderFieldOptions = [
+  kPlayerHeaderField,
   'White',
   'Black',
   'Event',

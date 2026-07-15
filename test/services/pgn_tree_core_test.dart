@@ -21,6 +21,98 @@ void main() {
       expect(isRepertoirePlayer('hikaru'), isFalse);
       expect(isRepertoirePlayer(''), isFalse);
     });
+
+    test('does not match patterns as substrings of real names', () {
+      expect(isRepertoirePlayer('Gamer123'), isFalse);
+      expect(isRepertoirePlayer('James'), isFalse);
+      expect(isRepertoirePlayer('SomeOpponent'), isFalse);
+      expect(isRepertoirePlayer('chessplayer99'), isFalse);
+    });
+  });
+
+  group('userNameMatchesHeader', () {
+    test('single name behaves like substring match', () {
+      expect(userNameMatchesHeader('carlsen, magnus', 'carlsen'), isTrue);
+      expect(userNameMatchesHeader('carlsen,m', 'carlsen'), isTrue);
+      expect(userNameMatchesHeader('nakamura', 'carlsen'), isFalse);
+    });
+
+    test('any of several ;-separated names may match', () {
+      const names = 'carlsen; drnykterstein';
+      expect(userNameMatchesHeader('carlsen, magnus', names), isTrue);
+      expect(userNameMatchesHeader('drnykterstein', names), isTrue);
+      expect(userNameMatchesHeader('nakamura', names), isFalse);
+    });
+
+    test('empty and separator-only inputs match nothing', () {
+      expect(userNameMatchesHeader('carlsen', ''), isFalse);
+      expect(userNameMatchesHeader('carlsen', ' ; ; '), isFalse);
+    });
+  });
+
+  group('summarizePlayerNameMatches', () {
+    const pairs = [
+      (white: 'Carlsen, Magnus', black: 'Nakamura, Hikaru'),
+      (white: 'Caruana, Fabiano', black: 'Carlsen,M'),
+      (white: 'Carlsen, Magnus', black: 'So, Wesley'),
+      (white: 'Ding, Liren', black: 'Nepomniachtchi, Ian'),
+    ];
+
+    test('counts matched games and distinct header spellings', () {
+      final summary = summarizePlayerNameMatches(
+        headerPairs: pairs,
+        namesInput: 'Carlsen',
+      );
+      expect(summary.totalGames, 4);
+      expect(summary.matchedGames, 3);
+      expect(summary.unmatchedGames, 1);
+      expect(summary.variantCounts, {'Carlsen, Magnus': 2, 'Carlsen,M': 1});
+    });
+
+    test('variants are ordered by count descending', () {
+      final summary = summarizePlayerNameMatches(
+        headerPairs: pairs,
+        namesInput: 'Carlsen',
+      );
+      expect(summary.variantCounts.keys.first, 'Carlsen, Magnus');
+    });
+
+    test('multiple ;-separated names union their matches', () {
+      final summary = summarizePlayerNameMatches(
+        headerPairs: pairs,
+        namesInput: 'Carlsen; Ding',
+      );
+      expect(summary.matchedGames, 4);
+      expect(summary.variantCounts.keys, contains('Ding, Liren'));
+    });
+
+    test('repertoire placeholders count only when opted in', () {
+      const repPairs = [
+        (white: 'Me', black: 'Rival2000'),
+        (white: 'Carlsen, Magnus', black: 'Nakamura, Hikaru'),
+      ];
+      final without = summarizePlayerNameMatches(
+        headerPairs: repPairs,
+        namesInput: 'Carlsen',
+      );
+      expect(without.matchedGames, 1);
+      final withPlaceholders = summarizePlayerNameMatches(
+        headerPairs: repPairs,
+        namesInput: 'Carlsen',
+        includeRepertoirePlaceholders: true,
+      );
+      expect(withPlaceholders.matchedGames, 2);
+      expect(withPlaceholders.variantCounts.keys, contains('Me'));
+    });
+
+    test('empty names input matches nothing', () {
+      final summary = summarizePlayerNameMatches(
+        headerPairs: pairs,
+        namesInput: '',
+      );
+      expect(summary.matchedGames, 0);
+      expect(summary.variantCounts, isEmpty);
+    });
   });
 
   group('resolveUserColor - strict matching', () {
@@ -53,6 +145,16 @@ void main() {
 
     test('username match is case-insensitive and substring-based', () {
       expect(resolve(white: 'GM_TESTUSER_2000'), isTrue);
+    });
+
+    test(';-separated aliases each attribute the user', () {
+      const aliases = 'testuser; othernick';
+      expect(resolve(white: 'TestUser', username: aliases), isTrue);
+      expect(resolve(black: 'OtherNick', username: aliases), isFalse);
+      expect(
+        resolve(filter: null, username: aliases),
+        isNull, // neither alias present → still ambiguous
+      );
     });
 
     test('repertoire pattern in White header attributes user to White', () {

@@ -16,6 +16,7 @@ library;
 import 'package:dartchess/dartchess.dart';
 
 import '../models/opening_tree.dart';
+import '../models/pgn_filter_models.dart' show splitPlayerNames;
 
 /// Common player name patterns used in repertoire files.
 const List<String> repertoirePlayerPatterns = [
@@ -27,9 +28,86 @@ const List<String> repertoirePlayerPatterns = [
 ];
 
 /// Whether [playerName] matches any known repertoire player pattern.
+///
+/// Matches whole words, not substrings: a substring test would classify real
+/// opponents like "Ga**me**r123" or "Ja**me**s" as repertoire placeholders,
+/// making their games count for both colours with an inverted score on the
+/// wrong-colour tree. App-generated placeholders ("Me", "Training",
+/// "My Repertoire", …) are all whole words.
 bool isRepertoirePlayer(String playerName) {
-  final lowerName = playerName.toLowerCase();
-  return repertoirePlayerPatterns.any((pattern) => lowerName.contains(pattern));
+  final words = playerName.toLowerCase().split(RegExp(r'[^a-z]+'));
+  return words.any(repertoirePlayerPatterns.contains);
+}
+
+/// Whether [headerLower] names the user.
+///
+/// [usernameLower] may hold several `;`-separated names/abbreviations (see
+/// [splitPlayerNames]); each is tried as a case-insensitive substring, so
+/// "carlsen; drnykterstein" matches both "Carlsen, Magnus" and
+/// "DrNykterstein". Both arguments must already be lower-cased. An empty or
+/// all-separator [usernameLower] matches nothing.
+bool userNameMatchesHeader(String headerLower, String usernameLower) =>
+    splitPlayerNames(usernameLower).any(headerLower.contains);
+
+/// How a player-name input matched a game collection's White/Black headers.
+///
+/// Built by [summarizePlayerNameMatches] so the UI can show *which* header
+/// spellings a name search is currently hitting ("Carlsen, Magnus ×54,
+/// Carlsen,M ×33") instead of asking the user to trust substring matching.
+class PlayerNameMatchSummary {
+  /// Games where at least one side matched.
+  final int matchedGames;
+  final int totalGames;
+
+  /// Distinct header values that matched (original casing) → number of games
+  /// they matched in, ordered by count descending.
+  final Map<String, int> variantCounts;
+
+  const PlayerNameMatchSummary({
+    required this.matchedGames,
+    required this.totalGames,
+    required this.variantCounts,
+  });
+
+  int get unmatchedGames => totalGames - matchedGames;
+}
+
+/// Match [namesInput] (see [splitPlayerNames]) against every game's
+/// White/Black headers, the same way game attribution does.
+///
+/// [includeRepertoirePlaceholders] additionally counts placeholder names
+/// ("Me", "Training", …) as matches — pass true when previewing analysis
+/// attribution (which treats them as the user), false for a pure name search.
+PlayerNameMatchSummary summarizePlayerNameMatches({
+  required Iterable<({String white, String black})> headerPairs,
+  required String namesInput,
+  bool includeRepertoirePlaceholders = false,
+}) {
+  final namesLower = namesInput.toLowerCase();
+  final counts = <String, int>{};
+  var matched = 0;
+  var total = 0;
+
+  bool sideMatches(String header) =>
+      userNameMatchesHeader(header.toLowerCase(), namesLower) ||
+      (includeRepertoirePlaceholders && isRepertoirePlayer(header));
+
+  for (final pair in headerPairs) {
+    total++;
+    final whiteHit = pair.white.isNotEmpty && sideMatches(pair.white);
+    final blackHit = pair.black.isNotEmpty && sideMatches(pair.black);
+    if (whiteHit) counts[pair.white] = (counts[pair.white] ?? 0) + 1;
+    if (blackHit) counts[pair.black] = (counts[pair.black] ?? 0) + 1;
+    if (whiteHit || blackHit) matched++;
+  }
+
+  final sorted = counts.entries.toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
+  return PlayerNameMatchSummary(
+    matchedGames: matched,
+    totalGames: total,
+    variantCounts: {for (final e in sorted) e.key: e.value},
+  );
 }
 
 /// What to do when the user's colour in a game cannot be determined from the
@@ -54,8 +132,9 @@ enum UnattributableGamePolicy {
 /// [userIsWhiteFilter] dictates the perspective (defaulting to White when the
 /// filter is null).
 ///
-/// When strict, a player header matches the user if it contains
-/// [usernameLower] or any of the [repertoirePlayerPatterns]. If exactly one
+/// When strict, a player header matches the user if it contains any of the
+/// `;`-separated names in [usernameLower] (see [userNameMatchesHeader]) or
+/// any of the [repertoirePlayerPatterns]. If exactly one
 /// side matches, that side is the user. Ambiguous games (both or neither
 /// side matches) fall back to [userIsWhiteFilter] when it is non-null;
 /// otherwise [unattributablePolicy] decides between skipping the game and
@@ -80,9 +159,9 @@ bool? resolveUserColor({
 
   // Match by username OR any repertoire player pattern.
   final whiteIsUser =
-      white.contains(usernameLower) || isRepertoirePlayer(white);
+      userNameMatchesHeader(white, usernameLower) || isRepertoirePlayer(white);
   final blackIsUser =
-      black.contains(usernameLower) || isRepertoirePlayer(black);
+      userNameMatchesHeader(black, usernameLower) || isRepertoirePlayer(black);
 
   bool isUserWhiteInGame;
   if (whiteIsUser && !blackIsUser) {

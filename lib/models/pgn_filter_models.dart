@@ -6,6 +6,21 @@ library;
 
 import 'dart:convert';
 
+// ── Player names ─────────────────────────────────────────────────────────────
+
+/// Pseudo header field that matches a player on **either** colour, with
+/// multi-name support (see [splitPlayerNames]). Not a real PGN header, so
+/// filter code must special-case it instead of doing a `headers[field]`
+/// lookup.
+const kPlayerHeaderField = 'Player';
+
+/// Split a player-name input into individual names to match.
+///
+/// Separator is `;` — commas appear inside PGN names ("Carlsen, Magnus"),
+/// so they cannot delimit. Parts are trimmed; empties dropped.
+List<String> splitPlayerNames(String input) =>
+    input.split(';').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+
 // ── Match mode ───────────────────────────────────────────────────────────────
 
 enum MatchMode { contains, notContains, exact, regex, after, before }

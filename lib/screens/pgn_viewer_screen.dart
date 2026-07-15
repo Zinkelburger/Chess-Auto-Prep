@@ -111,7 +111,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   Future<void> _openFileWithPositionSlice(String path, String? sliceFen) async {
-    await _loadFile(path);
+    // When a position slice is about to be applied it supersedes any restored
+    // slice, so a "Restored last slice" notice would be misleading.
+    await _loadFile(path, notifySliceRestore: sliceFen == null);
     // Bail if the load failed (the old file's games would still be in the
     // controller and the slice would silently target the wrong collection).
     if (!mounted ||
@@ -142,7 +144,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   void dispose() {
     windowManager.removeListener(this);
     _controller.removeListener(_onControllerUpdate);
-    _controller.disposeController();
+    _controller.dispose();
     _analysisController.removeListener(_onAnalysisUpdate);
     _analysisController.dispose();
     _tabController.dispose();
@@ -196,13 +198,27 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     );
   }
 
-  Future<void> _loadFile(String path) async {
+  Future<void> _loadFile(String path, {bool notifySliceRestore = true}) async {
     await _controller.loadFile(path);
     if (!mounted) return;
     final error = _controller.errorMessage;
     if (error != null) {
       showAppSnackBar(context, error, duration: const Duration(seconds: 5));
+      return;
     }
+    if (notifySliceRestore) _showPendingSliceRestoreSnackBar();
+  }
+
+  void _showPendingSliceRestoreSnackBar() {
+    final info = _controller.pendingSliceRestore;
+    if (info == null || !mounted) return;
+    _controller.clearPendingSliceRestore();
+    showAppSnackBar(
+      context,
+      'Restored last slice (${info.filteredCount}/${info.totalCount} games)',
+      actionLabel: 'Show All',
+      onAction: _controller.resetFilters,
+    );
   }
 
   void _openSliceDialog() {
@@ -1086,6 +1102,31 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   Widget _buildGameTab() {
+    if (_controller.filteredGames.isEmpty &&
+        _controller.allGames.isNotEmpty &&
+        _controller.hasActiveFilters) {
+      // A file is loaded but the active slice matches nothing — without an
+      // escape hatch here the chip bar is gone and the filter is unremovable.
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.filter_alt_off, size: 48, color: Colors.grey[600]),
+            const SizedBox(height: 16),
+            Text(
+              'No games match the current filters',
+              style: TextStyle(color: Colors.grey[400], fontSize: 16),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: _controller.resetFilters,
+              icon: const Icon(Icons.filter_alt_off),
+              label: const Text('Show All Games'),
+            ),
+          ],
+        ),
+      );
+    }
     if (_controller.filteredGames.isEmpty) {
       return Center(
         child: SingleChildScrollView(

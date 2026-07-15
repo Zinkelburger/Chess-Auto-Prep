@@ -408,8 +408,12 @@ class UnifiedAnalysisBuilder {
     final white = (game.headers['White'] ?? '').toLowerCase();
     final black = (game.headers['Black'] ?? '').toLowerCase();
     return (
-      white: white.contains(usernameLower) || isRepertoirePlayer(white),
-      black: black.contains(usernameLower) || isRepertoirePlayer(black),
+      white:
+          userNameMatchesHeader(white, usernameLower) ||
+          isRepertoirePlayer(white),
+      black:
+          userNameMatchesHeader(black, usernameLower) ||
+          isRepertoirePlayer(black),
     );
   }
 

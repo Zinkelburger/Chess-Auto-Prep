@@ -18,10 +18,17 @@ class AnalysisDownloadDialog extends StatefulWidget {
   final String? chesscomUsername;
   final String? lichessUsername;
 
+  /// Preselects the platform ('chesscom' or 'lichess'). Pass it when the
+  /// dialog re-downloads an existing player so the dialog targets that
+  /// player's platform instead of defaulting to whichever username field
+  /// happens to be filled.
+  final String? initialPlatform;
+
   const AnalysisDownloadDialog({
     super.key,
     this.chesscomUsername,
     this.lichessUsername,
+    this.initialPlatform,
   });
 
   @override
@@ -48,20 +55,25 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
   void initState() {
     super.initState();
 
-    final initialUsername =
-        widget.chesscomUsername ?? widget.lichessUsername ?? '';
-    _usernameController = TextEditingController(text: initialUsername);
-    _monthsController = TextEditingController(text: _months.toString());
-    _maxGamesController = TextEditingController(text: _maxGames.toString());
-
-    // Default to whichever platform already has a username.
-    if (widget.chesscomUsername != null &&
+    // An explicit platform wins; otherwise default to whichever platform
+    // already has a username.
+    if (widget.initialPlatform == 'chesscom' ||
+        widget.initialPlatform == 'lichess') {
+      _selectedPlatform = widget.initialPlatform!;
+    } else if (widget.chesscomUsername != null &&
         widget.chesscomUsername!.isNotEmpty) {
       _selectedPlatform = 'chesscom';
     } else if (widget.lichessUsername != null &&
         widget.lichessUsername!.isNotEmpty) {
       _selectedPlatform = 'lichess';
     }
+
+    final initialUsername = _selectedPlatform == 'chesscom'
+        ? (widget.chesscomUsername ?? widget.lichessUsername ?? '')
+        : (widget.lichessUsername ?? widget.chesscomUsername ?? '');
+    _usernameController = TextEditingController(text: initialUsername);
+    _monthsController = TextEditingController(text: _months.toString());
+    _maxGamesController = TextEditingController(text: _maxGames.toString());
 
     _loadPrefs();
   }

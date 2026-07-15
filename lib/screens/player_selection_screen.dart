@@ -344,6 +344,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
         lichessUsername: player.platform == 'lichess'
             ? player.username
             : appState.lichessUsername,
+        initialPlatform: player.platform,
       ),
     );
 
@@ -358,6 +359,38 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
       builder: (_) => const AnalysisImportDialog(),
     );
     if (result == null || !mounted) return;
+
+    // Names that sanitize to the same storage key (e.g. "AC/DC" vs "AC DC")
+    // land in the same files, so check the disk rather than the raw name.
+    final existing = await _gamesService.findExistingPlayer(
+      'import',
+      result.playerName,
+    );
+    if (!mounted) return;
+    if (existing != null) {
+      final replace = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Replace Imported Games?'),
+          content: Text(
+            '"${existing.username}" already has ${existing.gameCount} '
+            'imported game${existing.gameCount == 1 ? '' : 's'}. Importing '
+            'will replace them and clear their cached analysis.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Replace'),
+            ),
+          ],
+        ),
+      );
+      if (replace != true || !mounted) return;
+    }
 
     try {
       await _gamesService.saveAnalysisGames(

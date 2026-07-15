@@ -180,6 +180,134 @@ void main() {
     });
   });
 
+  group('splitPlayerNames', () {
+    test('single name passes through trimmed', () {
+      expect(splitPlayerNames('  Carlsen '), ['Carlsen']);
+    });
+
+    test('splits on ; and drops empties', () {
+      expect(splitPlayerNames('Carlsen; DrNykterstein; ;'), [
+        'Carlsen',
+        'DrNykterstein',
+      ]);
+    });
+
+    test('commas stay inside a single name', () {
+      expect(splitPlayerNames('Carlsen, Magnus'), ['Carlsen, Magnus']);
+    });
+
+    test('empty input yields no names', () {
+      expect(splitPlayerNames(''), isEmpty);
+      expect(splitPlayerNames(' ; '), isEmpty);
+    });
+  });
+
+  group('playerFieldMatches', () {
+    test('contains matches either colour, any alias', () {
+      expect(
+        playerFieldMatches(
+          'Carlsen, Magnus',
+          'Nakamura, Hikaru',
+          'carlsen',
+          MatchMode.contains,
+        ),
+        isTrue,
+      );
+      expect(
+        playerFieldMatches(
+          'Nakamura, Hikaru',
+          'Carlsen,M',
+          'carlsen; ding',
+          MatchMode.contains,
+        ),
+        isTrue,
+      );
+      expect(
+        playerFieldMatches(
+          'Nakamura, Hikaru',
+          'So, Wesley',
+          'carlsen',
+          MatchMode.contains,
+        ),
+        isFalse,
+      );
+    });
+
+    test('notContains requires every alias absent from both sides', () {
+      expect(
+        playerFieldMatches(
+          'Nakamura, Hikaru',
+          'So, Wesley',
+          'carlsen',
+          MatchMode.notContains,
+        ),
+        isTrue,
+      );
+      expect(
+        playerFieldMatches(
+          'Carlsen, Magnus',
+          'So, Wesley',
+          'carlsen; nakamura',
+          MatchMode.notContains,
+        ),
+        isFalse,
+      );
+    });
+
+    test('empty query matches everything', () {
+      expect(playerFieldMatches('A', 'B', '', MatchMode.contains), isTrue);
+    });
+  });
+
+  group('computeSliceMatches - Player field', () {
+    List<GameRecord> games() => [
+      (
+        headers: {'White': 'Carlsen, Magnus', 'Black': 'Nakamura, Hikaru'},
+        pgnText: '1. e4 e5 *',
+      ),
+      (
+        headers: {'White': 'Caruana, Fabiano', 'Black': 'Carlsen,M'},
+        pgnText: '1. d4 d5 *',
+      ),
+      (
+        headers: {'White': 'Ding, Liren', 'Black': 'So, Wesley'},
+        pgnText: '1. c4 e5 *',
+      ),
+    ];
+
+    test('matches either colour with aliases', () async {
+      final indices = await computeSliceMatches(
+        games: games(),
+        filters: [
+          (
+            field: kPlayerHeaderField,
+            mode: MatchMode.contains,
+            value: 'carlsen; ding',
+          ),
+        ],
+        seqGroups: const [],
+        seqGap: 4,
+      );
+      expect(indices, [0, 1, 2]);
+    });
+
+    test('excludes games matching no alias', () async {
+      final indices = await computeSliceMatches(
+        games: games(),
+        filters: [
+          (
+            field: kPlayerHeaderField,
+            mode: MatchMode.contains,
+            value: 'carlsen',
+          ),
+        ],
+        seqGroups: const [],
+        seqGap: 4,
+      );
+      expect(indices, [0, 1]);
+    });
+  });
+
   group('stripBom', () {
     test('removes UTF-8 BOM', () {
       expect(stripBom('\uFEFFhello'), 'hello');
