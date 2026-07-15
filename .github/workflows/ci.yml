@@ -1,13 +1,14 @@
-# Runs format check, static analysis, unit/widget tests, and integration tests
-# on every push and PR to main.
+# Runs format check, static analysis, unit/widget tests, and integration tests.
+# Only on tags (to conserve free Actions minutes) or manual dispatch from the
+# Actions tab — day-to-day pushes rely on the local checks in CLAUDE.md.
 
 name: CI
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    tags:
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   test:
