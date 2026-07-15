@@ -29,8 +29,10 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     this.onSelectRepertoire,
     this.onTrainRepertoire,
     this.onOpenGeneration,
+    this.onBuildByPlaying,
     this.onBuildFromGames,
     this.onOpenAudit,
+    this.onOpenFindHoles,
     this.onImportPgnFile,
     this.onImportPgnPaste,
     this.isWhiteRepertoire,
@@ -48,8 +50,10 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onSelectRepertoire;
   final VoidCallback? onTrainRepertoire;
   final VoidCallback? onOpenGeneration;
+  final VoidCallback? onBuildByPlaying;
   final VoidCallback? onBuildFromGames;
   final VoidCallback? onOpenAudit;
+  final VoidCallback? onOpenFindHoles;
   final VoidCallback? onImportPgnFile;
   final VoidCallback? onImportPgnPaste;
   final bool? isWhiteRepertoire;
@@ -81,10 +85,12 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
         if (onOpenGeneration != null || onOpenAudit != null)
           RepertoireActionRunner(
             onGenerate: onOpenGeneration,
+            onBuildByPlaying: onBuildByPlaying,
             onBuildFromGames: onBuildFromGames,
             onImportPgnFile: onImportPgnFile,
             onImportPgnPaste: onImportPgnPaste,
             onOpenAudit: onOpenAudit,
+            onOpenFindHoles: onOpenFindHoles,
           ),
         if (showTrainButton && onTrainRepertoire != null)
           RepertoireTrainButton(
@@ -289,17 +295,21 @@ class RepertoireActionRunner extends StatefulWidget {
   const RepertoireActionRunner({
     super.key,
     this.onGenerate,
+    this.onBuildByPlaying,
     this.onBuildFromGames,
     this.onImportPgnFile,
     this.onImportPgnPaste,
     this.onOpenAudit,
+    this.onOpenFindHoles,
   });
 
   final VoidCallback? onGenerate;
+  final VoidCallback? onBuildByPlaying;
   final VoidCallback? onBuildFromGames;
   final VoidCallback? onImportPgnFile;
   final VoidCallback? onImportPgnPaste;
   final VoidCallback? onOpenAudit;
+  final VoidCallback? onOpenFindHoles;
 
   @override
   State<RepertoireActionRunner> createState() => _RepertoireActionRunnerState();
@@ -312,6 +322,9 @@ class _RepertoireActionRunnerState extends State<RepertoireActionRunner> {
         if (widget.onGenerate != null)
           _RepAction('generate', 'Generate', Icons.auto_awesome,
               widget.onGenerate!),
+        if (widget.onBuildByPlaying != null)
+          _RepAction('build_by_playing', 'Build by playing',
+              Icons.sports_esports, widget.onBuildByPlaying!),
         if (widget.onBuildFromGames != null)
           _RepAction('from_games', 'From my games',
               Icons.download_for_offline_outlined, widget.onBuildFromGames!),
@@ -324,6 +337,9 @@ class _RepertoireActionRunnerState extends State<RepertoireActionRunner> {
         if (widget.onOpenAudit != null)
           _RepAction('audit', 'Audit for gaps', Icons.policy_outlined,
               widget.onOpenAudit!),
+        if (widget.onOpenFindHoles != null)
+          _RepAction('find_holes', 'Find holes', Icons.gps_fixed,
+              widget.onOpenFindHoles!),
       ];
 
   @override

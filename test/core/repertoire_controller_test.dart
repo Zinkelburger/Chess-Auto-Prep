@@ -466,6 +466,46 @@ void main() {
     });
   });
 
+  group('saved root position', () {
+    test('defaults to the starting position when no root is saved', () {
+      final controller = RepertoireController();
+
+      expect(controller.rootMoveSans, isEmpty);
+      expect(controller.rootFen, kStandardStartFen);
+      expect(controller.isAtRootPosition, isTrue);
+
+      controller.loadMoveHistory(['d4', 'Nf6']);
+      expect(controller.isAtRootPosition, isFalse);
+    });
+
+    test('follows the // Root: header and tracks the cursor', () async {
+      final controller = RepertoireController();
+      const pgnWithRoot = '''
+// Color: Black
+// Root: 1. d4 Nf6 2. c4 c5
+
+[Event "Benoni"]
+[Date "2026-01-01"]
+[White "Opponent"]
+[Black "Me"]
+[Result "0-1"]
+
+1. d4 Nf6 2. c4 c5 3. d5 e6
+''';
+
+      await controller.restoreRepertoireFromPgn(pgnWithRoot);
+
+      const rootSans = ['d4', 'Nf6', 'c4', 'c5'];
+      expect(controller.rootMoveSans, rootSans);
+      expect(controller.rootFen, fenAfterMoves(rootSans));
+
+      // Loading navigated to the root; leaving it must be detected.
+      expect(controller.isAtRootPosition, isTrue);
+      controller.goToStart();
+      expect(controller.isAtRootPosition, isFalse);
+    });
+  });
+
   group('state machine properties', () {
     late RepertoireController controller;
 

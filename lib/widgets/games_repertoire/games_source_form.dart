@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import '../../services/games_library/game_filter.dart';
 import '../../services/games_library/games_library_service.dart';
 import '../common/since_date_picker.dart';
+import '../starting_position_card.dart';
 
 /// What the user chose on the source form.
 class GamesSourceConfig {
@@ -17,12 +18,17 @@ class GamesSourceConfig {
     required this.username,
     required this.isWhite,
     required this.selection,
+    this.startMoves = const [],
   });
 
   final GamesPlatform platform;
   final String username;
   final bool isWhite;
   final GameSelection selection;
+
+  /// When non-empty, only draft from games that follow these SAN moves from
+  /// the game start (the board position when the form was opened).
+  final List<String> startMoves;
 }
 
 /// Show the form; resolves to the chosen config, or null if cancelled.
@@ -31,11 +37,19 @@ class GamesSourceConfig {
 /// field from whatever is already saved app-wide (e.g. the tactics trainer), so
 /// the user doesn't have to retype it. The platform defaults to whichever one
 /// has a saved username.
+///
+/// [currentFen]/[currentMoveSans] feed the "From current position" option and
+/// its starting-position preview. [atRoot] disables that option when the
+/// board is already at the game start.
 Future<GamesSourceConfig?> showGamesSourceForm(
   BuildContext context, {
   bool initialIsWhite = true,
   String? initialChesscomUsername,
   String? initialLichessUsername,
+  bool atRoot = true,
+  String? rootFen,
+  String? currentFen,
+  List<String> currentMoveSans = const [],
 }) {
   return showDialog<GamesSourceConfig>(
     context: context,
@@ -43,6 +57,10 @@ Future<GamesSourceConfig?> showGamesSourceForm(
       initialIsWhite: initialIsWhite,
       initialChesscomUsername: initialChesscomUsername,
       initialLichessUsername: initialLichessUsername,
+      atRoot: atRoot,
+      rootFen: rootFen,
+      currentFen: currentFen,
+      currentMoveSans: currentMoveSans,
     ),
   );
 }
@@ -52,10 +70,18 @@ class _GamesSourceDialog extends StatefulWidget {
     required this.initialIsWhite,
     this.initialChesscomUsername,
     this.initialLichessUsername,
+    required this.atRoot,
+    required this.rootFen,
+    required this.currentFen,
+    required this.currentMoveSans,
   });
   final bool initialIsWhite;
   final String? initialChesscomUsername;
   final String? initialLichessUsername;
+  final bool atRoot;
+  final String? rootFen;
+  final String? currentFen;
+  final List<String> currentMoveSans;
 
   @override
   State<_GamesSourceDialog> createState() => _GamesSourceDialogState();
@@ -65,6 +91,7 @@ class _GamesSourceDialogState extends State<_GamesSourceDialog> {
   late GamesPlatform _platform;
   late final TextEditingController _usernameCtrl;
   late bool _isWhite = widget.initialIsWhite;
+  bool _fromCurrentPosition = false;
 
   // Selection mode: by date (default — usually what you want for a repertoire)
   // or by a fixed count of most-recent games.
@@ -122,6 +149,8 @@ class _GamesSourceDialogState extends State<_GamesSourceDialog> {
       selection: _useDate
           ? GameSelection(since: _since, speeds: _speeds)
           : GameSelection(maxGames: _maxGames, speeds: _speeds),
+      startMoves:
+          _fromCurrentPosition ? widget.currentMoveSans : const [],
     ));
   }
 
@@ -166,6 +195,44 @@ class _GamesSourceDialogState extends State<_GamesSourceDialog> {
                 selected: {_isWhite},
                 onSelectionChanged: (s) => setState(() => _isWhite = s.first),
               ),
+              if (widget.rootFen != null) ...[
+                const SizedBox(height: 12),
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(value: false, label: Text('All my games')),
+                    ButtonSegment(
+                        value: true, label: Text('From current position')),
+                  ],
+                  selected: {_fromCurrentPosition},
+                  onSelectionChanged: widget.atRoot
+                      ? null
+                      : (s) =>
+                          setState(() => _fromCurrentPosition = s.first),
+                ),
+                const SizedBox(height: 8),
+                StartingPositionCard(
+                  label: _fromCurrentPosition
+                      ? 'ONLY GAMES THROUGH'
+                      : 'DRAFTING FROM',
+                  fen: _fromCurrentPosition
+                      ? (widget.currentFen ?? widget.rootFen!)
+                      : widget.rootFen!,
+                  moveSans: _fromCurrentPosition
+                      ? widget.currentMoveSans
+                      : const [],
+                  flipped: !_isWhite,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _fromCurrentPosition
+                      ? 'Only games that reach this position are drafted; '
+                          'all other openings are left out.'
+                      : 'Every downloaded game is used, drafting lines from '
+                          'the first move.',
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: Colors.grey[500]),
+                ),
+              ],
               const SizedBox(height: 12),
               SegmentedButton<bool>(
                 segments: const [

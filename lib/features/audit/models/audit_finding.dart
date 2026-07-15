@@ -7,6 +7,12 @@ enum AuditFindingType {
   missingResponse,
   weakPosition,
   deadEnd,
+
+  // Hole-hunt (adversarial) finding types — emitted by HoleHuntService,
+  // never by the defensive audit.
+  uncoveredStrongMove,
+  refutation,
+  practicalTrap,
 }
 
 enum AuditSeverity {
@@ -74,6 +80,19 @@ class AuditFinding {
   /// elsewhere in the repertoire (the resulting FEN exists in the tree).
   final bool transposesIntoRepertoire;
 
+  /// For Refutation/PracticalTrap: the concrete line to play (SAN).
+  final List<String>? exploitLine;
+
+  /// For PracticalTrap: expectimax practical eval (attacker perspective, cp).
+  final int? expectedEvalCp;
+
+  /// For PracticalTrap: expectedEvalCp minus raw engine eval (cp) — how much
+  /// harder the position plays than it "should".
+  final int? practicalGapCp;
+
+  /// Hole-hunt ranking score: cumulative reach probability × gain (cp).
+  final double? exploitScore;
+
   /// Whether the user has dismissed this finding.
   bool dismissed;
 
@@ -95,6 +114,10 @@ class AuditFinding {
     this.uncoveredMoves,
     this.cumulativeProbability,
     this.transposesIntoRepertoire = false,
+    this.exploitLine,
+    this.expectedEvalCp,
+    this.practicalGapCp,
+    this.exploitScore,
     this.dismissed = false,
   });
 
@@ -163,6 +186,29 @@ class AuditFinding {
           return 'Dead end: $count uncovered (${moves.join(", ")})';
         }
         return 'Dead end: $count opponent continuations uncovered';
+      case AuditFindingType.uncoveredStrongMove:
+        final move = missingMove ?? '?';
+        final numbered = _sanWithMoveNumber(move, movePath.length);
+        final transTag = transposesIntoRepertoire ? ' · transposes' : '';
+        return 'Uncovered: $numbered is engine-strong, no reply in file'
+            '$transTag';
+      case AuditFindingType.refutation:
+        final move = ourMove ?? '?';
+        final numbered = movePath.isNotEmpty
+            ? _sanWithMoveNumber(move, movePath.length - 1)
+            : move;
+        final line = exploitLine;
+        final lineTag = line != null && line.isNotEmpty
+            ? ' — ${line.join(" ")}'
+            : '';
+        return 'Refuted: $numbered loses ${evalLossCp}cp$lineTag';
+      case AuditFindingType.practicalTrap:
+        final line = exploitLine;
+        final lineTag = line != null && line.isNotEmpty
+            ? ' (${line.take(6).join(" ")})'
+            : '';
+        return 'Trap zone: practically +${practicalGapCp}cp over the raw eval'
+            '$lineTag';
     }
   }
 
@@ -209,6 +255,11 @@ class AuditFinding {
         if (cumulativeProbability != null)
           'cumulativeProbability': cumulativeProbability,
         if (transposesIntoRepertoire) 'transposesIntoRepertoire': true,
+        if (exploitLine != null && exploitLine!.isNotEmpty)
+          'exploitLine': exploitLine,
+        if (expectedEvalCp != null) 'expectedEvalCp': expectedEvalCp,
+        if (practicalGapCp != null) 'practicalGapCp': practicalGapCp,
+        if (exploitScore != null) 'exploitScore': exploitScore,
         if (dismissed) 'dismissed': true,
       };
 
@@ -233,6 +284,10 @@ class AuditFinding {
         cumulativeProbability: (j['cumulativeProbability'] as num?)?.toDouble(),
         transposesIntoRepertoire:
             j['transposesIntoRepertoire'] as bool? ?? false,
+        exploitLine: (j['exploitLine'] as List?)?.cast<String>(),
+        expectedEvalCp: j['expectedEvalCp'] as int?,
+        practicalGapCp: j['practicalGapCp'] as int?,
+        exploitScore: (j['exploitScore'] as num?)?.toDouble(),
         dismissed: j['dismissed'] as bool? ?? false,
       );
 }

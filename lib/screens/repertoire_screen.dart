@@ -35,8 +35,8 @@ import '../widgets/layout/bottom_pane.dart';
 import '../widgets/layout/repertoire_status_bar.dart';
 import '../widgets/repertoire_list_body.dart';
 import '../widgets/repertoire_lines_browser.dart';
+import '../constants/chess_constants.dart';
 import '../constants/ui_breakpoints.dart';
-import '../widgets/repertoire/repertoire_empty_state.dart';
 import '../widgets/repertoire/repertoire_toolbar.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/repertoire/repertoire_shortcuts.dart';
@@ -48,6 +48,8 @@ import '../features/audit/models/audit_finding.dart';
 import '../features/audit/services/audit_board_annotations.dart';
 import '../features/audit/widgets/audit_findings_panel.dart';
 import '../features/audit/widgets/ephemeral_finding_bar.dart';
+import '../core/hole_hunt_session_controller.dart';
+import '../features/holes/widgets/holes_report_panel.dart';
 import '../features/traps/widgets/trap_navigation_buttons.dart';
 import '../features/traps/widgets/trap_tour_bar.dart';
 import '../features/traps/widgets/traps_tab_content.dart';
@@ -56,9 +58,14 @@ import '../features/traps/services/trap_index_service.dart';
 import '../features/traps/services/trap_line_builder.dart';
 import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
 import '../services/generation/trap_extractor.dart';
+import '../services/build_by_playing/build_by_playing_config.dart';
+import '../services/build_by_playing/build_by_playing_controller.dart';
 import '../services/games_library/games_library_service.dart';
 import '../services/games_repertoire/games_draft_controller.dart';
 import '../theme/app_colors.dart';
+import '../widgets/build_by_playing/build_by_playing_form.dart';
+import '../widgets/build_by_playing/build_session_board_bar.dart';
+import '../widgets/build_by_playing/build_session_pane.dart';
 import '../widgets/games_repertoire/games_source_form.dart';
 import '../widgets/games_repertoire/draft_review_pane.dart';
 import '../widgets/layout/jobs_tab_content.dart';
@@ -80,6 +87,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   final GlobalKey<RepertoireGenerationTabState> _generationTabKey =
       GlobalKey<RepertoireGenerationTabState>();
   final AuditSessionController _auditController = AuditSessionController();
+  final HoleHuntSessionController _holeHuntController =
+      HoleHuntSessionController();
   final GlobalKey<BottomPaneState> _bottomPaneKey =
       GlobalKey<BottomPaneState>();
   final GlobalKey<AuditFindingsPanelState> _findingsPanelKey =
@@ -87,6 +96,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   bool _isCompactLayout = false;
   bool _showInlineGenConfig = false;
   bool _showInlineAuditConfig = false;
+  bool _showInlineHoleHuntConfig = false;
+
+  /// Findings tab: show the hole-hunt report instead of the audit findings.
+  bool _findingsShowHoles = false;
 
   final JobManager _jobManager = JobManager.instance;
 
@@ -133,11 +146,13 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
   bool get _isDraftActive => _draftController.isActive;
 
-  String? _lastRepertoireId;
+  // ── Build-by-playing session (takes over the Lines/Draft tab) ──
+  late final BuildByPlayingController _buildSession;
+  bool _wasBuildSessionActive = false;
 
-  /// Session-sticky: once the empty-state cards are dismissed (explicitly or
-  /// by playing a move), show the normal tools column even at the root.
-  bool _emptyStateDismissed = false;
+  bool get _isBuildSessionActive => _buildSession.isActive;
+
+  String? _lastRepertoireId;
 
   final FocusNode _focusNode = FocusNode();
   final GlobalKey _linesPreviewStackKey = GlobalKey();
@@ -152,8 +167,12 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     _loadLinesPanelPref();
     _controller = RepertoireController();
     _controller.addListener(_onRepertoireChanged);
+    _buildSession = BuildByPlayingController(repertoire: _controller);
+    _buildSession.addListener(_onBuildSessionChanged);
+    BuildByPlayingSettings.instance.loadFromPrefs();
     _generationController.addListener(_onGenerationChanged);
     _auditController.addListener(_onAuditChanged);
+    _holeHuntController.addListener(_onHoleHuntChanged);
     _coverageController.addListener(_onCoverageChanged);
     _draftController.addListener(_onDraftChanged);
 
@@ -239,10 +258,13 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   }
 
   void _clearInlineConfigFlags() {
-    if (_showInlineGenConfig || _showInlineAuditConfig) {
+    if (_showInlineGenConfig ||
+        _showInlineAuditConfig ||
+        _showInlineHoleHuntConfig) {
       setState(() {
         _showInlineGenConfig = false;
         _showInlineAuditConfig = false;
+        _showInlineHoleHuntConfig = false;
       });
     }
   }
@@ -251,6 +273,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     setState(() {
       _showInlineGenConfig = true;
       _showInlineAuditConfig = false;
+      _showInlineHoleHuntConfig = false;
     });
     _openBottomPane(BottomPaneTab.jobs);
   }
@@ -270,6 +293,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   void _openAuditDialog({bool forceConfig = false}) {
     if (!forceConfig) {
       if (_auditController.isAuditing || _auditController.hasResults) {
+        setState(() => _findingsShowHoles = false);
         _openBottomPane(BottomPaneTab.findings);
         return;
       }
@@ -277,6 +301,23 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     setState(() {
       _showInlineAuditConfig = true;
       _showInlineGenConfig = false;
+      _showInlineHoleHuntConfig = false;
+    });
+    _openBottomPane(BottomPaneTab.jobs);
+  }
+
+  void _openHoleHuntDialog({bool forceConfig = false}) {
+    if (!forceConfig) {
+      if (_holeHuntController.isHunting || _holeHuntController.hasResults) {
+        setState(() => _findingsShowHoles = true);
+        _openBottomPane(BottomPaneTab.findings);
+        return;
+      }
+    }
+    setState(() {
+      _showInlineHoleHuntConfig = true;
+      _showInlineGenConfig = false;
+      _showInlineAuditConfig = false;
     });
     _openBottomPane(BottomPaneTab.jobs);
   }
@@ -353,22 +394,17 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         _ephemeralFen = null;
       }
 
-      // Once the user starts playing moves, keep the tools column for the
-      // rest of the session — the empty-state cards must not pop back in
-      // when they navigate to the root position.
-      if (_controller.currentMoveSequence.isNotEmpty) {
-        _emptyStateDismissed = true;
-      }
-
       if (_controller.currentRepertoire != null && !_controller.isLoading) {
         final currentId = _controller.currentRepertoire!.filePath;
         if (currentId != _lastRepertoireId) {
           _auditController.onRepertoireSwitching(_lastRepertoireId);
+          _holeHuntController.onRepertoireSwitching(_lastRepertoireId);
           _lastRepertoireId = currentId;
           _boardFlipped = !_controller.isRepertoireWhite;
+          // A build-by-playing session must not survive a repertoire swap.
+          _buildSession.endSession();
           _generationController.clearTree();
           _coverageController.clear();
-          _emptyStateDismissed = false;
           // A tour from the previous repertoire's traps makes no sense here.
           _trapTourVisible = false;
           _trapTourInitialTrap = null;
@@ -387,6 +423,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
     if (newRepertoireId != null) {
       _auditController.tryRestore(newRepertoireId!);
+      _holeHuntController.tryRestore(newRepertoireId!);
     }
   }
 
@@ -425,16 +462,23 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     if (_auditController.isAuditing) {
       _auditController.saveProgress(_repertoireFilePath);
     }
+    if (_holeHuntController.isHunting) {
+      _holeHuntController.cancel(_repertoireFilePath);
+    }
     _toolsTabController.dispose();
     _sidePanelTabController.dispose();
     _focusNode.dispose();
     _boardPreview.dispose();
     _draftController.removeListener(_onDraftChanged);
     _draftController.dispose();
+    _buildSession.removeListener(_onBuildSessionChanged);
+    _buildSession.dispose();
     _coverageController.removeListener(_onCoverageChanged);
     _coverageController.dispose();
     _auditController.removeListener(_onAuditChanged);
     _auditController.dispose();
+    _holeHuntController.removeListener(_onHoleHuntChanged);
+    _holeHuntController.dispose();
     _generationController.removeListener(_onGenerationChanged);
     _generationController.dispose();
     _controller.removeListener(_onRepertoireChanged);
@@ -457,7 +501,38 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     });
   }
 
+  /// While a build-by-playing session is active, ←/→ navigate the scratchpad
+  /// (no-ops outside exploration) instead of the repertoire cursor — moving
+  /// the cursor away from a decision point would pause the session.
+  void _sessionAwareGoBack() {
+    if (_isBuildSessionActive) {
+      _buildSession.scratchGoBack();
+      return;
+    }
+    _controller.goBack();
+  }
+
+  void _sessionAwareGoForward() {
+    if (_isBuildSessionActive) {
+      _buildSession.scratchGoForward();
+      return;
+    }
+    _controller.goForward();
+  }
+
   Future<void> _performUndo() async {
+    if (_isBuildSessionActive) {
+      final undone = await _buildSession.undoLastCommit();
+      if (undone && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Undid last committed move'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
     if (!_controller.writer.canUndo) return;
     try {
       final undone = await _controller.writer.undo();
@@ -580,8 +655,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         onSelectRepertoire: _showRepertoireSelection,
         onTrainRepertoire: _trainRepertoire,
         onOpenGeneration: _openGenerationDialog,
+        onBuildByPlaying: _startBuildByPlaying,
         onBuildFromGames: _buildFromGames,
         onOpenAudit: _openAuditDialog,
+        onOpenFindHoles: _openHoleHuntDialog,
         onImportPgnFile: _importPgnFromFile,
         onImportPgnPaste: _importPgnFromPaste,
         trapNavigation: _buildTrapNavigation(),
@@ -608,6 +685,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             }
           },
           onCollapseBottomPane: () {
+            if (_buildSession.phase == BuildByPlayingPhase.exploring) {
+              _buildSession.backToDecisionPoint();
+              return true;
+            }
             if (_trapTourVisible) {
               _closeTrapTour();
               return true;
@@ -633,8 +714,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           },
           onToggleEngine: InlineEngineBar.toggleEngine,
           onFocusComment: PgnAnnotationPanel.focusActive,
-          onGoBack: _controller.goBack,
-          onGoForward: _controller.goForward,
+          onGoBack: _sessionAwareGoBack,
+          onGoForward: _sessionAwareGoForward,
           onGoToPreviousTrap: () => TrapNavigationButtons.goToPreviousTrap(
             trapIndex: _trapIndex,
             controller: _controller,
@@ -766,19 +847,24 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         final panelWidth = (_linesPanelWidth ?? defaultWidth)
             .clamp(_kLinesPanelMinWidth, maxWidth)
             .toDouble();
+        // The board zone needs a bounded width: the bars under the board
+        // (build-session, ephemeral finding) hold Rows with Expanded
+        // children, which cannot lay out under the Row's unbounded width.
+        // maxHeight matches the width the square board resolves to anyway
+        // (board side + padding), so the no-bar geometry is unchanged.
+        final boardZoneWidth =
+            constraints.maxHeight.clamp(0.0, constraints.maxWidth * 0.5);
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildBoardZone(),
+            SizedBox(width: boardZoneWidth, child: _buildBoardZone()),
             _verticalZoneDivider(),
             Expanded(child: _buildWideToolsColumn()),
-            if (!_showEmptyState) ...[
-              if (_linesPanelCollapsed)
-                _verticalZoneDivider()
-              else
-                _buildLinesPanelDragHandle(maxWidth),
-              _buildLinesSidePanel(panelWidth),
-            ],
+            if (_linesPanelCollapsed)
+              _verticalZoneDivider()
+            else
+              _buildLinesPanelDragHandle(maxWidth),
+            _buildLinesSidePanel(panelWidth),
           ],
         );
       },
@@ -833,7 +919,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         Expanded(
           child: BoardZone(
             boardPreview: _boardPreview,
-            fen: _ephemeralFen ?? _controller.fen,
+            fen: _isBuildSessionActive
+                ? _buildSession.boardFen
+                : (_ephemeralFen ?? _controller.fen),
             positionFromFen: _positionFromFen,
             boardFlipped: _boardFlipped,
             onMove: _handleMove,
@@ -843,6 +931,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             ),
           ),
         ),
+        if (_isBuildSessionActive)
+          BuildSessionBoardBar(session: _buildSession),
         if (_ephemeralFinding != null)
           EphemeralFindingBar(
             finding: _ephemeralFinding!,
@@ -858,29 +948,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     );
   }
 
-  /// Empty repertoire, nothing in flight, and no moves played yet: the tab
-  /// contents would all be blank, so show the add-lines entry points instead.
-  /// Sticky once dismissed (see [_emptyStateDismissed]) so the layout doesn't
-  /// flip back and forth as the user navigates.
-  bool get _showEmptyState =>
-      !_emptyStateDismissed &&
-      _controller.repertoireLines.isEmpty &&
-      _controller.currentMoveSequence.isEmpty &&
-      !_generationController.isGenerating &&
-      !_isDraftActive;
-
   /// Compact-layout tools pane: PGN | Lines/Draft | Tree tabs + nav.
   /// Engine bars live inside PGN tab only.
   Widget _buildToolsColumn() {
-    if (_showEmptyState) {
-      return RepertoireEmptyState(
-        onGenerate: _openGenerationDialog,
-        onBuildFromGames: _buildFromGames,
-        onImportPgnFile: _importPgnFromFile,
-        onImportPgnPaste: _importPgnFromPaste,
-        onDismiss: () => setState(() => _emptyStateDismissed = true),
-      );
-    }
     return Column(
       children: [
         _buildToolsTabBar(),
@@ -903,15 +973,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   /// Wide-layout tools column: the PGN editor, always visible — the
   /// Lines/Draft and Tree surfaces live in the side panel to the right.
   Widget _buildWideToolsColumn() {
-    if (_showEmptyState) {
-      return RepertoireEmptyState(
-        onGenerate: _openGenerationDialog,
-        onBuildFromGames: _buildFromGames,
-        onImportPgnFile: _importPgnFromFile,
-        onImportPgnPaste: _importPgnFromPaste,
-        onDismiss: () => setState(() => _emptyStateDismissed = true),
-      );
-    }
     return Column(
       children: [
         Expanded(child: _buildPgnTabWithEngines()),
@@ -942,13 +1003,21 @@ class _RepertoireScreenState extends State<RepertoireScreen>
               RotatedBox(
                 quarterTurns: 1,
                 child: Text(
-                  _isDraftActive
-                      ? 'Draft'
-                      : 'Lines (${_controller.repertoireLines.length})',
+                  _isBuildSessionActive
+                      ? 'Session'
+                      : _isDraftActive
+                          ? 'Draft'
+                          : 'Lines (${_controller.repertoireLines.length})',
                   style: TextStyle(
                     fontSize: 11,
-                    color: _isDraftActive ? AppColors.warning : theme.hintColor,
-                    fontWeight: _isDraftActive ? FontWeight.w600 : null,
+                    color: _isBuildSessionActive
+                        ? theme.colorScheme.primary
+                        : _isDraftActive
+                            ? AppColors.warning
+                            : theme.hintColor,
+                    fontWeight: _isBuildSessionActive || _isDraftActive
+                        ? FontWeight.w600
+                        : null,
                   ),
                 ),
               ),
@@ -1005,6 +1074,13 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   /// Second tools tab: normally the Lines list, but it becomes the Draft
   /// review surface while a build-from-games session is active.
   Widget _buildSecondTabContent() {
+    if (_isBuildSessionActive) {
+      return BuildSessionPane(
+        session: _buildSession,
+        boardPreview: _boardPreview,
+        onOpenSettings: _openBuildSessionSettings,
+      );
+    }
     if (_draftController.isBuilding) {
       return Center(
         child: Column(
@@ -1065,7 +1141,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             children: [
               Expanded(
                 child: InlineEngineBar(
-                  fen: _controller.fen,
+                  // Follow the scratchpad while a session explores.
+                  fen: _isBuildSessionActive
+                      ? _buildSession.boardFen
+                      : _controller.fen,
                   isActive: true,
                 ),
               ),
@@ -1084,6 +1163,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                       _generationController.coherenceService.result,
                   isGenerating: _generationController.isGenerating,
                   isGenerationPaused: _generationController.isPaused,
+                  // Follow the scratchpad while a session explores.
+                  fenOverride:
+                      _isBuildSessionActive ? _buildSession.boardFen : null,
                 ),
               ),
             ],
@@ -1129,25 +1211,36 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   }
 
   Widget _buildLinesTabLabel() {
+    final highlight = _isBuildSessionActive
+        ? Theme.of(context).colorScheme.primary
+        : _isDraftActive
+            ? AppColors.warning
+            : null;
     return Tab(
       height: 30,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            _isDraftActive ? Icons.download_done : Icons.list_alt,
+            _isBuildSessionActive
+                ? Icons.sports_esports
+                : _isDraftActive
+                    ? Icons.download_done
+                    : Icons.list_alt,
             size: 14,
-            color: _isDraftActive ? AppColors.warning : null,
+            color: highlight,
           ),
           const SizedBox(width: 4),
           Text(
-            _isDraftActive
-                ? 'Draft'
-                : 'Lines${_traps.isNotEmpty ? ' & Traps' : ''}',
+            _isBuildSessionActive
+                ? 'Session'
+                : _isDraftActive
+                    ? 'Draft'
+                    : 'Lines${_traps.isNotEmpty ? ' & Traps' : ''}',
             style: TextStyle(
               fontSize: 12,
-              color: _isDraftActive ? AppColors.warning : null,
-              fontWeight: _isDraftActive ? FontWeight.w600 : null,
+              color: highlight,
+              fontWeight: highlight != null ? FontWeight.w600 : null,
             ),
           ),
         ],
@@ -1189,14 +1282,14 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           ),
           IconButton(
             icon: const Icon(Icons.chevron_left, size: 20),
-            onPressed: _controller.goBack,
+            onPressed: _sessionAwareGoBack,
             tooltip: 'Back (←)',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           ),
           IconButton(
             icon: const Icon(Icons.chevron_right, size: 20),
-            onPressed: _controller.goForward,
+            onPressed: _sessionAwareGoForward,
             tooltip: 'Forward (→)',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
@@ -1233,18 +1326,23 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     return JobsTabContent(
       showInlineGenConfig: _showInlineGenConfig,
       showInlineAuditConfig: _showInlineAuditConfig,
+      showInlineHoleHuntConfig: _showInlineHoleHuntConfig,
       controller: _controller,
       generationController: _generationController,
       auditController: _auditController,
+      holeHuntController: _holeHuntController,
       jobManager: _jobManager,
       generationTabKey: _generationTabKey,
       onCloseInlineGenConfig: () =>
           setState(() => _showInlineGenConfig = false),
       onCloseInlineAuditConfig: () =>
           setState(() => _showInlineAuditConfig = false),
+      onCloseInlineHoleHuntConfig: () =>
+          setState(() => _showInlineHoleHuntConfig = false),
       onOpenGenerationDialog: _openGenerationDialog,
       onOpenAuditConfig: () => _openAuditDialog(forceConfig: true),
       onOpenCoverageDialog: _showCoverageCalculator,
+      onOpenHoleHuntConfig: () => _openHoleHuntDialog(forceConfig: true),
       onAuditingChanged: (auditing) {
         if (!mounted) return;
         _auditController.onAuditingChanged(
@@ -1269,12 +1367,41 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         if (!mounted) return;
         _auditController.onProgress(checked, total);
       },
+      onHoleHuntingChanged: (hunting) {
+        if (!mounted) return;
+        _holeHuntController.onHuntingChanged(
+          hunting,
+          _jobManager,
+          '${_controller.currentRepertoire?.name ?? 'Repertoire'} holes',
+        );
+        if (hunting) {
+          setState(() {
+            _showInlineHoleHuntConfig = false;
+            _findingsShowHoles = true;
+          });
+          _openBottomPane(BottomPaneTab.findings);
+        }
+      },
+      onHoleHuntResultReady: (result) {
+        if (!mounted) return;
+        _holeHuntController.onResultReady(result, _repertoireFilePath);
+      },
+      onHoleHuntLiveFinding: (finding) {
+        if (!mounted) return;
+        _holeHuntController.onLiveFinding(finding);
+      },
+      onHoleHuntProgress: (progress) {
+        if (!mounted) return;
+        _holeHuntController.onProgress(progress);
+      },
     );
   }
 
   Widget _buildFindingsContent() {
     final ac = _auditController;
-    return AuditFindingsPanel(
+    final hc = _holeHuntController;
+
+    final auditPanel = AuditFindingsPanel(
       key: _findingsPanelKey,
       result: ac.result,
       liveFindings: ac.liveFindings,
@@ -1292,6 +1419,55 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       onStartFreshAudit:
           ac.interruptedSnapshot != null ? _startFreshAudit : null,
       onStartAudit: () => _openAuditDialog(forceConfig: true),
+    );
+
+    // Only offer the Audit/Holes switch once a hunt exists — the tab is
+    // unchanged for audit-only workflows.
+    if (!hc.hasResults && !hc.isHunting) return auditPanel;
+
+    final holesPanel = HolesReportPanel(
+      result: hc.result,
+      liveFindings: hc.liveFindings,
+      isHunting: hc.isHunting,
+      progress: hc.progress,
+      trapPassSkipped: hc.trapPassSkipped,
+      onFindingSelected: _onFindingSelected,
+      onResultChanged: (updatedResult) {
+        hc.onResultChanged(updatedResult, _repertoireFilePath);
+      },
+      onStartHunt: () => _openHoleHuntDialog(forceConfig: true),
+    );
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: SegmentedButton<bool>(
+            segments: [
+              ButtonSegment(
+                value: false,
+                label: Text('Audit (${ac.activeFindingCount})',
+                    style: const TextStyle(fontSize: 11)),
+              ),
+              ButtonSegment(
+                value: true,
+                label: Text('Holes (${hc.activeFindingCount})',
+                    style: const TextStyle(fontSize: 11)),
+              ),
+            ],
+            selected: {_findingsShowHoles},
+            onSelectionChanged: (s) =>
+                setState(() => _findingsShowHoles = s.first),
+            showSelectedIcon: false,
+            style: const ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(child: _findingsShowHoles ? holesPanel : auditPanel),
+      ],
     );
   }
 
@@ -1321,7 +1497,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     _controller.navigateToLineMove(finding.movePath);
     _navigatingToFinding = false;
 
-    if (finding.type == AuditFindingType.missingResponse &&
+    if ((finding.type == AuditFindingType.missingResponse ||
+            finding.type == AuditFindingType.uncoveredStrongMove) &&
         finding.missingMove != null) {
       try {
         final parentFen = _controller.fen;
@@ -1653,6 +1830,11 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     setState(() {});
   }
 
+  void _onHoleHuntChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
   void _onCoverageChanged() {
     if (!mounted) return;
     setState(() {});
@@ -1664,11 +1846,19 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
   Future<void> _buildFromGames() async {
     final appState = context.read<AppState>();
+    // Real games always start from the initial position, so the from-current
+    // option only makes sense for standard-start repertoires.
+    final standardStart = _controller.startingFen == null;
     final config = await showGamesSourceForm(
       context,
       initialIsWhite: _controller.isRepertoireWhite,
       initialChesscomUsername: appState.chesscomUsername,
       initialLichessUsername: appState.lichessUsername,
+      atRoot: !standardStart || _controller.currentMoveSequence.isEmpty,
+      rootFen: kStandardStartFen,
+      currentFen: standardStart ? _controller.fen : null,
+      currentMoveSans:
+          standardStart ? _controller.currentMoveSequence : const [],
     );
     if (config == null || !mounted) return;
 
@@ -1690,6 +1880,53 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         content: Text(error),
       ));
     }
+  }
+
+  void _onBuildSessionChanged() {
+    if (!mounted) return;
+    setState(() {});
+    if (_buildSession.isActive && !_wasBuildSessionActive) {
+      _showLinesSurface();
+    }
+    _wasBuildSessionActive = _buildSession.isActive;
+  }
+
+  Future<void> _startBuildByPlaying() async {
+    if (_controller.currentRepertoire == null) return;
+    if (_isBuildSessionActive) {
+      _showLinesSurface();
+      return;
+    }
+    final config = await showBuildByPlayingForm(
+      context,
+      initial: BuildByPlayingSettings.instance.config,
+      atRoot: _controller.isAtRootPosition,
+      rootFen: _controller.rootFen,
+      rootMoveSans: _controller.rootMoveSans,
+      currentFen: _controller.fen,
+      currentMoveSans: _controller.currentMoveSequence,
+      boardFlipped: !_controller.isRepertoireWhite,
+    );
+    if (config == null || !mounted) return;
+    BuildByPlayingSettings.instance.applyFrom(config);
+    _showLinesSurface();
+    await _buildSession.start(
+      config,
+      generatedTree: _generationController.generatedTree,
+      fenMap: _generationController.generatedTreeFenMap,
+    );
+  }
+
+  /// Mid-session knob changes from the session pane's gear icon.
+  Future<void> _openBuildSessionSettings() async {
+    final config = await showBuildByPlayingForm(
+      context,
+      initial: _buildSession.config,
+      atRoot: true, // start-from choice is meaningless mid-session
+    );
+    if (config == null || !mounted) return;
+    BuildByPlayingSettings.instance.applyFrom(config);
+    _buildSession.updateConfig(config);
   }
 
   void _onDraftChanged() {
@@ -1784,6 +2021,12 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   /// Handle moves from the chessboard - board has already made the move and gives us rich info
   void _handleMove(CompletedMove move) {
     if (!mounted) return;
+    if (_isBuildSessionActive) {
+      // Session moves are scratchpad exploration (or ignored while the
+      // opponent thinks) — never direct repertoire-tree edits.
+      _buildSession.handleBoardMove(move.san);
+      return;
+    }
     _controller.playMove(move.san);
   }
 

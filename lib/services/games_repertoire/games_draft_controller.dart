@@ -71,6 +71,17 @@ class GamesDraftController extends ChangeNotifier {
         strictPlayerMatching: false,
       );
 
+      // "From current position": keep only the branch through the moves that
+      // were on the board when the form was opened.
+      if (config.startMoves.isNotEmpty) {
+        final restrictError = restrictTreeToLine(tree, config.startMoves);
+        if (restrictError != null) {
+          _building = false;
+          notifyListeners();
+          return restrictError;
+        }
+      }
+
       _draft = GamesDraft.against(
         tree: tree,
         isWhite: config.isWhite,

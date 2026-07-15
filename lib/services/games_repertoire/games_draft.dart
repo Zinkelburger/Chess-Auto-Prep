@@ -15,6 +15,42 @@ import '../../models/move_tree.dart';
 import '../../models/opening_tree.dart';
 import 'repertoire_diff.dart';
 
+/// Restrict [tree] in place to the single branch through [sans] (SAN moves
+/// from the game start): siblings along the path are discarded, and the
+/// subtree below the last move is kept whole. Used when the user drafts
+/// "from the current position" — only games that reached that position count.
+///
+/// Returns an error message when no game follows the whole sequence, null on
+/// success. On error the tree is left partially pruned and should be
+/// discarded.
+String? restrictTreeToLine(OpeningTree tree, List<String> sans) {
+  var node = tree.root;
+  for (final san in sans) {
+    final match = _findChildSan(node, san);
+    if (match == null) {
+      return 'None of the downloaded games reach the current position '
+          '(${sans.join(' ')}).';
+    }
+    for (final key in node.children.keys.toList()) {
+      if (key != match) node.removeChild(key);
+    }
+    node = node.children[match]!;
+  }
+  return null;
+}
+
+/// SAN check/mate suffixes can differ between sources; match without them.
+String _stripSanSuffix(String san) => san.replaceAll(RegExp(r'[+#]+$'), '');
+
+String? _findChildSan(OpeningTreeNode node, String san) {
+  if (node.children.containsKey(san)) return san;
+  final want = _stripSanSuffix(san);
+  for (final key in node.children.keys) {
+    if (_stripSanSuffix(key) == want) return key;
+  }
+  return null;
+}
+
 /// Filters applied when materializing — discard noise before it reaches the
 /// repertoire.
 class DraftFilters {

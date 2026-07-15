@@ -7,8 +7,8 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../../theme/app_colors.dart';
 import '../models/audit_finding.dart';
+import 'finding_style.dart';
 import 'finding_tile.dart';
 
 class AuditFindingsList extends StatelessWidget {
@@ -33,34 +33,6 @@ class AuditFindingsList extends StatelessWidget {
   final void Function(int index) onSelect;
   final void Function(AuditFinding finding) onToggleDismiss;
   final void Function(AuditFinding finding, Offset position) onContextMenu;
-
-  static Color _colorOf(AuditFinding finding) {
-    if (finding.type == AuditFindingType.missingResponse &&
-        finding.source == MissingResponseSource.clash) {
-      return Colors.purple;
-    }
-    return switch (finding.type) {
-      AuditFindingType.mistake => AppColors.evalNegative,
-      AuditFindingType.inaccuracy => Colors.orange,
-      AuditFindingType.missingResponse => Colors.blue,
-      AuditFindingType.weakPosition => Colors.deepOrange,
-      AuditFindingType.deadEnd => AppColors.onSurfaceMuted,
-    };
-  }
-
-  static IconData _iconOf(AuditFinding finding) {
-    if (finding.type == AuditFindingType.missingResponse &&
-        finding.source == MissingResponseSource.clash) {
-      return Icons.menu_book_outlined;
-    }
-    return switch (finding.type) {
-      AuditFindingType.mistake => Icons.error_outline,
-      AuditFindingType.inaccuracy => Icons.warning_amber_outlined,
-      AuditFindingType.missingResponse => Icons.visibility_off_outlined,
-      AuditFindingType.weakPosition => Icons.trending_down,
-      AuditFindingType.deadEnd => Icons.block_outlined,
-    };
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -110,8 +82,8 @@ class AuditFindingsList extends StatelessWidget {
         return FindingTile(
           finding: finding,
           isSelected: index == selectedIndex,
-          color: _colorOf(finding),
-          icon: _iconOf(finding),
+          color: findingColor(finding),
+          icon: findingIcon(finding),
           onSelect: () => onSelect(index),
           onToggleDismiss: () => onToggleDismiss(finding),
           onContextMenu: (pos) => onContextMenu(finding, pos),

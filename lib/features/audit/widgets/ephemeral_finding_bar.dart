@@ -24,6 +24,9 @@ class EphemeralFindingBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final move = finding.missingMove ?? '?';
+    final label = finding.type == AuditFindingType.uncoveredStrongMove
+        ? 'Uncovered: $move (engine-strong, preview)'
+        : 'Missing: $move (preview)';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
@@ -37,7 +40,7 @@ class EphemeralFindingBar extends StatelessWidget {
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              'Missing: $move (preview)',
+              label,
               style: const TextStyle(fontSize: 12, color: Colors.blue),
             ),
           ),

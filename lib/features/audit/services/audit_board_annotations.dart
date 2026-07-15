@@ -50,6 +50,11 @@ List<BoardAnnotation> buildAuditBoardAnnotations({
           AnnotationBrush.blue,
           f.missingMove
         ),
+      AuditFindingType.uncoveredStrongMove => (
+          AnnotationBrush.blue,
+          f.missingMove
+        ),
+      AuditFindingType.refutation => (AnnotationBrush.red, f.ourMove),
       _ => (AnnotationBrush.green, null as String?),
     };
 
