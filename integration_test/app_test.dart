@@ -14,8 +14,9 @@ void main() {
   // ── App Launch ─────────────────────────────────────────────────────────
 
   group('App Launch', () {
-    testWidgets('boots into Tactics mode with import controls visible',
-        (tester) async {
+    testWidgets('boots into Tactics mode with import controls visible', (
+      tester,
+    ) async {
       await pumpApp(tester);
 
       expect(find.text('Tactics'), findsOneWidget);
@@ -23,7 +24,9 @@ void main() {
       expect(find.text('Import Games'), findsOneWidget);
       expect(find.text('Lichess Username'), findsOneWidget);
       expect(find.text('Chess.com Username'), findsOneWidget);
-      expect(find.text('Stockfish Depth'), findsOneWidget);
+      // Stockfish depth moved into the engine-settings dialog behind the
+      // gear button; assert the button that opens it is present.
+      expect(find.byTooltip('Engine settings…'), findsOneWidget);
     });
   });
 
@@ -100,7 +103,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-          getAppState(tester).currentMode, equals(AppMode.repertoireTrainer));
+        getAppState(tester).currentMode,
+        equals(AppMode.repertoireTrainer),
+      );
     });
   });
 
@@ -114,8 +119,10 @@ void main() {
       expect(board, findsOneWidget);
 
       final boardWidget = tester.widget<ChessBoardWidget>(board);
-      expect(boardWidget.position.fen,
-          contains('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR'));
+      expect(
+        boardWidget.position.fen,
+        contains('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR'),
+      );
     });
   });
 }

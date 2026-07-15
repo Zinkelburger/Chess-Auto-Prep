@@ -32,6 +32,22 @@ class TacticsDatabase extends ChangeNotifier {
   int sessionPositionIndex = 0;
   Future<void> _pendingWrite = Future<void>.value();
 
+  // Async loads (e.g. loadPositions) can complete after the owning provider
+  // is disposed; swallow late notifications instead of asserting.
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
+  @override
+  void notifyListeners() {
+    if (_disposed) return;
+    super.notifyListeners();
+  }
+
   /// Display name of what's loaded into [positions]: [defaultSetName] for
   /// the tactics database, or the external file's name during a review.
   String _activeSetName = defaultSetName;
@@ -120,7 +136,8 @@ class TacticsDatabase extends ChangeNotifier {
       await _loadAnalyzedGameIds();
 
       log.i(
-          'Loaded ${positions.length} tactics positions from set "$_activeSetName"');
+        'Loaded ${positions.length} tactics positions from set "$_activeSetName"',
+      );
       log.i('Tracking ${analyzedGameIds.length} analyzed game IDs');
       notifyListeners();
       return positions.length;
@@ -150,7 +167,8 @@ class TacticsDatabase extends ChangeNotifier {
         await storage.writeFile(pgnPath, encoded.pgn);
         await storage.renameFile(legacy.path, '${legacy.path}.bak');
         log.i(
-            'Converted tactics set "${legacy.name}" from CSV to PGN (${parsed.positions.length} positions)');
+          'Converted tactics set "${legacy.name}" from CSV to PGN (${parsed.positions.length} positions)',
+        );
       } catch (e) {
         log.e('Error converting CSV set "${legacy.name}": $e');
       }
@@ -171,13 +189,16 @@ class TacticsDatabase extends ChangeNotifier {
       try {
         var targetName = set.name;
         var suffix = 1;
-        while (
-            await storage.fileExists(await storage.studyFilePath(targetName))) {
+        while (await storage.fileExists(
+          await storage.studyFilePath(targetName),
+        )) {
           suffix++;
           targetName = '${set.name} (tactics${suffix > 2 ? ' $suffix' : ''})';
         }
         await storage.renameFile(
-            set.filePath, await storage.studyFilePath(targetName));
+          set.filePath,
+          await storage.studyFilePath(targetName),
+        );
         log.i('Moved tactics set "${set.name}" to studies as "$targetName"');
       } catch (e) {
         log.e('Error moving tactics set "${set.name}" to studies: $e');
@@ -202,8 +223,12 @@ class TacticsDatabase extends ChangeNotifier {
     _activeSetPath = path;
     _externalGameIndex = gameIndex;
     _externalIncludeVariations = includeVariations;
-    _activeSetName = displayName ??
-        path.split('/').last.replaceAll(RegExp(r'\.pgn$', caseSensitive: false), '');
+    _activeSetName =
+        displayName ??
+        path
+            .split('/')
+            .last
+            .replaceAll(RegExp(r'\.pgn$', caseSensitive: false), '');
     _sessionQueue = [];
     _sessionQueueIndex = 0;
     _sessionMaxQueueIndex = 0;
@@ -266,8 +291,9 @@ class TacticsDatabase extends ChangeNotifier {
 
   /// Mark multiple games as analyzed
   Future<void> markGamesAnalyzed(Iterable<String> gameIds) async {
-    final newIds =
-        gameIds.where((id) => id.isNotEmpty && !analyzedGameIds.contains(id));
+    final newIds = gameIds.where(
+      (id) => id.isNotEmpty && !analyzedGameIds.contains(id),
+    );
     if (newIds.isNotEmpty) {
       analyzedGameIds.addAll(newIds);
       notifyListeners();
@@ -293,7 +319,8 @@ class TacticsDatabase extends ChangeNotifier {
   /// Parse tactics-CSV [content] (with header row) into positions.
   /// Bad rows are reported as warnings instead of failing the whole file.
   static ({List<TacticsPosition> positions, List<String> warnings}) parseCsv(
-      String content) {
+    String content,
+  ) {
     final positions = <TacticsPosition>[];
     final warnings = <String>[];
     if (content.trim().isEmpty) {
@@ -332,19 +359,25 @@ class TacticsDatabase extends ChangeNotifier {
             return;
           }
           await storage.writeFile(
-              externalPath, patchStatsInPgn(existing, snapshot));
+            externalPath,
+            patchStatsInPgn(existing, snapshot),
+          );
         } else {
           final encoded = encodePuzzlesToPgn(setName, snapshot);
           if (encoded.fallback > 0) {
             log.w(
-                '${encoded.fallback} position(s) stored with raw [CorrectLine] fallback');
+              '${encoded.fallback} position(s) stored with raw [CorrectLine] fallback',
+            );
           }
           if (encoded.dropped > 0) {
             log.w(
-                '${encoded.dropped} position(s) with unparsable FEN dropped on save');
+              '${encoded.dropped} position(s) with unparsable FEN dropped on save',
+            );
           }
           await storage.writeFile(
-              await storage.tacticsSetPath(setName), encoded.pgn);
+            await storage.tacticsSetPath(setName),
+            encoded.pgn,
+          );
         }
         log.i('Saved ${snapshot.length} tactics positions to set "$setName"');
       } catch (e) {
@@ -378,8 +411,9 @@ class TacticsDatabase extends ChangeNotifier {
   }
 
   /// Start a new review session with the given [settings].
-  void startSession(
-      [TacticsSessionSettings settings = const TacticsSessionSettings()]) {
+  void startSession([
+    TacticsSessionSettings settings = const TacticsSessionSettings(),
+  ]) {
     currentSession = ReviewSession();
     _sessionSettings = settings;
 
@@ -393,13 +427,18 @@ class TacticsDatabase extends ChangeNotifier {
     switch (settings.order) {
       case TacticsSessionOrder.newestFirst:
         _sessionQueue.sort(
-            (a, b) => positions[b].gameDate.compareTo(positions[a].gameDate));
+          (a, b) => positions[b].gameDate.compareTo(positions[a].gameDate),
+        );
       case TacticsSessionOrder.leastReviewed:
-        _sessionQueue.sort((a, b) =>
-            positions[a].reviewCount.compareTo(positions[b].reviewCount));
+        _sessionQueue.sort(
+          (a, b) =>
+              positions[a].reviewCount.compareTo(positions[b].reviewCount),
+        );
       case TacticsSessionOrder.worstSuccessRate:
-        _sessionQueue.sort((a, b) =>
-            positions[a].successRate.compareTo(positions[b].successRate));
+        _sessionQueue.sort(
+          (a, b) =>
+              positions[a].successRate.compareTo(positions[b].successRate),
+        );
       case TacticsSessionOrder.random:
         _sessionQueue.shuffle(Random());
     }
@@ -584,7 +623,9 @@ class TacticsDatabase extends ChangeNotifier {
     if (existing.any((p) => p.fen == position.fen)) return false;
     existing.add(position);
     await storage.writeFile(
-        path, encodePuzzlesToPgn(defaultSetName, existing).pgn);
+      path,
+      encodePuzzlesToPgn(defaultSetName, existing).pgn,
+    );
     return true;
   }
 
@@ -621,7 +662,8 @@ class TacticsDatabase extends ChangeNotifier {
       await savePositions();
       await _saveAnalyzedGameIds();
       log.w(
-          'Added $added new positions (${newPositions.length - added} duplicates skipped)');
+        'Added $added new positions (${newPositions.length - added} duplicates skipped)',
+      );
     }
   }
 
@@ -633,12 +675,7 @@ class TacticsDatabase extends ChangeNotifier {
 }
 
 /// Result of attempting a tactical position
-enum TacticsResult {
-  correct,
-  incorrect,
-  hint,
-  timeout,
-}
+enum TacticsResult { correct, incorrect, hint, timeout }
 
 /// Statistics for a review session
 class ReviewSession {
