@@ -17,8 +17,9 @@ import '../models/study_document.dart';
 import '../services/storage/storage_factory.dart';
 import '../utils/chess_utils.dart' show tryParseFen;
 import 'package:chess_auto_prep/utils/log.dart';
+import 'package:chess_auto_prep/utils/safe_change_notifier.dart';
 
-class StudyController extends ChangeNotifier {
+class StudyController extends ChangeNotifier with SafeChangeNotifier {
   StudyDocument _doc = StudyDocument.fresh('Untitled study');
   StudyDocument get doc => _doc;
 

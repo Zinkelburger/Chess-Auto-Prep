@@ -9,6 +9,7 @@ import '../../models/tactics_session_settings.dart';
 import '../../utils/fen_utils.dart';
 import '../tactics_database.dart';
 import '../tactics_engine.dart';
+import '../../utils/safe_change_notifier.dart';
 
 /// Board updates the UI must apply after session logic runs.
 class TacticsBoardUpdate {
@@ -50,7 +51,7 @@ enum SessionPuzzleOutcome { correct, incorrect, unattempted }
 ///    navigating past either end (or the back button) returns to the list.
 enum TacticsPlaySource { none, session, browse }
 
-class TacticsSessionController extends ChangeNotifier {
+class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
   TacticsSessionController({
     TacticsDatabase? database,
     TacticsEngine? engine,
