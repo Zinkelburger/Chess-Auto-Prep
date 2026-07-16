@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:convert';
 
 import '../models/analysis_player_info.dart';
+import 'chess_api_urls.dart';
 import 'lichess_api_client.dart';
 import 'pgn_parsing_service.dart';
 import '../utils/atomic_file.dart';
@@ -53,10 +54,7 @@ class AnalysisGamesService {
   /// Returns the URLs in chronological order (oldest first), or an empty
   /// list if the player has no archives.
   Future<List<String>> _fetchChesscomArchives(String username) async {
-    final url = Uri.parse(
-      'https://api.chess.com/pub/player/${username.toLowerCase()}'
-      '/games/archives',
-    );
+    final url = chesscomArchivesUrl(username);
     final response = await http.get(url);
     if (response.statusCode != 200) return [];
     final data = json.decode(response.body) as Map<String, dynamic>;
@@ -179,9 +177,7 @@ class AnalysisGamesService {
       params['max'] = maxGames.toString();
     }
 
-    final uri = Uri.parse(
-      'https://lichess.org/api/games/user/$username',
-    ).replace(queryParameters: params);
+    final uri = lichessUserGamesUrl(username, params);
 
     final response = await LichessApiClient.instance.get(
       uri,

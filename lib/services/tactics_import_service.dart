@@ -9,6 +9,7 @@ import '../models/tactics_position.dart';
 import 'tactics_engine.dart';
 import '../models/engine_settings.dart';
 import 'engine/stockfish_pool.dart';
+import 'chess_api_urls.dart';
 import 'lichess_api_client.dart';
 import 'maia_factory.dart';
 import 'tactics_database.dart';
@@ -253,10 +254,7 @@ class TacticsImportService {
     } else {
       params['max'] = '${maxGames ?? 20}';
     }
-    final query = params.entries.map((e) => '${e.key}=${e.value}').join('&');
-    final url = Uri.parse(
-      'https://lichess.org/api/games/user/$username?$query',
-    );
+    final url = lichessUserGamesUrl(username, params);
 
     progressCallback?.call('Downloading games from Lichess...');
     final response = await LichessApiClient.instance.get(
@@ -290,10 +288,7 @@ class TacticsImportService {
   /// Returns the URLs in chronological order (oldest first), or an empty
   /// list if the player has no archives.
   Future<List<String>> _fetchChesscomArchives(String username) async {
-    final url = Uri.parse(
-      'https://api.chess.com/pub/player/${username.toLowerCase()}'
-      '/games/archives',
-    );
+    final url = chesscomArchivesUrl(username);
     final response = await http.get(url);
     if (response.statusCode != 200) return [];
     final data = json.decode(response.body) as Map<String, dynamic>;
