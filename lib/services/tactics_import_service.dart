@@ -20,6 +20,9 @@ import 'tactics_parallel_analyzer_stub.dart'
     if (dart.library.io) 'tactics_parallel_analyzer.dart'
     as parallel;
 
+part 'tactics_import_analysis.dart';
+part 'tactics_import_pgn_helpers.dart';
+
 /// Callback for when a new tactics position is found during import.
 /// Returns a Future so callers can await persistence before proceeding.
 typedef OnPositionFoundCallback =
@@ -65,34 +68,6 @@ class TacticsImportService {
 
   /// Number of logical CPU cores on this machine.
   static int get availableCores => parallel.availableProcessors;
-
-  // Lichess winning chances formula (from scalachess)
-  // Returns [-1, +1] where -1 = losing, 0 = equal, +1 = winning
-  // https://github.com/lichess-org/scalachess/blob/master/core/src/main/scala/eval.scala
-  static const double _multiplier = -0.00368208;
-
-  double _winningChances(int centipawns) {
-    final capped = centipawns.clamp(-1000, 1000);
-    return 2 / (1 + math.exp(_multiplier * capped)) - 1;
-  }
-
-  /// Human-readable engine eval: pawns with sign ("+0.5", "-2.1") or mate
-  /// ("#3" delivering, "#-3" getting mated). Scores arrive in side-to-move
-  /// perspective; pass [negate] when that side is the opponent so the number
-  /// reads from the user's point of view.
-  static String _formatEval({
-    int? scoreCp,
-    int? scoreMate,
-    bool negate = false,
-  }) {
-    if (scoreMate != null) {
-      final mate = negate ? -scoreMate : scoreMate;
-      return '#$mate';
-    }
-    final cp = negate ? -(scoreCp ?? 0) : (scoreCp ?? 0);
-    final pawns = cp / 100.0;
-    return '${pawns >= 0 ? '+' : ''}${pawns.toStringAsFixed(1)}';
-  }
 
   /// Count stored PGN games that have not yet been analyzed.
   ///
@@ -156,22 +131,6 @@ class TacticsImportService {
       );
     }
     return games.length - kept.length;
-  }
-
-  /// Whether the game's `Date`/`UTCDate` header is before [cutoff] (day
-  /// granularity). Games without a parseable date pass the filter — better
-  /// to analyze one game too many than silently drop it.
-  static bool _isGameBefore(String gameText, DateTime cutoff) {
-    final match = RegExp(
-      r'\[(?:Date|UTCDate) "(\d{4})\.(\d{2})\.(\d{2})"\]',
-    ).firstMatch(gameText);
-    if (match == null) return false;
-    final gameDate = DateTime(
-      int.parse(match.group(1)!),
-      int.parse(match.group(2)!),
-      int.parse(match.group(3)!),
-    );
-    return gameDate.isBefore(DateTime(cutoff.year, cutoff.month, cutoff.day));
   }
 
   /// Resume analysis of stored PGN games that haven't been analyzed yet.
@@ -486,74 +445,6 @@ class TacticsImportService {
     }
   }
 
-  /// Extract game ID from PGN headers.
-  ///
-  /// Lichess provides the game URL in the [Site] header, Chess.com in [Link].
-  /// Both APIs always include one of these, so we only handle those two
-  /// sources (plus our own injected [GameId] header). Returns empty string
-  /// if no ID can be determined, which causes the game to be analyzed every
-  /// time (safe fallback).
-  ///
-  /// Always returns a platform-prefixed ID (`lichess_` / `chesscom_`) —
-  /// [resumeStoredPgns] routes games to the right username by that prefix,
-  /// so an unprefixed ID would make a game unresumable.
-  String _extractGameId(String gameText) {
-    // 1. A GameId header — ours from a previous import, or Lichess's own:
-    //    their PGN exports natively carry the bare game ID in [GameId].
-    //    Only trust it as-is when it already has a platform prefix.
-    final rawHeaderId = RegExp(
-      r'\[GameId "([^"]+)"\]',
-    ).firstMatch(gameText)?.group(1);
-    if (rawHeaderId != null &&
-        (rawHeaderId.startsWith('lichess_') ||
-            rawHeaderId.startsWith('chesscom_'))) {
-      return rawHeaderId;
-    }
-
-    // 2. Chess.com: [Link "https://www.chess.com/game/live/123456789"]
-    final linkMatch = RegExp(r'\[Link "([^"]+)"\]').firstMatch(gameText);
-    if (linkMatch != null) {
-      final link = linkMatch.group(1)!;
-      final match = RegExp(r'/(\d+)(?:\?|$|#)').firstMatch(link);
-      if (match != null) {
-        return 'chesscom_${match.group(1)}';
-      }
-      // Fallback: last path segment
-      final parts = link.split('/');
-      final lastPart = parts.where((p) => p.isNotEmpty).lastOrNull;
-      if (lastPart != null && lastPart.toLowerCase() != 'chess.com') {
-        return 'chesscom_$lastPart';
-      }
-    }
-
-    // 3. Lichess: [Site "https://lichess.org/AbCdEfGh"]
-    final siteMatch = RegExp(r'\[Site "([^"]+)"\]').firstMatch(gameText);
-    if (siteMatch != null) {
-      final site = siteMatch.group(1)!;
-      if (site.toLowerCase().contains('lichess.org/')) {
-        final parts = site.split('/');
-        final gameId = parts
-            .where((p) => p.isNotEmpty && !p.contains('.'))
-            .lastOrNull;
-        if (gameId != null && gameId.length >= 6) {
-          return 'lichess_$gameId';
-        }
-      }
-    }
-
-    // 4. A bare GameId header with no Site/Link to attribute it — only
-    //    Lichess emits a native GameId header, so prefix accordingly.
-    if (rawHeaderId != null && rawHeaderId.isNotEmpty) {
-      return 'lichess_$rawHeaderId';
-    }
-
-    // No recognizable game ID found
-    if (kDebugMode) {
-      log.w('Warning: could not extract game ID from PGN headers');
-    }
-    return '';
-  }
-
   /// Whether [gameId] was already analyzed, accepting legacy records: builds
   /// that trusted Lichess's native GameId header stored those IDs without
   /// the `lichess_` prefix.
@@ -562,69 +453,6 @@ class TacticsImportService {
     const prefix = 'lichess_';
     return gameId.startsWith(prefix) &&
         _database.isGameAnalyzed(gameId.substring(prefix.length));
-  }
-
-  /// Inject GameId header into PGN if not present
-  String _injectGameIdHeader(String gameText) {
-    // Check if GameId already exists
-    if (gameText.contains('[GameId ')) {
-      return gameText;
-    }
-
-    final gameId = _extractGameId(gameText);
-
-    // Find where to insert (after last header, before moves)
-    final lines = gameText.split('\n');
-    final result = <String>[];
-    bool addedGameId = false;
-
-    for (final line in lines) {
-      result.add(line);
-      final trimmed = line.trim();
-      if (!addedGameId && trimmed.startsWith('[') && trimmed.endsWith(']')) {
-        final nextIndex = lines.indexOf(line) + 1;
-        if (nextIndex < lines.length) {
-          final nextLine = lines[nextIndex].trim();
-          if (!nextLine.startsWith('[') && nextLine.isNotEmpty) {
-            result.add('[GameId "$gameId"]');
-            addedGameId = true;
-          }
-        }
-      }
-    }
-
-    // If we didn't add it yet (edge case), add before moves
-    if (!addedGameId) {
-      // Find first non-header line
-      for (int i = 0; i < result.length; i++) {
-        if (!result[i].trim().startsWith('[') && result[i].trim().isNotEmpty) {
-          result.insert(i, '[GameId "$gameId"]');
-          break;
-        }
-      }
-    }
-
-    return result.join('\n');
-  }
-
-  /// Extract the user's Elo from the first game in the batch.
-  ///
-  /// Parses PGN headers to find `WhiteElo` / `BlackElo` for the side matching
-  /// [username]. Returns `null` if the header is missing or unparseable.
-  static int? _extractUserElo(String gameText, String username) {
-    final game = PgnGame.parsePgn(gameText);
-    final white = (game.headers['White'] ?? '').toLowerCase();
-    final black = (game.headers['Black'] ?? '').toLowerCase();
-    final uLower = username.toLowerCase();
-
-    String? eloHeader;
-    if (white == uLower) {
-      eloHeader = game.headers['WhiteElo'];
-    } else if (black == uLower) {
-      eloHeader = game.headers['BlackElo'];
-    }
-    if (eloHeader == null) return null;
-    return int.tryParse(eloHeader.replaceAll('?', ''));
   }
 
   Future<ImportResult> _processGames(
@@ -810,185 +638,5 @@ class TacticsImportService {
       gamesAnalyzed: gameTasks.length,
       gamesSkipped: skippedCount,
     );
-  }
-
-  /// Analyze a single game using a pool worker. Returns discovered tactics.
-  Future<List<TacticsPosition>> _analyzeGameWithWorker({
-    required EvalWorker worker,
-    required String gameText,
-    required String username,
-    required int depth,
-    required String gameId,
-    MaiaEvaluator? maia,
-    int maiaElo = 2200,
-  }) async {
-    final game = PgnGame.parsePgn(gameText);
-
-    final white = (game.headers['White'] ?? '').toLowerCase();
-    final black = (game.headers['Black'] ?? '').toLowerCase();
-
-    // Exact (case-insensitive) match only. A substring fallback can
-    // misattribute the user's side when an opponent's name is a superstring
-    // of the username (e.g. user "tal" vs opponent "talinda").
-    Side? userColor;
-    if (white == username) {
-      userColor = Side.white;
-    } else if (black == username) {
-      userColor = Side.black;
-    }
-    if (userColor == null) return [];
-
-    final moves = <String>[];
-    var node = game.moves;
-    while (node.children.isNotEmpty) {
-      final child = node.children.first;
-      moves.add(child.data.san);
-      node = child;
-    }
-
-    final positions = <TacticsPosition>[];
-    final setupFlag = game.headers['SetUp'] ?? game.headers['Setup'] ?? '';
-    final fenHeader = game.headers['FEN'] ?? '';
-    Position pos;
-    if (setupFlag == '1' && fenHeader.isNotEmpty) {
-      pos = Chess.fromSetup(Setup.parseFen(fenHeader));
-    } else {
-      pos = Chess.initial;
-    }
-    int moveNumber = 1;
-
-    for (final san in moves) {
-      final isUserTurn = pos.turn == userColor;
-
-      if (isUserTurn) {
-        final evalA = await worker.evaluateFen(pos.fen, depth);
-
-        final fenBefore = pos.fen;
-        final move = pos.parseSan(san);
-        if (move == null) break;
-        pos = pos.play(move);
-
-        if (pos.isGameOver) {
-          if (pos.turn == Side.white) moveNumber++;
-          continue;
-        }
-
-        final evalB = await worker.evaluateFen(pos.fen, depth);
-        final fenAfter = pos.fen;
-
-        // EvalWorker returns side-to-move perspective:
-        //   evalA: user's turn  → already user's perspective
-        //   evalB: opponent's turn → negate for user's perspective
-        final cpA = evalA.effectiveCp;
-        final cpB = -evalB.effectiveCp;
-
-        final wcBefore = _winningChances(cpA);
-        final wcAfter = _winningChances(cpB);
-        final delta = wcBefore - wcAfter;
-
-        final isBlunder = delta >= 0.3;
-        final isMistake = delta >= 0.2 && delta < 0.3;
-        final isInaccuracy = delta >= 0.1 && delta < 0.2;
-
-        if ((isBlunder || isMistake || isInaccuracy) && evalA.pv.isNotEmpty) {
-          final bestMoveUci = evalA.pv.first;
-
-          final allPvSan = <String>[];
-          Position tempPos = Chess.fromSetup(Setup.parseFen(fenBefore));
-          for (final uci in evalA.pv) {
-            final (sanMove, newPos) = _makeUciMoveAndGetSan(tempPos, uci);
-            if (sanMove == null) break;
-            allPvSan.add(sanMove);
-            tempPos = newPos;
-          }
-
-          final solutionPv = allPvSan
-              .take(TacticsEngine.maxSolutionPvPlies)
-              .toList();
-          final correctLine = await TacticsEngine.buildTrainableLine(
-            allPvSan,
-            maia: maia,
-            worker: worker,
-            maiaElo: maiaElo,
-            startFen: fenBefore,
-          );
-
-          final bestMoveSan = _formatUciToSan(fenBefore, bestMoveUci);
-          final opponentResponse = evalB.pv.isNotEmpty
-              ? _formatUciToSan(fenAfter, evalB.pv.first)
-              : '';
-
-          final mistakeType = isBlunder
-              ? '??'
-              : isMistake
-              ? '?'
-              : '?!';
-          // Note shown as the flashcard back, deliberately terse:
-          // "h5 +0.5 → -2.1, Qf3 +0.5" — the played move with the eval arc,
-          // then the best move keeping the pre-move eval. Evals are from the
-          // user's perspective and mate-aware. No prose: the mistake label
-          // already shows as ??/?/?!, and wordier phrasings collided with
-          // filterDisplayComment's Lichess-classification stripper.
-          final evalBest = _formatEval(
-            scoreCp: evalA.scoreCp,
-            scoreMate: evalA.scoreMate,
-          );
-          final evalAfterMove = _formatEval(
-            scoreCp: evalB.scoreCp,
-            scoreMate: evalB.scoreMate,
-            negate: true,
-          );
-          final analysis =
-              '$san $evalBest → $evalAfterMove, $bestMoveSan $evalBest';
-
-          positions.add(
-            TacticsPosition(
-              fen: fenBefore,
-              userMove: san,
-              correctLine: correctLine,
-              solutionPv: solutionPv,
-              mistakeType: mistakeType,
-              mistakeAnalysis: analysis,
-              opponentBestResponse: opponentResponse,
-              positionContext:
-                  'Move $moveNumber, '
-                  '${userColor == Side.white ? 'White' : 'Black'} to play',
-              gameWhite: game.headers['White'] ?? '',
-              gameBlack: game.headers['Black'] ?? '',
-              gameResult: game.headers['Result'] ?? '*',
-              gameDate: game.headers['Date'] ?? '',
-              gameId: gameId,
-            ),
-          );
-        }
-      } else {
-        final move = pos.parseSan(san);
-        if (move != null) pos = pos.play(move);
-      }
-
-      if (pos.turn == Side.white) moveNumber++;
-    }
-
-    return positions;
-  }
-
-  (String? san, Position newPos) _makeUciMoveAndGetSan(
-    Position pos,
-    String uci,
-  ) {
-    final move = Move.parse(uci);
-    if (move == null) return (null, pos);
-    try {
-      final (newPos, san) = pos.makeSan(move);
-      return (san, newPos);
-    } catch (_) {
-      return (null, pos);
-    }
-  }
-
-  String _formatUciToSan(String fen, String uci) {
-    final pos = Chess.fromSetup(Setup.parseFen(fen));
-    final (san, _) = _makeUciMoveAndGetSan(pos, uci);
-    return san ?? uci;
   }
 }
