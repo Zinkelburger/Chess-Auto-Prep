@@ -32,66 +32,12 @@ import '../../utils/san_token_utils.dart';
 import '../explorer_cache_service.dart';
 import '../generation/fen_map.dart';
 import 'build_by_playing_config.dart';
+import 'build_by_playing_types.dart';
 import '../../utils/safe_change_notifier.dart';
 
-enum BuildByPlayingPhase {
-  /// No session running.
-  idle,
+export 'build_by_playing_types.dart' show BuildByPlayingPhase, PendingBranch;
 
-  /// Auto-playing covered repertoire answers / navigating to a popped branch.
-  advancing,
-
-  /// Fetching database stats and playing the opponent's reply.
-  opponentThinking,
-
-  /// Parked at a decision point — the user's turn, no repertoire answer yet.
-  awaitingUserMove,
-
-  /// The user is playing ephemeral scratchpad moves from the decision point.
-  exploring,
-
-  /// A commit is being written to the repertoire file.
-  committing,
-
-  /// Explorer failure, rate limit, or external navigation. [resume] recovers.
-  paused,
-
-  /// The pending-branch stack is empty — every line reached a cutoff.
-  sessionComplete,
-}
-
-/// An opponent reply queued for later: when the current line ends, the
-/// session backtracks here and plays [opponentSan].
-class PendingBranch {
-  const PendingBranch({
-    required this.pathFromRoot,
-    required this.opponentSan,
-    required this.opponentUci,
-    required this.probability,
-    required this.cumulativeProbability,
-    required this.games,
-    required this.epdAfter,
-  });
-
-  /// SAN moves from the tree root to the opponent-to-move position.
-  final List<String> pathFromRoot;
-
-  /// The queued reply.
-  final String opponentSan;
-  final String opponentUci;
-
-  /// Local play fraction of the reply at its position.
-  final double probability;
-
-  /// Product of opponent move probabilities, including this reply.
-  final double cumulativeProbability;
-
-  /// Games of this reply in the database.
-  final int games;
-
-  /// Normalised FEN after the reply — for transposition dedup.
-  final String epdAfter;
-}
+part 'build_by_playing_queries.dart';
 
 /// Snapshot of the latest commit so it can be undone from the session.
 class _CommitInfo {
@@ -108,7 +54,8 @@ class _CommitInfo {
   final double cumProb;
 }
 
-class BuildByPlayingController extends ChangeNotifier with SafeChangeNotifier {
+class BuildByPlayingController extends ChangeNotifier
+    with SafeChangeNotifier, _RepertoireQueries {
   BuildByPlayingController({
     required RepertoireController repertoire,
     ExplorerCacheService? explorer,
@@ -117,6 +64,7 @@ class BuildByPlayingController extends ChangeNotifier with SafeChangeNotifier {
     : _repertoire = repertoire,
        _explorer = explorer ?? ExplorerCacheService.instance;
 
+  @override
   final RepertoireController _repertoire;
   final ExplorerCacheService _explorer;
 
@@ -710,83 +658,6 @@ class BuildByPlayingController extends ChangeNotifier with SafeChangeNotifier {
     _candidates = result;
     _candidatesLoading = false;
     notifyListeners();
-  }
-
-  /// The repertoire's stored answer for the current position, or null when
-  /// this is an uncovered decision point. Prefers the exact-path answer;
-  /// falls back to any answer at the same position (transposition), guarded
-  /// by SAN legality.
-  String? _coveredAnswer(String fen, Position pos) {
-    final tree = _repertoire.openingTree;
-    if (tree == null) return null;
-
-    OpeningTreeNode? node = tree.root;
-    for (final san in _repertoire.currentMoveSequence) {
-      node = node!.children[san];
-      if (node == null) break;
-    }
-    if (node != null && node.children.isNotEmpty) {
-      final san = _mostPlayedChildSan(node);
-      if (san != null && pos.parseSan(san) != null) return san;
-    }
-
-    final transposed = tree.fenToNodes[normalizeFen(fen)];
-    if (transposed != null) {
-      for (final n in transposed) {
-        for (final san in n.children.keys) {
-          if (pos.parseSan(san) != null) return san;
-        }
-      }
-    }
-    return null;
-  }
-
-  String? _mostPlayedChildSan(OpeningTreeNode node) {
-    String? best;
-    var bestGames = -1;
-    for (final entry in node.children.entries) {
-      if (entry.value.gamesPlayed > bestGames) {
-        bestGames = entry.value.gamesPlayed;
-        best = entry.key;
-      }
-    }
-    return best;
-  }
-
-  /// Split [fullPath] into (prefix already in the repertoire file, remainder)
-  /// by walking the opening tree move-by-move. Matches the writer's
-  /// exact-mainline chaining semantics.
-  (List<String>, List<String>) _splitByCoverage(List<String> fullPath) {
-    final tree = _repertoire.openingTree;
-    final committed = <String>[];
-    var i = 0;
-    if (tree != null) {
-      OpeningTreeNode? node = tree.root;
-      for (; i < fullPath.length; i++) {
-        node = node!.children[fullPath[i]];
-        if (node == null) break;
-        committed.add(fullPath[i]);
-      }
-    }
-    return (committed, fullPath.sublist(i));
-  }
-
-  String _fenForSans(List<String> sans) {
-    var pos = _positionFromFen(_repertoire.tree.startingFen) ?? Chess.initial;
-    for (final san in sans) {
-      final move = pos.parseSan(san);
-      if (move == null) break;
-      pos = pos.play(move);
-    }
-    return pos.fen;
-  }
-
-  Position? _positionFromFen(String fen) {
-    try {
-      return Chess.fromSetup(Setup.parseFen(fen));
-    } catch (_) {
-      return null;
-    }
   }
 
   static bool _startsWith(List<String> list, List<String> prefix) {
