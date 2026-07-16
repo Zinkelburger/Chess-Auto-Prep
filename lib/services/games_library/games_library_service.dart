@@ -18,6 +18,7 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
 import '../analysis_games_service.dart';
+import '../chess_api_urls.dart';
 import '../storage/app_paths.dart';
 import 'game_filter.dart';
 
@@ -149,9 +150,7 @@ class GamesLibraryService {
     if (since != null) {
       params['since'] = '${since.millisecondsSinceEpoch}';
     }
-    final uri = Uri.parse(
-      'https://lichess.org/api/games/user/$username',
-    ).replace(queryParameters: params);
+    final uri = lichessUserGamesUrl(username, params);
     final resp = await http.get(
       uri,
       headers: {'Accept': 'application/x-chess-pgn'},

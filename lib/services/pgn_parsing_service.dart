@@ -340,13 +340,21 @@ String? parseTargetFen(String? input) {
       .where((t) => t.isNotEmpty)
       .toList();
   if (tokens.isEmpty) return null;
-  Position pos = Chess.initial;
-  for (final t in tokens) {
-    final move = pos.parseSan(t);
-    if (move == null) return null;
-    pos = pos.play(move);
+  try {
+    Position pos = Chess.initial;
+    for (final t in tokens) {
+      final move = pos.parseSan(t);
+      if (move == null) return null;
+      pos = pos.play(move);
+    }
+    return normalizeFen(pos.fen);
+  } catch (_) {
+    // dartchess' parseSan/play can throw (e.g. RangeError) on some malformed
+    // tokens — a stray '(' from pasted variation movetext, an 'x'-prefixed
+    // token — rather than returning null. Treat any such input as "no target",
+    // matching the FEN branch above and this function's documented contract.
+    return null;
   }
-  return normalizeFen(pos.fen);
 }
 
 // ── FEN position index ───────────────────────────────────────────────────────
