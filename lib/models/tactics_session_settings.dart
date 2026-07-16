@@ -76,6 +76,10 @@ class TacticsSessionSettings {
     if (pos.mistakeType == customMistakeType) return true;
     final played = pos.gameDateTime;
     if (played == null) return true;
+    // A window larger than any realistic game history means "all time". This
+    // also guards Duration's signed-64-bit microsecond field from overflowing
+    // (~1.07e8 days) and wrapping the cutoff into the future.
+    if (days >= 3650000) return true; // ~10,000 years
     final now = DateTime.now();
     final cutoff = DateTime(
       now.year,

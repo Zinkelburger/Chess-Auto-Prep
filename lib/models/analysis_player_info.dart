@@ -89,12 +89,12 @@ class AnalysisPlayerInfo {
     return AnalysisPlayerInfo(
       platform: json['platform'] as String? ?? 'unknown',
       username: json['username'] as String? ?? 'unknown',
-      maxGames: json['maxGames'] as int? ?? 100,
-      monthsBack: json['monthsBack'] as int?,
+      maxGames: (json['maxGames'] as num?)?.toInt() ?? 100,
+      monthsBack: (json['monthsBack'] as num?)?.toInt(),
       downloadedAt: json['downloadedAt'] != null
           ? DateTime.tryParse(json['downloadedAt'] as String)
           : null,
-      gameCount: json['gameCount'] as int? ?? 0,
+      gameCount: (json['gameCount'] as num?)?.toInt() ?? 0,
     );
   }
 

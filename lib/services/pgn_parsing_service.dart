@@ -243,9 +243,23 @@ bool matchesField(String headerVal, String query, MatchMode mode) {
         return false;
       }
     case MatchMode.after:
-      return headerVal.compareTo(query) >= 0;
+      {
+        // Numeric fields (WhiteElo/BlackElo/StudyRating) must compare
+        // numerically, not lexicographically — otherwise "≥ 500" wrongly
+        // excludes a 2400 game ("2400" < "500"). Dates ("YYYY.MM.DD") don't
+        // parse as num, so they fall back to the correct string compare.
+        final hv = num.tryParse(headerVal);
+        final q = num.tryParse(query);
+        if (hv != null && q != null) return hv >= q;
+        return headerVal.compareTo(query) >= 0;
+      }
     case MatchMode.before:
-      return headerVal.compareTo(query) <= 0;
+      {
+        final hv = num.tryParse(headerVal);
+        final q = num.tryParse(query);
+        if (hv != null && q != null) return hv <= q;
+        return headerVal.compareTo(query) <= 0;
+      }
   }
 }
 
