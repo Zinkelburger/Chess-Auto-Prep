@@ -109,7 +109,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
           text: label,
           style: TextStyle(
             fontSize: fontSize,
-            color: AppColors.onSurfaceMuted,
+            color: AppColors.pgnMove,
             fontFamily: 'monospace',
             fontWeight: FontWeight.bold,
           ),
@@ -217,7 +217,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
                           fontSize: fontSize,
                           color: isActive
                               ? AppColors.pgnMoveCurrentFg
-                              : AppColors.expectimax,
+                              : AppColors.pgnMove,
                           fontFamily: 'monospace',
                           fontWeight: isActive
                               ? FontWeight.bold
@@ -225,9 +225,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
                           decoration: isActive
                               ? null
                               : TextDecoration.underline,
-                          decorationColor: AppColors.expectimax.withValues(
-                            alpha: 0.5,
-                          ),
+                          decorationColor: Colors.white38,
                           decorationStyle: TextDecorationStyle.dotted,
                         ),
                       ),
@@ -245,7 +243,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
               text: annotation!.suffix,
               style: TextStyle(
                 fontSize: fontSize - 1,
-                color: annotation.suffixColor ?? AppColors.onSurfaceMuted,
+                color: annotation.suffixColor ?? AppColors.pgnMove,
                 fontWeight: annotation.suffixFontWeight,
                 fontFamily: 'monospace',
               ),
@@ -265,7 +263,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
             text: '${sanMoves[i]} ',
             style: TextStyle(
               fontSize: fontSize,
-              color: AppColors.onSurfaceMuted,
+              color: AppColors.pgnMove,
               fontFamily: 'monospace',
             ),
           ),
