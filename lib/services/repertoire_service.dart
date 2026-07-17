@@ -20,9 +20,12 @@ class RepertoireService {
   ///
   /// If [trainingColor] is provided ('white' or 'black') it is used directly;
   /// otherwise the colour is read from the file's `// Color:` comment.
+  /// [colorFromStartingSide] derives each line's colour from its own start
+  /// position instead (study puzzles: the solver is the side to move).
   Future<List<RepertoireLine>> parseRepertoireFile(
     String filePath, {
     String? trainingColor,
+    bool colorFromStartingSide = false,
   }) async {
     final content = await StorageFactory.instance.readRepertoirePgn(filePath);
 
@@ -38,6 +41,7 @@ class RepertoireService {
       () => RepertoireService().parseRepertoirePgn(
         content,
         trainingColor: trainingColor,
+        colorFromStartingSide: colorFromStartingSide,
       ),
     );
   }
@@ -48,9 +52,14 @@ class RepertoireService {
   /// knows the side.  Otherwise the colour is read from the `// Color:`
   /// comment that every app-created repertoire file contains.
   /// Falls back to 'white' if neither source provides a colour.
+  ///
+  /// [colorFromStartingSide] overrides both: each game's colour is the side
+  /// to move in its own start position ([FEN] header or standard start).
+  /// Used for studies-as-puzzles, where the solver always moves first.
   List<RepertoireLine> parseRepertoirePgn(
     String pgnContent, {
     String? trainingColor,
+    bool colorFromStartingSide = false,
   }) {
     pgnContent = pgn.stripBom(pgnContent);
     final lines = <RepertoireLine>[];
@@ -72,7 +81,10 @@ class RepertoireService {
 
         if (mainlineMoves.isEmpty) continue;
 
-        final color = resolvedColor;
+        final startPosition = extractStartPosition(game);
+        final color = colorFromStartingSide
+            ? (startPosition.turn == Side.white ? 'white' : 'black')
+            : resolvedColor;
 
         final comments = <String, String>{};
         final moveNodes = game.moves.mainline().toList();
@@ -91,7 +103,6 @@ class RepertoireService {
 
         final lineName = _generateLineName(game, gameIndex);
         final lineId = _extractLineId(game, mainlineMoves, gameIndex);
-        final startPosition = extractStartPosition(game);
         final importance = _extractImportance(game, gameText);
 
         lines.add(
@@ -275,13 +286,25 @@ class RepertoireService {
   }
 
   /// Extract a stable line identifier, preferring a PGN header if present.
-  String _extractLineId(PgnGame game, List<String> moves, int index) {
+  String _extractLineId(PgnGame game, List<String> moves, int index) =>
+      lineIdFromHeaders(game.headers, moves, index);
+
+  /// The line id the trainer assigns to a game: a `LineID`/`Id`/… header when
+  /// present, else the stable move-based fallback.  Callers that want to
+  /// target a specific line (e.g. "Train this chapter") must derive the id
+  /// this way — the header-blind [generateLineId] silently mismatches any
+  /// PGN that carries such a header.
+  String lineIdFromHeaders(
+    Map<String, String> headers,
+    List<String> moves,
+    int index,
+  ) {
     final headerId =
-        game.headers['LineID'] ??
-        game.headers['LineId'] ??
-        game.headers['Id'] ??
-        game.headers['Line'] ??
-        game.headers['Guid'];
+        headers['LineID'] ??
+        headers['LineId'] ??
+        headers['Id'] ??
+        headers['Line'] ??
+        headers['Guid'];
 
     if (headerId != null && headerId.trim().isNotEmpty) {
       return headerId.trim();
@@ -289,6 +312,20 @@ class RepertoireService {
 
     // Stable fallback based on moves so it persists across sessions.
     return _generateStableLineId(moves, index);
+  }
+
+  /// The line id the trainer will assign to the [index]-th game of [pgn].
+  /// Parses [pgn] through the same pipeline as the trainer ([PgnGame.parsePgn]
+  /// + [_extractLineId]) so the two agree regardless of how the source
+  /// serialized its headers.  Returns null when [pgn] doesn't parse.
+  String? lineIdForGamePgn(String pgn, int index) {
+    try {
+      final game = PgnGame.parsePgn(pgn);
+      final moves = game.moves.mainline().map((n) => n.san).toList();
+      return _extractLineId(game, moves, index);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Public access to generate a stable line ID from moves.

@@ -259,9 +259,9 @@ extension TreeBuildServiceDbExplorer on TreeBuildService {
 
         child.moveProbability = 1.0;
         child.cumulativeProbability = node.cumulativeProbability;
-        child.searchPriority = reach > 0
-            ? basePri * (m.count / reach)
-            : basePri;
+        final discount = reach > 0 ? m.count / reach : 1.0;
+        child.searchPriority = basePri * discount;
+        child.searchPriorityDiscount = discount;
         queue.add(child);
       }
     } else {

@@ -47,6 +47,7 @@ import '../widgets/pgn/solitaire_status_widgets.dart';
 import '../widgets/pgn_viewer_widget.dart';
 import '../widgets/pgn_slice_dialog.dart';
 import '../widgets/solitaire_trophy_cabinet.dart';
+import 'puzzle_creator_screen.dart';
 
 part 'pgn_viewer_screen_app_bar.dart';
 part 'pgn_viewer_screen_panes.dart';

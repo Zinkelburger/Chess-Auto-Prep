@@ -21,7 +21,15 @@ class RepertoireListBody extends StatefulWidget {
   /// Called when the user taps a repertoire card or creates a new one.
   final ValueChanged<RepertoireMetadata> onSelected;
 
-  const RepertoireListBody({super.key, required this.onSelected});
+  /// When set, studies are listed in their own section (as trainable
+  /// custom-tactics sets) and tapping one calls this instead.
+  final ValueChanged<RepertoireMetadata>? onStudySelected;
+
+  const RepertoireListBody({
+    super.key,
+    required this.onSelected,
+    this.onStudySelected,
+  });
 
   @override
   State<RepertoireListBody> createState() => _RepertoireListBodyState();
@@ -29,6 +37,7 @@ class RepertoireListBody extends StatefulWidget {
 
 class _RepertoireListBodyState extends State<RepertoireListBody> {
   List<RepertoireMetadata> _repertoires = [];
+  List<RepertoireMetadata> _studies = [];
   bool _isLoading = true;
   String? _loadError;
 
@@ -47,10 +56,15 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
     try {
       final repertoires = await StorageFactory.instance.listRepertoireFiles();
       repertoires.sort((a, b) => b.lastModified.compareTo(a.lastModified));
+      final studies = widget.onStudySelected == null
+          ? <RepertoireMetadata>[]
+          : await StorageFactory.instance.listStudyFiles();
+      studies.sort((a, b) => b.lastModified.compareTo(a.lastModified));
 
       if (!mounted) return;
       setState(() {
         _repertoires = repertoires;
+        _studies = studies;
         _isLoading = false;
         _loadError = null;
       });
@@ -97,7 +111,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
       );
     }
 
-    if (_repertoires.isEmpty) {
+    if (_repertoires.isEmpty && _studies.isEmpty) {
       return EmptyStatePlaceholder(
         icon: Icons.library_books,
         title: 'No Repertoires Found',
@@ -108,13 +122,21 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
       );
     }
 
+    final showSections = _studies.isNotEmpty;
     return Stack(
       children: [
-        ListView.builder(
+        ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-          itemCount: _repertoires.length,
-          itemBuilder: (context, index) =>
-              _buildRepertoireCard(_repertoires[index]),
+          children: [
+            if (showSections && _repertoires.isNotEmpty)
+              _buildSectionHeader('Repertoires'),
+            for (final repertoire in _repertoires)
+              _buildRepertoireCard(repertoire),
+            if (showSections) ...[
+              _buildSectionHeader('Studies — custom tactics'),
+              for (final study in _studies) _buildStudyCard(study),
+            ],
+          ],
         ),
         Positioned(
           right: 16,
@@ -126,6 +148,75 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 10),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          color: AppColors.onSurfaceMuted,
+        ),
+      ),
+    );
+  }
+
+  /// A study listed as a trainable custom-tactics set.  Managing studies
+  /// (rename/delete/edit) lives in Study mode, so no actions menu here.
+  Widget _buildStudyCard(RepertoireMetadata study) {
+    final chapterCount = study.gameCount;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        onTap: () => widget.onStudySelected?.call(study),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.infoTint,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.menu_book_outlined,
+                  color: AppColors.info,
+                  size: 32,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      study.name,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$chapterCount chapter${chapterCount == 1 ? '' : 's'}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: AppColors.onSurfaceMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

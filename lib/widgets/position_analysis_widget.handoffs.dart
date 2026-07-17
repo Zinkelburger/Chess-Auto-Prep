@@ -142,7 +142,7 @@ mixin _StudyHandoffMixin on _PositionAnalysisWidgetStateBase {
   void _makePuzzleFromPosition() {
     final fen = _currentFen;
     if (fen == null) return;
-    context.read<AppState>().switchToPuzzleCreator(seedFen: expandFen(fen));
+    PuzzleCreatorScreen.push(context, initialFen: expandFen(fen));
   }
 
   void _openGamesInPgnViewer() {

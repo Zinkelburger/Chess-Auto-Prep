@@ -23,11 +23,20 @@ class MoveInputWidget extends StatefulWidget {
   final void Function(CompletedMove move) onMove;
   final bool enabled;
 
+  /// Optional hook for keys that should navigate the trainer rather than edit
+  /// the move text (e.g. Space, S/P, the arrow keys). The field offers every
+  /// key that isn't plain editing here; if this returns true the key is
+  /// swallowed so it never types into — or moves the caret within — the field.
+  /// Used by the tactics trainer, whose shortcut handler is a focus-tree
+  /// sibling and so can't receive these keys by bubbling.
+  final bool Function(KeyEvent event)? onNavigationKey;
+
   const MoveInputWidget({
     super.key,
     required this.position,
     required this.onMove,
     this.enabled = true,
+    this.onNavigationKey,
   });
 
   @override
@@ -51,15 +60,29 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
       return KeyEventResult.handled;
     }
 
-    // Space can never be part of a chess move — let it bubble up to the
-    // parent shortcut handler (e.g. "Show Solution" in tactics).
-    if (key == LogicalKeyboardKey.space) {
-      return KeyEventResult.ignored;
-    }
-
     // Tab blurs the input, returning keyboard control to the panel shortcuts.
     if (key == LogicalKeyboardKey.tab) {
       _focusNode.unfocus();
+      return KeyEventResult.handled;
+    }
+
+    // While there's text being typed, ←/→ reposition the caret so a typo in a
+    // multi-char move (e.g. "Nbd7") can be fixed in place. Don't offer them to
+    // the trainer in that case. When the field is empty there's nothing to
+    // edit, so they fall through and step the solution/PGN as usual.
+    final isCaretKey =
+        key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.arrowRight;
+    if (isCaretKey && _controller.text.isNotEmpty) {
+      return KeyEventResult.ignored;
+    }
+
+    // Offer the key to the trainer (Space, S/P, arrows, …). A chess move can
+    // only contain a-h / 1-8 / K Q R B N / O / x / '-', so any key the trainer
+    // claims is a navigation key that must never reach the text field — swallow
+    // it here so the EditableText neither inserts a character nor moves the
+    // caret. Move characters aren't claimed, so they still type normally.
+    if (widget.onNavigationKey?.call(event) ?? false) {
       return KeyEventResult.handled;
     }
 

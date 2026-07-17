@@ -20,7 +20,6 @@ class _BrowseFilterBar extends StatelessWidget {
     required this.onDeleteSelected,
     required this.onSelectAll,
     required this.onClearAll,
-    this.onCreatePuzzle,
   });
 
   final int totalCount;
@@ -41,7 +40,6 @@ class _BrowseFilterBar extends StatelessWidget {
   final VoidCallback onDeleteSelected;
   final VoidCallback onSelectAll;
   final VoidCallback onClearAll;
-  final VoidCallback? onCreatePuzzle;
 
   @override
   Widget build(BuildContext context) {
@@ -114,15 +112,6 @@ class _BrowseFilterBar extends StatelessWidget {
                   child: const Text('Cancel', style: TextStyle(fontSize: 12)),
                 ),
               ] else ...[
-                if (onCreatePuzzle != null)
-                  TextButton.icon(
-                    onPressed: onCreatePuzzle,
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text(
-                      'New puzzle',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ),
                 IconButton(
                   onPressed: onToggleSelectMode,
                   icon: const Icon(Icons.checklist, size: 18),

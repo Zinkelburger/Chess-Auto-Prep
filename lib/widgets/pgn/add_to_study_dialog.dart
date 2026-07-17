@@ -29,8 +29,13 @@ class AddToStudyResult {
 
 class AddToStudyDialog extends StatefulWidget {
   final String initialChapterName;
+  final String title;
 
-  const AddToStudyDialog({super.key, required this.initialChapterName});
+  const AddToStudyDialog({
+    super.key,
+    required this.initialChapterName,
+    this.title = 'Add line to study',
+  });
 
   @override
   State<AddToStudyDialog> createState() => _AddToStudyDialogState();
@@ -110,7 +115,7 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
     );
 
     return AlertDialog(
-      title: const Text('Add line to study'),
+      title: Text(widget.title),
       content: SizedBox(
         width: 420,
         height: 420,

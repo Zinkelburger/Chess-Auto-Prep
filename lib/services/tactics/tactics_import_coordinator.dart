@@ -103,10 +103,18 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
   void dispose() {
     _notifyThrottle?.cancel();
     _foundFlushTimer?.cancel();
-    // Mid-import: leave the buffer for the import try/finally flush so we
-    // don't race a double-write. Orphaned finds (no active import) are
-    // persisted before super.dispose while [database] is still owned.
-    if (!isImporting && _foundBuffer.isNotEmpty) {
+    _foundFlushTimer = null;
+    // Persist any buffered finds before teardown, mid-import or not.
+    // [TacticsDatabase.addPositions] enqueues its file write *synchronously*
+    // onto the database's serialized write queue (see savePositions →
+    // _enqueueWrite), and the database is a longer-lived sibling that outlives
+    // this coordinator, so the write still lands even though dispose can't
+    // await it. Dedup-by-FEN in addPositions makes a double-write harmless, so
+    // we no longer need to skip the flush mid-import (which previously left a
+    // window where a coordinator torn down during an import dropped its
+    // buffered finds). Only a hard process kill inside the write window can
+    // still lose them — unavoidable from a synchronous dispose.
+    if (_foundBuffer.isNotEmpty) {
       final batch = List<TacticsPosition>.of(_foundBuffer);
       _foundBuffer.clear();
       unawaited(database.addPositions(batch));

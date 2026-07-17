@@ -6,31 +6,57 @@ part of '../tactics_control_panel.dart';
 
 mixin _TacticsKeyboardActions
     on _TacticsControlPanelStateBase, _TacticsPlayback {
+  /// [Focus.onKeyEvent] for the panel itself — runs when the panel (not a text
+  /// field) owns keyboard focus. Keys pressed while the move-input field is
+  /// focused never reach here (the field is a focus-tree sibling); they arrive
+  /// through [_handleTrainerNavigationKey] instead.
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent || _session.currentPosition == null) {
       return KeyEventResult.ignored;
     }
 
-    final key = event.logicalKey;
-
-    // "Typing a move" is not "typing text": a move can only contain
-    // a-h / 1-8 / K Q R B N / o-0 / x / '-', so keys outside that alphabet
-    // (Space, ↑/↓, P, S, J) stay live while the move input is focused.
-    // Any *other* focused text field (engine bar, import form) still
-    // swallows everything.
-    final typingMove =
-        TacticsControlPanel.moveInputKey.currentState?.hasFocus ?? false;
-    if (isTextInputFocused() && !typingMove) {
+    // Another text field in the panel subtree (import form, engine bar) owns
+    // focus → let it type. The move input is handled separately, so it never
+    // needs an exception here.
+    if (isTextInputFocused()) {
       return KeyEventResult.ignored;
     }
 
+    return _dispatchTrainerKey(event.logicalKey, typingMove: false);
+  }
+
+  /// Bridge for keys pressed while the move-input field owns focus. The field
+  /// and this panel are siblings in the focus tree, so key events can't bubble
+  /// between them; [MoveInputWidget] forwards keys here (via
+  /// [TacticsSessionController.onTrainerNavigationKey]) and swallows whatever
+  /// this claims. Returns true when the key drove navigation.
+  bool _handleTrainerNavigationKey(LogicalKeyboardKey key) {
+    if (_session.currentPosition == null) return false;
+    return _dispatchTrainerKey(key, typingMove: true) == KeyEventResult.handled;
+  }
+
+  /// Core trainer key dispatch, shared by the panel's own [Focus] handler and
+  /// the move-input bridge.
+  ///
+  /// [typingMove] is true when the move-input field owns focus. Keys that can
+  /// never be part of a move (Space, S/P, J, ↑/↓) navigate in either case —
+  /// that's what lets S/P switch puzzles even mid-type. ←/→ also navigate, but
+  /// only reach here when the move field is empty: with text in it the field
+  /// keeps ←/→ for caret editing (see [MoveInputWidget]) and never forwards
+  /// them. Keys that overlap the move alphabet (N, A) or (re)focus the field
+  /// (/, Tab, Escape) only fire when a move is *not* being typed.
+  KeyEventResult _dispatchTrainerKey(
+    LogicalKeyboardKey key, {
+    required bool typingMove,
+  }) {
+    // ── Always-on keys (never part of a move) ──────────────────────────────
     if (key == LogicalKeyboardKey.space) {
       _session.toggleSolution();
       return KeyEventResult.handled;
     }
 
-    // Mirror the button enablement: at the ends of the queue the shortcuts
-    // do nothing, same as the grayed-out Previous/Next.
+    // Mirror the button enablement: at the ends of the queue the shortcuts do
+    // nothing, same as the grayed-out Previous/Next.
     if ((key == LogicalKeyboardKey.keyP || key == LogicalKeyboardKey.arrowUp) &&
         hasNoLetterModifiers) {
       if (_session.hasPrevious) {
@@ -53,13 +79,9 @@ mixin _TacticsKeyboardActions
       return KeyEventResult.handled;
     }
 
-    // Everything below overlaps with move letters (n/a/e) or caret editing
-    // (←/→), so it only fires when the move input is not focused.
-    if (typingMove) {
-      return KeyEventResult.ignored;
-    }
-
-    // Left/Right arrow — navigate solution on Tactic tab, PGN on Analysis tab
+    // ←/→ walk the solution line (Tactic tab) or the PGN (Analysis tab).
+    // While a move is being typed they're kept by the field for caret editing
+    // (they only reach here when the move input is empty).
     if (key == LogicalKeyboardKey.arrowRight) {
       if (_tabController.index == 0 && _session.showSolution) {
         if (_solutionNav.arrowForward()) setState(() {});
@@ -76,6 +98,12 @@ mixin _TacticsKeyboardActions
         _pgnViewerController.goBack();
       }
       return KeyEventResult.handled;
+    }
+
+    // ── Keys below overlap move letters (n/a) or (re)focus the field ────────
+    // They must not fire while a move is being typed.
+    if (typingMove) {
+      return KeyEventResult.ignored;
     }
 
     if (key == LogicalKeyboardKey.keyN && hasNoLetterModifiers) {

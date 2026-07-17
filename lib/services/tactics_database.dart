@@ -34,6 +34,13 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
   int sessionPositionIndex = 0;
   Future<void> _pendingWrite = Future<void>.value();
 
+  /// Bumped on every [loadPositions] call.  The decode now runs off the UI
+  /// isolate, so a set switch / import reload can start a second load while
+  /// the first is still decoding; the load that owns the latest token clears
+  /// and repopulates [positions], and any older in-flight load bails instead
+  /// of appending its stale puzzles into the shared list.
+  int _loadGeneration = 0;
+
   /// True while [loadPositions] is reading and decoding the set file, so the
   /// browse UI can show a loading state instead of "no tactics yet".
   bool isLoading = false;
@@ -85,14 +92,14 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
   /// legacy per-set CSV files to PGN, and moves leftover named sets from the
   /// multi-set era into the studies directory.
   Future<int> loadPositions() async {
+    final generation = ++_loadGeneration;
     // Flag synchronously (the first build after a load call must see it),
     // but notify only after the await: loadPositions is called from
     // initState, and a synchronous notify there lands mid-build.
     isLoading = true;
     await _pendingWrite;
+    if (generation != _loadGeneration) return positions.length;
     notifyListeners();
-    positions.clear();
-    analyzedGameIds.clear();
 
     try {
       final storage = StorageFactory.instance;
@@ -101,10 +108,14 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
       await _migrateNamedSetsToStudies();
 
       final content = await storage.readFile(await activeSetFilePath());
+      if (generation != _loadGeneration) return positions.length;
 
       if (content == null || content.trim().isEmpty) {
         // No set file yet — load analyzed games list (legacy or empty state).
+        positions.clear();
+        analyzedGameIds.clear();
         await _loadAnalyzedGameIds();
+        if (generation != _loadGeneration) return positions.length;
         isLoading = false;
         notifyListeners();
         return 0;
@@ -125,6 +136,15 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
           onlyGame: onlyGame,
         ),
       );
+      // A newer load (set switch, import reload) started while we decoded —
+      // it now owns [positions]; drop this stale decode instead of appending
+      // it onto the newer load's list.
+      if (generation != _loadGeneration) return positions.length;
+
+      // Clear + repopulate with no await in between, so an overlapping load
+      // can never interleave its puzzles into the list.
+      positions.clear();
+      analyzedGameIds.clear();
       for (final warning in decoded.errors) {
         log.w('Set "$_activeSetName": $warning');
       }
@@ -137,6 +157,7 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
 
       // Also load the separate analyzed games list (includes games with no blunders)
       await _loadAnalyzedGameIds();
+      if (generation != _loadGeneration) return positions.length;
 
       log.i(
         'Loaded ${positions.length} tactics positions from set "$_activeSetName"',
@@ -147,6 +168,9 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
       return positions.length;
     } catch (e) {
       log.e('Error loading positions: $e');
+      if (generation != _loadGeneration) return positions.length;
+      positions.clear();
+      analyzedGameIds.clear();
       isLoading = false;
       notifyListeners();
       return 0;
@@ -628,36 +652,8 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
     await _saveAnalyzedGameIds();
   }
 
-  /// Add [position] to the tactics database (the [defaultSetName] file).
-  ///
-  /// Normally this is [addPosition]; during an external review the loaded
-  /// positions belong to the study file, so the puzzle is written through
-  /// to the database's own file on disk instead (an external save only
-  /// patches stat headers and would silently drop a new position).
-  /// Returns `true` when added (`false` = duplicate FEN).
-  Future<bool> addPositionToDatabase(TacticsPosition position) async {
-    if (!isExternalSet) return addPosition(position);
-
-    final storage = StorageFactory.instance;
-    final path = await storage.tacticsSetPath(defaultSetName);
-    final content = await storage.readFile(path);
-    // Decode + re-encode of the whole database file, off the UI isolate.
-    final pgn = await Isolate.run(() {
-      final existing = <TacticsPosition>[];
-      if (content != null && content.trim().isNotEmpty) {
-        existing.addAll(decodePuzzlesFromPgn(content).puzzles);
-      }
-      if (existing.any((p) => p.fen == position.fen)) return null;
-      existing.add(position);
-      return encodePuzzlesToPgn(defaultSetName, existing).pgn;
-    });
-    if (pgn == null) return false;
-    await storage.writeFile(path, pgn);
-    return true;
-  }
-
-  /// Add a single position (streaming import, puzzle creator).  Returns
-  /// `true` when the position was added (`false` = duplicate FEN).
+  /// Add a single position (streaming import).  Returns `true` when the
+  /// position was added (`false` = duplicate FEN).
   Future<bool> addPosition(TacticsPosition position) async {
     // Check for duplicates by FEN
     if (positions.any((p) => p.fen == position.fen)) return false;

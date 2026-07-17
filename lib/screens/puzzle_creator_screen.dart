@@ -1,45 +1,41 @@
 /// Manual puzzle creation flow: set up a position, play the solution,
-/// annotate, and save into the tactics database.
+/// annotate, and save as a chapter of a study (custom puzzles live in
+/// studies; the tactics page holds only game-mined tactics).
 ///
-/// Pushed as a route from the Tactics panel (or via the cross-mode
-/// "Make puzzle from this position" hooks).  Receives the *live*
-/// [TacticsDatabase] so saves land in the provider-owned instance.
+/// Pushed as a route from the cross-mode "Make puzzle from this position"
+/// hooks (Study, PGN Viewer, Player Analysis).  Saving shows the study
+/// picker; the puzzle is encoded as one PGN game (FEN + solution mainline,
+/// note as comment, star rating as a header) and appended via
+/// [StudyController.addChapterToStudyFile].
 library;
 
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../constants/ui_breakpoints.dart';
 import '../core/puzzle_creator_controller.dart';
-import '../models/tactics_position.dart';
-import '../services/tactics_database.dart';
+import '../core/study_controller.dart';
+import '../services/storage/storage_factory.dart';
+import '../services/tactics_pgn_codec.dart' show encodePuzzlePgn;
 import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
 import '../widgets/board_editor/board_editor_widget.dart';
 import '../widgets/board_editor/piece_palette.dart';
 import '../widgets/board_editor/position_setup_panel.dart';
 import '../widgets/chess_board_widget.dart';
+import '../widgets/pgn/add_to_study_dialog.dart';
 
 class PuzzleCreatorScreen extends StatefulWidget {
-  final TacticsDatabase database;
   final String? initialFen;
 
-  const PuzzleCreatorScreen({
-    super.key,
-    required this.database,
-    this.initialFen,
-  });
+  const PuzzleCreatorScreen({super.key, this.initialFen});
 
-  /// Push the creator; resolves to the saved puzzle (or null if abandoned).
-  static Future<TacticsPosition?> push(
-    BuildContext context, {
-    required TacticsDatabase database,
-    String? initialFen,
-  }) {
-    return Navigator.of(context).push<TacticsPosition>(
+  /// Push the creator as a full-screen route.
+  static Future<void> push(BuildContext context, {String? initialFen}) {
+    return Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) =>
-            PuzzleCreatorScreen(database: database, initialFen: initialFen),
+        builder: (_) => PuzzleCreatorScreen(initialFen: initialFen),
       ),
     );
   }
@@ -80,6 +76,18 @@ class _PuzzleCreatorScreenState extends State<PuzzleCreatorScreen> {
 
   Future<void> _save() async {
     if (_saving) return;
+
+    // Pick (or create) the destination study first — cancel keeps the
+    // creator open on the details step.
+    final result = await showDialog<AddToStudyResult>(
+      context: context,
+      builder: (_) => AddToStudyDialog(
+        initialChapterName: _creator.positionContext,
+        title: 'Save puzzle to study',
+      ),
+    );
+    if (result == null || !mounted) return;
+
     setState(() => _saving = true);
     try {
       final puzzle = _creator.buildPuzzle(
@@ -88,16 +96,27 @@ class _PuzzleCreatorScreenState extends State<PuzzleCreatorScreen> {
         gameWhite: _whiteCtrl.text.trim(),
         gameBlack: _blackCtrl.text.trim(),
       );
-      final added = await widget.database.addPositionToDatabase(puzzle);
+      final chapterPgn = encodePuzzlePgn(
+        puzzle,
+        _creator.solutionSan,
+        event: result.chapterName,
+        // Study chapters keep only per-move comments — attach the note to
+        // the final move so it survives the move-tree round-trip.
+        noteAfterLastMove: true,
+      );
+      final study = context.read<StudyController>();
+      final path =
+          result.existingPath ??
+          await StorageFactory.instance.studyFilePath(result.newStudyName!);
+      await study.addChapterToStudyFile(path, result.chapterName, chapterPgn);
       if (!mounted) return;
-      if (added) {
-        Navigator.of(context).pop(puzzle);
-      } else {
-        showAppSnackBar(
-          context,
-          'A puzzle with this position already exists.',
-          isError: true,
-        );
+      // The app-level messenger outlives this route, so show before popping.
+      showAppSnackBar(context, 'Puzzle saved to "${result.studyName}".');
+      Navigator.of(context).pop();
+    } catch (e) {
+      debugPrint('Save puzzle to study failed: $e');
+      if (mounted) {
+        showAppSnackBar(context, 'Could not save the puzzle.', isError: true);
       }
     } finally {
       if (mounted) setState(() => _saving = false);

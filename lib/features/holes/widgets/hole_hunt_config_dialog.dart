@@ -1,9 +1,10 @@
 /// Hole-hunt configuration dialog for Player Analysis.
 ///
 /// Collects a [HoleHuntConfig] and pops with it; the host screen owns the
-/// hunt lifecycle. The hunt attacks the displayed colour's game tree from
-/// the opposite side: uncovered strong moves, refutations, and (via the
-/// end-of-line expectimax pass) practical traps.
+/// hunt lifecycle. Unlike Analyze with Engine (raw Stockfish eval coloring),
+/// this is an adversarial hunt from the opposite side: uncovered strong
+/// moves, verified refutations, plus an end-of-line Maia expectimax pass
+/// for practical traps.
 library;
 
 import 'package:flutter/material.dart';
@@ -115,11 +116,28 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Attacks ${widget.playerName}\'s games as $treeColor from '
-                'the $attackerColor side: uncovered strong moves, concrete '
-                'refutations, and end-of-line practical traps found with '
-                'Stockfish + Maia expectimax.',
+                'Not the same as Analyze with Engine (that only scores '
+                'positions by raw Stockfish eval). Find Holes attacks '
+                '${widget.playerName}\'s $treeColor games from the '
+                '$attackerColor side and looks for ways to beat the lines:',
                 style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '• Uncovered strong moves — engine-best $attackerColor '
+                'tries with no reply in the file\n'
+                '• Refutations — $treeColor moves that lose after a '
+                'verified Stockfish reply\n'
+                '• Practical traps — at frequently reached leaves, Maia '
+                'expectimax finds lines that score far better for the '
+                'attacker than the raw engine eval suggests',
+                style: const TextStyle(fontSize: 12.5, height: 1.35),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Results are ranked by reach probability × gain, so you '
+                'get a short list of killer holes — not every bad eval.',
+                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
               ),
               const SizedBox(height: 12),
 
@@ -212,9 +230,10 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
                 ),
               ],
               const SizedBox(height: 12),
-              Text(
-                'The hunt runs the engine over the whole tree and can take '
-                'a while; it keeps working while you browse.',
+              const Text(
+                'Pass 1 walks the tree with Stockfish; pass 2 runs Maia '
+                'expectimax on the top leaves for practical traps. Can take '
+                'a while — it keeps working while you browse.',
                 style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
               ),
             ],

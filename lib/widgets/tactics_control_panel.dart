@@ -17,7 +17,6 @@ import '../services/tactics/tactics_import_coordinator.dart';
 import '../services/tactics/tactics_import_form.dart';
 import '../services/tactics/tactics_session_controller.dart';
 import '../services/tactics/tactics_solution_pgn.dart';
-import '../screens/puzzle_creator_screen.dart';
 import '../services/tactics_database.dart';
 import '../services/storage/storage_factory.dart';
 import '../theme/app_colors.dart';
@@ -91,10 +90,6 @@ abstract class _TacticsControlPanelStateBase extends State<TacticsControlPanel>
   // Focus node for keyboard shortcuts during training
   final FocusNode _focusNode = FocusNode();
 
-  /// AppState reference for the pending puzzle-seed listener (kept so
-  /// dispose() can unsubscribe without touching context).
-  AppState? _appStateRef;
-
   /// Last window cutoff the pending count was computed against.
   DateTime? _lastPendingCutoff;
 
@@ -139,6 +134,10 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
     _session.onAnalysisMove = _addMoveToAnalysis;
     _session.onUserMoveAccepted = _pgnViewerController.goForward;
     _session.onSessionCompleted = _onQueueExhausted;
+    // Bridge navigation keys pressed while the move-input field owns focus back
+    // to the panel shortcuts (the field is a focus-tree sibling — see
+    // _handleTrainerNavigationKey).
+    _session.onTrainerNavigationKey = _handleTrainerNavigationKey;
     _session.addListener(_onSessionChanged);
     _import.addListener(_onImportChanged);
     // Reactive safety net: any database mutation (import streaming, delete,
@@ -167,14 +166,6 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
         _form.loadPrefs();
 
         _resetBoardToStart();
-
-        // "Make puzzle from this position" hooks in other modes set a seed
-        // FEN before switching here; consume it now (panel just created) and
-        // on later AppState notifications (panel cached in IndexedStack).
-        _appStateRef = appState;
-        appState.addListener(_onAppStateForPuzzleSeed);
-        _consumePendingPuzzleSeed(appState);
-        _consumePendingReviewPath(appState);
       }
     });
 
@@ -257,75 +248,10 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
     if (mounted) setState(() {});
   }
 
-  void _onAppStateForPuzzleSeed() {
-    final appState = _appStateRef;
-    if (appState != null) {
-      _consumePendingPuzzleSeed(appState);
-      _consumePendingReviewPath(appState);
-    }
-  }
-
-  void _consumePendingPuzzleSeed(AppState appState) {
-    final seed = appState.pendingPuzzleSeedFen;
-    if (seed == null || !mounted) return;
-    appState.pendingPuzzleSeedFen = null;
-    // Defer navigation out of the notify/build phase.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _openPuzzleCreator(seedFen: seed);
-    });
-  }
-
-  /// "Review as puzzles" hook: open a study (or any PGN file) as an
-  /// external set.  Stats save back into the file's headers; content edits
-  /// belong in Study mode.
-  void _consumePendingReviewPath(AppState appState) {
-    final path = appState.pendingReviewPgnPath;
-    if (path == null || !mounted) return;
-    final gameIndex = appState.pendingReviewGameIndex;
-    final includeVariations = appState.pendingReviewIncludeVariations;
-    appState.pendingReviewPgnPath = null;
-    appState.pendingReviewGameIndex = null;
-    appState.pendingReviewIncludeVariations = false;
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-      _session.endSession();
-      _showRecap = false;
-      final count = await _database.openExternalSet(
-        path,
-        gameIndex: gameIndex,
-        includeVariations: includeVariations,
-      );
-      if (!mounted) return;
-      _resetBoardToStart();
-      setState(() {});
-      showAppSnackBar(
-        context,
-        count > 0
-            ? 'Reviewing "${_database.activeSetName}" as puzzles '
-                  '($count position${count == 1 ? '' : 's'}).'
-            : 'No reviewable chapters in "${_database.activeSetName}" — '
-                  'chapters need moves to train.',
-        isError: count == 0,
-      );
-    });
-  }
-
-  Future<void> _openPuzzleCreator({String? seedFen}) async {
-    final saved = await PuzzleCreatorScreen.push(
-      context,
-      database: _database,
-      initialFen: seedFen,
-    );
-    if (saved != null && mounted) {
-      showAppSnackBar(context, 'Puzzle saved.');
-    }
-  }
-
   @override
   void dispose() {
     // Detach our listeners/callbacks but do NOT dispose the owners — they are
     // provider-owned (see `_TacticsModeView`) and shared/outlive this panel.
-    _appStateRef?.removeListener(_onAppStateForPuzzleSeed);
     _session.removeListener(_onSessionChanged);
     _import.removeListener(_onImportChanged);
     _database.removeListener(_onDbChanged);
@@ -334,6 +260,7 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
     _session.onAnalysisMove = null;
     _session.onUserMoveAccepted = null;
     _session.onSessionCompleted = null;
+    _session.onTrainerNavigationKey = null;
     _focusNode.dispose();
     _tabController.dispose();
     _pendingCountDebounce?.cancel();
@@ -345,9 +272,10 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
   @override
   Widget build(BuildContext context) {
     // holdsFocus: the panel keeps keyboard focus for its navigation shortcuts
-    // and hands focus to the move input when typing is wanted. Keys that can
-    // never appear in a move (Space, ↑/↓, p/s/j) bubble to _handleKeyEvent
-    // even while typing; move-alphabet keys (n/a/e, ←/→) work only unfocused.
+    // and hands focus to the move input when typing is wanted. While the move
+    // input owns focus, keys that navigate the trainer (Space, S/P, J, arrows)
+    // are routed back here through _handleTrainerNavigationKey — the field is a
+    // focus-tree sibling, so they can't bubble to _handleKeyEvent.
     return TrainerKeyboardScope(
       holdsFocus: true,
       focusNode: _focusNode,
@@ -615,7 +543,6 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
         if (mounted) setState(() {});
       },
       onBatchDelete: _batchDeleteTactics,
-      onCreatePuzzle: () => _openPuzzleCreator(),
     );
   }
 }

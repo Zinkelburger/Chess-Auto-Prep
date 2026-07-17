@@ -262,7 +262,13 @@ class TacticsTrainingPanel extends StatelessWidget {
             contentPadding: EdgeInsets.zero,
           ),
         ),
+        // Everything below is the flashcard "back": it reveals downward as the
+        // puzzle is solved or the solution is shown. The fixed controls above
+        // never move, so revealing this content can't bounce the buttons. Each
+        // block leads with its own gap for uniform spacing regardless of which
+        // ones are visible.
         if (feedback.isNotEmpty) ...[
+          const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -279,14 +285,14 @@ class TacticsTrainingPanel extends StatelessWidget {
               ),
             ),
           ),
-          if (showSolution) const SizedBox(height: 8),
         ],
         if (_showNote) ...[
-          _NoteCard(note: position.mistakeAnalysis),
           const SizedBox(height: 8),
+          _NoteCard(note: position.mistakeAnalysis),
         ],
         _buildPlayedMoves(),
-        if (showSolution)
+        if (showSolution) ...[
+          const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -318,6 +324,7 @@ class TacticsTrainingPanel extends StatelessWidget {
               ],
             ),
           ),
+        ],
         if (_showRating) ...[
           const SizedBox(height: 12),
           _TacticsStarRating(rating: position.rating, onSetRating: onSetRating),
@@ -354,7 +361,9 @@ class TacticsTrainingPanel extends StatelessWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      // Leading gap (matching the other reveal blocks) so spacing stays even
+      // whether or not the solution/rating below it are visible.
+      padding: const EdgeInsets.only(top: 8),
       child: Text(
         buf.toString(),
         style: const TextStyle(fontSize: 14, color: AppColors.onSurfaceSoft),
@@ -505,6 +514,10 @@ class TacticsPositionInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pos = position;
+    // Clamp to at least 1 so a single-move tactic reads "1-move tactic"
+    // instead of dropping the line — the disappearing line used to shove
+    // every control below it, bouncing the panel on each Next/Previous.
+    final moveCount = math.max(1, engine.userMoveCount(pos));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -544,6 +557,10 @@ class TacticsPositionInfo extends StatelessWidget {
         Text(
           'Game: ${pos.gameWhite} vs ${pos.gameBlack}',
           style: const TextStyle(fontSize: 14),
+          // Names vary per puzzle; keep to one line so the header height (and
+          // everything below it) doesn't jump when a longer pairing wraps.
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         if (pos.userMove.isNotEmpty) ...[
           const SizedBox(height: 8),
@@ -551,19 +568,24 @@ class TacticsPositionInfo extends StatelessWidget {
             'You played: ${pos.userMove}${pos.mistakeType}',
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
           ),
-          if (pos.opponentBestResponse.isNotEmpty)
-            Text(
+          // Always reserve the "Allows" line's height, even when no opponent
+          // reply was stored, so puzzles with and without one keep the same
+          // header height and the buttons below never shift on Next/Previous.
+          Visibility(
+            visible: pos.opponentBestResponse.isNotEmpty,
+            maintainSize: true,
+            maintainAnimation: true,
+            maintainState: true,
+            child: Text(
               'Allows: ${pos.opponentBestResponse}',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
-        ],
-        if (engine.userMoveCount(pos) > 1) ...[
-          const SizedBox(height: 4),
-          Text(
-            '${engine.userMoveCount(pos)}-move tactic',
-            style: const TextStyle(fontSize: 14),
           ),
         ],
+        const SizedBox(height: 4),
+        // Shown for every puzzle (single-move tactics read "1-move tactic") so
+        // this line never appears/disappears between puzzles.
+        Text('$moveCount-move tactic', style: const TextStyle(fontSize: 14)),
       ],
     );
   }

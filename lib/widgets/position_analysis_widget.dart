@@ -33,6 +33,7 @@ import '../models/position_analysis.dart';
 import '../models/opening_tree.dart';
 import '../services/storage/storage_factory.dart';
 import '../theme/app_colors.dart';
+import '../screens/puzzle_creator_screen.dart';
 import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
 import '../utils/keyboard_shortcut_utils.dart';

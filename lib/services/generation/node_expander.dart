@@ -474,9 +474,11 @@ abstract class NodeExpander {
     // Fall back to the first child only when none carry an eval.
     incumbent ??= node.children.first;
     for (final child in node.children) {
-      child.searchPriority = identical(child, incumbent)
+      final isIncumbent = identical(child, incumbent);
+      child.searchPriority = isIncumbent
           ? basePri
           : basePri * config.ourAltDiscount;
+      child.searchPriorityDiscount = isIncumbent ? 1.0 : config.ourAltDiscount;
     }
     return incumbent;
   }

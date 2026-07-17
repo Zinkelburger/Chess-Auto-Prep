@@ -167,16 +167,20 @@ class RepertoireReviewService {
   /// [ReviewOrder.hardestFirst], lines are sorted by ascending playability
   /// (lowest quality first). Lines without playability data sort after those
   /// with data.
+  ///
+  /// [dueOnly] is the spaced-repetition filter; pass `false` (linear mode)
+  /// to include every line regardless of its due date.
   List<RepertoireLine> orderLinesForReview(
     List<RepertoireLine> lines,
     Map<String, RepertoireReviewEntry> reviewMap,
     ReviewOrder order, {
     Map<String, double>? playabilityMap,
+    bool dueOnly = true,
   }) {
     final due = <RepertoireLine>[];
     for (final line in lines) {
       final entry = reviewMap[line.id];
-      if (entry == null || entry.isDue) {
+      if (!dueOnly || entry == null || entry.isDue) {
         due.add(line);
       }
     }

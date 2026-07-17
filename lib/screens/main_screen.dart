@@ -287,6 +287,16 @@ class _TacticsBoardPane extends StatelessWidget {
               key: TacticsControlPanel.moveInputKey,
               position: appState.currentPosition,
               onMove: (move) => _attemptMove(context, move.uci),
+              // Route trainer navigation keys (Space, S/P, arrows, …) back to
+              // the control panel so they cycle puzzles / step the solution
+              // instead of typing into the field. Returns false for move
+              // characters, which then type normally.
+              onNavigationKey: (event) =>
+                  context
+                      .read<TacticsSessionController>()
+                      .onTrainerNavigationKey
+                      ?.call(event.logicalKey) ??
+                  false,
             ),
           ),
         ],

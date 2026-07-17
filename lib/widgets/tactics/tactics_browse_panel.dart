@@ -43,7 +43,6 @@ class TacticsBrowsePanel extends StatefulWidget {
     required this.onClearAll,
     this.onSetRating,
     this.onBatchDelete,
-    this.onCreatePuzzle,
   });
 
   final List<TacticsPosition> positions;
@@ -62,9 +61,6 @@ class TacticsBrowsePanel extends StatefulWidget {
   final VoidCallback onClearAll;
   final void Function(int index, int rating)? onSetRating;
   final void Function(List<int> indices)? onBatchDelete;
-
-  /// Opens the manual puzzle creator.  Hidden when null.
-  final VoidCallback? onCreatePuzzle;
 
   @override
   State<TacticsBrowsePanel> createState() => _TacticsBrowsePanelState();
@@ -167,17 +163,10 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                'No tactics in this set yet.\nImport games to discover tactical positions, or create your own.',
+                'No tactics in this set yet.\n'
+                'Import games to discover tactical positions.',
                 textAlign: TextAlign.center,
               ),
-              if (widget.onCreatePuzzle != null) ...[
-                const SizedBox(height: 12),
-                FilledButton.icon(
-                  icon: const Icon(Icons.add, size: 16),
-                  label: const Text('New puzzle'),
-                  onPressed: widget.onCreatePuzzle,
-                ),
-              ],
             ],
           ),
         ),
@@ -230,7 +219,6 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
             setState(() => _selected.addAll(visibleIndices));
           },
           onClearAll: widget.onClearAll,
-          onCreatePuzzle: widget.onCreatePuzzle,
         ),
         const Divider(height: 1),
         TacticsBrowseHeader(showBoards: _showBoards),
