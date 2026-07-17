@@ -25,6 +25,7 @@ mixin _GenerationConfigIo
     _setupMovesCtrl.text = config.setupMoves;
     _setupToleranceCtrl.text = config.setupToleranceCp.toString();
     _searchAlgorithm = config.searchAlgorithm;
+    _wideOpening = config.openingWidthPlies > 0;
     _verifyFinal = config.verifyFinal;
     _dbMinGamesCtrl.text = config.dbMinGames.toString();
     _dbMinProbCtrl.text = config.dbMinProb.toString();
@@ -197,6 +198,9 @@ mixin _GenerationConfigIo
         0,
         500,
       ),
+      // "Wide opening search" on → widen the first few plies (both colors'
+      // first two of our moves); off → 0 (legacy: only the root ply is wide).
+      openingWidthPlies: _wideOpening ? 3 : 0,
       maiaPriorGames: double.tryParse(_maiaPriorGamesCtrl.text.trim()) ?? 30.0,
       coverMinProb: (double.tryParse(_coverMinProbCtrl.text.trim()) ?? 0.05)
           .clamp(0.0, 1.0),

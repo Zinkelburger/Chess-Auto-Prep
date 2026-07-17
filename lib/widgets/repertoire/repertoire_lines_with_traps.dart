@@ -210,17 +210,17 @@ class _RepertoireLinesWithTrapsState extends State<RepertoireLinesWithTraps> {
             const SizedBox(width: 8),
             Text(
               label,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: Colors.grey[300],
+                color: AppColors.inkSoft,
               ),
             ),
             const Spacer(),
             Icon(
               isExpanded ? Icons.expand_less : Icons.expand_more,
               size: 18,
-              color: Colors.grey[500],
+              color: AppColors.onSurfaceMuted,
             ),
           ],
         ),

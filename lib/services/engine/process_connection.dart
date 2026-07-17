@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'engine_connection.dart';
@@ -58,12 +59,25 @@ class ProcessConnection implements EngineConnection {
       final byteData = await rootBundle.load(
         'assets/executables/$binaryName.gz',
       );
-      final compressed = byteData.buffer.asUint8List(
-        byteData.offsetInBytes,
-        byteData.lengthInBytes,
+      // Copy out of the shared asset buffer so the bytes can be sent to the
+      // worker isolate (the asUint8List view is a non-transferable window
+      // over rootBundle-owned memory).
+      final compressed = Uint8List.fromList(
+        byteData.buffer.asUint8List(
+          byteData.offsetInBytes,
+          byteData.lengthInBytes,
+        ),
       );
-      final decompressed = gzip.decode(compressed);
-      await file.writeAsBytes(decompressed, flush: true);
+      final targetPath = file.path;
+      // gzip.decode is fully synchronous over a ~73MB asset (~90MB decoded) —
+      // decoding on the UI isolate froze the first frame for hundreds of ms.
+      // Decode AND write on a worker isolate so neither the compressed input
+      // nor the decoded output ever touches the UI isolate. Runs at most once
+      // (guarded by the file.exists check above).
+      await Isolate.run(() {
+        final decompressed = gzip.decode(compressed);
+        File(targetPath).writeAsBytesSync(decompressed, flush: true);
+      });
 
       if (!Platform.isWindows) {
         await Process.run('chmod', ['+x', file.path]);

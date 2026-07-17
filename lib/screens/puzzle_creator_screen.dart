@@ -13,6 +13,7 @@ import '../constants/ui_breakpoints.dart';
 import '../core/puzzle_creator_controller.dart';
 import '../models/tactics_position.dart';
 import '../services/tactics_database.dart';
+import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
 import '../widgets/board_editor/board_editor_widget.dart';
 import '../widgets/board_editor/piece_palette.dart';
@@ -132,7 +133,7 @@ class _PuzzleCreatorScreenState extends State<PuzzleCreatorScreen> {
               : Row(
                   children: [
                     Expanded(flex: 5, child: board),
-                    Container(width: 1, color: Colors.grey[700]),
+                    Container(width: 1, color: AppColors.outline),
                     Expanded(flex: 4, child: panel),
                   ],
                 );
@@ -325,7 +326,7 @@ class _PuzzleCreatorScreenState extends State<PuzzleCreatorScreen> {
                   icon: Icon(
                     star <= _rating ? Icons.star : Icons.star_border,
                     size: 20,
-                    color: Colors.amber,
+                    color: AppColors.starAccent,
                   ),
                   visualDensity: VisualDensity.compact,
                   onPressed: () =>

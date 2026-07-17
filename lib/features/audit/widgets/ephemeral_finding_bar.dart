@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_colors.dart';
 import '../models/audit_finding.dart';
 
 class EphemeralFindingBar extends StatelessWidget {
@@ -30,21 +31,21 @@ class EphemeralFindingBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.blue.withAlpha(30),
-        border: Border(top: BorderSide(color: Colors.blue.withAlpha(80))),
+        color: AppColors.info.withAlpha(30),
+        border: Border(top: BorderSide(color: AppColors.info.withAlpha(80))),
       ),
       child: Row(
         children: [
           const Icon(
             Icons.visibility_off_outlined,
             size: 14,
-            color: Colors.blue,
+            color: AppColors.info,
           ),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(fontSize: 12, color: Colors.blue),
+              style: const TextStyle(fontSize: 12, color: AppColors.info),
             ),
           ),
           TextButton.icon(
@@ -52,7 +53,7 @@ class EphemeralFindingBar extends StatelessWidget {
             icon: const Icon(Icons.open_in_new, size: 14),
             label: const Text('Go to position', style: TextStyle(fontSize: 11)),
             style: TextButton.styleFrom(
-              foregroundColor: Colors.blue,
+              foregroundColor: AppColors.info,
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -60,7 +61,11 @@ class EphemeralFindingBar extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           IconButton(
-            icon: const Icon(Icons.close, size: 14, color: Colors.grey),
+            icon: const Icon(
+              Icons.close,
+              size: 14,
+              color: AppColors.onSurfaceMuted,
+            ),
             onPressed: onDismiss,
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,

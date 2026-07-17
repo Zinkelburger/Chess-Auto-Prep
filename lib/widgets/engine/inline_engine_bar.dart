@@ -9,6 +9,8 @@
 /// workers used by the repertoire pane.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -21,7 +23,7 @@ import '../../services/engine/stockfish_connection_factory.dart';
 import '../../services/engine/stockfish_pool.dart' show kPoolHashPerWorkerMb;
 import '../../theme/app_colors.dart';
 import '../../utils/chess_utils.dart'
-    show formatEvalDisplay, formatNodes, uciPvToSan;
+    show formatEvalDisplay, formatNodes, uciPvToSanCached;
 import '../../utils/fen_utils.dart';
 import '../clickable_move_line.dart';
 import '../analysis/analysis_settings_sheet.dart';
@@ -74,6 +76,18 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   bool _isSearching = false;
   String? _lastAnalyzedFen;
 
+  // Per-info-line progress used to fire a full setState (re-deriving every
+  // line's SAN) many times per second; throttle to a leading+trailing cadence.
+  Timer? _progressThrottle;
+  DiscoveryResult? _pendingProgress;
+
+  // Settings fields that actually affect the inline search — a re-search runs
+  // only when one of these changes, not on every unrelated EngineSettings
+  // notify (column mutes, Maia toggles, explorer DB, …).
+  int _lastDepth = 0;
+  int _lastMultiPv = 0;
+  int _lastInlineThreads = 0;
+
   EvalWorker? _worker;
   int _workerThreads = 0;
 
@@ -84,6 +98,9 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     super.initState();
     // Manual listener: thread-count changes dispose worker and re-run discovery.
     _settings.addListener(_onSettingsChanged);
+    _lastDepth = _settings.depth;
+    _lastMultiPv = _settings.multiPv;
+    _lastInlineThreads = _settings.inlineThreads;
     EngineLifecycle.instance.addListener(_onEngineGateChanged);
     _externalToggleNotifier.add(_onExternalToggle);
     if (_engineEnabled && widget.isActive) {
@@ -128,6 +145,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   @override
   void dispose() {
     _generation++;
+    _progressThrottle?.cancel();
     _externalToggleNotifier.remove(_onExternalToggle);
     EngineLifecycle.instance.removeListener(_onEngineGateChanged);
     _settings.removeListener(_onSettingsChanged);
@@ -136,6 +154,18 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   }
 
   void _onSettingsChanged() {
+    // Only depth / MultiPV / inline-thread changes affect the inline search;
+    // EngineSettings fires for ~30 unrelated fields and each one used to abort
+    // and restart the in-progress search.
+    final relevant =
+        _settings.depth != _lastDepth ||
+        _settings.multiPv != _lastMultiPv ||
+        _settings.inlineThreads != _lastInlineThreads;
+    if (!relevant) return;
+    _lastDepth = _settings.depth;
+    _lastMultiPv = _settings.multiPv;
+    _lastInlineThreads = _settings.inlineThreads;
+
     if (_settings.inlineThreads != _workerThreads) {
       _disposeWorker();
     }
@@ -143,6 +173,25 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     if (_engineEnabled && widget.isActive) {
       _runDiscovery();
     }
+  }
+
+  /// Leading + trailing throttle for streamed search progress: paint the first
+  /// update immediately, then coalesce the flood of UCI info lines to ~12fps
+  /// so each one doesn't fire a full bar rebuild + per-line SAN derivation.
+  /// The definitive result is still applied unthrottled in [_runDiscovery].
+  void _onDiscoveryProgress(DiscoveryResult intermediate, int myGen) {
+    if (!mounted || _generation != myGen) return;
+    _pendingProgress = intermediate;
+    if (_progressThrottle != null) return; // trailing edge will flush it
+    setState(() => _discovery = _pendingProgress!);
+    _pendingProgress = null;
+    _progressThrottle = Timer(const Duration(milliseconds: 80), () {
+      _progressThrottle = null;
+      if (!mounted || _generation != myGen) return;
+      final pending = _pendingProgress;
+      _pendingProgress = null;
+      if (pending != null) setState(() => _discovery = pending);
+    });
   }
 
   void _toggleEngine(bool value) {
@@ -193,6 +242,11 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     if (widget.fen == _lastAnalyzedFen && _discovery.lines.isNotEmpty) return;
 
     final myGen = ++_generation;
+    // Drop any pending throttled progress from the previous search so a stale
+    // trailing flush can't paint over the new one.
+    _progressThrottle?.cancel();
+    _progressThrottle = null;
+    _pendingProgress = null;
     final fen = widget.fen;
     _lastAnalyzedFen = fen;
 
@@ -218,10 +272,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
         _settings.depth,
         _settings.multiPv,
         whiteToMove,
-        onProgress: (intermediate) {
-          if (!mounted || _generation != myGen) return;
-          setState(() => _discovery = intermediate);
-        },
+        onProgress: (intermediate) => _onDiscoveryProgress(intermediate, myGen),
       );
 
       if (!mounted || _generation != myGen) {
@@ -296,14 +347,20 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                               '${formatNodes(_discovery.nodes)} nodes'
                         : '${_discovery.lines.length} lines • '
                               'depth ${_discovery.depth}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.onSurfaceSoft,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   )
-                : Tooltip(
+                : const Tooltip(
                     message: 'Toggle engine (E)',
                     child: Text(
                       'Engine',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.onSurfaceMuted,
+                      ),
                     ),
                   ),
           ),
@@ -338,9 +395,9 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
               child: CircularProgressIndicator(strokeWidth: 1.5),
             ),
             const SizedBox(width: 8),
-            Text(
+            const Text(
               'Analyzing...',
-              style: TextStyle(color: Colors.grey[500], fontSize: 13),
+              style: TextStyle(color: AppColors.onSurfaceMuted, fontSize: 13),
             ),
           ],
         ),
@@ -354,7 +411,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   }
 
   List<String> _pvToSanList(String fen, List<String> pv) =>
-      uciPvToSan(fen, pv, maxMoves: pv.length);
+      uciPvToSanCached(fen, pv);
 
   Widget _buildLineRow(BuildContext context, DiscoveryLine line) {
     final sanMoves = _pvToSanList(widget.fen, line.pv);

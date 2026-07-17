@@ -6,6 +6,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../theme/app_colors.dart';
 import 'empty_state_placeholder.dart';
 import '../../models/repertoire_mode.dart';
 
@@ -144,7 +145,7 @@ class _AnalyzeContextZoneState extends State<AnalyzeContextZone> {
           Icon(
             icon,
             size: 14,
-            color: isSelected ? Colors.teal : Colors.grey[500],
+            color: isSelected ? AppColors.accent : AppColors.onSurfaceMuted,
           ),
           const SizedBox(width: 4),
           Text(label, style: const TextStyle(fontSize: 11)),

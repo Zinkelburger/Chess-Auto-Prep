@@ -29,6 +29,7 @@ import '../services/engine/engine_lifecycle.dart';
 import '../services/engine/stockfish_pool.dart';
 import '../services/engine_weakness_service.dart';
 import '../services/unified_analysis_builder.dart';
+import '../theme/app_colors.dart';
 import '../widgets/engine/engine_gate.dart';
 import '../widgets/engine_weakness_dialog.dart';
 import '../widgets/app_mode_menu_button.dart';
@@ -309,7 +310,11 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.person_search, size: 64, color: Colors.grey[400]),
+            const Icon(
+              Icons.person_search,
+              size: 64,
+              color: AppColors.onSurfaceDim,
+            ),
             const SizedBox(height: 24),
             Text(
               'No Player Selected',

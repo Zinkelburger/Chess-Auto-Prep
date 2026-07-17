@@ -1,6 +1,8 @@
 /// Orchestrates Lichess / Chess.com tactics imports against [TacticsDatabase].
 library;
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../models/tactics_position.dart';
@@ -54,6 +56,63 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
   /// pending games for both platforms.
   String? _lichessUsername;
   String? _chesscomUsername;
+
+  /// Streamed finds are buffered and committed in batches — committing per
+  /// position re-encodes and rewrites the whole set file each time, which
+  /// starved the UI thread for the entire import.
+  final List<TacticsPosition> _foundBuffer = [];
+  Timer? _foundFlushTimer;
+  static const _foundFlushInterval = Duration(seconds: 2);
+
+  /// Progress/find notifications arrive many times per second during an
+  /// import and each one repaints the whole tactics panel; coalesce them.
+  Timer? _notifyThrottle;
+  bool _notifyQueued = false;
+  static const _notifyInterval = Duration(milliseconds: 200);
+
+  /// Leading-edge throttle with a trailing call, so the first update paints
+  /// immediately and the last one is never dropped.
+  void _notifyThrottled() {
+    if (_notifyThrottle != null) {
+      _notifyQueued = true;
+      return;
+    }
+    notifyListeners();
+    _notifyThrottle = Timer(_notifyInterval, () {
+      _notifyThrottle = null;
+      if (_notifyQueued) {
+        _notifyQueued = false;
+        _notifyThrottled();
+      }
+    });
+  }
+
+  /// Commit buffered finds to the database: one notify + one file write per
+  /// batch. Must run before any [TacticsDatabase.loadPositions] (which
+  /// reloads from disk) or the buffered finds would be dropped.
+  Future<void> _flushFoundPositions() async {
+    _foundFlushTimer?.cancel();
+    _foundFlushTimer = null;
+    if (_foundBuffer.isEmpty) return;
+    final batch = List<TacticsPosition>.of(_foundBuffer);
+    _foundBuffer.clear();
+    await database.addPositions(batch);
+  }
+
+  @override
+  void dispose() {
+    _notifyThrottle?.cancel();
+    _foundFlushTimer?.cancel();
+    // Mid-import: leave the buffer for the import try/finally flush so we
+    // don't race a double-write. Orphaned finds (no active import) are
+    // persisted before super.dispose while [database] is still owned.
+    if (!isImporting && _foundBuffer.isNotEmpty) {
+      final batch = List<TacticsPosition>.of(_foundBuffer);
+      _foundBuffer.clear();
+      unawaited(database.addPositions(batch));
+    }
+    super.dispose();
+  }
 
   /// Start of the pending/resume recency window, evaluated fresh on every
   /// count. Set by the UI from the fetch-window form; games played before
@@ -122,11 +181,15 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
         onPositionFound: _onPositionFound,
       );
 
+      await _flushFoundPositions();
       await database.loadPositions();
       // Cancelled: clear the "Stopping…" note instead of claiming success.
       importStatus = importService.wasCancelled ? null : _statusMessage(result);
       notifyListeners();
     } finally {
+      // On an abnormal exit the try block never flushed — persist what the
+      // cancelled/failed run found so far.
+      await _flushFoundPositions();
       activeImport = null;
       isImporting = false;
       await refreshPendingCount(
@@ -190,6 +253,7 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
         );
       }
 
+      await _flushFoundPositions();
       await database.loadPositions();
       // A cancelled run must not look like a completed one: no success
       // banner, and `false` so callers (auto-fetch, manual import) don't
@@ -203,6 +267,9 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
       notifyListeners();
       return true;
     } finally {
+      // On an abnormal exit the try block never flushed — persist what the
+      // cancelled/failed run found so far.
+      await _flushFoundPositions();
       activeImport = null;
       isImporting = false;
       await refreshPendingCount(
@@ -288,13 +355,17 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
 
   void _onProgress(String message) {
     importStatus = message;
-    notifyListeners();
+    _notifyThrottled();
   }
 
   Future<void> _onPositionFound(TacticsPosition position) async {
-    await database.addPosition(position);
+    _foundBuffer.add(position);
     newPositionsFound++;
-    notifyListeners();
+    _foundFlushTimer ??= Timer(_foundFlushInterval, () {
+      _foundFlushTimer = null;
+      unawaited(_flushFoundPositions());
+    });
+    _notifyThrottled();
   }
 
   String _statusMessage(ImportResult result) {

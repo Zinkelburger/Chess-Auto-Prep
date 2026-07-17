@@ -64,10 +64,13 @@ class EngineBusyNotice extends StatelessWidget {
           children: [
             const Icon(Icons.hourglass_top, size: 16, color: AppColors.warning),
             const SizedBox(width: 8),
-            Flexible(
+            const Flexible(
               child: Text(
                 'Engine busy — building your repertoire.',
-                style: TextStyle(fontSize: 12.5, color: Colors.grey[400]),
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.onSurfaceSoft,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -98,13 +101,13 @@ class EngineBusyNotice extends StatelessWidget {
               ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
-            Text(
+            const Text(
               'Stockfish is building your repertoire.\n'
               'Pause the build or let it finish to analyze again.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
-                color: Colors.grey[400],
+                color: AppColors.onSurfaceSoft,
                 height: 1.5,
               ),
             ),

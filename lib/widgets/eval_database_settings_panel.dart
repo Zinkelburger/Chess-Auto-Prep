@@ -129,10 +129,10 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
           ],
         ),
         const SizedBox(height: 4),
-        Text(
+        const Text(
           'Download once, point at the data/ folder, and evals use local data '
           'first — then API, then Stockfish.',
-          style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+          style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
         ),
         if (!_libraryAvailable) ...[
           const SizedBox(height: 12),
@@ -140,9 +140,11 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
             width: double.infinity,
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.amber.withValues(alpha: 0.12),
+              color: AppColors.warning.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.amber.withValues(alpha: 0.35)),
+              border: Border.all(
+                color: AppColors.warning.withValues(alpha: 0.35),
+              ),
             ),
             child: const Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -205,19 +207,19 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
             _setupStep(
               '2',
               'Point the field below at the data/ directory',
-              child: Text(
+              child: const Text(
                 'Select the folder that contains CURRENT and .sst files — '
                 'often …/chess-20251115/data after download.',
-                style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
               ),
             ),
             _setupStep(
               '3',
               'Done',
-              child: Text(
+              child: const Text(
                 'Enable local ChessDB and run repertoire generation. Eval chain: '
                 'local dump → SQLite slice → ChessDB API → Stockfish.',
-                style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
               ),
             ),
           ],
@@ -250,9 +252,9 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
             ),
           ],
         ),
-        Text(
+        const Text(
           'Point this at the data/ directory containing .sst files',
-          style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+          style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
         ),
         const SizedBox(height: 6),
         Row(

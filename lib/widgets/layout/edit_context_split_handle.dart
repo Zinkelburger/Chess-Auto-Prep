@@ -77,7 +77,7 @@ class _EditContextSplitHandleState extends State<EditContextSplitHandle> {
       width: _dragging ? width * 1.4 : width,
       height: _dragging ? height * 1.4 : height,
       decoration: BoxDecoration(
-        color: _dragging ? AppColors.expectimax : Colors.grey[600],
+        color: _dragging ? AppColors.accent : AppColors.onSurfaceDim,
         borderRadius: BorderRadius.circular(2),
       ),
     );

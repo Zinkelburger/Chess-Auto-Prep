@@ -3,6 +3,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:dartchess/dartchess.dart';
@@ -19,6 +20,7 @@ import '../services/tactics/tactics_solution_pgn.dart';
 import '../screens/puzzle_creator_screen.dart';
 import '../services/tactics_database.dart';
 import '../services/storage/storage_factory.dart';
+import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
 import '../utils/keyboard_shortcut_utils.dart';
@@ -95,6 +97,17 @@ abstract class _TacticsControlPanelStateBase extends State<TacticsControlPanel>
 
   /// Last window cutoff the pending count was computed against.
   DateTime? _lastPendingCutoff;
+
+  /// Debounce for the pending-count refresh: it prunes and re-reads the whole
+  /// stored-PGN archive, so it must not run once per keystroke in the days
+  /// field (typing "365" would fire it three times).
+  Timer? _pendingCountDebounce;
+
+  /// Cache for the analysis tab's solution PGN — building it replays the
+  /// solution line with dartchess, which is wasteful on every panel setState.
+  /// Keyed on FEN + solution line so an in-place edit invalidates it.
+  String? _solutionPgnKey;
+  String? _solutionPgnText;
 }
 
 class _TacticsControlPanelState extends _TacticsControlPanelStateBase
@@ -186,8 +199,11 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
     // Auto-load positions on startup
     _loadPositions();
 
-    // Pre-warm Stockfish pool + Maia so imports start instantly.
-    _warmUpEngines();
+    // Pre-warm Stockfish pool + Maia so imports start instantly — but at
+    // genuine framework idle, not inside the startup frame burst. The 45MB
+    // Maia ONNX parse is synchronous FFI; running it during first paint janked
+    // startup. Imports still lazily force init if the user is quicker than idle.
+    SchedulerBinding.instance.scheduleTask(_warmUpEngines, Priority.idle);
   }
 
   void _onSessionChanged() {
@@ -230,7 +246,10 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
     final cutoff = _form.sinceCutoff;
     if (cutoff != _lastPendingCutoff) {
       _lastPendingCutoff = cutoff;
-      unawaited(_import.refreshPendingCount());
+      _pendingCountDebounce?.cancel();
+      _pendingCountDebounce = Timer(const Duration(milliseconds: 500), () {
+        if (mounted) unawaited(_import.refreshPendingCount());
+      });
     }
   }
 
@@ -317,6 +336,7 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
     _session.onSessionCompleted = null;
     _focusNode.dispose();
     _tabController.dispose();
+    _pendingCountDebounce?.cancel();
     _form.removeListener(_onFormChanged);
     _form.dispose();
     super.dispose();
@@ -547,8 +567,15 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
     }
 
     final tactic = _session.currentPosition!;
-    final solutionSan = _session.engine.correctLineToSan(tactic);
-    final pgnText = buildSolutionPgn(tactic, solutionSan);
+    final cacheKey = '${tactic.fen}|${tactic.correctLine.join(' ')}';
+    if (_solutionPgnKey != cacheKey) {
+      _solutionPgnKey = cacheKey;
+      _solutionPgnText = buildSolutionPgn(
+        tactic,
+        _session.engine.correctLineToSan(tactic),
+      );
+    }
+    final pgnText = _solutionPgnText!;
 
     return PgnWithEngine(
       key: ValueKey('analysis_${tactic.fen}'),
@@ -576,6 +603,7 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
   Widget _buildBrowseTab() {
     return TacticsBrowsePanel(
       positions: _database.positions,
+      isLoading: _database.isLoading,
       selectedFen: _session.currentPosition?.fen,
       onSelectTactic: _playTacticFromBrowse,
       onDeleteTactic: _deleteTactic,

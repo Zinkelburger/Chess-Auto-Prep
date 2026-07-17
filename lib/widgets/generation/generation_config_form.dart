@@ -7,6 +7,8 @@ import '../../models/eval_database_settings.dart';
 import '../../models/pgn_source.dart';
 import '../../services/eval/cdbdirect_eval_provider.dart';
 import '../../services/generation/generation_config.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import '../lichess_db_info_icon.dart';
 import '../lichess_db_selector.dart';
 import '../pgn_sources_panel.dart';
@@ -131,32 +133,31 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
                 },
         ),
         const SizedBox(height: 4),
-        Text(
-          _buildModeDescription(),
-          style: const TextStyle(fontSize: 12, color: Colors.grey),
-        ),
+        Text(_buildModeDescription(), style: AppTextStyles.caption),
         if (_buildMode != BuildMode.trapFinder) ...[
           const SizedBox(height: 6),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.amber.withValues(alpha: 0.08),
+              color: AppColors.warningTint,
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.amber.withValues(alpha: 0.25)),
+              border: Border.all(
+                color: AppColors.warning.withValues(alpha: 0.25),
+              ),
             ),
-            child: Row(
+            child: const Row(
               children: [
                 Icon(
                   Icons.tips_and_updates_outlined,
                   size: 14,
-                  color: Colors.amber[600],
+                  color: AppColors.warning,
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Traps are automatically detected after building. '
                     'Browse them in the Lines pane.',
-                    style: TextStyle(fontSize: 11, color: Colors.amber[200]),
+                    style: TextStyle(fontSize: 11, color: AppColors.warning),
                   ),
                 ),
               ],
@@ -168,7 +169,7 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
           Text(
             'Add PGN files with the picker below. Lines already in your '
             'repertoire are not used for this build mode.',
-            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+            style: AppTextStyles.caption.copyWith(fontSize: 11),
           ),
           const SizedBox(height: 6),
           PgnSourcesPanel(
@@ -253,12 +254,12 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
               Icon(
                 _showAdvanced ? Icons.expand_less : Icons.expand_more,
                 size: 20,
-                color: Colors.grey[400],
+                color: AppColors.onSurfaceSoft,
               ),
               const SizedBox(width: 4),
-              Text(
+              const Text(
                 'Advanced settings',
-                style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+                style: TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
               ),
             ],
           ),
@@ -299,7 +300,7 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
                     child: Icon(
                       Icons.info_outline,
                       size: 16,
-                      color: Colors.grey[500],
+                      color: AppColors.onSurfaceMuted,
                     ),
                   ),
                 ),
@@ -341,7 +342,7 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
                     child: Icon(
                       Icons.info_outline,
                       size: 16,
-                      color: Colors.grey[500],
+                      color: AppColors.onSurfaceMuted,
                     ),
                   ),
                 ],
@@ -399,7 +400,7 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
                     child: Icon(
                       Icons.info_outline,
                       size: 16,
-                      color: Colors.grey[500],
+                      color: AppColors.onSurfaceMuted,
                     ),
                   ),
                 ],
@@ -407,7 +408,7 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
               const SizedBox(height: 4),
               Text(
                 _selectionModeDescription(),
-                style: const TextStyle(fontSize: 11, color: Colors.grey),
+                style: AppTextStyles.caption.copyWith(fontSize: 11),
               ),
               _sectionHeader('Thresholds'),
               Wrap(
@@ -448,7 +449,7 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
                     child: Icon(
                       Icons.info_outline,
                       size: 16,
-                      color: Colors.grey[500],
+                      color: AppColors.onSurfaceMuted,
                     ),
                   ),
                   if (_lichessDbOverride != null) ...[
@@ -486,7 +487,7 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
                     child: Icon(
                       Icons.info_outline,
                       size: 16,
-                      color: Colors.grey[500],
+                      color: AppColors.onSurfaceMuted,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -573,6 +574,40 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
                     : (v) => setState(
                         () => _searchAlgorithm = v ?? SearchAlgorithm.fast,
                       ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Checkbox(
+                    value: _wideOpening,
+                    onChanged: widget.isGenerating
+                        ? null
+                        : (v) => setState(() => _wideOpening = v ?? false),
+                  ),
+                  GestureDetector(
+                    onTap: widget.isGenerating
+                        ? null
+                        : () => setState(() => _wideOpening = !_wideOpening),
+                    child: const Text(
+                      'Wide opening search',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Tooltip(
+                    message:
+                        'Explore extra candidate moves for the first few of our\n'
+                        'moves (both Fast and Pure), then narrow deeper lines.\n'
+                        'Broadens the opening so alternatives and novelties are\n'
+                        'not missed; costs some build time. Off = only the very\n'
+                        'first move gets the wide sweep.',
+                    child: Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color: AppColors.onSurfaceMuted,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               Wrap(

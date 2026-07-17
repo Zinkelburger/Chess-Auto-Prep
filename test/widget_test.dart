@@ -8,6 +8,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chess_auto_prep/main.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
@@ -21,7 +22,13 @@ Future<void> _pumpDesktopSizedWidget(WidgetTester tester, Widget widget) async {
   });
 
   await tester.pumpWidget(widget);
-  await tester.pumpAndSettle();
+  // Avoid pumpAndSettle: MainScreen / tactics browse show an indeterminate
+  // CircularProgressIndicator while loading, which never "settles".
+  // Extra pumps: first visit shows a one-frame loading placeholder, then
+  // constructs the tactics screen on the next frame.
+  await tester.pump();
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 50));
 }
 
 /// Center of [square] in board-local coordinates (e.g. `e2`), not flipped.
@@ -34,6 +41,12 @@ Offset _boardLocalCenterForSquare(String square, double squareSize) {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   testWidgets('App loads without crashing', (WidgetTester tester) async {
     await _pumpDesktopSizedWidget(tester, const ChessAutoPrepApp());
 

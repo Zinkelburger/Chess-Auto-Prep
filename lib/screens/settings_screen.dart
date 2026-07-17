@@ -16,6 +16,7 @@ import 'package:provider/provider.dart';
 import '../models/engine_settings.dart';
 import '../models/eval_database_settings.dart';
 import '../services/engine/engine_lifecycle.dart';
+import '../theme/app_text_styles.dart';
 import '../utils/system_info.dart';
 import '../widgets/eval_database_settings_panel.dart';
 import '../widgets/settings/settings_widgets.dart';
@@ -67,7 +68,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Center(
                 child: Text(
                   'Chess Auto Prep',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                  style: AppTextStyles.caption.copyWith(fontSize: 11),
                 ),
               ),
               const SizedBox(height: 24),
@@ -139,7 +140,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Text(
             'Search depth, number of lines, expectimax tuning, and panel '
             'visibility live on the gear (⚙) next to each analysis panel.',
-            style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+            style: AppTextStyles.caption,
           ),
         ),
       ],

@@ -16,6 +16,7 @@ import 'package:chess_auto_prep/models/edit_context_layout.dart';
 import 'package:chess_auto_prep/services/edit_context_layout_prefs.dart';
 import 'package:chess_auto_prep/services/generation/fen_map.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
+import 'package:chess_auto_prep/theme/app_colors.dart';
 import 'package:chess_auto_prep/widgets/engine/expectimax_panel_host.dart';
 import 'package:chess_auto_prep/widgets/engine/unified_engine_pane.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart' show uciToSan;
@@ -254,7 +255,7 @@ class _EditContextZoneState extends State<EditContextZone> {
             Icon(
               spec.icon,
               size: 14,
-              color: isSelected ? Colors.teal : Colors.grey[500],
+              color: isSelected ? AppColors.accent : AppColors.onSurfaceMuted,
             ),
             const SizedBox(width: 4),
             Text(spec.label, style: const TextStyle(fontSize: 11)),
@@ -441,15 +442,15 @@ class _EditContextZoneState extends State<EditContextZone> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Material(
-          color: Colors.grey.withValues(alpha: 0.12),
+          color: AppColors.surfaceContainer,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             child: Text(
               label,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
-                color: Colors.grey[400],
+                color: AppColors.onSurfaceSoft,
               ),
             ),
           ),

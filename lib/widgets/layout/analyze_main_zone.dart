@@ -13,6 +13,7 @@ import '../../services/coherence_service.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../../services/generation/fen_map.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
+import '../../theme/app_colors.dart';
 import '../repertoire_lines_browser.dart';
 import 'empty_state_placeholder.dart';
 import '../../models/repertoire_mode.dart';
@@ -151,7 +152,7 @@ class _AnalyzeMainZoneState extends State<AnalyzeMainZone> {
           Icon(
             icon,
             size: 14,
-            color: isSelected ? Colors.teal : Colors.grey[500],
+            color: isSelected ? AppColors.accent : AppColors.onSurfaceMuted,
           ),
           const SizedBox(width: 4),
           Text(label, style: const TextStyle(fontSize: 11)),

@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/slice_filter_controller.dart';
 import '../../models/pgn_filter_models.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import '../../services/pgn_tree_core.dart'
     show PlayerNameMatchSummary, summarizePlayerNameMatches;
 
@@ -35,11 +37,7 @@ class HeaderFilters extends StatelessWidget {
         children: [
           Text(
             'Header Filters',
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 14,
-              color: Colors.grey[300],
-            ),
+            style: AppTextStyles.subtitle.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           for (int i = 0; i < controller.headerRows.length; i++)
@@ -150,7 +148,7 @@ class HeaderFilters extends StatelessWidget {
                   controller: f.controller,
                   decoration: InputDecoration(
                     hintText: hintText,
-                    hintStyle: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    hintStyle: AppTextStyles.hint.copyWith(fontSize: 12),
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -163,7 +161,7 @@ class HeaderFilters extends StatelessWidget {
                             child: Icon(
                               Icons.warning_amber,
                               size: 16,
-                              color: Colors.orange[400],
+                              color: AppColors.warning,
                             ),
                           )
                         : null,
@@ -190,7 +188,7 @@ class HeaderFilters extends StatelessWidget {
               padding: const EdgeInsets.only(left: 248, top: 2),
               child: Text(
                 'Expected A00–E99',
-                style: TextStyle(fontSize: 10, color: Colors.orange[400]),
+                style: const TextStyle(fontSize: 10, color: AppColors.warning),
               ),
             ),
           if (_showsNameMatches(f)) _buildNameMatchesLine(f.value),
@@ -221,7 +219,9 @@ class HeaderFilters extends StatelessWidget {
         _nameMatchesLabel(summary),
         style: TextStyle(
           fontSize: 11,
-          color: summary.matchedGames == 0 ? Colors.orange[400] : Colors.grey,
+          color: summary.matchedGames == 0
+              ? AppColors.warning
+              : AppColors.onSurfaceMuted,
         ),
       ),
     );

@@ -32,7 +32,7 @@ class GenerationLockOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: Colors.black.withValues(alpha: 0.6),
+      color: AppColors.scrimHeavy,
       child: Center(
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
@@ -62,9 +62,9 @@ class GenerationLockOverlay extends StatelessWidget {
                 'This tab is locked while your repertoire builds.\n'
                 'Training, Study, and puzzles stay available.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 13,
-                  color: Colors.grey[400],
+                  color: AppColors.onSurfaceSoft,
                   height: 1.5,
                 ),
               ),
@@ -75,10 +75,10 @@ class GenerationLockOverlay extends StatelessWidget {
                   textAlign: TextAlign.center,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 12,
-                    color: Colors.grey[500],
-                    fontFeatures: const [FontFeature.tabularFigures()],
+                    color: AppColors.onSurfaceMuted,
+                    fontFeatures: [FontFeature.tabularFigures()],
                   ),
                 ),
               ],
@@ -97,11 +97,11 @@ class GenerationLockOverlay extends StatelessWidget {
                       style: FilledButton.styleFrom(
                         backgroundColor: AppColors.warningSurface,
                       ),
-                      icon: const Icon(Icons.pause, color: Colors.white),
+                      icon: const Icon(Icons.pause, color: AppColors.onWarning),
                       label: const Text(
                         'Pause',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: AppColors.onWarning,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -112,11 +112,11 @@ class GenerationLockOverlay extends StatelessWidget {
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.dangerSurface,
                     ),
-                    icon: const Icon(Icons.stop, color: Colors.white),
+                    icon: const Icon(Icons.stop, color: AppColors.ink),
                     label: const Text(
                       'Cancel',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: AppColors.ink,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -128,9 +128,9 @@ class GenerationLockOverlay extends StatelessWidget {
                 'Pause frees the engine and unlocks the tab.\n'
                 'Cancel keeps the partial build — resume it anytime.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 11.5,
-                  color: Colors.grey[600],
+                  color: AppColors.onSurfaceMuted,
                   height: 1.4,
                 ),
               ),
@@ -178,7 +178,10 @@ class GenerationPausedBanner extends StatelessWidget {
               child: Text(
                 'Build paused — board and engine are free. '
                 'Cancelling keeps the partial build for later.',
-                style: TextStyle(fontSize: 12.5, color: Colors.grey[300]),
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.inkSoft,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -190,10 +193,14 @@ class GenerationPausedBanner extends StatelessWidget {
                 visualDensity: VisualDensity.compact,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
               ),
-              icon: const Icon(Icons.play_arrow, size: 16, color: Colors.white),
+              icon: const Icon(
+                Icons.play_arrow,
+                size: 16,
+                color: AppColors.ink,
+              ),
               label: const Text(
                 'Resume',
-                style: TextStyle(color: Colors.white, fontSize: 12.5),
+                style: TextStyle(color: AppColors.ink, fontSize: 12.5),
               ),
             ),
             const SizedBox(width: 6),

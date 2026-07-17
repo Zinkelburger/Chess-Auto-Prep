@@ -8,6 +8,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_colors.dart';
 import '../services/hole_hunt_config.dart';
 
 class HoleHuntConfigDialog extends StatefulWidget {
@@ -155,7 +156,10 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
                     ? 'You play $attackerColor against these $treeColor lines.'
                     : 'Finds what a prepared $attackerColor opponent could '
                           'exploit in these games.',
-                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.onSurfaceMuted,
+                ),
               ),
               const SizedBox(height: 16),
 
@@ -180,12 +184,15 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
                     Icon(
                       _showAdvanced ? Icons.expand_less : Icons.expand_more,
                       size: 16,
-                      color: Colors.grey[500],
+                      color: AppColors.onSurfaceMuted,
                     ),
                     const SizedBox(width: 4),
-                    Text(
+                    const Text(
                       'More thresholds',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.onSurfaceMuted,
+                      ),
                     ),
                   ],
                 ),
@@ -208,7 +215,7 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
               Text(
                 'The hunt runs the engine over the whole tree and can take '
                 'a while; it keeps working while you browse.',
-                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
               ),
             ],
           ),

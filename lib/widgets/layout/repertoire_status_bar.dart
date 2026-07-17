@@ -3,6 +3,8 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../theme/app_colors.dart';
+
 class RepertoireStatusBar extends StatelessWidget {
   final int findingsCount;
   final String? jobsStatus;
@@ -36,7 +38,7 @@ class RepertoireStatusBar extends StatelessWidget {
             _StatusBadge(
               icon: Icons.auto_awesome,
               label: jobsStatus!,
-              color: Colors.teal,
+              color: AppColors.accent,
               onTap: onJobsTap,
             ),
           if (jobsStatus != null && findingsCount > 0)
@@ -45,7 +47,7 @@ class RepertoireStatusBar extends StatelessWidget {
             _StatusBadge(
               icon: Icons.policy_outlined,
               label: '$findingsCount findings',
-              color: Colors.orange,
+              color: AppColors.warning,
               onTap: onFindingsTap,
             ),
         ],

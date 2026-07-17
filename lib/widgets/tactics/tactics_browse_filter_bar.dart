@@ -101,11 +101,11 @@ class _BrowseFilterBar extends StatelessWidget {
                   icon: const Icon(
                     Icons.delete_outline,
                     size: 14,
-                    color: Colors.red,
+                    color: AppColors.danger,
                   ),
                   label: const Text(
                     'Delete',
-                    style: TextStyle(color: Colors.red, fontSize: 12),
+                    style: TextStyle(color: AppColors.danger, fontSize: 12),
                   ),
                 ),
                 const SizedBox(width: 4),
@@ -135,11 +135,11 @@ class _BrowseFilterBar extends StatelessWidget {
                   icon: const Icon(
                     Icons.delete_outline,
                     size: 14,
-                    color: Colors.red,
+                    color: AppColors.danger,
                   ),
                   label: const Text(
                     'Clear All',
-                    style: TextStyle(color: Colors.red, fontSize: 12),
+                    style: TextStyle(color: AppColors.danger, fontSize: 12),
                   ),
                 ),
               ],
@@ -155,28 +155,28 @@ class _BrowseFilterBar extends StatelessWidget {
               _MistakeTypeChip(
                 type: '??',
                 label: 'Blunders',
-                color: Colors.red,
+                color: AppColors.mistakeBlunder,
                 enabled: enabledTypes.contains('??'),
                 onToggle: () => onToggleType('??'),
               ),
               _MistakeTypeChip(
                 type: '?',
                 label: 'Mistakes',
-                color: Colors.orange,
+                color: AppColors.mistakeMistake,
                 enabled: enabledTypes.contains('?'),
                 onToggle: () => onToggleType('?'),
               ),
               _MistakeTypeChip(
                 type: '?!',
                 label: 'Inaccuracies',
-                color: Colors.yellow.shade700,
+                color: AppColors.mistakeInaccuracy,
                 enabled: enabledTypes.contains('?!'),
                 onToggle: () => onToggleType('?!'),
               ),
               _MistakeTypeChip(
                 type: '✎',
                 label: 'Custom',
-                color: Colors.lightBlue,
+                color: AppColors.mistakeCustom,
                 enabled: enabledTypes.contains('custom'),
                 onToggle: () => onToggleType('custom'),
               ),
@@ -201,7 +201,7 @@ class _BrowseFilterBar extends StatelessWidget {
           // Sort row
           Row(
             children: [
-              const Icon(Icons.sort, size: 14, color: Colors.grey),
+              const Icon(Icons.sort, size: 14, color: AppColors.onSurfaceMuted),
               const SizedBox(width: 4),
               ...TacticsBrowseSort.values.map(
                 (s) => Padding(
@@ -284,7 +284,7 @@ class _MinRatingChip extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text('$r'),
-                const Icon(Icons.star, size: 14, color: Colors.amber),
+                const Icon(Icons.star, size: 14, color: AppColors.starAccent),
                 const Text('+'),
               ],
             ),
@@ -297,7 +297,9 @@ class _MinRatingChip extends StatelessWidget {
             Icon(
               Icons.star,
               size: 13,
-              color: minRating > 0 ? Colors.amber : Colors.grey,
+              color: minRating > 0
+                  ? AppColors.starAccent
+                  : AppColors.onSurfaceMuted,
             ),
             const SizedBox(width: 2),
             Text(

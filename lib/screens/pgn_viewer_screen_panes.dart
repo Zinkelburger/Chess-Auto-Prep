@@ -89,13 +89,13 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.red.withValues(alpha: 0.85),
+                        color: AppColors.dangerSurface.withValues(alpha: 0.85),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Text(
                         'Incorrect — try again',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: AppColors.ink,
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
                         ),
@@ -240,11 +240,15 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.filter_alt_off, size: 48, color: Colors.grey[600]),
+            const Icon(
+              Icons.filter_alt_off,
+              size: 48,
+              color: AppColors.onSurfaceDim,
+            ),
             const SizedBox(height: 16),
-            Text(
+            const Text(
               'No games match the current filters',
-              style: TextStyle(color: Colors.grey[400], fontSize: 16),
+              style: AppTextStyles.emptyStateTitle,
             ),
             const SizedBox(height: 12),
             FilledButton.icon(
@@ -262,12 +266,13 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.menu_book, size: 48, color: Colors.grey[600]),
-              const SizedBox(height: 16),
-              Text(
-                'No PGN loaded',
-                style: TextStyle(color: Colors.grey[400], fontSize: 16),
+              const Icon(
+                Icons.menu_book,
+                size: 48,
+                color: AppColors.onSurfaceDim,
               ),
+              const SizedBox(height: 16),
+              const Text('No PGN loaded', style: AppTextStyles.emptyStateTitle),
               if (_controller.errorMessage != null) ...[
                 const SizedBox(height: 12),
                 Padding(
@@ -292,9 +297,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
                 const SizedBox(height: 24),
                 Text(
                   'Recent',
-                  style: TextStyle(
-                    color: Colors.grey[500],
-                    fontSize: 12,
+                  style: AppTextStyles.caption.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -312,23 +315,22 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
                         ),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: Colors.grey[800]!),
+                          border: Border.all(color: AppColors.divider),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.description,
                               size: 16,
-                              color: Colors.grey[500],
+                              color: AppColors.onSurfaceMuted,
                             ),
                             const SizedBox(width: 8),
                             Flexible(
                               child: Text(
                                 p.basename(path),
-                                style: TextStyle(
-                                  color: Colors.blue[300],
-                                  fontSize: 13,
+                                style: AppTextStyles.muted.copyWith(
+                                  color: AppColors.info,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -385,24 +387,24 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.amber.withValues(alpha: 0.08),
+        color: AppColors.warning.withValues(alpha: 0.08),
         border: Border(
           bottom: BorderSide(
-            color: Colors.amber.withValues(alpha: 0.3),
+            color: AppColors.warning.withValues(alpha: 0.3),
             width: 0.5,
           ),
         ),
       ),
       child: Row(
         children: [
-          Icon(Icons.edit, size: 14, color: Colors.amber[600]),
+          const Icon(Icons.edit, size: 14, color: AppColors.warning),
           const SizedBox(width: 6),
-          Text(
+          const Text(
             'Amending',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: Colors.amber[600],
+              color: AppColors.warning,
             ),
           ),
           const SizedBox(width: 12),
@@ -410,7 +412,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
             child: Text(
               'Moves you play are saved to the file · '
               'click any move, then comment or glyph it below',
-              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+              style: AppTextStyles.caption.copyWith(fontSize: 11),
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
             ),
@@ -418,10 +420,14 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
           const SizedBox(width: 8),
           TextButton.icon(
             onPressed: _toggleEditMode,
-            icon: Icon(Icons.close, size: 14, color: Colors.grey[500]),
+            icon: const Icon(
+              Icons.close,
+              size: 14,
+              color: AppColors.onSurfaceMuted,
+            ),
             label: Text(
               'Exit',
-              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+              style: AppTextStyles.caption.copyWith(fontSize: 11),
             ),
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),

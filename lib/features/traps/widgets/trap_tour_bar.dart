@@ -210,10 +210,10 @@ class TrapTourBarState extends State<TrapTourBar> {
                       'The trap line is loaded in the PGN tab — click '
                       'any move to step through it.\n'
                       'Shift+←/→ jumps between traps inside the line.',
-                  child: Icon(
+                  child: const Icon(
                     Icons.help_outline,
                     size: 14,
-                    color: Colors.grey[600],
+                    color: AppColors.onSurfaceDim,
                   ),
                 ),
                 const SizedBox(width: 2),
@@ -259,7 +259,10 @@ class _TrapTourNarrative extends StatelessWidget {
         const SizedBox(height: 1),
         Text.rich(
           TextSpan(
-            style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.onSurfaceSoft,
+            ),
             children: [
               const TextSpan(text: 'They\'re tempted by '),
               TextSpan(

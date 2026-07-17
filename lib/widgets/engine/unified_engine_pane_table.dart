@@ -5,11 +5,14 @@ mixin _EnginePaneTable on _UnifiedEnginePaneStateBase {
 
   Widget _buildUnifiedMoveTable() {
     return ListenableBuilder(
+      // poolStatus is intentionally NOT merged here: _mergeMoves reads none of
+      // it, yet it fires ~3x per move during evaluation — those rebuilds (each
+      // re-running the full merge + per-move SAN derivation) changed nothing on
+      // screen. The pool-status text has its own listener in the settings bar.
       listenable: Listenable.merge([
         _settings,
         _analysis.discoveryResult,
         _analysis.results,
-        _analysis.poolStatus,
         _probabilityService.currentPosition,
       ]),
       builder: (context, _) {
@@ -36,10 +39,10 @@ mixin _EnginePaneTable on _UnifiedEnginePaneStateBase {
                           child: CircularProgressIndicator(strokeWidth: 1.5),
                         ),
                         const SizedBox(width: 8),
-                        Text(
+                        const Text(
                           'Analyzing...',
                           style: TextStyle(
-                            color: Colors.grey[500],
+                            color: AppColors.onSurfaceMuted,
                             fontSize: 13,
                           ),
                         ),
@@ -78,7 +81,7 @@ mixin _EnginePaneTable on _UnifiedEnginePaneStateBase {
     final style = TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.w600,
-      color: muted ? AppColors.onSurfaceDim : Colors.grey[400],
+      color: muted ? AppColors.onSurfaceDim : AppColors.onSurfaceSoft,
       letterSpacing: 0.5,
       decoration: muted ? TextDecoration.lineThrough : null,
       decorationColor: AppColors.onSurfaceDim,
@@ -105,9 +108,7 @@ mixin _EnginePaneTable on _UnifiedEnginePaneStateBase {
           ? '$tooltipExtra\n$_colHeaderTip'
           : _colHeaderTip,
       child: Material(
-        color: muted
-            ? Colors.white.withValues(alpha: 0.04)
-            : Colors.transparent,
+        color: muted ? AppColors.hoverOverlay : Colors.transparent,
         borderRadius: BorderRadius.circular(4),
         child: InkWell(
           onTap: () {
@@ -149,12 +150,12 @@ mixin _EnginePaneTable on _UnifiedEnginePaneStateBase {
             children: [
               SizedBox(
                 width: moveWidth,
-                child: Text(
+                child: const Text(
                   'MOVE',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: Colors.grey[500],
+                    color: AppColors.onSurfaceMuted,
                     letterSpacing: 0.5,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -263,7 +264,7 @@ mixin _EnginePaneTable on _UnifiedEnginePaneStateBase {
       }
 
       if (m.san.isEmpty) {
-        m.san = uciToSan(widget.fen, m.uci);
+        m.san = uciToSanCached(widget.fen, m.uci);
       }
     }
 

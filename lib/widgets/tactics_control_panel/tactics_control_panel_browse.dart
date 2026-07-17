@@ -34,16 +34,18 @@ mixin _TacticsBrowseActions on _TacticsControlPanelStateBase, _TacticsPlayback {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: AppColors.danger),
+            ),
           ),
         ],
       ),
     );
 
     if (confirmed == true && mounted) {
-      for (final idx in sortedDescIndices) {
-        await _database.deletePositionAt(idx);
-      }
+      // One notify + one file write for the whole batch.
+      await _database.deletePositionsAt(sortedDescIndices);
     }
   }
 
@@ -89,7 +91,10 @@ mixin _TacticsBrowseActions on _TacticsControlPanelStateBase, _TacticsPlayback {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: AppColors.danger),
+            ),
           ),
         ],
       ),
@@ -119,7 +124,10 @@ mixin _TacticsBrowseActions on _TacticsControlPanelStateBase, _TacticsPlayback {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Clear All', style: TextStyle(color: Colors.red)),
+            child: const Text(
+              'Clear All',
+              style: TextStyle(color: AppColors.danger),
+            ),
           ),
         ],
       ),

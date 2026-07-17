@@ -74,7 +74,10 @@ void showAppSnackBar(
           (isError ? const Duration(days: 365) : const Duration(seconds: 3)),
       backgroundColor: isError ? AppColors.dangerSurface : null,
       showCloseIcon: true,
-      closeIconColor: Colors.white70,
+      // Must clear 3:1 on BOTH snackbar fills: 11.8:1 on the default
+      // surfaceInset, 5.0:1 on the dangerSurface error fill (where
+      // onSurfaceSoft measured only 2.99:1).
+      closeIconColor: AppColors.ink,
       action: actionLabel != null && onAction != null
           ? SnackBarAction(label: actionLabel, onPressed: onAction)
           : null,

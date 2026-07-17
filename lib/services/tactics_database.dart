@@ -1,3 +1,4 @@
+import 'dart:isolate';
 import 'dart:math';
 
 import 'package:csv/csv.dart';
@@ -32,6 +33,10 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
   ReviewSession currentSession = ReviewSession();
   int sessionPositionIndex = 0;
   Future<void> _pendingWrite = Future<void>.value();
+
+  /// True while [loadPositions] is reading and decoding the set file, so the
+  /// browse UI can show a loading state instead of "no tactics yet".
+  bool isLoading = false;
 
   /// Display name of what's loaded into [positions]: [defaultSetName] for
   /// the tactics database, or the external file's name during a review.
@@ -80,7 +85,12 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
   /// legacy per-set CSV files to PGN, and moves leftover named sets from the
   /// multi-set era into the studies directory.
   Future<int> loadPositions() async {
+    // Flag synchronously (the first build after a load call must see it),
+    // but notify only after the await: loadPositions is called from
+    // initState, and a synchronous notify there lands mid-build.
+    isLoading = true;
     await _pendingWrite;
+    notifyListeners();
     positions.clear();
     analyzedGameIds.clear();
 
@@ -95,17 +105,25 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
       if (content == null || content.trim().isEmpty) {
         // No set file yet — load analyzed games list (legacy or empty state).
         await _loadAnalyzedGameIds();
+        isLoading = false;
         notifyListeners();
         return 0;
       }
 
       // External files (studies) may hold chapters from the standard start;
       // our own set files always carry [FEN].
-      final decoded = decodePuzzlesFromPgn(
-        content,
-        requireFen: !isExternalSet,
-        includeVariations: isExternalSet && _externalIncludeVariations,
-        onlyGame: isExternalSet ? _externalGameIndex : null,
+      // Decode replays every puzzle's moves with dartchess — off the UI
+      // isolate so opening Tactics mode doesn't freeze the frame.
+      final requireFen = !isExternalSet;
+      final includeVariations = isExternalSet && _externalIncludeVariations;
+      final onlyGame = isExternalSet ? _externalGameIndex : null;
+      final decoded = await Isolate.run(
+        () => decodePuzzlesFromPgn(
+          content,
+          requireFen: requireFen,
+          includeVariations: includeVariations,
+          onlyGame: onlyGame,
+        ),
       );
       for (final warning in decoded.errors) {
         log.w('Set "$_activeSetName": $warning');
@@ -124,10 +142,12 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
         'Loaded ${positions.length} tactics positions from set "$_activeSetName"',
       );
       log.i('Tracking ${analyzedGameIds.length} analyzed game IDs');
+      isLoading = false;
       notifyListeners();
       return positions.length;
     } catch (e) {
       log.e('Error loading positions: $e');
+      isLoading = false;
       notifyListeners();
       return 0;
     }
@@ -343,12 +363,16 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
             log.e('External set file vanished: $externalPath');
             return;
           }
-          await storage.writeFile(
-            externalPath,
-            patchStatsInPgn(existing, snapshot),
+          final patched = await Isolate.run(
+            () => patchStatsInPgn(existing, snapshot),
           );
+          await storage.writeFile(externalPath, patched);
         } else {
-          final encoded = encodePuzzlesToPgn(setName, snapshot);
+          // Encoding replays every stored puzzle with dartchess (lineToSan),
+          // so it is O(database) CPU — run it off the UI isolate.
+          final encoded = await Isolate.run(
+            () => encodePuzzlesToPgn(setName, snapshot),
+          );
           if (encoded.fallback > 0) {
             log.w(
               '${encoded.fallback} position(s) stored with raw [CorrectLine] fallback',
@@ -383,6 +407,22 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
   Future<void> deletePositionAt(int index) async {
     if (index < 0 || index >= positions.length) return;
     positions.removeAt(index);
+    notifyListeners();
+    await savePositions();
+  }
+
+  /// Delete several positions in one mutation: one notify, one file write —
+  /// batch delete from the browse list must not re-encode the whole set once
+  /// per selected row.  [sortedDescIndices] must be sorted descending so
+  /// removals don't shift the remaining indices.
+  Future<void> deletePositionsAt(List<int> sortedDescIndices) async {
+    var removed = 0;
+    for (final index in sortedDescIndices) {
+      if (index < 0 || index >= positions.length) continue;
+      positions.removeAt(index);
+      removed++;
+    }
+    if (removed == 0) return;
     notifyListeners();
     await savePositions();
   }
@@ -601,16 +641,18 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
     final storage = StorageFactory.instance;
     final path = await storage.tacticsSetPath(defaultSetName);
     final content = await storage.readFile(path);
-    final existing = <TacticsPosition>[];
-    if (content != null && content.trim().isNotEmpty) {
-      existing.addAll(decodePuzzlesFromPgn(content).puzzles);
-    }
-    if (existing.any((p) => p.fen == position.fen)) return false;
-    existing.add(position);
-    await storage.writeFile(
-      path,
-      encodePuzzlesToPgn(defaultSetName, existing).pgn,
-    );
+    // Decode + re-encode of the whole database file, off the UI isolate.
+    final pgn = await Isolate.run(() {
+      final existing = <TacticsPosition>[];
+      if (content != null && content.trim().isNotEmpty) {
+        existing.addAll(decodePuzzlesFromPgn(content).puzzles);
+      }
+      if (existing.any((p) => p.fen == position.fen)) return null;
+      existing.add(position);
+      return encodePuzzlesToPgn(defaultSetName, existing).pgn;
+    });
+    if (pgn == null) return false;
+    await storage.writeFile(path, pgn);
     return true;
   }
 

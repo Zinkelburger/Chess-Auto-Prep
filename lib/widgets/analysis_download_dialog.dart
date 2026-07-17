@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/analysis_player_info.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 
 /// How the download range is specified.
@@ -312,7 +314,7 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
                   Center(
                     child: Text(
                       'Last $_months month${_months == 1 ? '' : 's'}',
-                      style: TextStyle(color: Colors.grey[700]),
+                      style: const TextStyle(color: AppColors.onSurfaceMuted),
                     ),
                   ),
                 ],
@@ -348,9 +350,9 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
           ],
         ),
         const SizedBox(height: 4),
-        Text(
+        const Text(
           'Fetch all non-bullet games from the last N months (up to 10 years)',
-          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          style: AppTextStyles.caption,
         ),
       ],
     );
@@ -383,7 +385,7 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
                   Center(
                     child: Text(
                       'Last $_maxGames game${_maxGames == 1 ? '' : 's'}',
-                      style: TextStyle(color: Colors.grey[700]),
+                      style: const TextStyle(color: AppColors.onSurfaceMuted),
                     ),
                   ),
                 ],
@@ -419,9 +421,9 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
           ],
         ),
         const SizedBox(height: 4),
-        Text(
+        const Text(
           'Download the last 1–500 games (excluding bullet)',
-          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          style: AppTextStyles.caption,
         ),
       ],
     );

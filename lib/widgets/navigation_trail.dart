@@ -4,6 +4,7 @@ library;
 import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/navigation_stack.dart';
+import 'package:chess_auto_prep/theme/app_colors.dart';
 
 class NavigationTrail extends StatelessWidget {
   final NavigationStack stack;
@@ -41,10 +42,10 @@ class NavigationTrail extends StatelessWidget {
                   itemCount: stack.length,
                   separatorBuilder: (_, __) => Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 2),
-                    child: Icon(
+                    child: const Icon(
                       Icons.chevron_right,
                       size: 14,
-                      color: Colors.grey[500],
+                      color: AppColors.onSurfaceMuted,
                     ),
                   ),
                   itemBuilder: (context, i) {
@@ -94,7 +95,11 @@ class NavigationTrail extends StatelessWidget {
                 onTap: stack.clear,
                 child: Padding(
                   padding: const EdgeInsets.all(4),
-                  child: Icon(Icons.close, size: 14, color: Colors.grey[500]),
+                  child: const Icon(
+                    Icons.close,
+                    size: 14,
+                    color: AppColors.onSurfaceMuted,
+                  ),
                 ),
               ),
             ],
@@ -120,13 +125,13 @@ class NavigationTrail extends StatelessWidget {
   static Color _colorForReason(String reason) {
     switch (reason) {
       case 'trap':
-        return Colors.orange;
+        return AppColors.warning;
       case 'hard_move':
-        return Colors.red;
+        return AppColors.danger;
       case 'suggestion':
-        return Colors.green;
+        return AppColors.success;
       default:
-        return Colors.blue;
+        return AppColors.info;
     }
   }
 }

@@ -167,7 +167,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                     label: const Text('Start Trap Tour'),
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.warning,
-                      foregroundColor: Colors.black,
+                      foregroundColor: AppColors.onWarning,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       textStyle: const TextStyle(
                         fontSize: 12,
@@ -220,7 +220,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
         decoration: BoxDecoration(
           color: selected
               ? AppColors.warning.withValues(alpha: 0.2)
-              : Colors.grey[800],
+              : AppColors.chipInactiveBg,
           borderRadius: BorderRadius.circular(10),
           border: selected
               ? Border.all(
@@ -234,7 +234,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
           style: TextStyle(
             fontSize: 10,
             fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-            color: selected ? AppColors.warning : Colors.grey[400],
+            color: selected ? AppColors.warning : AppColors.onSurfaceSoft,
           ),
         ),
       ),
@@ -249,7 +249,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
-          color: selected ? AppColors.warningSurface : Colors.grey[800],
+          color: selected ? AppColors.warningSurface : AppColors.chipInactiveBg,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Text(
@@ -257,7 +257,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
           style: TextStyle(
             fontSize: 10,
             fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-            color: selected ? Colors.white : Colors.grey[400],
+            color: selected ? AppColors.onWarning : AppColors.onSurfaceSoft,
           ),
         ),
       ),
@@ -282,12 +282,14 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
         decoration: BoxDecoration(
           color: isPositionMatch
               ? AppColors.warningSurface.withValues(alpha: 0.5)
-              : (index % 2 == 0 ? Colors.grey[900] : Colors.grey[850]),
+              : (index % 2 == 0
+                    ? AppColors.surfaceElevated
+                    : AppColors.surfaceInset),
           border: Border(
             left: isPositionMatch
                 ? const BorderSide(color: AppColors.warning, width: 3)
                 : BorderSide.none,
-            bottom: BorderSide(color: Colors.grey[800]!, width: 0.5),
+            bottom: const BorderSide(color: AppColors.divider, width: 0.5),
           ),
         ),
         child: Column(
@@ -298,10 +300,10 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
               children: [
                 Text(
                   '#${index + 1}',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
-                    color: Colors.grey[500],
+                    color: AppColors.onSurfaceMuted,
                   ),
                 ),
                 if (trap.openingName != null) ...[
@@ -309,10 +311,10 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                   Expanded(
                     child: Text(
                       trap.openingName!,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
-                        color: Colors.grey[300],
+                        color: AppColors.onSurfaceSoft,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -321,7 +323,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                   const Spacer(),
                 _buildStatBadge(
                   '${(trap.cumulativeProb * 100).toStringAsFixed(1)}% reach',
-                  Colors.blueGrey,
+                  AppColors.engineLine,
                   tooltip: 'Probability of reaching this position',
                 ),
                 const SizedBox(width: 4),
@@ -329,7 +331,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                   icon: Icon(
                     isExpanded ? Icons.expand_less : Icons.expand_more,
                     size: 18,
-                    color: Colors.grey[500],
+                    color: AppColors.onSurfaceMuted,
                   ),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(
@@ -361,7 +363,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                     margin: const EdgeInsets.only(right: 12),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.grey[700]!, width: 0.5),
+                      border: Border.all(color: AppColors.outline, width: 0.5),
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: IgnorePointer(
@@ -380,7 +382,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
-                          color: Colors.grey[500],
+                          color: AppColors.onSurfaceMuted,
                           letterSpacing: 0.5,
                         ),
                       ),
@@ -392,9 +394,9 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                           padding: const EdgeInsets.only(top: 2),
                           child: Text(
                             '+${replies.length - 4} more',
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 10,
-                              color: Colors.grey[600],
+                              color: AppColors.onSurfaceMuted,
                               fontStyle: FontStyle.italic,
                             ),
                           ),
@@ -475,7 +477,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                     ? AppColors.evalPositive
                     : isBad
                     ? AppColors.danger
-                    : Colors.orange[300],
+                    : AppColors.replyInaccuracy,
               ),
             ),
           ),
@@ -484,7 +486,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
               'drops ${evalDrop}cp',
               style: TextStyle(
                 fontSize: 10,
-                color: isBad ? AppColors.danger : Colors.orange[300],
+                color: isBad ? AppColors.danger : AppColors.replyInaccuracy,
               ),
             )
           else if (isGood)
@@ -495,10 +497,10 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
           const Spacer(),
           Text(
             '${(reply.probability * 100).toStringAsFixed(0)}%',
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w600,
-              color: Colors.grey[400],
+              color: AppColors.onSurfaceSoft,
             ),
           ),
           const SizedBox(width: 6),
@@ -510,11 +512,11 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
 
   Widget _buildClassBadge(TrapReplyClass cls) {
     final (label, color) = switch (cls) {
-      TrapReplyClass.blunder => ('BLUNDER', AppColors.danger),
-      TrapReplyClass.mistake => ('MISTAKE', Colors.orange),
-      TrapReplyClass.inaccuracy => ('INACCURACY', Colors.amber),
-      TrapReplyClass.acceptable => ('OK', Colors.grey),
-      TrapReplyClass.good => ('BEST', AppColors.evalPositive),
+      TrapReplyClass.blunder => ('BLUNDER', AppColors.replyBlunder),
+      TrapReplyClass.mistake => ('MISTAKE', AppColors.replyMistake),
+      TrapReplyClass.inaccuracy => ('INACCURACY', AppColors.replyInaccuracy),
+      TrapReplyClass.acceptable => ('OK', AppColors.replyAcceptable),
+      TrapReplyClass.good => ('BEST', AppColors.replyGood),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
@@ -567,9 +569,9 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
           if (i % 2 == 0)
             Text(
               '${(i ~/ 2) + 1}.',
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 11,
-                color: Colors.grey[500],
+                color: AppColors.onSurfaceMuted,
                 fontFamily: 'monospace',
               ),
             ),
@@ -586,7 +588,9 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
               style: TextStyle(
                 fontSize: 11,
                 fontFamily: 'monospace',
-                color: i < matchDepth ? AppColors.warning : Colors.grey[300],
+                color: i < matchDepth
+                    ? AppColors.warning
+                    : AppColors.onSurfaceSoft,
                 fontWeight: i < matchDepth
                     ? FontWeight.bold
                     : FontWeight.normal,
@@ -597,9 +601,9 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
         if (moves.length > maxPreviewMoves)
           Text(
             '... +${moves.length - maxPreviewMoves}',
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 10,
-              color: Colors.grey[500],
+              color: AppColors.onSurfaceMuted,
               fontStyle: FontStyle.italic,
             ),
           ),

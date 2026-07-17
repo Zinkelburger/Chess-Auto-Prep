@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/tactics_position.dart';
+import '../../theme/app_colors.dart';
 
 /// Compact success/review stats for a tactics position.
 class PuzzleStatsDisplay extends StatelessWidget {
@@ -28,12 +29,12 @@ class PuzzleStatsDisplay extends StatelessWidget {
         style: TextStyle(
           fontSize: fontSize,
           color: pos.reviewCount == 0
-              ? Colors.grey
+              ? AppColors.onSurfaceMuted
               : pos.successRate >= 0.7
-              ? Colors.green
+              ? AppColors.success
               : pos.successRate >= 0.4
-              ? Colors.orange
-              : Colors.red,
+              ? AppColors.warning
+              : AppColors.danger,
         ),
       ),
     );

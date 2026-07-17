@@ -8,6 +8,8 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../core/slice_filter_controller.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import '../../utils/fen_utils.dart';
 import '../position_preview_icon.dart';
 
@@ -40,11 +42,7 @@ class PositionFilter extends StatelessWidget {
       children: [
         Text(
           'Position Filter',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 14,
-            color: Colors.grey[300],
-          ),
+          style: AppTextStyles.subtitle.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
         Row(
@@ -54,7 +52,7 @@ class PositionFilter extends StatelessWidget {
                 controller: text,
                 decoration: InputDecoration(
                   hintText: 'FEN or moves, e.g. 1. e4 c6',
-                  hintStyle: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  hintStyle: AppTextStyles.hint.copyWith(fontSize: 12),
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 10,
@@ -65,7 +63,7 @@ class PositionFilter extends StatelessWidget {
                       ? Icon(
                           showOk ? Icons.check_circle : Icons.error_outline,
                           size: 18,
-                          color: showOk ? Colors.green : Colors.red,
+                          color: showOk ? AppColors.success : AppColors.danger,
                         )
                       : null,
                   suffixIconConstraints: const BoxConstraints(
@@ -99,7 +97,7 @@ class PositionFilter extends StatelessWidget {
             padding: const EdgeInsets.only(top: 4),
             child: Text(
               parse.error!,
-              style: const TextStyle(fontSize: 11, color: Colors.red),
+              style: const TextStyle(fontSize: 11, color: AppColors.danger),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -151,13 +149,13 @@ class _BoardPositionChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
             color: isStart
-                ? Colors.grey[800]
+                ? AppColors.chipInactiveBg
                 : isActive
-                ? Colors.blue[700]
-                : Colors.grey[800],
+                ? AppColors.chipActiveBg
+                : AppColors.chipInactiveBg,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isActive ? Colors.blue[400]! : Colors.grey[700]!,
+              color: isActive ? AppColors.info : AppColors.outline,
               width: isActive ? 1.5 : 0.5,
             ),
           ),
@@ -168,10 +166,10 @@ class _BoardPositionChip extends StatelessWidget {
                 Icons.grid_on,
                 size: 12,
                 color: isStart
-                    ? Colors.grey[600]
+                    ? AppColors.onSurfaceDisabled
                     : isActive
-                    ? Colors.blue[100]
-                    : Colors.grey[400],
+                    ? AppColors.chipActiveFg
+                    : AppColors.onSurfaceSoft,
               ),
               const SizedBox(width: 4),
               Text(
@@ -180,10 +178,10 @@ class _BoardPositionChip extends StatelessWidget {
                   fontSize: 11,
                   fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
                   color: isStart
-                      ? Colors.grey[600]
+                      ? AppColors.onSurfaceDisabled
                       : isActive
-                      ? Colors.blue[100]
-                      : Colors.grey[400],
+                      ? AppColors.chipActiveFg
+                      : AppColors.onSurfaceSoft,
                 ),
               ),
             ],

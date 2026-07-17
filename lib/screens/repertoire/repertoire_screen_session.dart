@@ -147,12 +147,17 @@ mixin _RepertoireSessionHandlers
 
     context.read<AppState>().setRepertoireGenerating(ctrl.isGenerating);
 
-    if (ctrl.generatedTree != null) {
-      _runCoherence();
-    }
-
     final justFinished = !ctrl.isGenerating && _wasGenerating;
     _wasGenerating = ctrl.isGenerating;
+
+    // Re-cluster only when a new generated tree appears or the run completes.
+    // This used to fire on every progress notify, re-extracting itemsets over
+    // all repertoire lines several times per second for the whole build.
+    if (ctrl.generatedTree != null &&
+        (justFinished || !identical(ctrl.generatedTree, _lastCoherenceTree))) {
+      _lastCoherenceTree = ctrl.generatedTree;
+      _runCoherence();
+    }
 
     if (justFinished && ctrl.lastError != null) {
       showAppSnackBar(context, ctrl.lastError!, isError: true);
@@ -174,7 +179,19 @@ mixin _RepertoireSessionHandlers
       }
     }
 
-    setState(() {});
+    if (ctrl.isGenerating) {
+      // Progress ticks arrive many times per second; coalesce the
+      // whole-screen rebuild instead of repainting on every one — this also
+      // runs while the screen sits hidden in the IndexedStack.
+      _genRebuildThrottle ??= Timer(const Duration(milliseconds: 250), () {
+        _genRebuildThrottle = null;
+        if (mounted) setState(() {});
+      });
+    } else {
+      _genRebuildThrottle?.cancel();
+      _genRebuildThrottle = null;
+      setState(() {});
+    }
   }
 
   void _onAuditChanged() {

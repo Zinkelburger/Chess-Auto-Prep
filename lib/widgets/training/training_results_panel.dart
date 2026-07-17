@@ -5,6 +5,7 @@ import '../../models/repertoire_review_entry.dart';
 import '../../models/training_settings.dart';
 import '../../services/repertoire_review_service.dart';
 import '../../services/training/training_phase.dart';
+import '../../theme/app_colors.dart';
 import 'training_progress_panel.dart';
 
 /// Line completion UI: self-rating, all-caught-up, and auto-rate placeholder.
@@ -186,7 +187,11 @@ class AllCaughtUpPanel extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.check_circle_outline, size: 56, color: Colors.green[400]),
+          const Icon(
+            Icons.check_circle_outline,
+            size: 56,
+            color: AppColors.success,
+          ),
           const SizedBox(height: 16),
           Text('All caught up!', style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
@@ -226,10 +231,10 @@ class TrainingRatingButtons extends StatelessWidget {
   });
 
   static const _ratings = [
-    (ReviewRating.again, 'Again', Color(0xFFE53935)),
-    (ReviewRating.hard, 'Hard', Color(0xFFFB8C00)),
-    (ReviewRating.good, 'Good', Color(0xFF1E88E5)),
-    (ReviewRating.easy, 'Easy', Color(0xFF43A047)),
+    (ReviewRating.again, 'Again', AppColors.srsAgain),
+    (ReviewRating.hard, 'Hard', AppColors.srsHard),
+    (ReviewRating.good, 'Good', AppColors.srsGood),
+    (ReviewRating.easy, 'Easy', AppColors.srsEasy),
   ];
 
   @override

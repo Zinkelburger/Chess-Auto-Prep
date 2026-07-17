@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_colors.dart';
 import '../models/audit_finding.dart';
 
 /// One row in the audit findings list. Extracted from `audit_findings_panel`.
@@ -60,8 +61,8 @@ class FindingTile extends StatelessWidget {
                         fontFamily: 'monospace',
                         fontFeatures: const [FontFeature.tabularFigures()],
                         color: finding.dismissed
-                            ? Colors.grey[700]
-                            : Colors.blueGrey[300],
+                            ? AppColors.onSurfaceDim
+                            : AppColors.engineLine,
                       ),
                     ),
                   ),
@@ -76,7 +77,9 @@ class FindingTile extends StatelessWidget {
                         finding.summary,
                         style: TextStyle(
                           fontSize: 12,
-                          color: finding.dismissed ? Colors.grey : null,
+                          color: finding.dismissed
+                              ? AppColors.onSurfaceMuted
+                              : null,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -85,7 +88,7 @@ class FindingTile extends StatelessWidget {
                         finding.movePathString,
                         style: const TextStyle(
                           fontSize: 11,
-                          color: Colors.grey,
+                          color: AppColors.onSurfaceMuted,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -97,7 +100,9 @@ class FindingTile extends StatelessWidget {
                   icon: Icon(
                     finding.dismissed ? Icons.undo : Icons.close,
                     size: 16,
-                    color: finding.dismissed ? Colors.grey : Colors.grey[400],
+                    color: finding.dismissed
+                        ? AppColors.onSurfaceMuted
+                        : AppColors.onSurfaceSoft,
                   ),
                   tooltip: finding.dismissed ? 'Restore' : 'Dismiss (D)',
                   onPressed: onToggleDismiss,
@@ -107,7 +112,7 @@ class FindingTile extends StatelessWidget {
                     minWidth: 32,
                     minHeight: 32,
                   ),
-                  hoverColor: Colors.grey.withAlpha(40),
+                  hoverColor: AppColors.hoverOverlay,
                   splashRadius: 16,
                 ),
               ],

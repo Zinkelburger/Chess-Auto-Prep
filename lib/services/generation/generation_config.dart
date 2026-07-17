@@ -100,6 +100,16 @@ class TreeBuildConfig {
   /// worse-eval moves are the point and need their subtrees searched.
   final int fastAltGapCp;
 
+  /// "Wide opening search": our-move nodes at or below this ply get the wide
+  /// [rootMultipv] candidate floor, the full [maxEvalLossCp] window, and (in
+  /// Fast) exemption from the [fastAltGapCp] alternative-subtree gate — so the
+  /// first few of our moves are explored broadly in BOTH search algorithms
+  /// before the priority-zone pruning narrows the deeper, rarely-reached
+  /// lines.  Applies to Pure too (it widens the MultiPV floor Pure would
+  /// otherwise cap at [ourMultipv] past the root).  0 keeps the legacy
+  /// behavior where only the root (ply 0) gets the wide floor.
+  final int openingWidthPlies;
+
   /// Dirichlet prior weight (λ, in virtual games) for smoothing DB opponent
   /// move frequencies with Maia's policy:
   ///   p = (count + λ·maiaP) / (N + λ)
@@ -224,6 +234,7 @@ class TreeBuildConfig {
     this.searchAlgorithm = SearchAlgorithm.fast,
     this.ourAltDiscount = 0.25,
     this.fastAltGapCp = 30,
+    this.openingWidthPlies = 3,
     this.maiaPriorGames = 30.0,
     this.coverMinProb = 0.05,
     this.verifyFinal = true,
@@ -287,6 +298,7 @@ class TreeBuildConfig {
       ),
       ourAltDiscount: (json['our_alt_discount'] as num?)?.toDouble() ?? 0.25,
       fastAltGapCp: (json['fast_alt_gap_cp'] as num?)?.toInt() ?? 30,
+      openingWidthPlies: (json['opening_width_plies'] as num?)?.toInt() ?? 3,
       maiaPriorGames: (json['maia_prior_games'] as num?)?.toDouble() ?? 30.0,
       coverMinProb: (json['cover_min_prob'] as num?)?.toDouble() ?? 0.05,
       verifyFinal: json['verify_final'] as bool? ?? true,
@@ -442,6 +454,15 @@ class TreeBuildConfig {
   int get rootMultipv =>
       ourMultipv >= rootMultipvFloor ? ourMultipv : rootMultipvFloor;
 
+  /// Whether [ply] is inside the widened opening band — the feature is on
+  /// ([openingWidthPlies] > 0) and [ply] is at or below it.  Callers use this
+  /// to grant the wide MultiPV floor / full eval window and, in Fast, to
+  /// exempt our-move alternatives from the subtree gate.  The root (ply 0)
+  /// always gets the wide floor regardless (via [rootMultipv]); this only
+  /// governs the *extension* past the root and the gate exemption.
+  bool widensOpeningAtPly(int ply) =>
+      openingWidthPlies > 0 && ply <= openingWidthPlies;
+
   /// Max centipawns an our-move candidate may lose vs the best sibling and
   /// still enter the tree, at reach priority [priority].
   int effectiveMaxEvalLossCp(double priority) {
@@ -495,6 +516,7 @@ class TreeBuildConfig {
     'best_first': bestFirst,
     'our_alt_discount': ourAltDiscount,
     'fast_alt_gap_cp': fastAltGapCp,
+    'opening_width_plies': openingWidthPlies,
     'maia_prior_games': maiaPriorGames,
     'cover_min_prob': coverMinProb,
     'verify_final': verifyFinal,
@@ -551,6 +573,7 @@ class TreeBuildConfig {
     SearchAlgorithm? searchAlgorithm,
     double? ourAltDiscount,
     int? fastAltGapCp,
+    int? openingWidthPlies,
     double? maiaPriorGames,
     double? coverMinProb,
     bool? verifyFinal,
@@ -606,6 +629,7 @@ class TreeBuildConfig {
       searchAlgorithm: searchAlgorithm ?? this.searchAlgorithm,
       ourAltDiscount: ourAltDiscount ?? this.ourAltDiscount,
       fastAltGapCp: fastAltGapCp ?? this.fastAltGapCp,
+      openingWidthPlies: openingWidthPlies ?? this.openingWidthPlies,
       maiaPriorGames: maiaPriorGames ?? this.maiaPriorGames,
       coverMinProb: coverMinProb ?? this.coverMinProb,
       verifyFinal: verifyFinal ?? this.verifyFinal,

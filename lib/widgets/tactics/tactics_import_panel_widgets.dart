@@ -91,7 +91,7 @@ class _SessionSettingsForm extends StatelessWidget {
       children: [
         Text(
           'From games in the last:',
-          style: TextStyle(fontSize: 13, color: Colors.grey[300]),
+          style: const TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
         ),
         const SizedBox(height: 6),
         Wrap(
@@ -116,7 +116,10 @@ class _SessionSettingsForm extends StatelessWidget {
           children: [
             Text(
               'Order:',
-              style: TextStyle(fontSize: 13, color: Colors.grey[300]),
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.onSurfaceSoft,
+              ),
             ),
             const SizedBox(width: 8),
             DropdownButton<TacticsSessionOrder>(
@@ -142,7 +145,7 @@ class _SessionSettingsForm extends StatelessWidget {
         const SizedBox(height: 12),
         Text(
           'Mistake types to include:',
-          style: TextStyle(fontSize: 13, color: Colors.grey[300]),
+          style: const TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
         ),
         _MistakeTypeCheckbox(
           label: 'Blunders (??)',
@@ -171,7 +174,7 @@ class _SessionSettingsForm extends StatelessWidget {
         const SizedBox(height: 8),
         Text(
           'Options:',
-          style: TextStyle(fontSize: 13, color: Colors.grey[300]),
+          style: const TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
         ),
         _MistakeTypeCheckbox(
           label: 'Unreviewed only',
@@ -258,13 +261,17 @@ class _ResumeAnalysisBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.blue.withValues(alpha: 0.1),
+        color: AppColors.infoTint,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.blue),
+        border: Border.all(color: AppColors.info),
       ),
       child: Row(
         children: [
-          Icon(Icons.pause_circle_outline, size: 16, color: Colors.blue[300]),
+          const Icon(
+            Icons.pause_circle_outline,
+            size: 16,
+            color: AppColors.info,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -307,9 +314,9 @@ class TacticsImportStatusBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.blue.withValues(alpha: 0.1),
+        color: AppColors.infoTint,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.blue),
+        border: Border.all(color: AppColors.info),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -324,10 +331,10 @@ class TacticsImportStatusBanner extends StatelessWidget {
                 ),
               if (isImporting) const SizedBox(width: 12),
               if (!isImporting)
-                Icon(
+                const Icon(
                   Icons.check_circle_outline,
                   size: 16,
-                  color: Colors.green[400],
+                  color: AppColors.success,
                 ),
               if (!isImporting) const SizedBox(width: 8),
               Expanded(child: Text(status)),

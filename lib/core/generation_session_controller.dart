@@ -369,11 +369,15 @@ class GenerationSessionController extends ChangeNotifier
 
       String? treeJson;
       try {
-        treeJson = serializeTree(tree);
+        // The build is finished here (no concurrent mutator), so the indented
+        // JSON encode of the whole tree can safely run off the UI isolate.
+        final json = await Isolate.run(() => serializeTree(tree));
+        treeJson = json;
         final base = p.withoutExtension(filePath);
-        await StorageFactory.instance.writeFile('${base}_tree.json', treeJson);
-      } catch (_) {
-        // Tree JSON save is best-effort
+        await StorageFactory.instance.writeFile('${base}_tree.json', json);
+      } catch (e) {
+        // Tree JSON save is best-effort — log so isolate/send failures aren't silent.
+        debugPrint('[GenerationController] Failed to save tree JSON: $e');
       }
 
       await writeRunDebugDump(
@@ -503,9 +507,15 @@ class GenerationSessionController extends ChangeNotifier
     final failedTree = buildService.currentTree;
     String? failedTreeJson;
     try {
-      if (failedTree != null) failedTreeJson = serializeTree(failedTree);
-    } catch (_) {
+      // Build has stopped (failure path) — serialize off the UI isolate.
+      if (failedTree != null) {
+        failedTreeJson = await Isolate.run(() => serializeTree(failedTree));
+      }
+    } catch (e) {
       // Partial tree may be unserializable; dump the log regardless.
+      debugPrint(
+        '[GenerationController] Failed to serialize failed-tree JSON: $e',
+      );
     }
     await writeRunDebugDump(
       log: buildService.runLog,

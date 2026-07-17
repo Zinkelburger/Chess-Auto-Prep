@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/repertoire_metadata.dart';
 import '../../services/storage/storage_factory.dart';
+import '../../theme/app_colors.dart';
 
 /// Outcome of [AddToStudyDialog]: exactly one of [existingPath] /
 /// [newStudyName] is set.
@@ -162,7 +163,9 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
                               'No studies yet — type a name above to '
                               'create one.',
                               textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.grey[500]),
+                              style: const TextStyle(
+                                color: AppColors.onSurfaceMuted,
+                              ),
                             ),
                           ),
                         for (final s in filtered)

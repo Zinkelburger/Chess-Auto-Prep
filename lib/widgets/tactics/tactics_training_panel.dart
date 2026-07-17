@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../models/tactics_position.dart';
 import '../../services/tactics_engine.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import '../../utils/pgn_comment_utils.dart' show filterDisplayComment;
 import '../clickable_move_line.dart';
 import '../shortcut_tooltip.dart';
@@ -153,8 +155,8 @@ class TacticsTrainingPanel extends StatelessWidget {
       displayTacticsNote(position.mistakeAnalysis).isNotEmpty;
 
   Color _feedbackColor() {
-    if (feedback.contains('Correct')) return Colors.green;
-    return Colors.red;
+    if (feedback.contains('Correct')) return AppColors.success;
+    return AppColors.danger;
   }
 
   @override
@@ -288,7 +290,7 @@ class TacticsTrainingPanel extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey),
+              border: Border.all(color: AppColors.onSurfaceMuted),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Column(
@@ -308,9 +310,9 @@ class TacticsTrainingPanel extends StatelessWidget {
                 if (solutionSanMoves.isEmpty &&
                     position.correctLine.isEmpty) ...[
                   const SizedBox(height: 4),
-                  Text(
+                  const Text(
                     'No solution available',
-                    style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+                    style: AppTextStyles.muted,
                   ),
                 ],
               ],
@@ -355,7 +357,7 @@ class TacticsTrainingPanel extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(
         buf.toString(),
-        style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+        style: const TextStyle(fontSize: 14, color: AppColors.onSurfaceSoft),
       ),
     );
   }
@@ -365,15 +367,9 @@ class TacticsTrainingPanel extends StatelessWidget {
     if (san.isEmpty) {
       final fallback = engine.getSolution(position, fromIndex: 0);
       if (fallback == 'No solution available') {
-        return Text(
-          fallback,
-          style: TextStyle(fontSize: 13, color: Colors.grey[500]),
-        );
+        return Text(fallback, style: AppTextStyles.muted);
       }
-      return Text(
-        fallback,
-        style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
-      );
+      return Text(fallback, style: AppTextStyles.mono);
     }
 
     final trainablePlies = position.correctLine.length;
@@ -449,7 +445,10 @@ class _TacticsStarRating extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text('Rate:', style: TextStyle(fontSize: 13, color: Colors.grey[400])),
+        const Text(
+          'Rate:',
+          style: TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
+        ),
         const SizedBox(width: 8),
         for (int star = 1; star <= 5; star++)
           Tooltip(
@@ -461,7 +460,9 @@ class _TacticsStarRating extends StatelessWidget {
                 child: Icon(
                   star <= rating ? Icons.star : Icons.star_border,
                   size: 24,
-                  color: star <= rating ? Colors.amber : Colors.grey[600],
+                  color: star <= rating
+                      ? AppColors.starAccent
+                      : AppColors.starEmpty,
                 ),
               ),
             ),
@@ -471,7 +472,10 @@ class _TacticsStarRating extends StatelessWidget {
             padding: const EdgeInsets.only(left: 8),
             child: Text(
               rating == 1 ? '(hidden from training)' : '',
-              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppColors.onSurfaceMuted,
+              ),
             ),
           ),
       ],

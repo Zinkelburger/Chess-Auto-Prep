@@ -6,6 +6,8 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../theme/app_colors.dart';
+
 class EmptyStatePlaceholder extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -41,7 +43,7 @@ class EmptyStatePlaceholder extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: iconSize, color: Colors.grey[500]),
+            Icon(icon, size: iconSize, color: AppColors.onSurfaceMuted),
             const SizedBox(height: 16),
             Text(
               title,
@@ -52,7 +54,10 @@ class EmptyStatePlaceholder extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 subtitle!,
-                style: TextStyle(color: Colors.grey[500], fontSize: 14),
+                style: const TextStyle(
+                  color: AppColors.onSurfaceMuted,
+                  fontSize: 14,
+                ),
                 textAlign: TextAlign.center,
               ),
             ],

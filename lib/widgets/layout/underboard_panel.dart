@@ -7,6 +7,8 @@ library;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../theme/app_colors.dart';
+
 const double kUnderboardMinHeight = 80;
 const double kUnderboardDefaultHeight = 180;
 const double kUnderboardMaxHeight = 500;
@@ -186,7 +188,11 @@ class UnderboardPanelState extends State<UnderboardPanel>
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Icon(Icons.drag_handle, size: 16, color: Colors.grey[600]),
+              child: const Icon(
+                Icons.drag_handle,
+                size: 16,
+                color: AppColors.onSurfaceMuted,
+              ),
             ),
             IconButton(
               icon: Icon(
@@ -228,7 +234,7 @@ class UnderboardPanelState extends State<UnderboardPanel>
                 '$count',
                 style: const TextStyle(
                   fontSize: 10,
-                  color: Colors.white,
+                  color: AppColors.onWarning,
                   fontWeight: FontWeight.bold,
                 ),
               ),

@@ -14,6 +14,7 @@ import '../models/pgn_filter_models.dart';
 import '../models/pgn_source.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/storage/storage_factory.dart';
+import '../theme/app_colors.dart';
 import 'pgn_inline_slice_editor.dart';
 
 /// Compact panel for managing multiple PGN sources with per-source slicing.
@@ -316,10 +317,10 @@ class _SourceRow extends StatelessWidget {
                   height: 18,
                   decoration: BoxDecoration(
                     color: source.color == PgnSourceColor.white
-                        ? Colors.white
-                        : Colors.grey[900],
+                        ? AppColors.sideWhite
+                        : AppColors.sideBlack,
                     borderRadius: BorderRadius.circular(3),
-                    border: Border.all(color: Colors.grey[600]!, width: 0.5),
+                    border: Border.all(color: AppColors.outline, width: 0.5),
                   ),
                   child: Center(
                     child: Text(
@@ -327,8 +328,8 @@ class _SourceRow extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 11,
                         color: source.color == PgnSourceColor.white
-                            ? Colors.grey[900]
-                            : Colors.white,
+                            ? AppColors.onSideWhite
+                            : AppColors.ink,
                       ),
                     ),
                   ),

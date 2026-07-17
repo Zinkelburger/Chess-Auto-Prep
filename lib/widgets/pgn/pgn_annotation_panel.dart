@@ -9,6 +9,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../theme/app_colors.dart';
 import '../../utils/pgn_comment_utils.dart' show kMoveNags;
 
 class PgnAnnotationPanel extends StatefulWidget {
@@ -173,7 +174,10 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
               hintText: enabled
                   ? 'Comment on ${widget.moveLabel}…  (C to type, Esc to leave)'
                   : 'Click or play a move to annotate it',
-              hintStyle: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              hintStyle: const TextStyle(
+                fontSize: 12,
+                color: AppColors.onSurfaceMuted,
+              ),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 10,
                 vertical: 8,
@@ -230,7 +234,7 @@ class _GlyphButton extends StatelessWidget {
             border: Border.all(
               color: isActive
                   ? color.withValues(alpha: 0.7)
-                  : Colors.grey.withValues(alpha: 0.3),
+                  : AppColors.divider,
             ),
           ),
           child: Text(
@@ -240,8 +244,8 @@ class _GlyphButton extends StatelessWidget {
               fontWeight: FontWeight.bold,
               fontFamily: 'monospace',
               color: onTap == null
-                  ? Colors.grey[700]
-                  : (isActive ? color : Colors.grey[400]),
+                  ? AppColors.onSurfaceDisabled
+                  : (isActive ? color : AppColors.onSurfaceSoft),
             ),
           ),
         ),

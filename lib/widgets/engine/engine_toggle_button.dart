@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../services/engine/engine_lifecycle.dart';
+import '../../theme/app_colors.dart';
 
 /// Board toolbar button for engine on/off.
 /// Shows state via icon color and optional spinner.
@@ -32,10 +33,10 @@ class EngineToggleButton extends StatelessWidget {
               : Icon(
                   Icons.bolt,
                   color: isGenerating
-                      ? Colors.grey
+                      ? AppColors.onSurfaceMuted
                       : isOn
                       ? Theme.of(context).colorScheme.primary
-                      : Colors.grey,
+                      : AppColors.onSurfaceMuted,
                 ),
           tooltip: isGenerating
               ? 'Engine busy — repertoire generation in progress'

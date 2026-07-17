@@ -69,7 +69,7 @@ mixin _RepertoireLayout
         onHorizontalDragEnd: (_) => _saveLinesPanelWidth(),
         child: SizedBox(
           width: 7,
-          child: Center(child: Container(width: 1, color: Colors.grey[700])),
+          child: Center(child: Container(width: 1, color: AppColors.outline)),
         ),
       ),
     );
@@ -167,10 +167,10 @@ mixin _RepertoireLayout
               const SizedBox(height: 8),
               Tooltip(
                 message: 'Show lines (L)',
-                child: Icon(
+                child: const Icon(
                   Icons.keyboard_double_arrow_left,
                   size: 16,
-                  color: theme.hintColor,
+                  color: AppColors.onSurfaceMuted,
                 ),
               ),
               const SizedBox(height: 12),
@@ -182,13 +182,13 @@ mixin _RepertoireLayout
                       : _isDraftActive
                       ? 'Draft'
                       : 'Lines (${_controller.repertoireLines.length})',
-                  style: TextStyle(
+                  style: AppTextStyles.caption.copyWith(
                     fontSize: 11,
                     color: _isBuildSessionActive
                         ? theme.colorScheme.primary
                         : _isDraftActive
                         ? AppColors.warning
-                        : theme.hintColor,
+                        : AppColors.onSurfaceMuted,
                     fontWeight: _isBuildSessionActive || _isDraftActive
                         ? FontWeight.w600
                         : null,
@@ -274,6 +274,6 @@ mixin _RepertoireLayout
   }
 
   Widget _verticalZoneDivider() {
-    return Container(width: 1, color: Colors.grey[700]);
+    return Container(width: 1, color: AppColors.outline);
   }
 }

@@ -11,6 +11,7 @@ import '../models/analysis_player_info.dart';
 import '../models/engine_settings.dart';
 import '../models/opening_tree.dart';
 import '../services/engine/stockfish_pool.dart';
+import '../theme/app_colors.dart';
 
 /// Settings returned by the config dialog.
 class EngineWeaknessConfig {
@@ -155,9 +156,9 @@ class _EngineWeaknessConfigDialogState
               const SizedBox(height: 8),
               Text(
                 _resourceSummary,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 11,
-                  color: Colors.grey[500],
+                  color: AppColors.onSurfaceMuted,
                   fontStyle: FontStyle.italic,
                 ),
               ),
@@ -195,9 +196,9 @@ class _EngineWeaknessConfigDialogState
                     child: Text(
                       'Last downloaded ${widget.playerInfo!.downloadTimeAgo}'
                       ' · fetched ${widget.playerInfo!.rangeDescription}',
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 11,
-                        color: Colors.grey[500],
+                        color: AppColors.onSurfaceMuted,
                         fontStyle: FontStyle.italic,
                       ),
                     ),
@@ -207,7 +208,10 @@ class _EngineWeaknessConfigDialogState
               Text(
                 '$_positionCount positions will be evaluated'
                 '${widget.whiteTree != null && widget.blackTree != null ? ' (both colors)' : ''}',
-                style: TextStyle(color: Colors.grey[400], fontSize: 13),
+                style: const TextStyle(
+                  color: AppColors.onSurfaceSoft,
+                  fontSize: 13,
+                ),
               ),
               const SizedBox(height: 24),
               Row(
@@ -247,7 +251,10 @@ class _EngineWeaknessConfigDialogState
               ),
               Text(
                 'Evaluate your most-played positions with Stockfish',
-                style: TextStyle(color: Colors.grey[400], fontSize: 13),
+                style: const TextStyle(
+                  color: AppColors.onSurfaceSoft,
+                  fontSize: 13,
+                ),
               ),
             ],
           ),

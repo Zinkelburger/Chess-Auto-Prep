@@ -9,7 +9,7 @@ class TacticsBrowseHeader extends StatelessWidget {
   static const _headerStyle = TextStyle(
     fontWeight: FontWeight.bold,
     fontSize: 12,
-    color: Colors.grey,
+    color: AppColors.onSurfaceMuted,
   );
 
   @override
@@ -94,18 +94,14 @@ class TacticsBrowseRow extends StatelessWidget {
                 ? Theme.of(
                     context,
                   ).colorScheme.primaryContainer.withValues(alpha: 0.3)
-                : (index.isEven
-                      ? Colors.transparent
-                      : Colors.white.withValues(alpha: 0.02)),
-            border: Border(
-              bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.15)),
-            ),
+                : (index.isEven ? Colors.transparent : AppColors.rowStripe),
+            border: const Border(bottom: BorderSide(color: AppColors.divider)),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           child: Row(
             children: [
               if (showBoard) ...[
-                _BoardThumbnail(fen: position.fen),
+                StaticBoardThumbnail(fen: position.fen),
                 const SizedBox(width: 8),
               ],
               if (selectMode)
@@ -122,7 +118,7 @@ class TacticsBrowseRow extends StatelessWidget {
                     icon: const Icon(
                       Icons.play_arrow,
                       size: 18,
-                      color: Colors.green,
+                      color: AppColors.success,
                     ),
                     tooltip: 'Train this tactic',
                     constraints: const BoxConstraints(
@@ -143,10 +139,12 @@ class TacticsBrowseRow extends StatelessWidget {
                 ),
                 IconButton(
                   onPressed: onDelete,
+                  // Deliberately subdued: a full-strength red X on every row
+                  // would shout louder than the content it deletes.
                   icon: Icon(
                     Icons.close,
                     size: 16,
-                    color: Colors.red.withValues(alpha: 0.6),
+                    color: AppColors.danger.withValues(alpha: 0.6),
                   ),
                   tooltip: 'Delete tactic',
                   constraints: const BoxConstraints(
@@ -165,10 +163,10 @@ class TacticsBrowseRow extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
                     color: switch (pos.mistakeType) {
-                      '??' => Colors.red,
-                      '?!' => Colors.yellow,
-                      'custom' => Colors.lightBlue,
-                      _ => Colors.orange,
+                      '??' => AppColors.mistakeBlunder,
+                      '?!' => AppColors.mistakeInaccuracy,
+                      'custom' => AppColors.mistakeCustom,
+                      _ => AppColors.mistakeMistake,
                     },
                   ),
                 ),
@@ -218,45 +216,6 @@ class TacticsBrowseRow extends StatelessWidget {
   }
 }
 
-/// Small static board preview for a browse row, oriented so the side to move
-/// is at the bottom (same perspective as training).
-class _BoardThumbnail extends StatelessWidget {
-  const _BoardThumbnail({required this.fen});
-
-  final String fen;
-
-  static const double _size = 60;
-
-  @override
-  Widget build(BuildContext context) {
-    final Position position;
-    try {
-      position = Chess.fromSetup(Setup.parseFen(fen));
-    } catch (_) {
-      return const SizedBox(
-        width: _size,
-        height: _size,
-        child: Icon(Icons.broken_image_outlined, size: 20, color: Colors.grey),
-      );
-    }
-    return SizedBox(
-      width: _size,
-      height: _size,
-      // RepaintBoundary keeps the 64-square board raster out of the list's
-      // scroll repaints — without it every scrolled frame redraws each board.
-      child: RepaintBoundary(
-        child: IgnorePointer(
-          child: ChessBoardWidget(
-            position: position,
-            flipped: position.turn == Side.black,
-            enableUserMoves: false,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _BrowseStarRating extends StatelessWidget {
   const _BrowseStarRating({required this.rating, this.onSetRating});
 
@@ -276,7 +235,7 @@ class _BrowseStarRating extends StatelessWidget {
           child: Icon(
             star <= rating ? Icons.star : Icons.star_border,
             size: 14,
-            color: star <= rating ? Colors.amber : Colors.grey[700],
+            color: star <= rating ? AppColors.starAccent : AppColors.starEmpty,
           ),
         );
       }),

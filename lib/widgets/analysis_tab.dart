@@ -21,6 +21,7 @@ import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
+import '../theme/app_text_styles.dart';
 import 'opening_tree_widget.dart';
 
 class AnalysisTab extends StatefulWidget {
@@ -263,11 +264,11 @@ class _AnalysisTabState extends State<AnalysisTab> {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(
+          child: const Text(
             'Generate a tree to see candidate moves here.\n'
             'Stockfish and expectimax are on the PGN tab.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey[500], fontSize: 13),
+            style: AppTextStyles.muted,
           ),
         ),
       );
@@ -362,10 +363,7 @@ class _AnalysisTabState extends State<AnalysisTab> {
   Widget _buildTreeSection() {
     if (widget.controller.openingTree == null) {
       return const Center(
-        child: Text(
-          'No opening tree available',
-          style: TextStyle(color: Colors.grey, fontSize: 13),
-        ),
+        child: Text('No opening tree available', style: AppTextStyles.muted),
       );
     }
     return OpeningTreeWidget(

@@ -4,6 +4,7 @@ library;
 
 import 'dart:convert';
 import 'dart:io' as io;
+import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
@@ -29,7 +30,16 @@ class RepertoireService {
       throw Exception('Repertoire file not found: $filePath');
     }
 
-    return parseRepertoirePgn(content, trainingColor: trainingColor);
+    // The builder path already parses via compute(); the trainer parsed on the
+    // UI isolate. A repertoire PGN is hundreds of KB / hundreds of games, each
+    // fully replayed — run it off the UI isolate. A fresh (stateless) service
+    // inside the isolate avoids capturing `this`.
+    return Isolate.run(
+      () => RepertoireService().parseRepertoirePgn(
+        content,
+        trainingColor: trainingColor,
+      ),
+    );
   }
 
   /// Parses repertoire PGN content and extracts trainable lines.

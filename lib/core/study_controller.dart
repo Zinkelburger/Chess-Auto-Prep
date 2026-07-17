@@ -7,6 +7,7 @@
 library;
 
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
@@ -106,7 +107,12 @@ class StudyController extends ChangeNotifier with SafeChangeNotifier {
     await flushSave();
     final content = await StorageFactory.instance.readFile(path);
     final name = path.split('/').last.replaceAll(RegExp(r'\.pgn$'), '');
-    _doc = StudyDocument.fromPgn(content ?? '', name: name, filePath: path);
+    // fromPgn runs PgnGame.parsePgn + a full move replay for every chapter —
+    // off the UI isolate so opening a large study doesn't freeze the frame.
+    final text = content ?? '';
+    _doc = await Isolate.run(
+      () => StudyDocument.fromPgn(text, name: name, filePath: path),
+    );
     _chapterIndex = 0;
     _cursor = TreePath.empty;
     _dirty = false;

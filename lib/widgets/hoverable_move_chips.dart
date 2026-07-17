@@ -12,6 +12,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../core/board_preview_controller.dart';
+import '../theme/app_colors.dart';
 import '../utils/chess_utils.dart' show fenAfterMoves;
 
 /// Compact inline move text with optional hover board preview.
@@ -109,8 +110,8 @@ class _HoverableMoveChipsState extends State<HoverableMoveChips> {
     _disposeRecognizers();
 
     final theme = Theme.of(context);
-    final defaultColor = theme.colorScheme.onSurface.withValues(alpha: 0.7);
-    final numColor = theme.colorScheme.onSurface.withValues(alpha: 0.45);
+    const defaultColor = AppColors.pgnMove;
+    const numColor = AppColors.pgnMoveNumber;
     final hlColor = widget.highlightColor ?? theme.colorScheme.primary;
 
     final hasHover = widget.boardPreview != null;

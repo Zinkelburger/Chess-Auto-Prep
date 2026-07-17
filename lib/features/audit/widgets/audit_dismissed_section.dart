@@ -4,6 +4,8 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_colors.dart';
+
 class AuditDismissedSection extends StatelessWidget {
   const AuditDismissedSection({
     super.key,
@@ -25,11 +27,18 @@ class AuditDismissedSection extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.archive_outlined, size: 14, color: Colors.grey[500]),
+          const Icon(
+            Icons.archive_outlined,
+            size: 14,
+            color: AppColors.onSurfaceMuted,
+          ),
           const SizedBox(width: 4),
           Text(
             '$dismissedCount dismissed',
-            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.onSurfaceMuted,
+            ),
           ),
           const Spacer(),
           TextButton(

@@ -30,6 +30,10 @@ class EvalCache {
       Platform.isLinux || Platform.isMacOS || Platform.isWindows;
 
   /// Idempotent. Safe to call on every tree-build start.
+  ///
+  /// [getEvalCpWhite] / [putEvalCpWhite] (and [MaiaCache]) await this before
+  /// touching SQLite, so a fire-and-forget warm-up in `main` cannot leave
+  /// early writes memory-only.
   Future<void> init() {
     return _initFuture ??= _init();
   }
@@ -105,6 +109,7 @@ class EvalCache {
     final hit = _mem[fen];
     if (hit != null && hit.depth >= minDepth) return hit.cpWhite;
 
+    await init();
     final db = _db;
     if (db == null) return null;
     try {
@@ -136,6 +141,7 @@ class EvalCache {
       return;
     }
 
+    await init();
     final db = _db;
     if (db == null) return;
     try {
@@ -158,6 +164,7 @@ class EvalCache {
 
   /// Total cached entries (in the DB, not the L1 mirror).
   Future<int> count() async {
+    await init();
     final db = _db;
     if (db == null) return _mem.length;
     try {
@@ -171,6 +178,7 @@ class EvalCache {
   /// Drop every row (e.g. from a settings "clear cache" button).
   Future<void> clear() async {
     _mem.clear();
+    await init();
     final db = _db;
     if (db == null) return;
     try {
@@ -207,6 +215,7 @@ class MaiaCache {
       return (policy: _mem[k]!, winProb: _winMem[k] ?? 0.0);
     }
 
+    await EvalCache.instance.init();
     final db = EvalCache.instance._db;
     if (db == null) return null;
     try {
@@ -240,6 +249,7 @@ class MaiaCache {
     _mem[k] = policy;
     _winMem[k] = winProb;
 
+    await EvalCache.instance.init();
     final db = EvalCache.instance._db;
     if (db == null) return;
     try {

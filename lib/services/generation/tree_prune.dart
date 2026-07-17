@@ -101,8 +101,15 @@ void propagateHigherCumP(
   FrontierQueue queue,
 ) {
   if (newCumP <= canonical.cumulativeProbability) return;
-  final ratio = newCumP / canonical.cumulativeProbability;
+  final old = canonical.cumulativeProbability;
   canonical.cumulativeProbability = newCumP;
+  if (old <= 0.0) {
+    // Ratio would be Inf; rebuild descendant cumPs from edge probabilities
+    // so a zero→positive transposition still widens the frontier.
+    _rebuildCumPFromEdges(canonical, minProbability, queue);
+    return;
+  }
+  final ratio = newCumP / old;
   _propagateCumPRecursive(canonical, ratio, minProbability, queue);
 }
 
@@ -117,6 +124,32 @@ void _propagateCumPRecursive(
     if (child.searchPriority >= 0.0) child.searchPriority *= ratio;
     if (child.children.isNotEmpty) {
       _propagateCumPRecursive(child, ratio, minProbability, queue);
+    } else if (!child.explored &&
+        child.cumulativeProbability >= minProbability) {
+      // If the leaf is still queued, [FrontierQueue.add] re-sifts it in place
+      // for its just-raised searchPriority instead of adding a duplicate; if
+      // it was already popped (below-floor) it is re-enqueued.
+      queue.add(child);
+    }
+  }
+}
+
+/// Absolute cumP assign when the canonical had zero/negative probability
+/// (ratio scaling is undefined). Uses each child's [BuildTreeNode.moveProbability]
+/// as the parent→child edge weight.
+void _rebuildCumPFromEdges(
+  BuildTreeNode node,
+  double minProbability,
+  FrontierQueue queue,
+) {
+  for (final child in node.children) {
+    final edge = child.moveProbability;
+    child.cumulativeProbability = node.cumulativeProbability * edge;
+    if (child.searchPriority >= 0.0) {
+      child.searchPriority = child.cumulativeProbability;
+    }
+    if (child.children.isNotEmpty) {
+      _rebuildCumPFromEdges(child, minProbability, queue);
     } else if (!child.explored &&
         child.cumulativeProbability >= minProbability) {
       queue.add(child);

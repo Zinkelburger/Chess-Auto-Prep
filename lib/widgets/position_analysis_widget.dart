@@ -32,6 +32,7 @@ import '../models/move_tree.dart';
 import '../models/position_analysis.dart';
 import '../models/opening_tree.dart';
 import '../services/storage/storage_factory.dart';
+import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
 import '../utils/keyboard_shortcut_utils.dart';
@@ -238,7 +239,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
             return Column(
               children: [
                 Expanded(flex: 4, child: _buildBoardPane()),
-                Container(height: 1, color: Colors.grey[700]),
+                Container(height: 1, color: AppColors.outline),
                 Expanded(flex: 5, child: _buildStackedPanels()),
               ],
             );
@@ -248,13 +249,13 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
             return Column(
               children: [
                 Expanded(flex: 4, child: _buildBoardPane()),
-                Container(height: 1, color: Colors.grey[700]),
+                Container(height: 1, color: AppColors.outline),
                 Expanded(
                   flex: 5,
                   child: Row(
                     children: [
                       Expanded(child: _buildLeftPanel()),
-                      Container(width: 1, color: Colors.grey[700]),
+                      Container(width: 1, color: AppColors.outline),
                       Expanded(child: _buildRightPanel()),
                     ],
                   ),
@@ -269,9 +270,9 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
           return Row(
             children: [
               SizedBox(width: leftWidth, child: _buildLeftPanel()),
-              Container(width: 1, color: Colors.grey[700]),
+              Container(width: 1, color: AppColors.outline),
               Expanded(child: _buildBoardPane()),
-              Container(width: 1, color: Colors.grey[700]),
+              Container(width: 1, color: AppColors.outline),
               SizedBox(width: rightWidth, child: _buildRightPanel()),
             ],
           );
@@ -441,7 +442,10 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text('Analyzing positions…', style: TextStyle(color: Colors.grey)),
+            Text(
+              'Analyzing positions…',
+              style: TextStyle(color: AppColors.onSurfaceMuted),
+            ),
           ],
         ),
       );
@@ -453,7 +457,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
         child: Text(
           'Select a player to begin',
           textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.grey),
+          style: TextStyle(color: AppColors.onSurfaceMuted),
         ),
       ),
     );
@@ -512,7 +516,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
       return const Center(
         child: Text(
           'Opening tree not available',
-          style: TextStyle(color: Colors.grey),
+          style: TextStyle(color: AppColors.onSurfaceMuted),
         ),
       );
     }
@@ -556,7 +560,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
       return const Center(
         child: Text(
           'Select a game to view PGN',
-          style: TextStyle(color: Colors.grey),
+          style: TextStyle(color: AppColors.onSurfaceMuted),
         ),
       );
     }

@@ -6,6 +6,7 @@ library;
 import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
+import '../theme/app_colors.dart';
 import 'lichess_db_info_icon.dart';
 
 const _speedOptions = <(String label, String value)>[
@@ -165,7 +166,7 @@ class LichessDbSelector extends StatelessWidget {
             message: 'Which time controls to include.',
             child: Text(
               'Speeds:',
-              style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
             ),
           ),
         const SizedBox(height: 6),
@@ -220,7 +221,7 @@ class LichessDbSelector extends StatelessWidget {
                 'Each value is the lower bound of a Lichess rating bracket.',
             child: Text(
               'Ratings:',
-              style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
             ),
           ),
         const SizedBox(height: 6),

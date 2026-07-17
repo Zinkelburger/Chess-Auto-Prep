@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/app_colors.dart';
+
 /// Bootstrap UI when no repertoire is loaded or training cannot start yet.
 class RepertoireSelectorPanel extends StatelessWidget {
   final bool isLoading;
@@ -39,7 +41,7 @@ class RepertoireSelectorPanel extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            const Icon(Icons.error_outline, size: 64, color: AppColors.danger),
             const SizedBox(height: 12),
             Text(error!, textAlign: TextAlign.center),
             const SizedBox(height: 12),

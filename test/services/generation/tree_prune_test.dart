@@ -219,5 +219,39 @@ void main() {
       expect(queue.length, 1);
       expect(queue.first.moveSan, 'leaf');
     });
+
+    test(
+      're-queues an already-queued leaf without duplicating (best-first)',
+      () {
+        final canonical = _node(cumP: 0.1);
+        final leaf = _node(san: 'leaf', cumP: 0.06);
+        canonical.children.add(leaf);
+        final queue = FrontierQueue(bestFirst: true);
+        queue.add(leaf); // leaf already sitting in the frontier
+        expect(queue.length, 1);
+
+        // Transposition raises canonical's cumP; the leaf clears minProbability
+        // and would previously have been added a second time.
+        propagateHigherCumP(canonical, 0.2, 0.01, queue);
+
+        expect(queue.length, 1); // no duplicate entry
+        expect(queue.contains(leaf), isTrue);
+        expect(queue.removeFirst(), same(leaf));
+        expect(queue.isEmpty, isTrue);
+      },
+    );
+
+    test('zero cumP adopts newCumP via edge probs (no Inf ratio)', () {
+      final canonical = _node(cumP: 0.0);
+      final leaf = _node(san: 'leaf', cumP: 0.0)..moveProbability = 0.4;
+      canonical.children.add(leaf);
+      final queue = FrontierQueue(bestFirst: false);
+
+      propagateHigherCumP(canonical, 0.5, 0.01, queue);
+
+      expect(canonical.cumulativeProbability, closeTo(0.5, 1e-12));
+      expect(leaf.cumulativeProbability, closeTo(0.2, 1e-12));
+      expect(queue.contains(leaf), isTrue);
+    });
   });
 }

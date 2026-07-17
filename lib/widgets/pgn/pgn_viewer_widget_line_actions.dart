@@ -28,7 +28,7 @@ mixin _PgnViewerLineActions on _PgnViewerWidgetStateBase {
     bool enabled = true,
     Color? color,
   }) {
-    final effectiveColor = enabled ? color : Colors.grey[700];
+    final effectiveColor = enabled ? color : AppColors.onSurfaceDisabled;
     return PopupMenuItem(
       value: value,
       enabled: enabled,
@@ -99,7 +99,7 @@ mixin _PgnViewerLineActions on _PgnViewerWidgetStateBase {
             'delete',
             Icons.delete_outline,
             'Delete variation',
-            color: Colors.red,
+            color: AppColors.danger,
           ),
           _menuItem('clear_all', Icons.clear_all, 'Clear all analysis'),
         ],

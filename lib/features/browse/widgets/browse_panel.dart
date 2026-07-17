@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_colors.dart';
 import '../../../widgets/shortcut_tooltip.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
@@ -249,7 +250,7 @@ class _BrowsePanelState extends State<BrowsePanel> {
             Icon(
               _showRare ? Icons.expand_less : Icons.expand_more,
               size: 16,
-              color: Colors.grey,
+              color: AppColors.onSurfaceMuted,
             ),
             const SizedBox(width: 4),
             Text(

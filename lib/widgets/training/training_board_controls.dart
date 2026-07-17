@@ -6,6 +6,7 @@ import '../../core/repertoire_controller.dart';
 import '../../models/repertoire_line.dart';
 import '../../services/training/training_phase.dart';
 import '../../services/training/training_session_controller.dart';
+import '../../theme/app_colors.dart';
 import '../../utils/pgn_comment_utils.dart' show filterDisplayComment;
 import '../../widgets/chess_board_widget.dart';
 import 'move_input_widget.dart';
@@ -515,7 +516,7 @@ class _LearnContent extends StatelessWidget {
                 color: feedback != null && feedback!.startsWith('Wrong')
                     ? theme.colorScheme.error
                     : feedback == 'Correct!'
-                    ? Colors.green
+                    ? AppColors.success
                     : null,
               ),
             ),
@@ -667,9 +668,9 @@ class _ReplayContent extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.orange.withValues(alpha: 0.08),
+            color: AppColors.warning.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+            border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -677,7 +678,7 @@ class _ReplayContent extends StatelessWidget {
               Text(
                 'Replaying missed moves',
                 style: theme.textTheme.titleSmall?.copyWith(
-                  color: Colors.orange[700],
+                  color: AppColors.warning,
                 ),
               ),
               const SizedBox(height: 4),
@@ -704,7 +705,7 @@ class TrainingFeedbackText extends StatelessWidget {
     final theme = Theme.of(context);
     Color color = theme.colorScheme.onSurfaceVariant;
     if (feedback.startsWith('Correct')) {
-      color = Colors.green;
+      color = AppColors.success;
     } else if (feedback.startsWith('Wrong') || feedback.startsWith('Try')) {
       color = theme.colorScheme.error;
     }
@@ -731,11 +732,11 @@ class TrainingMoveDifficultyChip extends StatelessWidget {
     Color color;
     if (difficulty >= 1.0) {
       label = 'Memorized';
-      color = Colors.green;
+      color = AppColors.success;
     } else if (difficulty > 0) {
       final pct = (difficulty * 100).round();
       label = '$pct% learned';
-      color = Colors.orange;
+      color = AppColors.warning;
     } else {
       label = 'New move';
       color = theme.colorScheme.onSurfaceVariant;

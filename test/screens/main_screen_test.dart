@@ -19,6 +19,10 @@ void main() {
       final appState = AppState();
 
       Future<void> pumpNavigation() async {
+        // First visit shows a one-frame loading placeholder, then constructs
+        // the screen on the next frame (see _MainScreenState.build) — hence
+        // the extra pump before the navigation-animation pumps.
+        await tester.pump();
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
         await tester.pump(const Duration(milliseconds: 300));

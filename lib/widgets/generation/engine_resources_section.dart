@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/engine/stockfish_pool.dart';
 import '../../services/generation/generation_config.dart';
+import '../../theme/app_colors.dart';
 import '../../utils/system_info.dart';
 
 class EngineResourcesSection extends StatelessWidget {
@@ -59,7 +60,10 @@ class EngineResourcesSection extends StatelessWidget {
           Text(
             'Your system has $cores logical core${cores == 1 ? '' : 's'}. '
             'Tree build uses 1 Stockfish worker with UCI Threads set below.',
-            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.onSurfaceMuted,
+            ),
           ),
           const SizedBox(height: 10),
           Wrap(
@@ -99,9 +103,9 @@ class EngineResourcesSection extends StatelessWidget {
           ),
           if (isDbExplorer) ...[
             const SizedBox(height: 6),
-            Text(
+            const Text(
               'Engine runs during eval enrichment after the PGN tree is built.',
-              style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+              style: TextStyle(fontSize: 10, color: AppColors.onSurfaceMuted),
             ),
           ],
         ],

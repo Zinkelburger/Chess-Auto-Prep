@@ -294,7 +294,9 @@ class _SplitHandleState extends State<_SplitHandle> {
               width: _dragging ? 56 : 40,
               height: 3,
               decoration: BoxDecoration(
-                color: _dragging ? AppColors.expectimax : Colors.grey[600],
+                color: _dragging
+                    ? AppColors.expectimax
+                    : AppColors.onSurfaceDim,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),

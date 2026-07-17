@@ -52,17 +52,17 @@ mixin _TacticsImportPanelStartCard on _TacticsImportPanelStateBase {
     // Only shown when the user needs to act (or wait); no hint in the
     // ordinary ready state — the button's "(N ready)" already says it all.
     String? hint;
-    Color hintColor = Colors.grey[400]!;
+    Color hintColor = AppColors.onSurfaceSoft;
     if (positionCount == 0) {
       hint = 'No tactics yet — import your games above to get started.';
     } else if (matchingCount == 0) {
       hint =
           'All $positionCount positions are filtered out — '
           'loosen the filters.';
-      hintColor = Colors.orange[300]!;
+      hintColor = AppColors.warning;
     } else if (widget.isImporting) {
       hint = 'Import is running — new tactics are added as they\'re found.';
-      hintColor = Colors.green[400]!;
+      hintColor = AppColors.success;
     }
 
     return Card(
@@ -83,8 +83,8 @@ mixin _TacticsImportPanelStartCard on _TacticsImportPanelStateBase {
                     : null,
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.all(16),
-                  backgroundColor: Colors.green[700],
-                  foregroundColor: Colors.white,
+                  backgroundColor: AppColors.successSurface,
+                  foregroundColor: AppColors.ink,
                 ),
                 icon: const Icon(Icons.play_arrow),
                 label: Text(
@@ -153,12 +153,19 @@ mixin _TacticsImportPanelStartCard on _TacticsImportPanelStateBase {
         '${_recencyLabel(_settings.maxAgeDays)} · $_mistakeTypesLabel';
     return Row(
       children: [
-        Icon(Icons.filter_alt_outlined, size: 14, color: Colors.grey[500]),
+        const Icon(
+          Icons.filter_alt_outlined,
+          size: 14,
+          color: AppColors.onSurfaceMuted,
+        ),
         const SizedBox(width: 6),
         Expanded(
           child: Text(
             summary,
-            style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.onSurfaceSoft,
+            ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),

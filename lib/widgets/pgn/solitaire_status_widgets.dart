@@ -6,6 +6,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../core/pgn_viewer_controller.dart';
+import '../../theme/app_colors.dart';
 
 /// Compact end-of-game strip shown above the movetext instead of a modal
 /// overlay: the user is left freely browsing their fully annotated game.
@@ -19,10 +20,10 @@ class SolitaireCompleteBanner extends StatelessWidget {
     final s = controller.solitaire;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      color: Colors.green.withValues(alpha: 0.12),
+      color: AppColors.success.withValues(alpha: 0.12),
       child: Row(
         children: [
-          const Icon(Icons.flag, size: 16, color: Colors.green),
+          const Icon(Icons.flag, size: 16, color: AppColors.success),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -105,7 +106,10 @@ class SolitaireStatusBar extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               '${s.correctFirstTry}/${s.totalUserMoves} first-try',
-              style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.onSurfaceSoft,
+              ),
             ),
           ],
           const SizedBox(width: 4),

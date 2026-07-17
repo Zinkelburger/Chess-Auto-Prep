@@ -65,14 +65,14 @@ class AuditFilterBar extends StatelessWidget {
               label: 'Inaccuracies',
               count: countOf(AuditFindingType.inaccuracy),
               type: AuditFindingType.inaccuracy,
-              color: Colors.orange,
+              color: AppColors.findingInaccuracy,
             ),
             const SizedBox(width: 4),
             _chip(
               label: 'Missing',
               count: countOf(AuditFindingType.missingResponse),
               type: AuditFindingType.missingResponse,
-              color: Colors.blue,
+              color: AppColors.findingMissingResponse,
             ),
             if (clashCount > 0) ...[
               const SizedBox(width: 4),
@@ -80,7 +80,7 @@ class AuditFilterBar extends StatelessWidget {
                 label: 'Clashes',
                 count: clashCount,
                 isActive: clashOnly,
-                color: Colors.purple,
+                color: AppColors.findingClash,
                 onSelected: onToggleClashOnly,
               ),
             ],
@@ -89,7 +89,7 @@ class AuditFilterBar extends StatelessWidget {
               label: 'Weak',
               count: countOf(AuditFindingType.weakPosition),
               type: AuditFindingType.weakPosition,
-              color: Colors.deepOrange,
+              color: AppColors.findingWeakPosition,
             ),
             const SizedBox(width: 4),
             _chip(
@@ -114,7 +114,7 @@ class AuditFilterBar extends StatelessWidget {
     return FilterChip(
       label: Text(
         count > 0 ? '$label ($count)' : label,
-        style: TextStyle(fontSize: 12, color: isActive ? Colors.white : color),
+        style: TextStyle(fontSize: 12, color: isActive ? AppColors.ink : color),
       ),
       selected: isActive,
       selectedColor: color.withAlpha(80),
@@ -138,7 +138,7 @@ class AuditFilterBar extends StatelessWidget {
     return FilterChip(
       label: Text(
         '$label ($count)',
-        style: TextStyle(fontSize: 12, color: isActive ? Colors.white : color),
+        style: TextStyle(fontSize: 12, color: isActive ? AppColors.ink : color),
       ),
       selected: isActive,
       selectedColor: color.withAlpha(80),

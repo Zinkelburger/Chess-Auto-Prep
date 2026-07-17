@@ -8,6 +8,8 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../core/slice_filter_controller.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 
 class SequenceFilter extends StatelessWidget {
   final SliceFilterController controller;
@@ -31,24 +33,20 @@ class SequenceFilter extends StatelessWidget {
       children: [
         Text(
           'Move Sequence Filter',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 14,
-            color: Colors.grey[300],
-          ),
+          style: AppTextStyles.subtitle.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 4),
         Text(
           'Find games containing specific moves in order. '
           'Use [gap] between groups that need not be consecutive.',
-          style: TextStyle(color: Colors.grey[500], fontSize: 11),
+          style: AppTextStyles.caption.copyWith(fontSize: 11),
         ),
         const SizedBox(height: 8),
         TextField(
           controller: controller.sequenceText,
           decoration: InputDecoration(
             hintText: 'e.g.  d5 e5 [gap] f6',
-            hintStyle: TextStyle(color: Colors.grey[600], fontSize: 12),
+            hintStyle: AppTextStyles.hint.copyWith(fontSize: 12),
             isDense: true,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 10,
@@ -85,16 +83,16 @@ class SequenceFilter extends StatelessWidget {
               Expanded(
                 child: Text(
                   error,
-                  style: const TextStyle(fontSize: 11, color: Colors.red),
+                  style: const TextStyle(fontSize: 11, color: AppColors.danger),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               )
             else
               const Spacer(),
-            Text(
+            const Text(
               'Max gap: ',
-              style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
             ),
             SizedBox(
               width: 40,
@@ -114,9 +112,9 @@ class SequenceFilter extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            Text(
+            const Text(
               'ply',
-              style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
             ),
           ],
         ),

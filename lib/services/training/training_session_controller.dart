@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
@@ -241,7 +242,9 @@ class TrainingSessionController extends ChangeNotifier
       final json = await storage.readFile(treePath);
       if (json == null || json.isEmpty) return;
 
-      final tree = deserializeTree(json);
+      // Multi-MB jsonDecode + recursive node build — off the UI isolate so
+      // opening the trainer doesn't freeze the frame.
+      final tree = await Isolate.run(() => deserializeTree(json));
       _treeRoot = tree.root;
 
       final config = tree.configSnapshot;

@@ -505,6 +505,8 @@ class HoleHuntService {
         ourMultipv: 4,
         oppMaxChildren: 4,
         oppMassTarget: 0.80,
+        // Tight node budget: keep it on depth, not opening breadth.
+        openingWidthPlies: 0,
         verifyFinal: false,
         // The defaults (0..200, root-anchored) prune attacker tries that
         // merely hold the raw eval — exactly the moves a practical trap is

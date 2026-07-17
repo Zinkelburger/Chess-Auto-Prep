@@ -109,7 +109,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
           text: label,
           style: TextStyle(
             fontSize: fontSize,
-            color: Colors.grey[600],
+            color: AppColors.onSurfaceMuted,
             fontFamily: 'monospace',
             fontWeight: FontWeight.bold,
           ),
@@ -129,7 +129,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
             text: '$moveNum.',
             style: TextStyle(
               fontSize: fontSize,
-              color: Colors.grey[600],
+              color: AppColors.pgnMoveNumber,
               fontFamily: 'monospace',
             ),
           ),
@@ -140,7 +140,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
             text: '$moveNum...',
             style: TextStyle(
               fontSize: fontSize,
-              color: Colors.grey[600],
+              color: AppColors.pgnMoveNumber,
               fontFamily: 'monospace',
             ),
           ),
@@ -163,7 +163,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
               child: Icon(
                 annotation!.prefixIcon,
                 size: annotation.iconSize,
-                color: annotation.prefixIconColor ?? Colors.grey,
+                color: annotation.prefixIconColor ?? AppColors.onSurfaceMuted,
               ),
             ),
           );
@@ -195,15 +195,29 @@ class ClickableMoveLineWidget extends StatelessWidget {
                       padding: movePadding,
                       decoration: isActive
                           ? BoxDecoration(
-                              color: AppColors.expectimax,
+                              color: AppColors.pgnMoveCurrentBg,
                               borderRadius: BorderRadius.circular(2),
+                              border: Border.all(
+                                color: AppColors.pgnMoveCurrent,
+                                width: 1,
+                              ),
                             )
-                          : null,
+                          // Reserve the border width so activating a move
+                          // doesn't reflow the line.
+                          : BoxDecoration(
+                              borderRadius: BorderRadius.circular(2),
+                              border: Border.all(
+                                color: Colors.transparent,
+                                width: 1,
+                              ),
+                            ),
                       child: Text(
                         sanMoves[i],
                         style: TextStyle(
                           fontSize: fontSize,
-                          color: isActive ? Colors.white : AppColors.expectimax,
+                          color: isActive
+                              ? AppColors.pgnMoveCurrentFg
+                              : AppColors.expectimax,
                           fontFamily: 'monospace',
                           fontWeight: isActive
                               ? FontWeight.bold
@@ -231,7 +245,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
               text: annotation!.suffix,
               style: TextStyle(
                 fontSize: fontSize - 1,
-                color: annotation.suffixColor ?? Colors.grey[500],
+                color: annotation.suffixColor ?? AppColors.onSurfaceMuted,
                 fontWeight: annotation.suffixFontWeight,
                 fontFamily: 'monospace',
               ),
@@ -251,7 +265,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
             text: '${sanMoves[i]} ',
             style: TextStyle(
               fontSize: fontSize,
-              color: Colors.grey[500],
+              color: AppColors.onSurfaceMuted,
               fontFamily: 'monospace',
             ),
           ),

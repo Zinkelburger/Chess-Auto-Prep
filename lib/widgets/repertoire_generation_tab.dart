@@ -7,6 +7,7 @@
 library;
 
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
@@ -143,7 +144,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       try {
         final json = await storage.readFile(path);
         if (json == null) return;
-        final tree = deserializeTree(json);
+        final tree = await Isolate.run(() => deserializeTree(json));
         if (!tree.buildComplete && mounted) {
           setState(() {
             final md = tree.configSnapshot['max_depth'];
@@ -284,14 +285,17 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                   style: TextStyle(
                     color: ctrl.lastError != null
                         ? AppColors.danger
-                        : Colors.grey,
+                        : AppColors.onSurfaceMuted,
                   ),
                 ),
               ],
               const SizedBox(height: 8),
               Text(
                 _configFormKey.currentState?.selectionModeDescription() ?? '',
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.onSurfaceMuted,
+                ),
               ),
             ],
           ),
@@ -338,7 +342,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           Text(
             '${tree.totalNodes} nodes, depth ${tree.maxPlyReached}'
             '${tree.startMoves.isNotEmpty ? '\nFrom: ${tree.startMoves}' : ''}',
-            style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.onSurfaceSoft,
+            ),
           ),
           if (!canResume) ...[
             const SizedBox(height: 4),

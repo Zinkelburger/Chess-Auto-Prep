@@ -13,6 +13,8 @@ import 'package:provider/provider.dart';
 import '../core/app_state.dart';
 import '../models/analysis_player_info.dart';
 import '../services/analysis_games_service.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 import '../widgets/analysis_download_dialog.dart';
 import '../widgets/analysis_import_dialog.dart';
@@ -111,7 +113,11 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, size: 64, color: Colors.red),
+              const Icon(
+                Icons.error_outline,
+                size: 64,
+                color: AppColors.danger,
+              ),
               const SizedBox(height: 16),
               Text(_loadError!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
@@ -131,7 +137,11 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.person_search, size: 64, color: Colors.grey[400]),
+            const Icon(
+              Icons.person_search,
+              size: 64,
+              color: AppColors.onSurfaceDim,
+            ),
             const SizedBox(height: 24),
             Text(
               'No Players Downloaded',
@@ -143,7 +153,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
               ' to get started',
               style: Theme.of(
                 context,
-              ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+              ).textTheme.bodyMedium?.copyWith(color: AppColors.onSurfaceMuted),
             ),
             const SizedBox(height: 32),
             Row(
@@ -183,10 +193,10 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
         ? Icons.language
         : Icons.bolt;
     final platformColor = player.isImported
-        ? Colors.orange
+        ? AppColors.platformImported
         : player.platform == 'chesscom'
-        ? Colors.green
-        : Colors.blue;
+        ? AppColors.platformChessCom
+        : AppColors.platformLichess;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -215,7 +225,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
                   children: [
                     Text(
                       player.username,
-                      style: const TextStyle(
+                      style: AppTextStyles.body.copyWith(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
@@ -224,13 +234,15 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
                     Text(
                       '${player.gameCount} games · ${player.platformDisplayName}'
                       ' · ${player.rangeDescription}',
-                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.onSurfaceMuted,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       '${player.isImported ? 'Imported' : 'Downloaded'} '
                       '${player.downloadTimeAgo}',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      style: AppTextStyles.caption,
                     ),
                   ],
                 ),
@@ -277,9 +289,12 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
                     value: 'delete',
                     child: Row(
                       children: [
-                        Icon(Icons.delete, size: 20, color: Colors.red),
+                        Icon(Icons.delete, size: 20, color: AppColors.danger),
                         SizedBox(width: 12),
-                        Text('Delete', style: TextStyle(color: Colors.red)),
+                        Text(
+                          'Delete',
+                          style: TextStyle(color: AppColors.danger),
+                        ),
                       ],
                     ),
                   ),
@@ -311,7 +326,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
             child: const Text('Delete'),
           ),
         ],

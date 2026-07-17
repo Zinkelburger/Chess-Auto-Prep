@@ -11,6 +11,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../theme/app_colors.dart';
 import '../../../utils/keyboard_shortcut_utils.dart';
 import '../models/audit_finding.dart';
 import '../models/audit_result.dart';
@@ -364,7 +365,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
         child: Text(
           'No audit results yet.\nRun an audit from the toolbar (A).',
           textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.grey, fontSize: 13),
+          style: TextStyle(color: AppColors.onSurfaceMuted, fontSize: 13),
         ),
       );
     }

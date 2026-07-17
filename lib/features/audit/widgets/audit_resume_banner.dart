@@ -4,6 +4,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_colors.dart';
 import '../services/audit_persistence.dart';
 
 class AuditResumeBanner extends StatelessWidget {
@@ -25,17 +26,23 @@ class AuditResumeBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.amber.withAlpha(20),
-        border: Border(bottom: BorderSide(color: Colors.amber.withAlpha(60))),
+        color: AppColors.warning.withAlpha(20),
+        border: Border(
+          bottom: BorderSide(color: AppColors.warning.withAlpha(60)),
+        ),
       ),
       child: Row(
         children: [
-          const Icon(Icons.pause_circle_outline, size: 16, color: Colors.amber),
+          const Icon(
+            Icons.pause_circle_outline,
+            size: 16,
+            color: AppColors.warning,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               'Audit interrupted at $checked positions ($findings findings)',
-              style: const TextStyle(fontSize: 11, color: Colors.amber),
+              style: const TextStyle(fontSize: 11, color: AppColors.warning),
             ),
           ),
           TextButton(
@@ -56,7 +63,7 @@ class AuditResumeBanner extends StatelessWidget {
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               textStyle: const TextStyle(fontSize: 11),
-              foregroundColor: Colors.grey,
+              foregroundColor: AppColors.onSurfaceMuted,
             ),
             child: const Text('Start Fresh'),
           ),

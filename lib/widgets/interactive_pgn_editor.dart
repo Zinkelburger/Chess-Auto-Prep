@@ -9,8 +9,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
-import 'package:dartchess/dartchess.dart';
-import 'package:chess_auto_prep/constants/chess_constants.dart';
+import '../theme/pgn_text_styles.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
@@ -440,15 +439,15 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                           ],
                         ),
                       ),
-                      Divider(height: 1, color: Colors.grey[800]),
+                      const Divider(height: 1, color: AppColors.divider),
                       const SizedBox(height: 4),
                     ] else if (_showTitleField) ...[
                       Row(
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.drive_file_rename_outline,
                             size: 15,
-                            color: Colors.grey[500],
+                            color: AppColors.onSurfaceMuted,
                           ),
                           const SizedBox(width: 6),
                           Expanded(
@@ -456,8 +455,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                               controller: _titleController,
                               decoration: InputDecoration(
                                 hintText: 'Line title',
-                                hintStyle: TextStyle(
-                                  color: Colors.grey[600],
+                                hintStyle: const TextStyle(
+                                  color: AppColors.onSurfaceMuted,
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -467,10 +466,10 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                                   vertical: 4,
                                 ),
                               ),
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.grey[200],
+                                color: AppColors.inkSoft,
                               ),
                               onChanged: (_) {
                                 widget.onDirty?.call();
@@ -480,7 +479,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                           ),
                         ],
                       ),
-                      Divider(height: 1, color: Colors.grey[800]),
+                      const Divider(height: 1, color: AppColors.divider),
                       const SizedBox(height: 4),
                     ],
                     Expanded(
@@ -540,40 +539,24 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         startIsWhite,
         isFirstMove: true,
         parentPath: TreePath.empty,
-        positionBefore: _startingPosition(),
       ),
     );
-  }
-
-  Position _startingPosition() {
-    try {
-      return widget.tree.startingFen != kStandardStartFen
-          ? Chess.fromSetup(Setup.parseFen(widget.tree.startingFen))
-          : Chess.initial;
-    } catch (_) {
-      return Chess.initial;
-    }
   }
 
   /// A monospace move-number label (e.g. "12. " or "12... ") for the move list.
   Widget _moveNumberLabel(String text) {
-    return Text(
-      text,
-      style: const TextStyle(
-        color: AppColors.pgnMoveNumber,
-        fontFamily: 'monospace',
-        fontSize: 14,
-      ),
-    );
+    return Text(text, style: PgnTextStyles.moveNumber);
   }
 
+  // Note: this renders SAN straight from the tree — no dartchess replay. The
+  // editor used to thread a Position through the whole recursion (a full
+  // parseSan/play replay of every node on each rebuild) without ever using it.
   List<Widget> _buildMoveWidgets(
     List<MoveNode> siblings,
     int moveNumber,
     bool isWhite, {
     bool isFirstMove = false,
     required TreePath parentPath,
-    required Position positionBefore,
   }) {
     if (parentPath.isEmpty &&
         isFirstMove &&
@@ -591,13 +574,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
     final main = siblings[0];
     final mainPath = parentPath.child(0);
-    final mainMove = main.san == '--'
-        ? null
-        : positionBefore.parseSan(main.san);
-    Position positionAfterMain = positionBefore;
-    if (mainMove != null) {
-      positionAfterMain = positionBefore.play(mainMove);
-    }
 
     // Null moves ('--') anchor comments to a position; show the comment but
     // never the SAN itself (matches the PGN viewer).
@@ -619,26 +595,10 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
     if (siblings.length > 1) {
       for (int i = 1; i < siblings.length; i++) {
-        widgets.add(
-          const Text(
-            ' ( ',
-            style: TextStyle(
-              color: AppColors.pgnVariation,
-              fontFamily: 'monospace',
-              fontSize: 14,
-            ),
-          ),
-        );
+        widgets.add(const Text(' ( ', style: PgnTextStyles.variation));
 
         final variant = siblings[i];
         final variantPath = parentPath.child(i);
-        final variantMove = variant.san == '--'
-            ? null
-            : positionBefore.parseSan(variant.san);
-        Position positionAfterVariant = positionBefore;
-        if (variantMove != null) {
-          positionAfterVariant = positionBefore.play(variantMove);
-        }
 
         if (variant.san != '--') {
           if (isWhite) {
@@ -662,20 +622,10 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
             isWhite ? moveNumber : moveNumber + 1,
             !isWhite,
             parentPath: variantPath,
-            positionBefore: positionAfterVariant,
           ),
         );
 
-        widgets.add(
-          const Text(
-            ' ) ',
-            style: TextStyle(
-              color: AppColors.pgnVariation,
-              fontFamily: 'monospace',
-              fontSize: 14,
-            ),
-          ),
-        );
+        widgets.add(const Text(' ) ', style: PgnTextStyles.variation));
       }
     }
 
@@ -685,7 +635,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         isWhite ? moveNumber : moveNumber + 1,
         !isWhite,
         parentPath: mainPath,
-        positionBefore: positionAfterMain,
       ),
     );
 
@@ -747,8 +696,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       bgColor = AppColors.pgnMoveCurrentBg;
       borderColor = AppColors.pgnMoveCurrent;
     } else if (isOnCtxPath) {
-      textColor = Colors.white70;
-      bgColor = Colors.blueGrey.withAlpha(60);
+      textColor = AppColors.pgnMove;
+      bgColor = AppColors.pgnMoveCurrentBg.withValues(alpha: 0.35);
     } else {
       textColor = AppColors.pgnMove;
       decoration = TextDecoration.underline;
@@ -772,13 +721,13 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           children: [
             Text(
               node.san,
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 14,
+              style: PgnTextStyles.move.copyWith(
                 color: textColor,
-                fontWeight: FontWeight.normal,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                 decoration: decoration,
-                decorationColor: AppColors.onSurfaceDim.withValues(alpha: 0.45),
+                decorationColor: AppColors.onSurfaceMuted.withValues(
+                  alpha: 0.5,
+                ),
                 decorationStyle: TextDecorationStyle.dotted,
               ),
             ),
