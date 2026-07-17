@@ -175,10 +175,16 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
               label: Text(_hasEvals ? 'Re-analyze' : 'Analyze with Engine'),
               onPressed: _showWeaknessConfig,
             ),
-            TextButton.icon(
-              icon: const Icon(Icons.gps_fixed, size: 18),
-              label: const Text('Find Holes'),
-              onPressed: _showHoleHuntConfig,
+            Tooltip(
+              message:
+                  'Hunt exploitable holes from the opposite side '
+                  '(coverage gaps, refutations, expectimax traps) — '
+                  'not just bad raw evals',
+              child: TextButton.icon(
+                icon: const Icon(Icons.gps_fixed, size: 18),
+                label: const Text('Find Holes'),
+                onPressed: _showHoleHuntConfig,
+              ),
             ),
           ],
           IconButton(

@@ -13,6 +13,8 @@ import 'package:provider/provider.dart';
 import '../constants/ui_breakpoints.dart';
 import '../core/app_state.dart';
 import '../core/study_controller.dart';
+import '../models/move_tree.dart' show TreePath;
+import '../services/repertoire_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
 import '../utils/keyboard_shortcut_utils.dart';
@@ -24,6 +26,7 @@ import '../widgets/interactive_pgn_editor.dart';
 import '../widgets/pgn/pgn_annotation_panel.dart';
 import '../widgets/trainer_keyboard_scope.dart';
 import '../widgets/training/move_input_widget.dart';
+import 'puzzle_creator_screen.dart';
 
 class StudyScreen extends StatefulWidget {
   const StudyScreen({super.key});
@@ -41,6 +44,8 @@ class _StudyScreenState extends State<StudyScreen> {
   bool _editingName = false;
   final TextEditingController _nameEditController = TextEditingController();
 
+  AppState? _appStateRef;
+
   @override
   void initState() {
     super.initState();
@@ -48,21 +53,36 @@ class _StudyScreenState extends State<StudyScreen> {
     _study.addListener(_onStudyChanged);
     _study.refreshStudyList();
 
-    // "Edit set in Study" hook: open the pending file (may live outside the
-    // studies directory, e.g. a tactics set).
+    // "Edit study" hook (e.g. from the Repertoire Trainer): open the pending
+    // file now and on later AppState notifications — the screen is cached in
+    // main_screen's IndexedStack, so handoffs after first build arrive as
+    // notifications, not a fresh initState.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final appState = context.read<AppState>();
-      final path = appState.pendingStudyPath;
-      if (path != null) {
-        appState.pendingStudyPath = null;
-        _study.openStudy(path);
-      }
+      _appStateRef = appState;
+      appState.addListener(_onAppStateChanged);
+      _consumePendingStudyPath(appState);
     });
+  }
+
+  void _onAppStateChanged() {
+    final appState = _appStateRef;
+    if (appState == null || !mounted) return;
+    if (appState.currentMode != AppMode.study) return;
+    _consumePendingStudyPath(appState);
+  }
+
+  void _consumePendingStudyPath(AppState appState) {
+    final path = appState.pendingStudyPath;
+    if (path == null) return;
+    appState.pendingStudyPath = null;
+    _study.openStudy(path);
   }
 
   @override
   void dispose() {
+    _appStateRef?.removeListener(_onAppStateChanged);
     _study.removeListener(_onStudyChanged);
     _focusNode.dispose();
     _nameEditController.dispose();
@@ -272,15 +292,10 @@ class _StudyScreenState extends State<StudyScreen> {
     _study.setChapterStartingPosition(position.fen);
   }
 
-  /// Review this study (or just the current chapter) as flashcards in the
-  /// Tactics trainer: each chapter becomes one card (starting FEN → mainline,
-  /// comments shown as the note), optionally with every variation expanded
-  /// into an extra card starting at its branch point.  Review stats write
-  /// back into this file's headers.
-  Future<void> _review({
-    required bool wholeStudy,
-    required bool includeVariations,
-  }) async {
+  /// Train this study (or just the current chapter) in the Repertoire
+  /// Trainer's tactics mode: each chapter is one puzzle — starting FEN,
+  /// solution mainline, comments shown as annotations.
+  Future<void> _train({required bool wholeStudy}) async {
     final path = _study.doc.filePath;
     if (path == null) {
       showAppSnackBar(
@@ -297,19 +312,35 @@ class _StudyScreenState extends State<StudyScreen> {
       showAppSnackBar(
         context,
         wholeStudy
-            ? 'No chapters with moves to review yet.'
-            : 'This chapter has no moves to review yet.',
+            ? 'No chapters with moves to train yet.'
+            : 'This chapter has no moves to train yet.',
         isError: true,
       );
       return;
     }
+    // Focus one chapter by the *same* line id the trainer will derive when it
+    // re-parses the saved file. Deriving it from this chapter's PGN (header
+    // preferred, stable fallback) rather than assuming the stable fallback
+    // keeps "Train this chapter" correct even for studies imported with a
+    // LineID/Id/Guid header (Chessable/ChessBase exports).
+    String? lineId;
+    if (!wholeStudy) {
+      final service = RepertoireService();
+      lineId =
+          service.lineIdForGamePgn(
+            _study.chapter.toPgn(),
+            _study.chapterIndex,
+          ) ??
+          service.generateLineId(
+            _study.tree.sanSequenceAt(
+              _study.tree.mainlineEndFrom(TreePath.empty),
+            ),
+            _study.chapterIndex,
+          );
+    }
     await _study.flushSave();
     if (!mounted) return;
-    context.read<AppState>().switchToTacticsReview(
-      path: path,
-      gameIndex: wholeStudy ? null : _study.chapterIndex,
-      includeVariations: includeVariations,
-    );
+    context.read<AppState>().switchToStudyTraining(path: path, lineId: lineId);
   }
 
   Future<void> _renameChapter() async {
@@ -374,24 +405,15 @@ class _StudyScreenState extends State<StudyScreen> {
             onPressed: _editChapterPosition,
           ),
           PopupMenuButton<String>(
-            icon: const Icon(Icons.style_outlined, size: 20),
-            tooltip: 'Review as flashcards',
-            onSelected: (action) => _review(
-              wholeStudy: action.startsWith('study'),
-              includeVariations: action.endsWith('vars'),
-            ),
+            icon: const Icon(Icons.school_outlined, size: 20),
+            tooltip: 'Train in Repertoire Trainer',
+            onSelected: (action) => _train(wholeStudy: action == 'study'),
             itemBuilder: (_) => const [
-              PopupMenuItem(value: 'chapter', child: Text('Review chapter')),
               PopupMenuItem(
-                value: 'chapter_vars',
-                child: Text('Review chapter + variations'),
+                value: 'chapter',
+                child: Text('Train this chapter'),
               ),
-              PopupMenuDivider(),
-              PopupMenuItem(value: 'study', child: Text('Review study')),
-              PopupMenuItem(
-                value: 'study_vars',
-                child: Text('Review study + variations'),
-              ),
+              PopupMenuItem(value: 'study', child: Text('Train whole study')),
             ],
           ),
           IconButton(
@@ -403,8 +425,9 @@ class _StudyScreenState extends State<StudyScreen> {
             icon: const Icon(Icons.extension, size: 20),
             tooltip: 'Make puzzle from this position',
             onPressed: () {
-              context.read<AppState>().switchToPuzzleCreator(
-                seedFen: _study.currentPosition.fen,
+              PuzzleCreatorScreen.push(
+                context,
+                initialFen: _study.currentPosition.fen,
               );
             },
           ),
@@ -628,8 +651,8 @@ class _StudyScreenState extends State<StudyScreen> {
                 tooltip: 'Manage chapters',
                 onSelected: (action) {
                   switch (action) {
-                    case 'review':
-                      _review(wholeStudy: false, includeVariations: false);
+                    case 'train':
+                      _train(wholeStudy: false);
                     case 'add_from_position':
                       _addChapter(fromPosition: true);
                     case 'set_position':
@@ -642,8 +665,8 @@ class _StudyScreenState extends State<StudyScreen> {
                 },
                 itemBuilder: (_) => const [
                   PopupMenuItem(
-                    value: 'review',
-                    child: Text('Review this chapter'),
+                    value: 'train',
+                    child: Text('Train this chapter'),
                   ),
                   PopupMenuDivider(),
                   PopupMenuItem(

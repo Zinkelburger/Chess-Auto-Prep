@@ -25,12 +25,13 @@ mixin _ReplayPhaseMixin
   RepertoireController get session;
   int get _lineGeneration;
 
-  // Cross-phase helper defined on the host class.
+  // Cross-phase helpers defined on the host class.
   void updateMoveProgress(
     RepertoireLine line,
     int moveIndex, {
     required bool wasCorrect,
   });
+  void _finishLine();
 
   void startReplayPhase() {
     wrongMoveIndices = wrongMoveIndices.toSet().toList()..sort();
@@ -45,11 +46,7 @@ mixin _ReplayPhaseMixin
   void setupReplayPosition() {
     if (currentLine == null) return;
     if (replayIndex >= wrongMoveIndices.length) {
-      phase = TrainingPhase.finished;
-      waitingForUser = false;
-      feedback = 'Line complete — rate your recall.';
-      currentAnnotation = null;
-      notifyListeners();
+      _finishLine();
       return;
     }
 

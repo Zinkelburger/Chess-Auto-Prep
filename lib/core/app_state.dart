@@ -36,25 +36,13 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
   /// mode, pre-seeded with these PGN file paths.
   List<String>? pendingGenerationPgnPaths;
 
-  /// FEN to seed the puzzle creator with ("Make puzzle from this position"
-  /// hooks in other modes).  Set before switching to tactics mode; consumed
-  /// by the tactics panel on activation.
-  String? pendingPuzzleSeedFen;
+  /// Study PGN to train in the Repertoire Trainer ("Train" in Study mode).
+  /// Set before switching to trainer mode; consumed by the trainer screen on
+  /// activation.  [pendingLineId] optionally focuses one chapter's line.
+  String? pendingTrainStudyPath;
 
-  /// PGN file to open as an external puzzle set ("Review as flashcards" in
-  /// Study mode).  Set before switching to tactics mode; consumed by the
-  /// tactics panel on activation.
-  String? pendingReviewPgnPath;
-
-  /// Restrict the pending review to one PGN game (chapter) index;
-  /// null = the whole file.
-  int? pendingReviewGameIndex;
-
-  /// Whether the pending review expands variations into extra cards.
-  bool pendingReviewIncludeVariations = false;
-
-  /// PGN file to open for editing in Study mode ("Edit set in Study" in
-  /// Tactics mode).  Consumed by the study screen on activation.
+  /// PGN file to open for editing in Study mode ("Edit study" in the
+  /// Repertoire Trainer).  Consumed by the study screen on activation.
   String? pendingStudyPath;
 
   /// PGN file to open in the PGN Viewer ("Open Games in PGN Viewer" in
@@ -89,31 +77,18 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
-  /// Switch to tactics mode and open the puzzle creator seeded with [seedFen].
-  void switchToPuzzleCreator({required String seedFen}) {
-    pendingPuzzleSeedFen = seedFen;
-    _currentMode = AppMode.tactics;
-    notifyListeners();
-  }
-
-  /// Switch to tactics mode reviewing the PGN file at [path] as a puzzle set
-  /// ("Review as flashcards" in Study mode).  [gameIndex] restricts the
-  /// review to one chapter; [includeVariations] expands variations into
-  /// extra cards.
-  void switchToTacticsReview({
-    required String path,
-    int? gameIndex,
-    bool includeVariations = false,
-  }) {
-    pendingReviewPgnPath = path;
-    pendingReviewGameIndex = gameIndex;
-    pendingReviewIncludeVariations = includeVariations;
-    _currentMode = AppMode.tactics;
+  /// Switch to the Repertoire Trainer with the study at [path] loaded as a
+  /// tactics-mode training source ("Train" in Study mode).  [lineId]
+  /// optionally starts on one chapter's line.
+  void switchToStudyTraining({required String path, String? lineId}) {
+    pendingTrainStudyPath = path;
+    pendingLineId = lineId;
+    _currentMode = AppMode.repertoireTrainer;
     notifyListeners();
   }
 
   /// Switch to Study mode with the PGN file at [path] opened for editing
-  /// ("Edit set in Study" in Tactics mode).
+  /// ("Edit study" in the Repertoire Trainer).
   void switchToStudyEdit({required String path}) {
     pendingStudyPath = path;
     _currentMode = AppMode.study;

@@ -2,6 +2,7 @@ import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
 import 'package:chess_auto_prep/widgets/training/move_input_widget.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -16,6 +17,7 @@ void main() {
       Position? position,
       bool enabled = true,
       void Function(CompletedMove)? onMove,
+      bool Function(KeyEvent)? onNavigationKey,
     }) {
       return MaterialApp(
         home: Scaffold(
@@ -23,6 +25,7 @@ void main() {
             position: position ?? startPosition,
             enabled: enabled,
             onMove: onMove ?? (_) {},
+            onNavigationKey: onNavigationKey,
           ),
         ),
       );
@@ -250,6 +253,112 @@ void main() {
 
       expect(received, isNotNull);
       expect(received!.san, 'O-O');
+    });
+
+    // ── Trainer navigation keys ──────────────────────────────────────────
+    // The tactics trainer's shortcut handler is a focus-tree sibling, so the
+    // field forwards non-editing keys to onNavigationKey and swallows whatever
+    // it claims — that's what keeps S/P and the arrow keys out of the textbox.
+
+    testWidgets('forwards navigation keys to onNavigationKey while focused', (
+      tester,
+    ) async {
+      final received = <LogicalKeyboardKey>[];
+      await tester.pumpWidget(
+        buildWidget(
+          onNavigationKey: (event) {
+            received.add(event.logicalKey);
+            return true; // claim the key
+          },
+        ),
+      );
+
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pump();
+
+      expect(received, [
+        LogicalKeyboardKey.keyS,
+        LogicalKeyboardKey.keyP,
+        LogicalKeyboardKey.arrowLeft,
+        LogicalKeyboardKey.arrowRight,
+        LogicalKeyboardKey.space,
+      ]);
+    });
+
+    testWidgets('a claimed navigation key never types into the field', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildWidget(onNavigationKey: (_) => true));
+
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField));
+      expect(textField.controller!.text, isEmpty);
+    });
+
+    testWidgets('arrow keys stay in the field for caret editing while typing', (
+      tester,
+    ) async {
+      final received = <LogicalKeyboardKey>[];
+      await tester.pumpWidget(
+        buildWidget(
+          onNavigationKey: (event) {
+            received.add(event.logicalKey);
+            return true; // claim everything it's offered
+          },
+        ),
+      );
+
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+
+      // A partial, ambiguous multi-char move (no auto-submit from the start
+      // position) so there is text to edit.
+      await tester.enterText(find.byType(TextField), 'Nb');
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+
+      // With text present, ←/→ are NOT forwarded — the field keeps them so the
+      // caret can be repositioned to fix a typo.
+      expect(received, isEmpty);
+      final textField = tester.widget<TextField>(find.byType(TextField));
+      expect(textField.controller!.text, 'Nb');
+    });
+
+    testWidgets('Escape and Tab are handled by the field, not forwarded', (
+      tester,
+    ) async {
+      final received = <LogicalKeyboardKey>[];
+      await tester.pumpWidget(
+        buildWidget(
+          onNavigationKey: (event) {
+            received.add(event.logicalKey);
+            return true;
+          },
+        ),
+      );
+
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+
+      expect(received, isEmpty);
     });
   });
 }

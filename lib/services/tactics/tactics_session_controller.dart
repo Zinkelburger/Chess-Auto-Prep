@@ -3,6 +3,7 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 
 import '../../models/tactics_position.dart';
 import '../../models/tactics_session_settings.dart';
@@ -78,6 +79,14 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// (Manual navigation reports completion through [skipPosition] returning
   /// `null` instead.)
   VoidCallback? onSessionCompleted;
+
+  /// Set by the control panel: routes a navigation key pressed while the
+  /// move-input field owns focus (Space, S/P, the arrow keys, J) to the panel's
+  /// trainer shortcuts, so those keys drive puzzle/solution navigation instead
+  /// of typing into the field. Returns true when the key was consumed. The move
+  /// input and the panel are siblings in the focus tree, so key events can't
+  /// bubble between them — this callback is the bridge.
+  bool Function(LogicalKeyboardKey key)? onTrainerNavigationKey;
 
   TacticsPosition? currentPosition;
   bool positionSolved = false;

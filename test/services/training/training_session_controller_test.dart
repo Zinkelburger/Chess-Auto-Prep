@@ -43,6 +43,7 @@ class _FakeRepertoireService extends RepertoireService {
   Future<List<RepertoireLine>> parseRepertoireFile(
     String filePath, {
     String? trainingColor,
+    bool colorFromStartingSide = false,
   }) async {
     if (parseError != null) throw parseError!;
     return List.of(lines);
@@ -587,6 +588,193 @@ void main() {
       controller.updateMoveProgress(line, 0, wasCorrect: false);
       expect(controller.moveProgressMap['X:0']!.correctStreak, 0);
       expect(controller.moveProgressMap['X:0']!.learned, isFalse);
+      controller.dispose();
+    });
+  });
+
+  group('training modes', () {
+    test('tactics mode drills a new line cold — no learn phase', () async {
+      final controller = buildController();
+      final line = _line('T', ['e4', 'e5']);
+      controller.lines = [line];
+      // No review entry → the line is "new", but tactics mode must not
+      // reveal the solution via the learn walkthrough.
+      controller.trainingMode = TrainingMode.tactics;
+
+      controller.startLine(line);
+      expect(controller.phase, TrainingPhase.drilling);
+      expect(controller.hadLearnPhaseThisSession, isFalse);
+      await _waitFor(() => controller.waitingForUser);
+      expect(controller.currentMoveIndex, 0);
+      controller.dispose();
+    });
+
+    test('tactics mode never auto-plays intro moves', () async {
+      final controller = buildController()
+        ..settings = _fastSettings()
+        ..settings.skipToFirstComment = true;
+      final line = _line(
+        'T2',
+        ['e4', 'e5', 'Nf3'],
+        comments: {'2': 'The point.'},
+      );
+      controller.lines = [line];
+      controller.reviewMap['T2'] = _entry('', 'T2');
+
+      // Repertoire mode skips ahead to the first commented move…
+      controller.startLine(line);
+      expect(controller.trainingStartIndex, 2);
+
+      // …tactics mode starts at the puzzle position, always.
+      controller.trainingMode = TrainingMode.tactics;
+      controller.startLine(line);
+      expect(controller.trainingStartIndex, 0);
+      await _waitFor(() => controller.waitingForUser);
+      expect(controller.session.moveHistory, isEmpty);
+      controller.dispose();
+    });
+
+    test('setStudySource defaults to tactics + linear; setRepertoire resets '
+        'to repertoire + spaced', () {
+      final controller = buildController();
+
+      controller.setStudySource(meta());
+      expect(controller.sourceIsStudy, isTrue);
+      expect(controller.trainingMode, TrainingMode.tactics);
+      expect(controller.repetitionMode, RepetitionMode.linear);
+
+      controller.setRepertoire(meta());
+      expect(controller.sourceIsStudy, isFalse);
+      expect(controller.trainingMode, TrainingMode.repertoire);
+      expect(controller.repetitionMode, RepetitionMode.spaced);
+      controller.dispose();
+    });
+  });
+
+  group('linear repetition', () {
+    test('queue includes non-due lines; a completed line drops out with '
+        'pass/fail recorded but no SRS scheduling', () async {
+      repService.lines = [
+        _line('A', ['e4']),
+        _line('B', ['d4']),
+      ];
+      // A is scheduled far in the future — spaced mode would skip it.
+      final farDue = DateTime.now().toUtc().add(const Duration(days: 30));
+      reviewService.entries = [_entry(repPath(), 'A', due: farDue)];
+
+      final controller = buildController()
+        ..settings = _fastSettings(autoNext: false)
+        ..setStudySource(meta());
+      await controller.loadRepertoire();
+
+      // Linear ignores due dates: both lines queue in file order.
+      expect(controller.dueQueue.map((l) => l.id), ['A', 'B']);
+      expect(controller.currentLine!.id, 'A');
+      expect(controller.phase, TrainingPhase.drilling);
+      await _waitFor(() => controller.waitingForUser);
+
+      await controller.handleUserMove(_move(uci: 'e2e4', san: 'e4'));
+      await _waitFor(() => controller.phase == TrainingPhase.finished);
+      expect(controller.feedback, 'Puzzle solved!');
+
+      // The finished line left the queue; stats recorded, no scheduling.
+      expect(controller.dueQueue.map((l) => l.id), ['B']);
+      await _waitFor(() => reviewService.history.length == 1);
+      expect(reviewService.history.single.sessionType, 'linear');
+      expect(reviewService.history.single.hadMistake, isFalse);
+      expect(controller.reviewMap['A']!.passCount, 1);
+      expect(
+        controller.reviewMap['A']!.lastRating,
+        'good',
+        reason: 'linear completion must not touch the SRS rating',
+      );
+      expect(
+        controller.reviewMap['A']!.dueDateUtc,
+        farDue,
+        reason: 'linear completion must not reschedule the line',
+      );
+      expect(controller.sessionCorrect, 1);
+      expect(
+        repService.headerUpdates,
+        isEmpty,
+        reason: 'no SRS headers written in linear mode',
+      );
+
+      // Next line, solve it too → the set is complete.
+      controller.nextLine();
+      await _waitFor(() => controller.waitingForUser);
+      expect(controller.currentLine!.id, 'B');
+      await controller.handleUserMove(_move(uci: 'd2d4', san: 'd4'));
+      await _waitFor(() => controller.phase == TrainingPhase.finished);
+      expect(controller.dueQueue, isEmpty);
+
+      controller.nextLine();
+      expect(controller.feedback, 'Set complete!');
+      controller.dispose();
+    });
+
+    test('a mistake in linear mode counts as a fail', () async {
+      repService.lines = [
+        _line('A', ['e4']),
+      ];
+      final controller = buildController()
+        ..settings = _fastSettings(wrongMoveReplay: false, autoNext: false)
+        ..setStudySource(meta());
+      await controller.loadRepertoire();
+      await _waitFor(() => controller.waitingForUser);
+
+      await controller.handleUserMove(_move(uci: 'd2d4', san: 'd4'));
+      await _waitFor(() => controller.phase == TrainingPhase.finished);
+      expect(controller.feedback, 'Solved — with mistakes.');
+      await _waitFor(() => reviewService.history.length == 1);
+      expect(controller.reviewMap['A']!.failCount, 1);
+      expect(controller.sessionIncorrect, 1);
+      controller.dispose();
+    });
+
+    test('rateLine in linear mode only advances — no scheduling', () async {
+      repService.lines = [
+        _line('A', ['e4']),
+        _line('B', ['d4']),
+      ];
+      final controller = buildController()
+        ..settings = _fastSettings(autoNext: false)
+        ..setStudySource(meta());
+      await controller.loadRepertoire();
+      await _waitFor(() => controller.waitingForUser);
+
+      await controller.handleUserMove(_move(uci: 'e2e4', san: 'e4'));
+      await _waitFor(() => controller.phase == TrainingPhase.finished);
+
+      await controller.rateLine(ReviewRating.good);
+      expect(controller.currentLine!.id, 'B');
+      expect(controller.reviewMap['A']!.lastRating, '');
+      expect(controller.reviewMap['A']!.dueDateUtc, isNull);
+      controller.dispose();
+    });
+
+    test('switching repetition mode rebuilds the queue', () async {
+      repService.lines = [
+        _line('A', ['e4']),
+      ];
+      reviewService.entries = [
+        _entry(
+          repPath(),
+          'A',
+          due: DateTime.now().toUtc().add(const Duration(days: 30)),
+        ),
+      ];
+      final controller = buildController()..setRepertoire(meta());
+      await controller.loadRepertoire();
+
+      // Spaced: A is not due → empty queue.
+      expect(controller.dueQueue, isEmpty);
+
+      controller.setRepetitionMode(RepetitionMode.linear);
+      expect(controller.dueQueue.map((l) => l.id), ['A']);
+
+      controller.setRepetitionMode(RepetitionMode.spaced);
+      expect(controller.dueQueue, isEmpty);
       controller.dispose();
     });
   });

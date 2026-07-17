@@ -40,7 +40,12 @@ String _sanitizeComment(String s) =>
     s.replaceAll('{', '(').replaceAll('}', ')');
 
 /// Numbered movetext for [solutionSan] starting from [fen]
-/// (e.g. `4... Qh4# 5. Ke2`), with an optional leading brace [comment].
+/// (e.g. `4... Qh4# 5. Ke2`), with an optional brace [comment].
+///
+/// The comment leads the movetext by default (the tactics decoder reads it
+/// as the game-level note); [commentAfterMoves] attaches it after the last
+/// move instead, so move-tree round-trips (studies) keep it as a move
+/// annotation.
 ///
 /// Move numbering and side-to-move are derived from [fen]; serialization
 /// delegates to the shared [buildNumberedMovetext]. (Formerly named
@@ -51,9 +56,11 @@ String buildSolutionMovetext(
   List<String> solutionSan, {
   String? comment,
   String result = '*',
+  bool commentAfterMoves = false,
 }) {
+  final hasComment = comment != null && comment.trim().isNotEmpty;
   final buf = StringBuffer();
-  if (comment != null && comment.trim().isNotEmpty) {
+  if (hasComment && !commentAfterMoves) {
     buf.write('{${_sanitizeComment(comment.trim())}} ');
   }
   if (solutionSan.isNotEmpty) {
@@ -67,6 +74,9 @@ String buildSolutionMovetext(
     );
     buf.write(' ');
   }
+  if (hasComment && commentAfterMoves) {
+    buf.write('{${_sanitizeComment(comment.trim())}} ');
+  }
   buf.write(result);
   return buf.toString();
 }
@@ -77,11 +87,16 @@ String buildSolutionMovetext(
 /// converting a stored `correctLine` that may mix SAN and UCI).  When
 /// [solutionSan] is empty but the puzzle has a `correctLine`, the raw tokens
 /// are preserved in a `[CorrectLine]` header instead of the movetext.
+///
+/// [noteAfterLastMove] places the note after the final move instead of
+/// leading the movetext — required when the game becomes a study chapter,
+/// where only per-move comments survive the move-tree round-trip.
 String encodePuzzlePgn(
   TacticsPosition puzzle,
   List<String> solutionSan, {
   String? event,
   bool includeNote = true,
+  bool noteAfterLastMove = false,
   List<String> solutionPvSan = const [],
 }) {
   final headers = StringBuffer();
@@ -134,6 +149,7 @@ String encodePuzzlePgn(
     puzzle.fen,
     solutionSan,
     comment: includeNote ? puzzle.mistakeAnalysis : null,
+    commentAfterMoves: noteAfterLastMove,
   );
   return '$headers\n$movetext\n';
 }

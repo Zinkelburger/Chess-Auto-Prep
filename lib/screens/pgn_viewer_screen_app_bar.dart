@@ -125,8 +125,9 @@ mixin _AppBarBuildersMixin
                 } else if (value == 'trophies') {
                   _showTrophyCabinet();
                 } else if (value == 'make_puzzle') {
-                  context.read<AppState>().switchToPuzzleCreator(
-                    seedFen: _controller.currentPosition.fen,
+                  PuzzleCreatorScreen.push(
+                    context,
+                    initialFen: _controller.currentPosition.fen,
                   );
                 }
               },

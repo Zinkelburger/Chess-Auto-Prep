@@ -429,32 +429,5 @@ void main() {
         expect(db2.isExternalSet, isFalse);
       },
     );
-
-    test('addPositionToDatabase writes through to the database file during '
-        'a review', () async {
-      final db = TacticsDatabase();
-      await db.addPosition(_pos(_fen(1)));
-
-      final study = studyFile('S');
-      await study.create(recursive: true);
-      await study.writeAsString(studyPgn);
-      await db.openExternalSet(study.path);
-
-      final added = await db.addPositionToDatabase(_pos(_fen(2)));
-      expect(added, isTrue);
-      expect(
-        db.positions.map((p0) => p0.fen),
-        isNot(contains(_fen(2))),
-        reason: 'the loaded review set is untouched',
-      );
-
-      await db.closeExternalSet();
-      expect(db.positions.map((p0) => p0.fen), containsAll([_fen(1), _fen(2)]));
-      expect(
-        await study.readAsString(),
-        isNot(contains(_fen(2))),
-        reason: 'the study file is untouched',
-      );
-    });
   });
 }

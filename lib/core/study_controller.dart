@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart';
 import '../models/move_tree.dart';
 import '../models/repertoire_metadata.dart';
 import '../models/study_document.dart';
+import '../services/pgn_parsing_service.dart' show extractHeaders;
 import '../services/storage/storage_factory.dart';
 import '../utils/chess_utils.dart' show tryParseFen;
 import 'package:chess_auto_prep/utils/log.dart';
@@ -36,6 +37,12 @@ class StudyController extends ChangeNotifier with SafeChangeNotifier {
   bool get dirty => _dirty;
 
   bool flipped = false;
+
+  /// Bumped whenever the active document is (re)assigned — [openStudy],
+  /// [newStudy], [deleteStudy].  [openStudy] decodes off the UI isolate, so
+  /// two quick opens can finish out of call order; the winner captures this
+  /// token before its await and bails if a newer open/replace superseded it.
+  int _docGeneration = 0;
 
   Timer? _autoSaveTimer;
   static const _autoSaveDelay = Duration(seconds: 2);
@@ -62,6 +69,7 @@ class StudyController extends ChangeNotifier with SafeChangeNotifier {
     if (await storage.fileExists(path)) {
       throw ArgumentError('A study named "$name" already exists');
     }
+    _docGeneration++; // supersede any in-flight openStudy
     await flushSave();
     _doc = StudyDocument.fresh(name)..filePath = path;
     _chapterIndex = 0;
@@ -82,8 +90,13 @@ class StudyController extends ChangeNotifier with SafeChangeNotifier {
     String chapterName,
     String pgn,
   ) async {
+    // Carry the source headers along (StarRating, White/Black, …) so a
+    // chapter written by the puzzle creator or "Add line to study" keeps
+    // them across the in-memory round-trip (Event/FEN/SetUp are regenerated
+    // by StudyChapter.toPgn).
     final chapter = StudyChapter(
       name: chapterName,
+      headers: extractHeaders(pgn),
       tree: MoveTree.fromPgn(pgn),
     );
     if (_doc.filePath == path) {
@@ -104,15 +117,21 @@ class StudyController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   Future<void> openStudy(String path) async {
+    final generation = ++_docGeneration;
     await flushSave();
     final content = await StorageFactory.instance.readFile(path);
+    if (generation != _docGeneration) return; // superseded by a newer open
     final name = path.split('/').last.replaceAll(RegExp(r'\.pgn$'), '');
     // fromPgn runs PgnGame.parsePgn + a full move replay for every chapter —
     // off the UI isolate so opening a large study doesn't freeze the frame.
     final text = content ?? '';
-    _doc = await Isolate.run(
+    final loaded = await Isolate.run(
       () => StudyDocument.fromPgn(text, name: name, filePath: path),
     );
+    // A later open (or newStudy/deleteStudy) may have finished while this
+    // decode ran; don't clobber it with this now-stale document.
+    if (generation != _docGeneration) return;
+    _doc = loaded;
     _chapterIndex = 0;
     _cursor = TreePath.empty;
     _dirty = false;
@@ -143,6 +162,7 @@ class StudyController extends ChangeNotifier with SafeChangeNotifier {
   Future<void> deleteStudy(String path) async {
     await StorageFactory.instance.deleteFile(path);
     if (_doc.filePath == path) {
+      _docGeneration++; // supersede any in-flight openStudy of this file
       _doc = StudyDocument.fresh('Untitled study');
       _chapterIndex = 0;
       _cursor = TreePath.empty;

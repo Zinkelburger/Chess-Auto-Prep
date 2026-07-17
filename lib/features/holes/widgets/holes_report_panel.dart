@@ -294,8 +294,11 @@ class _HolesReportPanelState extends State<HolesReportPanel> {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Run Find Holes to search these lines for uncovered '
-            'strong moves, refutations, and practical traps.',
+            'Find Holes attacks these lines from the opposite side — '
+            'uncovered replies, verified refutations, and Maia '
+            'expectimax traps at end positions — then ranks a short '
+            'list of killer holes. Different from Analyze with Engine, '
+            'which only colors positions by raw Stockfish eval.',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.onSurfaceMuted, fontSize: 12),
           ),

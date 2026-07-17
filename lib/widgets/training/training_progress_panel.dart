@@ -72,11 +72,15 @@ class TrainingBottomControls extends StatelessWidget {
   final int dueQueueLength;
   final ValueChanged<bool> onAutoNextChanged;
 
+  /// Suffix after the queue count: 'due' (spaced) or 'left' (linear).
+  final String queueLabel;
+
   const TrainingBottomControls({
     super.key,
     required this.settings,
     required this.dueQueueLength,
     required this.onAutoNextChanged,
+    this.queueLabel = 'due',
   });
 
   @override
@@ -91,7 +95,7 @@ class TrainingBottomControls extends StatelessWidget {
         ),
         const Spacer(),
         Text(
-          '$dueQueueLength due',
+          '$dueQueueLength $queueLabel',
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ],

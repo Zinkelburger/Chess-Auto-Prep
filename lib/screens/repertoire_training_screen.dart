@@ -1,5 +1,8 @@
-/// Repertoire Trainer - Chessable-style line drilling with spaced repetition
+/// Repertoire Trainer - Chessable-style line drilling with spaced repetition,
+/// plus a tactics mode for training studies of custom puzzles.
 library;
+
+import 'dart:async' show unawaited;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +11,7 @@ import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
 import '../models/repertoire_metadata.dart';
+import '../models/training_settings.dart';
 import '../services/training/training_phase.dart';
 import '../services/training/training_session_controller.dart';
 import '../theme/app_colors.dart';
@@ -72,8 +76,11 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     });
   }
 
+  AppState? _appStateRef;
+
   @override
   void dispose() {
+    _appStateRef?.removeListener(_onAppStateChanged);
     _training.removeListener(_onTrainingChanged);
     _training.dispose();
     _tabController.dispose();
@@ -91,25 +98,53 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     await _training.loadSettings();
     if (!mounted) return;
 
+    // The screen is cached in main_screen's IndexedStack, so later
+    // builder/study → trainer handoffs arrive as AppState notifications,
+    // not a fresh initState.
     final appState = context.read<AppState>();
-    if (appState.pendingRepertoirePath != null &&
-        appState.currentMode == AppMode.repertoireTrainer) {
-      _training.setRepertoire(
-        RepertoireMetadata(
-          filePath: appState.pendingRepertoirePath!,
-          name: p.basenameWithoutExtension(appState.pendingRepertoirePath!),
-          lastModified: DateTime.now(),
-        ),
-      );
-      final lineId = appState.pendingLineId;
-      appState.pendingRepertoirePath = null;
-      appState.pendingLineId = null;
-      await _training.loadRepertoire(startLineId: lineId);
-    } else if (_training.repertoire != null) {
+    _appStateRef = appState;
+    appState.addListener(_onAppStateChanged);
+
+    if (_consumePendingSource(appState)) return;
+    if (_training.repertoire != null) {
       await _training.loadRepertoire(startLineId: widget.startLineId);
     } else {
       _training.setIdle();
     }
+  }
+
+  void _onAppStateChanged() {
+    final appState = _appStateRef;
+    if (appState == null || !mounted) return;
+    if (appState.currentMode != AppMode.repertoireTrainer) return;
+    _consumePendingSource(appState);
+  }
+
+  /// Consume a pending repertoire or study handoff.  Returns true when a
+  /// source was consumed and its load started.
+  bool _consumePendingSource(AppState appState) {
+    final studyPath = appState.pendingTrainStudyPath;
+    final repertoirePath = appState.pendingRepertoirePath;
+    if (studyPath == null && repertoirePath == null) return false;
+
+    final lineId = appState.pendingLineId;
+    appState.pendingTrainStudyPath = null;
+    appState.pendingRepertoirePath = null;
+    appState.pendingLineId = null;
+
+    final path = studyPath ?? repertoirePath!;
+    final metadata = RepertoireMetadata(
+      filePath: path,
+      name: p.basenameWithoutExtension(path),
+      lastModified: DateTime.now(),
+    );
+    if (studyPath != null) {
+      _training.setStudySource(metadata);
+    } else {
+      _training.setRepertoire(metadata);
+    }
+    unawaited(_training.loadRepertoire(startLineId: lineId));
+    return true;
   }
 
   Future<void> _selectRepertoire() async {
@@ -127,6 +162,13 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     context.read<AppState>().switchToBuilder(
       repertoirePath: _training.repertoire!.filePath,
       lineId: _training.currentLine?.id,
+    );
+  }
+
+  void _openInStudy() {
+    if (_training.repertoire == null) return;
+    context.read<AppState>().switchToStudyEdit(
+      path: _training.repertoire!.filePath,
     );
   }
 
@@ -222,7 +264,13 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
             icon: const Icon(Icons.refresh),
             onPressed: () => _training.loadRepertoire(),
           ),
-        if (repertoire != null)
+        if (repertoire != null && _training.sourceIsStudy)
+          IconButton(
+            tooltip: 'Edit study',
+            icon: const Icon(Icons.menu_book_outlined),
+            onPressed: _openInStudy,
+          )
+        else if (repertoire != null)
           IconButton(
             tooltip: 'Open in Builder',
             icon: const Icon(Icons.construction),
@@ -244,9 +292,17 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     _training.loadRepertoire();
   }
 
+  void _onStudySelected(RepertoireMetadata study) {
+    _training.setStudySource(study);
+    _training.loadRepertoire();
+  }
+
   Widget _buildBody() {
     if (_training.repertoire == null && !_training.isLoading) {
-      return RepertoireListBody(onSelected: _onRepertoireSelected);
+      return RepertoireListBody(
+        onSelected: _onRepertoireSelected,
+        onStudySelected: _onStudySelected,
+      );
     }
 
     final bootstrap = RepertoireSelectorPanel(
@@ -327,12 +383,53 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     );
   }
 
+  /// Mode selectors: what is trained (repertoire lines vs tactics puzzles)
+  /// and how completions schedule (spaced repetition vs linear).
+  Widget _buildModeSelectors() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        SegmentedButton<TrainingMode>(
+          segments: [
+            for (final mode in TrainingMode.values)
+              ButtonSegment(value: mode, label: Text(mode.label)),
+          ],
+          selected: {_training.trainingMode},
+          onSelectionChanged: (selection) =>
+              _training.setTrainingMode(selection.first),
+          showSelectedIcon: false,
+          style: const ButtonStyle(
+            visualDensity: VisualDensity.compact,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
+        SegmentedButton<RepetitionMode>(
+          segments: [
+            for (final mode in RepetitionMode.values)
+              ButtonSegment(value: mode, label: Text(mode.label)),
+          ],
+          selected: {_training.repetitionMode},
+          onSelectionChanged: (selection) =>
+              _training.setRepetitionMode(selection.first),
+          showSelectedIcon: false,
+          style: const ButtonStyle(
+            visualDensity: VisualDensity.compact,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildTrainTab() {
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _buildModeSelectors(),
+          const SizedBox(height: 8),
           if (_training.currentLine != null) ...[
             Text(
               _training.currentLine!.name,
@@ -353,6 +450,8 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
                     lineHadMistake: _training.lineHadMistake,
                     hadLearnPhaseThisSession:
                         _training.hadLearnPhaseThisSession == true,
+                    repetitionMode: _training.repetitionMode,
+                    trainingMode: _training.trainingMode,
                     settings: _training.settings,
                     sessionCorrect: _training.sessionCorrect,
                     sessionIncorrect: _training.sessionIncorrect,
@@ -387,6 +486,9 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
           TrainingBottomControls(
             settings: _training.settings,
             dueQueueLength: _training.dueQueue.length,
+            queueLabel: _training.repetitionMode == RepetitionMode.linear
+                ? 'left'
+                : 'due',
             onAutoNextChanged: (v) {
               setState(() => _training.settings.autoNext = v);
               _training.settings.save();
@@ -454,9 +556,13 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
                 ),
               ),
               TextButton.icon(
-                onPressed: _openInBuilder,
+                onPressed: _training.sourceIsStudy
+                    ? _openInStudy
+                    : _openInBuilder,
                 icon: const Icon(Icons.edit, size: 16),
-                label: const Text('Edit in Builder'),
+                label: Text(
+                  _training.sourceIsStudy ? 'Edit in Study' : 'Edit in Builder',
+                ),
               ),
             ],
           ),

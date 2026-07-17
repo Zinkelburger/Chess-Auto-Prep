@@ -26,6 +26,35 @@ void main() {
       expect(lines.single.moves, ['Nf3']);
     });
 
+    test('colorFromStartingSide derives each line colour from its own start '
+        'position (study puzzles)', () {
+      // Black to move in the first chapter, standard start in the second.
+      const blackToMoveFen =
+          'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2';
+      final pgn = [
+        '[Event "Black puzzle"]',
+        '[FEN "$blackToMoveFen"]',
+        '[SetUp "1"]',
+        '',
+        '2... Nc6 *',
+        '',
+        '[Event "White puzzle"]',
+        '',
+        '1. e4 *',
+      ].join('\n');
+
+      final lines = RepertoireService().parseRepertoirePgn(
+        pgn,
+        colorFromStartingSide: true,
+      );
+
+      expect(lines, hasLength(2));
+      expect(lines[0].color, 'black');
+      expect(lines[0].moves, ['Nc6']);
+      expect(lines[1].color, 'white');
+      expect(lines[1].moves, ['e4']);
+    });
+
     test('parseRepertoirePgn handles multi-game file correctly', () {
       final pgn = '''
 // Color: White

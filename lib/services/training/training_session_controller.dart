@@ -60,6 +60,24 @@ class TrainingSessionController extends ChangeNotifier
   Map<String, RepertoireMoveProgress> moveProgressMap = {};
   TrainingSettings settings = TrainingSettings();
 
+  // -- Source & modes --
+
+  /// True when the loaded source is a study (custom puzzles), not a
+  /// repertoire.  Studies parse with per-chapter solver colours and skip the
+  /// playability/tree machinery.
+  bool sourceIsStudy = false;
+
+  /// Repertoire mode walks new lines through the learn phase; tactics mode
+  /// always quizzes cold (a puzzle's solution must not be shown first).
+  TrainingMode trainingMode = TrainingMode.repertoire;
+
+  /// Spaced repetition (due-queue + Again/Hard/Good/Easy) or linear (every
+  /// line once, in order, no scheduling).
+  RepetitionMode repetitionMode = RepetitionMode.spaced;
+
+  /// Lines completed during this linear session (line ids).
+  final Set<String> _linearDone = {};
+
   /// Per-line playability scores from the generated tree (0 = hardest, 1 = easiest).
   /// Empty when no tree.json exists for the repertoire.
   Map<String, double> playabilityMap = {};
@@ -68,7 +86,9 @@ class TrainingSessionController extends ChangeNotifier
   Map<String, ({int ply, double quality, bool isOurMove})> bottleneckMap = {};
 
   /// True when no tree.json was found for the current repertoire.
-  bool get needsScoring => _treeRoot == null && lines.isNotEmpty;
+  /// Studies have no generated tree — never prompt to score them.
+  bool get needsScoring =>
+      !sourceIsStudy && _treeRoot == null && lines.isNotEmpty;
 
   BuildTreeNode? _treeRoot;
   bool? _treeIsWhite;
@@ -111,6 +131,14 @@ class TrainingSessionController extends ChangeNotifier
   /// (intro playback, move-feedback delays) aborts instead of clobbering the
   /// new line's state.
   int _lineGeneration = 0;
+
+  /// Bumped on every [loadRepertoire] call.  Parsing now runs off the UI
+  /// isolate, so a study↔repertoire handoff can start a second load while the
+  /// first is still parsing; the load holding the latest token wins and any
+  /// older one bails instead of interleaving its lines/queue with the other
+  /// load's source and mode.  Distinct from [_lineGeneration] (per-line
+  /// pacing).
+  int _loadGeneration = 0;
 
   /// Called whenever a new line session begins (including auto-next).
   VoidCallback? onLineStarted;
@@ -159,6 +187,41 @@ class TrainingSessionController extends ChangeNotifier
 
   void setRepertoire(RepertoireMetadata? value) {
     repertoire = value;
+    sourceIsStudy = false;
+    trainingMode = TrainingMode.repertoire;
+    repetitionMode = RepetitionMode.spaced;
+    notifyListeners();
+  }
+
+  /// Select a study as the training source: each chapter is one puzzle
+  /// (start FEN + solution mainline).  Defaults to tactics mode with linear
+  /// repetition; both stay user-switchable.
+  void setStudySource(RepertoireMetadata value) {
+    repertoire = value;
+    sourceIsStudy = true;
+    trainingMode = TrainingMode.tactics;
+    repetitionMode = RepetitionMode.linear;
+    notifyListeners();
+  }
+
+  /// Switch between repertoire (learn + drill) and tactics (cold solve).
+  /// Restarts the in-progress line so the change takes effect immediately.
+  void setTrainingMode(TrainingMode mode) {
+    if (trainingMode == mode) return;
+    trainingMode = mode;
+    notifyListeners();
+    if (currentLine != null && phase != TrainingPhase.finished) {
+      startLine(currentLine);
+    }
+  }
+
+  /// Switch between spaced repetition and linear scheduling.  Rebuilds the
+  /// queue; the in-progress line keeps playing.
+  void setRepetitionMode(RepetitionMode mode) {
+    if (repetitionMode == mode) return;
+    repetitionMode = mode;
+    if (mode == RepetitionMode.linear) _linearDone.clear();
+    dueQueue = _buildQueue();
     notifyListeners();
   }
 
@@ -168,6 +231,11 @@ class TrainingSessionController extends ChangeNotifier
 
   Future<void> loadRepertoire({String? startLineId}) async {
     if (repertoire == null) return;
+    // Capture the token and the source flag up front: `sourceIsStudy` is a
+    // shared mutable field a concurrent handoff can flip while we await, so
+    // this load must decide "study or repertoire" from its own snapshot.
+    final generation = ++_loadGeneration;
+    final loadIsStudy = sourceIsStudy;
     isLoading = true;
     error = null;
     feedback = null;
@@ -175,16 +243,22 @@ class TrainingSessionController extends ChangeNotifier
 
     try {
       final filePath = repertoire!.filePath;
-      final parsedLines = await repertoireService.parseRepertoireFile(filePath);
+      final parsedLines = await repertoireService.parseRepertoireFile(
+        filePath,
+        // Study puzzles: the solver is whoever moves first in each chapter.
+        colorFromStartingSide: loadIsStudy,
+      );
+      if (generation != _loadGeneration) return; // superseded mid-parse
       if (parsedLines.isEmpty) {
-        error = 'No trainable lines found.';
-        isLoading = false;
-        notifyListeners();
+        error = loadIsStudy
+            ? 'No chapters with moves to train.'
+            : 'No trainable lines found.';
         return;
       }
 
       final allEntries = await reviewService.loadAll();
       final moveProgress = await reviewService.loadMoveProgress();
+      if (generation != _loadGeneration) return;
       _otherRepertoireEntries = allEntries
           .where((e) => e.repertoireId != filePath)
           .toList();
@@ -197,6 +271,7 @@ class TrainingSessionController extends ChangeNotifier
         existing: currentEntries,
       );
       await reviewService.saveAll([..._otherRepertoireEntries, ...merged]);
+      if (generation != _loadGeneration) return;
 
       lines = parsedLines;
       reviewMap = {for (final e in merged) e.lineId: e};
@@ -204,23 +279,33 @@ class TrainingSessionController extends ChangeNotifier
         moveProgress.where((mp) => mp.repertoireId == filePath).toList(),
       );
 
-      await _loadTreeAndComputePlayability(filePath, parsedLines);
+      if (loadIsStudy) {
+        // No generated tree for studies — clear any repertoire leftovers.
+        _treeRoot = null;
+        _treeIsWhite = null;
+        playabilityMap = {};
+        bottleneckMap = {};
+      } else {
+        await _loadTreeAndComputePlayability(filePath, parsedLines);
+        if (generation != _loadGeneration) return;
+      }
 
-      dueQueue = reviewService.orderLinesForReview(
-        lines,
-        reviewMap,
-        settings.reviewOrder,
-        playabilityMap: playabilityMap,
-      );
+      _linearDone.clear();
+      dueQueue = _buildQueue();
       notifyListeners();
 
       pickStartingLine(startLineId: startLineId);
     } catch (e) {
+      if (generation != _loadGeneration) return;
       error = 'Error loading repertoire: $e';
       notifyListeners();
     } finally {
-      isLoading = false;
-      notifyListeners();
+      // Only the current load owns the loading flag; a superseded one must
+      // leave it set so the winning load's spinner stays up.
+      if (generation == _loadGeneration) {
+        isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -271,6 +356,31 @@ class TrainingSessionController extends ChangeNotifier
   // LINE MANAGEMENT
   // ---------------------------------------------------------------------------
 
+  /// The review queue under the active repetition mode: spaced = due/new
+  /// lines only; linear = every line not yet completed this session.
+  List<RepertoireLine> _buildQueue() {
+    // Studies carry no CumProb, so the default "by cumulative probability"
+    // order would be meaningless — fall back to file (chapter) order.
+    var order = settings.reviewOrder;
+    if (sourceIsStudy && order == ReviewOrder.byImportance) {
+      order = ReviewOrder.sequential;
+    }
+    final ordered = reviewService.orderLinesForReview(
+      lines,
+      reviewMap,
+      order,
+      playabilityMap: playabilityMap,
+      dueOnly: repetitionMode == RepetitionMode.spaced,
+    );
+    if (repetitionMode == RepetitionMode.linear) {
+      return [
+        for (final line in ordered)
+          if (!_linearDone.contains(line.id)) line,
+      ];
+    }
+    return ordered;
+  }
+
   void pickStartingLine({String? startLineId}) {
     if (lines.isEmpty) return;
     RepertoireLine? initial;
@@ -306,7 +416,9 @@ class TrainingSessionController extends ChangeNotifier
         ? settings.trainingDepth!.clamp(1, line.moves.length)
         : line.moves.length;
 
-    final isNew = _isLineNew(line);
+    // Tactics mode always quizzes cold — the learn walkthrough would show
+    // the puzzle's solution.
+    final isNew = trainingMode == TrainingMode.repertoire && _isLineNew(line);
 
     currentLine = line;
     currentLineLength = effectiveLength;
@@ -326,7 +438,11 @@ class TrainingSessionController extends ChangeNotifier
     currentPairUser = null;
     _lineGeneration++;
     playingIntro = false;
-    trainingStartIndex = settings.skipToFirstComment ? _firstCommentIndex() : 0;
+    // Never auto-play intro moves in tactics mode — they are the solution.
+    trainingStartIndex =
+        trainingMode == TrainingMode.repertoire && settings.skipToFirstComment
+        ? _firstCommentIndex()
+        : 0;
     notifyListeners();
     onLineStarted?.call();
 
@@ -539,12 +655,83 @@ class TrainingSessionController extends ChangeNotifier
         wrongMoveIndices.isNotEmpty) {
       startReplayPhase();
     } else {
-      phase = TrainingPhase.finished;
-      waitingForUser = false;
-      feedback = 'Line complete — rate your recall.';
-      currentAnnotation = null;
-      notifyListeners();
+      _finishLine();
     }
+  }
+
+  /// Enter the finished phase.  In spaced mode the results panel asks for a
+  /// rating; in linear mode the completion is recorded here (pass/fail, no
+  /// scheduling) and the panel offers Next.
+  @override
+  void _finishLine() {
+    phase = TrainingPhase.finished;
+    waitingForUser = false;
+    currentAnnotation = null;
+    if (repetitionMode == RepetitionMode.linear) {
+      final solvedClean = !lineHadMistake;
+      feedback = trainingMode == TrainingMode.tactics
+          ? (solvedClean ? 'Puzzle solved!' : 'Solved — with mistakes.')
+          : (solvedClean ? 'Line complete!' : 'Line complete — with mistakes.');
+      unawaited(_recordLinearCompletion());
+    } else {
+      feedback = 'Line complete — rate your recall.';
+    }
+    notifyListeners();
+  }
+
+  /// Linear-mode bookkeeping: pass/fail counts, session stats and history —
+  /// but no spaced-repetition scheduling (the line stays "new" for SRS).
+  Future<void> _recordLinearCompletion() async {
+    final line = currentLine;
+    if (line == null) return;
+    _linearDone.add(line.id);
+    // Drop the finished line from the queue synchronously so the results
+    // panel's remaining count (and set-complete detection) are accurate.
+    dueQueue = _buildQueue();
+
+    final hadMistake = lineHadMistake;
+    if (hadMistake) {
+      sessionIncorrect++;
+      sessionStreak = 0;
+    } else {
+      sessionCorrect++;
+      sessionStreak++;
+      if (sessionStreak > sessionBestStreak) {
+        sessionBestStreak = sessionStreak;
+      }
+    }
+
+    final existing =
+        reviewMap[line.id] ??
+        RepertoireReviewEntry(
+          repertoireId: repertoireId,
+          lineId: line.id,
+          lineName: line.name,
+        );
+    reviewMap[line.id] = existing.copyWith(
+      passCount: hadMistake ? existing.passCount : existing.passCount + 1,
+      failCount: hadMistake ? existing.failCount + 1 : existing.failCount,
+    );
+
+    await reviewService.saveAll([
+      ..._otherRepertoireEntries,
+      ...reviewMap.values,
+    ]);
+    await reviewService.saveMoveProgress(
+      moveProgressMap.values.toList(),
+      repertoireId: repertoireId,
+    );
+    await reviewService.appendHistory([
+      RepertoireReviewHistoryEntry(
+        repertoireId: repertoireId,
+        lineId: line.id,
+        timestampUtc: DateTime.now().toUtc(),
+        rating: '',
+        hadMistake: hadMistake,
+        sessionType: 'linear',
+      ),
+    ]);
+    notifyListeners();
   }
 
   // ---------------------------------------------------------------------------
@@ -553,6 +740,12 @@ class TrainingSessionController extends ChangeNotifier
 
   Future<void> rateLine(ReviewRating rating) async {
     if (currentLine == null) return;
+    // Linear mode has no ratings — completion was recorded in _finishLine;
+    // a stray rating call (keyboard shortcut) just advances.
+    if (repetitionMode == RepetitionMode.linear) {
+      rebuildQueueAndAdvance();
+      return;
+    }
 
     final existing =
         reviewMap[currentLine!.id] ??
@@ -616,27 +809,19 @@ class TrainingSessionController extends ChangeNotifier
     if (settings.autoNext) {
       rebuildQueueAndAdvance();
     } else {
-      dueQueue = reviewService.orderLinesForReview(
-        lines,
-        reviewMap,
-        settings.reviewOrder,
-        playabilityMap: playabilityMap,
-      );
+      dueQueue = _buildQueue();
       notifyListeners();
     }
   }
 
   void rebuildQueueAndAdvance() {
-    dueQueue = reviewService.orderLinesForReview(
-      lines,
-      reviewMap,
-      settings.reviewOrder,
-      playabilityMap: playabilityMap,
-    );
+    dueQueue = _buildQueue();
 
     if (dueQueue.isEmpty) {
       phase = TrainingPhase.finished;
-      feedback = 'All caught up!';
+      feedback = repetitionMode == RepetitionMode.linear
+          ? 'Set complete!'
+          : 'All caught up!';
       notifyListeners();
       return;
     }

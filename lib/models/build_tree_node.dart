@@ -65,6 +65,15 @@ class BuildTreeNode implements MoveTreeNodeView {
   /// consumers fall back to [cumulativeProbability].
   double searchPriority = -1.0;
 
+  /// This edge's *local* discount applied to [searchPriority] beyond
+  /// [moveProbability] — 1.0 everywhere except our-move alternatives, which
+  /// carry `ourAltDiscount` (or a DB frequency share).  Lets a zero→positive
+  /// transposition rebuild ([propagateHigherCumP]) re-derive discounted
+  /// priorities instead of collapsing them to the raw cumulative probability.
+  /// A transient search signal, not serialized: after a resume it defaults to
+  /// 1.0, which degrades a rebuild to the undiscounted (pre-fix) behaviour.
+  double searchPriorityDiscount = 1.0;
+
   // Lichess stats
   int whiteWins = 0;
   int blackWins = 0;

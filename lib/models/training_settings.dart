@@ -1,5 +1,32 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// What kind of content the trainer drills.
+///
+/// Repertoire mode walks new lines through the learn phase before quizzing;
+/// tactics mode always quizzes cold (showing a puzzle's solution first would
+/// spoil it).
+enum TrainingMode { repertoire, tactics }
+
+extension TrainingModeLabel on TrainingMode {
+  String get label => switch (this) {
+    TrainingMode.repertoire => 'Repertoire',
+    TrainingMode.tactics => 'Tactics',
+  };
+}
+
+/// How completed lines are scheduled.
+///
+/// Spaced repetition builds a due-queue with Again/Hard/Good/Easy ratings;
+/// linear runs through every line once, in order, with no scheduling.
+enum RepetitionMode { spaced, linear }
+
+extension RepetitionModeLabel on RepetitionMode {
+  String get label => switch (this) {
+    RepetitionMode.spaced => 'Spaced repetition',
+    RepetitionMode.linear => 'Linear',
+  };
+}
+
 /// How the repertoire trainer orders lines for review.
 enum ReviewOrder {
   byImportance,
