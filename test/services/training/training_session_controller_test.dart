@@ -278,7 +278,12 @@ void main() {
         // A is not due, so the queue is B then C (importance desc, null last).
         expect(controller.dueQueue.map((l) => l.id), ['B', 'C']);
 
-        // The first due line was started; B is new, so it opens in learning.
+        // Loading lands on the line browser; nothing auto-starts.
+        expect(controller.currentLine, isNull);
+
+        // Starting the queue picks the first due line; B is new, so it opens
+        // in learning.
+        controller.pickStartingLine();
         expect(controller.currentLine!.id, 'B');
         expect(controller.phase, TrainingPhase.learning);
         expect(controller.hadLearnPhaseThisSession, isTrue);
@@ -666,6 +671,7 @@ void main() {
         ..settings = _fastSettings(autoNext: false)
         ..setStudySource(meta());
       await controller.loadRepertoire();
+      controller.pickStartingLine();
 
       // Linear ignores due dates: both lines queue in file order.
       expect(controller.dueQueue.map((l) => l.id), ['A', 'B']);
@@ -721,6 +727,7 @@ void main() {
         ..settings = _fastSettings(wrongMoveReplay: false, autoNext: false)
         ..setStudySource(meta());
       await controller.loadRepertoire();
+      controller.pickStartingLine();
       await _waitFor(() => controller.waitingForUser);
 
       await controller.handleUserMove(_move(uci: 'd2d4', san: 'd4'));
@@ -741,6 +748,7 @@ void main() {
         ..settings = _fastSettings(autoNext: false)
         ..setStudySource(meta());
       await controller.loadRepertoire();
+      controller.pickStartingLine();
       await _waitFor(() => controller.waitingForUser);
 
       await controller.handleUserMove(_move(uci: 'e2e4', san: 'e4'));

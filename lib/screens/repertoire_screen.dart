@@ -388,12 +388,26 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         _openLineAfterLoad(lineId);
       }
 
+      final pendingMoves = appState.pendingMoveSequence;
+      if (pendingMoves != null) {
+        appState.pendingMoveSequence = null;
+        _openMovesAfterLoad(pendingMoves);
+      }
+
       final pendingPgnPaths = appState.pendingGenerationPgnPaths;
       if (pendingPgnPaths != null) {
         appState.pendingGenerationPgnPaths = null;
         _seedGenerationAfterLoad(pendingPgnPaths);
       }
     }
+  }
+
+  /// Navigate the board to a SAN sequence once the repertoire is loaded
+  /// ("Explore this position" hand-off from the trainer).
+  Future<void> _openMovesAfterLoad(List<String> moves) async {
+    await _controller.awaitLoaded();
+    if (!mounted) return;
+    _controller.loadMoveSequence(moves);
   }
 
   Future<void> _openLineAfterLoad(String lineId) async {

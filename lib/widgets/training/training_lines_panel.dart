@@ -1,3 +1,4 @@
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 
 import '../../models/repertoire_line.dart';
@@ -22,10 +23,46 @@ enum LineSortMode {
 
 extension LineSortModeLabel on LineSortMode {
   String get label => switch (this) {
-    LineSortMode.smart => 'Smart',
-    LineSortMode.probability => 'Probability',
-    LineSortMode.ease => 'Ease (hardest first)',
+    LineSortMode.smart => 'Needs work first',
+    LineSortMode.probability => 'Most common first',
+    LineSortMode.ease => 'Hardest first',
   };
+
+  /// Shown as a tooltip so "Needs work first" is never a mystery.
+  String get description => switch (this) {
+    LineSortMode.smart =>
+      'Due lines with the highest fail rate first; learned lines by '
+          'soonest due date; new lines in file order.',
+    LineSortMode.probability =>
+      'Lines you are most likely to face first, by cumulative opponent '
+          'move probability.',
+    LineSortMode.ease =>
+      'Lines whose moves are least natural to find first (playability '
+          'score from the generated tree).',
+  };
+}
+
+/// "1.e4 e6 2.d4 d5" movetext for [line] from ply [start] (inclusive) to
+/// [end] (exclusive; defaults to the whole line).
+String formatLineMovesText(RepertoireLine line, {int start = 0, int? end}) {
+  final stop = (end ?? line.moves.length).clamp(0, line.moves.length);
+  final startFullmoves = line.startPosition.fullmoves;
+  final startIsWhite = line.startPosition.turn == Side.white;
+  final parts = <String>[];
+  for (int i = start; i < stop; i++) {
+    final isWhite = startIsWhite ? i.isEven : i.isOdd;
+    final number = startIsWhite
+        ? startFullmoves + i ~/ 2
+        : startFullmoves + (i + 1) ~/ 2;
+    if (isWhite) {
+      parts.add('$number.${line.moves[i]}');
+    } else if (parts.isEmpty) {
+      parts.add('$number...${line.moves[i]}');
+    } else {
+      parts.add(line.moves[i]);
+    }
+  }
+  return parts.join(' ');
 }
 
 /// Training-aware lines browser with Learn/Review action buttons and
@@ -37,6 +74,10 @@ class TrainingLinesPanel extends StatefulWidget {
   final Map<String, double> playabilityMap;
   final Map<String, ({int ply, double quality, bool isOurMove})> bottleneckMap;
   final bool needsScoring;
+
+  /// Whether the uncommented intro auto-plays (dims those moves in the
+  /// preview and excludes them from mastery).
+  final bool introEnabled;
   final void Function(RepertoireLine line) onLineSelected;
   final VoidCallback onStartNextNew;
   final VoidCallback onStartNextDue;
@@ -50,6 +91,7 @@ class TrainingLinesPanel extends StatefulWidget {
     this.playabilityMap = const {},
     this.bottleneckMap = const {},
     this.needsScoring = false,
+    this.introEnabled = false,
     required this.onLineSelected,
     required this.onStartNextNew,
     required this.onStartNextDue,
@@ -166,6 +208,7 @@ class _TrainingLinesPanelState extends State<TrainingLinesPanel> {
                     moveProgressMap: widget.moveProgressMap,
                     playability: widget.playabilityMap[line.id],
                     bottleneck: widget.bottleneckMap[line.id],
+                    introEnabled: widget.introEnabled,
                     onTap: () => widget.onLineSelected(line),
                   ),
                 const SizedBox(height: 8),
@@ -183,6 +226,7 @@ class _TrainingLinesPanelState extends State<TrainingLinesPanel> {
                     moveProgressMap: widget.moveProgressMap,
                     playability: widget.playabilityMap[line.id],
                     bottleneck: widget.bottleneckMap[line.id],
+                    introEnabled: widget.introEnabled,
                     onTap: () => widget.onLineSelected(line),
                   ),
                 const SizedBox(height: 8),
@@ -200,6 +244,7 @@ class _TrainingLinesPanelState extends State<TrainingLinesPanel> {
                         moveProgressMap: widget.moveProgressMap,
                         playability: widget.playabilityMap[line.id],
                         bottleneck: widget.bottleneckMap[line.id],
+                        introEnabled: widget.introEnabled,
                         onTap: () => widget.onLineSelected(line),
                       ),
                   ],

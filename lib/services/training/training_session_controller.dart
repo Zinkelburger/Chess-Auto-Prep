@@ -294,7 +294,11 @@ class TrainingSessionController extends ChangeNotifier
       dueQueue = _buildQueue();
       notifyListeners();
 
-      pickStartingLine(startLineId: startLineId);
+      // Land on the line browser; only jump straight into a line when the
+      // caller asked for one (e.g. "Train this line" from the Builder).
+      if (startLineId != null) {
+        pickStartingLine(startLineId: startLineId);
+      }
     } catch (e) {
       if (generation != _loadGeneration) return;
       error = 'Error loading repertoire: $e';
@@ -519,6 +523,42 @@ class TrainingSessionController extends ChangeNotifier
   }
 
   void nextLine() => rebuildQueueAndAdvance();
+
+  /// Skip the current line without rating it — it stays in the queue and the
+  /// next line starts immediately.
+  void skipLine() {
+    if (currentLine == null) return;
+    _learnTimer?.cancel();
+    rebuildQueueAndAdvance();
+  }
+
+  /// Restart the current line from the beginning (learn phase again if the
+  /// line is still new).
+  void restartLine() {
+    if (currentLine == null) return;
+    startLine(currentLine);
+  }
+
+  /// Leave the active line and return to the line browser. Nothing is rated
+  /// or persisted; the queue is refreshed.
+  void stopSession() {
+    _learnTimer?.cancel();
+    _lineGeneration++;
+    currentLine = null;
+    phase = TrainingPhase.drilling;
+    waitingForUser = false;
+    feedback = null;
+    currentAnnotation = null;
+    currentPairOpponent = null;
+    currentPairUser = null;
+    learnWaitingForAck = false;
+    learnQuizzing = false;
+    opponentWaitingForAck = false;
+    playingIntro = false;
+    session.clearMoveHistory();
+    dueQueue = _buildQueue();
+    notifyListeners();
+  }
 
   // ---------------------------------------------------------------------------
   // DRILL PHASE

@@ -137,6 +137,7 @@ class _LineRow extends StatelessWidget {
   final Map<String, RepertoireMoveProgress> moveProgressMap;
   final double? playability;
   final ({int ply, double quality, bool isOurMove})? bottleneck;
+  final bool introEnabled;
   final VoidCallback onTap;
 
   const _LineRow({
@@ -145,8 +146,11 @@ class _LineRow extends StatelessWidget {
     required this.moveProgressMap,
     this.playability,
     this.bottleneck,
+    this.introEnabled = false,
     required this.onTap,
   });
+
+  int get _introLength => introEnabled ? line.uncommentedIntroLength : 0;
 
   String _statusLabel() {
     if (entry == null || entry!.isNew) return 'New';
@@ -172,14 +176,17 @@ class _LineRow extends StatelessWidget {
   }
 
   double _moveMastery() {
-    if (line.moves.isEmpty) return 0;
+    // Auto-played intro moves are never quizzed, so they don't count.
+    final start = _introLength < line.moves.length ? _introLength : 0;
+    final total = line.moves.length - start;
+    if (total <= 0) return 0;
     int learned = 0;
-    for (int i = 0; i < line.moves.length; i++) {
+    for (int i = start; i < line.moves.length; i++) {
       final key = '${line.id}:$i';
       final prog = moveProgressMap[key];
       if (prog != null && prog.learned) learned++;
     }
-    return learned / line.moves.length;
+    return learned / total;
   }
 
   @override
@@ -249,10 +256,15 @@ class _LineRow extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 4),
+            _MovesPreview(line: line, introLength: _introLength),
+            const SizedBox(height: 4),
             Row(
               children: [
                 Text(
-                  '${line.moves.length} moves',
+                  _introLength > 0
+                      ? '${line.moves.length - _introLength} to train'
+                            ' · $_introLength auto'
+                      : '${line.moves.length} moves',
                   style: const TextStyle(
                     fontSize: 11,
                     color: AppColors.onSurfaceMuted,
@@ -281,6 +293,55 @@ class _LineRow extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// MOVES PREVIEW — full movetext, auto-played intro dimmed
+// ---------------------------------------------------------------------------
+
+class _MovesPreview extends StatelessWidget {
+  final RepertoireLine line;
+  final int introLength;
+
+  const _MovesPreview({required this.line, required this.introLength});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (line.moves.isEmpty) return const SizedBox.shrink();
+
+    final introText = introLength > 0
+        ? formatLineMovesText(line, end: introLength)
+        : '';
+    final trainedText = formatLineMovesText(line, start: introLength);
+    final baseStyle = TextStyle(
+      fontSize: 11,
+      height: 1.35,
+      fontFamily: 'monospace',
+      color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+    );
+
+    return Tooltip(
+      message: formatLineMovesText(line),
+      waitDuration: const Duration(milliseconds: 600),
+      child: Text.rich(
+        TextSpan(
+          children: [
+            if (introText.isNotEmpty)
+              TextSpan(
+                text: '$introText ',
+                style: baseStyle.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
+                ),
+              ),
+            TextSpan(text: trainedText, style: baseStyle),
+          ],
+        ),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }

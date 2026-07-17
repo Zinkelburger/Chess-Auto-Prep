@@ -148,7 +148,14 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
     // loaded and PGN analysis while a puzzle is on the board (a PGN tab with
     // no puzzle is useless, and Browse is reachable from the puzzle via the
     // back button / walking off either end of the browse queue).
-    _tabController = TabController(length: 2, vsync: this);
+    // Zero duration: tab clicks land on the next frame instead of sliding in
+    // over ~300ms — the panel data is already in memory, so there is nothing
+    // to wait for.
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      animationDuration: Duration.zero,
+    );
 
     _form = TacticsImportForm(defaultCores: EngineSettings.instance.workers);
     _form.addListener(_onFormChanged);

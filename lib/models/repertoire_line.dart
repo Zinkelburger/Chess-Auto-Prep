@@ -4,6 +4,8 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 
+import '../utils/pgn_comment_utils.dart' show filterDisplayComment;
+
 class RepertoireLine {
   final String id;
   final String name; // e.g., "French Defense - Main Line"
@@ -70,6 +72,26 @@ class RepertoireLine {
 
   /// Gets the total number of trainable moves in this line
   int get totalMoves => moves.length;
+
+  int? _uncommentedIntroLength;
+
+  /// Number of leading moves before the first human-annotated move — the
+  /// "book intro" that [TrainingSettings.skipToFirstComment] auto-plays
+  /// instead of quizzing. Engine-token comments (`[%eval]`, `[%cumProb]`, …)
+  /// don't count as annotations. Returns 0 when the line has no prose
+  /// comments at all (nothing to anchor the tabiya, so the whole line trains
+  /// normally).
+  int get uncommentedIntroLength {
+    return _uncommentedIntroLength ??= () {
+      for (int i = 0; i < moves.length; i++) {
+        final raw = comments[i.toString()];
+        if (raw != null && filterDisplayComment(raw).isNotEmpty) {
+          return i;
+        }
+      }
+      return 0; // no prose comments anywhere
+    }();
+  }
 
   /// Checks if this line trains the specified color
   bool trainsColor(String colorToTrain) => color == colorToTrain;

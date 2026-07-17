@@ -14,6 +14,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../models/engine_settings.dart';
 import '../../services/analysis_service.dart';
 import '../../services/eval_cache.dart';
@@ -23,11 +24,12 @@ import '../../services/engine/stockfish_connection_factory.dart';
 import '../../services/engine/stockfish_pool.dart' show kPoolHashPerWorkerMb;
 import '../../theme/app_colors.dart';
 import '../../utils/chess_utils.dart'
-    show formatEvalDisplay, formatNodes, uciPvToSanCached;
+    show fenAfterMoves, formatEvalDisplay, formatNodes, uciPvToSanCached;
 import '../../utils/fen_utils.dart';
 import '../clickable_move_line.dart';
 import '../analysis/analysis_settings_sheet.dart';
 import 'engine_gate.dart';
+import 'floating_board_preview.dart';
 
 class InlineEngineBar extends StatefulWidget {
   final String fen;
@@ -38,11 +40,15 @@ class InlineEngineBar extends StatefulWidget {
   final void Function(List<String> sanMoves, int clickedIndex)?
   onLineMoveTapped;
 
+  /// Orientation of the floating hover-preview board.
+  final bool previewFlipped;
+
   const InlineEngineBar({
     super.key,
     required this.fen,
     this.isActive = true,
     this.onLineMoveTapped,
+    this.previewFlipped = false,
   });
 
   /// Whether the engine is currently enabled (static, shared across instances).
@@ -92,6 +98,10 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   int _workerThreads = 0;
 
   bool _gateLocked = EngineGate.isLocked;
+
+  /// Drives the floating mini-board shown when hovering PV moves.
+  final BoardPreviewController _boardPreview = BoardPreviewController();
+  final GlobalKey _previewKey = GlobalKey();
 
   @override
   void initState() {
@@ -150,6 +160,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     EngineLifecycle.instance.removeListener(_onEngineGateChanged);
     _settings.removeListener(_onSettingsChanged);
     _disposeWorker();
+    _boardPreview.dispose();
     super.dispose();
   }
 
@@ -314,6 +325,13 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
           else
             _buildLines(context),
         ],
+        // Renders nothing inline; drives the hover mini-board via Overlay.
+        FloatingBoardPreview(
+          stackKey: _previewKey,
+          controller: _boardPreview,
+          flipped: widget.previewFlipped,
+          ownerTag: _previewKey,
+        ),
       ],
     );
   }
@@ -413,6 +431,24 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   List<String> _pvToSanList(String fen, List<String> pv) =>
       uciPvToSanCached(fen, pv);
 
+  /// Show the floating board after [sanMoves] up to and including [idx].
+  void _showPreview(
+    DiscoveryLine line,
+    List<String> sanMoves,
+    int idx,
+    Offset anchor,
+  ) {
+    if (sanMoves.isEmpty) return;
+    _boardPreview.setPreview(
+      fenAfterMoves(widget.fen, sanMoves, idx),
+      moves: sanMoves.sublist(0, idx + 1),
+      target: BoardPreviewTarget.floating,
+      lastMoveUci: idx < line.pv.length ? line.pv[idx] : null,
+      anchorGlobal: anchor,
+      ownerTag: _previewKey,
+    );
+  }
+
   Widget _buildLineRow(BuildContext context, DiscoveryLine line) {
     final sanMoves = _pvToSanList(widget.fen, line.pv);
     final san = sanMoves.isNotEmpty ? sanMoves.first : '?';
@@ -430,32 +466,41 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
         children: [
           SizedBox(
             width: 48,
-            child: widget.onLineMoveTapped != null
-                ? MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: GestureDetector(
-                      onTap: () => widget.onLineMoveTapped!(sanMoves, 0),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 2),
-                        child: Text(
-                          san,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'monospace',
-                            fontSize: 14,
-                          ),
-                        ),
+            child: Builder(
+              builder: (anchorContext) => MouseRegion(
+                cursor: widget.onLineMoveTapped != null
+                    ? SystemMouseCursors.click
+                    : MouseCursor.defer,
+                onEnter: (_) {
+                  final box = anchorContext.findRenderObject() as RenderBox?;
+                  if (box == null) return;
+                  final anchor = box.localToGlobal(
+                    Offset(box.size.width / 2, box.size.height),
+                  );
+                  _showPreview(line, sanMoves, 0, anchor);
+                },
+                onExit: (_) => _boardPreview.clearPreview(),
+                child: GestureDetector(
+                  onTap: widget.onLineMoveTapped != null
+                      ? () {
+                          widget.onLineMoveTapped!(sanMoves, 0);
+                          _boardPreview.clearPreview();
+                        }
+                      : null,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: Text(
+                      san,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'monospace',
+                        fontSize: 14,
                       ),
                     ),
-                  )
-                : Text(
-                    san,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'monospace',
-                      fontSize: 14,
-                    ),
                   ),
+                ),
+              ),
+            ),
           ),
           Container(
             width: 52,
@@ -476,13 +521,16 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
             ),
           ),
           const SizedBox(width: 6),
-          Expanded(child: _buildClickableContinuation(sanMoves)),
+          Expanded(child: _buildClickableContinuation(line, sanMoves)),
         ],
       ),
     );
   }
 
-  Widget _buildClickableContinuation(List<String> sanMoves) {
+  Widget _buildClickableContinuation(
+    DiscoveryLine line,
+    List<String> sanMoves,
+  ) {
     if (sanMoves.length <= 1) return const SizedBox.shrink();
 
     final fenParts = widget.fen.split(' ');
@@ -500,8 +548,13 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
       maxMoves: 7,
       fontSize: 12,
       onMoveTapped: widget.onLineMoveTapped != null
-          ? (idx) => widget.onLineMoveTapped!(sanMoves, idx)
+          ? (idx) {
+              widget.onLineMoveTapped!(sanMoves, idx);
+              _boardPreview.clearPreview();
+            }
           : null,
+      onMoveHovered: (idx, anchor) => _showPreview(line, sanMoves, idx, anchor),
+      onHoverExit: _boardPreview.clearPreview,
     );
   }
 }
