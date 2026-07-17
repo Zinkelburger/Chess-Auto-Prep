@@ -109,7 +109,11 @@ void main() {
     test('records removed subtree roots into removedLines', () {
       final root = _node(san: '');
       final keep = _node(san: 'keep');
-      final drop = _node(san: 'drop', cumP: 0.25, prune: PruneReason.evalTooLow);
+      final drop = _node(
+        san: 'drop',
+        cumP: 0.25,
+        prune: PruneReason.evalTooLow,
+      );
       drop.engineEvalCp = -180;
       drop.pruneEvalCp = -180;
       drop.children.add(_node(san: 'grandchild'));
@@ -173,19 +177,21 @@ void main() {
       expect(grandchild.cumulativeProbability, closeTo(0.1, 1e-12));
     });
 
-    test('queues unexplored leaves that clear minProbability after scaling',
-        () {
-      final canonical = _node(cumP: 0.1);
-      final leafBig = _node(san: 'big', cumP: 0.06);
-      final leafSmall = _node(san: 'small', cumP: 0.005);
-      canonical.children.addAll([leafBig, leafSmall]);
-      final queue = FrontierQueue(bestFirst: false);
+    test(
+      'queues unexplored leaves that clear minProbability after scaling',
+      () {
+        final canonical = _node(cumP: 0.1);
+        final leafBig = _node(san: 'big', cumP: 0.06);
+        final leafSmall = _node(san: 'small', cumP: 0.005);
+        canonical.children.addAll([leafBig, leafSmall]);
+        final queue = FrontierQueue(bestFirst: false);
 
-      // ratio 2.0 → leafBig 0.12 (>= 0.01), leafSmall 0.01 (>= 0.01)
-      propagateHigherCumP(canonical, 0.2, 0.01, queue);
-      expect(queue.contains(leafBig), isTrue);
-      expect(queue.contains(leafSmall), isTrue);
-    });
+        // ratio 2.0 → leafBig 0.12 (>= 0.01), leafSmall 0.01 (>= 0.01)
+        propagateHigherCumP(canonical, 0.2, 0.01, queue);
+        expect(queue.contains(leafBig), isTrue);
+        expect(queue.contains(leafSmall), isTrue);
+      },
+    );
 
     test('does not queue explored leaves or leaves below minProbability', () {
       final canonical = _node(cumP: 0.1);
@@ -212,6 +218,40 @@ void main() {
       // its leaf (0.08 after scaling) is queued
       expect(queue.length, 1);
       expect(queue.first.moveSan, 'leaf');
+    });
+
+    test(
+      're-queues an already-queued leaf without duplicating (best-first)',
+      () {
+        final canonical = _node(cumP: 0.1);
+        final leaf = _node(san: 'leaf', cumP: 0.06);
+        canonical.children.add(leaf);
+        final queue = FrontierQueue(bestFirst: true);
+        queue.add(leaf); // leaf already sitting in the frontier
+        expect(queue.length, 1);
+
+        // Transposition raises canonical's cumP; the leaf clears minProbability
+        // and would previously have been added a second time.
+        propagateHigherCumP(canonical, 0.2, 0.01, queue);
+
+        expect(queue.length, 1); // no duplicate entry
+        expect(queue.contains(leaf), isTrue);
+        expect(queue.removeFirst(), same(leaf));
+        expect(queue.isEmpty, isTrue);
+      },
+    );
+
+    test('zero cumP adopts newCumP via edge probs (no Inf ratio)', () {
+      final canonical = _node(cumP: 0.0);
+      final leaf = _node(san: 'leaf', cumP: 0.0)..moveProbability = 0.4;
+      canonical.children.add(leaf);
+      final queue = FrontierQueue(bestFirst: false);
+
+      propagateHigherCumP(canonical, 0.5, 0.01, queue);
+
+      expect(canonical.cumulativeProbability, closeTo(0.5, 1e-12));
+      expect(leaf.cumulativeProbability, closeTo(0.2, 1e-12));
+      expect(queue.contains(leaf), isTrue);
     });
   });
 }

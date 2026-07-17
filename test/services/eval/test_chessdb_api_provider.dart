@@ -75,10 +75,8 @@ void main() {
 
     test('lookup returns shallow when depth too low', () async {
       final provider = ChessDbApiProvider(
-        httpFetch: (_) async => http.Response(
-          '{"status":"ok","eval":10,"depth":12}',
-          200,
-        ),
+        httpFetch: (_) async =>
+            http.Response('{"status":"ok","eval":10,"depth":12}', 200),
       );
       await provider.init();
 

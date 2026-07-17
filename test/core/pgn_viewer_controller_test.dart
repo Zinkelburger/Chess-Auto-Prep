@@ -114,11 +114,13 @@ void main() {
       expect(c.boardFlipped, isTrue);
 
       c.setPerspective(
-          const Perspective(mode: PerspectiveMode.player, playerName: 'villain'));
+        const Perspective(mode: PerspectiveMode.player, playerName: 'villain'),
+      );
       expect(c.boardFlipped, isTrue, reason: 'protagonist plays Black');
 
       c.setPerspective(
-          const Perspective(mode: PerspectiveMode.player, playerName: 'hero'));
+        const Perspective(mode: PerspectiveMode.player, playerName: 'hero'),
+      );
       expect(c.boardFlipped, isFalse, reason: 'protagonist plays White');
     });
   });
@@ -147,8 +149,11 @@ void main() {
       c.goToGame(1);
       c.applySlice([0, 1], const SliceConfig.empty());
 
-      expect(c.currentGameIndex, 1,
-          reason: 'repeat slice must not reset the cursor');
+      expect(
+        c.currentGameIndex,
+        1,
+        reason: 'repeat slice must not reset the cursor',
+      );
     });
 
     test('resetFilters restores the full game list', () {

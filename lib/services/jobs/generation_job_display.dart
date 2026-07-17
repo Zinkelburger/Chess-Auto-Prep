@@ -11,29 +11,28 @@ export 'generation_phase.dart';
 
 extension GenerationPhaseLabels on GenerationPhase {
   String get label => switch (this) {
-        GenerationPhase.parsingPgn => 'Parsing PGN',
-        GenerationPhase.buildingTree => 'Building tree',
-        GenerationPhase.enrichingEvals => 'Enriching evals',
-        GenerationPhase.computingEase => 'Computing ease',
-        GenerationPhase.computingExpectimax => 'Calculating expectimax',
-        GenerationPhase.selectingRepertoire => 'Selecting repertoire',
-        GenerationPhase.verifying => 'Verifying moves',
-        GenerationPhase.extractingLines => 'Extracting lines',
-        GenerationPhase.idle => 'Starting',
-      };
+    GenerationPhase.parsingPgn => 'Parsing PGN',
+    GenerationPhase.buildingTree => 'Building tree',
+    GenerationPhase.enrichingEvals => 'Enriching evals',
+    GenerationPhase.computingEase => 'Computing ease',
+    GenerationPhase.computingExpectimax => 'Calculating expectimax',
+    GenerationPhase.selectingRepertoire => 'Selecting repertoire',
+    GenerationPhase.verifying => 'Verifying moves',
+    GenerationPhase.extractingLines => 'Extracting lines',
+    GenerationPhase.idle => 'Starting',
+  };
 
   IconData get icon => switch (this) {
-        GenerationPhase.parsingPgn => Icons.description_outlined,
-        GenerationPhase.buildingTree => Icons.account_tree_outlined,
-        GenerationPhase.enrichingEvals => Icons.psychology_outlined,
-        GenerationPhase.computingEase => Icons.speed_outlined,
-        GenerationPhase.computingExpectimax => Icons.functions_outlined,
-        GenerationPhase.selectingRepertoire => Icons.checklist_outlined,
-        GenerationPhase.verifying => Icons.verified_outlined,
-        GenerationPhase.extractingLines =>
-          Icons.format_list_numbered_outlined,
-        GenerationPhase.idle => Icons.hourglass_empty,
-      };
+    GenerationPhase.parsingPgn => Icons.description_outlined,
+    GenerationPhase.buildingTree => Icons.account_tree_outlined,
+    GenerationPhase.enrichingEvals => Icons.psychology_outlined,
+    GenerationPhase.computingEase => Icons.speed_outlined,
+    GenerationPhase.computingExpectimax => Icons.functions_outlined,
+    GenerationPhase.selectingRepertoire => Icons.checklist_outlined,
+    GenerationPhase.verifying => Icons.verified_outlined,
+    GenerationPhase.extractingLines => Icons.format_list_numbered_outlined,
+    GenerationPhase.idle => Icons.hourglass_empty,
+  };
 }
 
 String formatJobDuration(Duration d) {
@@ -141,21 +140,20 @@ String buildGenerationStatsLine({
   bool bestFirst = false,
   int frontierSize = 0,
   int? etaRunSec,
-}) =>
-    buildGenerationStatParts(
-      phase: phase,
-      nodes: nodes,
-      currentDepth: currentDepth,
-      maxPlyConfig: maxPlyConfig,
-      unexploredAtDepth: unexploredAtDepth,
-      totalAtDepth: totalAtDepth,
-      nodesPerMinute: nodesPerMinute,
-      etaDepthSec: etaDepthSec,
-      linesExtracted: linesExtracted,
-      bestFirst: bestFirst,
-      frontierSize: frontierSize,
-      etaRunSec: etaRunSec,
-    ).join(' · ');
+}) => buildGenerationStatParts(
+  phase: phase,
+  nodes: nodes,
+  currentDepth: currentDepth,
+  maxPlyConfig: maxPlyConfig,
+  unexploredAtDepth: unexploredAtDepth,
+  totalAtDepth: totalAtDepth,
+  nodesPerMinute: nodesPerMinute,
+  etaDepthSec: etaDepthSec,
+  linesExtracted: linesExtracted,
+  bestFirst: bestFirst,
+  frontierSize: frontierSize,
+  etaRunSec: etaRunSec,
+).join(' · ');
 
 /// Progress fraction (0–1) for the linear indicator, when meaningful.
 ///

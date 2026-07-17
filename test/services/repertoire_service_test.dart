@@ -26,6 +26,35 @@ void main() {
       expect(lines.single.moves, ['Nf3']);
     });
 
+    test('colorFromStartingSide derives each line colour from its own start '
+        'position (study puzzles)', () {
+      // Black to move in the first chapter, standard start in the second.
+      const blackToMoveFen =
+          'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2';
+      final pgn = [
+        '[Event "Black puzzle"]',
+        '[FEN "$blackToMoveFen"]',
+        '[SetUp "1"]',
+        '',
+        '2... Nc6 *',
+        '',
+        '[Event "White puzzle"]',
+        '',
+        '1. e4 *',
+      ].join('\n');
+
+      final lines = RepertoireService().parseRepertoirePgn(
+        pgn,
+        colorFromStartingSide: true,
+      );
+
+      expect(lines, hasLength(2));
+      expect(lines[0].color, 'black');
+      expect(lines[0].moves, ['Nc6']);
+      expect(lines[1].color, 'white');
+      expect(lines[1].moves, ['e4']);
+    });
+
     test('parseRepertoirePgn handles multi-game file correctly', () {
       final pgn = '''
 // Color: White
@@ -83,14 +112,8 @@ void main() {
 ''';
 
       final service = RepertoireService();
-      expect(
-        service.parseRepertoirePgn(whitePgn).single.color,
-        'white',
-      );
-      expect(
-        service.parseRepertoirePgn(blackPgn).single.color,
-        'black',
-      );
+      expect(service.parseRepertoirePgn(whitePgn).single.color, 'white');
+      expect(service.parseRepertoirePgn(blackPgn).single.color, 'black');
     });
   });
 
@@ -129,10 +152,11 @@ void main() {
       expect(service.parseRepertoirePgn(disk).single.moves, ['e4']);
     });
 
-    test('appendMoveAtPath extends existing game when prefix matches',
-        () async {
-      final filePath = '${tempDir.path}/existing.pgn';
-      await File(filePath).writeAsString('''
+    test(
+      'appendMoveAtPath extends existing game when prefix matches',
+      () async {
+        final filePath = '${tempDir.path}/existing.pgn';
+        await File(filePath).writeAsString('''
 // Color: White
 
 [Event "Line 1"]
@@ -144,52 +168,110 @@ void main() {
 1. e4 e5
 ''');
 
-      final result = await service.appendMoveAtPath(
-        filePath,
-        ['e4', 'e5'],
-        'Nf3',
-        isWhiteRepertoire: true,
-      );
+        final result = await service.appendMoveAtPath(
+          filePath,
+          ['e4', 'e5'],
+          'Nf3',
+          isWhiteRepertoire: true,
+        );
 
-      expect(result.success, isTrue);
-      expect(result.updatedContent, contains('Nf3'));
-      expect(
-        service.parseRepertoirePgn(result.updatedContent),
-        hasLength(1),
-      );
-      expect(
-        service.parseRepertoirePgn(result.updatedContent).single.moves,
-        ['e4', 'e5', 'Nf3'],
-      );
+        expect(result.success, isTrue);
+        expect(result.updatedContent, contains('Nf3'));
+        expect(service.parseRepertoirePgn(result.updatedContent), hasLength(1));
+        expect(service.parseRepertoirePgn(result.updatedContent).single.moves, [
+          'e4',
+          'e5',
+          'Nf3',
+        ]);
+      },
+    );
+
+    test(
+      'appendMoveAtPath creates sibling game when no prefix matches',
+      () async {
+        final filePath = '${tempDir.path}/sibling.pgn';
+        await File(filePath).writeAsString('''
+// Color: White
+
+[Event "Line 1"]
+[Date "2026-01-01"]
+[White "Me"]
+[Black "Opponent"]
+[Result "1-0"]
+
+1. e4 e5
+''');
+
+        final result = await service.appendMoveAtPath(
+          filePath,
+          ['e4', 'c5'],
+          'Nf3',
+          isWhiteRepertoire: true,
+        );
+
+        expect(result.success, isTrue);
+        final lines = service.parseRepertoirePgn(result.updatedContent);
+        expect(lines, hasLength(2));
+        expect(lines[0].moves, ['e4', 'e5']);
+        expect(lines[1].moves, ['e4', 'c5', 'Nf3']);
+      },
+    );
+  });
+
+  group('updateLineContent', () {
+    late Directory tempDir;
+    late RepertoireService service;
+
+    setUp(() async {
+      tempDir = await Directory.systemTemp.createTemp('repertoire_svc_test');
+      service = RepertoireService();
     });
 
-    test('appendMoveAtPath creates sibling game when no prefix matches',
-        () async {
-      final filePath = '${tempDir.path}/sibling.pgn';
+    tearDown(() async {
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    test('preserves headers the editor does not serialize', () async {
+      final filePath = '${tempDir.path}/line.pgn';
       await File(filePath).writeAsString('''
-// Color: White
-
-[Event "Line 1"]
-[Date "2026-01-01"]
+[Event "Old Title"]
 [White "Me"]
-[Black "Opponent"]
-[Result "1-0"]
+[Black "Training"]
+[Result "*"]
+[LineID "line_abc123"]
+[LastReview "2026-07-01T00:00:00.000Z"]
 
-1. e4 e5
+1. e4 e5 2. Nf3 *
 ''');
 
-      final result = await service.appendMoveAtPath(
+      // The editor writes only the standard headers, like MoveTree.toPgn.
+      final ok = await service.updateLineContent(
         filePath,
-        ['e4', 'c5'],
-        'Nf3',
-        isWhiteRepertoire: true,
+        'line_abc123',
+        '[Event "New Title"]\n[Date "2026.07.09"]\n[White "Me"]\n'
+            '[Black "Training"]\n[Result "*"]\n\n1. e4 e5 2. Nf3 Nc6',
       );
+      expect(ok, isTrue);
 
-      expect(result.success, isTrue);
-      final lines = service.parseRepertoirePgn(result.updatedContent);
-      expect(lines, hasLength(2));
-      expect(lines[0].moves, ['e4', 'e5']);
-      expect(lines[1].moves, ['e4', 'c5', 'Nf3']);
+      final disk = await File(filePath).readAsString();
+      expect(disk, contains('[Event "New Title"]'));
+      expect(disk, contains('[LineID "line_abc123"]'));
+      expect(disk, contains('[LastReview "2026-07-01T00:00:00.000Z"]'));
+      expect(disk, isNot(contains('Old Title')));
+
+      // The line must still be findable by its id afterwards.
+      final renamed = await service.updateLineTitle(
+        filePath,
+        'line_abc123',
+        'Renamed',
+      );
+      expect(renamed, isTrue);
+      expect(
+        await File(filePath).readAsString(),
+        contains('[Event "Renamed"]'),
+      );
     });
   });
 }

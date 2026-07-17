@@ -7,6 +7,7 @@ library;
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
+import '../theme/app_colors.dart';
 import '../utils/best_effort_position.dart';
 import 'chess_board_widget.dart';
 
@@ -49,9 +50,7 @@ class _PositionPreviewIconState extends State<PositionPreviewIcon> {
     );
 
     _overlayEntry?.remove();
-    _overlayEntry = OverlayEntry(
-      builder: (_) => _buildBoard(position, anchor),
-    );
+    _overlayEntry = OverlayEntry(builder: (_) => _buildBoard(position, anchor));
     overlay.insert(_overlayEntry!);
   }
 
@@ -66,7 +65,9 @@ class _PositionPreviewIconState extends State<PositionPreviewIcon> {
     var top = anchor.dy + _anchorGap;
 
     left = left.clamp(
-        0.0, (screenSize.width - _boardSize).clamp(0.0, double.infinity));
+      0.0,
+      (screenSize.width - _boardSize).clamp(0.0, double.infinity),
+    );
     if (top + _boardSize > screenSize.height - 8) {
       top = anchor.dy - _boardSize - _anchorGap - 24;
     }
@@ -80,7 +81,7 @@ class _PositionPreviewIconState extends State<PositionPreviewIcon> {
       child: IgnorePointer(
         child: Material(
           elevation: 8,
-          shadowColor: Colors.black54,
+          shadowColor: AppColors.shadow,
           borderRadius: BorderRadius.circular(4),
           clipBehavior: Clip.antiAlias,
           child: ChessBoardWidget(
@@ -101,12 +102,12 @@ class _PositionPreviewIconState extends State<PositionPreviewIcon> {
       child: MouseRegion(
         onEnter: (_) => _showOverlay(),
         onExit: (_) => _removeOverlay(),
-        child: Tooltip(
+        child: const Tooltip(
           message: 'Preview position',
           child: Icon(
             Icons.visibility_outlined,
             size: 16,
-            color: Colors.grey[400],
+            color: AppColors.onSurfaceSoft,
           ),
         ),
       ),

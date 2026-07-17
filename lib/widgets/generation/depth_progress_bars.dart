@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/app_colors.dart';
+
 /// Compact per-depth explored/total mini-bars for the tree-build phase —
 /// one vertical bar per ply, filled by the explored fraction at that depth.
 ///
@@ -32,29 +34,31 @@ class DepthProgressBars extends StatelessWidget {
       if (total <= 0) continue;
       final done = ply < explored.length ? explored[ply] : 0;
       final fraction = (done / total).clamp(0.0, 1.0);
-      bars.add(Tooltip(
-        message: 'Ply $ply: $done/$total explored',
-        waitDuration: const Duration(milliseconds: 300),
-        child: Container(
-          width: 7,
-          height: 22,
-          decoration: BoxDecoration(
-            color: Colors.grey[850],
-            borderRadius: BorderRadius.circular(2),
-          ),
-          alignment: Alignment.bottomCenter,
-          child: FractionallySizedBox(
-            heightFactor: fraction,
-            widthFactor: 1.0,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: fraction >= 1.0 ? color : color.withAlpha(170),
-                borderRadius: BorderRadius.circular(2),
+      bars.add(
+        Tooltip(
+          message: 'Ply $ply: $done/$total explored',
+          waitDuration: const Duration(milliseconds: 300),
+          child: Container(
+            width: 7,
+            height: 22,
+            decoration: BoxDecoration(
+              color: AppColors.surfaceInset,
+              borderRadius: BorderRadius.circular(2),
+            ),
+            alignment: Alignment.bottomCenter,
+            child: FractionallySizedBox(
+              heightFactor: fraction,
+              widthFactor: 1.0,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: fraction >= 1.0 ? color : color.withAlpha(170),
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
           ),
         ),
-      ));
+      );
     }
     if (bars.isEmpty) return const SizedBox.shrink();
     return Wrap(spacing: 2, runSpacing: 2, children: bars);

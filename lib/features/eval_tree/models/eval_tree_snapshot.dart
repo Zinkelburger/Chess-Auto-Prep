@@ -1,10 +1,6 @@
 import 'dart:collection';
 
-enum EvalTreePruneKind {
-  none,
-  evalTooHigh,
-  evalTooLow,
-}
+enum EvalTreePruneKind { none, evalTooHigh, evalTooLow }
 
 class EvalTreeNodeSnapshot {
   final int id;
@@ -73,9 +69,9 @@ class EvalTreeSnapshot {
     required List<String> startMovesSan,
     required Map<String, dynamic> configSnapshot,
     required Map<int, EvalTreeNodeSnapshot> nodesById,
-  })  : startMovesSan = List.unmodifiable(startMovesSan),
-        configSnapshot = Map.unmodifiable(configSnapshot),
-        nodesById = UnmodifiableMapView(Map.unmodifiable(nodesById));
+  }) : startMovesSan = List.unmodifiable(startMovesSan),
+       configSnapshot = Map.unmodifiable(configSnapshot),
+       nodesById = UnmodifiableMapView(Map.unmodifiable(nodesById));
 
   int get nodeCount => nodesById.length;
 
@@ -128,8 +124,10 @@ class EvalTreeSnapshot {
     return path;
   }
 
-  List<String> fullMovePathSan(int id) =>
-      [...startMovesSan, ...movePathSan(id)];
+  List<String> fullMovePathSan(int id) => [
+    ...startMovesSan,
+    ...movePathSan(id),
+  ];
 
   int? preferredChildId(int id) {
     final node = this.node(id);

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
@@ -12,8 +13,10 @@ import '../../models/repertoire_move_progress.dart';
 import '../../models/repertoire_review_entry.dart'
     show RepertoireReviewEntry, ReviewRating;
 import '../../models/repertoire_review_history_entry.dart';
+import '../../models/completed_move.dart';
 import '../../models/training_settings.dart';
-import '../../widgets/chess_board_widget.dart';
+import '../../utils/pgn_comment_utils.dart' show filterDisplayComment;
+import '../../utils/safe_change_notifier.dart';
 import '../generation/tree_my_ease.dart' show computeLinePlayability;
 import '../generation/tree_serialization.dart' show deserializeTree;
 import '../line_metrics_helpers.dart' show walkTreeForLine;
@@ -22,17 +25,28 @@ import '../repertoire_service.dart';
 import '../storage/storage_factory.dart';
 import 'training_phase.dart';
 
+part 'training_session_display.dart';
+part 'training_session_validation.dart';
+part 'training_session_learn.dart';
+part 'training_session_replay.dart';
+
 /// Manages repertoire training session state: phases, line queue, move validation,
 /// progress persistence, and session statistics.
-class TrainingSessionController extends ChangeNotifier {
+class TrainingSessionController extends ChangeNotifier
+    with
+        SafeChangeNotifier,
+        _MoveDisplayMixin,
+        _MoveValidationMixin,
+        _LearnPhaseMixin,
+        _ReplayPhaseMixin {
   final RepertoireService repertoireService;
   final RepertoireReviewService reviewService;
 
   TrainingSessionController({
     RepertoireService? repertoireService,
     RepertoireReviewService? reviewService,
-  })  : repertoireService = repertoireService ?? RepertoireService(),
-        reviewService = reviewService ?? RepertoireReviewService() {
+  }) : repertoireService = repertoireService ?? RepertoireService(),
+       reviewService = reviewService ?? RepertoireReviewService() {
     session.addListener(_onSessionChanged);
   }
 
@@ -46,6 +60,24 @@ class TrainingSessionController extends ChangeNotifier {
   Map<String, RepertoireMoveProgress> moveProgressMap = {};
   TrainingSettings settings = TrainingSettings();
 
+  // -- Source & modes --
+
+  /// True when the loaded source is a study (custom puzzles), not a
+  /// repertoire.  Studies parse with per-chapter solver colours and skip the
+  /// playability/tree machinery.
+  bool sourceIsStudy = false;
+
+  /// Repertoire mode walks new lines through the learn phase; tactics mode
+  /// always quizzes cold (a puzzle's solution must not be shown first).
+  TrainingMode trainingMode = TrainingMode.repertoire;
+
+  /// Spaced repetition (due-queue + Again/Hard/Good/Easy) or linear (every
+  /// line once, in order, no scheduling).
+  RepetitionMode repetitionMode = RepetitionMode.spaced;
+
+  /// Lines completed during this linear session (line ids).
+  final Set<String> _linearDone = {};
+
   /// Per-line playability scores from the generated tree (0 = hardest, 1 = easiest).
   /// Empty when no tree.json exists for the repertoire.
   Map<String, double> playabilityMap = {};
@@ -54,7 +86,9 @@ class TrainingSessionController extends ChangeNotifier {
   Map<String, ({int ply, double quality, bool isOurMove})> bottleneckMap = {};
 
   /// True when no tree.json was found for the current repertoire.
-  bool get needsScoring => _treeRoot == null && lines.isNotEmpty;
+  /// Studies have no generated tree — never prompt to score them.
+  bool get needsScoring =>
+      !sourceIsStudy && _treeRoot == null && lines.isNotEmpty;
 
   BuildTreeNode? _treeRoot;
   bool? _treeIsWhite;
@@ -66,6 +100,7 @@ class TrainingSessionController extends ChangeNotifier {
   int currentMoveIndex = 0;
   TrainingPhase phase = TrainingPhase.drilling;
   bool lineHadMistake = false;
+
   /// True when this line session started with the learn walkthrough (new line).
   bool? _hadLearnPhaseThisSession;
   bool get hadLearnPhaseThisSession => _hadLearnPhaseThisSession ?? false;
@@ -84,6 +119,26 @@ class TrainingSessionController extends ChangeNotifier {
 
   /// True when opponent move has a comment and we're waiting for Next click.
   bool opponentWaitingForAck = false;
+
+  /// Move index where active training begins. Moves before it are auto-played
+  /// as an intro when [TrainingSettings.skipToFirstComment] is on.
+  int trainingStartIndex = 0;
+
+  /// True while the pre-comment intro moves are auto-playing on the board.
+  bool playingIntro = false;
+
+  /// Bumped on every line start (and dispose) so in-flight async pacing
+  /// (intro playback, move-feedback delays) aborts instead of clobbering the
+  /// new line's state.
+  int _lineGeneration = 0;
+
+  /// Bumped on every [loadRepertoire] call.  Parsing now runs off the UI
+  /// isolate, so a study↔repertoire handoff can start a second load while the
+  /// first is still parsing; the load holding the latest token wins and any
+  /// older one bails instead of interleaving its lines/queue with the other
+  /// load's source and mode.  Distinct from [_lineGeneration] (per-line
+  /// pacing).
+  int _loadGeneration = 0;
 
   /// Called whenever a new line session begins (including auto-next).
   VoidCallback? onLineStarted;
@@ -118,6 +173,7 @@ class TrainingSessionController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _lineGeneration++;
     _learnTimer?.cancel();
     session.removeListener(_onSessionChanged);
     session.dispose();
@@ -131,6 +187,41 @@ class TrainingSessionController extends ChangeNotifier {
 
   void setRepertoire(RepertoireMetadata? value) {
     repertoire = value;
+    sourceIsStudy = false;
+    trainingMode = TrainingMode.repertoire;
+    repetitionMode = RepetitionMode.spaced;
+    notifyListeners();
+  }
+
+  /// Select a study as the training source: each chapter is one puzzle
+  /// (start FEN + solution mainline).  Defaults to tactics mode with linear
+  /// repetition; both stay user-switchable.
+  void setStudySource(RepertoireMetadata value) {
+    repertoire = value;
+    sourceIsStudy = true;
+    trainingMode = TrainingMode.tactics;
+    repetitionMode = RepetitionMode.linear;
+    notifyListeners();
+  }
+
+  /// Switch between repertoire (learn + drill) and tactics (cold solve).
+  /// Restarts the in-progress line so the change takes effect immediately.
+  void setTrainingMode(TrainingMode mode) {
+    if (trainingMode == mode) return;
+    trainingMode = mode;
+    notifyListeners();
+    if (currentLine != null && phase != TrainingPhase.finished) {
+      startLine(currentLine);
+    }
+  }
+
+  /// Switch between spaced repetition and linear scheduling.  Rebuilds the
+  /// queue; the in-progress line keeps playing.
+  void setRepetitionMode(RepetitionMode mode) {
+    if (repetitionMode == mode) return;
+    repetitionMode = mode;
+    if (mode == RepetitionMode.linear) _linearDone.clear();
+    dueQueue = _buildQueue();
     notifyListeners();
   }
 
@@ -140,6 +231,11 @@ class TrainingSessionController extends ChangeNotifier {
 
   Future<void> loadRepertoire({String? startLineId}) async {
     if (repertoire == null) return;
+    // Capture the token and the source flag up front: `sourceIsStudy` is a
+    // shared mutable field a concurrent handoff can flip while we await, so
+    // this load must decide "study or repertoire" from its own snapshot.
+    final generation = ++_loadGeneration;
+    final loadIsStudy = sourceIsStudy;
     isLoading = true;
     error = null;
     feedback = null;
@@ -147,26 +243,35 @@ class TrainingSessionController extends ChangeNotifier {
 
     try {
       final filePath = repertoire!.filePath;
-      final parsedLines = await repertoireService.parseRepertoireFile(filePath);
+      final parsedLines = await repertoireService.parseRepertoireFile(
+        filePath,
+        // Study puzzles: the solver is whoever moves first in each chapter.
+        colorFromStartingSide: loadIsStudy,
+      );
+      if (generation != _loadGeneration) return; // superseded mid-parse
       if (parsedLines.isEmpty) {
-        error = 'No trainable lines found.';
-        isLoading = false;
-        notifyListeners();
+        error = loadIsStudy
+            ? 'No chapters with moves to train.'
+            : 'No trainable lines found.';
         return;
       }
 
       final allEntries = await reviewService.loadAll();
       final moveProgress = await reviewService.loadMoveProgress();
-      _otherRepertoireEntries =
-          allEntries.where((e) => e.repertoireId != filePath).toList();
-      final currentEntries =
-          allEntries.where((e) => e.repertoireId == filePath).toList();
+      if (generation != _loadGeneration) return;
+      _otherRepertoireEntries = allEntries
+          .where((e) => e.repertoireId != filePath)
+          .toList();
+      final currentEntries = allEntries
+          .where((e) => e.repertoireId == filePath)
+          .toList();
       final merged = reviewService.syncEntries(
         repertoireId: filePath,
         lines: parsedLines,
         existing: currentEntries,
       );
       await reviewService.saveAll([..._otherRepertoireEntries, ...merged]);
+      if (generation != _loadGeneration) return;
 
       lines = parsedLines;
       reviewMap = {for (final e in merged) e.lineId: e};
@@ -174,23 +279,33 @@ class TrainingSessionController extends ChangeNotifier {
         moveProgress.where((mp) => mp.repertoireId == filePath).toList(),
       );
 
-      await _loadTreeAndComputePlayability(filePath, parsedLines);
+      if (loadIsStudy) {
+        // No generated tree for studies — clear any repertoire leftovers.
+        _treeRoot = null;
+        _treeIsWhite = null;
+        playabilityMap = {};
+        bottleneckMap = {};
+      } else {
+        await _loadTreeAndComputePlayability(filePath, parsedLines);
+        if (generation != _loadGeneration) return;
+      }
 
-      dueQueue = reviewService.orderLinesForReview(
-        lines,
-        reviewMap,
-        settings.reviewOrder,
-        playabilityMap: playabilityMap,
-      );
+      _linearDone.clear();
+      dueQueue = _buildQueue();
       notifyListeners();
 
       pickStartingLine(startLineId: startLineId);
     } catch (e) {
+      if (generation != _loadGeneration) return;
       error = 'Error loading repertoire: $e';
       notifyListeners();
     } finally {
-      isLoading = false;
-      notifyListeners();
+      // Only the current load owns the loading flag; a superseded one must
+      // leave it set so the winning load's spinner stays up.
+      if (generation == _loadGeneration) {
+        isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -212,7 +327,9 @@ class TrainingSessionController extends ChangeNotifier {
       final json = await storage.readFile(treePath);
       if (json == null || json.isEmpty) return;
 
-      final tree = deserializeTree(json);
+      // Multi-MB jsonDecode + recursive node build — off the UI isolate so
+      // opening the trainer doesn't freeze the frame.
+      final tree = await Isolate.run(() => deserializeTree(json));
       _treeRoot = tree.root;
 
       final config = tree.configSnapshot;
@@ -239,12 +356,39 @@ class TrainingSessionController extends ChangeNotifier {
   // LINE MANAGEMENT
   // ---------------------------------------------------------------------------
 
+  /// The review queue under the active repetition mode: spaced = due/new
+  /// lines only; linear = every line not yet completed this session.
+  List<RepertoireLine> _buildQueue() {
+    // Studies carry no CumProb, so the default "by cumulative probability"
+    // order would be meaningless — fall back to file (chapter) order.
+    var order = settings.reviewOrder;
+    if (sourceIsStudy && order == ReviewOrder.byImportance) {
+      order = ReviewOrder.sequential;
+    }
+    final ordered = reviewService.orderLinesForReview(
+      lines,
+      reviewMap,
+      order,
+      playabilityMap: playabilityMap,
+      dueOnly: repetitionMode == RepetitionMode.spaced,
+    );
+    if (repetitionMode == RepetitionMode.linear) {
+      return [
+        for (final line in ordered)
+          if (!_linearDone.contains(line.id)) line,
+      ];
+    }
+    return ordered;
+  }
+
   void pickStartingLine({String? startLineId}) {
     if (lines.isEmpty) return;
     RepertoireLine? initial;
     if (startLineId != null) {
-      initial = lines.firstWhere((l) => l.id == startLineId,
-          orElse: () => lines.first);
+      initial = lines.firstWhere(
+        (l) => l.id == startLineId,
+        orElse: () => lines.first,
+      );
     } else if (dueQueue.isNotEmpty) {
       initial = dueQueue.first;
     } else {
@@ -272,7 +416,9 @@ class TrainingSessionController extends ChangeNotifier {
         ? settings.trainingDepth!.clamp(1, line.moves.length)
         : line.moves.length;
 
-    final isNew = _isLineNew(line);
+    // Tactics mode always quizzes cold — the learn walkthrough would show
+    // the puzzle's solution.
+    final isNew = trainingMode == TrainingMode.repertoire && _isLineNew(line);
 
     currentLine = line;
     currentLineLength = effectiveLength;
@@ -290,132 +436,89 @@ class TrainingSessionController extends ChangeNotifier {
     opponentWaitingForAck = false;
     currentPairOpponent = null;
     currentPairUser = null;
+    _lineGeneration++;
+    playingIntro = false;
+    // Never auto-play intro moves in tactics mode — they are the solution.
+    trainingStartIndex =
+        trainingMode == TrainingMode.repertoire && settings.skipToFirstComment
+        ? _firstCommentIndex()
+        : 0;
     notifyListeners();
     onLineStarted?.call();
 
-    Future.microtask(() {
+    Future.microtask(() async {
+      if (!await _playIntroMoves()) return;
       if (phase == TrainingPhase.learning) {
-        advanceLearnPhase();
+        await advanceLearnPhase();
       } else {
-        advanceDrillPhase();
+        await advanceDrillPhase();
       }
     });
   }
 
-  void nextLine() => rebuildQueueAndAdvance();
-
-  // ---------------------------------------------------------------------------
-  // LEARN PHASE
-  // ---------------------------------------------------------------------------
-
-  Future<void> advanceLearnPhase() async {
-    if (currentLine == null) return;
-    if (currentMoveIndex >= currentLineLength) {
-      session.clearMoveHistory();
-      if (currentLine!.startPosition.fen != Chess.initial.fen) {
-        session.setPositionFromFen(currentLine!.startPosition.fen);
-      } else {
-        session.clearMoveHistory();
+  /// First move index (within the effective line length) whose comment has
+  /// displayable prose. Returns 0 when no move qualifies, so the whole line
+  /// is trained as before.
+  int _firstCommentIndex() {
+    if (currentLine == null) return 0;
+    for (int i = 0; i < currentLineLength; i++) {
+      final comment = currentLine!.comments[i.toString()];
+      if (comment != null && filterDisplayComment(comment).isNotEmpty) {
+        return i;
       }
-      currentMoveIndex = 0;
-      phase = TrainingPhase.drilling;
-      feedback = null;
-      currentAnnotation = null;
-      currentPairOpponent = null;
-      currentPairUser = null;
-      waitingForUser = false;
-      notifyListeners();
-      Future.microtask(advanceDrillPhase);
-      return;
     }
+    return 0;
+  }
 
-    final san = currentLine!.moves[currentMoveIndex];
-    final move = session.position.parseSan(san);
-    if (move == null) {
-      error = 'Invalid move in line: $san';
-      notifyListeners();
-      return;
-    }
-    session.playMove(san);
+  /// Auto-plays the moves before [trainingStartIndex] so the user watches the
+  /// line take shape instead of drilling rote opening moves. Returns false if
+  /// a new line (or dispose) interrupted playback.
+  Future<bool> _playIntroMoves() async {
+    if (trainingStartIndex <= 0 || currentLine == null) return true;
+    final generation = _lineGeneration;
 
-    final annotation = currentLine!.comments[currentMoveIndex.toString()];
-    final isUserMove = _isUserMove(currentMoveIndex);
-    final display = _buildMoveDisplay(currentMoveIndex, isOpponent: !isUserMove);
-
-    currentAnnotation = annotation;
-    feedback = null;
+    playingIntro = true;
     waitingForUser = false;
-
-    if (!isUserMove) {
-      currentPairOpponent = display;
-      currentPairUser = null;
-      notifyListeners();
-
-      if (annotation != null && annotation.isNotEmpty) {
-        opponentWaitingForAck = true;
-        notifyListeners();
-      } else {
-        await Future.delayed(Duration(milliseconds: settings.moveSpeedMs));
-        currentMoveIndex++;
-        await advanceLearnPhase();
-      }
-    } else {
-      currentPairUser = display;
-      notifyListeners();
-
-      if (settings.learnRequiresClick) {
-        learnWaitingForAck = true;
-        notifyListeners();
-      } else if (annotation != null && annotation.isNotEmpty) {
-        _learnTimer = Timer(
-          Duration(seconds: settings.learnDelaySec),
-          learnAcknowledged,
-        );
-      } else {
-        await Future.delayed(Duration(milliseconds: settings.moveSpeedMs));
-        currentMoveIndex++;
-        await advanceLearnPhase();
-      }
-    }
-  }
-
-  void learnAcknowledged() {
-    _learnTimer?.cancel();
-    session.goBack();
-    learnWaitingForAck = false;
-    learnQuizzing = true;
-    waitingForUser = true;
-    feedback = 'Your move';
-    currentAnnotation = null;
     notifyListeners();
-  }
 
-  Future<void> handleLearnQuizMove(CompletedMove move) async {
-    if (currentLine == null) return;
-    final expectedSan = currentLine!.moves[currentMoveIndex];
-    final isCorrect = isCorrectUserMove(move, expectedSan);
+    for (int i = 0; i < trainingStartIndex; i++) {
+      await Future.delayed(Duration(milliseconds: settings.introSpeedMs));
+      if (generation != _lineGeneration) return false;
 
-    if (isCorrect) {
-      session.playMove(expectedSan);
-      learnQuizzing = false;
-      waitingForUser = false;
-      feedback = 'Correct!';
-      notifyListeners();
-      await Future.delayed(const Duration(milliseconds: 300));
-      currentMoveIndex++;
-      await advanceLearnPhase();
-    } else {
-      feedback = 'Wrong — the move is $expectedSan';
-      notifyListeners();
-      await Future.delayed(const Duration(milliseconds: 1200));
-      session.playMove(expectedSan);
-      await Future.delayed(const Duration(milliseconds: 800));
-      session.goBack();
-      feedback = 'Try again';
-      waitingForUser = true;
+      final san = currentLine!.moves[i];
+      if (session.position.parseSan(san) == null) {
+        error = 'Invalid move in line: $san';
+        playingIntro = false;
+        notifyListeners();
+        return false;
+      }
+      session.playMove(san);
+      final isUser = _isUserMove(i);
+      final display = _buildMoveDisplay(i, isOpponent: !isUser);
+      if (isUser) {
+        currentPairUser = display;
+      } else {
+        currentPairOpponent = display;
+        currentPairUser = null;
+      }
+      currentMoveIndex = i + 1;
       notifyListeners();
     }
+
+    await Future.delayed(Duration(milliseconds: settings.introSpeedMs));
+    if (generation != _lineGeneration) return false;
+
+    playingIntro = false;
+    feedback = null;
+    currentAnnotation = null;
+    // Keep the opponent move as context for the first trained move; the
+    // advance methods overwrite it when the next move is the opponent's.
+    currentPairUser = null;
+    notifyListeners();
+    return true;
   }
+
+  void nextLine() => rebuildQueueAndAdvance();
 
   // ---------------------------------------------------------------------------
   // DRILL PHASE
@@ -424,13 +527,15 @@ class TrainingSessionController extends ChangeNotifier {
   bool _isUserMove(int moveIndex) {
     if (currentLine == null) return false;
     final startIsWhite = currentLine!.startPosition.turn == Side.white;
-    final isWhiteMove =
-        startIsWhite ? (moveIndex % 2 == 0) : (moveIndex % 2 == 1);
+    final isWhiteMove = startIsWhite
+        ? (moveIndex % 2 == 0)
+        : (moveIndex % 2 == 1);
     return (isWhiteLine && isWhiteMove) || (!isWhiteLine && !isWhiteMove);
   }
 
   Future<void> advanceDrillPhase() async {
     if (currentLine == null) return;
+    final generation = _lineGeneration;
     final limit = effectiveLineLength;
 
     while (currentMoveIndex < limit) {
@@ -438,15 +543,24 @@ class TrainingSessionController extends ChangeNotifier {
         _prepareDrillMove(currentMoveIndex);
         return;
       } else {
-        await _playOpponentMove(currentMoveIndex);
+        _playOpponentMove(currentMoveIndex);
         if (opponentWaitingForAck) return;
         currentMoveIndex++;
+        if (currentMoveIndex >= limit) {
+          // Let the final opponent move register on the board before the
+          // results panel replaces the card.
+          await Future.delayed(Duration(milliseconds: settings.moveSpeedMs));
+          if (generation != _lineGeneration) return;
+        }
       }
     }
     _onLineComplete();
   }
 
-  Future<void> _playOpponentMove(int moveIndex) async {
+  /// Plays the opponent reply with no trailing delay: the reply and the next
+  /// "Your move" prompt land in the same frame. Pacing happens while the
+  /// user's answered pair is still on screen (see [handleUserMove]).
+  void _playOpponentMove(int moveIndex) {
     if (currentLine == null) return;
     final san = currentLine!.moves[moveIndex];
     final move = session.position.parseSan(san);
@@ -464,8 +578,6 @@ class TrainingSessionController extends ChangeNotifier {
     final annotation = currentLine!.comments[moveIndex.toString()];
     currentAnnotation = annotation;
     notifyListeners();
-
-    await Future.delayed(Duration(milliseconds: settings.moveSpeedMs));
   }
 
   void _prepareDrillMove(int moveIndex) {
@@ -489,6 +601,7 @@ class TrainingSessionController extends ChangeNotifier {
       return;
     }
 
+    final generation = _lineGeneration;
     final expectedSan = currentLine!.moves[currentMoveIndex];
     final isCorrect = isCorrectUserMove(move, expectedSan);
 
@@ -503,7 +616,11 @@ class TrainingSessionController extends ChangeNotifier {
       notifyListeners();
 
       currentMoveIndex++;
-      await Future.delayed(Duration(milliseconds: settings.moveSpeedMs ~/ 2));
+      // Hold the completed pair + "Correct!" for the full pause, then swap
+      // to the opponent's reply and next prompt in one update — no cleared
+      // or opponent-only frames in between.
+      await Future.delayed(Duration(milliseconds: settings.moveSpeedMs));
+      if (generation != _lineGeneration) return;
       _clearPair();
       await advanceDrillPhase();
     } else {
@@ -511,18 +628,22 @@ class TrainingSessionController extends ChangeNotifier {
       lineHadMistake = true;
       wrongMoveIndices.add(currentMoveIndex);
 
+      // Input off immediately so a second answer can't interleave with the
+      // correction that plays out below.
+      waitingForUser = false;
       feedback = 'Wrong — the move was $expectedSan';
       notifyListeners();
       await Future.delayed(const Duration(milliseconds: 1200));
+      if (generation != _lineGeneration) return;
 
       final display = _buildMoveDisplay(currentMoveIndex, isOpponent: false);
       session.playMove(expectedSan);
-      waitingForUser = false;
       currentPairUser = display;
       currentAnnotation = null;
       notifyListeners();
       currentMoveIndex++;
       await Future.delayed(Duration(milliseconds: settings.moveSpeedMs));
+      if (generation != _lineGeneration) return;
       _clearPair();
       await advanceDrillPhase();
     }
@@ -534,98 +655,83 @@ class TrainingSessionController extends ChangeNotifier {
         wrongMoveIndices.isNotEmpty) {
       startReplayPhase();
     } else {
-      phase = TrainingPhase.finished;
-      waitingForUser = false;
-      feedback = 'Line complete — rate your recall.';
-      currentAnnotation = null;
-      notifyListeners();
+      _finishLine();
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // REPLAY PHASE
-  // ---------------------------------------------------------------------------
-
-  void startReplayPhase() {
-    wrongMoveIndices = wrongMoveIndices.toSet().toList()..sort();
-    replayIndex = 0;
-    phase = TrainingPhase.replaying;
-    feedback = 'Replay missed moves (${wrongMoveIndices.length} remaining)';
+  /// Enter the finished phase.  In spaced mode the results panel asks for a
+  /// rating; in linear mode the completion is recorded here (pass/fail, no
+  /// scheduling) and the panel offers Next.
+  @override
+  void _finishLine() {
+    phase = TrainingPhase.finished;
+    waitingForUser = false;
     currentAnnotation = null;
-    notifyListeners();
-    setupReplayPosition();
-  }
-
-  void setupReplayPosition() {
-    if (currentLine == null) return;
-    if (replayIndex >= wrongMoveIndices.length) {
-      phase = TrainingPhase.finished;
-      waitingForUser = false;
-      feedback = 'Line complete — rate your recall.';
-      currentAnnotation = null;
-      notifyListeners();
-      return;
-    }
-
-    final targetMoveIndex = wrongMoveIndices[replayIndex];
-
-    if (currentLine!.startPosition.fen != Chess.initial.fen) {
-      session.setPositionFromFen(currentLine!.startPosition.fen);
+    if (repetitionMode == RepetitionMode.linear) {
+      final solvedClean = !lineHadMistake;
+      feedback = trainingMode == TrainingMode.tactics
+          ? (solvedClean ? 'Puzzle solved!' : 'Solved — with mistakes.')
+          : (solvedClean ? 'Line complete!' : 'Line complete — with mistakes.');
+      unawaited(_recordLinearCompletion());
     } else {
-      session.clearMoveHistory();
+      feedback = 'Line complete — rate your recall.';
     }
-    for (int i = 0; i < targetMoveIndex; i++) {
-      session.playMove(currentLine!.moves[i]);
-    }
-
-    waitingForUser = true;
-    feedback = 'Replay — ${wrongMoveIndices.length - replayIndex} left';
-    currentAnnotation = null;
     notifyListeners();
   }
 
-  Future<void> handleReplayMove(CompletedMove move) async {
-    final targetMoveIndex = wrongMoveIndices[replayIndex];
-    final expectedSan = currentLine!.moves[targetMoveIndex];
-    final isCorrect = isCorrectUserMove(move, expectedSan);
+  /// Linear-mode bookkeeping: pass/fail counts, session stats and history —
+  /// but no spaced-repetition scheduling (the line stays "new" for SRS).
+  Future<void> _recordLinearCompletion() async {
+    final line = currentLine;
+    if (line == null) return;
+    _linearDone.add(line.id);
+    // Drop the finished line from the queue synchronously so the results
+    // panel's remaining count (and set-complete detection) are accurate.
+    dueQueue = _buildQueue();
 
-    if (isCorrect) {
-      updateMoveProgress(currentLine!, targetMoveIndex, wasCorrect: true);
-      session.playMove(expectedSan);
-      feedback = 'Correct!';
-      waitingForUser = false;
-      notifyListeners();
-      replayIndex++;
-      await Future.delayed(const Duration(milliseconds: 500));
-      setupReplayPosition();
+    final hadMistake = lineHadMistake;
+    if (hadMistake) {
+      sessionIncorrect++;
+      sessionStreak = 0;
     } else {
-      updateMoveProgress(currentLine!, targetMoveIndex, wasCorrect: false);
-      feedback = 'Try again — the move is $expectedSan';
-      notifyListeners();
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // MOVE VALIDATION
-  // ---------------------------------------------------------------------------
-
-  bool isCorrectUserMove(CompletedMove move, String expectedSan) {
-    final expectedMove = session.position.parseSan(expectedSan);
-    if (expectedMove == null) return false;
-
-    try {
-      final expectedPos = session.position.play(expectedMove);
-      final userMove = Move.parse(move.uci);
-      if (userMove == null) return false;
-      final userPos = session.position.play(userMove);
-      if (userPos.fen == expectedPos.fen) return true;
-    } catch (_) {
-      // invalid FEN — fall through to SAN comparison
+      sessionCorrect++;
+      sessionStreak++;
+      if (sessionStreak > sessionBestStreak) {
+        sessionBestStreak = sessionStreak;
+      }
     }
 
-    String normalizeSan(String san) =>
-        san.replaceAll(RegExp(r'[+#?!]'), '').trim().toLowerCase();
-    return normalizeSan(move.san) == normalizeSan(expectedSan);
+    final existing =
+        reviewMap[line.id] ??
+        RepertoireReviewEntry(
+          repertoireId: repertoireId,
+          lineId: line.id,
+          lineName: line.name,
+        );
+    reviewMap[line.id] = existing.copyWith(
+      passCount: hadMistake ? existing.passCount : existing.passCount + 1,
+      failCount: hadMistake ? existing.failCount + 1 : existing.failCount,
+    );
+
+    await reviewService.saveAll([
+      ..._otherRepertoireEntries,
+      ...reviewMap.values,
+    ]);
+    await reviewService.saveMoveProgress(
+      moveProgressMap.values.toList(),
+      repertoireId: repertoireId,
+    );
+    await reviewService.appendHistory([
+      RepertoireReviewHistoryEntry(
+        repertoireId: repertoireId,
+        lineId: line.id,
+        timestampUtc: DateTime.now().toUtc(),
+        rating: '',
+        hadMistake: hadMistake,
+        sessionType: 'linear',
+      ),
+    ]);
+    notifyListeners();
   }
 
   // ---------------------------------------------------------------------------
@@ -634,8 +740,15 @@ class TrainingSessionController extends ChangeNotifier {
 
   Future<void> rateLine(ReviewRating rating) async {
     if (currentLine == null) return;
+    // Linear mode has no ratings — completion was recorded in _finishLine;
+    // a stray rating call (keyboard shortcut) just advances.
+    if (repetitionMode == RepetitionMode.linear) {
+      rebuildQueueAndAdvance();
+      return;
+    }
 
-    final existing = reviewMap[currentLine!.id] ??
+    final existing =
+        reviewMap[currentLine!.id] ??
         RepertoireReviewEntry(
           repertoireId: repertoireId,
           lineId: currentLine!.id,
@@ -643,14 +756,18 @@ class TrainingSessionController extends ChangeNotifier {
         );
 
     final hadMistake = lineHadMistake;
-    final updated = reviewService.applyRating(existing, rating).copyWith(
+    final updated = reviewService
+        .applyRating(existing, rating)
+        .copyWith(
           passCount: hadMistake ? existing.passCount : existing.passCount + 1,
           failCount: hadMistake ? existing.failCount + 1 : existing.failCount,
         );
     reviewMap[currentLine!.id] = updated;
 
-    await reviewService
-        .saveAll([..._otherRepertoireEntries, ...reviewMap.values]);
+    await reviewService.saveAll([
+      ..._otherRepertoireEntries,
+      ...reviewMap.values,
+    ]);
     await reviewService.saveMoveProgress(
       moveProgressMap.values.toList(),
       repertoireId: repertoireId,
@@ -663,7 +780,7 @@ class TrainingSessionController extends ChangeNotifier {
         rating: rating.name,
         hadMistake: hadMistake,
         sessionType: 'trainer',
-      )
+      ),
     ]);
 
     repertoireService.updateLineReviewHeaders(
@@ -692,35 +809,28 @@ class TrainingSessionController extends ChangeNotifier {
     if (settings.autoNext) {
       rebuildQueueAndAdvance();
     } else {
-      dueQueue = reviewService.orderLinesForReview(
-        lines,
-        reviewMap,
-        settings.reviewOrder,
-        playabilityMap: playabilityMap,
-      );
+      dueQueue = _buildQueue();
       notifyListeners();
     }
   }
 
   void rebuildQueueAndAdvance() {
-    dueQueue = reviewService.orderLinesForReview(
-      lines,
-      reviewMap,
-      settings.reviewOrder,
-      playabilityMap: playabilityMap,
-    );
+    dueQueue = _buildQueue();
 
     if (dueQueue.isEmpty) {
       phase = TrainingPhase.finished;
-      feedback = 'All caught up!';
+      feedback = repetitionMode == RepetitionMode.linear
+          ? 'Set complete!'
+          : 'All caught up!';
       notifyListeners();
       return;
     }
 
     int nextIndex = 0;
     if (currentLine != null) {
-      final currentQueueIndex =
-          dueQueue.indexWhere((l) => l.id == currentLine!.id);
+      final currentQueueIndex = dueQueue.indexWhere(
+        (l) => l.id == currentLine!.id,
+      );
       if (currentQueueIndex >= 0) {
         nextIndex = (currentQueueIndex + 1) % dueQueue.length;
       }
@@ -730,25 +840,19 @@ class TrainingSessionController extends ChangeNotifier {
 
   /// Start the next unseen/new line from the queue.
   void startNextNew() {
-    final line = dueQueue.firstWhere(
-      (l) {
-        final entry = reviewMap[l.id];
-        return entry == null || entry.isNew;
-      },
-      orElse: () => dueQueue.first,
-    );
+    final line = dueQueue.firstWhere((l) {
+      final entry = reviewMap[l.id];
+      return entry == null || entry.isNew;
+    }, orElse: () => dueQueue.first);
     startLine(line);
   }
 
   /// Start the next due-for-review (not new) line from the queue.
   void startNextDue() {
-    final line = dueQueue.firstWhere(
-      (l) {
-        final entry = reviewMap[l.id];
-        return entry != null && !entry.isNew && entry.isDue;
-      },
-      orElse: () => dueQueue.first,
-    );
+    final line = dueQueue.firstWhere((l) {
+      final entry = reviewMap[l.id];
+      return entry != null && !entry.isNew && entry.isDue;
+    }, orElse: () => dueQueue.first);
     startLine(line);
   }
 
@@ -757,8 +861,11 @@ class TrainingSessionController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updateMoveProgress(RepertoireLine line, int moveIndex,
-      {required bool wasCorrect}) {
+  void updateMoveProgress(
+    RepertoireLine line,
+    int moveIndex, {
+    required bool wasCorrect,
+  }) {
     final key = '${line.id}:$moveIndex';
     final existing = moveProgressMap[key];
     final threshold = settings.correctStreakThreshold;
@@ -795,55 +902,6 @@ class TrainingSessionController extends ChangeNotifier {
   // MOVE DISPLAY HELPERS
   // ---------------------------------------------------------------------------
 
-  /// Compute the full move number for a given move index in the current line.
-  int _fullMoveNumber(int moveIndex) {
-    if (currentLine == null) return 1;
-    final startFullmoves = currentLine!.startPosition.fullmoves;
-    final startIsWhite = currentLine!.startPosition.turn == Side.white;
-    if (startIsWhite) {
-      return startFullmoves + (moveIndex ~/ 2);
-    } else {
-      return startFullmoves + ((moveIndex + 1) ~/ 2);
-    }
-  }
-
-  /// Whether the move at [moveIndex] is White's move.
-  bool _isMoveWhite(int moveIndex) {
-    if (currentLine == null) return true;
-    final startIsWhite = currentLine!.startPosition.turn == Side.white;
-    return startIsWhite ? (moveIndex % 2 == 0) : (moveIndex % 2 == 1);
-  }
-
-  /// Format a move as "1. e4" or "1... e5".
-  String formatMoveNotation(int moveIndex, String san) {
-    final num = _fullMoveNumber(moveIndex);
-    final isWhite = _isMoveWhite(moveIndex);
-    return isWhite ? '$num. $san' : '$num... $san';
-  }
-
-  /// Build a [MoveDisplayInfo] for the given move index.
-  MoveDisplayInfo _buildMoveDisplay(int moveIndex, {bool isOpponent = false}) {
-    if (currentLine == null) {
-      return MoveDisplayInfo(
-        moveIndex: moveIndex,
-        san: '',
-        fullMoveNumber: 1,
-        isWhiteMove: true,
-        isOpponentMove: isOpponent,
-        comment: null,
-      );
-    }
-    final san = currentLine!.moves[moveIndex];
-    return MoveDisplayInfo(
-      moveIndex: moveIndex,
-      san: san,
-      fullMoveNumber: _fullMoveNumber(moveIndex),
-      isWhiteMove: _isMoveWhite(moveIndex),
-      isOpponentMove: isOpponent,
-      comment: currentLine!.comments[moveIndex.toString()],
-    );
-  }
-
   void _clearPair() {
     currentPairOpponent = null;
     currentPairUser = null;
@@ -865,37 +923,4 @@ class TrainingSessionController extends ChangeNotifier {
       }
     });
   }
-
-}
-
-/// Information about a move to display in the Chessable-style panel.
-class MoveDisplayInfo {
-  final int moveIndex;
-  final String san;
-  final int fullMoveNumber;
-  final bool isWhiteMove;
-  final bool isOpponentMove;
-  final String? comment;
-
-  const MoveDisplayInfo({
-    required this.moveIndex,
-    required this.san,
-    required this.fullMoveNumber,
-    required this.isWhiteMove,
-    required this.isOpponentMove,
-    this.comment,
-  });
-
-  /// Formatted notation like "1. e4" or "1... e5"
-  String get notation =>
-      isWhiteMove ? '$fullMoveNumber. $san' : '$fullMoveNumber... $san';
-
-  /// Label like "Black's move 1... e5" or "White's move 2. Nf3"
-  String get moveLabel {
-    final side = isWhiteMove ? "White's" : "Black's";
-    return '$side move $notation';
-  }
-
-  /// Label for "Your move" display.
-  String get yourMoveLabel => 'Your move $notation';
 }

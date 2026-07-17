@@ -5,32 +5,19 @@ import 'package:chess_auto_prep/services/line_metrics_helpers.dart';
 import '../utils/pgn_utils.dart' as pgn_utils;
 
 /// Coverage category filter for the lines browser.
-enum CoverageFilter {
-  all,
-  covered,
-  tooShallow,
-  tooDeep,
-  unaccounted,
-}
+enum CoverageFilter { all, covered, tooShallow, tooDeep, unaccounted }
 
-/// Sort order for the lines browser.
-enum LineSortBy {
-  name,
-  length,
-  position,
-  quality,
-  playability,
-  traps,
-  coherence,
-}
+/// Sortable columns in the lines browser table.
+enum LineSortBy { name, moves, ease, coherence, traps, coverage }
 
-/// Quality/metrics filter for the lines browser.
-enum LineMetricsFilter {
-  all,
-  hardMoves,
-  trappy,
-  lowCoherence,
-}
+/// Per-line quality toggles. Active filters are ANDed together.
+enum LineMetricsFilter { hardMoves, trappy, lowCoherence }
+
+/// A move whose ease falls below this is flagged as hard to find.
+const double hardMoveEaseThreshold = 0.3;
+
+/// A line whose coherence falls below this is flagged as low coherence.
+const double lowCoherenceThreshold = 0.4;
 
 bool isPlaceholderLineTitle(String title) =>
     title.isEmpty ||
@@ -38,44 +25,69 @@ bool isPlaceholderLineTitle(String title) =>
     title == 'Repertoire Line' ||
     title == 'Edited Line';
 
-String getLineGroupName(RepertoireLine line) {
-  final eventTitle = pgn_utils.extractEventTitle(line.fullPgn);
-  if (!isPlaceholderLineTitle(eventTitle)) {
-    final parts = eventTitle.split(RegExp(r'[:\-–#]'));
-    if (parts.isNotEmpty) {
-      return parts[0].trim();
-    }
-    return eventTitle;
-  }
+/// Per-line strings derived from the PGN, precomputed once per repertoire
+/// change so filter toggles and row builds never re-parse anything.
+class LineDisplayData {
+  /// Resolved display title: PGN event/title header, or the line name.
+  final String title;
 
-  if (line.moves.length >= 2) {
-    return '1.${line.moves[0]} ${line.moves[1]}';
-  } else if (line.moves.isNotEmpty) {
-    return '1.${line.moves[0]}';
-  }
-  return 'Other';
+  /// Lowercase haystack for search: name, title, and moves with and
+  /// without move numbers.
+  final String searchText;
+
+  const LineDisplayData({required this.title, required this.searchText});
 }
 
-/// Filters, sorts, and groups repertoire lines for the browser.
-({
-  List<RepertoireLine> filtered,
-  Map<String, List<RepertoireLine>> grouped,
-  Set<String> groupsToExpand,
-}) filterSortAndGroupLines({
+/// Builds the display/search index for [lines]. O(total PGN size); call it
+/// when the repertoire changes, not per filter run.
+Map<String, LineDisplayData> buildLineDisplayIndex(List<RepertoireLine> lines) {
+  final index = <String, LineDisplayData>{};
+  for (final line in lines) {
+    final eventTitle = pgn_utils.extractEventTitle(line.fullPgn);
+    final title = !isPlaceholderLineTitle(eventTitle) ? eventTitle : line.name;
+    final searchText = [
+      line.name,
+      eventTitle,
+      line.moves.join(' '),
+      pgn_utils.formatMovesForSearch(line.moves),
+    ].join('\n').toLowerCase();
+    index[line.id] = LineDisplayData(title: title, searchText: searchText);
+  }
+  return index;
+}
+
+/// Rank for coverage sorting: best (covered) first, unanalyzed last.
+int? coverageSortRank(LineCoverageInfo? info) {
+  final category = info?.leaf?.category;
+  return switch (category) {
+    LeafCategory.covered => 0,
+    LeafCategory.tooDeep => 1,
+    LeafCategory.tooShallow => 2,
+    null => null,
+  };
+}
+
+/// Filters and sorts repertoire lines for the browser. Flat list, no grouping.
+List<RepertoireLine> filterAndSortLines({
   required List<RepertoireLine> allLines,
   required String searchTerm,
   required bool showOnlyMatchingPosition,
   required List<String> currentMoves,
   required LineSortBy sortBy,
+  required bool sortAscending,
   required CoverageFilter coverageFilter,
-  required LineMetricsFilter metricsFilter,
+  required Set<LineMetricsFilter> metricsFilters,
   required Map<String, LineCoverageInfo> lineCoverage,
   required Map<String, LineQualityInfo> lineMetrics,
   CoverageResult? coverageResult,
+
+  /// Precomputed via [buildLineDisplayIndex]; derived on the fly when absent
+  /// (tests, one-off callers).
+  Map<String, LineDisplayData>? displayIndex,
 }) {
   final normalizedSearch = searchTerm.toLowerCase().trim();
 
-  var filtered = allLines.where((line) {
+  final filtered = allLines.where((line) {
     if (showOnlyMatchingPosition && currentMoves.isNotEmpty) {
       if (!pgn_utils.lineMatchesPosition(line, currentMoves)) {
         return false;
@@ -83,17 +95,15 @@ String getLineGroupName(RepertoireLine line) {
     }
 
     if (normalizedSearch.isNotEmpty) {
-      final lineName = line.name.toLowerCase();
-      final eventTitle =
-          pgn_utils.extractEventTitle(line.fullPgn).toLowerCase();
-      final movesString = line.moves.join(' ').toLowerCase();
-      final formattedMoves =
-          pgn_utils.formatMovesForSearch(line.moves).toLowerCase();
-
-      if (!lineName.contains(normalizedSearch) &&
-          !eventTitle.contains(normalizedSearch) &&
-          !movesString.contains(normalizedSearch) &&
-          !formattedMoves.contains(normalizedSearch)) {
+      final searchText =
+          displayIndex?[line.id]?.searchText ??
+          [
+            line.name,
+            pgn_utils.extractEventTitle(line.fullPgn),
+            line.moves.join(' '),
+            pgn_utils.formatMovesForSearch(line.moves),
+          ].join('\n').toLowerCase();
+      if (!searchText.contains(normalizedSearch)) {
         return false;
       }
     }
@@ -104,95 +114,64 @@ String getLineGroupName(RepertoireLine line) {
 
       switch (coverageFilter) {
         case CoverageFilter.covered:
-          return info.leaf?.category == LeafCategory.covered;
+          if (info.leaf?.category != LeafCategory.covered) return false;
         case CoverageFilter.tooShallow:
-          return info.leaf?.category == LeafCategory.tooShallow;
+          if (info.leaf?.category != LeafCategory.tooShallow) return false;
         case CoverageFilter.tooDeep:
-          return info.leaf?.category == LeafCategory.tooDeep;
+          if (info.leaf?.category != LeafCategory.tooDeep) return false;
         case CoverageFilter.unaccounted:
-          return info.unaccountedMoves.isNotEmpty;
+          if (info.unaccountedMoves.isEmpty) return false;
         case CoverageFilter.all:
-          return true;
+          break;
+      }
+    }
+
+    if (metricsFilters.isNotEmpty) {
+      final m = lineMetrics[line.id];
+      if (m == null) return false;
+      for (final filter in metricsFilters) {
+        final passes = switch (filter) {
+          LineMetricsFilter.hardMoves =>
+            m.bottleneckQuality != null &&
+                m.bottleneckQuality! < hardMoveEaseThreshold,
+          LineMetricsFilter.trappy => m.trapCount > 0,
+          LineMetricsFilter.lowCoherence =>
+            m.coherence != null && m.coherence! < lowCoherenceThreshold,
+        };
+        if (!passes) return false;
       }
     }
 
     return true;
   }).toList();
 
-  if (metricsFilter != LineMetricsFilter.all) {
-    filtered = filtered.where((line) {
-      final m = lineMetrics[line.id];
-      if (m == null) return false;
-      return switch (metricsFilter) {
-        LineMetricsFilter.all => true,
-        LineMetricsFilter.hardMoves =>
-          m.bottleneckQuality != null && m.bottleneckQuality! < 0.3,
-        LineMetricsFilter.trappy => m.trapCount > 0,
-        LineMetricsFilter.lowCoherence =>
-          m.coherence != null && m.coherence! < 0.4,
-      };
-    }).toList();
-  }
+  // Sort key per line; null keys always sort last regardless of direction.
+  num? keyOf(RepertoireLine line) => switch (sortBy) {
+    LineSortBy.name => null,
+    LineSortBy.moves => line.moves.length,
+    LineSortBy.ease => lineMetrics[line.id]?.playability,
+    LineSortBy.coherence => lineMetrics[line.id]?.coherence,
+    LineSortBy.traps => lineMetrics[line.id]?.trapCount,
+    LineSortBy.coverage => coverageSortRank(lineCoverage[line.id]),
+  };
 
-  switch (sortBy) {
-    case LineSortBy.length:
-      filtered.sort((a, b) => b.moves.length.compareTo(a.moves.length));
-    case LineSortBy.position:
-      filtered.sort((a, b) {
-        final aMatch = pgn_utils.getPositionMatchDepth(a, currentMoves);
-        final bMatch = pgn_utils.getPositionMatchDepth(b, currentMoves);
-        if (aMatch != bMatch) return bMatch.compareTo(aMatch);
-        return a.name.compareTo(b.name);
-      });
-    case LineSortBy.quality:
-      filtered.sort((a, b) {
-        final aq = lineMetrics[a.id]?.quality ?? 0.5;
-        final bq = lineMetrics[b.id]?.quality ?? 0.5;
-        return aq.compareTo(bq);
-      });
-    case LineSortBy.playability:
-      filtered.sort((a, b) {
-        final ap = lineMetrics[a.id]?.playability ?? 0.5;
-        final bp = lineMetrics[b.id]?.playability ?? 0.5;
-        return bp.compareTo(ap);
-      });
-    case LineSortBy.traps:
-      filtered.sort((a, b) {
-        final at = lineMetrics[a.id]?.trapCount ?? 0;
-        final bt = lineMetrics[b.id]?.trapCount ?? 0;
-        return bt.compareTo(at);
-      });
-    case LineSortBy.coherence:
-      filtered.sort((a, b) {
-        final ac = lineMetrics[a.id]?.coherence ?? 0.5;
-        final bc = lineMetrics[b.id]?.coherence ?? 0.5;
-        return bc.compareTo(ac);
-      });
-    case LineSortBy.name:
-      filtered.sort((a, b) => a.name.compareTo(b.name));
-  }
+  int byName(RepertoireLine a, RepertoireLine b) =>
+      a.name.toLowerCase().compareTo(b.name.toLowerCase());
 
-  final grouped = <String, List<RepertoireLine>>{};
-  for (final line in filtered) {
-    final groupName = getLineGroupName(line);
-    grouped.putIfAbsent(groupName, () => []).add(line);
-  }
-
-  final groupsToExpand = <String>{};
-  if (currentMoves.isNotEmpty) {
-    for (final entry in grouped.entries) {
-      final hasExactMatch = entry.value.any((l) =>
-          l.moves.length >= currentMoves.length &&
-          pgn_utils.lineMatchesPosition(l, currentMoves));
-      if (hasExactMatch) {
-        groupsToExpand.add(entry.key);
-      }
+  filtered.sort((a, b) {
+    if (sortBy == LineSortBy.name) {
+      final c = byName(a, b);
+      return sortAscending ? c : -c;
     }
-  }
+    final ka = keyOf(a);
+    final kb = keyOf(b);
+    if (ka == null && kb == null) return byName(a, b);
+    if (ka == null) return 1;
+    if (kb == null) return -1;
+    final c = ka.compareTo(kb);
+    if (c != 0) return sortAscending ? c : -c;
+    return byName(a, b);
+  });
 
-  return (
-    filtered: filtered,
-    grouped: grouped,
-    groupsToExpand: groupsToExpand,
-  );
+  return filtered;
 }

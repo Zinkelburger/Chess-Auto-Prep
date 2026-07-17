@@ -50,30 +50,30 @@ class PgnSource {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        if (filePath != null) 'filePath': filePath,
-        'color': color.name,
-        'totalGames': totalGames,
-        if (sliceConfig != null && !sliceConfig!.isEmpty)
-          'sliceConfig': sliceConfig!.toJsonString(),
-        if (matchedIndices != null) 'matchedIndices': matchedIndices,
-      };
+    'id': id,
+    'name': name,
+    if (filePath != null) 'filePath': filePath,
+    'color': color.name,
+    'totalGames': totalGames,
+    if (sliceConfig != null && !sliceConfig!.isEmpty)
+      'sliceConfig': sliceConfig!.toJsonString(),
+    if (matchedIndices != null) 'matchedIndices': matchedIndices,
+  };
 
   factory PgnSource.fromJson(Map<String, dynamic> json) => PgnSource(
-        id: json['id'] as String? ?? generateId(),
-        name: json['name'] as String? ?? 'Untitled',
-        filePath: json['filePath'] as String?,
-        color: PgnSourceColor.values.firstWhere(
-          (c) => c.name == (json['color'] as String? ?? 'white'),
-          orElse: () => PgnSourceColor.white,
-        ),
-        totalGames: json['totalGames'] as int? ?? 0,
-        sliceConfig: json['sliceConfig'] != null
-            ? SliceConfig.fromJsonString(json['sliceConfig'] as String)
-            : null,
-        matchedIndices: (json['matchedIndices'] as List<dynamic>?)?.cast<int>(),
-      );
+    id: json['id'] as String? ?? generateId(),
+    name: json['name'] as String? ?? 'Untitled',
+    filePath: json['filePath'] as String?,
+    color: PgnSourceColor.values.firstWhere(
+      (c) => c.name == (json['color'] as String? ?? 'white'),
+      orElse: () => PgnSourceColor.white,
+    ),
+    totalGames: json['totalGames'] as int? ?? 0,
+    sliceConfig: json['sliceConfig'] != null
+        ? SliceConfig.fromJsonString(json['sliceConfig'] as String)
+        : null,
+    matchedIndices: (json['matchedIndices'] as List<dynamic>?)?.cast<int>(),
+  );
 
   String toJsonString() => jsonEncode(toJson());
 

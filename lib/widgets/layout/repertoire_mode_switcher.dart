@@ -3,7 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 
-import 'repertoire_mode.dart';
+import '../../models/repertoire_mode.dart';
 
 class RepertoireModeSwitcher extends StatelessWidget {
   const RepertoireModeSwitcher({
@@ -47,9 +47,7 @@ class RepertoireModeSwitcher extends StatelessWidget {
           style: ButtonStyle(
             visualDensity: VisualDensity.compact,
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            textStyle: WidgetStatePropertyAll(
-              theme.textTheme.labelSmall,
-            ),
+            textStyle: WidgetStatePropertyAll(theme.textTheme.labelSmall),
           ),
         ),
       ),

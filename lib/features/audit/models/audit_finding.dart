@@ -7,20 +7,18 @@ enum AuditFindingType {
   missingResponse,
   weakPosition,
   deadEnd,
+
+  // Hole-hunt (adversarial) finding types — emitted by HoleHuntService,
+  // never by the defensive audit.
+  uncoveredStrongMove,
+  refutation,
+  practicalTrap,
 }
 
-enum AuditSeverity {
-  critical,
-  warning,
-  info,
-}
+enum AuditSeverity { critical, warning, info }
 
 /// Source that detected a missing opponent response.
-enum MissingResponseSource {
-  lichess,
-  maia,
-  clash,
-}
+enum MissingResponseSource { lichess, maia, clash }
 
 class AuditFinding {
   final AuditFindingType type;
@@ -74,6 +72,19 @@ class AuditFinding {
   /// elsewhere in the repertoire (the resulting FEN exists in the tree).
   final bool transposesIntoRepertoire;
 
+  /// For Refutation/PracticalTrap: the concrete line to play (SAN).
+  final List<String>? exploitLine;
+
+  /// For PracticalTrap: expectimax practical eval (attacker perspective, cp).
+  final int? expectedEvalCp;
+
+  /// For PracticalTrap: expectedEvalCp minus raw engine eval (cp) — how much
+  /// harder the position plays than it "should".
+  final int? practicalGapCp;
+
+  /// Hole-hunt ranking score: cumulative reach probability × gain (cp).
+  final double? exploitScore;
+
   /// Whether the user has dismissed this finding.
   bool dismissed;
 
@@ -95,6 +106,10 @@ class AuditFinding {
     this.uncoveredMoves,
     this.cumulativeProbability,
     this.transposesIntoRepertoire = false,
+    this.exploitLine,
+    this.expectedEvalCp,
+    this.practicalGapCp,
+    this.exploitScore,
     this.dismissed = false,
   });
 
@@ -151,8 +166,9 @@ class AuditFinding {
         final numbered = _sanWithMoveNumber(move, movePath.length);
         final probLabel = _missingMoveLocalProbLabel;
         final transTag = transposesIntoRepertoire ? ' · transposes' : '';
-        final prefix =
-            source == MissingResponseSource.clash ? 'Clash' : 'Missing';
+        final prefix = source == MissingResponseSource.clash
+            ? 'Clash'
+            : 'Missing';
         return '$prefix: $numbered ($probLabel$transTag)';
       case AuditFindingType.weakPosition:
         return 'Weak position: eval ${positionEvalCp}cp';
@@ -163,6 +179,29 @@ class AuditFinding {
           return 'Dead end: $count uncovered (${moves.join(", ")})';
         }
         return 'Dead end: $count opponent continuations uncovered';
+      case AuditFindingType.uncoveredStrongMove:
+        final move = missingMove ?? '?';
+        final numbered = _sanWithMoveNumber(move, movePath.length);
+        final transTag = transposesIntoRepertoire ? ' · transposes' : '';
+        return 'Uncovered: $numbered is engine-strong, no reply in file'
+            '$transTag';
+      case AuditFindingType.refutation:
+        final move = ourMove ?? '?';
+        final numbered = movePath.isNotEmpty
+            ? _sanWithMoveNumber(move, movePath.length - 1)
+            : move;
+        final line = exploitLine;
+        final lineTag = line != null && line.isNotEmpty
+            ? ' — ${line.join(" ")}'
+            : '';
+        return 'Refuted: $numbered loses ${evalLossCp}cp$lineTag';
+      case AuditFindingType.practicalTrap:
+        final line = exploitLine;
+        final lineTag = line != null && line.isNotEmpty
+            ? ' (${line.take(6).join(" ")})'
+            : '';
+        return 'Trap zone: practically +${practicalGapCp}cp over the raw eval'
+            '$lineTag';
     }
   }
 
@@ -190,49 +229,57 @@ class AuditFinding {
   // ── JSON serialization ──────────────────────────────────────────────────
 
   Map<String, dynamic> toJson() => {
-        'type': type.name,
-        'severity': severity.name,
-        'movePath': movePath,
-        'fen': fen,
-        if (ourMove != null) 'ourMove': ourMove,
-        if (bestMove != null) 'bestMove': bestMove,
-        if (evalLossCp != null) 'evalLossCp': evalLossCp,
-        if (positionEvalCp != null) 'positionEvalCp': positionEvalCp,
-        if (bestMoveEvalCp != null) 'bestMoveEvalCp': bestMoveEvalCp,
-        if (missingMove != null) 'missingMove': missingMove,
-        if (gameCount != null) 'gameCount': gameCount,
-        if (probability != null) 'probability': probability,
-        if (source != null) 'source': source!.name,
-        if (continuationCount != null) 'continuationCount': continuationCount,
-        if (uncoveredMoves != null && uncoveredMoves!.isNotEmpty)
-          'uncoveredMoves': uncoveredMoves,
-        if (cumulativeProbability != null)
-          'cumulativeProbability': cumulativeProbability,
-        if (transposesIntoRepertoire) 'transposesIntoRepertoire': true,
-        if (dismissed) 'dismissed': true,
-      };
+    'type': type.name,
+    'severity': severity.name,
+    'movePath': movePath,
+    'fen': fen,
+    if (ourMove != null) 'ourMove': ourMove,
+    if (bestMove != null) 'bestMove': bestMove,
+    if (evalLossCp != null) 'evalLossCp': evalLossCp,
+    if (positionEvalCp != null) 'positionEvalCp': positionEvalCp,
+    if (bestMoveEvalCp != null) 'bestMoveEvalCp': bestMoveEvalCp,
+    if (missingMove != null) 'missingMove': missingMove,
+    if (gameCount != null) 'gameCount': gameCount,
+    if (probability != null) 'probability': probability,
+    if (source != null) 'source': source!.name,
+    if (continuationCount != null) 'continuationCount': continuationCount,
+    if (uncoveredMoves != null && uncoveredMoves!.isNotEmpty)
+      'uncoveredMoves': uncoveredMoves,
+    if (cumulativeProbability != null)
+      'cumulativeProbability': cumulativeProbability,
+    if (transposesIntoRepertoire) 'transposesIntoRepertoire': true,
+    if (exploitLine != null && exploitLine!.isNotEmpty)
+      'exploitLine': exploitLine,
+    if (expectedEvalCp != null) 'expectedEvalCp': expectedEvalCp,
+    if (practicalGapCp != null) 'practicalGapCp': practicalGapCp,
+    if (exploitScore != null) 'exploitScore': exploitScore,
+    if (dismissed) 'dismissed': true,
+  };
 
   factory AuditFinding.fromJson(Map<String, dynamic> j) => AuditFinding(
-        type: AuditFindingType.values.byName(j['type'] as String),
-        severity: AuditSeverity.values.byName(j['severity'] as String),
-        movePath: (j['movePath'] as List).cast<String>(),
-        fen: j['fen'] as String,
-        ourMove: j['ourMove'] as String?,
-        bestMove: j['bestMove'] as String?,
-        evalLossCp: j['evalLossCp'] as int?,
-        positionEvalCp: j['positionEvalCp'] as int?,
-        bestMoveEvalCp: j['bestMoveEvalCp'] as int?,
-        missingMove: j['missingMove'] as String?,
-        gameCount: j['gameCount'] as int?,
-        probability: (j['probability'] as num?)?.toDouble(),
-        source: j['source'] != null
-            ? MissingResponseSource.values.byName(j['source'] as String)
-            : null,
-        continuationCount: j['continuationCount'] as int?,
-        uncoveredMoves: (j['uncoveredMoves'] as List?)?.cast<String>(),
-        cumulativeProbability: (j['cumulativeProbability'] as num?)?.toDouble(),
-        transposesIntoRepertoire:
-            j['transposesIntoRepertoire'] as bool? ?? false,
-        dismissed: j['dismissed'] as bool? ?? false,
-      );
+    type: AuditFindingType.values.byName(j['type'] as String),
+    severity: AuditSeverity.values.byName(j['severity'] as String),
+    movePath: (j['movePath'] as List).cast<String>(),
+    fen: j['fen'] as String,
+    ourMove: j['ourMove'] as String?,
+    bestMove: j['bestMove'] as String?,
+    evalLossCp: j['evalLossCp'] as int?,
+    positionEvalCp: j['positionEvalCp'] as int?,
+    bestMoveEvalCp: j['bestMoveEvalCp'] as int?,
+    missingMove: j['missingMove'] as String?,
+    gameCount: j['gameCount'] as int?,
+    probability: (j['probability'] as num?)?.toDouble(),
+    source: j['source'] != null
+        ? MissingResponseSource.values.byName(j['source'] as String)
+        : null,
+    continuationCount: j['continuationCount'] as int?,
+    uncoveredMoves: (j['uncoveredMoves'] as List?)?.cast<String>(),
+    cumulativeProbability: (j['cumulativeProbability'] as num?)?.toDouble(),
+    transposesIntoRepertoire: j['transposesIntoRepertoire'] as bool? ?? false,
+    exploitLine: (j['exploitLine'] as List?)?.cast<String>(),
+    expectedEvalCp: j['expectedEvalCp'] as int?,
+    practicalGapCp: j['practicalGapCp'] as int?,
+    exploitScore: (j['exploitScore'] as num?)?.toDouble(),
+    dismissed: j['dismissed'] as bool? ?? false,
+  );
 }

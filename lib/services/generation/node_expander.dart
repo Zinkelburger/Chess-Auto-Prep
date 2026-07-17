@@ -30,6 +30,9 @@ import 'generation_config.dart';
 import 'opponent_prior.dart';
 import 'setup_bias.dart';
 
+part 'maia_db_expander.dart';
+part 'stockfish_expander.dart';
+
 /// Move probability assigned to an engine-injected PV continuation when
 /// Maia has no opinion on it.  Small but non-zero: the move must survive
 /// probability floors so the engine's expected reply is present in the
@@ -180,11 +183,10 @@ abstract class NodeExpander {
   ///
   /// `BuildMode.dbExplorer` never reaches here — it has its own entry point
   /// driven by the PGN frequency map rather than per-node move sources.
-  factory NodeExpander.forRun(BuildRun run) =>
-      switch (run.config.buildMode) {
-        BuildMode.maiaDbExplore => MaiaDbExpander(run),
-        _ => StockfishExpander(run),
-      };
+  factory NodeExpander.forRun(BuildRun run) => switch (run.config.buildMode) {
+    BuildMode.maiaDbExplore => MaiaDbExpander(run),
+    _ => StockfishExpander(run),
+  };
 
   TreeBuildConfig get config => run.config;
 
@@ -273,8 +275,9 @@ abstract class NodeExpander {
       candidates: candidates,
       smoothing: smoothing,
       minGames: config.minGames,
-      maxChildren:
-          config.effectiveOppMaxChildren(effectiveSearchPriority(node)),
+      maxChildren: config.effectiveOppMaxChildren(
+        effectiveSearchPriority(node),
+      ),
       massTarget: config.oppMassTarget,
       attachStats: true,
     );
@@ -318,8 +321,9 @@ abstract class NodeExpander {
       ],
       smoothing: false,
       minMoveProb: config.maiaMinProb,
-      maxChildren:
-          config.effectiveOppMaxChildren(effectiveSearchPriority(node)),
+      maxChildren: config.effectiveOppMaxChildren(
+        effectiveSearchPriority(node),
+      ),
       massTarget: config.oppMassTarget,
     );
 
@@ -408,12 +412,13 @@ abstract class NodeExpander {
         final result = await run.pool.evaluateFen(childFen, config.evalDepth);
         run.stats.sfMultipvCalls++;
         final childIsWhite = isWhiteToMove(childFen);
-        childCpWhite =
-            childIsWhite ? result.effectiveCp : -result.effectiveCp;
+        childCpWhite = childIsWhite ? result.effectiveCp : -result.effectiveCp;
         evalDepthUsed = config.evalDepth;
       } else {
-        final dbEval =
-            await run.evalResolver.lookupDbEvalWhite(childFen, config);
+        final dbEval = await run.evalResolver.lookupDbEvalWhite(
+          childFen,
+          config,
+        );
         if (dbEval == null) continue;
         childCpWhite = dbEval.$1;
         evalDepthUsed = dbEval.$2;
@@ -455,16 +460,25 @@ abstract class NodeExpander {
     BuildTreeNode? incumbent;
     var bestCp = 0;
     for (final child in node.children) {
+      // evalForUs returns 0 for an eval-less child; skip those so a missing
+      // eval can never masquerade as a 0cp incumbent over real (negative-eval)
+      // siblings.  Every our-move child currently carries an eval, so this is
+      // a guard for future expanders, not a behavior change today.
+      if (!child.hasEngineEval) continue;
       final cp = child.evalForUs(config.playAsWhite);
       if (incumbent == null || cp > bestCp) {
         bestCp = cp;
         incumbent = child;
       }
     }
+    // Fall back to the first child only when none carry an eval.
+    incumbent ??= node.children.first;
     for (final child in node.children) {
-      child.searchPriority = identical(child, incumbent)
+      final isIncumbent = identical(child, incumbent);
+      child.searchPriority = isIncumbent
           ? basePri
           : basePri * config.ourAltDiscount;
+      child.searchPriorityDiscount = isIncumbent ? 1.0 : config.ourAltDiscount;
     }
     return incumbent;
   }
@@ -481,7 +495,9 @@ abstract class NodeExpander {
   ///
   /// Everything expands under Pure (exhaustive by contract), under trappy
   /// selection (worse-eval moves are the point and need searched subtrees),
-  /// and for preferred-setup candidates (the setup bias needs them alive).
+  /// in the wide-opening band (the first [TreeBuildConfig.openingWidthPlies]
+  /// of our moves grow every in-window alternative), and for preferred-setup
+  /// candidates (the setup bias needs them alive).
   List<BuildTreeNode> ourChildrenToExpand(
     BuildTreeNode node,
     BuildTreeNode? incumbent,
@@ -489,6 +505,7 @@ abstract class NodeExpander {
     final children = List.of(node.children);
     if (config.searchAlgorithm == SearchAlgorithm.pure ||
         config.selectionMode == SelectionMode.trappy ||
+        config.widensOpeningAtPly(node.ply) ||
         config.fastAltGapCp <= 0 ||
         incumbent == null ||
         !incumbent.hasEngineEval) {
@@ -497,12 +514,15 @@ abstract class NodeExpander {
 
     final setupSans = parseSetupMoves(config.setupMoves).toSet();
     final incumbentCp = incumbent.evalForUs(config.playAsWhite);
-    final alts = [
-      for (final c in children)
-        if (!identical(c, incumbent)) c,
-    ]..sort((a, b) => b
-        .evalForUs(config.playAsWhite)
-        .compareTo(a.evalForUs(config.playAsWhite)));
+    final alts =
+        [
+          for (final c in children)
+            if (!identical(c, incumbent)) c,
+        ]..sort(
+          (a, b) => b
+              .evalForUs(config.playAsWhite)
+              .compareTo(a.evalForUs(config.playAsWhite)),
+        );
 
     final expand = <BuildTreeNode>[incumbent];
     var altsTaken = 0;
@@ -522,274 +542,5 @@ abstract class NodeExpander {
       }
     }
     return expand;
-  }
-}
-
-// ── Stockfish MultiPV our-move expansion ─────────────────────────────────
-
-class StockfishExpander extends NodeExpander {
-  StockfishExpander(super.run);
-
-  @override
-  Future<void> expandOurMove(
-    BuildTreeNode node,
-    FrontierQueue queue, {
-    bool coverageOnly = false,
-  }) async {
-    // Fast: MultiPV shrinks with reach priority; Pure: constant.  Root
-    // always gets a wide sweep — everything descends from it.
-    final nodePriority = effectiveSearchPriority(node);
-    final mpvCount = node.ply == 0
-        ? config.rootMultipv
-        : config.effectiveMultipv(nodePriority);
-    final whiteToMove = isWhiteToMove(node.fen);
-
-    final sw = Stopwatch()..start();
-    final discovery = await run.pool.discoverMoves(
-      fen: node.fen,
-      depth: config.evalDepth,
-      multiPv: mpvCount,
-      isWhiteToMove: whiteToMove,
-    );
-    run.stats.sfMultipvCalls++;
-    run.stats.sfMultipvMs += sw.elapsedMilliseconds;
-
-    if (discovery.lines.isEmpty) return;
-
-    // Set node eval from top line
-    if (!node.hasEngineEval) {
-      final topCp = discovery.lines.first.effectiveCp;
-      final stmCp = whiteToMove ? topCp : -topCp;
-      node.engineEvalCp = stmCp;
-      run.evalResolver.cacheEvalWhite(node.fen, topCp, config.evalDepth);
-    }
-
-    // Eval-window pruning (deferred from the build loop so the eval comes
-    // from MultiPV line 0, avoiding an extra single-PV call).
-    if (evalWindowPrune(node, config)) return;
-
-    // Lichess enrichment for SAN + win rates at our-move nodes.
-    // Matches C: queried when `!maia_only` (Lichess is the opponent
-    // source, so the explorer data is available anyway).
-    ExplorerResponse? lichess;
-    if (!config.maiaOnly) {
-      lichess = await run.evalResolver.getDbData(node.fen, config);
-    }
-
-    if (lichess != null) {
-      final totalW = lichess.moves.fold(0, (s, m) => s + m.white);
-      final totalB = lichess.moves.fold(0, (s, m) => s + m.black);
-      final totalD = lichess.moves.fold(0, (s, m) => s + m.draws);
-      node.setLichessStats(totalW, totalB, totalD);
-    }
-
-    // Filter candidates by eval loss (direction depends on STM).  Fast
-    // halves the window at cold nodes; the root keeps the full window.
-    final bestCp = discovery.lines.first.effectiveCp;
-    final evalLossWindow = node.ply == 0
-        ? config.maxEvalLossCp
-        : config.effectiveMaxEvalLossCp(nodePriority);
-
-    for (final line in discovery.lines) {
-      if (line.moveUci.isEmpty) continue;
-      final evalLoss =
-          whiteToMove ? bestCp - line.effectiveCp : line.effectiveCp - bestCp;
-      if (evalLoss > evalLossWindow) continue;
-
-      final childFen = playUciMove(node.fen, line.moveUci);
-      if (childFen == null) continue;
-
-      // Get SAN from Lichess data or compute it
-      String san = line.moveUci;
-      if (lichess != null) {
-        final lichessMove =
-            lichess.moves.where((m) => m.uci == line.moveUci).firstOrNull;
-        if (lichessMove != null) {
-          san = lichessMove.san;
-        }
-      }
-      if (san == line.moveUci) {
-        san = uciToSan(node.fen, line.moveUci);
-      }
-
-      final childIsWhite = isWhiteToMove(childFen);
-      final childEvalStm = whiteToMove ? -line.effectiveCp : line.effectiveCp;
-
-      final child = run.makeChild(
-        parent: node,
-        fen: childFen,
-        san: san,
-        uci: line.moveUci,
-      );
-      if (child == null) continue;
-
-      child.moveProbability = 1.0;
-      child.cumulativeProbability = node.cumulativeProbability;
-      child.engineEvalCp = childEvalStm;
-      run.evalResolver.cacheEvalWhite(childFen,
-          childIsWhite ? childEvalStm : -childEvalStm, config.evalDepth);
-
-      // Enrich with Lichess stats
-      if (lichess != null) {
-        final lm =
-            lichess.moves.where((m) => m.uci == line.moveUci).firstOrNull;
-        if (lm != null) {
-          child.setLichessStats(lm.white, lm.black, lm.draws);
-        }
-      }
-
-      // Line 0 only: stash engine's preferred opponent reply on the child
-      // (opponent-to-move position after our best move).
-      if (line.pvNumber == 1 && line.pv.length >= 2) {
-        child.pvContinuationMove = line.pv[1];
-      }
-
-      run.emitNodeProgress(child);
-    }
-
-    await injectSetupCandidates(node, bestCpWhite: bestCp);
-
-    // Populate maia_frequency on our-move children.  C gates this on
-    // `populate_maia_frequency` (novelty > 0 || find_traps); Dart always
-    // populates when Maia is available since the data is useful for both
-    // novelty scoring and trap-line display.
-    if (MaiaFactory.isAvailable &&
-        MaiaFactory.instance != null &&
-        node.children.isNotEmpty) {
-      try {
-        final maiaResult = await MaiaFactory.instance!.evaluate(
-          node.fen,
-          config.maiaElo,
-        );
-        run.stats.maiaEvals++;
-        if (maiaResult.policy.isNotEmpty) {
-          for (final child in node.children) {
-            final freq = maiaResult.policy[child.moveUci];
-            if (freq != null) {
-              child.maiaFrequency = freq;
-            }
-          }
-        }
-      } catch (_) {
-        // Maia frequency is best-effort
-      }
-    }
-
-    final incumbent = assignOurMovePriorities(node);
-
-    // Coverage-only: the answer is the deliverable — children stay
-    // unexplored leaves so a future resume with more budget can deepen them.
-    if (coverageOnly) return;
-
-    // Fast: only the incumbent and gap-qualifying alternatives grow
-    // subtrees; the rest stay evaluated leaves for selection.
-    for (final child in ourChildrenToExpand(node, incumbent)) {
-      if (run.isCancelled) break;
-      queue.add(child);
-    }
-  }
-}
-
-// ── Maia + DB our-move expansion ─────────────────────────────────────────
-
-class MaiaDbExpander extends NodeExpander {
-  MaiaDbExpander(super.run);
-
-  @override
-  Future<void> expandOurMove(
-    BuildTreeNode node,
-    FrontierQueue queue, {
-    bool coverageOnly = false,
-  }) async {
-    if (!MaiaFactory.isAvailable || MaiaFactory.instance == null) {
-      run.log('Maia unavailable — cannot run maiaDbExplore mode');
-      return;
-    }
-
-    // Window prune using the DB eval set by the build loop.
-    if (evalWindowPrune(node, config)) return;
-
-    final sw = Stopwatch()..start();
-    final MaiaResult maiaResult;
-    try {
-      maiaResult = await MaiaFactory.instance!.evaluate(
-        node.fen,
-        config.maiaElo,
-      );
-    } catch (e) {
-      run.log('Maia eval failed @ ${node.fen}: $e');
-      return;
-    }
-    run.stats.maiaEvals++;
-    run.stats.maiaTotalMs += sw.elapsedMilliseconds;
-    if (maiaResult.policy.isEmpty) return;
-
-    final sortedMoves = maiaResult.policy.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    // Fast: candidate count shrinks with reach priority, like MultiPV.
-    final maxCandidates = config
-        .effectiveMultipv(effectiveSearchPriority(node))
-        .clamp(1, TreeBuildConfig.maxOurCandidates);
-    final bestCpWhite = node.hasEngineEval
-        ? (node.isWhiteToMove ? node.engineEvalCp! : -node.engineEvalCp!)
-        : null;
-
-    int added = 0;
-    for (final entry in sortedMoves) {
-      if (added >= maxCandidates) break;
-      final uci = entry.key;
-      final prob = entry.value;
-      if (prob < config.maiaMinProb) continue;
-
-      final childFen = playUciMove(node.fen, uci);
-      if (childFen == null) continue;
-
-      // Child eval from DB only — skip candidates with no database coverage.
-      final childEval =
-          await run.evalResolver.lookupDbEvalWhite(childFen, config);
-      if (childEval == null) continue;
-
-      final childIsWhite = isWhiteToMove(childFen);
-      final childCpWhite = childEval.$1;
-
-      if (bestCpWhite != null) {
-        final evalLoss = bestCpWhite - childCpWhite;
-        if (evalLoss > config.maxEvalLossCp) continue;
-      }
-
-      final san = uciToSan(node.fen, uci);
-      final child = run.makeChild(
-        parent: node,
-        fen: childFen,
-        san: san,
-        uci: uci,
-      );
-      if (child == null) continue;
-
-      child.moveProbability = 1.0;
-      child.cumulativeProbability = node.cumulativeProbability;
-      child.maiaFrequency = prob;
-      child.engineEvalCp = childIsWhite ? childCpWhite : -childCpWhite;
-      run.evalResolver.cacheEvalWhite(childFen, childCpWhite, childEval.$2);
-
-      added++;
-      run.emitNodeProgress(child);
-    }
-
-    await injectSetupCandidates(node, bestCpWhite: bestCpWhite);
-
-    final incumbent = assignOurMovePriorities(node);
-
-    // Coverage-only: the answer is the deliverable — children stay
-    // unexplored leaves so a future resume with more budget can deepen them.
-    if (coverageOnly) return;
-
-    // Fast: only the incumbent and gap-qualifying alternatives grow
-    // subtrees; the rest stay evaluated leaves for selection.
-    for (final child in ourChildrenToExpand(node, incumbent)) {
-      if (run.isCancelled) break;
-      queue.add(child);
-    }
   }
 }

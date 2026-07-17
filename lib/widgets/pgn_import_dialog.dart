@@ -28,10 +28,8 @@ Future<PgnImportResult?> showPgnImportDialog(
 }) {
   return showDialog<PgnImportResult>(
     context: context,
-    builder: (context) => _PgnImportDialog(
-      title: title,
-      confirmLabel: confirmLabel,
-    ),
+    builder: (context) =>
+        _PgnImportDialog(title: title, confirmLabel: confirmLabel),
   );
 }
 
@@ -39,10 +37,7 @@ class _PgnImportDialog extends StatefulWidget {
   final String title;
   final String confirmLabel;
 
-  const _PgnImportDialog({
-    required this.title,
-    required this.confirmLabel,
-  });
+  const _PgnImportDialog({required this.title, required this.confirmLabel});
 
   @override
   State<_PgnImportDialog> createState() => _PgnImportDialogState();
@@ -112,10 +107,9 @@ class _PgnImportDialogState extends State<_PgnImportDialog> {
     final text = _controller.text.trim();
     if (text.isEmpty || _gameCount == 0) return;
 
-    Navigator.of(context).pop(PgnImportResult(
-      pgnContent: text,
-      gameCount: _gameCount,
-    ));
+    Navigator.of(
+      context,
+    ).pop(PgnImportResult(pgnContent: text, gameCount: _gameCount));
   }
 
   @override

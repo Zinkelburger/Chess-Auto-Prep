@@ -69,11 +69,8 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
     if (oldWidget.fen != widget.fen) _requestCurrent();
   }
 
-  ExplorerQuery get _query => ExplorerQuery(
-        database: _database,
-        speeds: _speeds,
-        ratings: _ratings,
-      );
+  ExplorerQuery get _query =>
+      ExplorerQuery(database: _database, speeds: _speeds, ratings: _ratings);
 
   void _requestCurrent() {
     if (!_prefsLoaded) return;
@@ -163,7 +160,9 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
   }
 
   Widget _buildFilterHeader(BuildContext context) {
-    final dbLabel = _database == LichessDatabase.masters ? 'Masters' : 'Lichess';
+    final dbLabel = _database == LichessDatabase.masters
+        ? 'Masters'
+        : 'Lichess';
     final summary = _database == LichessDatabase.masters
         ? dbLabel
         : '$dbLabel · ${_speeds.length} speeds · ${_ratings.length} ratings';
@@ -238,8 +237,9 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
                 final move = data.moves[i];
                 return ExplorerMoveRow(
                   move: move,
-                  inRepertoire:
-                      widget.repertoireMovesAtPosition.contains(move.san),
+                  inRepertoire: widget.repertoireMovesAtPosition.contains(
+                    move.san,
+                  ),
                   onPlay: () => widget.onPlayMove(move.san),
                   onAdd: widget.onAddMove == null
                       ? null
@@ -270,9 +270,13 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
                 color: Colors.grey[800],
                 borderRadius: BorderRadius.circular(3),
               ),
-              child: Text(eco,
-                  style: const TextStyle(
-                      fontSize: 10, fontWeight: FontWeight.w600)),
+              child: Text(
+                eco,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
             const SizedBox(width: 6),
           ],
@@ -283,8 +287,10 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          Text('$games games',
-              style: TextStyle(fontSize: 10, color: Colors.grey[400])),
+          Text(
+            '$games games',
+            style: TextStyle(fontSize: 10, color: Colors.grey[400]),
+          ),
         ],
       ),
     );

@@ -8,23 +8,36 @@ library;
 ///
 /// Layout: toolbar row  ➜  three-panel [PositionAnalysisWidget].
 
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../features/audit/models/audit_finding.dart';
+import '../features/audit/models/audit_result.dart';
+import '../features/holes/services/hole_hunt_config.dart';
+import '../features/holes/services/hole_hunt_persistence.dart';
+import '../features/holes/services/hole_hunt_service.dart';
+import '../features/holes/widgets/hole_hunt_config_dialog.dart';
 import '../models/analysis_player_info.dart';
 import '../models/engine_weakness_result.dart';
 import '../models/position_analysis.dart';
 import '../utils/fen_utils.dart';
 import '../models/opening_tree.dart';
 import '../services/analysis_games_service.dart';
-import '../services/pgn_parsing_service.dart';
+import '../services/engine/engine_lifecycle.dart';
+import '../services/engine/stockfish_pool.dart';
 import '../services/engine_weakness_service.dart';
 import '../services/unified_analysis_builder.dart';
+import '../theme/app_colors.dart';
 import '../widgets/engine/engine_gate.dart';
 import '../widgets/engine_weakness_dialog.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/position_analysis_widget.dart';
 import 'player_selection_screen.dart';
+
+part 'analysis_screen_engine.dart';
+part 'analysis_screen_holes.dart';
 
 class AnalysisScreen extends StatefulWidget {
   const AnalysisScreen({super.key});
@@ -33,12 +46,24 @@ class AnalysisScreen extends StatefulWidget {
   State<AnalysisScreen> createState() => _AnalysisScreenState();
 }
 
-class _AnalysisScreenState extends State<AnalysisScreen> {
+/// Shared state fields for [AnalysisScreen] plus the cross-group helpers the
+/// engine-weakness and hole-hunt mixins call. The concrete [_AnalysisScreenState]
+/// supplies [initState]/[build]/[dispose] and the analysis pipeline.
+abstract class _AnalysisScreenStateBase extends State<AnalysisScreen> {
   final AnalysisGamesService _gamesService = AnalysisGamesService();
 
   AnalysisPlayerInfo? _currentPlayer;
+
+  /// Path to the current player's downloaded games PGN (enables the
+  /// "Open Games in PGN Viewer" handoff).
+  String? _analysisPgnPath;
+
+  // Displayed colour's analysis/tree, plus both colours kept in memory so a
+  // colour switch is an instant swap instead of a rebuild.
   PositionAnalysis? _positionAnalysis;
   OpeningTree? _openingTree;
+  PositionAnalysis? _whiteAnalysis;
+  PositionAnalysis? _blackAnalysis;
   OpeningTree? _whiteTree;
   OpeningTree? _blackTree;
   bool _isAnalyzing = false;
@@ -58,6 +83,43 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
   bool get _hasEvals => _engineEvals.isNotEmpty;
 
+  // ── Hole hunt state ─────────────────────────────────────────────────
+  //
+  // Reports are kept per colour (keyed by "player is white"), mirroring the
+  // two game trees, and persisted per player + colour.
+  final HoleHuntService _holeService = HoleHuntService();
+  final Map<bool, AuditResult?> _holesResults = {true: null, false: null};
+  final Map<bool, HoleHuntConfig?> _holesConfigs = {true: null, false: null};
+  List<AuditFinding> _holesLive = [];
+  HoleHuntProgress? _holesProgress;
+  bool _isHunting = false;
+  bool _huntIsWhite = true;
+  bool _huntCancelled = false;
+  bool _trapPassSkipped = false;
+
+  // Implemented by the concrete state; called from the extracted mixins.
+  Future<void> _analyzeBothColors();
+  Future<bool> _redownloadGames(int monthsBack);
+
+  void _showError(String message) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Error'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnalysisScreenState extends _AnalysisScreenStateBase
+    with _EngineWeaknessMixin, _HoleHuntMixin {
   @override
   void initState() {
     super.initState();
@@ -71,6 +133,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   @override
   void dispose() {
     _evalService?.dispose();
+    // The pending hunt future notices the flag and releases the engine.
+    if (_isHunting) _holeService.cancel();
     super.dispose();
   }
 
@@ -100,13 +164,29 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         title: titleBlock,
         actions: [
           if (_evalRunning) _buildEvalProgress(theme),
+          if (_isHunting) _buildHuntProgress(theme),
           if (_currentPlayer != null) ..._buildColorControls(),
-          if (_openingTree != null && !_isAnalyzing && !_evalRunning)
+          if (_openingTree != null &&
+              !_isAnalyzing &&
+              !_evalRunning &&
+              !_isHunting) ...[
             TextButton.icon(
               icon: const Icon(Icons.psychology, size: 18),
               label: Text(_hasEvals ? 'Re-analyze' : 'Analyze with Engine'),
               onPressed: _showWeaknessConfig,
             ),
+            Tooltip(
+              message:
+                  'Hunt exploitable holes from the opposite side '
+                  '(coverage gaps, refutations, expectimax traps) — '
+                  'not just bad raw evals',
+              child: TextButton.icon(
+                icon: const Icon(Icons.gps_fixed, size: 18),
+                label: const Text('Find Holes'),
+                onPressed: _showHoleHuntConfig,
+              ),
+            ),
+          ],
           IconButton(
             icon: const Icon(Icons.person_search),
             tooltip: 'Select Player',
@@ -120,8 +200,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           if (_isAnalyzing)
             LinearProgressIndicator(
               minHeight: 2,
-              value:
-                  _analysisTotal > 0 ? _analysisCurrent / _analysisTotal : null,
+              value: _analysisTotal > 0
+                  ? _analysisCurrent / _analysisTotal
+                  : null,
             ),
           Expanded(child: _buildBody(context)),
         ],
@@ -151,8 +232,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             if (selection.isEmpty) return;
             final chosen = selection.first;
             if (chosen != _playerIsWhite) {
-              setState(() => _playerIsWhite = chosen);
-              _loadColorAnalysis();
+              _selectColor(chosen);
             }
           },
           style: const ButtonStyle(
@@ -162,6 +242,39 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         ),
       ),
     ];
+  }
+
+  Widget _buildHuntProgress(ThemeData theme) {
+    final progress = _holesProgress;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            value: progress?.fraction,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          _huntCancelled
+              ? 'Cancelling hunt…'
+              : 'Holes: ${progress?.message ?? 'starting…'}',
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(width: 4),
+        IconButton(
+          icon: const Icon(Icons.close, size: 16),
+          tooltip: 'Cancel',
+          onPressed: _huntCancelled ? null : _cancelHoleHunt,
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+        ),
+      ],
+    );
   }
 
   Widget _buildEvalProgress(ThemeData theme) {
@@ -203,7 +316,11 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.person_search, size: 64, color: Colors.grey[400]),
+            const Icon(
+              Icons.person_search,
+              size: 64,
+              color: AppColors.onSurfaceDim,
+            ),
             const SizedBox(height: 24),
             Text(
               'No Player Selected',
@@ -220,13 +337,23 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       );
     }
 
+    final huntOnDisplayedColor = _isHunting && _huntIsWhite == _playerIsWhite;
     return PositionAnalysisWidget(
       analysis: _positionAnalysis,
       openingTree: _openingTree,
       playerIsWhite: _playerIsWhite,
       isLoading: _isAnalyzing,
-      onAnalyze: _loadColorAnalysis,
+      onAnalyze: _analyzeBothColors,
       hasEvals: _hasEvals,
+      playerName: _currentPlayer?.username,
+      analysisPgnPath: _analysisPgnPath,
+      holesResult: _holesResults[_playerIsWhite],
+      holesLiveFindings: huntOnDisplayedColor ? _holesLive : const [],
+      isHoleHunting: huntOnDisplayedColor,
+      holesProgress: huntOnDisplayedColor ? _holesProgress : null,
+      holesTrapPassSkipped: _trapPassSkipped && _huntIsWhite == _playerIsWhite,
+      onHolesResultChanged: _onHolesResultChanged,
+      onStartHoleHunt: _isHunting || _isAnalyzing ? null : _showHoleHuntConfig,
     );
   }
 
@@ -235,7 +362,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   String get _metadataSubtitle {
     final p = _currentPlayer;
     if (p == null) return '';
-    final dl = p.downloadedAt != null ? ' · downloaded ${p.downloadTimeAgo}' : '';
+    final dl = p.downloadedAt != null
+        ? ' · downloaded ${p.downloadTimeAgo}'
+        : '';
     final base =
         '${p.gameCount} games · ${p.platformDisplayName} (${p.username})'
         ' · ${p.rangeDescription}$dl';
@@ -254,26 +383,45 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
     if (result != null && mounted) {
       _cancelEvalAnalysis();
+      if (_isHunting) _cancelHoleHunt();
       setState(() {
         _currentPlayer = result;
-        _positionAnalysis = null;
-        _openingTree = null;
-        _whiteTree = null;
-        _blackTree = null;
-        _playerIsWhite = true;
-        _engineEvals = [];
+        _resetAnalysisState();
       });
       await _analyzeBothColors();
     }
+  }
+
+  /// Clear all per-player analysis state (both colours + evals + holes).
+  void _resetAnalysisState() {
+    _analysisPgnPath = null;
+    _positionAnalysis = null;
+    _openingTree = null;
+    _whiteAnalysis = null;
+    _blackAnalysis = null;
+    _whiteTree = null;
+    _blackTree = null;
+    _playerIsWhite = true;
+    _engineEvals = [];
+    _holesResults[true] = null;
+    _holesResults[false] = null;
+    _holesConfigs[true] = null;
+    _holesConfigs[false] = null;
+    _holesLive = [];
+    _holesProgress = null;
+    _trapPassSkipped = false;
   }
 
   // ── Re-download games ───────────────────────────────────────────
 
   /// Downloads all games for the given month range and returns `true` on
   /// success.
+  @override
   Future<bool> _redownloadGames(int monthsBack) async {
     final player = _currentPlayer;
     if (player == null) return false;
+    // Imported game-sets have no source to re-download from.
+    if (player.isImported) return false;
 
     _cancelEvalAnalysis();
 
@@ -341,12 +489,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
       setState(() {
         _currentPlayer = updated;
-        _positionAnalysis = null;
-        _openingTree = null;
-        _whiteTree = null;
-        _blackTree = null;
-        _playerIsWhite = true;
-        _engineEvals = [];
+        _resetAnalysisState();
       });
 
       return true;
@@ -359,169 +502,25 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     }
   }
 
-  // ── Engine weakness analysis ─────────────────────────────────────
-
-  Future<void> _showWeaknessConfig() async {
-    if (_whiteTree == null && _blackTree == null) return;
-    if (!EngineGate.ensureAvailable(context)) return;
-
-    final config = await showDialog<EngineWeaknessConfig>(
-      context: context,
-      builder: (_) => EngineWeaknessConfigDialog(
-        whiteTree: _whiteTree,
-        blackTree: _blackTree,
-        playerInfo: _currentPlayer,
-      ),
-    );
-
-    if (config == null || !mounted) return;
-
-    if (config.redownload) {
-      final ok = await _redownloadGames(config.monthsBack);
-      if (!ok) return;
-      await _analyzeBothColors();
-      if (!mounted) return;
-    }
-
-    _runWeaknessAnalysis(config);
-  }
-
-  Future<void> _runWeaknessAnalysis(EngineWeaknessConfig config) async {
-    _evalService?.dispose();
-    _evalService = EngineWeaknessService();
-
-    setState(() {
-      _evalRunning = true;
-      _evalCompleted = 0;
-      _evalTotal = 0;
-    });
-
-    try {
-      final results = await _evalService!.analyze(
-        whiteTree: _whiteTree,
-        blackTree: _blackTree,
-        minOccurrences: config.minGames,
-        depth: config.depth,
-        onProgress: (c, t) {
-          if (mounted) {
-            setState(() {
-              _evalCompleted = c;
-              _evalTotal = t;
-            });
-          }
-        },
-      );
-
-      if (!mounted) return;
-
-      setState(() {
-        _engineEvals = results;
-        _evalRunning = false;
-      });
-
-      _mergeEvalsIntoAnalysis();
-      _saveEngineEvals();
-    } catch (e) {
-      if (mounted) {
-        setState(() => _evalRunning = false);
-        _showError('Engine analysis failed: $e');
-      }
-    } finally {
-      _evalService?.dispose();
-      _evalService = null;
-    }
-  }
-
-  void _cancelEvalAnalysis() {
-    _evalService?.dispose();
-    _evalService = null;
-    if (mounted) setState(() => _evalRunning = false);
-  }
-
-  /// Merge stored engine eval results into the current [_positionAnalysis].
-  void _mergeEvalsIntoAnalysis() {
-    final analysis = _positionAnalysis;
-    if (analysis == null || _engineEvals.isEmpty) return;
-
-    int matched = 0;
-    int created = 0;
-
-    for (final r in _engineEvals) {
-      if (r.playerIsWhite != _playerIsWhite) continue;
-
-      final key = normalizeFen(r.fen);
-      var stats = analysis.positionStats[key];
-
-      if (stats == null) {
-        stats = PositionStats(
-          fen: key,
-          games: r.gamesPlayed,
-          wins: r.wins,
-          losses: r.losses,
-          draws: r.draws,
-        );
-        analysis.positionStats[key] = stats;
-        created++;
-      } else {
-        matched++;
-      }
-
-      stats.evalCp = r.evalCp;
-      stats.evalMate = r.evalMate;
-      stats.evalDepth = r.depth;
-
-      if (kDebugMode && (matched + created) <= 5) {
-        debugPrint('[EvalMerge] ${r.evalDisplay} '
-            '(${r.gamesPlayed}g, ${(r.winRate * 100).toStringAsFixed(0)}%) '
-            'FEN=$key');
-      }
-    }
-
-    if (kDebugMode) {
-      final forColor = _playerIsWhite ? 'white' : 'black';
-      debugPrint('[EvalMerge] $forColor: $matched matched, '
-          '$created created, ${_engineEvals.length} total evals');
-    }
-
-    setState(() {});
-  }
-
-  Future<void> _saveEngineEvals() async {
-    final player = _currentPlayer;
-    if (player == null || _engineEvals.isEmpty) return;
-    try {
-      await _gamesService.saveEngineEvals(
-        player.platform,
-        player.username,
-        _engineEvals.map((e) => e.toJson()).toList(),
-      );
-    } catch (e) {
-      debugPrint('[AnalysisScreen] Failed to persist/load analysis: $e');
-    }
-  }
-
-  Future<void> _loadEngineEvals() async {
-    final player = _currentPlayer;
-    if (player == null) return;
-    try {
-      final data = await _gamesService.loadEngineEvals(
-        player.platform,
-        player.username,
-      );
-      if (data != null && mounted) {
-        _engineEvals = data
-            .map(
-                (e) => EngineWeaknessResult.fromJson(e as Map<String, dynamic>))
-            .toList();
-        _mergeEvalsIntoAnalysis();
-      }
-    } catch (e) {
-      debugPrint('[AnalysisScreen] Failed to persist/load analysis: $e');
-    }
-  }
-
   // ── Analysis ─────────────────────────────────────────────────────
 
+  /// Switch the displayed colour. Both colours are kept in memory after a
+  /// build, so this is normally an instant swap; the rebuild fallback only
+  /// runs if the last build never completed.
+  void _selectColor(bool isWhite) {
+    setState(() {
+      _playerIsWhite = isWhite;
+      _positionAnalysis = isWhite ? _whiteAnalysis : _blackAnalysis;
+      _openingTree = isWhite ? _whiteTree : _blackTree;
+    });
+    if (_positionAnalysis == null && !_isAnalyzing) {
+      _analyzeBothColors();
+    } else {
+      _mergeEvalsIntoAnalysis();
+    }
+  }
+
+  @override
   Future<void> _analyzeBothColors() async {
     final player = _currentPlayer;
     if (player == null) return;
@@ -534,97 +533,77 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     });
 
     try {
-      final pgnList = await _loadPgnList(player);
-      if (pgnList == null) return;
-
-      if (mounted) {
-        setState(() => _analysisPhase = 'Analyzing as White');
-      }
-
-      // Launch both colours concurrently in separate isolates.
-      // Only White reports progress (Black runs silently in background).
-      final whiteFuture =
-          _buildAnalysis(player, pgnList, true, onProgress: _onBuildProgress);
-      final blackFuture = _buildAnalysis(player, pgnList, false);
-
-      final (whiteAnalysis, whiteTree) = await whiteFuture;
-
-      if (mounted) {
-        setState(() {
-          _positionAnalysis = whiteAnalysis;
-          _openingTree = whiteTree;
-          _whiteTree = whiteTree;
-          _playerIsWhite = true;
-          _isAnalyzing = true;
-          _analysisPhase = 'Analyzing as Black';
-          _analysisCurrent = 0;
-          _analysisTotal = 0;
-        });
-      }
-
-      // Load saved engine evals and merge while Black finishes.
-      await _loadEngineEvals();
-
-      final (_, blackTree) = await blackFuture;
-      if (mounted) {
-        setState(() {
-          _blackTree = blackTree;
-          _isAnalyzing = false;
-          _analysisPhase = '';
-          _analysisCurrent = 0;
-          _analysisTotal = 0;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        _showError('Failed to analyze positions: $e');
-        setState(() {
-          _isAnalyzing = false;
-          _analysisPhase = '';
-        });
-      }
-    }
-  }
-
-  Future<void> _loadColorAnalysis() async {
-    final player = _currentPlayer;
-    if (player == null) return;
-
-    final colorName = _playerIsWhite ? 'White' : 'Black';
-    setState(() {
-      _isAnalyzing = true;
-      _analysisPhase = 'Analyzing as $colorName';
-      _analysisCurrent = 0;
-      _analysisTotal = 0;
-    });
-
-    try {
-      final pgnList = await _loadPgnList(player);
-      if (pgnList == null) return;
-
-      final (analysis, tree) = await _buildAnalysis(
-        player,
-        pgnList,
-        _playerIsWhite,
-        onProgress: _onBuildProgress,
+      final pgnPath = await _gamesService.analysisPgnPath(
+        player.platform,
+        player.username,
+      );
+      final whiteCachePath = await _gamesService.cachedAnalysisPath(
+        player.platform,
+        player.username,
+        true,
+      );
+      final blackCachePath = await _gamesService.cachedAnalysisPath(
+        player.platform,
+        player.username,
+        false,
       );
 
-      if (mounted) {
-        setState(() {
-          _positionAnalysis = analysis;
-          _openingTree = tree;
-          if (_playerIsWhite) {
-            _whiteTree = tree;
-          } else {
-            _blackTree = tree;
-          }
-          _isAnalyzing = false;
-          _analysisPhase = '';
-          _analysisCurrent = 0;
-          _analysisTotal = 0;
-        });
-        _mergeEvalsIntoAnalysis();
+      if (!await File(pgnPath).exists()) {
+        if (mounted) {
+          _showError(
+            'No games found. Please re-download games for this player.',
+          );
+          setState(() => _isAnalyzing = false);
+        }
+        return;
       }
+      if (!mounted || _currentPlayer != player) return;
+      _analysisPgnPath = pgnPath;
+
+      // Fast path: both colours restored from the stat-validated disk cache.
+      var bundle = await UnifiedAnalysisBuilder.loadCachedBundle(
+        pgnFilePath: pgnPath,
+        whiteCachePath: whiteCachePath,
+        blackCachePath: blackCachePath,
+      );
+
+      // Slow path: one isolate reads the file and builds both colours in a
+      // single pass, persisting the cache for next time.
+      if (bundle == null) {
+        if (mounted) {
+          setState(() => _analysisPhase = 'Analyzing games');
+        }
+        bundle = await UnifiedAnalysisBuilder.buildBothInIsolate(
+          pgnFilePath: pgnPath,
+          username: player.username,
+          onProgress: _onBuildProgress,
+          whiteCachePath: whiteCachePath,
+          blackCachePath: blackCachePath,
+        );
+      }
+
+      // Guard: the user may have selected a different player while the
+      // (possibly minutes-long) build ran — installing this bundle would
+      // show the old player's data under the new player's name.
+      if (!mounted || _currentPlayer != player) return;
+      final result = bundle;
+      setState(() {
+        _whiteAnalysis = result.whiteAnalysis;
+        _blackAnalysis = result.blackAnalysis;
+        _whiteTree = result.whiteTree;
+        _blackTree = result.blackTree;
+        _positionAnalysis = _playerIsWhite ? _whiteAnalysis : _blackAnalysis;
+        _openingTree = _playerIsWhite ? _whiteTree : _blackTree;
+        _isAnalyzing = false;
+        _analysisPhase = '';
+        _analysisCurrent = 0;
+        _analysisTotal = 0;
+      });
+
+      // Merge previously computed engine evals into the displayed analysis,
+      // and restore any saved hole reports.
+      await _loadEngineEvals();
+      await _loadHolesReports();
     } catch (e) {
       if (mounted) {
         _showError('Failed to analyze positions: $e');
@@ -634,33 +613,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         });
       }
     }
-  }
-
-  Future<List<String>?> _loadPgnList(AnalysisPlayerInfo player) async {
-    final pgns = await _gamesService.loadAnalysisGames(
-      player.platform,
-      player.username,
-    );
-    if (pgns == null || pgns.isEmpty) {
-      if (mounted) {
-        _showError(
-          'No games found. Please re-download games for this player.',
-        );
-        setState(() => _isAnalyzing = false);
-      }
-      return null;
-    }
-
-    final pgnList = splitPgnIntoGames(pgns);
-    if (pgnList.isEmpty) {
-      if (mounted) {
-        _showError('No valid games found in downloaded data.');
-        setState(() => _isAnalyzing = false);
-      }
-      return null;
-    }
-
-    return pgnList;
   }
 
   void _onBuildProgress(int current, int total) {
@@ -670,49 +622,5 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         _analysisTotal = total;
       });
     }
-  }
-
-  Future<(PositionAnalysis, OpeningTree)> _buildAnalysis(
-    AnalysisPlayerInfo player,
-    List<String> pgnList,
-    bool isWhite, {
-    void Function(int current, int total)? onProgress,
-  }) async {
-    final (analysis, tree) = await UnifiedAnalysisBuilder.buildInIsolate(
-      pgnList: pgnList,
-      username: player.username,
-      isWhite: isWhite,
-      onProgress: onProgress,
-    );
-
-    // Cache the FEN-map analysis for fast reload next time.
-    try {
-      await _gamesService.saveCachedAnalysis(
-        player.platform,
-        player.username,
-        isWhite,
-        analysis.toJson(),
-      );
-    } catch (e) {
-      debugPrint('[AnalysisScreen] Failed to persist/load analysis: $e');
-    }
-
-    return (analysis, tree);
-  }
-
-  void _showError(String message) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Error'),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
   }
 }

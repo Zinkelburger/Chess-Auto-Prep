@@ -25,6 +25,7 @@ import '../utils/eval_constants.dart';
 import '../utils/pgn_comment_utils.dart';
 import 'engine/stockfish_pool.dart';
 import 'maia_factory.dart';
+import '../utils/safe_change_notifier.dart';
 
 // ---------------------------------------------------------------------------
 // Data models
@@ -112,7 +113,7 @@ MoveClassification classifyMove(double delta) {
 // ---------------------------------------------------------------------------
 
 ({List<MoveEval> evals, double startWinChance, int totalMoves})?
-    _parseCachedEvals(String pgnText) {
+_parseCachedEvals(String pgnText) {
   final parsed = PgnGame.parsePgn(pgnText);
   final mainline = parsed.moves.mainline().toList();
   if (mainline.isEmpty) return null;
@@ -160,20 +161,22 @@ MoveClassification classifyMove(double delta) {
     }
 
     final winChance = cpToWinningChance(evalData.cp, evalData.mate);
-    results.add(MoveEval(
-      ply: i + 1,
-      san: moveData.san,
-      fenBefore: fenBefore,
-      fenAfter: fenAfter,
-      scoreCp: evalData.cp,
-      scoreMate: evalData.mate,
-      winningChance: winChance,
-      maiaProb: maiaProb,
-      maiaTopMove: maiaTop?.move,
-      maiaTopProb: maiaTop?.prob,
-      bestLine: bestLine,
-      depth: evalData.depth,
-    ));
+    results.add(
+      MoveEval(
+        ply: i + 1,
+        san: moveData.san,
+        fenBefore: fenBefore,
+        fenAfter: fenAfter,
+        scoreCp: evalData.cp,
+        scoreMate: evalData.mate,
+        winningChance: winChance,
+        maiaProb: maiaProb,
+        maiaTopMove: maiaTop?.move,
+        maiaTopProb: maiaTop?.prob,
+        bestLine: bestLine,
+        depth: evalData.depth,
+      ),
+    );
   }
 
   if (results.length < mainline.length - 2) return null;
@@ -194,21 +197,23 @@ MoveClassification classifyMove(double delta) {
       classification = MoveClassification.interesting;
     }
 
-    classified.add(MoveEval(
-      ply: e.ply,
-      san: e.san,
-      fenBefore: e.fenBefore,
-      fenAfter: e.fenAfter,
-      scoreCp: e.scoreCp,
-      scoreMate: e.scoreMate,
-      winningChance: e.winningChance,
-      maiaProb: e.maiaProb,
-      maiaTopMove: e.maiaTopMove,
-      maiaTopProb: e.maiaTopProb,
-      bestLine: e.bestLine,
-      depth: e.depth,
-      classification: classification,
-    ));
+    classified.add(
+      MoveEval(
+        ply: e.ply,
+        san: e.san,
+        fenBefore: e.fenBefore,
+        fenAfter: e.fenAfter,
+        scoreCp: e.scoreCp,
+        scoreMate: e.scoreMate,
+        winningChance: e.winningChance,
+        maiaProb: e.maiaProb,
+        maiaTopMove: e.maiaTopMove,
+        maiaTopProb: e.maiaTopProb,
+        bestLine: e.bestLine,
+        depth: e.depth,
+        classification: classification,
+      ),
+    );
     prevWinChance = e.winningChance;
   }
 
@@ -223,7 +228,7 @@ MoveClassification classifyMove(double delta) {
 // Controller
 // ---------------------------------------------------------------------------
 
-class GameAnalysisController extends ChangeNotifier {
+class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
   List<MoveEval> _evals = [];
   List<MoveEval> get evals => _evals;
 
@@ -329,13 +334,16 @@ class GameAnalysisController extends ChangeNotifier {
       } else {
         pos = Chess.initial;
       }
-      final positions = <({
-        String fenBefore,
-        String fenAfter,
-        bool isWhiteToMove,
-        PgnNodeData moveData,
-        String moveUci
-      })>[];
+      final positions =
+          <
+            ({
+              String fenBefore,
+              String fenAfter,
+              bool isWhiteToMove,
+              PgnNodeData moveData,
+              String moveUci,
+            })
+          >[];
       for (final moveData in mainline) {
         final fenBefore = pos.fen;
         final move = pos.parseSan(moveData.san);
@@ -360,8 +368,10 @@ class GameAnalysisController extends ChangeNotifier {
           : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
       final startResult = await pool.evaluateFen(startFen, useDepth);
       if (_isCancelled) return;
-      _startWinChance =
-          cpToWinningChance(startResult.scoreCp, startResult.scoreMate);
+      _startWinChance = cpToWinningChance(
+        startResult.scoreCp,
+        startResult.scoreMate,
+      );
 
       // Initialize MAIA
       final maia = MaiaFactory.instance;
@@ -386,9 +396,11 @@ class GameAnalysisController extends ChangeNotifier {
 
       // Process in parallel batches — classify incrementally
       final batchSize = workerCount;
-      for (int batchStart = 0;
-          batchStart < positions.length;
-          batchStart += batchSize) {
+      for (
+        int batchStart = 0;
+        batchStart < positions.length;
+        batchStart += batchSize
+      ) {
         if (_isCancelled) break;
 
         final batchEnd = (batchStart + batchSize).clamp(0, positions.length);
@@ -410,8 +422,9 @@ class GameAnalysisController extends ChangeNotifier {
           final globalIdx = batchStart + j;
           final ply = globalIdx + 1;
 
-          final whiteNormCp =
-              p.isWhiteToMove ? result.scoreCp : _negateCp(result.scoreCp);
+          final whiteNormCp = p.isWhiteToMove
+              ? result.scoreCp
+              : _negateCp(result.scoreCp);
           final whiteNormMate = p.isWhiteToMove
               ? result.scoreMate
               : _negateMate(result.scoreMate);
@@ -518,8 +531,11 @@ class GameAnalysisController extends ChangeNotifier {
         comment = setPvInComment(comment, eval.bestLine);
       }
       if (eval.maiaTopMove != null && eval.maiaTopProb != null) {
-        comment =
-            setMaiaTopInComment(comment, eval.maiaTopMove!, eval.maiaTopProb!);
+        comment = setMaiaTopInComment(
+          comment,
+          eval.maiaTopMove!,
+          eval.maiaTopProb!,
+        );
       }
       moveData.comments![0] = comment;
     } else {
@@ -528,8 +544,11 @@ class GameAnalysisController extends ChangeNotifier {
         comment = '$comment [%pv ${eval.bestLine.join(',')}]';
       }
       if (eval.maiaTopMove != null && eval.maiaTopProb != null) {
-        comment =
-            setMaiaTopInComment(comment, eval.maiaTopMove!, eval.maiaTopProb!);
+        comment = setMaiaTopInComment(
+          comment,
+          eval.maiaTopMove!,
+          eval.maiaTopProb!,
+        );
       }
       moveData.comments = [comment];
     }

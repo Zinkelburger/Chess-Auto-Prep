@@ -46,10 +46,12 @@ class DefaultPgnService {
 
       try {
         final byteData = await rootBundle.load('assets/$_directoryName/$name');
-        final data = decodeTextBytes(byteData.buffer.asUint8List(
-          byteData.offsetInBytes,
-          byteData.lengthInBytes,
-        ));
+        final data = decodeTextBytes(
+          byteData.buffer.asUint8List(
+            byteData.offsetInBytes,
+            byteData.lengthInBytes,
+          ),
+        );
         await target.writeAsString(data, flush: true);
       } catch (e) {
         // Asset missing from bundle (e.g. stripped for size) — skip silently.
@@ -75,10 +77,12 @@ class DefaultPgnService {
         .cast<File>()
         .toList();
 
-    files.sort((a, b) => p
-        .basename(a.path)
-        .toLowerCase()
-        .compareTo(p.basename(b.path).toLowerCase()));
+    files.sort(
+      (a, b) => p
+          .basename(a.path)
+          .toLowerCase()
+          .compareTo(p.basename(b.path).toLowerCase()),
+    );
     return files;
   }
 }

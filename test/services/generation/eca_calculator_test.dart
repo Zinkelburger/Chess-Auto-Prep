@@ -9,9 +9,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'generation_test_helpers.dart';
 
 TreeBuildConfig _whiteConfig() => const TreeBuildConfig(
-      startFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-      playAsWhite: true,
-    );
+  startFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+  playAsWhite: true,
+);
 
 void main() {
   group('ExpectimaxCalculator.calculate', () {
@@ -29,8 +29,11 @@ void main() {
       calc.calculate(tree);
 
       void checkAll(BuildTreeNode node) {
-        expect(node.hasExpectimax, isTrue,
-            reason: '${node.moveSan}@${node.ply} should have expectimax');
+        expect(
+          node.hasExpectimax,
+          isTrue,
+          reason: '${node.moveSan}@${node.ply} should have expectimax',
+        );
         for (final child in node.children) {
           checkAll(child);
         }
@@ -55,8 +58,7 @@ void main() {
       // Children: e5 (p=0.55), c5 (p=0.35). Covered = 0.90, tail = 0.10.
       final vE5 = t.e4e5.expectimaxValue;
       final vC5 = t.e4c5.expectimaxValue;
-      final leafVal =
-          1.0 * winProbability(t.e4.evalForUs(true)) + 0.0 * 0.5;
+      final leafVal = 1.0 * winProbability(t.e4.evalForUs(true)) + 0.0 * 0.5;
       final expected = 0.55 * vE5 + 0.35 * vC5 + 0.10 * leafVal;
       expect(t.e4.expectimaxValue, closeTo(expected, 0.001));
     });
@@ -65,8 +67,10 @@ void main() {
       calc.calculate(tree);
 
       // root is our-move (white to move). Best child = max V among e4, d4.
-      final bestV = [t.e4.expectimaxValue, t.d4.expectimaxValue]
-          .reduce((a, b) => a > b ? a : b);
+      final bestV = [
+        t.e4.expectimaxValue,
+        t.d4.expectimaxValue,
+      ].reduce((a, b) => a > b ? a : b);
       expect(tree.root.expectimaxValue, closeTo(bestV, 0.001));
     });
 
@@ -109,7 +113,8 @@ void main() {
         evalCp: 35,
         nodeId: 999,
       );
-      final continuation = makeNode(
+      // Attaches itself as a child of `canonical` via `parent:`.
+      makeNode(
         fen: kFenAfterE4E5Nf3,
         san: 'Nf3',
         uci: 'g1f3',
@@ -125,8 +130,10 @@ void main() {
 
       // Ensure canonical gets calculated first via a separate tree.
       final canonicalTree = BuildTree(root: canonical);
-      final calcWithFm =
-          ExpectimaxCalculator(config: _whiteConfig(), fenMap: fenMap);
+      final calcWithFm = ExpectimaxCalculator(
+        config: _whiteConfig(),
+        fenMap: fenMap,
+      );
       calcWithFm.calculate(canonicalTree);
       expect(canonical.hasExpectimax, isTrue);
 

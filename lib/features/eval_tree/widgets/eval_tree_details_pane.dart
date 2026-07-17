@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_colors.dart';
 import '../../../utils/ease_utils.dart' show winProbability;
 import '../../../utils/eval_constants.dart';
 import '../tree_colors.dart';
@@ -24,7 +25,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
     final isOurTurn = currentNode.sideToMoveIsWhite == snapshot.playAsWhite;
     final showCplForChildren =
         controller.metricDisplayMode == EvalTreeMetricDisplayMode.cpl &&
-            isOurTurn;
+        isOurTurn;
 
     double maxProb = 0;
     for (final child in children) {
@@ -43,10 +44,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
           child: _buildChildrenLabel(children.length, isOurTurn),
         ),
         if (children.isEmpty)
-          SliverFillRemaining(
-            hasScrollBody: false,
-            child: _buildLeafMessage(),
-          )
+          SliverFillRemaining(hasScrollBody: false, child: _buildLeafMessage())
         else
           SliverList.builder(
             itemCount: children.length,
@@ -60,11 +58,9 @@ class EvalTreeDetailsPane extends StatelessWidget {
   Widget _buildHeader(bool isOurTurn) {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: Colors.transparent,
-        border: Border(
-          bottom: BorderSide(color: Colors.grey[700]!, width: 1),
-        ),
+        border: Border(bottom: BorderSide(color: AppColors.outline, width: 1)),
       ),
       child: Row(
         children: [
@@ -78,7 +74,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
               isOurTurn ? 'Our move' : 'Opponent',
               style: const TextStyle(
                 fontSize: 10,
-                color: Colors.white,
+                color: AppColors.ink,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -89,9 +85,9 @@ class EvalTreeDetailsPane extends StatelessWidget {
               _movePath(),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 12,
-                color: Colors.grey[300],
+                color: AppColors.inkSoft,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -100,19 +96,27 @@ class EvalTreeDetailsPane extends StatelessWidget {
             width: 32,
             height: 32,
             child: IconButton(
-              icon: Icon(Icons.arrow_back, size: 18, color: Colors.grey[400]),
+              icon: const Icon(
+                Icons.arrow_back,
+                size: 18,
+                color: AppColors.onSurfaceSoft,
+              ),
               padding: EdgeInsets.zero,
               tooltip: 'Back',
-              onPressed:
-                  currentNode.parentId != null ? controller.goParent : null,
+              onPressed: currentNode.parentId != null
+                  ? controller.goParent
+                  : null,
             ),
           ),
           SizedBox(
             width: 32,
             height: 32,
             child: IconButton(
-              icon:
-                  Icon(Icons.arrow_forward, size: 18, color: Colors.grey[400]),
+              icon: const Icon(
+                Icons.arrow_forward,
+                size: 18,
+                color: AppColors.onSurfaceSoft,
+              ),
               padding: EdgeInsets.zero,
               tooltip: 'Forward',
               onPressed: currentNode.childIds.isNotEmpty
@@ -130,10 +134,9 @@ class EvalTreeDetailsPane extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      color: Theme.of(context)
-          .colorScheme
-          .surfaceContainerHighest
-          .withValues(alpha: 0.5),
+      color: Theme.of(
+        context,
+      ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -151,7 +154,8 @@ class EvalTreeDetailsPane extends StatelessWidget {
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     TextSpan(
-                      text: 'Probability of reaching this position, based on\n'
+                      text:
+                          'Probability of reaching this position, based on\n'
                           'how often opponents play each reply (from the\n'
                           'Lichess database). 100% at the root, decreasing\n'
                           'as the line gets more specific.',
@@ -161,7 +165,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
                 child: _statBadge(
                   'Likelihood',
                   '${(currentNode.cumulativeProbability * 100).toStringAsFixed(2)}%',
-                  Colors.blue[300]!,
+                  AppColors.info,
                 ),
               ),
               if (currentNode.ease != null)
@@ -193,7 +197,10 @@ class EvalTreeDetailsPane extends StatelessWidget {
                   ),
                 if (currentNode.totalGames > 0)
                   _statBadge(
-                      'Games', '${currentNode.totalGames}', Colors.grey[400]!),
+                    'Games',
+                    '${currentNode.totalGames}',
+                    AppColors.onSurfaceSoft,
+                  ),
               ],
             ),
           ],
@@ -209,7 +216,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
                   _statBadge(
                     'Subtree',
                     '${currentNode.subtreePly} ply',
-                    Colors.grey[400]!,
+                    AppColors.onSurfaceSoft,
                   ),
                 if ((currentNode.trapScore ?? 0) > 0.05)
                   _statBadge(
@@ -239,7 +246,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(5),
-        border: Border.all(color: Colors.grey[700]!, width: 1),
+        border: Border.all(color: AppColors.outline, width: 1),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(4),
@@ -247,11 +254,11 @@ class EvalTreeDetailsPane extends StatelessWidget {
           children: [
             Expanded(
               flex: (winProb * 1000).round().clamp(1, 999),
-              child: Container(color: Colors.white),
+              child: Container(color: AppColors.sideWhite),
             ),
             Expanded(
               flex: ((1 - winProb) * 1000).round().clamp(1, 999),
-              child: Container(color: Colors.grey[900]),
+              child: Container(color: AppColors.sideBlack),
             ),
           ],
         ),
@@ -269,16 +276,19 @@ class EvalTreeDetailsPane extends StatelessWidget {
         children: [
           Text(
             isOurTurn ? 'Candidate moves' : 'Opponent replies',
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: Colors.grey[400],
+              color: AppColors.onSurfaceSoft,
             ),
           ),
           const SizedBox(width: 6),
           Text(
             '($count)',
-            style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.onSurfaceMuted,
+            ),
           ),
         ],
       ),
@@ -300,10 +310,11 @@ class EvalTreeDetailsPane extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color:
-              isRepertoire ? kNodeColorOurMove.withValues(alpha: 0.14) : null,
+          color: isRepertoire
+              ? kNodeColorOurMove.withValues(alpha: 0.14)
+              : null,
           border: Border(
-            bottom: BorderSide(color: Colors.grey[800]!, width: 0.5),
+            bottom: const BorderSide(color: AppColors.divider, width: 0.5),
             left: isRepertoire
                 ? const BorderSide(color: kNodeAccentRepertoire, width: 3)
                 : BorderSide.none,
@@ -315,9 +326,13 @@ class EvalTreeDetailsPane extends StatelessWidget {
             Row(
               children: [
                 if (isRepertoire)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: Icon(Icons.star, size: 14, color: Colors.amber[400]),
+                  const Padding(
+                    padding: EdgeInsets.only(right: 4),
+                    child: Icon(
+                      Icons.star,
+                      size: 14,
+                      color: AppColors.starAccent,
+                    ),
                   ),
                 SizedBox(
                   width: 64,
@@ -339,7 +354,10 @@ class EvalTreeDetailsPane extends StatelessWidget {
                 Expanded(
                   child: Text(
                     '${(child.moveProbability * 100).toStringAsFixed(1)}%',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.onSurfaceSoft,
+                    ),
                   ),
                 ),
                 if (child.expectimaxValue != null)
@@ -356,10 +374,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
             const SizedBox(height: 5),
             Row(
               children: [
-                SizedBox(
-                  width: 64,
-                  child: _buildProbabilityBar(barFraction),
-                ),
+                SizedBox(width: 64, child: _buildProbabilityBar(barFraction)),
                 const SizedBox(width: 8),
                 if (child.ease != null)
                   _miniStat(
@@ -371,7 +386,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
                   _miniStat(
                     'games',
                     _compactNumber(child.totalGames),
-                    Colors.grey[500]!,
+                    AppColors.onSurfaceMuted,
                   ),
                 if ((child.trapScore ?? 0) > 0.05)
                   _miniStat(
@@ -398,7 +413,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
                     child: _miniStat(
                       'score',
                       child.repertoireScore.toStringAsFixed(2),
-                      Colors.amber[300]!,
+                      AppColors.starAccent,
                     ),
                   ),
               ],
@@ -433,7 +448,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.18),
+        color: AppColors.backdrop.withValues(alpha: 0.18),
         borderRadius: BorderRadius.circular(4),
         border: Border.all(color: accentColor.withValues(alpha: 0.45)),
       ),
@@ -469,12 +484,12 @@ class EvalTreeDetailsPane extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.park, size: 32, color: Colors.grey[600]),
+            const Icon(Icons.park, size: 32, color: AppColors.onSurfaceDim),
             const SizedBox(height: 8),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.grey),
+              style: const TextStyle(color: AppColors.onSurfaceMuted),
             ),
           ],
         ),
@@ -488,7 +503,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
       children: [
         Text(
           '$label: ',
-          style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+          style: const TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
         ),
         Text(
           value,
@@ -510,12 +525,12 @@ class EvalTreeDetailsPane extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: isHigh ? Colors.green[900] : Colors.red[900],
+        color: isHigh ? AppColors.successSurface : AppColors.dangerSurface,
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
         isHigh ? 'Winning$evalStr' : 'Lost$evalStr',
-        style: const TextStyle(fontSize: 10, color: Colors.white),
+        style: const TextStyle(fontSize: 10, color: AppColors.ink),
       ),
     );
   }
@@ -538,7 +553,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
           Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(3),
-              color: Colors.grey[800],
+              color: AppColors.surfaceInset,
             ),
           ),
           FractionallySizedBox(
@@ -546,7 +561,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
             child: Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(3),
-                color: Colors.blue[400],
+                color: AppColors.info,
               ),
             ),
           ),

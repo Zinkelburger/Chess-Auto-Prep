@@ -178,9 +178,10 @@ class OpeningTree {
   /// FEN to node mapping for quick lookup
   final Map<String, List<OpeningTreeNode>> fenToNodes;
 
-  OpeningTree(
-      {OpeningTreeNode? root, Map<String, List<OpeningTreeNode>>? fenToNodes})
-      : fenToNodes = fenToNodes ?? {} {
+  OpeningTree({
+    OpeningTreeNode? root,
+    Map<String, List<OpeningTreeNode>>? fenToNodes,
+  }) : fenToNodes = fenToNodes ?? {} {
     // Ensure root and currentNode point to the same object
     final rootNode = root ?? OpeningTreeNode(move: '', fen: kStandardStartFen);
     this.root = rootNode;
@@ -411,9 +412,6 @@ class OpeningTree {
           .toList();
     }
 
-    return OpeningTree(
-      root: builtNodes[0],
-      fenToNodes: fenToNodes,
-    );
+    return OpeningTree(root: builtNodes[0], fenToNodes: fenToNodes);
   }
 }

@@ -21,13 +21,16 @@ class RepertoireReviewService {
     final csv = await _storage.readRepertoireReviewsCsv();
     if (csv == null || csv.trim().isEmpty) return [];
 
-    final lines =
-        csv.split('\n').where((line) => line.trim().isNotEmpty).toList();
+    final lines = csv
+        .split('\n')
+        .where((line) => line.trim().isNotEmpty)
+        .toList();
     if (lines.isEmpty) return [];
 
     final firstLine = lines.first.trim();
-    final rows =
-        firstLine.startsWith('repertoire_id,') ? lines.sublist(1) : lines;
+    final rows = firstLine.startsWith('repertoire_id,')
+        ? lines.sublist(1)
+        : lines;
     return rows.map((row) => RepertoireReviewEntry.fromCsvRow(row)).toList();
   }
 
@@ -42,11 +45,14 @@ class RepertoireReviewService {
   Future<List<RepertoireReviewHistoryEntry>> loadHistory() async {
     final csv = await _storage.readRepertoireReviewHistoryCsv();
     if (csv == null || csv.trim().isEmpty) return [];
-    final lines =
-        csv.split('\n').where((line) => line.trim().isNotEmpty).toList();
+    final lines = csv
+        .split('\n')
+        .where((line) => line.trim().isNotEmpty)
+        .toList();
     if (lines.isEmpty) return [];
-    final rows =
-        lines.first.trim() == _historyHeader ? lines.sublist(1) : lines;
+    final rows = lines.first.trim() == _historyHeader
+        ? lines.sublist(1)
+        : lines;
     return rows
         .map((row) => RepertoireReviewHistoryEntry.fromCsvRow(row))
         .toList();
@@ -65,11 +71,14 @@ class RepertoireReviewService {
   Future<List<RepertoireMoveProgress>> loadMoveProgress() async {
     final csv = await _storage.readRepertoireMoveProgressCsv();
     if (csv == null || csv.trim().isEmpty) return [];
-    final lines =
-        csv.split('\n').where((line) => line.trim().isNotEmpty).toList();
+    final lines = csv
+        .split('\n')
+        .where((line) => line.trim().isNotEmpty)
+        .toList();
     if (lines.isEmpty) return [];
-    final rows =
-        lines.first.trim() == _moveProgressHeader ? lines.sublist(1) : lines;
+    final rows = lines.first.trim() == _moveProgressHeader
+        ? lines.sublist(1)
+        : lines;
     return rows.map((row) => RepertoireMoveProgress.fromCsvRow(row)).toList();
   }
 
@@ -82,8 +91,9 @@ class RepertoireReviewService {
     List<RepertoireMoveProgress> all;
     if (repertoireId != null) {
       final existing = await loadMoveProgress();
-      final others =
-          existing.where((e) => e.repertoireId != repertoireId).toList();
+      final others = existing
+          .where((e) => e.repertoireId != repertoireId)
+          .toList();
       all = [...others, ...entries];
     } else {
       all = entries;
@@ -103,7 +113,7 @@ class RepertoireReviewService {
   }) {
     final merged = <RepertoireReviewEntry>[];
     final existingMap = {
-      for (final e in existing) '${e.repertoireId}:${e.lineId}': e
+      for (final e in existing) '${e.repertoireId}:${e.lineId}': e,
     };
 
     for (final line in lines) {
@@ -121,7 +131,9 @@ class RepertoireReviewService {
   }
 
   RepertoireReviewEntry _entryFromPgnHeaders(
-      String repertoireId, RepertoireLine line) {
+    String repertoireId,
+    RepertoireLine line,
+  ) {
     final h = line.headers;
     DateTime? parseDate(String? s) {
       if (s == null || s.isEmpty) return null;
@@ -146,11 +158,7 @@ class RepertoireReviewService {
     List<RepertoireLine> lines,
     Map<String, RepertoireReviewEntry> reviewMap,
   ) {
-    return orderLinesForReview(
-      lines,
-      reviewMap,
-      ReviewOrder.sequential,
-    );
+    return orderLinesForReview(lines, reviewMap, ReviewOrder.sequential);
   }
 
   /// Filter due/new lines and sort according to [order].
@@ -159,16 +167,20 @@ class RepertoireReviewService {
   /// [ReviewOrder.hardestFirst], lines are sorted by ascending playability
   /// (lowest quality first). Lines without playability data sort after those
   /// with data.
+  ///
+  /// [dueOnly] is the spaced-repetition filter; pass `false` (linear mode)
+  /// to include every line regardless of its due date.
   List<RepertoireLine> orderLinesForReview(
     List<RepertoireLine> lines,
     Map<String, RepertoireReviewEntry> reviewMap,
     ReviewOrder order, {
     Map<String, double>? playabilityMap,
+    bool dueOnly = true,
   }) {
     final due = <RepertoireLine>[];
     for (final line in lines) {
       final entry = reviewMap[line.id];
-      if (entry == null || entry.isDue) {
+      if (!dueOnly || entry == null || entry.isDue) {
         due.add(line);
       }
     }
@@ -300,7 +312,8 @@ class RepertoireReviewService {
   }
 
   Map<String, RepertoireMoveProgress> indexMoveProgress(
-      List<RepertoireMoveProgress> items) {
+    List<RepertoireMoveProgress> items,
+  ) {
     return {for (final i in items) '${i.lineId}:${i.moveIndex}': i};
   }
 }

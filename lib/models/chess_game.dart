@@ -89,7 +89,9 @@ class ChessGameModel {
         .replaceAll(RegExp(r'\([^)]*\)'), '') // Remove variations
         .replaceAll(RegExp(r'\d+\.'), '') // Remove move numbers
         .replaceAll(
-            RegExp(r'[*1-9]/[*1-9]-[*1-9]/[*1-9]'), '') // Remove results
+          RegExp(r'[*1-9]/[*1-9]-[*1-9]/[*1-9]'),
+          '',
+        ) // Remove results
         .trim();
 
     for (final move in cleanText.split(RegExp(r'\s+'))) {

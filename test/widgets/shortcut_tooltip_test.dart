@@ -6,10 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('actionTooltip', () {
     test('appends shortcut in parentheses', () {
-      expect(
-        actionTooltip('Flip board', shortcut: 'F'),
-        'Flip board (F)',
-      );
+      expect(actionTooltip('Flip board', shortcut: 'F'), 'Flip board (F)');
       expect(
         actionTooltip('Undo last add', shortcut: 'Ctrl+Z'),
         'Undo last add (Ctrl+Z)',

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../models/engine_settings.dart';
 import '../../services/analysis_service.dart';
 import '../../services/probability_service.dart';
+import '../../theme/app_colors.dart';
 
 class EnginePaneFooter extends StatelessWidget {
   final EngineSettings settings;
@@ -34,9 +35,9 @@ class EnginePaneFooter extends StatelessWidget {
       builder: (context, _) {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             border: Border(
-              top: BorderSide(color: Colors.grey[800]!, width: 0.5),
+              top: BorderSide(color: AppColors.divider, width: 0.5),
             ),
           ),
           // Mothballed: Lichess Explorer stats hidden.
@@ -49,8 +50,10 @@ class EnginePaneFooter extends StatelessWidget {
                   child: TextButton.icon(
                     onPressed: onSetRoot,
                     icon: const Icon(Icons.my_location, size: 14),
-                    label: const Text('Set as root',
-                        style: TextStyle(fontSize: 11)),
+                    label: const Text(
+                      'Set as root',
+                      style: TextStyle(fontSize: 11),
+                    ),
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       minimumSize: Size.zero,

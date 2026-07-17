@@ -40,7 +40,8 @@ void main() {
 
       final index = TrapIndexService(traps);
       final found = index.trapAtFen(
-          'rnbqkbnr/pp2pppp/2p5/3pP3/3P4/8/PPP2PPP/RNBQKBNR b KQkq -');
+        'rnbqkbnr/pp2pppp/2p5/3pP3/3P4/8/PPP2PPP/RNBQKBNR b KQkq -',
+      );
       expect(found, isNotNull);
       expect(found!.movesSan.last, 'e5');
     });

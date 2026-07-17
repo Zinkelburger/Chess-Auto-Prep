@@ -13,6 +13,7 @@ import '../../services/generation/generation_config.dart';
 import '../../services/jobs/generation_job_display.dart';
 import '../../services/jobs/repertoire_job.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import '../generation/depth_progress_bars.dart';
 
 class JobsPanel extends StatelessWidget {
@@ -21,6 +22,7 @@ class JobsPanel extends StatelessWidget {
   final AuditSessionController auditController;
   final VoidCallback? onOpenGenerationDialog;
   final VoidCallback? onOpenAuditDialog;
+  final VoidCallback? onOpenCoverageDialog;
   final VoidCallback? onPauseGeneration;
   final VoidCallback? onResumeGeneration;
   final VoidCallback? onCancelGeneration;
@@ -37,6 +39,7 @@ class JobsPanel extends StatelessWidget {
     required this.auditController,
     this.onOpenGenerationDialog,
     this.onOpenAuditDialog,
+    this.onOpenCoverageDialog,
     this.onPauseGeneration,
     this.onResumeGeneration,
     this.onCancelGeneration,
@@ -69,6 +72,8 @@ class JobsPanel extends StatelessWidget {
           isAuditing &&
           job == auditController.currentJob) {
         activeCards.add(_buildAuditJobCard(context, job));
+      } else if (job.type == JobType.coverage) {
+        activeCards.add(_buildCoverageJobCard(context, job));
       } else {
         activeCards.add(_buildJobTile(context, job));
       }
@@ -85,9 +90,8 @@ class JobsPanel extends StatelessWidget {
               children: [
                 Text(
                   'Completed',
-                  style: TextStyle(
+                  style: AppTextStyles.caption.copyWith(
                     fontSize: 11,
-                    color: Colors.grey[500],
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -110,20 +114,22 @@ class JobsPanel extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.work_outline, size: 40, color: Colors.grey[700]),
+          const Icon(
+            Icons.work_outline,
+            size: 40,
+            color: AppColors.onSurfaceDim,
+          ),
           const SizedBox(height: 12),
           Text(
             'No active jobs',
-            style: TextStyle(
-              color: Colors.grey[400],
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
+            style: AppTextStyles.bodyStrong.copyWith(
+              color: AppColors.onSurfaceSoft,
             ),
           ),
           const SizedBox(height: 4),
-          Text(
+          const Text(
             'Generate a repertoire or audit an existing one',
-            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+            style: AppTextStyles.caption,
           ),
           const SizedBox(height: 20),
           Row(
@@ -140,6 +146,14 @@ class JobsPanel extends StatelessWidget {
                 icon: const Icon(Icons.policy_outlined, size: 16),
                 label: const Text('Audit'),
               ),
+              if (onOpenCoverageDialog != null) ...[
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: onOpenCoverageDialog,
+                  icon: const Icon(Icons.analytics_outlined, size: 16),
+                  label: const Text('Coverage'),
+                ),
+              ],
             ],
           ),
         ],
@@ -177,7 +191,8 @@ class JobsPanel extends StatelessWidget {
       bestFirst: gc.progressBestFirst,
       priorityProgress: gc.progressPriorityFraction,
     );
-    final depthBars = phase == GenerationPhase.buildingTree &&
+    final depthBars =
+        phase == GenerationPhase.buildingTree &&
             gc.progressDepthTotals.isNotEmpty
         ? DepthProgressBars(
             totals: gc.progressDepthTotals,
@@ -218,29 +233,27 @@ class JobsPanel extends StatelessWidget {
                   message: gc.isSnapshotExporting
                       ? (gc.snapshotStatus ?? 'Exporting snapshot…')
                       : 'Save the lines found so far to a new repertoire — '
-                          'the run keeps going',
+                            'the run keeps going',
                   child: TextButton(
                     onPressed: gc.isSnapshotExporting
                         ? null
                         : onExportLinesGeneration,
-                    child: Text(
+                    child: const Text(
                       'Export Lines',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.lightBlue[300],
-                      ),
+                      style: TextStyle(fontSize: 11, color: AppColors.info),
                     ),
                   ),
                 ),
               if (onFinishNowGeneration != null)
                 Tooltip(
-                  message: 'Stop exploring and build lines from '
+                  message:
+                      'Stop exploring and build lines from '
                       'what\'s been found so far',
                   child: TextButton(
                     onPressed: onFinishNowGeneration,
-                    child: Text(
+                    child: const Text(
                       'Finish Now',
-                      style: TextStyle(fontSize: 11, color: Colors.orange[300]),
+                      style: TextStyle(fontSize: 11, color: AppColors.warning),
                     ),
                   ),
                 ),
@@ -251,16 +264,14 @@ class JobsPanel extends StatelessWidget {
 
   Widget _buildAuditJobCard(BuildContext context, RepertoireJob job) {
     final ac = auditController;
-    final fraction = ac.totalNodes > 0
-        ? ac.nodesChecked / ac.totalNodes
-        : null;
+    final fraction = ac.totalNodes > 0 ? ac.nodesChecked / ac.totalNodes : null;
     final statParts = [
       ac.totalNodes > 0
           ? '${ac.nodesChecked} / ${ac.totalNodes} positions checked'
           : 'Starting audit…',
     ];
-    final configSummary = ac.lastConfig?.summaryLabel ??
-        _auditConfigFromJob(job)?.summaryLabel;
+    final configSummary =
+        ac.lastConfig?.summaryLabel ?? _auditConfigFromJob(job)?.summaryLabel;
     final accent = Theme.of(context).colorScheme.tertiary;
 
     return _ActiveJobCard(
@@ -281,13 +292,38 @@ class JobsPanel extends StatelessWidget {
     );
   }
 
+  Widget _buildCoverageJobCard(BuildContext context, RepertoireJob job) {
+    final accent = Theme.of(context).colorScheme.secondary;
+    return _ActiveJobCard(
+      icon: Icons.analytics_outlined,
+      accent: accent,
+      title: job.label,
+      subtitle: null,
+      phaseIcon: Icons.analytics_outlined,
+      phaseLabel: 'Analyzing coverage',
+      statParts: [
+        job.progress.message.isNotEmpty
+            ? job.progress.message
+            : 'Starting analysis…',
+      ],
+      elapsed: null,
+      resourceLabel: null,
+      progress: job.progress.fraction > 0 ? job.progress.fraction : null,
+      isPaused: false,
+      onPause: null,
+      onResume: null,
+      onCancel: null,
+    );
+  }
+
   TreeBuildConfig? _configFromJob(RepertoireJob job) {
     final snap = job.configSnapshot;
     if (snap == null) return null;
     try {
       return TreeBuildConfig.fromJson(
         snap,
-        startFen: job.subtreeFen ??
+        startFen:
+            job.subtreeFen ??
             'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
       );
     } catch (_) {
@@ -306,16 +342,18 @@ class JobsPanel extends StatelessWidget {
   }
 
   Widget _buildJobTile(BuildContext context, RepertoireJob job) {
-    final icon = job.type == JobType.generation
-        ? Icons.auto_awesome
-        : Icons.policy_outlined;
+    final icon = switch (job.type) {
+      JobType.generation => Icons.auto_awesome,
+      JobType.audit => Icons.policy_outlined,
+      JobType.coverage => Icons.analytics_outlined,
+    };
     final statusColor = switch (job.status) {
       JobStatus.running => Theme.of(context).colorScheme.primary,
-      JobStatus.paused => Colors.orange,
+      JobStatus.paused => AppColors.warning,
       JobStatus.completed => AppColors.success,
       JobStatus.failed => AppColors.danger,
-      JobStatus.cancelled => Colors.grey,
-      JobStatus.queued => Colors.grey,
+      JobStatus.cancelled => AppColors.onSurfaceMuted,
+      JobStatus.queued => AppColors.onSurfaceMuted,
     };
     final statusLabel = switch (job.status) {
       JobStatus.running => 'Running',
@@ -347,15 +385,15 @@ class JobsPanel extends StatelessWidget {
       ),
       subtitle: Text(
         subtitleParts.join(' · '),
-        style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+        style: AppTextStyles.caption.copyWith(fontSize: 11),
         overflow: TextOverflow.ellipsis,
       ),
       trailing: Icon(
         job.status == JobStatus.completed
             ? Icons.check_circle_outline
             : job.status == JobStatus.failed
-                ? Icons.error_outline
-                : Icons.cancel_outlined,
+            ? Icons.error_outline
+            : Icons.cancel_outlined,
         size: 16,
         color: statusColor,
       ),
@@ -423,8 +461,11 @@ class _ActiveJobCard extends StatelessWidget {
                 width: 16,
                 height: 16,
                 child: isPaused
-                    ? Icon(Icons.pause_circle_filled,
-                        size: 16, color: Colors.orange[300])
+                    ? const Icon(
+                        Icons.pause_circle_filled,
+                        size: 16,
+                        color: AppColors.warning,
+                      )
                     : CircularProgressIndicator(
                         strokeWidth: 1.5,
                         color: accent,
@@ -452,10 +493,10 @@ class _ActiveJobCard extends StatelessWidget {
                         if (elapsed != null)
                           Text(
                             elapsed!,
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 10,
                               fontFamily: 'monospace',
-                              color: Colors.grey[500],
+                              color: AppColors.onSurfaceMuted,
                             ),
                           ),
                       ],
@@ -464,31 +505,35 @@ class _ActiveJobCard extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         subtitle!,
-                        style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: AppColors.onSurfaceMuted,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ],
                 ),
               ),
-              if (isPaused)
+              if (isPaused && onResume != null)
                 TextButton(
                   onPressed: onResume,
                   child: const Text('Resume', style: TextStyle(fontSize: 11)),
                 )
-              else
+              else if (!isPaused && onPause != null)
                 TextButton(
                   onPressed: onPause,
                   child: const Text('Pause', style: TextStyle(fontSize: 11)),
                 ),
               ...?extraActions,
-              TextButton(
-                onPressed: onCancel,
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(fontSize: 11, color: AppColors.danger),
+              if (onCancel != null)
+                TextButton(
+                  onPressed: onCancel,
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(fontSize: 11, color: AppColors.danger),
+                  ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -517,27 +562,26 @@ class _ActiveJobCard extends StatelessWidget {
             children: [
               for (final part in statParts)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
-                    color: Colors.grey[850],
+                    color: AppColors.surfaceInset,
                     borderRadius: BorderRadius.circular(5),
                   ),
                   child: Text(
                     part,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: Colors.grey[300],
+                      color: AppColors.inkSoft,
                     ),
                   ),
                 ),
             ],
           ),
-          if (detail != null) ...[
-            const SizedBox(height: 6),
-            detail!,
-          ],
+          if (detail != null) ...[const SizedBox(height: 6), detail!],
           if (progress != null) ...[
             const SizedBox(height: 6),
             ClipRRect(
@@ -545,7 +589,7 @@ class _ActiveJobCard extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: progress!.clamp(0.0, 1.0),
                 minHeight: 3,
-                backgroundColor: Colors.grey[850],
+                backgroundColor: AppColors.surfaceInset,
                 color: accent,
               ),
             ),
@@ -555,7 +599,7 @@ class _ActiveJobCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(2),
               child: LinearProgressIndicator(
                 minHeight: 3,
-                backgroundColor: Colors.grey[850],
+                backgroundColor: AppColors.surfaceInset,
                 color: accent,
               ),
             ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/models/build_tree_node.dart';
 import 'package:chess_auto_prep/theme/app_colors.dart';
+import 'package:chess_auto_prep/theme/app_text_styles.dart';
 import 'package:chess_auto_prep/utils/eval_constants.dart';
 import 'package:chess_auto_prep/utils/fen_utils.dart';
 
@@ -118,11 +119,7 @@ class _CompactTreeOutlineState extends State<CompactTreeOutline> {
     _highlightIndex = highlightIndex;
   }
 
-  void _buildRowsRecursive(
-    BuildTreeNode node,
-    int depth,
-    List<_FlatRow> rows,
-  ) {
+  void _buildRowsRecursive(BuildTreeNode node, int depth, List<_FlatRow> rows) {
     final hasChildren = node.children.isNotEmpty;
     final isExpanded = _expandedNodeIds.contains(node.nodeId);
     rows.add(
@@ -188,8 +185,9 @@ class _CompactTreeOutlineState extends State<CompactTreeOutline> {
           playAsWhite: widget.playAsWhite,
           startPlyOffset: _startPlyOffset,
           isHighlighted: isHighlighted,
-          onChevronTap:
-              row.hasChildren ? () => _toggleExpanded(row.node) : null,
+          onChevronTap: row.hasChildren
+              ? () => _toggleExpanded(row.node)
+              : null,
           onRowTap: () => widget.onNodeTapped?.call(row.node),
         );
       },
@@ -251,10 +249,10 @@ class _CompactTreeRow extends StatelessWidget {
               SizedBox(
                 width: 14,
                 child: node.isRepertoireMove
-                    ? Icon(
+                    ? const Icon(
                         Icons.star,
                         size: 12,
-                        color: Colors.amber[400],
+                        color: AppColors.starAccent,
                       )
                     : null,
               ),
@@ -263,8 +261,7 @@ class _CompactTreeRow extends StatelessWidget {
                   _formatMoveLabel(node),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontFamily: 'monospace',
+                  style: AppTextStyles.mono.copyWith(
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
                   ),
@@ -274,8 +271,7 @@ class _CompactTreeRow extends StatelessWidget {
                 const SizedBox(width: 6),
                 Text(
                   _formatEval(evalCp),
-                  style: TextStyle(
-                    fontFamily: 'monospace',
+                  style: AppTextStyles.monoDense.copyWith(
                     fontSize: 11,
                     color: AppColors.cpEval(evalCp),
                   ),
@@ -285,8 +281,7 @@ class _CompactTreeRow extends StatelessWidget {
                 const SizedBox(width: 6),
                 Text(
                   'V:${(node.expectimaxValue * 100).round()}%',
-                  style: TextStyle(
-                    fontFamily: 'monospace',
+                  style: AppTextStyles.monoDense.copyWith(
                     fontSize: 10,
                     color: AppColors.winProbability(node.expectimaxValue),
                   ),
@@ -296,10 +291,9 @@ class _CompactTreeRow extends StatelessWidget {
                 const SizedBox(width: 6),
                 Text(
                   '${(node.moveProbability * 100).round()}%',
-                  style: const TextStyle(
-                    fontFamily: 'monospace',
+                  style: AppTextStyles.monoDense.copyWith(
                     fontSize: 10,
-                    color: AppColors.onSurfaceDim,
+                    color: AppColors.onSurfaceMuted,
                   ),
                 ),
               ],

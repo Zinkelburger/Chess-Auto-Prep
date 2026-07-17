@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
 import '../controllers/eval_tree_controller.dart';
 import '../models/eval_tree_snapshot.dart';
 import '../services/eval_tree_layout_engine.dart';
@@ -59,11 +61,8 @@ class _EvalTreeViewportState extends State<EvalTreeViewport> {
   @override
   Widget build(BuildContext context) {
     if (widget.frame.nodesById.isEmpty && _exitingNodes.isEmpty) {
-      return Center(
-        child: Text(
-          'No nodes to display',
-          style: TextStyle(color: Colors.grey[600], fontSize: 13),
-        ),
+      return const Center(
+        child: Text('No nodes to display', style: AppTextStyles.muted),
       );
     }
 
@@ -173,7 +172,8 @@ class _EvalTreeViewportState extends State<EvalTreeViewport> {
       return;
     }
 
-    final layoutNode = widget.frame.tryNode(targetNodeId) ??
+    final layoutNode =
+        widget.frame.tryNode(targetNodeId) ??
         widget.frame.tryNode(widget.frame.selectedNodeId) ??
         widget.frame.tryNode(widget.frame.rootNodeId);
     if (layoutNode == null) {
@@ -204,10 +204,7 @@ class _EvalTreeEdgePainter extends CustomPainter {
   final EvalTreeSnapshot snapshot;
   final EvalTreeLayoutFrame frame;
 
-  const _EvalTreeEdgePainter({
-    required this.snapshot,
-    required this.frame,
-  });
+  const _EvalTreeEdgePainter({required this.snapshot, required this.frame});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -218,14 +215,17 @@ class _EvalTreeEdgePainter extends CustomPainter {
 
       final childNode = snapshot.node(edge.destinationNodeId);
       final paint = Paint()
-        ..color =
-            childNode.isRepertoireMove ? Colors.blue[400]! : Colors.grey[700]!
+        ..color = childNode.isRepertoireMove
+            ? AppColors.info
+            : AppColors.outline
         ..strokeWidth = childNode.isRepertoireMove ? 2.5 : 1.0
         ..style = PaintingStyle.stroke;
 
       final sourceCenter = Offset(source.rect.center.dx, source.rect.bottom);
-      final destinationCenter =
-          Offset(destination.rect.center.dx, destination.rect.top);
+      final destinationCenter = Offset(
+        destination.rect.center.dx,
+        destination.rect.top,
+      );
       final midY = (sourceCenter.dy + destinationCenter.dy) / 2;
       final path = Path()
         ..moveTo(sourceCenter.dx, sourceCenter.dy)
@@ -295,9 +295,10 @@ class _FadingNodeChipState extends State<_FadingNodeChip>
   @override
   Widget build(BuildContext context) {
     return FadeTransition(
-      opacity: Tween<double>(begin: 1.0, end: 0.0).animate(
-        CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-      ),
+      opacity: Tween<double>(
+        begin: 1.0,
+        end: 0.0,
+      ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut)),
       child: widget.child,
     );
   }

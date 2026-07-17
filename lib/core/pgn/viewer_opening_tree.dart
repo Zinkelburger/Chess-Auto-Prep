@@ -263,8 +263,9 @@ class ViewerOpeningTree {
     final fen = normalizeFen(openingTree!.currentNode.fen);
     return _positionGameCache.putIfAbsent(fen, () {
       if (_positionGameCache.length >= _maxCacheEntries) {
-        final keysToRemove =
-            _positionGameCache.keys.take(_maxCacheEntries ~/ 4).toList();
+        final keysToRemove = _positionGameCache.keys
+            .take(_maxCacheEntries ~/ 4)
+            .toList();
         for (final k in keysToRemove) {
           _positionGameCache.remove(k);
         }
@@ -298,7 +299,10 @@ class ViewerOpeningTree {
       final results = <int>[];
       for (int i = 0; i < filtered.length; i++) {
         if (pgn.gamePassesThroughFen(
-            filtered[i].headers, filtered[i].pgnText, fen)) {
+          filtered[i].headers,
+          filtered[i].pgnText,
+          fen,
+        )) {
           results.add(i);
         }
       }

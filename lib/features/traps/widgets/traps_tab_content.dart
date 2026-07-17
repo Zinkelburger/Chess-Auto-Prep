@@ -4,6 +4,8 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../core/board_preview_controller.dart';
+import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
 import '../models/trap_line_info.dart';
 import '../services/trap_index_service.dart';
 import 'traps_browser.dart';
@@ -48,26 +50,25 @@ class TrapsTabContent extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.warning_amber_rounded,
-                  size: 48, color: Colors.grey[700]),
+              const Icon(
+                Icons.warning_amber_rounded,
+                size: 48,
+                color: AppColors.onSurfaceDim,
+              ),
               const SizedBox(height: 16),
-              Text(
+              const Text(
                 'No traps detected yet',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey[400],
-                ),
+                style: AppTextStyles.emptyStateTitle,
               ),
               const SizedBox(height: 8),
               Text(
                 hasRepertoire
                     ? 'Discover traps in your existing repertoire, or '
-                        'generate a new repertoire to find them.'
+                          'generate a new repertoire to find them.'
                     : 'Generate a repertoire to discover positions where '
-                        'opponents are likely to make mistakes.',
+                          'opponents are likely to make mistakes.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                style: AppTextStyles.emptyStateBody,
               ),
               const SizedBox(height: 20),
               if (hasRepertoire) ...[
@@ -82,7 +83,7 @@ class TrapsTabContent extends StatelessWidget {
                   icon: const Icon(Icons.auto_awesome, size: 14),
                   label: const Text('Generate Full Repertoire'),
                   style: TextButton.styleFrom(
-                    foregroundColor: Colors.grey[400],
+                    foregroundColor: AppColors.onSurfaceSoft,
                   ),
                 ),
               ] else

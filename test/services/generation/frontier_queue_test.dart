@@ -8,11 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 int _idCounter = 0;
 
-BuildTreeNode _node({
-  double priority = -1.0,
-  double cumP = 1.0,
-  int ply = 0,
-}) {
+BuildTreeNode _node({double priority = -1.0, double cumP = 1.0, int ply = 0}) {
   final n = BuildTreeNode(
     fen: 'fen-${++_idCounter}',
     moveSan: 'e4',
@@ -88,6 +84,60 @@ void main() {
       q.addAll([first, second]);
       expect(q.removeFirst(), same(first));
       expect(q.removeFirst(), same(second));
+    });
+
+    test('add is idempotent — a queued node is never inserted twice', () {
+      final q = FrontierQueue(bestFirst: false);
+      final n = _node(priority: 0.5);
+      q.add(n);
+      q.add(n);
+      expect(q.length, 1);
+      expect(q.contains(n), isTrue);
+      expect(q.removeFirst(), same(n));
+      expect(q.isEmpty, isTrue);
+    });
+  });
+
+  group('FrontierQueue indexed heap (dedup + reprioritize)', () {
+    test('add is idempotent — a queued node is never inserted twice', () {
+      final q = FrontierQueue(bestFirst: true);
+      final n = _node(priority: 0.5);
+      q.add(n);
+      q.add(n);
+      expect(q.length, 1);
+      expect(q.contains(n), isTrue);
+      expect(q.removeFirst(), same(n));
+      expect(q.isEmpty, isTrue);
+      expect(q.contains(n), isFalse);
+    });
+
+    test('re-adding after an in-place priority raise re-sifts to the top', () {
+      final q = FrontierQueue(bestFirst: true);
+      final a = _node(priority: 0.9);
+      final b = _node(priority: 0.5);
+      final c = _node(priority: 0.1);
+      q.addAll([a, b, c]);
+      // c was lowest; raise it above everything, then re-add to re-sift.
+      c.searchPriority = 1.0;
+      q.add(c);
+      expect(q.length, 3); // no duplicate entry
+      expect(q.removeFirst(), same(c));
+      expect(q.removeFirst(), same(a));
+      expect(q.removeFirst(), same(b));
+    });
+
+    test('re-adding after an in-place priority drop re-sifts downward', () {
+      final q = FrontierQueue(bestFirst: true);
+      final a = _node(priority: 0.9);
+      final b = _node(priority: 0.5);
+      final c = _node(priority: 0.1);
+      q.addAll([a, b, c]);
+      a.searchPriority = 0.0; // was the max, now the min
+      q.add(a);
+      expect(q.length, 3);
+      expect(q.removeFirst(), same(b));
+      expect(q.removeFirst(), same(c));
+      expect(q.removeFirst(), same(a));
     });
   });
 }

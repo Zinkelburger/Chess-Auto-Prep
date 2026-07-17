@@ -65,6 +65,15 @@ class BuildTreeNode implements MoveTreeNodeView {
   /// consumers fall back to [cumulativeProbability].
   double searchPriority = -1.0;
 
+  /// This edge's *local* discount applied to [searchPriority] beyond
+  /// [moveProbability] — 1.0 everywhere except our-move alternatives, which
+  /// carry `ourAltDiscount` (or a DB frequency share).  Lets a zero→positive
+  /// transposition rebuild ([propagateHigherCumP]) re-derive discounted
+  /// priorities instead of collapsing them to the raw cumulative probability.
+  /// A transient search signal, not serialized: after a resume it defaults to
+  /// 1.0, which degrades a rebuild to the undiscounted (pre-fix) behaviour.
+  double searchPriorityDiscount = 1.0;
+
   // Lichess stats
   int whiteWins = 0;
   int blackWins = 0;
@@ -397,34 +406,34 @@ class BuildStats {
   int extEvalSubtreeSkips = 0;
 
   Map<String, dynamic> toJson() => {
-        'lichess_queries': lichessQueries,
-        'lichess_cache_hits': lichessCacheHits,
-        'lichess_total_ms': lichessTotalMs.round(),
-        'maia_evals': maiaEvals,
-        'maia_total_ms': maiaTotalMs.round(),
-        'sf_multipv_calls': sfMultipvCalls,
-        'sf_multipv_ms': sfMultipvMs.round(),
-        'sf_single_calls': sfSingleCalls,
-        'sf_single_ms': sfSingleMs.round(),
-        'sf_batch_calls': sfBatchCalls,
-        'sf_batch_ms': sfBatchMs.round(),
-        'db_eval_hits': dbEvalHits,
-        'db_eval_misses': dbEvalMisses,
-        'db_explorer_hits': dbExplorerHits,
-        'db_explorer_misses': dbExplorerMisses,
-        'local_chessdb_hits': localChessDbHits,
-        'local_chessdb_misses': localChessDbMisses,
-        'local_chessdb_shallow': localChessDbShallow,
-        'local_chessdb_hard_misses': localChessDbHardMisses,
-        'cdbdirect_hits': cdbDirectHits,
-        'cdbdirect_misses': cdbDirectMisses,
-        'cdbdirect_shallow': cdbDirectShallow,
-        'cdbdirect_hard_misses': cdbDirectHardMisses,
-        'chessdb_api_hits': chessDbApiHits,
-        'chessdb_api_misses': chessDbApiMisses,
-        'chessdb_api_shallow': chessDbApiShallow,
-        'chessdb_api_quota_blocked': chessDbApiQuotaBlocked,
-        'transposition_eval_hits': transpositionEvalHits,
-        'ext_eval_subtree_skips': extEvalSubtreeSkips,
-      };
+    'lichess_queries': lichessQueries,
+    'lichess_cache_hits': lichessCacheHits,
+    'lichess_total_ms': lichessTotalMs.round(),
+    'maia_evals': maiaEvals,
+    'maia_total_ms': maiaTotalMs.round(),
+    'sf_multipv_calls': sfMultipvCalls,
+    'sf_multipv_ms': sfMultipvMs.round(),
+    'sf_single_calls': sfSingleCalls,
+    'sf_single_ms': sfSingleMs.round(),
+    'sf_batch_calls': sfBatchCalls,
+    'sf_batch_ms': sfBatchMs.round(),
+    'db_eval_hits': dbEvalHits,
+    'db_eval_misses': dbEvalMisses,
+    'db_explorer_hits': dbExplorerHits,
+    'db_explorer_misses': dbExplorerMisses,
+    'local_chessdb_hits': localChessDbHits,
+    'local_chessdb_misses': localChessDbMisses,
+    'local_chessdb_shallow': localChessDbShallow,
+    'local_chessdb_hard_misses': localChessDbHardMisses,
+    'cdbdirect_hits': cdbDirectHits,
+    'cdbdirect_misses': cdbDirectMisses,
+    'cdbdirect_shallow': cdbDirectShallow,
+    'cdbdirect_hard_misses': cdbDirectHardMisses,
+    'chessdb_api_hits': chessDbApiHits,
+    'chessdb_api_misses': chessDbApiMisses,
+    'chessdb_api_shallow': chessDbApiShallow,
+    'chessdb_api_quota_blocked': chessDbApiQuotaBlocked,
+    'transposition_eval_hits': transpositionEvalHits,
+    'ext_eval_subtree_skips': extEvalSubtreeSkips,
+  };
 }

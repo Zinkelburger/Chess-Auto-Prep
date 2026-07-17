@@ -32,8 +32,10 @@ Position? bestEffortPositionFromInput(String input) {
 Position? _fromFen(String input) {
   try {
     final fullFen = expandFen(input);
-    return Chess.fromSetup(Setup.parseFen(fullFen),
-        ignoreImpossibleCheck: true);
+    return Chess.fromSetup(
+      Setup.parseFen(fullFen),
+      ignoreImpossibleCheck: true,
+    );
   } catch (_) {
     return null;
   }
@@ -130,10 +132,14 @@ Position? _tryCastleFallback(Position pos, String san, int ply) {
         .removePieceAt(sq(4, rank)) // remove king from e-file
         .removePieceAt(sq(7, rank)); // remove rook from h-file
     board = board
-        .setPieceAt(sq(6, rank),
-            Piece(color: isWhite ? Side.white : Side.black, role: Role.king))
-        .setPieceAt(sq(5, rank),
-            Piece(color: isWhite ? Side.white : Side.black, role: Role.rook));
+        .setPieceAt(
+          sq(6, rank),
+          Piece(color: isWhite ? Side.white : Side.black, role: Role.king),
+        )
+        .setPieceAt(
+          sq(5, rank),
+          Piece(color: isWhite ? Side.white : Side.black, role: Role.rook),
+        );
     return Chess(
       board: board,
       turn: pos.turn.opposite,
@@ -149,10 +155,14 @@ Position? _tryCastleFallback(Position pos, String san, int ply) {
         .removePieceAt(sq(4, rank)) // remove king from e-file
         .removePieceAt(sq(0, rank)); // remove rook from a-file
     board = board
-        .setPieceAt(sq(2, rank),
-            Piece(color: isWhite ? Side.white : Side.black, role: Role.king))
-        .setPieceAt(sq(3, rank),
-            Piece(color: isWhite ? Side.white : Side.black, role: Role.rook));
+        .setPieceAt(
+          sq(2, rank),
+          Piece(color: isWhite ? Side.white : Side.black, role: Role.king),
+        )
+        .setPieceAt(
+          sq(3, rank),
+          Piece(color: isWhite ? Side.white : Side.black, role: Role.rook),
+        );
     return Chess(
       board: board,
       turn: pos.turn.opposite,
@@ -216,11 +226,11 @@ Position _advanceTurn(Position pos) {
 }
 
 Role? _charToRole(String c) => switch (c) {
-      'N' => Role.knight,
-      'B' => Role.bishop,
-      'R' => Role.rook,
-      'Q' => Role.queen,
-      'K' => Role.king,
-      'P' => Role.pawn,
-      _ => null,
-    };
+  'N' => Role.knight,
+  'B' => Role.bishop,
+  'R' => Role.rook,
+  'Q' => Role.queen,
+  'K' => Role.king,
+  'P' => Role.pawn,
+  _ => null,
+};

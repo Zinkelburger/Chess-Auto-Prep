@@ -1,8 +1,8 @@
 /// Jobs tab body for the repertoire bottom pane.
 ///
 /// Shows one of three surfaces: the inline generation config, the inline
-/// audit config, or the jobs list. The host owns the inline-config flags and
-/// the pane; this widget only renders and forwards intents.
+/// audit config, or the jobs list. The host owns the inline-config flags
+/// and the pane; this widget only renders and forwards intents.
 library;
 
 import 'package:flutter/material.dart';
@@ -38,6 +38,9 @@ class JobsTabContent extends StatelessWidget {
   /// Open the audit config (forceConfig) from the jobs list.
   final VoidCallback onOpenAuditConfig;
 
+  /// Open the coverage config dialog and start a coverage run.
+  final VoidCallback? onOpenCoverageDialog;
+
   // Audit lifecycle callbacks stay host-owned so they can guard on `mounted`
   // (the audit service reports asynchronously and may outlive this widget).
   final void Function(bool auditing) onAuditingChanged;
@@ -58,6 +61,7 @@ class JobsTabContent extends StatelessWidget {
     required this.onCloseInlineAuditConfig,
     required this.onOpenGenerationDialog,
     required this.onOpenAuditConfig,
+    this.onOpenCoverageDialog,
     required this.onAuditingChanged,
     required this.onAuditResultReady,
     required this.onAuditLiveFinding,
@@ -133,6 +137,7 @@ class JobsTabContent extends StatelessWidget {
         auditController: auditController,
         onOpenGenerationDialog: onOpenGenerationDialog,
         onOpenAuditDialog: onOpenAuditConfig,
+        onOpenCoverageDialog: onOpenCoverageDialog,
         onPauseAudit: auditController.pause,
         onResumeAudit: auditController.resume,
         onCancelAudit: () =>
@@ -180,9 +185,10 @@ class JobsTabContent extends StatelessWidget {
         children: [
           Icon(icon, size: 16),
           const SizedBox(width: 6),
-          Text(title,
-              style:
-                  const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          Text(
+            title,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
           const Spacer(),
           IconButton(
             icon: const Icon(Icons.close, size: 18),

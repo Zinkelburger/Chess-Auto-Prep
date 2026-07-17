@@ -5,12 +5,10 @@ import 'package:chess_auto_prep/core/repertoire_controller.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/models/opening_tree.dart';
 import 'package:chess_auto_prep/services/games_repertoire/games_draft.dart';
-import 'package:chess_auto_prep/services/games_repertoire/repertoire_merge.dart';
 import 'package:chess_auto_prep/widgets/games_repertoire/draft_tree_view.dart';
 import 'package:chess_auto_prep/widgets/games_repertoire/merge_conflict_sheet.dart';
 
-Widget _wrap(Widget child) =>
-    MaterialApp(home: Scaffold(body: child));
+Widget _wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
 
 void main() {
   group('DraftTreeView', () {
@@ -21,11 +19,11 @@ void main() {
       final draft = GamesDraft(tree: tree, isWhite: true);
       var changes = 0;
 
-      await tester.pumpWidget(_wrap(DraftTreeView(
-        draft: draft,
-        minGames: 1,
-        onChanged: () => changes++,
-      )));
+      await tester.pumpWidget(
+        _wrap(
+          DraftTreeView(draft: draft, minGames: 1, onChanged: () => changes++),
+        ),
+      );
 
       // All four moves are visible.
       expect(find.text('1. e4'), findsOneWidget);
@@ -52,16 +50,15 @@ void main() {
       expect(changes, 1);
     });
 
-    testWidgets('starts deep lines collapsed and expands on row tap',
-        (tester) async {
+    testWidgets('starts deep lines collapsed and expands on row tap', (
+      tester,
+    ) async {
       final tree = OpeningTree()..appendLine(['e4', 'e5', 'Nf3']);
       final draft = GamesDraft(tree: tree, isWhite: true);
 
-      await tester.pumpWidget(_wrap(DraftTreeView(
-        draft: draft,
-        minGames: 1,
-        onChanged: () {},
-      )));
+      await tester.pumpWidget(
+        _wrap(DraftTreeView(draft: draft, minGames: 1, onChanged: () {})),
+      );
 
       // e5 is at depth 1, so it starts collapsed: Nf3 is hidden and the row
       // shows the "collapsed" chevron.
@@ -88,8 +85,9 @@ void main() {
   });
 
   group('MergeConflictSheet', () {
-    testWidgets('shows candidates and resolves by promoting to mainline',
-        (tester) async {
+    testWidgets('shows candidates and resolves by promoting to mainline', (
+      tester,
+    ) async {
       final controller = RepertoireController();
       controller.loadMoveSequence(['e4', 'e5', 'Nf3']);
       // Merge a draft where I played Bc4 instead of Nf3 → one conflict.
@@ -99,10 +97,14 @@ void main() {
       );
       expect(result.hasConflicts, isTrue);
 
-      await tester.pumpWidget(_wrap(MergeConflictSheet(
-        controller: controller,
-        conflicts: result.conflicts,
-      )));
+      await tester.pumpWidget(
+        _wrap(
+          MergeConflictSheet(
+            controller: controller,
+            conflicts: result.conflicts,
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       // Both candidate moves are offered.

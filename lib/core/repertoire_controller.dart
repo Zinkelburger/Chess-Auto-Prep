@@ -21,25 +21,35 @@ import '../services/games_repertoire/repertoire_merge.dart';
 import '../services/opening_tree_builder.dart';
 import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';
+import '../utils/fen_utils.dart';
 import '../utils/movetext_builder.dart';
 import '../utils/san_token_utils.dart';
 import 'move_navigation.dart';
 import 'repertoire_authoring.dart';
 import 'repertoire_writer.dart';
+import '../utils/safe_change_notifier.dart';
+
+part 'repertoire_controller_persistence.dart';
 
 // ---------------------------------------------------------------------------
 // Isolate-safe top-level helper for parsing repertoire lines (used by compute)
 // ---------------------------------------------------------------------------
 
 List<RepertoireLine> _parseRepertoireInIsolate(
-    ({String pgn, String color}) args) {
+  ({String pgn, String color}) args,
+) {
   final service = RepertoireService();
   return service.parseRepertoirePgn(args.pgn, trainingColor: args.color);
 }
 
 /// Manages repertoire state and acts as the single source of truth.
 /// All UI components should derive their chess position from this class.
-class RepertoireController with ChangeNotifier, MoveNavigation {
+class RepertoireController
+    with
+        ChangeNotifier,
+        MoveNavigation,
+        SafeChangeNotifier,
+        _RepertoirePersistence {
   late final RepertoireWriter writer = RepertoireWriter(this);
 
   /// Pure PGN-authoring collaborator (game/line construction).
@@ -113,6 +123,30 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
     final f = _tree.startingFen;
     return f == kStandardStartFen ? null : f;
   }
+
+  /// SAN moves of the saved root position (empty when no root is saved).
+  List<String> get rootMoveSans => _parsePgnMoveText(_rootMoves);
+
+  /// FEN of the saved root position — the tree's starting position when no
+  /// root is saved.
+  String get rootFen {
+    Position pos;
+    try {
+      pos = Chess.fromSetup(Setup.parseFen(_tree.startingFen));
+    } catch (_) {
+      pos = Chess.initial;
+    }
+    for (final san in rootMoveSans) {
+      final move = pos.parseSan(san);
+      if (move == null) break;
+      pos = pos.play(move);
+    }
+    return pos.fen;
+  }
+
+  /// Whether the cursor currently sits on the saved root position
+  /// (move counters ignored, so transpositions count).
+  bool get isAtRootPosition => normalizeFen(fen) == normalizeFen(rootFen);
 
   // ── Navigation (single entry point) ──────────────────────────────
 
@@ -319,12 +353,15 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
 
     final previousPgn = _repertoirePgn ?? '';
     final movePath = _tree.sanSequenceAt(target);
-    writer.pushUndo(UndoOperation(
-      previousPgn: previousPgn,
-      treePathBeforeAdd:
-          movePath.isEmpty ? [] : movePath.sublist(0, movePath.length - 1),
-      moveAdded: movePath.isNotEmpty ? movePath.last : '',
-    ));
+    writer.pushUndo(
+      UndoOperation(
+        previousPgn: previousPgn,
+        treePathBeforeAdd: movePath.isEmpty
+            ? []
+            : movePath.sublist(0, movePath.length - 1),
+        moveAdded: movePath.isNotEmpty ? movePath.last : '',
+      ),
+    );
 
     final newCursor = target.parent;
     _tree.deleteAt(target);
@@ -339,10 +376,7 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
     // After promotion the node is now at index 0 among siblings.
     if (target.isNotEmpty && target.last != 0) {
       // Recompute cursor if it pointed at the promoted node.
-      final promoted = TreePath([
-        ...target.parent.toList(),
-        0,
-      ]);
+      final promoted = TreePath([...target.parent.toList(), 0]);
       if (_path == target) _path = promoted;
     }
     notifyListeners();
@@ -475,199 +509,6 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
     );
   }
 
-  // ── Repertoire lifecycle ─────────────────────────────────────────
-
-  /// Sets a new repertoire and triggers loading.
-  Future<void> setRepertoire(RepertoireMetadata repertoire) async {
-    _currentRepertoire = repertoire;
-    await loadRepertoire();
-  }
-
-  /// Writes the color header to the PGN file and reloads.
-  Future<void> setRepertoireColor(bool isWhite) async {
-    if (_currentRepertoire == null) return;
-    final filePath = _currentRepertoire!.filePath;
-    final storage = StorageFactory.instance;
-    if (!await storage.fileExists(filePath)) return;
-
-    final colorLabel = isWhite ? 'White' : 'Black';
-    final existing = await storage.readFile(filePath);
-    if (existing == null) return;
-    final updated = _upsertMetadataComment(existing, '// Color:', colorLabel);
-    await storage.writeFile(filePath, updated);
-    _needsColorSelection = false;
-    await loadRepertoire();
-  }
-
-  /// Sets the current move sequence as the root position and persists it.
-  Future<void> setRootPosition() async {
-    if (_currentRepertoire == null) return;
-    final filePath = _currentRepertoire!.filePath;
-    final storage = StorageFactory.instance;
-    if (!await storage.fileExists(filePath)) return;
-
-    final moveText = _movesToPgnMoveText(currentMoveSequence);
-    _rootMoves = moveText;
-
-    final existing = await storage.readFile(filePath);
-    if (existing == null) return;
-    final updated = _upsertMetadataComment(existing, '// Root:', moveText);
-    await storage.writeFile(filePath, updated);
-    notifyListeners();
-  }
-
-  /// Restores repertoire state from a PGN snapshot (used by undo).
-  Future<void> restoreRepertoireFromPgn(
-    String pgnContent, {
-    List<String>? syncPath,
-  }) async {
-    _repertoirePgn = pgnContent.isEmpty ? null : pgnContent;
-    await _buildOpeningTree();
-    await _parseRepertoireLines();
-    if (syncPath != null) {
-      navigateToLineMove(syncPath);
-    } else {
-      _navigateToRootPosition();
-    }
-    notifyListeners();
-  }
-
-  /// (Re)loads the PGN content for the current repertoire.
-  Future<void> loadRepertoire() async {
-    if (_currentRepertoire == null) return;
-    writer.clearUndoStack();
-    _loadError = null;
-    _setLoading(true);
-
-    try {
-      final filePath = _currentRepertoire!.filePath;
-      final storage = StorageFactory.instance;
-
-      if (await storage.fileExists(filePath)) {
-        _repertoirePgn = await storage.readFile(filePath);
-
-        _tree = MoveTree();
-        _path = TreePath.empty;
-
-        await _buildOpeningTree();
-        await _parseRepertoireLines();
-        _navigateToRootPosition();
-      } else {
-        _repertoirePgn = null;
-        _openingTree = null;
-        _repertoireLines = [];
-        _tree = MoveTree();
-        _path = TreePath.empty;
-      }
-    } catch (e) {
-      _loadError = 'Failed to load repertoire: $e';
-      debugPrint(_loadError);
-      _repertoirePgn = null;
-      _openingTree = null;
-      _repertoireLines = [];
-      _tree = MoveTree();
-      _path = TreePath.empty;
-    } finally {
-      _setLoading(false);
-    }
-  }
-
-  /// Parses repertoire lines for PGN browser.
-  Future<void> _parseRepertoireLines() async {
-    if (_repertoirePgn == null || _repertoirePgn!.isEmpty) {
-      _repertoireLines = [];
-      return;
-    }
-
-    try {
-      final pgnContent = _repertoirePgn!;
-      final color = _isRepertoireWhite ? 'white' : 'black';
-      _repertoireLines = await compute(
-        _parseRepertoireInIsolate,
-        (pgn: pgnContent, color: color),
-      );
-      debugPrint(
-          'Parsed ${_repertoireLines.length} repertoire lines for PGN browser');
-    } catch (e) {
-      debugPrint('Failed to parse repertoire lines: $e');
-      _repertoireLines = [];
-    }
-  }
-
-  /// Builds an opening tree from the current repertoire PGN.
-  Future<void> _buildOpeningTree() async {
-    if (_repertoirePgn == null || _repertoirePgn!.isEmpty) {
-      _openingTree = OpeningTree();
-      return;
-    }
-
-    try {
-      String? repertoireColor;
-      String? rootMoves;
-      final lines = _repertoirePgn!.split('\n');
-
-      for (final line in lines) {
-        final trimmedLine = line.trim();
-        if (trimmedLine.startsWith('// Color:')) {
-          repertoireColor = trimmedLine.substring(9).trim();
-        } else if (trimmedLine.startsWith('// Root:')) {
-          rootMoves = trimmedLine.substring(8).trim();
-        }
-      }
-
-      _rootMoves = rootMoves ?? '';
-
-      _needsColorSelection = repertoireColor == null;
-      final isWhiteRepertoire = repertoireColor != 'Black';
-      _isRepertoireWhite = isWhiteRepertoire;
-
-      final processedGames = <String>[];
-
-      for (final chunk in pgn.splitPgnIntoGames(_repertoirePgn!)) {
-        final headers = pgn.extractHeaders(chunk);
-        final moveLines = <String>[];
-        for (final line in chunk.split('\n')) {
-          final trimmed = line.trim();
-          if (trimmed.isEmpty || trimmed.startsWith('[')) continue;
-          moveLines.add(trimmed);
-        }
-        if (moveLines.isEmpty) continue;
-
-        final game = _authoring.buildGame(
-          event: headers['Event'],
-          date: headers['Date'],
-          white: headers['White'],
-          black: headers['Black'],
-          result: headers['Result'],
-          moveLines: moveLines,
-        );
-        if (game != null) {
-          processedGames.add(game);
-        }
-      }
-
-      if (processedGames.isEmpty) {
-        debugPrint('No games processed for tree building');
-        _openingTree = OpeningTree();
-        return;
-      }
-
-      _openingTree = await OpeningTreeBuilder.buildTree(
-        pgnList: processedGames,
-        username: '',
-        userIsWhite: isWhiteRepertoire,
-        maxDepth: kOpeningTreeMaxDepth,
-        strictPlayerMatching: false,
-      );
-
-      debugPrint(
-          'Built opening tree with ${_openingTree?.totalGames} total games');
-    } catch (e) {
-      debugPrint('Failed to build opening tree: $e');
-      _openingTree = OpeningTree();
-    }
-  }
-
   // ── PGN line management ──────────────────────────────────────────
 
   RepertoireLine? _selectedPgnLine;
@@ -724,7 +565,10 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
           if (c.isNotEmpty) comments[i.toString()] = c;
         }
       }
-      _repertoireLines[idx] = RepertoireLine(
+      // Swap in a fresh list: consumers (lines browser) rebuild their
+      // display/search indexes only when the list identity changes.
+      final updated = List.of(_repertoireLines);
+      updated[idx] = RepertoireLine(
         id: old.id,
         name: old.name,
         moves: newMoves,
@@ -732,8 +576,11 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
         startPosition: service.extractStartPositionFromPgn(newPgn),
         fullPgn: newPgn,
         comments: comments,
+        headers: Map<String, String>.from(parsed.headers),
+        importance: old.importance,
       );
-      _selectedPgnLine = _repertoireLines[idx];
+      _repertoireLines = updated;
+      _selectedPgnLine = updated[idx];
     }
 
     notifyListeners();
@@ -753,13 +600,15 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
       _openingTree?.appendLineFromFen(startFen, moves);
     }
 
-    _repertoireLines.add(_authoring.buildNewLine(
-      moves: moves,
-      title: title,
-      pgnContent: pgnContent,
-      index: _repertoireLines.length,
-      isWhite: _isRepertoireWhite,
-    ));
+    _repertoireLines.add(
+      _authoring.buildNewLine(
+        moves: moves,
+        title: title,
+        pgnContent: pgnContent,
+        index: _repertoireLines.length,
+        isWhite: _isRepertoireWhite,
+      ),
+    );
 
     if (_currentRepertoire != null) {
       _currentRepertoire = _currentRepertoire!.copyWith(
@@ -797,10 +646,15 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
     final startFen = startingFen ?? kStandardStartFen;
     _openingTree?.appendLineFromFen(startFen, [...prefix, newMove]);
 
-    final lineIndex = _authoring.findLineIndexForPrefix(_repertoireLines, prefix);
+    final lineIndex = _authoring.findLineIndexForPrefix(
+      _repertoireLines,
+      prefix,
+    );
     if (lineIndex != null) {
-      _repertoireLines[lineIndex] =
-          _authoring.extendLine(_repertoireLines[lineIndex], newMove);
+      _repertoireLines[lineIndex] = _authoring.extendLine(
+        _repertoireLines[lineIndex],
+        newMove,
+      );
       notifyListeners();
       return;
     }
@@ -819,82 +673,5 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
       pgnForLine,
       updateTree: false,
     );
-  }
-
-  /// Imports PGN content into the current repertoire file.
-  Future<int> importPgnContent(String pgnContent) async {
-    if (_currentRepertoire == null) return 0;
-
-    final filePath = _currentRepertoire!.filePath;
-    final storage = StorageFactory.instance;
-    if (!await storage.fileExists(filePath)) return 0;
-
-    final gameCount = pgn.countPgnGames(pgnContent);
-
-    final existing = await storage.readFile(filePath);
-    if (existing == null) return 0;
-    final separator = existing.endsWith('\n\n')
-        ? ''
-        : existing.endsWith('\n')
-            ? '\n'
-            : '\n\n';
-    await storage.writeFile(filePath, '$existing$separator$pgnContent\n');
-
-    await loadRepertoire();
-
-    return gameCount > 0 ? gameCount : 1;
-  }
-
-  final List<Completer<void>> _loadCompleters = [];
-
-  /// Returns a Future that completes when the current load finishes.
-  /// Resolves immediately if no load is in progress.
-  Future<void> awaitLoaded() {
-    if (!_isLoading) return Future.value();
-    final c = Completer<void>();
-    _loadCompleters.add(c);
-    return c.future;
-  }
-
-  void _setLoading(bool loading) {
-    _isLoading = loading;
-    if (!loading) {
-      for (final c in _loadCompleters) {
-        c.complete();
-      }
-      _loadCompleters.clear();
-    }
-    notifyListeners();
-  }
-
-  String _upsertMetadataComment(String content, String prefix, String value) {
-    final lines = content.split('\n');
-    final updated = <String>[];
-    var inserted = false;
-
-    for (final line in lines) {
-      final trimmed = line.trim();
-
-      if (trimmed.startsWith(prefix)) {
-        if (!inserted) {
-          updated.add('$prefix $value');
-          inserted = true;
-        }
-        continue;
-      }
-
-      if (!inserted && trimmed.startsWith('[Event ')) {
-        updated.add('$prefix $value');
-        inserted = true;
-      }
-
-      updated.add(line);
-    }
-
-    if (!inserted) {
-      updated.insert(0, '$prefix $value');
-    }
-
-    return updated.join('\n');
   }
 }

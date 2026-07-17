@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:path/path.dart' as p;
+import '../../utils/atomic_file.dart';
 import '../../utils/file_text_reader.dart';
 import '../../models/repertoire_metadata.dart';
 import '../../models/tactics_set_metadata.dart';
@@ -44,40 +45,17 @@ class IOStorageService implements StorageService {
 
     final content = await readTextFile(file);
     final count = content.trim().isEmpty ? 0 : pgn.countPgnGamesFast(content);
-    _countCache[file.path] =
-        (size: stat.size, modifiedMs: modifiedMs, count: count);
+    _countCache[file.path] = (
+      size: stat.size,
+      modifiedMs: modifiedMs,
+      count: count,
+    );
     return count;
   }
 
   Future<File> _resolveFile(String path) async {
     if (p.isAbsolute(path)) return File(path);
     return AppPaths.documentsFile(path);
-  }
-
-  /// Best-effort atomic replace: write to a temp file, then rename.
-  Future<void> _writeAtomically(File target, String content) async {
-    final parent = target.parent;
-    if (!await parent.exists()) {
-      await parent.create(recursive: true);
-    }
-
-    final tmp = File(
-      p.join(
-        parent.path,
-        '.${p.basename(target.path)}.${DateTime.now().microsecondsSinceEpoch}.tmp',
-      ),
-    );
-
-    await tmp.writeAsString(content, flush: true);
-
-    try {
-      await tmp.rename(target.path);
-    } on FileSystemException {
-      if (await target.exists()) {
-        await target.delete();
-      }
-      await tmp.rename(target.path);
-    }
   }
 
   // ── Generic file I/O ─────────────────────────────────────────────────────
@@ -95,7 +73,7 @@ class IOStorageService implements StorageService {
 
   @override
   Future<void> writeFile(String path, String content) async {
-    await _writeAtomically(await _resolveFile(path), content);
+    await writeTextFileAtomically(await _resolveFile(path), content);
   }
 
   @override
@@ -151,15 +129,17 @@ class IOStorageService implements StorageService {
           entity,
     ];
 
-    return Future.wait(files.map((file) async {
-      final stat = await file.stat();
-      return RepertoireMetadata(
-        filePath: file.path,
-        name: p.basenameWithoutExtension(file.path),
-        gameCount: await _cachedGameCount(file, stat),
-        lastModified: stat.modified,
-      );
-    }));
+    return Future.wait(
+      files.map((file) async {
+        final stat = await file.stat();
+        return RepertoireMetadata(
+          filePath: file.path,
+          name: p.basenameWithoutExtension(file.path),
+          gameCount: await _cachedGameCount(file, stat),
+          lastModified: stat.modified,
+        );
+      }),
+    );
   }
 
   @override
@@ -205,27 +185,31 @@ class IOStorageService implements StorageService {
         if (entity is Directory) entity,
     ];
 
-    return Future.wait(folders.map((folder) async {
-      var chapterCount = 0;
-      DateTime lastModified = (await folder.stat()).modified;
-      await for (final entity in folder.list()) {
-        if (entity is File && _isChapterFile(entity.path)) {
-          chapterCount++;
-          final modified = (await entity.stat()).modified;
-          if (modified.isAfter(lastModified)) lastModified = modified;
+    return Future.wait(
+      folders.map((folder) async {
+        var chapterCount = 0;
+        DateTime lastModified = (await folder.stat()).modified;
+        await for (final entity in folder.list()) {
+          if (entity is File && _isChapterFile(entity.path)) {
+            chapterCount++;
+            final modified = (await entity.stat()).modified;
+            if (modified.isAfter(lastModified)) lastModified = modified;
+          }
         }
-      }
-      return RepertoireMetadata(
-        filePath: folder.path,
-        name: p.basename(folder.path),
-        gameCount: chapterCount,
-        lastModified: lastModified,
-      );
-    }));
+        return RepertoireMetadata(
+          filePath: folder.path,
+          name: p.basename(folder.path),
+          gameCount: chapterCount,
+          lastModified: lastModified,
+        );
+      }),
+    );
   }
 
   @override
-  Future<List<RepertoireMetadata>> listChapters(String repertoireDirPath) async {
+  Future<List<RepertoireMetadata>> listChapters(
+    String repertoireDirPath,
+  ) async {
     final dir = Directory(repertoireDirPath);
     if (!await dir.exists()) return [];
 
@@ -234,18 +218,21 @@ class IOStorageService implements StorageService {
         if (entity is File && _isChapterFile(entity.path)) entity,
     ];
 
-    final entries = await Future.wait(files.map((file) async {
-      final stat = await file.stat();
-      return RepertoireMetadata(
-        filePath: file.path,
-        name: p.basenameWithoutExtension(file.path),
-        gameCount: await _cachedGameCount(file, stat),
-        lastModified: stat.modified,
-      );
-    }));
+    final entries = await Future.wait(
+      files.map((file) async {
+        final stat = await file.stat();
+        return RepertoireMetadata(
+          filePath: file.path,
+          name: p.basenameWithoutExtension(file.path),
+          gameCount: await _cachedGameCount(file, stat),
+          lastModified: stat.modified,
+        );
+      }),
+    );
 
     entries.sort(
-        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
     return entries;
   }
 
@@ -261,7 +248,9 @@ class IOStorageService implements StorageService {
 
   @override
   Future<String> renameRepertoireDirectory(
-      String oldDirPath, String newName) async {
+    String oldDirPath,
+    String newName,
+  ) async {
     final parent = p.dirname(oldDirPath);
     final newPath = p.join(parent, newName);
     await Directory(oldDirPath).rename(newPath);
@@ -289,18 +278,21 @@ class IOStorageService implements StorageService {
           entity,
     ];
 
-    final entries = await Future.wait(files.map((file) async {
-      final stat = await file.stat();
-      return RepertoireMetadata(
-        filePath: file.path,
-        name: p.basenameWithoutExtension(file.path),
-        gameCount: await _cachedGameCount(file, stat),
-        lastModified: stat.modified,
-      );
-    }));
+    final entries = await Future.wait(
+      files.map((file) async {
+        final stat = await file.stat();
+        return RepertoireMetadata(
+          filePath: file.path,
+          name: p.basenameWithoutExtension(file.path),
+          gameCount: await _cachedGameCount(file, stat),
+          lastModified: stat.modified,
+        );
+      }),
+    );
 
     entries.sort(
-        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
     return entries;
   }
 
@@ -321,18 +313,21 @@ class IOStorageService implements StorageService {
           entity,
     ];
 
-    final entries = await Future.wait(files.map((file) async {
-      final stat = await file.stat();
-      return TacticsSetMetadata(
-        filePath: file.path,
-        name: p.basenameWithoutExtension(file.path),
-        positionCount: await _cachedGameCount(file, stat),
-        lastModified: stat.modified,
-      );
-    }));
+    final entries = await Future.wait(
+      files.map((file) async {
+        final stat = await file.stat();
+        return TacticsSetMetadata(
+          filePath: file.path,
+          name: p.basenameWithoutExtension(file.path),
+          positionCount: await _cachedGameCount(file, stat),
+          lastModified: stat.modified,
+        );
+      }),
+    );
 
     entries.sort(
-        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
     return entries;
   }
 
@@ -353,8 +348,10 @@ class IOStorageService implements StorageService {
     final entries = <({String name, String path})>[];
     await for (final entity in dir.list()) {
       if (!entity.path.toLowerCase().endsWith('.csv')) continue;
-      entries.add(
-          (name: p.basenameWithoutExtension(entity.path), path: entity.path));
+      entries.add((
+        name: p.basenameWithoutExtension(entity.path),
+        path: entity.path,
+      ));
     }
     return entries;
   }
@@ -400,7 +397,7 @@ class IOStorageService implements StorageService {
   Future<void> saveTacticsCsv(String csvContent) async {
     try {
       final file = await _getFile(_tacticsCsvFileName);
-      await _writeAtomically(file, csvContent);
+      await writeTextFileAtomically(file, csvContent);
     } catch (e) {
       log.e('Error saving tactics CSV: $e');
     }
@@ -424,7 +421,7 @@ class IOStorageService implements StorageService {
   Future<void> saveAnalyzedGameIds(List<String> ids) async {
     try {
       final file = await _getFile(_analyzedGamesFileName);
-      await _writeAtomically(file, ids.join('\n'));
+      await writeTextFileAtomically(file, ids.join('\n'));
     } catch (e) {
       log.e('Error saving analyzed game IDs: $e');
     }
@@ -447,7 +444,7 @@ class IOStorageService implements StorageService {
   Future<void> saveImportedPgns(String pgnContent) async {
     try {
       final file = await _getFile(_importedGamesFileName);
-      await _writeAtomically(file, pgnContent);
+      await writeTextFileAtomically(file, pgnContent);
     } catch (e) {
       log.e('Error saving imported PGNs: $e');
     }
@@ -476,7 +473,7 @@ class IOStorageService implements StorageService {
   Future<void> saveRepertoirePgn(String filename, String content) async {
     try {
       final file = await _getFile(filename);
-      await _writeAtomically(file, content);
+      await writeTextFileAtomically(file, content);
     } catch (e) {
       log.e('Error saving repertoire PGN: $e');
     }
@@ -499,7 +496,7 @@ class IOStorageService implements StorageService {
   Future<void> saveRepertoireReviewsCsv(String csvContent) async {
     try {
       final file = await _getFile(_repertoireReviewsFileName);
-      await _writeAtomically(file, csvContent);
+      await writeTextFileAtomically(file, csvContent);
     } catch (e) {
       log.e('Error saving repertoire reviews CSV: $e');
     }
@@ -522,7 +519,7 @@ class IOStorageService implements StorageService {
   Future<void> saveRepertoireReviewHistoryCsv(String csvContent) async {
     try {
       final file = await _getFile(_repertoireReviewHistoryFileName);
-      await _writeAtomically(file, csvContent);
+      await writeTextFileAtomically(file, csvContent);
     } catch (e) {
       log.e('Error saving repertoire review history CSV: $e');
     }
@@ -545,7 +542,7 @@ class IOStorageService implements StorageService {
   Future<void> saveRepertoireMoveProgressCsv(String csvContent) async {
     try {
       final file = await _getFile(_repertoireMoveProgressFileName);
-      await _writeAtomically(file, csvContent);
+      await writeTextFileAtomically(file, csvContent);
     } catch (e) {
       log.e('Error saving repertoire move progress CSV: $e');
     }

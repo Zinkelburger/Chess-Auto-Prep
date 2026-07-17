@@ -49,7 +49,7 @@ class _ExpandedTrapListState extends State<ExpandedTrapList> {
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
         child: Text(
           'No trap details available',
-          style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+          style: const TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
         ),
       );
     }
@@ -72,7 +72,7 @@ class _ExpandedTrapListState extends State<ExpandedTrapList> {
                 children: [
                   Text(
                     i < traps.length - 1 ? '├' : '└',
-                    style: TextStyle(color: Colors.grey[600]),
+                    style: const TextStyle(color: AppColors.onSurfaceMuted),
                   ),
                   const SizedBox(width: 6),
                   Expanded(
@@ -88,10 +88,12 @@ class _ExpandedTrapListState extends State<ExpandedTrapList> {
                     borderRadius: BorderRadius.circular(4),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.grey.withAlpha(80)),
+                        border: Border.all(color: AppColors.divider),
                       ),
                       child: const Text('Go', style: TextStyle(fontSize: 10)),
                     ),

@@ -20,18 +20,19 @@ void main() {
     bool hasExpectimax = true,
     bool isRepertoireMove = false,
   }) {
-    final n = BuildTreeNode(
-      fen: fen,
-      moveSan: san,
-      moveUci: uci,
-      ply: ply,
-      isWhiteToMove: isWhiteToMove,
-      nodeId: 0,
-    )
-      ..moveProbability = moveProbability
-      ..expectimaxValue = expectimax
-      ..hasExpectimax = hasExpectimax
-      ..isRepertoireMove = isRepertoireMove;
+    final n =
+        BuildTreeNode(
+            fen: fen,
+            moveSan: san,
+            moveUci: uci,
+            ply: ply,
+            isWhiteToMove: isWhiteToMove,
+            nodeId: 0,
+          )
+          ..moveProbability = moveProbability
+          ..expectimaxValue = expectimax
+          ..hasExpectimax = hasExpectimax
+          ..isRepertoireMove = isRepertoireMove;
     if (evalCp != null) n.engineEvalCp = evalCp;
     return n;
   }
@@ -141,12 +142,7 @@ void main() {
   group('followExpectimaxLine', () {
     test('follows best expectimax at our-move, most probable at opponent', () {
       final eca = ExpectimaxCalculator(config: config);
-      final path = followExpectimaxLine(
-        tree.root,
-        config,
-        eca,
-        maxPlies: 10,
-      );
+      final path = followExpectimaxLine(tree.root, config, eca, maxPlies: 10);
 
       expect(path.length, 3);
       expect(path[0].moveSan, 'e4');
@@ -156,12 +152,7 @@ void main() {
 
     test('respects maxPlies limit', () {
       final eca = ExpectimaxCalculator(config: config);
-      final path = followExpectimaxLine(
-        tree.root,
-        config,
-        eca,
-        maxPlies: 1,
-      );
+      final path = followExpectimaxLine(tree.root, config, eca, maxPlies: 1);
 
       expect(path.length, 1);
       expect(path[0].moveSan, 'e4');
@@ -261,17 +252,11 @@ void main() {
 
   group('hasPrecomputedExpectimaxAtPly', () {
     test('false when subtree not explored to target ply', () {
-      expect(
-        hasPrecomputedExpectimaxAtPly(tree, tree.root.fen, 10),
-        isFalse,
-      );
+      expect(hasPrecomputedExpectimaxAtPly(tree, tree.root.fen, 10), isFalse);
     });
 
     test('true when subtree is complete to target ply', () {
-      expect(
-        hasPrecomputedExpectimaxAtPly(tree, tree.root.fen, 3),
-        isTrue,
-      );
+      expect(hasPrecomputedExpectimaxAtPly(tree, tree.root.fen, 3), isTrue);
     });
   });
 

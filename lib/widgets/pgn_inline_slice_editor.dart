@@ -19,8 +19,8 @@ import 'slice/position_filter.dart';
 import 'slice/sequence_filter.dart';
 
 /// Callback when slice is applied or cleared.
-typedef SliceResultCallback = void Function(
-    List<int>? matchedIndices, SliceConfig? config);
+typedef SliceResultCallback =
+    void Function(List<int>? matchedIndices, SliceConfig? config);
 
 /// Compact, expandable slice editor for one PGN source.
 class InlineSliceEditor extends StatefulWidget {
@@ -110,20 +110,20 @@ class _InlineSliceEditorState extends State<InlineSliceEditor> {
 
     pgn
         .computeSliceMatches(
-      games: widget.allGames,
-      targetFen: _filters.positionFen,
-      filters: _filters.rawHeaderFilters,
-      seqGroups: _filters.sequenceGroups,
-      seqGap: _filters.sequenceGap,
-      fenIndex: widget.fenIndex,
-    )
+          games: widget.allGames,
+          targetFen: _filters.positionFen,
+          filters: _filters.rawHeaderFilters,
+          seqGroups: _filters.sequenceGroups,
+          seqGap: _filters.sequenceGap,
+          fenIndex: widget.fenIndex,
+        )
         .then((indices) {
-      if (!mounted || generation != _computeGeneration) return;
-      setState(() {
-        _matchedIndices = indices;
-        _computing = false;
-      });
-    });
+          if (!mounted || generation != _computeGeneration) return;
+          setState(() {
+            _matchedIndices = indices;
+            _computing = false;
+          });
+        });
   }
 
   void _applySlice() {
@@ -173,8 +173,9 @@ class _InlineSliceEditorState extends State<InlineSliceEditor> {
                   onTap: () {
                     if (_mode != _SliceMode.slice) {
                       setState(() => _mode = _SliceMode.slice);
-                      WidgetsBinding.instance
-                          .addPostFrameCallback((_) => _recompute());
+                      WidgetsBinding.instance.addPostFrameCallback(
+                        (_) => _recompute(),
+                      );
                     }
                   },
                 ),
@@ -190,16 +191,17 @@ class _InlineSliceEditorState extends State<InlineSliceEditor> {
                       color: _computing
                           ? cs.onSurfaceVariant
                           : _matchedIndices.isEmpty
-                              ? cs.error
-                              : cs.primary,
+                          ? cs.error
+                          : cs.primary,
                     ),
                   ),
                   const SizedBox(width: 8),
                   SizedBox(
                     height: 28,
                     child: FilledButton.tonal(
-                      onPressed:
-                          _matchedIndices.isNotEmpty ? _applySlice : null,
+                      onPressed: _matchedIndices.isNotEmpty
+                          ? _applySlice
+                          : null,
                       style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         textStyle: const TextStyle(fontSize: 11),
@@ -227,7 +229,7 @@ class _InlineSliceEditorState extends State<InlineSliceEditor> {
                   const SizedBox(height: 12),
                   SequenceFilter(controller: _filters),
                   const SizedBox(height: 12),
-                  HeaderFilters(controller: _filters),
+                  HeaderFilters(controller: _filters, games: widget.allGames),
                 ],
               ),
             ),

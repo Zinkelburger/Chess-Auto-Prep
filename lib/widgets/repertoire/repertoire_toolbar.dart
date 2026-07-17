@@ -32,6 +32,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     this.onOpenChapters,
     this.onTrainRepertoire,
     this.onOpenGeneration,
+    this.onBuildByPlaying,
     this.onBuildFromGames,
     this.onOpenAudit,
     this.onImportPgnFile,
@@ -53,6 +54,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onOpenChapters;
   final VoidCallback? onTrainRepertoire;
   final VoidCallback? onOpenGeneration;
+  final VoidCallback? onBuildByPlaying;
   final VoidCallback? onBuildFromGames;
   final VoidCallback? onOpenAudit;
   final VoidCallback? onImportPgnFile;
@@ -92,6 +94,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
         if (onOpenGeneration != null || onOpenAudit != null)
           RepertoireActionRunner(
             onGenerate: onOpenGeneration,
+            onBuildByPlaying: onBuildByPlaying,
             onBuildFromGames: onBuildFromGames,
             onImportPgnFile: onImportPgnFile,
             onImportPgnPaste: onImportPgnPaste,
@@ -117,26 +120,29 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
               PopupMenuItem(
                 value: 'switch_color',
                 child: Tooltip(
-                  message: 'This repertoire prepares the '
+                  message:
+                      'This repertoire prepares the '
                       '${isWhiteRepertoire! ? 'White' : 'Black'} side. '
                       'Switching flips the board and treats the '
                       '${isWhiteRepertoire! ? 'Black' : 'White'} side as '
                       'your moves.',
                   waitDuration: const Duration(milliseconds: 400),
                   child: ListTile(
-                    leading: Icon(
-                      isWhiteRepertoire!
-                          ? Icons.circle_outlined
-                          : Icons.circle,
-                      size: 20,
-                      color: Colors.black87,
+                    // Bordered swatch, not a bare Icon: the sideBlack disc is
+                    // near-invisible on the popup surface without an outline.
+                    leading: Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isWhiteRepertoire!
+                            ? AppColors.sideBlack
+                            : AppColors.sideWhite,
+                        border: Border.all(color: AppColors.outline),
+                      ),
                     ),
                     title: Text(
-                      'Playing as ${isWhiteRepertoire! ? 'White' : 'Black'}',
-                    ),
-                    subtitle: Text(
-                      'Switch to ${isWhiteRepertoire! ? 'Black' : 'White'} '
-                      'repertoire',
+                      'Switch to ${isWhiteRepertoire! ? 'Black' : 'White'}',
                     ),
                     dense: true,
                     contentPadding: EdgeInsets.zero,
@@ -189,7 +195,9 @@ class RepertoireSwitcherTitle extends StatelessWidget {
               Icon(
                 Icons.arrow_drop_down,
                 size: 20,
-                color: onTap == null ? Colors.grey[700] : Colors.grey[400],
+                color: onTap == null
+                    ? AppColors.onSurfaceDisabled
+                    : AppColors.onSurfaceSoft,
               ),
             ],
           ),
@@ -295,7 +303,9 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
                   borderRadius: BorderRadius.circular(6),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 4, vertical: 2),
+                      horizontal: 4,
+                      vertical: 2,
+                    ),
                     child: Text(
                       repertoireName,
                       maxLines: 1,
@@ -325,8 +335,9 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
               chapterName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w600),
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           Icon(
@@ -362,10 +373,7 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
         },
         itemBuilder: (context) => [
           for (final c in chapters)
-            PopupMenuItem<String>(
-              value: c.filePath,
-              child: _chapterRow(c),
-            ),
+            PopupMenuItem<String>(value: c.filePath, child: _chapterRow(c)),
           const PopupMenuDivider(),
           const PopupMenuItem<String>(
             value: _addValue,
@@ -453,15 +461,22 @@ class RepertoireGenerationStatusChip extends StatelessWidget {
                       height: 12,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.white,
+                        color: AppColors.onWarning,
                       ),
                     )
                   else
-                    const Icon(Icons.pause, size: 12, color: Colors.white),
+                    const Icon(
+                      Icons.pause,
+                      size: 12,
+                      color: AppColors.onWarning,
+                    ),
                   const SizedBox(width: 6),
                   Text(
                     isPaused ? 'Paused' : 'Building...',
-                    style: const TextStyle(fontSize: 11, color: Colors.white),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.onWarning,
+                    ),
                   ),
                 ],
               ),
@@ -475,12 +490,7 @@ class RepertoireGenerationStatusChip extends StatelessWidget {
 
 /// A repertoire action the user can pick from the runner dropdown.
 class _RepAction {
-  const _RepAction(
-    this.id,
-    this.label,
-    this.icon,
-    this.onRun,
-  );
+  const _RepAction(this.id, this.label, this.icon, this.onRun);
 
   final String id;
   final String label;
@@ -498,6 +508,7 @@ class RepertoireActionRunner extends StatefulWidget {
   const RepertoireActionRunner({
     super.key,
     this.onGenerate,
+    this.onBuildByPlaying,
     this.onBuildFromGames,
     this.onImportPgnFile,
     this.onImportPgnPaste,
@@ -505,6 +516,7 @@ class RepertoireActionRunner extends StatefulWidget {
   });
 
   final VoidCallback? onGenerate;
+  final VoidCallback? onBuildByPlaying;
   final VoidCallback? onBuildFromGames;
   final VoidCallback? onImportPgnFile;
   final VoidCallback? onImportPgnPaste;
@@ -518,22 +530,49 @@ class _RepertoireActionRunnerState extends State<RepertoireActionRunner> {
   String? _selectedId;
 
   List<_RepAction> get _actions => [
-        if (widget.onGenerate != null)
-          _RepAction('generate', 'Generate', Icons.auto_awesome,
-              widget.onGenerate!),
-        if (widget.onBuildFromGames != null)
-          _RepAction('from_games', 'From my games',
-              Icons.download_for_offline_outlined, widget.onBuildFromGames!),
-        if (widget.onImportPgnFile != null)
-          _RepAction('import_pgn_file', 'Import PGN file', Icons.file_open,
-              widget.onImportPgnFile!),
-        if (widget.onImportPgnPaste != null)
-          _RepAction('import_pgn_paste', 'Paste PGN', Icons.paste,
-              widget.onImportPgnPaste!),
-        if (widget.onOpenAudit != null)
-          _RepAction('audit', 'Audit for gaps', Icons.policy_outlined,
-              widget.onOpenAudit!),
-      ];
+    if (widget.onGenerate != null)
+      _RepAction(
+        'generate',
+        'Generate',
+        Icons.auto_awesome,
+        widget.onGenerate!,
+      ),
+    if (widget.onBuildByPlaying != null)
+      _RepAction(
+        'build_by_playing',
+        'Build by playing',
+        Icons.sports_esports,
+        widget.onBuildByPlaying!,
+      ),
+    if (widget.onBuildFromGames != null)
+      _RepAction(
+        'from_games',
+        'From my games',
+        Icons.download_for_offline_outlined,
+        widget.onBuildFromGames!,
+      ),
+    if (widget.onImportPgnFile != null)
+      _RepAction(
+        'import_pgn_file',
+        'Import PGN file',
+        Icons.file_open,
+        widget.onImportPgnFile!,
+      ),
+    if (widget.onImportPgnPaste != null)
+      _RepAction(
+        'import_pgn_paste',
+        'Paste PGN',
+        Icons.paste,
+        widget.onImportPgnPaste!,
+      ),
+    if (widget.onOpenAudit != null)
+      _RepAction(
+        'audit',
+        'Audit for gaps',
+        Icons.policy_outlined,
+        widget.onOpenAudit!,
+      ),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -624,10 +663,7 @@ class _RepertoireActionRunnerState extends State<RepertoireActionRunner> {
 }
 
 class RepertoireTrainButton extends StatelessWidget {
-  const RepertoireTrainButton({
-    super.key,
-    required this.onPressed,
-  });
+  const RepertoireTrainButton({super.key, required this.onPressed});
 
   final VoidCallback? onPressed;
 

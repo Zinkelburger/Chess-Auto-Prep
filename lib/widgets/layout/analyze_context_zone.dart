@@ -6,8 +6,9 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../theme/app_colors.dart';
 import 'empty_state_placeholder.dart';
-import 'repertoire_mode.dart';
+import '../../models/repertoire_mode.dart';
 
 class AnalyzeContextZone extends StatefulWidget {
   const AnalyzeContextZone({
@@ -21,14 +22,14 @@ class AnalyzeContextZone extends StatefulWidget {
     this.initialView,
     this.onViewChanged,
   }) : assert(
-          trapsContent != null ||
-              evalTreeContent != null ||
-              metricsContent != null ||
-              trapsBuilder != null ||
-              evalTreeBuilder != null ||
-              metricsBuilder != null,
-          'Provide at least one context content slot or builder',
-        );
+         trapsContent != null ||
+             evalTreeContent != null ||
+             metricsContent != null ||
+             trapsBuilder != null ||
+             evalTreeBuilder != null ||
+             metricsBuilder != null,
+         'Provide at least one context content slot or builder',
+       );
 
   final Widget? trapsContent;
   final Widget? evalTreeContent;
@@ -56,10 +57,10 @@ class _AnalyzeContextZoneState extends State<AnalyzeContextZone> {
       widget.metricsContent != null || widget.metricsBuilder != null;
 
   List<AnalyzeContextView> get _availableViews => [
-        if (_hasTrapsSlot()) AnalyzeContextView.traps,
-        if (_hasEvalTreeSlot()) AnalyzeContextView.evalTree,
-        if (_hasMetricsSlot()) AnalyzeContextView.metrics,
-      ];
+    if (_hasTrapsSlot()) AnalyzeContextView.traps,
+    if (_hasEvalTreeSlot()) AnalyzeContextView.evalTree,
+    if (_hasMetricsSlot()) AnalyzeContextView.metrics,
+  ];
 
   @override
   void initState() {
@@ -144,7 +145,7 @@ class _AnalyzeContextZoneState extends State<AnalyzeContextZone> {
           Icon(
             icon,
             size: 14,
-            color: isSelected ? Colors.teal : Colors.grey[500],
+            color: isSelected ? AppColors.accent : AppColors.onSurfaceMuted,
           ),
           const SizedBox(width: 4),
           Text(label, style: const TextStyle(fontSize: 11)),

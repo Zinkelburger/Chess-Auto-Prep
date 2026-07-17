@@ -6,8 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/engine_defaults.dart';
 import '../utils/system_info.dart';
 import 'settings_enums.dart';
+import '../utils/safe_change_notifier.dart';
 
-class EngineSettings with ChangeNotifier {
+class EngineSettings with ChangeNotifier, SafeChangeNotifier {
   static const _prefix = 'engine_settings.';
 
   // ── Stockfish settings ────────────────────────────────────────────────
@@ -381,21 +382,21 @@ class EngineSettings with ChangeNotifier {
 
   /// Changes when analysis inputs change (not column dim state).
   int get analysisConfigRevision => Object.hash(
-        depth,
-        multiPv,
-        maxAnalysisMoves,
-        showStockfish,
-        showMaia,
-        showProbability,
-        _opponentProbabilityMode,
-        _explorerDatabase,
-        _explorerSpeeds,
-        _explorerRatings,
-        _maiaElo,
-        _candidateSourceOur,
-        _candidateSourceOpp,
-        _stockfishTopN,
-      );
+    depth,
+    multiPv,
+    maxAnalysisMoves,
+    showStockfish,
+    showMaia,
+    showProbability,
+    _opponentProbabilityMode,
+    _explorerDatabase,
+    _explorerSpeeds,
+    _explorerRatings,
+    _maiaElo,
+    _candidateSourceOur,
+    _candidateSourceOpp,
+    _stockfishTopN,
+  );
 
   /// Detected logical CPU cores.
   static final int systemCores = getLogicalCores();
@@ -420,57 +421,99 @@ class EngineSettings with ChangeNotifier {
           (prefs.getInt('$_prefix$key') ?? def).clamp(min, max);
 
       _workers = loadInt(
-          'workers', (systemCores ~/ 2).clamp(1, systemCores), 1, systemCores);
+        'workers',
+        (systemCores ~/ 2).clamp(1, systemCores),
+        1,
+        systemCores,
+      );
       _depth = loadInt('depth', kDefaultDepth, kMinDepth, kMaxDepth);
       _multiPv = loadInt('multi_pv', kDefaultMultiPv, kMinMultiPv, kMaxMultiPv);
-      _inlineThreads =
-          loadInt('inline_threads', kDefaultInlineThreads, 1, systemCores);
-      _maxAnalysisMoves = loadInt('max_analysis_moves', kDefaultMaxAnalysisMoves,
-          kMinMaxAnalysisMoves, kMaxMaxAnalysisMoves);
+      _inlineThreads = loadInt(
+        'inline_threads',
+        kDefaultInlineThreads,
+        1,
+        systemCores,
+      );
+      _maxAnalysisMoves = loadInt(
+        'max_analysis_moves',
+        kDefaultMaxAnalysisMoves,
+        kMinMaxAnalysisMoves,
+        kMaxMaxAnalysisMoves,
+      );
       _showStockfish =
           prefs.getBool('${_prefix}show_stockfish') ?? kDefaultShowStockfish;
       _showMaia = prefs.getBool('${_prefix}show_maia') ?? kDefaultShowMaia;
-      _showProbability = prefs.getBool('${_prefix}show_probability') ??
+      _showProbability =
+          prefs.getBool('${_prefix}show_probability') ??
           kDefaultShowProbability;
       _showEngineDock =
           prefs.getBool('${_prefix}show_engine_dock') ?? kDefaultShowEngineDock;
-      _showExpectimaxDock = prefs.getBool('${_prefix}show_expectimax_dock') ??
+      _showExpectimaxDock =
+          prefs.getBool('${_prefix}show_expectimax_dock') ??
           kDefaultShowExpectimaxDock;
       _opponentProbabilityMode = OpponentProbabilityMode.fromStorageKey(
-          prefs.getString('${_prefix}opponent_prob_mode') ??
-              'maia_lichess_fallback');
-      _explorerDatabase = prefs.getString('${_prefix}explorer_database') ??
+        prefs.getString('${_prefix}opponent_prob_mode') ??
+            'maia_lichess_fallback',
+      );
+      _explorerDatabase =
+          prefs.getString('${_prefix}explorer_database') ??
           kDefaultExplorerDatabase;
-      _explorerSpeeds = prefs.getString('${_prefix}explorer_speeds') ??
+      _explorerSpeeds =
+          prefs.getString('${_prefix}explorer_speeds') ??
           kDefaultExplorerSpeeds;
-      _explorerRatings = prefs.getString('${_prefix}explorer_ratings') ??
+      _explorerRatings =
+          prefs.getString('${_prefix}explorer_ratings') ??
           kDefaultExplorerRatings;
       _maiaElo = loadInt('maia_elo', kDefaultMaiaElo, kMinMaiaElo, kMaxMaiaElo);
       _candidateSourceOur = CandidateSource.fromStorageKey(
-          prefs.getString('${_prefix}candidate_source_our') ?? 'maia');
+        prefs.getString('${_prefix}candidate_source_our') ?? 'maia',
+      );
       _candidateSourceOpp = CandidateSource.fromStorageKey(
-          prefs.getString('${_prefix}candidate_source_opp') ?? 'maia');
-      _stockfishTopN = loadInt('stockfish_top_n', kDefaultStockfishTopN,
-          kMinStockfishTopN, kMaxStockfishTopN);
-      _onTheFlyMaxDepth = loadInt('on_the_fly_max_depth',
-          kDefaultOnTheFlyMaxDepth, kMinOnTheFlyMaxDepth, kMaxOnTheFlyMaxDepth);
-      _expectimaxOurMultipv = loadInt('exp_our_multipv', kDefaultExpOurMultipv,
-          kMinExpOurMultipv, kMaxExpOurMultipv);
+        prefs.getString('${_prefix}candidate_source_opp') ?? 'maia',
+      );
+      _stockfishTopN = loadInt(
+        'stockfish_top_n',
+        kDefaultStockfishTopN,
+        kMinStockfishTopN,
+        kMaxStockfishTopN,
+      );
+      _onTheFlyMaxDepth = loadInt(
+        'on_the_fly_max_depth',
+        kDefaultOnTheFlyMaxDepth,
+        kMinOnTheFlyMaxDepth,
+        kMaxOnTheFlyMaxDepth,
+      );
+      _expectimaxOurMultipv = loadInt(
+        'exp_our_multipv',
+        kDefaultExpOurMultipv,
+        kMinExpOurMultipv,
+        kMaxExpOurMultipv,
+      );
       _expectimaxOppMaxChildren = loadInt(
-          'exp_opp_max_children',
-          kDefaultExpOppMaxChildren,
-          kMinExpOppMaxChildren,
-          kMaxExpOppMaxChildren);
+        'exp_opp_max_children',
+        kDefaultExpOppMaxChildren,
+        kMinExpOppMaxChildren,
+        kMaxExpOppMaxChildren,
+      );
       _expectimaxOppMassTarget =
-          (prefs.getDouble('${_prefix}exp_opp_mass') ?? kDefaultExpOppMassTarget)
+          (prefs.getDouble('${_prefix}exp_opp_mass') ??
+                  kDefaultExpOppMassTarget)
               .clamp(kMinExpOppMassTarget, kMaxExpOppMassTarget);
       _expectimaxMinProb =
           (prefs.getDouble('${_prefix}exp_min_prob') ?? kDefaultExpMinProb)
               .clamp(kMinExpMinProb, kMaxExpMinProb);
-      _expectimaxMaxEvalLoss = loadInt('exp_max_eval_loss',
-          kDefaultExpMaxEvalLoss, kMinExpMaxEvalLoss, kMaxExpMaxEvalLoss);
-      _expectimaxEvalDepth = loadInt('exp_eval_depth', kDefaultExpEvalDepth,
-          kMinExpEvalDepth, kMaxExpEvalDepth);
+      _expectimaxMaxEvalLoss = loadInt(
+        'exp_max_eval_loss',
+        kDefaultExpMaxEvalLoss,
+        kMinExpMaxEvalLoss,
+        kMaxExpMaxEvalLoss,
+      );
+      _expectimaxEvalDepth = loadInt(
+        'exp_eval_depth',
+        kDefaultExpEvalDepth,
+        kMinExpEvalDepth,
+        kMaxExpEvalDepth,
+      );
       _probabilityStartMoves =
           prefs.getString('${_prefix}probability_start_moves') ?? '';
       _mutedAnalysisColumns
@@ -500,28 +543,40 @@ class EngineSettings with ChangeNotifier {
       await prefs.setBool('${_prefix}show_probability', _showProbability);
       await prefs.setBool('${_prefix}show_engine_dock', _showEngineDock);
       await prefs.setBool(
-          '${_prefix}show_expectimax_dock', _showExpectimaxDock);
+        '${_prefix}show_expectimax_dock',
+        _showExpectimaxDock,
+      );
       await prefs.setString(
-          '${_prefix}opponent_prob_mode', _opponentProbabilityMode.storageKey);
+        '${_prefix}opponent_prob_mode',
+        _opponentProbabilityMode.storageKey,
+      );
       await prefs.setString('${_prefix}explorer_database', _explorerDatabase);
       await prefs.setString('${_prefix}explorer_speeds', _explorerSpeeds);
       await prefs.setString('${_prefix}explorer_ratings', _explorerRatings);
       await prefs.setInt('${_prefix}maia_elo', _maiaElo);
       await prefs.setString(
-          '${_prefix}candidate_source_our', _candidateSourceOur.storageKey);
+        '${_prefix}candidate_source_our',
+        _candidateSourceOur.storageKey,
+      );
       await prefs.setString(
-          '${_prefix}candidate_source_opp', _candidateSourceOpp.storageKey);
+        '${_prefix}candidate_source_opp',
+        _candidateSourceOpp.storageKey,
+      );
       await prefs.setInt('${_prefix}stockfish_top_n', _stockfishTopN);
       await prefs.setInt('${_prefix}on_the_fly_max_depth', _onTheFlyMaxDepth);
       await prefs.setInt('${_prefix}exp_our_multipv', _expectimaxOurMultipv);
       await prefs.setInt(
-          '${_prefix}exp_opp_max_children', _expectimaxOppMaxChildren);
+        '${_prefix}exp_opp_max_children',
+        _expectimaxOppMaxChildren,
+      );
       await prefs.setDouble('${_prefix}exp_opp_mass', _expectimaxOppMassTarget);
       await prefs.setDouble('${_prefix}exp_min_prob', _expectimaxMinProb);
       await prefs.setInt('${_prefix}exp_max_eval_loss', _expectimaxMaxEvalLoss);
       await prefs.setInt('${_prefix}exp_eval_depth', _expectimaxEvalDepth);
       await prefs.setString(
-          '${_prefix}probability_start_moves', _probabilityStartMoves);
+        '${_prefix}probability_start_moves',
+        _probabilityStartMoves,
+      );
       await prefs.setString(
         '${_prefix}muted_columns',
         _mutedAnalysisColumns.join(','),

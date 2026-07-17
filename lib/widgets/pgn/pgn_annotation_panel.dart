@@ -7,11 +7,27 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../../theme/app_colors.dart';
 import '../../utils/pgn_comment_utils.dart' show kMoveNags;
 import 'movetext_primitives.dart' show GlyphButton;
 
 class PgnAnnotationPanel extends StatefulWidget {
+  /// Focuses the comment field of the most recently mounted panel that has a
+  /// target move, placing the cursor at the end. Returns false when no such
+  /// panel is on screen, so callers can let the key event fall through.
+  /// Escape inside the field hands focus back to whoever had it before.
+  static bool focusActive() {
+    for (final state in _PgnAnnotationPanelState._mounted.reversed) {
+      if (state.mounted && state.widget.targetKey != null) {
+        state._focusComment();
+        return true;
+      }
+    }
+    return false;
+  }
+
   /// Identity of the annotated move. When it changes the comment field is
   /// re-seeded from [comment]; null means no move is selected (game start).
   final String? targetKey;
@@ -43,6 +59,10 @@ class PgnAnnotationPanel extends StatefulWidget {
 }
 
 class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
+  /// Mounted panels, oldest first; [PgnAnnotationPanel.focusActive] targets
+  /// the newest so a nested/foreground panel wins over a background one.
+  static final List<_PgnAnnotationPanelState> _mounted = [];
+
   late final TextEditingController _controller;
   final FocusNode _focusNode = FocusNode(debugLabel: 'PgnAnnotationPanel');
   Timer? _debounce;
@@ -51,6 +71,27 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.comment);
+    _focusNode.onKeyEvent = _handleFieldKey;
+    _mounted.add(this);
+  }
+
+  /// Escape leaves the comment field and returns focus to the previously
+  /// focused node (the screen's shortcut Focus), re-enabling board shortcuts.
+  KeyEventResult _handleFieldKey(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape) {
+      _flushDebounce(widget.onCommentChanged);
+      node.unfocus(disposition: UnfocusDisposition.previouslyFocusedChild);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _focusComment() {
+    _focusNode.requestFocus();
+    _controller.selection = TextSelection.collapsed(
+      offset: _controller.text.length,
+    );
   }
 
   @override
@@ -76,6 +117,7 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
 
   @override
   void dispose() {
+    _mounted.remove(this);
     _flushDebounce(widget.onCommentChanged);
     _controller.dispose();
     _focusNode.dispose();
@@ -109,18 +151,6 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
         children: [
           Row(
             children: [
-              SizedBox(
-                width: 76,
-                child: Text(
-                  enabled ? widget.moveLabel : '—',
-                  style: const TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
               for (final nag in kMoveNags)
                 GlyphButton(
                   symbol: nag.symbol,
@@ -143,20 +173,27 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
             decoration: InputDecoration(
               isDense: true,
               hintText: enabled
-                  ? 'Comment on ${widget.moveLabel}…'
+                  ? 'Comment on ${widget.moveLabel}…  (C to type, Esc to leave)'
                   : 'Click or play a move to annotate it',
-              hintStyle: TextStyle(fontSize: 12, color: Colors.grey[600]),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              hintStyle: const TextStyle(
+                fontSize: 12,
+                color: AppColors.onSurfaceMuted,
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 8,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
-                borderSide:
-                    BorderSide(color: theme.dividerColor.withValues(alpha: 0.6)),
+                borderSide: BorderSide(
+                  color: theme.dividerColor.withValues(alpha: 0.6),
+                ),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
-                borderSide:
-                    BorderSide(color: theme.dividerColor.withValues(alpha: 0.6)),
+                borderSide: BorderSide(
+                  color: theme.dividerColor.withValues(alpha: 0.6),
+                ),
               ),
             ),
           ),
@@ -165,4 +202,3 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
     );
   }
 }
-

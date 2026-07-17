@@ -21,8 +21,9 @@ void main() {
       expect(controller.lastMoveUci, isNull);
     });
 
-    testWidgets('setPreview debounces and fires after 80ms',
-        (WidgetTester tester) async {
+    testWidgets('setPreview debounces and fires after 80ms', (
+      WidgetTester tester,
+    ) async {
       int notifyCount = 0;
       controller.addListener(() => notifyCount++);
 
@@ -40,8 +41,9 @@ void main() {
       expect(notifyCount, 1);
     });
 
-    testWidgets('floating target and lastMoveUci are stored',
-        (WidgetTester tester) async {
+    testWidgets('floating target and lastMoveUci are stored', (
+      WidgetTester tester,
+    ) async {
       controller.setPreview(
         'fen2',
         target: BoardPreviewTarget.floating,
@@ -52,8 +54,9 @@ void main() {
       expect(controller.lastMoveUci, 'e2e4');
     });
 
-    testWidgets('rapid setPreview calls - only last fires',
-        (WidgetTester tester) async {
+    testWidgets('rapid setPreview calls - only last fires', (
+      WidgetTester tester,
+    ) async {
       int notifyCount = 0;
       controller.addListener(() => notifyCount++);
 
@@ -82,8 +85,9 @@ void main() {
       expect(notifyCount, 1);
     });
 
-    testWidgets('clearPreview cancels pending debounce',
-        (WidgetTester tester) async {
+    testWidgets('clearPreview cancels pending debounce', (
+      WidgetTester tester,
+    ) async {
       controller.setPreview('fen1');
       await tester.pump(const Duration(milliseconds: 30));
       controller.clearPreview();

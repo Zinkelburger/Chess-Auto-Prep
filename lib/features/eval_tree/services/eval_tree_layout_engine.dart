@@ -105,8 +105,11 @@ class EvalTreeLayoutEngine {
     EvalTreeLayoutConfig config = const EvalTreeLayoutConfig(),
   }) {
     final selectedNodeId = controller.selectedNodeId ?? snapshot.rootNodeId;
-    final visibleNodeIds =
-        _buildVisibleNodeIds(snapshot, controller, selectedNodeId);
+    final visibleNodeIds = _buildVisibleNodeIds(
+      snapshot,
+      controller,
+      selectedNodeId,
+    );
     final rootNodeId = controller.showAncestorSpine
         ? _resolveVisibleRootNodeId(snapshot, selectedNodeId, visibleNodeIds)
         : selectedNodeId;
@@ -129,7 +132,12 @@ class EvalTreeLayoutEngine {
     };
     final subtreeWidths = <int, double>{};
     _measureSubtreeWidths(
-        rootNodeId, visibleChildren, nodeSizes, subtreeWidths, config);
+      rootNodeId,
+      visibleChildren,
+      nodeSizes,
+      subtreeWidths,
+      config,
+    );
 
     final positionedNodes = <int, EvalTreeLayoutNode>{};
     _positionNode(
@@ -175,7 +183,8 @@ class EvalTreeLayoutEngine {
     return EvalTreeLayoutFrame(
       rootNodeId: rootNodeId,
       selectedNodeId: selectedNodeId,
-      hitDisplayCap: visibleNodeIds.length >= controller.maxDisplayNodes &&
+      hitDisplayCap:
+          visibleNodeIds.length >= controller.maxDisplayNodes &&
           snapshot.nodeCount > visibleNodeIds.length,
       canvasSize: canvasSize,
       contentBounds: contentBounds,
@@ -206,8 +215,10 @@ class EvalTreeLayoutEngine {
       visibleNodeIds.add(selectedNodeId);
     }
 
-    final descendantBudget =
-        math.max(0, maxDisplayNodes - visibleNodeIds.length);
+    final descendantBudget = math.max(
+      0,
+      maxDisplayNodes - visibleNodeIds.length,
+    );
     _addDescendants(
       snapshot,
       selectedNodeId,
@@ -264,8 +275,10 @@ class EvalTreeLayoutEngine {
       for (final childId in visibleChildren)
         childId: math.max(1, snapshot.node(childId).subtreeSize - 1),
     };
-    final totalWeight =
-        childWeights.values.fold<int>(0, (sum, value) => sum + value);
+    final totalWeight = childWeights.values.fold<int>(
+      0,
+      (sum, value) => sum + value,
+    );
     final childBudgets = <int, int>{};
     var distributable = remainingBudget;
     for (final childId in visibleChildren) {
@@ -402,7 +415,8 @@ class EvalTreeLayoutEngine {
     final secondaryWidth = secondaryLabel == null
         ? 0.0
         : _measureSingleLineWidth(secondaryLabel, _nodeSecondaryMeasureStyle);
-    final rawWidth = math.max(titleWidth, secondaryWidth) +
+    final rawWidth =
+        math.max(titleWidth, secondaryWidth) +
         (nodeHorizontalPadding * 2) +
         _nodeTextWidthBuffer;
     final width = rawWidth > config.maxNodeWidth

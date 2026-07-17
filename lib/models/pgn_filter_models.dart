@@ -6,21 +6,38 @@ library;
 
 import 'dart:convert';
 
+// ── Player names ─────────────────────────────────────────────────────────────
+
+/// Pseudo header field that matches a player on **either** colour, with
+/// multi-name support (see [splitPlayerNames]). Not a real PGN header, so
+/// filter code must special-case it instead of doing a `headers[field]`
+/// lookup.
+const kPlayerHeaderField = 'Player';
+
+/// Split a player-name input into individual names to match.
+///
+/// Separator is `;` — commas appear inside PGN names ("Carlsen, Magnus"),
+/// so they cannot delimit. Parts are trimmed; empties dropped.
+List<String> splitPlayerNames(String input) =>
+    input.split(';').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+
 // ── Match mode ───────────────────────────────────────────────────────────────
 
 enum MatchMode { contains, notContains, exact, regex, after, before }
 
 String matchModeLabel(MatchMode m, {bool numeric = false}) => switch (m) {
-      MatchMode.contains => 'contains',
-      MatchMode.notContains => 'not contains',
-      MatchMode.exact => 'exact',
-      MatchMode.regex => 'regex',
-      MatchMode.after => numeric ? '≥ (min)' : '≥ (after)',
-      MatchMode.before => numeric ? '≤ (max)' : '≤ (before)',
-    };
+  MatchMode.contains => 'contains',
+  MatchMode.notContains => 'not contains',
+  MatchMode.exact => 'exact',
+  MatchMode.regex => 'regex',
+  MatchMode.after => numeric ? '≥ (min)' : '≥ (after)',
+  MatchMode.before => numeric ? '≤ (max)' : '≤ (before)',
+};
 
-MatchMode matchModeFromName(String name) => MatchMode.values
-    .firstWhere((m) => m.name == name, orElse: () => MatchMode.contains);
+MatchMode matchModeFromName(String name) => MatchMode.values.firstWhere(
+  (m) => m.name == name,
+  orElse: () => MatchMode.contains,
+);
 
 /// Fields where ≥/≤ represent numeric comparison, not temporal.
 bool isNumericField(String field) =>
@@ -40,8 +57,11 @@ class HeaderFilterConfig {
     required this.value,
   });
 
-  Map<String, dynamic> toJson() =>
-      {'field': field, 'mode': mode.name, 'value': value};
+  Map<String, dynamic> toJson() => {
+    'field': field,
+    'mode': mode.name,
+    'value': value,
+  };
 
   factory HeaderFilterConfig.fromJson(Map<String, dynamic> j) =>
       HeaderFilterConfig(
@@ -74,10 +94,10 @@ class SliceConfig {
     this.sequenceGap = 4,
   });
   const SliceConfig.empty()
-      : positionInput = null,
-        headerFilters = const [],
-        sequencePattern = null,
-        sequenceGap = 4;
+    : positionInput = null,
+      headerFilters = const [],
+      sequencePattern = null,
+      sequenceGap = 4;
 
   bool get isEmpty =>
       (positionInput == null || positionInput!.trim().isEmpty) &&
@@ -85,22 +105,24 @@ class SliceConfig {
       (sequencePattern == null || sequencePattern!.trim().isEmpty);
 
   String toJsonString() => jsonEncode({
-        if (positionInput != null && positionInput!.isNotEmpty)
-          'positionInput': positionInput,
-        'headerFilters': headerFilters.map((f) => f.toJson()).toList(),
-        if (sequencePattern != null && sequencePattern!.isNotEmpty)
-          'sequencePattern': sequencePattern,
-        if (sequenceGap != 4) 'sequenceGap': sequenceGap,
-      });
+    if (positionInput != null && positionInput!.isNotEmpty)
+      'positionInput': positionInput,
+    'headerFilters': headerFilters.map((f) => f.toJson()).toList(),
+    if (sequencePattern != null && sequencePattern!.isNotEmpty)
+      'sequencePattern': sequencePattern,
+    if (sequenceGap != 4) 'sequenceGap': sequenceGap,
+  });
 
   factory SliceConfig.fromJsonString(String s) {
     try {
       final j = jsonDecode(s) as Map<String, dynamic>;
       return SliceConfig(
         positionInput: j['positionInput'] as String?,
-        headerFilters: (j['headerFilters'] as List<dynamic>?)
-                ?.map((e) =>
-                    HeaderFilterConfig.fromJson(e as Map<String, dynamic>))
+        headerFilters:
+            (j['headerFilters'] as List<dynamic>?)
+                ?.map(
+                  (e) => HeaderFilterConfig.fromJson(e as Map<String, dynamic>),
+                )
                 .toList() ??
             const [],
         sequencePattern: j['sequencePattern'] as String?,
@@ -112,13 +134,13 @@ class SliceConfig {
   }
 
   List<String> get chipLabels => [
-        if (positionInput != null && positionInput!.isNotEmpty)
-          'Pos: ${_truncate(positionInput!, 20)}',
-        if (sequencePattern != null && sequencePattern!.isNotEmpty)
-          'Seq: ${_truncate(sequencePattern!, 18)} (gap $sequenceGap)',
-        for (final f in headerFilters)
-          if (f.value.isNotEmpty) f.chipLabel,
-      ];
+    if (positionInput != null && positionInput!.isNotEmpty)
+      'Pos: ${_truncate(positionInput!, 20)}',
+    if (sequencePattern != null && sequencePattern!.isNotEmpty)
+      'Seq: ${_truncate(sequencePattern!, 18)} (gap $sequenceGap)',
+    for (final f in headerFilters)
+      if (f.value.isNotEmpty) f.chipLabel,
+  ];
 
   static String _truncate(String s, int max) =>
       s.length <= max ? s : '${s.substring(0, max)}…';
@@ -130,8 +152,4 @@ typedef GameRecord = ({Map<String, String> headers, String pgnText});
 
 // ── Sort mode ────────────────────────────────────────────────────────────────
 
-enum GameSortMode {
-  fileOrder,
-  ratingDesc,
-  ratingAsc,
-}
+enum GameSortMode { fileOrder, ratingDesc, ratingAsc }

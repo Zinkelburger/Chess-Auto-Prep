@@ -1,7 +1,7 @@
 /// User-arrangeable column/stack layout for [EditContextZone].
 library;
 
-import 'package:chess_auto_prep/widgets/layout/repertoire_mode.dart';
+import 'package:chess_auto_prep/models/repertoire_mode.dart';
 
 EditContextView? _viewFromName(String name) {
   for (final v in EditContextView.values) {
@@ -44,10 +44,10 @@ class EditContextColumnLayout {
   }
 
   Map<String, dynamic> toJson() => {
-        'views': views.map((v) => v.name).toList(),
-        'hFlex': horizontalFlex,
-        if (verticalFlex.isNotEmpty) 'vFlex': verticalFlex,
-      };
+    'views': views.map((v) => v.name).toList(),
+    'hFlex': horizontalFlex,
+    if (verticalFlex.isNotEmpty) 'vFlex': verticalFlex,
+  };
 
   factory EditContextColumnLayout.fromJson(Map<String, dynamic> json) {
     final rawViews = json['views'] as List<dynamic>? ?? const [];
@@ -75,22 +75,22 @@ class EditContextLayout {
 
   /// Default placement when no saved layout exists.
   static EditContextLayout get defaultLayout => const EditContextLayout(
-        columns: [
-          EditContextColumnLayout(
-            views: [
-              EditContextView.browse,
-              EditContextView.engine,
-              EditContextView.expectimax,
-              EditContextView.tree,
-            ],
-            horizontalFlex: 1,
-          ),
-          EditContextColumnLayout(
-            views: [EditContextView.lines],
-            horizontalFlex: 0.42,
-          ),
+    columns: [
+      EditContextColumnLayout(
+        views: [
+          EditContextView.browse,
+          EditContextView.engine,
+          EditContextView.expectimax,
+          EditContextView.tree,
         ],
-      );
+        horizontalFlex: 1,
+      ),
+      EditContextColumnLayout(
+        views: [EditContextView.lines],
+        horizontalFlex: 0.42,
+      ),
+    ],
+  );
 
   Set<EditContextView> get allPlacedViews =>
       columns.expand((c) => c.views).toSet();
@@ -129,8 +129,9 @@ class EditContextLayout {
           newColumns.add(EditContextColumnLayout(views: [v]));
         } else {
           final last = newColumns.last;
-          newColumns[newColumns.length - 1] =
-              last.copyWith(views: [...last.views, v]);
+          newColumns[newColumns.length - 1] = last.copyWith(
+            views: [...last.views, v],
+          );
         }
         placed.add(v);
       }
@@ -151,11 +152,7 @@ class EditContextLayout {
     int? stackIndex,
   }) {
     var cols = columns
-        .map(
-          (c) => c.copyWith(
-            views: c.views.where((v) => v != view).toList(),
-          ),
-        )
+        .map((c) => c.copyWith(views: c.views.where((v) => v != view).toList()))
         .where((c) => c.views.isNotEmpty)
         .toList();
 
@@ -165,7 +162,7 @@ class EditContextLayout {
     if (columnIndex == cols.length) {
       cols = [
         ...cols,
-        EditContextColumnLayout(views: [view])
+        EditContextColumnLayout(views: [view]),
       ];
       return EditContextLayout(columns: cols);
     }
@@ -180,7 +177,10 @@ class EditContextLayout {
 
   EditContextLayout addColumn() {
     return EditContextLayout(
-      columns: [...columns, const EditContextColumnLayout(views: [])],
+      columns: [
+        ...columns,
+        const EditContextColumnLayout(views: []),
+      ],
     );
   }
 
@@ -191,10 +191,7 @@ class EditContextLayout {
     return EditContextLayout(columns: cols);
   }
 
-  EditContextLayout setVerticalFlex(
-    int columnIndex,
-    List<double> flex,
-  ) {
+  EditContextLayout setVerticalFlex(int columnIndex, List<double> flex) {
     if (columnIndex < 0 || columnIndex >= columns.length) return this;
     final cols = List<EditContextColumnLayout>.from(columns);
     cols[columnIndex] = cols[columnIndex].copyWith(verticalFlex: flex);
@@ -202,15 +199,17 @@ class EditContextLayout {
   }
 
   Map<String, dynamic> toJson() => {
-        'columns': columns.map((c) => c.toJson()).toList(),
-      };
+    'columns': columns.map((c) => c.toJson()).toList(),
+  };
 
   factory EditContextLayout.fromJson(Map<String, dynamic> json) {
     final raw = json['columns'] as List<dynamic>? ?? const [];
     final cols = raw
-        .map((e) => EditContextColumnLayout.fromJson(
-              Map<String, dynamic>.from(e as Map),
-            ))
+        .map(
+          (e) => EditContextColumnLayout.fromJson(
+            Map<String, dynamic>.from(e as Map),
+          ),
+        )
         .where((c) => c.views.isNotEmpty)
         .toList();
     if (cols.isEmpty) return defaultLayout;

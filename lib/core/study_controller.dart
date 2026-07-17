@@ -7,6 +7,7 @@
 library;
 
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
@@ -19,8 +20,9 @@ import '../services/pgn_parsing_service.dart'
 import '../services/storage/storage_factory.dart';
 import '../utils/chess_utils.dart' show tryParseFen;
 import 'package:chess_auto_prep/utils/log.dart';
+import 'package:chess_auto_prep/utils/safe_change_notifier.dart';
 
-class StudyController extends ChangeNotifier {
+class StudyController extends ChangeNotifier with SafeChangeNotifier {
   StudyDocument _doc = StudyDocument.fresh('Untitled study');
   StudyDocument get doc => _doc;
 
@@ -36,6 +38,12 @@ class StudyController extends ChangeNotifier {
   bool get dirty => _dirty;
 
   bool flipped = false;
+
+  /// Bumped whenever the active document is (re)assigned — [openStudy],
+  /// [newStudy], [deleteStudy].  [openStudy] decodes off the UI isolate, so
+  /// two quick opens can finish out of call order; the winner captures this
+  /// token before its await and bails if a newer open/replace superseded it.
+  int _docGeneration = 0;
 
   Timer? _autoSaveTimer;
   static const _autoSaveDelay = Duration(seconds: 2);
@@ -62,6 +70,7 @@ class StudyController extends ChangeNotifier {
     if (await storage.fileExists(path)) {
       throw ArgumentError('A study named "$name" already exists');
     }
+    _docGeneration++; // supersede any in-flight openStudy
     await flushSave();
     _doc = StudyDocument.fresh(name)..filePath = path;
     _chapterIndex = 0;
@@ -78,9 +87,19 @@ class StudyController extends ChangeNotifier {
   /// so a later autosave can't clobber the addition; otherwise edits the
   /// file on disk directly.
   Future<void> addChapterToStudyFile(
-      String path, String chapterName, String pgn) async {
-    final chapter =
-        StudyChapter(name: chapterName, tree: MoveTree.fromPgn(pgn));
+    String path,
+    String chapterName,
+    String pgn,
+  ) async {
+    // Carry the source headers along (StarRating, White/Black, …) so a
+    // chapter written by the puzzle creator or "Add line to study" keeps
+    // them across the in-memory round-trip (Event/FEN/SetUp are regenerated
+    // by StudyChapter.toPgn).
+    final chapter = StudyChapter(
+      name: chapterName,
+      headers: extractHeaders(pgn),
+      tree: MoveTree.fromPgn(pgn),
+    );
     if (_doc.filePath == path) {
       _doc.chapters.add(chapter);
       _markDirty();
@@ -99,19 +118,27 @@ class StudyController extends ChangeNotifier {
   }
 
   Future<void> openStudy(String path) async {
+    final generation = ++_docGeneration;
     await flushSave();
     final content = await StorageFactory.instance.readFile(path);
+    if (generation != _docGeneration) return; // superseded by a newer open
     final name = path.split('/').last.replaceAll(RegExp(r'\.pgn$'), '');
-    // Parsing replays every move of every chapter (multi-MB repertoire
-    // studies take long enough to freeze the UI), so it runs off-isolate;
-    // the trees come back with foreign node ids and must be re-minted.
-    final parsed = await compute(
-        _parseStudyEntry, (content: content ?? '', name: name, path: path));
+    // fromPgn runs PgnGame.parsePgn + a full move replay for every chapter —
+    // off the UI isolate so opening a large study doesn't freeze the frame.
+    final text = content ?? '';
+    final loaded = await Isolate.run(
+      () => StudyDocument.fromPgn(text, name: name, filePath: path),
+    );
+    // A later open (or newStudy/deleteStudy) may have finished while this
+    // decode ran; don't clobber it with this now-stale document.
+    if (generation != _docGeneration) return;
+    // Trees crossing the isolate boundary carry foreign node ids — adopt
+    // them only after re-minting via [MoveTree.copyWithFreshIds].
     _doc = StudyDocument(
-      name: parsed.name,
-      filePath: parsed.filePath,
+      name: loaded.name,
+      filePath: loaded.filePath,
       chapters: [
-        for (final c in parsed.chapters)
+        for (final c in loaded.chapters)
           StudyChapter(
             name: c.name,
             headers: c.headers,
@@ -149,6 +176,7 @@ class StudyController extends ChangeNotifier {
   Future<void> deleteStudy(String path) async {
     await StorageFactory.instance.deleteFile(path);
     if (_doc.filePath == path) {
+      _docGeneration++; // supersede any in-flight openStudy of this file
       _doc = StudyDocument.fresh('Untitled study');
       _chapterIndex = 0;
       _cursor = TreePath.empty;
@@ -214,8 +242,13 @@ class StudyController extends ChangeNotifier {
       final name = headers['Event']?.trim().isNotEmpty == true
           ? headers['Event']!
           : 'Chapter ${_doc.chapters.length + 1}';
-      _doc.chapters.add(StudyChapter(
-          name: name, headers: headers, tree: tree.copyWithFreshIds()));
+      _doc.chapters.add(
+        StudyChapter(
+          name: name,
+          headers: headers,
+          tree: tree.copyWithFreshIds(),
+        ),
+      );
       added++;
     }
     if (added > 0) {
@@ -276,8 +309,9 @@ class StudyController extends ChangeNotifier {
 
   /// Follow the mainline continuation from the cursor, if any.
   void goForward() {
-    final children =
-        _cursor.isEmpty ? tree.roots : (tree.nodeAt(_cursor)?.children ?? []);
+    final children = _cursor.isEmpty
+        ? tree.roots
+        : (tree.nodeAt(_cursor)?.children ?? []);
     if (children.isEmpty) return;
     _cursor = _cursor.child(0);
     notifyListeners();
@@ -381,10 +415,6 @@ class StudyController extends ChangeNotifier {
 // block long enough to freeze the UI, so the controller parses off-isolate.
 // Trees crossing the isolate boundary carry foreign node ids — adopt them
 // only via [MoveTree.copyWithFreshIds].
-
-StudyDocument _parseStudyEntry(
-        ({String content, String name, String? path}) args) =>
-    StudyDocument.fromPgn(args.content, name: args.name, filePath: args.path);
 
 List<(Map<String, String>, MoveTree)> _parseChapterTreesEntry(String pgn) {
   final games = splitPgnIntoGames(stripBom(pgn));

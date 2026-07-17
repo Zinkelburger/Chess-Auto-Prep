@@ -4,8 +4,10 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../models/edit_context_layout.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import 'edit_context_tabs.dart';
-import 'repertoire_mode.dart';
+import '../../models/repertoire_mode.dart';
 
 Future<void> showEditContextLayoutSheet({
   required BuildContext context,
@@ -82,17 +84,14 @@ class _EditContextLayoutSheetState extends State<_EditContextLayoutSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Pane layout',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('Pane layout', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 4),
             Text(
               'Columns are side-by-side; views within a column stack vertically. '
               'Drag dividers in the context zone to resize.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey[500],
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: AppColors.onSurfaceMuted),
             ),
             const SizedBox(height: 12),
             ...List.generate(cols.length, (ci) => _columnCard(ci, cols[ci])),
@@ -125,7 +124,7 @@ class _EditContextLayoutSheetState extends State<_EditContextLayoutSheet> {
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Text(
                   'No views — assign from chips (long-press) or enable a panel.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                  style: AppTextStyles.caption,
                 ),
               ),
             ...List.generate(col.views.length, (si) {
@@ -170,10 +169,7 @@ class _EditContextLayoutSheetState extends State<_EditContextLayoutSheet> {
                         ),
                       ],
                       onSelected: (targetCol) => _apply(
-                        _layout.placeView(
-                          view,
-                          columnIndex: targetCol,
-                        ),
+                        _layout.placeView(view, columnIndex: targetCol),
                       ),
                     ),
                   ],

@@ -30,54 +30,58 @@ void main() {
   });
 
   test(
-      'node subtitle defaults to cpl for our moves and eval for opponent moves',
-      () {
-    final tree = makeEvalTreeTestTree();
-    final snapshot = EvalTreeSnapshotAdapter.fromBuildTree(
-      tree,
-      playAsWhite: true,
-    );
+    'node subtitle defaults to cpl for our moves and eval for opponent moves',
+    () {
+      final tree = makeEvalTreeTestTree();
+      final snapshot = EvalTreeSnapshotAdapter.fromBuildTree(
+        tree,
+        playAsWhite: true,
+      );
 
-    final d4 =
-        snapshot.nodesById.values.firstWhere((node) => node.moveSan == 'd4');
-    final e4 =
-        snapshot.nodesById.values.firstWhere((node) => node.moveSan == 'e4');
-    final e5 =
-        snapshot.nodesById.values.firstWhere((node) => node.moveSan == 'e5');
+      final d4 = snapshot.nodesById.values.firstWhere(
+        (node) => node.moveSan == 'd4',
+      );
+      final e4 = snapshot.nodesById.values.firstWhere(
+        (node) => node.moveSan == 'e4',
+      );
+      final e5 = snapshot.nodesById.values.firstWhere(
+        (node) => node.moveSan == 'e5',
+      );
 
-    expect(
-      EvalTreeLayoutEngine.subtitleForNode(
-        snapshot,
-        d4,
-        EvalTreeMetricDisplayMode.cpl,
-      ),
-      '6cpl',
-    );
-    expect(
-      EvalTreeLayoutEngine.subtitleForNode(
-        snapshot,
-        e4,
-        EvalTreeMetricDisplayMode.cpl,
-      ),
-      '18cpl',
-    );
-    expect(
-      EvalTreeLayoutEngine.subtitleForNode(
-        snapshot,
-        e5,
-        EvalTreeMetricDisplayMode.cpl,
-      ),
-      '+0.1',
-    );
-    expect(
-      EvalTreeLayoutEngine.subtitleForNode(
-        snapshot,
-        e4,
-        EvalTreeMetricDisplayMode.eval,
-      ),
-      '+0.3',
-    );
-  });
+      expect(
+        EvalTreeLayoutEngine.subtitleForNode(
+          snapshot,
+          d4,
+          EvalTreeMetricDisplayMode.cpl,
+        ),
+        '6cpl',
+      );
+      expect(
+        EvalTreeLayoutEngine.subtitleForNode(
+          snapshot,
+          e4,
+          EvalTreeMetricDisplayMode.cpl,
+        ),
+        '18cpl',
+      );
+      expect(
+        EvalTreeLayoutEngine.subtitleForNode(
+          snapshot,
+          e5,
+          EvalTreeMetricDisplayMode.cpl,
+        ),
+        '+0.1',
+      );
+      expect(
+        EvalTreeLayoutEngine.subtitleForNode(
+          snapshot,
+          e4,
+          EvalTreeMetricDisplayMode.eval,
+        ),
+        '+0.3',
+      );
+    },
+  );
 
   test('graph secondary label follows the active metric mode', () {
     final tree = makeEvalTreeTestTree();
@@ -86,10 +90,12 @@ void main() {
       playAsWhite: true,
     );
 
-    final e4 =
-        snapshot.nodesById.values.firstWhere((node) => node.moveSan == 'e4');
-    final e5 =
-        snapshot.nodesById.values.firstWhere((node) => node.moveSan == 'e5');
+    final e4 = snapshot.nodesById.values.firstWhere(
+      (node) => node.moveSan == 'e4',
+    );
+    final e5 = snapshot.nodesById.values.firstWhere(
+      (node) => node.moveSan == 'e5',
+    );
 
     expect(
       EvalTreeLayoutEngine.secondaryLabelForNode(
@@ -117,60 +123,72 @@ void main() {
     );
   });
 
-  test('layout engine grows nodes past the soft width cap when text needs it',
-      () {
-    final tree = makeEvalTreeTestTree();
-    final snapshot = EvalTreeSnapshotAdapter.fromBuildTree(
-      tree,
-      playAsWhite: true,
-    );
-    final controller = EvalTreeController()..loadSnapshot(snapshot);
-    final e4 =
-        snapshot.nodesById.values.firstWhere((node) => node.moveSan == 'e4');
+  test(
+    'layout engine grows nodes past the soft width cap when text needs it',
+    () {
+      final tree = makeEvalTreeTestTree();
+      final snapshot = EvalTreeSnapshotAdapter.fromBuildTree(
+        tree,
+        playAsWhite: true,
+      );
+      final controller = EvalTreeController()..loadSnapshot(snapshot);
+      final e4 = snapshot.nodesById.values.firstWhere(
+        (node) => node.moveSan == 'e4',
+      );
 
-    final frame = EvalTreeLayoutEngine.buildFrame(
-      snapshot,
-      controller,
-      config: const EvalTreeLayoutConfig(minNodeWidth: 24, maxNodeWidth: 40),
-    );
+      final frame = EvalTreeLayoutEngine.buildFrame(
+        snapshot,
+        controller,
+        config: const EvalTreeLayoutConfig(minNodeWidth: 24, maxNodeWidth: 40),
+      );
 
-    expect(frame.nodesById[e4.id]!.size.width, greaterThan(40));
-  });
+      expect(frame.nodesById[e4.id]!.size.width, greaterThan(40));
+    },
+  );
 
   test(
-      'layout engine keeps the ancestor path and only the selected node children',
-      () {
-    final tree = makeEvalTreeTestTree();
-    final snapshot = EvalTreeSnapshotAdapter.fromBuildTree(
-      tree,
-      playAsWhite: true,
-    );
-    final controller = EvalTreeController()..loadSnapshot(snapshot);
+    'layout engine keeps the ancestor path and only the selected node children',
+    () {
+      final tree = makeEvalTreeTestTree();
+      final snapshot = EvalTreeSnapshotAdapter.fromBuildTree(
+        tree,
+        playAsWhite: true,
+      );
+      final controller = EvalTreeController()..loadSnapshot(snapshot);
 
-    final root = snapshot.root;
-    final d4 =
-        snapshot.nodesById.values.firstWhere((node) => node.moveSan == 'd4');
-    final e4 =
-        snapshot.nodesById.values.firstWhere((node) => node.moveSan == 'e4');
-    final c5 =
-        snapshot.nodesById.values.firstWhere((node) => node.moveSan == 'c5');
-    final e5 =
-        snapshot.nodesById.values.firstWhere((node) => node.moveSan == 'e5');
-    final bc4 =
-        snapshot.nodesById.values.firstWhere((node) => node.moveSan == 'Bc4');
-    final nf3 =
-        snapshot.nodesById.values.firstWhere((node) => node.moveSan == 'Nf3');
+      final root = snapshot.root;
+      final d4 = snapshot.nodesById.values.firstWhere(
+        (node) => node.moveSan == 'd4',
+      );
+      final e4 = snapshot.nodesById.values.firstWhere(
+        (node) => node.moveSan == 'e4',
+      );
+      final c5 = snapshot.nodesById.values.firstWhere(
+        (node) => node.moveSan == 'c5',
+      );
+      final e5 = snapshot.nodesById.values.firstWhere(
+        (node) => node.moveSan == 'e5',
+      );
+      final bc4 = snapshot.nodesById.values.firstWhere(
+        (node) => node.moveSan == 'Bc4',
+      );
+      final nf3 = snapshot.nodesById.values.firstWhere(
+        (node) => node.moveSan == 'Nf3',
+      );
 
-    controller.selectNode(e5.id, requestFocus: false);
+      controller.selectNode(e5.id, requestFocus: false);
 
-    final frame = EvalTreeLayoutEngine.buildFrame(snapshot, controller);
+      final frame = EvalTreeLayoutEngine.buildFrame(snapshot, controller);
 
-    expect(frame.rootNodeId, root.id);
-    expect(frame.nodesById.keys,
-        containsAll([root.id, e4.id, e5.id, bc4.id, nf3.id]));
-    expect(frame.tryNode(d4.id), isNull);
-    expect(frame.tryNode(c5.id), isNull);
-  });
+      expect(frame.rootNodeId, root.id);
+      expect(
+        frame.nodesById.keys,
+        containsAll([root.id, e4.id, e5.id, bc4.id, nf3.id]),
+      );
+      expect(frame.tryNode(d4.id), isNull);
+      expect(frame.tryNode(c5.id), isNull);
+    },
+  );
 
   test('layout engine respects display caps and selected-root mode', () {
     final tree = makeEvalTreeTestTree();
@@ -180,8 +198,9 @@ void main() {
     );
     final controller = EvalTreeController()..loadSnapshot(snapshot);
 
-    final e5 =
-        snapshot.nodesById.values.firstWhere((node) => node.moveSan == 'e5');
+    final e5 = snapshot.nodesById.values.firstWhere(
+      (node) => node.moveSan == 'e5',
+    );
     controller.selectNode(e5.id, requestFocus: false);
     controller.setAncestorSpine(false);
     controller.setMaxDisplayNodes(3);
@@ -193,48 +212,55 @@ void main() {
     expect(frame.tryNode(e5.id), isNotNull);
   });
 
-  test('layout engine keeps the selected node visible when the spine is capped',
-      () {
-    final tree = makeEvalTreeTestTree();
-    final snapshot = EvalTreeSnapshotAdapter.fromBuildTree(
-      tree,
-      playAsWhite: true,
-    );
-    final controller = EvalTreeController()..loadSnapshot(snapshot);
+  test(
+    'layout engine keeps the selected node visible when the spine is capped',
+    () {
+      final tree = makeEvalTreeTestTree();
+      final snapshot = EvalTreeSnapshotAdapter.fromBuildTree(
+        tree,
+        playAsWhite: true,
+      );
+      final controller = EvalTreeController()..loadSnapshot(snapshot);
 
-    final root = snapshot.root;
-    final e4 =
-        snapshot.nodesById.values.firstWhere((node) => node.moveSan == 'e4');
-    final e5 =
-        snapshot.nodesById.values.firstWhere((node) => node.moveSan == 'e5');
-    final nf3 =
-        snapshot.nodesById.values.firstWhere((node) => node.moveSan == 'Nf3');
+      final root = snapshot.root;
+      final e4 = snapshot.nodesById.values.firstWhere(
+        (node) => node.moveSan == 'e4',
+      );
+      final e5 = snapshot.nodesById.values.firstWhere(
+        (node) => node.moveSan == 'e5',
+      );
+      final nf3 = snapshot.nodesById.values.firstWhere(
+        (node) => node.moveSan == 'Nf3',
+      );
 
-    controller.selectNode(nf3.id, requestFocus: false);
-    controller.setMaxDisplayNodes(3);
+      controller.selectNode(nf3.id, requestFocus: false);
+      controller.setMaxDisplayNodes(3);
 
-    final frame = EvalTreeLayoutEngine.buildFrame(snapshot, controller);
+      final frame = EvalTreeLayoutEngine.buildFrame(snapshot, controller);
 
-    expect(frame.rootNodeId, e4.id);
-    expect(frame.tryNode(root.id), isNull);
-    expect(frame.tryNode(e4.id), isNotNull);
-    expect(frame.tryNode(e5.id), isNotNull);
-    expect(frame.tryNode(nf3.id), isNotNull);
-  });
+      expect(frame.rootNodeId, e4.id);
+      expect(frame.tryNode(root.id), isNull);
+      expect(frame.tryNode(e4.id), isNotNull);
+      expect(frame.tryNode(e5.id), isNotNull);
+      expect(frame.tryNode(nf3.id), isNotNull);
+    },
+  );
 
-  test('layout engine marks capped frames when the visible budget is exhausted',
-      () {
-    final tree = makeEvalTreeTestTree();
-    final snapshot = EvalTreeSnapshotAdapter.fromBuildTree(
-      tree,
-      playAsWhite: true,
-    );
-    final controller = EvalTreeController()..loadSnapshot(snapshot);
+  test(
+    'layout engine marks capped frames when the visible budget is exhausted',
+    () {
+      final tree = makeEvalTreeTestTree();
+      final snapshot = EvalTreeSnapshotAdapter.fromBuildTree(
+        tree,
+        playAsWhite: true,
+      );
+      final controller = EvalTreeController()..loadSnapshot(snapshot);
 
-    controller.setMaxDisplayNodes(3);
-    final frame = EvalTreeLayoutEngine.buildFrame(snapshot, controller);
+      controller.setMaxDisplayNodes(3);
+      final frame = EvalTreeLayoutEngine.buildFrame(snapshot, controller);
 
-    expect(frame.nodesById.length, 3);
-    expect(frame.hitDisplayCap, isTrue);
-  });
+      expect(frame.nodesById.length, 3);
+      expect(frame.hitDisplayCap, isTrue);
+    },
+  );
 }

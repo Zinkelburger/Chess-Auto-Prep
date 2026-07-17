@@ -123,11 +123,7 @@ class GameSelection {
   const GameSelection({
     this.maxGames,
     this.since,
-    this.speeds = const {
-      GameSpeed.blitz,
-      GameSpeed.rapid,
-      GameSpeed.classical,
-    },
+    this.speeds = const {GameSpeed.blitz, GameSpeed.rapid, GameSpeed.classical},
   });
 
   /// Keep at most this many of the most-recent games (after other filters).
@@ -144,7 +140,9 @@ class GameSelection {
 
 /// Parse a multi-game PGN into records (newest first when dates are present).
 List<GameRecord> parseGameRecords(String multiGamePgn) {
-  final records = splitPgnIntoGames(multiGamePgn).map(GameRecord.parse).toList();
+  final records = splitPgnIntoGames(
+    multiGamePgn,
+  ).map(GameRecord.parse).toList();
   _sortNewestFirst(records);
   return records;
 }

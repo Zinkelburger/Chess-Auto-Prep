@@ -13,8 +13,9 @@ void main() {
       t.d4.explored = true;
       t.e4e5.explored = true;
 
-      final (totals, explored) =
-          TreeBuildProgressTracker.depthHistogram(t.root);
+      final (totals, explored) = TreeBuildProgressTracker.depthHistogram(
+        t.root,
+      );
 
       expect(totals, [1, 2, 4, 4]);
       expect(explored, [1, 2, 1, 0]);
@@ -24,8 +25,10 @@ void main() {
       final t = StandardTree();
       t.e4e5.explored = true;
 
-      final (total, unexplored) =
-          TreeBuildProgressTracker.depthLayerStats(t.root, 2);
+      final (total, unexplored) = TreeBuildProgressTracker.depthLayerStats(
+        t.root,
+        2,
+      );
       expect(total, 4);
       expect(unexplored, 3);
 

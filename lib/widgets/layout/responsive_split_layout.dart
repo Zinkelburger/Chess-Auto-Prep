@@ -6,6 +6,7 @@ library;
 
 import 'package:flutter/material.dart';
 import '../../constants/ui_breakpoints.dart';
+import '../../theme/app_colors.dart';
 
 class ResponsiveSplitLayout extends StatelessWidget {
   final Widget primary;
@@ -33,7 +34,7 @@ class ResponsiveSplitLayout extends StatelessWidget {
           return Row(
             children: [
               Expanded(flex: primaryFlex, child: primary),
-              Container(width: 1, color: Colors.grey[700]),
+              Container(width: 1, color: AppColors.outline),
               Expanded(flex: secondaryFlex, child: secondary),
             ],
           );

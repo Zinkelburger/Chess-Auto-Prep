@@ -178,23 +178,29 @@ class LichessAuthService extends ChangeNotifier {
         );
       } catch (e) {
         if (kDebugMode) {
-          log.e('[LichessAuth] Failed to bind callback server on '
-              'port $_callbackPort: $e');
+          log.e(
+            '[LichessAuth] Failed to bind callback server on '
+            'port $_callbackPort: $e',
+          );
         }
         rethrow;
       }
     } catch (e) {
       if (kDebugMode) {
-        log.e('[LichessAuth] Failed to bind callback server on '
-            'port $_callbackPort: $e');
+        log.e(
+          '[LichessAuth] Failed to bind callback server on '
+          'port $_callbackPort: $e',
+        );
       }
       rethrow;
     }
     _callbackCompleter = Completer<String?>();
 
     if (kDebugMode) {
-      log.i('[LichessAuth] OAuth callback server listening on '
-          'http://localhost:$_callbackPort/callback');
+      log.i(
+        '[LichessAuth] OAuth callback server listening on '
+        'http://localhost:$_callbackPort/callback',
+      );
     }
 
     _callbackServer!.listen((request) {
@@ -212,8 +218,10 @@ class LichessAuthService extends ChangeNotifier {
         request.response.close();
 
         if (kDebugMode) {
-          log.e('[LichessAuth] Callback received — '
-              '${code != null ? 'auth code OK' : 'error: $error'}');
+          log.e(
+            '[LichessAuth] Callback received — '
+            '${code != null ? 'auth code OK' : 'error: $error'}',
+          );
         }
 
         if (!_callbackCompleter!.isCompleted) {
@@ -231,7 +239,8 @@ class LichessAuthService extends ChangeNotifier {
     // the `%` when opening via xdg-open, producing `game%253Aread` and
     // causing Lichess to reject the scope.  Colons are legal in query
     // strings per RFC 3986, so we leave them unencoded.
-    final query = 'response_type=code'
+    final query =
+        'response_type=code'
         '&client_id=${Uri.encodeQueryComponent(clientId)}'
         '&redirect_uri=${Uri.encodeQueryComponent(_redirectUri)}'
         '&code_challenge_method=S256'
@@ -250,8 +259,10 @@ class LichessAuthService extends ChangeNotifier {
     if (_callbackCompleter == null) return false;
 
     if (kDebugMode) {
-      log.w('[LichessAuth] Waiting for OAuth callback '
-          '(timeout ${timeout.inSeconds}s)...');
+      log.w(
+        '[LichessAuth] Waiting for OAuth callback '
+        '(timeout ${timeout.inSeconds}s)...',
+      );
     }
 
     try {
@@ -262,8 +273,10 @@ class LichessAuthService extends ChangeNotifier {
       }
       final ok = await _exchangeCode(code);
       if (kDebugMode) {
-        log.e('[LichessAuth] Token exchange '
-            '${ok ? 'succeeded — logged in as $_username' : 'FAILED'}');
+        log.e(
+          '[LichessAuth] Token exchange '
+          '${ok ? 'succeeded — logged in as $_username' : 'FAILED'}',
+        );
       }
       return ok;
     } on TimeoutException {
@@ -304,8 +317,10 @@ class LichessAuthService extends ChangeNotifier {
         _tokenExpiry = DateTime.now().add(Duration(seconds: expiresIn));
 
         if (kDebugMode) {
-          log.i('[LichessAuth] Token obtained — expires in '
-              '${(expiresIn / 86400).round()} days');
+          log.i(
+            '[LichessAuth] Token obtained — expires in '
+            '${(expiresIn / 86400).round()} days',
+          );
         }
 
         await _fetchUsername();
@@ -315,8 +330,10 @@ class LichessAuthService extends ChangeNotifier {
       }
 
       if (kDebugMode) {
-        log.e('[LichessAuth] Token exchange failed: '
-            '${response.statusCode} ${response.body}');
+        log.e(
+          '[LichessAuth] Token exchange failed: '
+          '${response.statusCode} ${response.body}',
+        );
       }
     } catch (e) {
       if (kDebugMode) log.e('[LichessAuth] Token exchange error: $e');
@@ -351,9 +368,7 @@ class LichessAuthService extends ChangeNotifier {
   /// Pass your existing headers (e.g. `{'Accept': 'application/x-chess-pgn'}`)
   /// and the auth token will be added automatically if available.
   /// Returns the headers unchanged if not authenticated.
-  Future<Map<String, String>> getHeaders([
-    Map<String, String>? extra,
-  ]) async {
+  Future<Map<String, String>> getHeaders([Map<String, String>? extra]) async {
     final headers = <String, String>{};
     if (extra != null) headers.addAll(extra);
 
@@ -466,7 +481,8 @@ class LichessAuthService extends ChangeNotifier {
 
   // ── Helpers ────────────────────────────────────────────────────────
 
-  String _callbackHtml(bool success) => '''<!DOCTYPE html>
+  String _callbackHtml(bool success) =>
+      '''<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>Chess Auto Prep</title></head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;

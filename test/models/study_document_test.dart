@@ -20,16 +20,23 @@ Defence} 4. Ba4) 3... Bc5 *
       final chapter = doc.chapters.single;
       expect(chapter.name, 'Italian ideas');
 
-      final reparsed =
-          StudyDocument.fromPgn(doc.toPgn(), name: 'test again');
+      final reparsed = StudyDocument.fromPgn(doc.toPgn(), name: 'test again');
       final tree = reparsed.chapters.single.tree;
 
       // Mainline: e4 e5 Nf3 Nc6 Bc4 Bc5
-      expect(tree.sanSequenceAt(const TreePath([0, 0, 0, 0, 0, 0])),
-          ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Bc5']);
+      expect(tree.sanSequenceAt(const TreePath([0, 0, 0, 0, 0, 0])), [
+        'e4',
+        'e5',
+        'Nf3',
+        'Nc6',
+        'Bc4',
+        'Bc5',
+      ]);
       // Comment survived.
-      expect(tree.nodeAt(const TreePath([0, 0, 0]))?.comment,
-          'Develop with tempo');
+      expect(
+        tree.nodeAt(const TreePath([0, 0, 0]))?.comment,
+        'Develop with tempo',
+      );
       // Variation 3. Bb5 with nested comment.
       final bb5 = tree.nodeAt(const TreePath([0, 0, 0, 0, 1]));
       expect(bb5?.san, 'Bb5');
@@ -61,8 +68,10 @@ Defence} 4. Ba4) 3... Bc5 *
       doc.chapters.single.name = 'Lucena';
       doc.chapters.single.tree.startingFen =
           '1k1K4/1P6/8/8/8/8/r7/2R5 w - - 0 1';
-      doc.chapters.single.tree
-          .addMove(TreePath.empty, 'Rc4'); // building the bridge
+      doc.chapters.single.tree.addMove(
+        TreePath.empty,
+        'Rc4',
+      ); // building the bridge
       doc.chapters.add(StudyChapter(name: 'Philidor'));
       doc.chapters[1].tree.addMove(TreePath.empty, 'e4');
 
@@ -70,8 +79,10 @@ Defence} 4. Ba4) 3... Bc5 *
       expect(reparsed.chapters, hasLength(2));
       expect(reparsed.chapters[0].name, 'Lucena');
       expect(reparsed.chapters[1].name, 'Philidor');
-      expect(reparsed.chapters[0].tree.startingFen,
-          '1k1K4/1P6/8/8/8/8/r7/2R5 w - - 0 1');
+      expect(
+        reparsed.chapters[0].tree.startingFen,
+        '1k1K4/1P6/8/8/8/8/r7/2R5 w - - 0 1',
+      );
       expect(reparsed.chapters[0].tree.roots.single.san, 'Rc4');
       expect(reparsed.chapters[1].tree.startingFen, kStandardStartFen);
       expect(reparsed.chapters[1].tree.roots.single.san, 'e4');

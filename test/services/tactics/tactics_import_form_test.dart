@@ -43,8 +43,10 @@ void main() {
     expect(params.mode, TacticsImportMode.sinceDate);
     // Today counts as day 1, so the cutoff is 6 midnights back.
     final now = DateTime.now();
-    expect(params.since,
-        DateTime(now.year, now.month, now.day).subtract(const Duration(days: 6)));
+    expect(
+      params.since,
+      DateTime(now.year, now.month, now.day).subtract(const Duration(days: 6)),
+    );
     expect(params.maxGames, 200);
     form.dispose();
   });

@@ -5,10 +5,14 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('parseSetupMoves', () {
     test('splits on spaces and commas, normalizes suffixes', () {
-      expect(
-        parseSetupMoves('Be3 Qd2, f3  O-O-O h4 Nh3+'),
-        {'Be3', 'Qd2', 'f3', 'O-O-O', 'h4', 'Nh3'},
-      );
+      expect(parseSetupMoves('Be3 Qd2, f3  O-O-O h4 Nh3+'), {
+        'Be3',
+        'Qd2',
+        'f3',
+        'O-O-O',
+        'h4',
+        'Nh3',
+      });
     });
 
     test('empty and whitespace-only input disable the bias', () {
@@ -27,8 +31,7 @@ void main() {
   });
 
   group('sanToUci', () {
-    const startFen =
-        'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    const startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
     test('converts legal SAN to UCI', () {
       expect(sanToUci(startFen, 'e4'), 'e2e4');
@@ -42,7 +45,8 @@ void main() {
 
     test('castling uses king-destination convention', () {
       // White ready to castle long.
-      const fen = 'r3kbnr/ppp2ppp/2npbq2/4p3/4P3/2NPBQ2/PPP2PPP/R3KBNR '
+      const fen =
+          'r3kbnr/ppp2ppp/2npbq2/4p3/4P3/2NPBQ2/PPP2PPP/R3KBNR '
           'w KQkq - 0 1';
       expect(sanToUci(fen, 'O-O-O'), 'e1c1');
     });

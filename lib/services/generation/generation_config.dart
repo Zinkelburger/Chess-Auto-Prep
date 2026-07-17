@@ -6,13 +6,7 @@ import '../../utils/system_info.dart';
 
 // ── Selection mode ──────────────────────────────────────────────────────
 
-enum SelectionMode {
-  expectimax,
-  engineOnly,
-  dbWinRateOnly,
-  playable,
-  trappy,
-}
+enum SelectionMode { expectimax, engineOnly, dbWinRateOnly, playable, trappy }
 
 // ── Tree build algorithm mode ───────────────────────────────────────────
 
@@ -105,6 +99,16 @@ class TreeBuildConfig {
   /// 0 disables the gate.  Ignored under trappy selection, where
   /// worse-eval moves are the point and need their subtrees searched.
   final int fastAltGapCp;
+
+  /// "Wide opening search": our-move nodes at or below this ply get the wide
+  /// [rootMultipv] candidate floor, the full [maxEvalLossCp] window, and (in
+  /// Fast) exemption from the [fastAltGapCp] alternative-subtree gate — so the
+  /// first few of our moves are explored broadly in BOTH search algorithms
+  /// before the priority-zone pruning narrows the deeper, rarely-reached
+  /// lines.  Applies to Pure too (it widens the MultiPV floor Pure would
+  /// otherwise cap at [ourMultipv] past the root).  0 keeps the legacy
+  /// behavior where only the root (ply 0) gets the wide floor.
+  final int openingWidthPlies;
 
   /// Dirichlet prior weight (λ, in virtual games) for smoothing DB opponent
   /// move frequencies with Maia's policy:
@@ -230,6 +234,7 @@ class TreeBuildConfig {
     this.searchAlgorithm = SearchAlgorithm.fast,
     this.ourAltDiscount = 0.25,
     this.fastAltGapCp = 30,
+    this.openingWidthPlies = 3,
     this.maiaPriorGames = 30.0,
     this.coverMinProb = 0.05,
     this.verifyFinal = true,
@@ -293,6 +298,7 @@ class TreeBuildConfig {
       ),
       ourAltDiscount: (json['our_alt_discount'] as num?)?.toDouble() ?? 0.25,
       fastAltGapCp: (json['fast_alt_gap_cp'] as num?)?.toInt() ?? 30,
+      openingWidthPlies: (json['opening_width_plies'] as num?)?.toInt() ?? 3,
       maiaPriorGames: (json['maia_prior_games'] as num?)?.toDouble() ?? 30.0,
       coverMinProb: (json['cover_min_prob'] as num?)?.toDouble() ?? 0.05,
       verifyFinal: json['verify_final'] as bool? ?? true,
@@ -327,7 +333,7 @@ class TreeBuildConfig {
       noveltyWeight: (json['novelty_weight'] as num?)?.toInt() ?? 0,
       pgnFilePaths:
           (json['pgn_file_paths'] as List<dynamic>?)?.cast<String>() ??
-              const [],
+          const [],
       dbMinGames: (json['db_min_games'] as num?)?.toInt() ?? 5,
       dbMinProb: (json['db_min_prob'] as num?)?.toDouble() ?? 0.05,
       minElo: (json['min_elo'] as num?)?.toInt() ?? 0,
@@ -365,11 +371,11 @@ class TreeBuildConfig {
 
   /// Short label for the active build algorithm.
   String get buildModeLabel => switch (buildMode) {
-        BuildMode.stockfishExpectimax => 'Stockfish + expectimax',
-        BuildMode.maiaDbExplore => 'Maia DB explore',
-        BuildMode.dbExplorer => 'DB Explorer',
-        BuildMode.trapFinder => 'Trap finder',
-      };
+    BuildMode.stockfishExpectimax => 'Stockfish + expectimax',
+    BuildMode.maiaDbExplore => 'Maia DB explore',
+    BuildMode.dbExplorer => 'DB Explorer',
+    BuildMode.trapFinder => 'Trap finder',
+  };
 
   /// Compact one-line summary for Jobs panel and status displays.
   String get summaryLabel {
@@ -448,6 +454,15 @@ class TreeBuildConfig {
   int get rootMultipv =>
       ourMultipv >= rootMultipvFloor ? ourMultipv : rootMultipvFloor;
 
+  /// Whether [ply] is inside the widened opening band — the feature is on
+  /// ([openingWidthPlies] > 0) and [ply] is at or below it.  Callers use this
+  /// to grant the wide MultiPV floor / full eval window and, in Fast, to
+  /// exempt our-move alternatives from the subtree gate.  The root (ply 0)
+  /// always gets the wide floor regardless (via [rootMultipv]); this only
+  /// governs the *extension* past the root and the gate exemption.
+  bool widensOpeningAtPly(int ply) =>
+      openingWidthPlies > 0 && ply <= openingWidthPlies;
+
   /// Max centipawns an our-move candidate may lose vs the best sibling and
   /// still enter the tree, at reach priority [priority].
   int effectiveMaxEvalLossCp(double priority) {
@@ -483,70 +498,71 @@ class TreeBuildConfig {
 
   /// Short label for the frontier/pruning algorithm.
   String get searchAlgorithmLabel => switch (searchAlgorithm) {
-        SearchAlgorithm.pure => 'Pure Expectimax',
-        SearchAlgorithm.fast => 'Fast Expectimax',
-      };
+    SearchAlgorithm.pure => 'Pure Expectimax',
+    SearchAlgorithm.fast => 'Fast Expectimax',
+  };
 
   /// Convert a white-perspective centipawn score to "our" perspective.
   int toOurPerspective(int whiteCp) => playAsWhite ? whiteCp : -whiteCp;
 
   /// Serialise to a JSON-compatible map for tree file metadata.
   Map<String, dynamic> toJson() => {
-        'play_as_white': playAsWhite,
-        'min_probability': minProbability,
-        'max_depth': maxPly,
-        'max_nodes': maxNodes,
-        'search_algorithm': searchAlgorithm.name,
-        // Legacy key so older builds of the app can still read tree metadata.
-        'best_first': bestFirst,
-        'our_alt_discount': ourAltDiscount,
-        'fast_alt_gap_cp': fastAltGapCp,
-        'maia_prior_games': maiaPriorGames,
-        'cover_min_prob': coverMinProb,
-        'verify_final': verifyFinal,
-        'verify_depth': verifyDepth,
-        'setup_moves': setupMoves,
-        'setup_tolerance_cp': setupToleranceCp,
-        'build_mode': buildMode.name,
-        'eval_depth': evalDepth,
-        'engine_threads': resolvedEngineThreads,
-        'our_multipv': ourMultipv,
-        'max_eval_loss_cp': maxEvalLossCp,
-        'opp_max_children': oppMaxChildren,
-        'opp_mass_target': oppMassTarget,
-        'min_eval_cp': minEvalCp,
-        'max_eval_cp': maxEvalCp,
-        'relative_eval': relativeEval,
-        'use_lichess_db': useLichessDb,
-        'use_masters': useMasters,
-        'rating_range': ratingRange,
-        'speeds': speeds,
-        'min_games': minGames,
-        'maia_elo': maiaElo,
-        'maia_min_prob': maiaMinProb,
-        'maia_only': maiaOnly,
-        'rank_lines_by_importance': rankLinesByImportance,
-        'annotate_move_probabilities': annotateMoveProbabilities,
-        'annotate_maia_only': annotateMaiaOnly,
-        'selection_mode': selectionMode.name,
-        'leaf_confidence': leafConfidence,
-        'novelty_weight': noveltyWeight,
-        'pgn_file_paths': pgnFilePaths,
-        'db_min_games': dbMinGames,
-        'db_min_prob': dbMinProb,
-        'min_elo': minElo,
-        'enable_cdbdirect': enableCdbDirect,
-        'cdbdirect_path': cdbDirectPath,
-        'cdbdirect_read_ahead': cdbDirectReadAhead,
-        'batch_eval_lookups': batchEvalLookups,
-        'enable_local_chessdb': enableLocalChessDb,
-        'local_chessdb_path': localChessDbPath,
-        'enable_chessdb_api': enableChessDbApi,
-        'chessdb_api_daily_quota': chessDbApiDailyQuota,
-        'chessdb_api_concurrency': chessDbApiConcurrency,
-        'enable_ext_eval_subtree_skip': enableExtEvalSubtreeSkip,
-        'min_acceptable_eval_depth': minAcceptableEvalDepth,
-      };
+    'play_as_white': playAsWhite,
+    'min_probability': minProbability,
+    'max_depth': maxPly,
+    'max_nodes': maxNodes,
+    'search_algorithm': searchAlgorithm.name,
+    // Legacy key so older builds of the app can still read tree metadata.
+    'best_first': bestFirst,
+    'our_alt_discount': ourAltDiscount,
+    'fast_alt_gap_cp': fastAltGapCp,
+    'opening_width_plies': openingWidthPlies,
+    'maia_prior_games': maiaPriorGames,
+    'cover_min_prob': coverMinProb,
+    'verify_final': verifyFinal,
+    'verify_depth': verifyDepth,
+    'setup_moves': setupMoves,
+    'setup_tolerance_cp': setupToleranceCp,
+    'build_mode': buildMode.name,
+    'eval_depth': evalDepth,
+    'engine_threads': resolvedEngineThreads,
+    'our_multipv': ourMultipv,
+    'max_eval_loss_cp': maxEvalLossCp,
+    'opp_max_children': oppMaxChildren,
+    'opp_mass_target': oppMassTarget,
+    'min_eval_cp': minEvalCp,
+    'max_eval_cp': maxEvalCp,
+    'relative_eval': relativeEval,
+    'use_lichess_db': useLichessDb,
+    'use_masters': useMasters,
+    'rating_range': ratingRange,
+    'speeds': speeds,
+    'min_games': minGames,
+    'maia_elo': maiaElo,
+    'maia_min_prob': maiaMinProb,
+    'maia_only': maiaOnly,
+    'rank_lines_by_importance': rankLinesByImportance,
+    'annotate_move_probabilities': annotateMoveProbabilities,
+    'annotate_maia_only': annotateMaiaOnly,
+    'selection_mode': selectionMode.name,
+    'leaf_confidence': leafConfidence,
+    'novelty_weight': noveltyWeight,
+    'pgn_file_paths': pgnFilePaths,
+    'db_min_games': dbMinGames,
+    'db_min_prob': dbMinProb,
+    'min_elo': minElo,
+    'enable_cdbdirect': enableCdbDirect,
+    'cdbdirect_path': cdbDirectPath,
+    'cdbdirect_read_ahead': cdbDirectReadAhead,
+    'batch_eval_lookups': batchEvalLookups,
+    'enable_local_chessdb': enableLocalChessDb,
+    'local_chessdb_path': localChessDbPath,
+    'enable_chessdb_api': enableChessDbApi,
+    'chessdb_api_daily_quota': chessDbApiDailyQuota,
+    'chessdb_api_concurrency': chessDbApiConcurrency,
+    'enable_ext_eval_subtree_skip': enableExtEvalSubtreeSkip,
+    'min_acceptable_eval_depth': minAcceptableEvalDepth,
+  };
 
   TreeBuildConfig copyWith({
     String? startFen,
@@ -557,6 +573,7 @@ class TreeBuildConfig {
     SearchAlgorithm? searchAlgorithm,
     double? ourAltDiscount,
     int? fastAltGapCp,
+    int? openingWidthPlies,
     double? maiaPriorGames,
     double? coverMinProb,
     bool? verifyFinal,
@@ -612,6 +629,7 @@ class TreeBuildConfig {
       searchAlgorithm: searchAlgorithm ?? this.searchAlgorithm,
       ourAltDiscount: ourAltDiscount ?? this.ourAltDiscount,
       fastAltGapCp: fastAltGapCp ?? this.fastAltGapCp,
+      openingWidthPlies: openingWidthPlies ?? this.openingWidthPlies,
       maiaPriorGames: maiaPriorGames ?? this.maiaPriorGames,
       coverMinProb: coverMinProb ?? this.coverMinProb,
       verifyFinal: verifyFinal ?? this.verifyFinal,
@@ -666,10 +684,7 @@ class TreeBuildConfig {
   }
 }
 
-SearchAlgorithm _parseSearchAlgorithm(
-  String? value, {
-  bool? legacyBestFirst,
-}) {
+SearchAlgorithm _parseSearchAlgorithm(String? value, {bool? legacyBestFirst}) {
   switch (value) {
     case 'pure':
       return SearchAlgorithm.pure;

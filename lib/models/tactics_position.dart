@@ -19,7 +19,7 @@ class TacticsPosition {
   final double timeToSolve; // Time taken to solve (seconds)
   final int hintsUsed; // Number of hints used
   final String
-      opponentBestResponse; // Opponent's best reply after user's bad move
+  opponentBestResponse; // Opponent's best reply after user's bad move
   final int rating; // 0 = unrated, 1–5 star quality rating
 
   const TacticsPosition({
@@ -83,8 +83,9 @@ class TacticsPosition {
       gameDate: gameDate ?? this.gameDate,
       gameId: gameId ?? this.gameId,
       gameUrl: gameUrl ?? this.gameUrl,
-      lastReviewed:
-          clearLastReviewed ? null : (lastReviewed ?? this.lastReviewed),
+      lastReviewed: clearLastReviewed
+          ? null
+          : (lastReviewed ?? this.lastReviewed),
       reviewCount: reviewCount ?? this.reviewCount,
       successCount: successCount ?? this.successCount,
       timeToSolve: timeToSolve ?? this.timeToSolve,
@@ -100,8 +101,9 @@ class TacticsPosition {
   /// [gameDate] (PGN `YYYY.MM.DD`) parsed as a date, or `null` when absent
   /// or a placeholder like `????.??.??`.
   DateTime? get gameDateTime {
-    final match =
-        RegExp(r'^(\d{4})\.(\d{2})\.(\d{2})$').firstMatch(gameDate.trim());
+    final match = RegExp(
+      r'^(\d{4})\.(\d{2})\.(\d{2})$',
+    ).firstMatch(gameDate.trim());
     if (match == null) return null;
     final year = int.parse(match.group(1)!);
     final month = int.parse(match.group(2)!);
@@ -115,11 +117,11 @@ class TacticsPosition {
 
   // Legacy getters for backward compatibility
   String get description => switch (mistakeType) {
-        '??' => 'Fix the blunder - find the best move',
-        '?!' => 'Correct the inaccuracy - find the best move',
-        'custom' => 'Find the best move',
-        _ => 'Improve on the mistake - find the best move',
-      };
+    '??' => 'Fix the blunder - find the best move',
+    '?!' => 'Correct the inaccuracy - find the best move',
+    'custom' => 'Find the best move',
+    _ => 'Improve on the mistake - find the best move',
+  };
   String get gameSource => '$gameWhite vs $gameBlack';
   int get moveNumber => _extractMoveNumber(positionContext);
   String get playerToMove =>
@@ -137,7 +139,8 @@ class TacticsPosition {
   factory TacticsPosition.fromCsv(List<dynamic> row) {
     if (row.length < 17) {
       throw ArgumentError(
-          'Not enough CSV values for TacticsPosition (need ≥17, got ${row.length})');
+        'Not enough CSV values for TacticsPosition (need ≥17, got ${row.length})',
+      );
     }
 
     return TacticsPosition(
@@ -150,8 +153,11 @@ class TacticsPosition {
       gameUrl: row[6].toString(),
       positionContext: row[7].toString(),
       userMove: row[8].toString(),
-      correctLine:
-          row[9].toString().split('|').where((s) => s.isNotEmpty).toList(),
+      correctLine: row[9]
+          .toString()
+          .split('|')
+          .where((s) => s.isNotEmpty)
+          .toList(),
       mistakeType: row[10].toString(),
       mistakeAnalysis: row[11].toString(),
       reviewCount: int.tryParse(row[12].toString()) ?? 0,
@@ -176,23 +182,23 @@ class TacticsPosition {
   factory TacticsPosition.fromJson(Map<String, dynamic> json) {
     final correctLine = json['correct_line'] is String
         ? (json['correct_line'] as String)
-            .split('|')
-            .where((s) => s.isNotEmpty)
-            .toList()
+              .split('|')
+              .where((s) => s.isNotEmpty)
+              .toList()
         : (json['correct_line'] as List<dynamic>?)
-                ?.map((e) => e as String)
-                .toList() ??
-            [];
+                  ?.map((e) => e as String)
+                  .toList() ??
+              [];
 
     final solutionPv = json['solution_pv'] is String
         ? (json['solution_pv'] as String)
-            .split('|')
-            .where((s) => s.isNotEmpty)
-            .toList()
+              .split('|')
+              .where((s) => s.isNotEmpty)
+              .toList()
         : (json['solution_pv'] as List<dynamic>?)
-                ?.map((e) => e as String)
-                .toList() ??
-            [];
+                  ?.map((e) => e as String)
+                  .toList() ??
+              [];
 
     return TacticsPosition(
       fen: json['fen'] as String,

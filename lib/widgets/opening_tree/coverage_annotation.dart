@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/opening_tree.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
+import '../../theme/app_colors.dart';
 import '../../utils/fen_utils.dart';
 
 /// Coverage classification for an opening-tree move row.
@@ -109,13 +110,13 @@ class CoverageIndicator extends StatelessWidget {
     Color color;
     switch (status) {
       case CoverageStatus.covered:
-        color = const Color(0xFF4CAF50);
+        color = AppColors.coverageCovered;
       case CoverageStatus.tooShallow:
-        color = const Color(0xFFFFA726);
+        color = AppColors.coverageShallow;
       case CoverageStatus.tooDeep:
-        color = const Color(0xFF42A5F5);
+        color = AppColors.coverageDeep;
       case CoverageStatus.unaccounted:
-        color = const Color(0xFFEF5350);
+        color = AppColors.coverageUnaccounted;
     }
 
     return Container(

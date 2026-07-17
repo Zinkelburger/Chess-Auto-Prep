@@ -62,7 +62,8 @@ class _EnginePaneLifecycleHarness {
 
     if (!_engineActive) return;
 
-    final becameUsable = (prev == null ||
+    final becameUsable =
+        (prev == null ||
             prev == EngineState.off ||
             prev == EngineState.generating) &&
         (state == EngineState.idle || state == EngineState.analyzing) &&
@@ -101,8 +102,9 @@ void main() {
       'runAnalysis during analyzing does not cause extra lifecycle notifications',
       () async {
         await lifecycle.toggleOn();
-        final harness =
-            _EnginePaneLifecycleHarness(fenProvider: () => _startFen);
+        final harness = _EnginePaneLifecycleHarness(
+          fenProvider: () => _startFen,
+        );
 
         harness.runAnalysis();
         expect(lifecycle.state, EngineState.analyzing);
@@ -121,8 +123,9 @@ void main() {
       'idle → analyzing listener transition does not re-schedule analysis',
       () async {
         await lifecycle.toggleOn();
-        final harness =
-            _EnginePaneLifecycleHarness(fenProvider: () => _startFen);
+        final harness = _EnginePaneLifecycleHarness(
+          fenProvider: () => _startFen,
+        );
 
         harness.runAnalysis();
         expect(harness.scheduleAnalysisCount, 0);
@@ -131,26 +134,23 @@ void main() {
       },
     );
 
-    test(
-      'analyzing → idle completion does not re-schedule analysis',
-      () async {
-        await lifecycle.toggleOn();
-        final harness =
-            _EnginePaneLifecycleHarness(fenProvider: () => _startFen);
+    test('analyzing → idle completion does not re-schedule analysis', () async {
+      await lifecycle.toggleOn();
+      final harness = _EnginePaneLifecycleHarness(fenProvider: () => _startFen);
 
-        harness.runAnalysis();
-        lifecycle.onAnalysisComplete();
-        expect(harness.scheduleAnalysisCount, 0);
+      harness.runAnalysis();
+      lifecycle.onAnalysisComplete();
+      expect(harness.scheduleAnalysisCount, 0);
 
-        harness.dispose();
-      },
-    );
+      harness.dispose();
+    });
 
     test(
       'off → idle toggle re-schedules analysis once (engine became usable)',
       () async {
-        final harness =
-            _EnginePaneLifecycleHarness(fenProvider: () => _startFen);
+        final harness = _EnginePaneLifecycleHarness(
+          fenProvider: () => _startFen,
+        );
 
         await lifecycle.toggleOn();
         expect(harness.scheduleAnalysisCount, 1);
@@ -163,8 +163,9 @@ void main() {
       'repeated runAnalysis while analyzing does not accumulate notifications',
       () async {
         await lifecycle.toggleOn();
-        final harness =
-            _EnginePaneLifecycleHarness(fenProvider: () => _startFen);
+        final harness = _EnginePaneLifecycleHarness(
+          fenProvider: () => _startFen,
+        );
         notificationCount = 0;
 
         harness.runAnalysis();

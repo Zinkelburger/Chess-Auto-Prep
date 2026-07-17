@@ -27,8 +27,8 @@ class StudyChapter {
     Map<String, String>? headers,
     MoveTree? tree,
     String? startingFen,
-  })  : headers = headers ?? {},
-        tree = tree ?? MoveTree(startingFen: startingFen);
+  }) : headers = headers ?? {},
+       tree = tree ?? MoveTree(startingFen: startingFen);
 
   /// Result header token used to terminate the movetext ("*" when absent).
   String get result => headers['Result'] ?? '*';
@@ -73,9 +73,9 @@ class StudyDocument {
 
   /// A new study with one empty chapter.
   factory StudyDocument.fresh(String name) => StudyDocument(
-        name: name,
-        chapters: [StudyChapter(name: 'Chapter 1')],
-      );
+    name: name,
+    chapters: [StudyChapter(name: 'Chapter 1')],
+  );
 
   factory StudyDocument.fromPgn(
     String content, {
@@ -91,11 +91,13 @@ class StudyDocument {
           ? headers['Event']!
           : 'Chapter ${i + 1}';
       // MoveTree.fromPgn reads the [FEN] header itself.
-      chapters.add(StudyChapter(
-        name: chapterName,
-        headers: headers,
-        tree: MoveTree.fromPgn(gameText),
-      ));
+      chapters.add(
+        StudyChapter(
+          name: chapterName,
+          headers: headers,
+          tree: MoveTree.fromPgn(gameText),
+        ),
+      );
     }
     if (chapters.isEmpty) {
       chapters.add(StudyChapter(name: 'Chapter 1'));

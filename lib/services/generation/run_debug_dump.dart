@@ -62,7 +62,8 @@ Future<String?> writeRunDebugDump({
 
     final now = DateTime.now();
     String two(int v) => v.toString().padLeft(2, '0');
-    final stamp = '${now.year}${two(now.month)}${two(now.day)}_'
+    final stamp =
+        '${now.year}${two(now.month)}${two(now.day)}_'
         '${two(now.hour)}${two(now.minute)}${two(now.second)}';
     var runDir = Directory(p.join(baseDir.path, 'run_$stamp'));
     if (await runDir.exists()) {
@@ -81,11 +82,13 @@ Future<String?> writeRunDebugDump({
     };
 
     const encoder = JsonEncoder.withIndent('  ');
-    await File(p.join(runDir.path, 'summary.json'))
-        .writeAsString(encoder.convert(summary));
+    await File(
+      p.join(runDir.path, 'summary.json'),
+    ).writeAsString(encoder.convert(summary));
     await File(p.join(runDir.path, 'run_log.txt')).writeAsString(log.dump());
     await File(p.join(runDir.path, 'pruned_too_low.json')).writeAsString(
-        encoder.convert(prunedTooLow.map((l) => l.toJson()).toList()));
+      encoder.convert(prunedTooLow.map((l) => l.toJson()).toList()),
+    );
     if (treeJson != null) {
       await File(p.join(runDir.path, 'tree.json')).writeAsString(treeJson);
     }

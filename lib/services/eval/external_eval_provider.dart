@@ -39,7 +39,7 @@ class EvalLookupResult {
   const EvalLookupResult.hardMiss() : this._(hardMiss: true);
 
   const EvalLookupResult.found(EvalHit value)
-      : this._(hit: value, shallow: false, hardMiss: false);
+    : this._(hit: value, shallow: false, hardMiss: false);
 
   bool get isHit => hit != null;
 }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_suggestion_service.dart';
+import '../../../theme/app_colors.dart';
 import '../../../utils/chess_utils.dart';
 import '../../../widgets/clickable_move_line.dart';
 
@@ -70,11 +71,16 @@ class _SuggestionPanelState extends State<SuggestionPanel> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.auto_fix_high,
-                      size: 48, color: Colors.grey.shade400),
+                  const Icon(
+                    Icons.auto_fix_high,
+                    size: 48,
+                    color: AppColors.onSurfaceSoft,
+                  ),
                   const SizedBox(height: 8),
-                  Text('Set a target and tap Generate',
-                      style: theme.textTheme.bodyMedium),
+                  Text(
+                    'Set a target and tap Generate',
+                    style: theme.textTheme.bodyMedium,
+                  ),
                 ],
               ),
             ),
@@ -108,15 +114,21 @@ class _SuggestionPanelState extends State<SuggestionPanel> {
           Row(
             children: [
               Text('Coverage: ', style: theme.textTheme.bodyMedium),
-              Text('${widget.currentCoverage.toStringAsFixed(1)}%',
-                  style: theme.textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.bold)),
+              Text(
+                '${widget.currentCoverage.toStringAsFixed(1)}%',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const Spacer(),
               Text('Target: ', style: theme.textTheme.bodyMedium),
-              Text('${_targetCoverage.round()}%',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.primary)),
+              Text(
+                '${_targetCoverage.round()}%',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -178,8 +190,9 @@ class _SuggestionPanelState extends State<SuggestionPanel> {
       child: Row(
         children: [
           Text(
-              '${_suggestions.length} suggestions (+${totalGain.toStringAsFixed(1)}%)',
-              style: theme.textTheme.bodySmall),
+            '${_suggestions.length} suggestions (+${totalGain.toStringAsFixed(1)}%)',
+            style: theme.textTheme.bodySmall,
+          ),
           const Spacer(),
           FilledButton(
             onPressed: widget.onAcceptAll,
@@ -224,33 +237,45 @@ class _SuggestionRow extends StatelessWidget {
               Row(
                 children: [
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: theme.colorScheme.primaryContainer,
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    child: Text('#${index + 1}',
-                        style: const TextStyle(
-                            fontSize: 10, fontWeight: FontWeight.bold)),
+                    child: Text(
+                      '#${index + 1}',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Text(
-                      '+${suggestion.coverageGain.toStringAsFixed(1)}% coverage',
-                      style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.green)),
+                    '+${suggestion.coverageGain.toStringAsFixed(1)}% coverage',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.coverageCovered,
+                    ),
+                  ),
                   const Spacer(),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade200,
+                      color: AppColors.surfaceInset,
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    child: Text(suggestion.source,
-                        style: const TextStyle(fontSize: 10)),
+                    child: Text(
+                      suggestion.source,
+                      style: const TextStyle(fontSize: 10),
+                    ),
                   ),
                 ],
               ),
@@ -262,8 +287,11 @@ class _SuggestionRow extends StatelessWidget {
                 onMoveHovered: (idx, _) {
                   const startFen =
                       'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-                  final fen =
-                      fenAfterMoves(startFen, suggestion.fullMoves, idx);
+                  final fen = fenAfterMoves(
+                    startFen,
+                    suggestion.fullMoves,
+                    idx,
+                  );
                   boardPreview.setPreview(fen);
                 },
                 onHoverExit: () => boardPreview.clearPreview(),
@@ -273,32 +301,38 @@ class _SuggestionRow extends StatelessWidget {
                 children: [
                   if (suggestion.leafEvalCp != null) ...[
                     _MetricChip(
-                        label: 'Eval',
-                        value: _formatEval(suggestion.leafEvalCp!)),
+                      label: 'Eval',
+                      value: _formatEval(suggestion.leafEvalCp!),
+                    ),
                     const SizedBox(width: 6),
                   ],
                   if (suggestion.linePlayability != null) ...[
                     _MetricChip(
-                        label: 'Ease',
-                        value:
-                            '${(suggestion.linePlayability! * 100).round()}%'),
+                      label: 'Ease',
+                      value: '${(suggestion.linePlayability! * 100).round()}%',
+                    ),
                     const SizedBox(width: 6),
                   ],
                   if (suggestion.trapCount > 0)
                     _MetricChip(
-                        label: 'Traps', value: '${suggestion.trapCount}'),
+                      label: 'Traps',
+                      value: '${suggestion.trapCount}',
+                    ),
                   const Spacer(),
                   FilledButton(
                     onPressed: onAccept,
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 4),
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                     child: Text(
-                        'Accept (+${suggestion.coverageGain.toStringAsFixed(1)}%)',
-                        style: const TextStyle(fontSize: 11)),
+                      'Accept (+${suggestion.coverageGain.toStringAsFixed(1)}%)',
+                      style: const TextStyle(fontSize: 11),
+                    ),
                   ),
                 ],
               ),
@@ -326,7 +360,7 @@ class _MetricChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
+        color: AppColors.surfaceInset,
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text('$label: $value', style: const TextStyle(fontSize: 10)),

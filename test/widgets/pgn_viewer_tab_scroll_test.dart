@@ -14,35 +14,43 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
 
 void main() {
-  testWidgets('mainline navigation with Game tab offstage keeps current tab',
-      (tester) async {
+  testWidgets('mainline navigation with Game tab offstage keeps current tab', (
+    tester,
+  ) async {
     final controller = PgnViewerWidgetController();
     late TabController tabs;
 
-    await tester.pumpWidget(MaterialApp(
-      home: DefaultTabController(
-        length: 2,
-        child: Builder(builder: (context) {
-          tabs = DefaultTabController.of(context);
-          return Scaffold(
-            appBar: AppBar(
-              bottom: const TabBar(
-                tabs: [Tab(text: 'Game'), Tab(text: 'Analysis')],
-              ),
-            ),
-            body: TabBarView(
-              children: [
-                PgnViewerWidget(
-                  pgnText: '1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6',
-                  controller: controller,
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DefaultTabController(
+          length: 2,
+          child: Builder(
+            builder: (context) {
+              tabs = DefaultTabController.of(context);
+              return Scaffold(
+                appBar: AppBar(
+                  bottom: const TabBar(
+                    tabs: [
+                      Tab(text: 'Game'),
+                      Tab(text: 'Analysis'),
+                    ],
+                  ),
                 ),
-                const Center(child: Text('analysis body')),
-              ],
-            ),
-          );
-        }),
+                body: TabBarView(
+                  children: [
+                    PgnViewerWidget(
+                      pgnText: '1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6',
+                      controller: controller,
+                    ),
+                    const Center(child: Text('analysis body')),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
     expect(controller.mainLineLength, 8, reason: 'game should have loaded');
 
@@ -58,7 +66,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tabs.index, 1, reason: 'navigation must not switch tabs');
-    expect(controller.mainLineIndex, 2,
-        reason: 'navigation should still work while offstage');
+    expect(
+      controller.mainLineIndex,
+      2,
+      reason: 'navigation should still work while offstage',
+    );
   });
 }

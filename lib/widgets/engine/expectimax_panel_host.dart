@@ -40,6 +40,10 @@ class ExpectimaxPanelHost extends StatefulWidget {
   /// Optional shared service (e.g. [RepertoireAnalysisDock] summary bar).
   final OnTheFlyExpectimaxService? onTheFlyService;
 
+  /// Analyze this FEN instead of the controller cursor (e.g. the
+  /// build-by-playing scratchpad position).
+  final String? fenOverride;
+
   const ExpectimaxPanelHost({
     super.key,
     required this.controller,
@@ -56,7 +60,10 @@ class ExpectimaxPanelHost extends StatefulWidget {
     this.onLineMoveClicked,
     this.autoComputeEnabled = true,
     this.onTheFlyService,
+    this.fenOverride,
   });
+
+  String get effectiveFen => fenOverride ?? controller.fen;
 
   @override
   State<ExpectimaxPanelHost> createState() => _ExpectimaxPanelHostState();
@@ -112,7 +119,8 @@ class _ExpectimaxPanelHostState extends State<ExpectimaxPanelHost> {
         oldWidget.treeConfig != widget.treeConfig ||
         oldWidget.isGenerating != widget.isGenerating ||
         oldWidget.isGenerationPaused != widget.isGenerationPaused ||
-        oldWidget.autoComputeEnabled != widget.autoComputeEnabled) {
+        oldWidget.autoComputeEnabled != widget.autoComputeEnabled ||
+        oldWidget.fenOverride != widget.fenOverride) {
       _scheduleAutoCompute();
     }
   }
@@ -143,7 +151,7 @@ class _ExpectimaxPanelHostState extends State<ExpectimaxPanelHost> {
       return;
     }
 
-    final fen = widget.controller.fen;
+    final fen = widget.effectiveFen;
     if (_onTheFly.currentFen == fen &&
         (_onTheFly.state == OnTheFlyState.computing ||
             (_onTheFly.state == OnTheFlyState.ready &&
@@ -205,7 +213,7 @@ class _ExpectimaxPanelHostState extends State<ExpectimaxPanelHost> {
     }
     _onTheFly.cancel();
     _onTheFly.ensureRunning(
-      fen: widget.controller.fen,
+      fen: widget.effectiveFen,
       playAsWhite: widget.controller.isRepertoireWhite,
       mainTree: widget.tree,
       mainConfig: widget.treeConfig,
@@ -216,7 +224,7 @@ class _ExpectimaxPanelHostState extends State<ExpectimaxPanelHost> {
 
   @override
   Widget build(BuildContext context) {
-    final fen = widget.controller.fen;
+    final fen = widget.effectiveFen;
     final useMain = _hasPrecomputedExpectimax(fen);
 
     return ExpectimaxLinesPane(
@@ -234,7 +242,8 @@ class _ExpectimaxPanelHostState extends State<ExpectimaxPanelHost> {
       compact: widget.compact,
       onOpenSettings: widget.onOpenSettings,
       onMoveSelected: widget.onMoveSelected ?? widget.controller.playMove,
-      onLineMoveClicked: widget.onLineMoveClicked ??
+      onLineMoveClicked:
+          widget.onLineMoveClicked ??
           (sanMoves, index) {
             widget.controller.applyLineFromCurrent(sanMoves, index);
             widget.boardPreview.clearPreview();

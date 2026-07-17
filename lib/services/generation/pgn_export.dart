@@ -23,11 +23,9 @@ class PgnBatchWriter {
     if (_lineCount == 0) return;
     final payload = _buffer.toString();
     clear();
-    await File(filePath).writeAsString(
-      payload,
-      mode: FileMode.append,
-      flush: true,
-    );
+    await File(
+      filePath,
+    ).writeAsString(payload, mode: FileMode.append, flush: true);
   }
 
   void clear() {
@@ -66,15 +64,19 @@ String buildRepertoirePgnEntry({
   );
 
   final annotation = StringBuffer()
-    ..write('{CumProb ${(cumulativeProb * 100).toStringAsFixed(3)}%'
-        ', Eval $finalEvalCp cp');
+    ..write(
+      '{CumProb ${(cumulativeProb * 100).toStringAsFixed(3)}%'
+      ', Eval $finalEvalCp cp',
+    );
   if (pruneReason == PruneReason.evalTooHigh && pruneEvalCp != null) {
     annotation.write(
-        ', Already winning (${pruneEvalCp >= 0 ? "+" : ""}${(pruneEvalCp / 100).toStringAsFixed(1)})');
+      ', Already winning (${pruneEvalCp >= 0 ? "+" : ""}${(pruneEvalCp / 100).toStringAsFixed(1)})',
+    );
   }
   if (rankByImportance) {
-    annotation
-        .write(', [%cumProb ${(cumulativeProb * 100).toStringAsFixed(3)}%]');
+    annotation.write(
+      ', [%cumProb ${(cumulativeProb * 100).toStringAsFixed(3)}%]',
+    );
   }
   annotation.write('}');
 
@@ -95,12 +97,7 @@ String buildRepertoirePgnEntry({
     if (needsFenHeader) '[SetUp "1"]',
   ];
 
-  return [
-    ...tags,
-    '',
-    '$annotation',
-    '$line *',
-  ].join('\n');
+  return [...tags, '', '$annotation', '$line *'].join('\n');
 }
 
 /// Numbered movetext for a generated line, with optional per-move

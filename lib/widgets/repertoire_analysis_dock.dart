@@ -17,6 +17,7 @@ import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import '../services/on_the_fly_expectimax_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import '../utils/chess_utils.dart' show formatEvalDisplay, uciToSan;
 import '../utils/eval_constants.dart';
 import 'analysis/analysis_settings_sheet.dart';
@@ -191,8 +192,8 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
                   ],
                 )
               : showEngine
-                  ? _buildEnginePane()
-                  : _buildExpectimaxPane(),
+              ? _buildEnginePane()
+              : _buildExpectimaxPane(),
         ),
       ],
     );
@@ -218,7 +219,10 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
           if (_settings.showEngineDock && _settings.showExpectimaxDock)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text('·', style: TextStyle(color: Colors.grey[600])),
+              child: Text(
+                '·',
+                style: TextStyle(color: AppColors.onSurfaceMuted),
+              ),
             ),
           if (_settings.showExpectimaxDock)
             Text(
@@ -265,7 +269,7 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
     }
 
     return Material(
-      color: Colors.grey.withValues(alpha: 0.1),
+      color: AppColors.surfaceContainer,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Row(
@@ -283,11 +287,11 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
             Tooltip(
               message: exRaw != null
                   ? 'Expectimax practical eval (V → cp).\n'
-                      'Accounts for likely opponent replies.\n'
-                      'Raw leaf engine: $exRaw'
+                        'Accounts for likely opponent replies.\n'
+                        'Raw leaf engine: $exRaw'
                   : 'Expectimax practical eval (V → cp).\n'
-                      'At our moves: max child V. At opponent moves: '
-                      'Σ pᵢ·V(childᵢ) plus tail for uncovered probability.',
+                        'At our moves: max child V. At opponent moves: '
+                        'Σ pᵢ·V(childᵢ) plus tail for uncovered probability.',
               child: _SummaryChip(
                 label: 'Expectimax',
                 value: exLabel,
@@ -307,7 +311,7 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
               const SizedBox(width: 6),
               Text(
                 '${prog.bestCompletedDepth}/${prog.targetMaxDepth}',
-                style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                style: AppTextStyles.caption.copyWith(fontSize: 10),
               ),
             ],
           ],
@@ -327,7 +331,8 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
       fen: widget.controller.fen,
       isActive: _engineActive,
       compact: true,
-      isUserTurn: widget.controller.position.turn ==
+      isUserTurn:
+          widget.controller.position.turn ==
           (widget.controller.isRepertoireWhite ? Side.white : Side.black),
       currentMoveSequence: widget.controller.currentMoveSequence,
       isWhiteRepertoire: widget.controller.isRepertoireWhite,
@@ -390,21 +395,14 @@ class _SummaryChip extends StatelessWidget {
   final String value;
   final Color? color;
 
-  const _SummaryChip({
-    required this.label,
-    required this.value,
-    this.color,
-  });
+  const _SummaryChip({required this.label, required this.value, this.color});
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          '$label ',
-          style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-        ),
+        Text('$label ', style: AppTextStyles.caption.copyWith(fontSize: 11)),
         Text(
           value,
           style: TextStyle(

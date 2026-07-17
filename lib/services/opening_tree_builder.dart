@@ -46,17 +46,15 @@ class OpeningTreeBuilder {
     required void Function(int processed, int total) onProgress,
   }) async {
     final receivePort = ReceivePort();
-    final isolate = await Isolate.spawn<Map<String, dynamic>>(
-      _buildTreeSyncIsolateEntry,
-      {
-        'sendPort': receivePort.sendPort,
-        'pgnList': pgnList,
-        'username': username,
-        'userIsWhite': userIsWhite,
-        'maxDepth': maxDepth,
-        'strictPlayerMatching': strictPlayerMatching,
-      },
-    );
+    final isolate =
+        await Isolate.spawn<Map<String, dynamic>>(_buildTreeSyncIsolateEntry, {
+          'sendPort': receivePort.sendPort,
+          'pgnList': pgnList,
+          'username': username,
+          'userIsWhite': userIsWhite,
+          'maxDepth': maxDepth,
+          'strictPlayerMatching': strictPlayerMatching,
+        });
 
     final completer = Completer<Map<String, dynamic>>();
     late final StreamSubscription<dynamic> sub;
@@ -74,8 +72,9 @@ class OpeningTreeBuilder {
         }
       } else if (type == 'error') {
         if (!completer.isCompleted) {
-          completer
-              .completeError(Exception(message['error'] ?? 'Unknown error'));
+          completer.completeError(
+            Exception(message['error'] ?? 'Unknown error'),
+          );
         }
       }
     });
@@ -138,8 +137,14 @@ class OpeningTreeBuilder {
       if (trimmed.isNotEmpty) {
         try {
           final game = PgnGame.parsePgn(trimmed);
-          _processGame(tree, game, usernameLower, userIsWhite, maxDepth,
-              strictPlayerMatching);
+          _processGame(
+            tree,
+            game,
+            usernameLower,
+            userIsWhite,
+            maxDepth,
+            strictPlayerMatching,
+          );
         } catch (_) {
           skipped++;
         }
@@ -154,7 +159,8 @@ class OpeningTreeBuilder {
     if (skipped > 0) {
       // ignore: avoid_print
       log.w(
-          '[OpeningTreeBuilder] Skipped $skipped malformed games out of $total');
+        '[OpeningTreeBuilder] Skipped $skipped malformed games out of $total',
+      );
     }
 
     return tree.toTransferJson();

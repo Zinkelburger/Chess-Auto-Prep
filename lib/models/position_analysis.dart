@@ -109,6 +109,7 @@ class GameInfo {
   final String event;
   final String whiteElo;
   final String blackElo;
+  final String link;
 
   GameInfo({
     this.pgnText,
@@ -120,7 +121,16 @@ class GameInfo {
     this.event = '',
     this.whiteElo = '',
     this.blackElo = '',
+    this.link = '',
   });
+
+  /// Online game URL, if any. Chess.com puts it in `[Link]`, Lichess in
+  /// `[Site]`; only http(s) values count.
+  String? get gameUrl {
+    if (link.startsWith('http')) return link;
+    if (site.startsWith('http')) return site;
+    return null;
+  }
 
   /// Human-readable game title
   String get title {
@@ -162,6 +172,7 @@ class GameInfo {
     String event = '';
     String whiteElo = '';
     String blackElo = '';
+    String link = '';
 
     final lines = pgnText.split('\n');
     for (final line in lines) {
@@ -181,6 +192,8 @@ class GameInfo {
         whiteElo = _extractHeader(line);
       } else if (line.startsWith('[BlackElo "')) {
         blackElo = _extractHeader(line);
+      } else if (line.startsWith('[Link "')) {
+        link = _extractHeader(line);
       }
     }
 
@@ -194,6 +207,7 @@ class GameInfo {
       event: event,
       whiteElo: whiteElo,
       blackElo: blackElo,
+      link: link,
     );
   }
 
@@ -204,36 +218,6 @@ class GameInfo {
       return line.substring(start, end);
     }
     return '';
-  }
-
-  /// Serialize to JSON
-  Map<String, dynamic> toJson() {
-    return {
-      'pgnText': pgnText,
-      'white': white,
-      'black': black,
-      'result': result,
-      'date': date,
-      'site': site,
-      'event': event,
-      'whiteElo': whiteElo,
-      'blackElo': blackElo,
-    };
-  }
-
-  /// Deserialize from JSON
-  factory GameInfo.fromJson(Map<String, dynamic> json) {
-    return GameInfo(
-      pgnText: json['pgnText'] as String?,
-      white: json['white'] as String? ?? '',
-      black: json['black'] as String? ?? '',
-      result: json['result'] as String? ?? '',
-      date: json['date'] as String? ?? '',
-      site: json['site'] as String? ?? '',
-      event: json['event'] as String? ?? '',
-      whiteElo: json['whiteElo'] as String? ?? '',
-      blackElo: json['blackElo'] as String? ?? '',
-    );
   }
 }
 
@@ -246,9 +230,9 @@ class PositionAnalysis {
     Map<String, PositionStats>? positionStats,
     List<GameInfo>? games,
     Map<String, List<int>>? fenToGameIndices,
-  })  : positionStats = positionStats ?? {},
-        games = games ?? [],
-        fenToGameIndices = fenToGameIndices ?? {};
+  }) : positionStats = positionStats ?? {},
+       games = games ?? [],
+       fenToGameIndices = fenToGameIndices ?? {};
 
   /// Add or update position statistics
   void addPositionStats(PositionStats stats) {
@@ -262,13 +246,15 @@ class PositionAnalysis {
     return index;
   }
 
-  /// Create a mapping from FEN to game
+  /// Create a mapping from FEN to game.
+  ///
+  /// Games are linked in ascending index order, so checking the last entry is
+  /// enough to avoid duplicates — a `contains` scan here is quadratic on
+  /// positions that occur in every game (e.g. the starting position).
   void linkFenToGame(String fen, int gameIndex) {
-    if (!fenToGameIndices.containsKey(fen)) {
-      fenToGameIndices[fen] = [];
-    }
-    if (!fenToGameIndices[fen]!.contains(gameIndex)) {
-      fenToGameIndices[fen]!.add(gameIndex);
+    final list = fenToGameIndices[fen] ??= [];
+    if (list.isEmpty || list.last != gameIndex) {
+      list.add(gameIndex);
     }
   }
 
@@ -291,8 +277,9 @@ class PositionAnalysis {
     int minGames = 3,
     String sortBy = 'win_rate',
   }) {
-    var filtered =
-        positionStats.values.where((stats) => stats.games >= minGames).toList();
+    var filtered = positionStats.values
+        .where((stats) => stats.games >= minGames)
+        .toList();
 
     if (sortBy == 'eval_bad_white') {
       filtered = filtered.where((s) => s.hasEval).toList();
@@ -311,55 +298,5 @@ class PositionAnalysis {
     }
 
     return filtered;
-  }
-
-  /// Serialize to JSON.
-  ///
-  /// By default only the top 50 worst positions are included (for on-disk
-  /// caching).  Pass [fullExport] = true to include every position — needed
-  /// when transferring across an isolate boundary.
-  Map<String, dynamic> toJson({bool fullExport = false}) {
-    final positions = fullExport
-        ? positionStats.values.toList()
-        : getSortedPositions(minGames: 3, sortBy: 'win_rate').take(50).toList();
-
-    return {
-      'positionStats': positions.map((p) => p.toJson()).toList(),
-      'games': games.map((g) => g.toJson()).toList(),
-      'fenToGameIndices': fenToGameIndices.map(
-        (key, value) => MapEntry(key, value),
-      ),
-    };
-  }
-
-  /// Deserialize from JSON
-  factory PositionAnalysis.fromJson(Map<String, dynamic> json) {
-    final positionStatsList = (json['positionStats'] as List<dynamic>?)
-            ?.map((p) => PositionStats.fromJson(p as Map<String, dynamic>))
-            .toList() ??
-        [];
-
-    final positionStatsMap = <String, PositionStats>{};
-    for (final stats in positionStatsList) {
-      positionStatsMap[stats.fen] = stats;
-    }
-
-    final gamesList = (json['games'] as List<dynamic>?)
-            ?.map((g) => GameInfo.fromJson(g as Map<String, dynamic>))
-            .toList() ??
-        [];
-
-    final fenToGameIndicesMap =
-        (json['fenToGameIndices'] as Map<String, dynamic>?)?.map(
-              (key, value) =>
-                  MapEntry(key, (value as List<dynamic>).cast<int>()),
-            ) ??
-            {};
-
-    return PositionAnalysis(
-      positionStats: positionStatsMap,
-      games: gamesList,
-      fenToGameIndices: fenToGameIndicesMap,
-    );
   }
 }

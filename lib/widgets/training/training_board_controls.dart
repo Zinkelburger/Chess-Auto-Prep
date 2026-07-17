@@ -6,6 +6,7 @@ import '../../core/repertoire_controller.dart';
 import '../../models/repertoire_line.dart';
 import '../../services/training/training_phase.dart';
 import '../../services/training/training_session_controller.dart';
+import '../../theme/app_colors.dart';
 import '../../utils/pgn_comment_utils.dart' show filterDisplayComment;
 import '../../widgets/chess_board_widget.dart';
 import 'move_input_widget.dart';
@@ -79,6 +80,7 @@ class TrainingPhasePanel extends StatelessWidget {
   final int currentMoveIndex;
   final bool waitingForUser;
   final bool isWhiteLine;
+  final bool playingIntro;
   final double Function(RepertoireLine line, int moveIndex) moveDifficulty;
   final VoidCallback onLearnAcknowledged;
   final VoidCallback onOpponentAcknowledged;
@@ -99,6 +101,7 @@ class TrainingPhasePanel extends StatelessWidget {
     required this.currentMoveIndex,
     required this.waitingForUser,
     required this.isWhiteLine,
+    this.playingIntro = false,
     required this.moveDifficulty,
     required this.onLearnAcknowledged,
     required this.onOpponentAcknowledged,
@@ -106,6 +109,12 @@ class TrainingPhasePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (playingIntro) {
+      return _IntroContent(
+        opponent: currentPairOpponent,
+        user: currentPairUser,
+      );
+    }
     switch (phase) {
       case TrainingPhase.learning:
         return _LearnContent(
@@ -142,6 +151,61 @@ class TrainingPhasePanel extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
+// INTRO CONTENT — auto-playing the moves before the first comment
+// ---------------------------------------------------------------------------
+
+class _IntroContent extends StatelessWidget {
+  final MoveDisplayInfo? opponent;
+  final MoveDisplayInfo? user;
+
+  const _IntroContent({this.opponent, this.user});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: theme.colorScheme.primary.withValues(alpha: 0.25),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.play_circle_outline,
+                  size: 18,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Watch — playing the opening moves. Training starts '
+                    'at the first comment.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (opponent != null || user != null) ...[
+            const SizedBox(height: 12),
+            _MovePairCard(opponent: opponent, user: user),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // CHESSABLE-STYLE MOVE LINE — shows a single move header + comment
 // ---------------------------------------------------------------------------
 
@@ -156,14 +220,16 @@ class _MoveLine extends StatelessWidget {
     final theme = Theme.of(context);
     final isOpponent = display.isOpponentMove;
     // Scraped PGNs carry engine tokens and stray double spaces — show prose only.
-    final comment =
-        display.comment == null ? '' : filterDisplayComment(display.comment!);
+    final comment = display.comment == null
+        ? ''
+        : filterDisplayComment(display.comment!);
     final sideLabel = display.isWhiteMove ? "White's" : "Black's";
     final headerText = isOpponent
         ? '$sideLabel move ${display.notation}'
         : 'Your move ${display.notation}';
-    final headerColor =
-        isOpponent ? theme.colorScheme.onSurfaceVariant : theme.colorScheme.primary;
+    final headerColor = isOpponent
+        ? theme.colorScheme.onSurfaceVariant
+        : theme.colorScheme.primary;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -231,9 +297,7 @@ class _MovePairCard extends StatelessWidget {
               color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
             ),
           ],
-          if (user != null) ...[
-            _MoveLine(display: user!),
-          ],
+          if (user != null) ...[_MoveLine(display: user!)],
         ],
       ),
     );
@@ -291,10 +355,7 @@ class _NextButtonState extends State<_NextButton>
           icon: const Icon(Icons.arrow_forward, size: 20),
           label: const Text(
             'Next',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
           ),
           style: FilledButton.styleFrom(
             minimumSize: const Size.fromHeight(44),
@@ -311,8 +372,9 @@ class _NextButtonState extends State<_NextButton>
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: theme.colorScheme.primary
-                      .withValues(alpha: 0.25 + glow * 0.3),
+                  color: theme.colorScheme.primary.withValues(
+                    alpha: 0.25 + glow * 0.3,
+                  ),
                   blurRadius: 8 + glow * 8,
                   spreadRadius: glow * 3,
                 ),
@@ -327,17 +389,23 @@ class _NextButtonState extends State<_NextButton>
 }
 
 // ---------------------------------------------------------------------------
-// YOUR MOVE PROMPT
+// DRILL PAIR CARD — one stable container for the whole answer cycle:
+// opponent context on top, user slot below (prompt row → played move).
+// Layout stays put between states so nothing jumps around.
 // ---------------------------------------------------------------------------
 
-class _YourMovePrompt extends StatelessWidget {
-  final MoveDisplayInfo? opponentContext;
+class _DrillPairCard extends StatelessWidget {
+  final MoveDisplayInfo? opponent;
+  final MoveDisplayInfo? user;
+  final bool showPrompt;
   final int currentMoveIndex;
   final RepertoireLine? currentLine;
   final double Function(RepertoireLine, int)? moveDifficulty;
 
-  const _YourMovePrompt({
-    this.opponentContext,
+  const _DrillPairCard({
+    this.opponent,
+    this.user,
+    required this.showPrompt,
     required this.currentMoveIndex,
     this.currentLine,
     this.moveDifficulty,
@@ -346,6 +414,7 @@ class _YourMovePrompt extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final hasUserRow = user != null || showPrompt;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
@@ -359,38 +428,40 @@ class _YourMovePrompt extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (opponentContext != null) ...[
-            _MoveLine(display: opponentContext!, showComment: false),
+          if (opponent != null) _MoveLine(display: opponent!),
+          if (opponent != null && hasUserRow)
             Divider(
               height: 20,
               color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
             ),
-          ],
-          Row(
-            children: [
-              Icon(
-                Icons.touch_app_outlined,
-                size: 16,
-                color: theme.colorScheme.primary.withValues(alpha: 0.6),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                'Your move',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  color: theme.colorScheme.primary,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
+          if (user != null)
+            _MoveLine(display: user!)
+          else if (showPrompt)
+            Row(
+              children: [
+                Icon(
+                  Icons.touch_app_outlined,
+                  size: 16,
+                  color: theme.colorScheme.primary.withValues(alpha: 0.6),
                 ),
-              ),
-              const Spacer(),
-              if (currentLine != null &&
-                  moveDifficulty != null &&
-                  currentMoveIndex < currentLine!.moves.length)
-                TrainingMoveDifficultyChip(
-                  difficulty: moveDifficulty!(currentLine!, currentMoveIndex),
+                const SizedBox(width: 6),
+                Text(
+                  'Your move',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
                 ),
-            ],
-          ),
+                const Spacer(),
+                if (currentLine != null &&
+                    moveDifficulty != null &&
+                    currentMoveIndex < currentLine!.moves.length)
+                  TrainingMoveDifficultyChip(
+                    difficulty: moveDifficulty!(currentLine!, currentMoveIndex),
+                  ),
+              ],
+            ),
         ],
       ),
     );
@@ -445,8 +516,8 @@ class _LearnContent extends StatelessWidget {
                 color: feedback != null && feedback!.startsWith('Wrong')
                     ? theme.colorScheme.error
                     : feedback == 'Correct!'
-                        ? Colors.green
-                        : null,
+                    ? AppColors.success
+                    : null,
               ),
             ),
           ],
@@ -474,10 +545,7 @@ class _LearnContent extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _MovePairCard(
-              opponent: currentPairOpponent,
-              user: currentPairUser,
-            ),
+            _MovePairCard(opponent: currentPairOpponent, user: currentPairUser),
             const SizedBox(height: 12),
             _NextButton(onPressed: onLearnAcknowledged),
           ],
@@ -526,47 +594,48 @@ class _DrillContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Waiting for user to play their move
-    if (waitingForUser) {
-      return SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (feedback != null && feedback!.isNotEmpty) ...[
-              TrainingFeedbackText(feedback: feedback!),
-              const SizedBox(height: 8),
-            ],
-            _YourMovePrompt(
-              opponentContext: currentPairOpponent,
-              currentMoveIndex: currentMoveIndex,
-              currentLine: currentLine,
-              moveDifficulty: moveDifficulty,
-            ),
-          ],
-        ),
-      );
+    // Keep the prompt row during wrong-move feedback (input is off, but the
+    // user slot shouldn't collapse while the correction is pending).
+    final wrongPending =
+        currentPairUser == null && (feedback?.startsWith('Wrong') ?? false);
+    final showPrompt = waitingForUser || wrongPending;
+
+    if (!showPrompt && currentPairOpponent == null && currentPairUser == null) {
+      return const SizedBox.shrink();
     }
 
-    // Showing opponent move (with comment) or completed pair while auto-advancing
-    if (currentPairOpponent != null || currentPairUser != null) {
-      return SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (feedback != null && feedback!.isNotEmpty) ...[
-              TrainingFeedbackText(feedback: feedback!),
-              const SizedBox(height: 8),
-            ],
-            _MovePairCard(
-              opponent: currentPairOpponent,
-              user: currentPairUser,
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Fixed-height slot: feedback fades in and out without shifting
+          // the card below.
+          SizedBox(
+            height: 28,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 150),
+                child: (feedback == null || feedback!.isEmpty)
+                    ? const SizedBox.shrink()
+                    : TrainingFeedbackText(
+                        key: ValueKey(feedback),
+                        feedback: feedback!,
+                      ),
+              ),
             ),
-          ],
-        ),
-      );
-    }
-
-    return const SizedBox.shrink();
+          ),
+          _DrillPairCard(
+            opponent: currentPairOpponent,
+            user: currentPairUser,
+            showPrompt: showPrompt,
+            currentMoveIndex: currentMoveIndex,
+            currentLine: currentLine,
+            moveDifficulty: moveDifficulty,
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -599,17 +668,18 @@ class _ReplayContent extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.orange.withValues(alpha: 0.08),
+            color: AppColors.warning.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+            border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 'Replaying missed moves',
-                style: theme.textTheme.titleSmall
-                    ?.copyWith(color: Colors.orange[700]),
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: AppColors.warning,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
@@ -635,7 +705,7 @@ class TrainingFeedbackText extends StatelessWidget {
     final theme = Theme.of(context);
     Color color = theme.colorScheme.onSurfaceVariant;
     if (feedback.startsWith('Correct')) {
-      color = Colors.green;
+      color = AppColors.success;
     } else if (feedback.startsWith('Wrong') || feedback.startsWith('Try')) {
       color = theme.colorScheme.error;
     }
@@ -662,11 +732,11 @@ class TrainingMoveDifficultyChip extends StatelessWidget {
     Color color;
     if (difficulty >= 1.0) {
       label = 'Memorized';
-      color = Colors.green;
+      color = AppColors.success;
     } else if (difficulty > 0) {
       final pct = (difficulty * 100).round();
       label = '$pct% learned';
-      color = Colors.orange;
+      color = AppColors.warning;
     } else {
       label = 'New move';
       color = theme.colorScheme.onSurfaceVariant;

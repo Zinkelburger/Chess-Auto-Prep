@@ -11,6 +11,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../theme/app_colors.dart';
 import '../../../utils/keyboard_shortcut_utils.dart';
 import '../models/audit_finding.dart';
 import '../models/audit_result.dart';
@@ -121,8 +122,11 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
 
     var filtered = allFindings.where(_matchesFilters).toList();
 
-    filtered.sort((a, b) =>
-        (b.cumulativeProbability ?? 0).compareTo(a.cumulativeProbability ?? 0));
+    filtered.sort(
+      (a, b) => (b.cumulativeProbability ?? 0).compareTo(
+        a.cumulativeProbability ?? 0,
+      ),
+    );
 
     if (filtered.length > _maxVisible) {
       _visibleFindings = filtered.sublist(0, _maxVisible);
@@ -232,11 +236,17 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
     final viewEnd = viewStart + _scrollController.position.viewportDimension;
 
     if (offset < viewStart) {
-      _scrollController.animateTo(offset,
-          duration: const Duration(milliseconds: 150), curve: Curves.easeOut);
+      _scrollController.animateTo(
+        offset,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+      );
     } else if (offset + itemHeight > viewEnd) {
-      _scrollController.animateTo(offset + itemHeight - viewEnd + viewStart,
-          duration: const Duration(milliseconds: 150), curve: Curves.easeOut);
+      _scrollController.animateTo(
+        offset + itemHeight - viewEnd + viewStart,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+      );
     }
   }
 
@@ -355,7 +365,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
         child: Text(
           'No audit results yet.\nRun an audit from the toolbar (A).',
           textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.grey, fontSize: 13),
+          style: TextStyle(color: AppColors.onSurfaceMuted, fontSize: 13),
         ),
       );
     }
@@ -434,40 +444,53 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
     );
   }
 
-
   // ── Dismiss context menu ──────────────────────────────────────────────
 
   void _showDismissMenu(
-      BuildContext context, Offset position, AuditFinding finding) {
+    BuildContext context,
+    Offset position,
+    AuditFinding finding,
+  ) {
     final plyLabel = finding.movePath.isEmpty
         ? 'root'
         : 'move ${(finding.movePath.length + 1) ~/ 2}';
     showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
-          position.dx, position.dy, position.dx + 1, position.dy + 1),
+        position.dx,
+        position.dy,
+        position.dx + 1,
+        position.dy + 1,
+      ),
       popUpAnimationStyle: AnimationStyle.noAnimation,
       items: [
         PopupMenuItem(
           value: 'dismiss',
-          child: Text(finding.dismissed ? 'Restore' : 'Dismiss',
-              style: const TextStyle(fontSize: 12)),
+          child: Text(
+            finding.dismissed ? 'Restore' : 'Dismiss',
+            style: const TextStyle(fontSize: 12),
+          ),
         ),
         const PopupMenuItem(
           value: 'similar',
-          child: Text('Dismiss similar at this position',
-              style: TextStyle(fontSize: 12)),
+          child: Text(
+            'Dismiss similar at this position',
+            style: TextStyle(fontSize: 12),
+          ),
         ),
         PopupMenuItem(
           value: 'depth',
           child: Text(
-              'Dismiss all ${finding.type.name} at $plyLabel or earlier',
-              style: const TextStyle(fontSize: 12)),
+            'Dismiss all ${finding.type.name} at $plyLabel or earlier',
+            style: const TextStyle(fontSize: 12),
+          ),
         ),
         PopupMenuItem(
           value: 'type',
-          child: Text('Dismiss all ${_typeLabel(finding.type)}',
-              style: const TextStyle(fontSize: 12)),
+          child: Text(
+            'Dismiss all ${_typeLabel(finding.type)}',
+            style: const TextStyle(fontSize: 12),
+          ),
         ),
       ],
     ).then((value) {
@@ -495,7 +518,9 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
       AuditFindingType.missingResponse => 'missing responses',
       AuditFindingType.weakPosition => 'weak positions',
       AuditFindingType.deadEnd => 'dead ends',
+      AuditFindingType.uncoveredStrongMove => 'uncovered strong moves',
+      AuditFindingType.refutation => 'refutations',
+      AuditFindingType.practicalTrap => 'practical traps',
     };
   }
-
 }

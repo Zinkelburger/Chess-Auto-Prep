@@ -50,8 +50,7 @@ class TreeBuildProgressTracker {
     _buildStartTotalNodes = buildStartTotalNodes;
     _depthTracker = -1;
     _bestFirst = bestFirst;
-    _priorityFloor =
-        minProbability > 0 ? minProbability : _fallbackFloor;
+    _priorityFloor = minProbability > 0 ? minProbability : _fallbackFloor;
     _lastPoppedPriority = -1.0;
     _frontierSize = 0;
     _progressSamples.clear();
@@ -118,23 +117,25 @@ class TreeBuildProgressTracker {
       }
     }
 
-    onProgress(BuildProgress(
-      totalNodes: tree.totalNodes,
-      maxPlyReached: tree.maxPlyReached,
-      maxPlyConfig: maxPlyConfig,
-      elapsedMs: elapsedMs,
-      nodesPerMinute: nodesPerMinute,
-      currentDepth: currentDepth,
-      unexploredAtDepth: unexploredAtDepth,
-      totalAtDepth: totalAtDepth,
-      etaDepthSeconds: etaDepthSeconds,
-      bestFirst: _bestFirst,
-      frontierSize: _frontierSize,
-      priorityProgress: priorityProgress,
-      etaRunSeconds: etaRunSeconds,
-      depthTotals: totals,
-      depthExplored: explored,
-    ));
+    onProgress(
+      BuildProgress(
+        totalNodes: tree.totalNodes,
+        maxPlyReached: tree.maxPlyReached,
+        maxPlyConfig: maxPlyConfig,
+        elapsedMs: elapsedMs,
+        nodesPerMinute: nodesPerMinute,
+        currentDepth: currentDepth,
+        unexploredAtDepth: unexploredAtDepth,
+        totalAtDepth: totalAtDepth,
+        etaDepthSeconds: etaDepthSeconds,
+        bestFirst: _bestFirst,
+        frontierSize: _frontierSize,
+        priorityProgress: priorityProgress,
+        etaRunSeconds: etaRunSeconds,
+        depthTotals: totals,
+        depthExplored: explored,
+      ),
+    );
   }
 
   /// Log-scale position of the popped priority between 1.0 and the search

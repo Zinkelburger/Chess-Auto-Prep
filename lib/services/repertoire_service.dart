@@ -4,41 +4,28 @@ library;
 
 import 'dart:convert';
 import 'dart:io' as io;
+import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 import '../models/repertoire_line.dart';
+import '../utils/atomic_file.dart';
 import '../utils/file_text_reader.dart';
 import '../utils/pgn_comment_utils.dart';
 import 'pgn_parsing_service.dart' as pgn;
 import 'storage/storage_factory.dart';
 
 class RepertoireService {
-  Future<void> _writeAtomically(io.File target, String content) async {
-    final parent = target.parent;
-    if (!await parent.exists()) {
-      await parent.create(recursive: true);
-    }
-    final tmp =
-        io.File('${target.path}.${DateTime.now().microsecondsSinceEpoch}.tmp');
-    await tmp.writeAsString(content, flush: true);
-    try {
-      await tmp.rename(target.path);
-    } on io.FileSystemException {
-      if (await target.exists()) {
-        await target.delete();
-      }
-      await tmp.rename(target.path);
-    }
-  }
-
   /// Parses a repertoire PGN file and extracts all trainable lines.
   ///
   /// If [trainingColor] is provided ('white' or 'black') it is used directly;
   /// otherwise the colour is read from the file's `// Color:` comment.
+  /// [colorFromStartingSide] derives each line's colour from its own start
+  /// position instead (study puzzles: the solver is the side to move).
   Future<List<RepertoireLine>> parseRepertoireFile(
     String filePath, {
     String? trainingColor,
+    bool colorFromStartingSide = false,
   }) async {
     final content = await StorageFactory.instance.readRepertoirePgn(filePath);
 
@@ -46,7 +33,17 @@ class RepertoireService {
       throw Exception('Repertoire file not found: $filePath');
     }
 
-    return parseRepertoirePgn(content, trainingColor: trainingColor);
+    // The builder path already parses via compute(); the trainer parsed on the
+    // UI isolate. A repertoire PGN is hundreds of KB / hundreds of games, each
+    // fully replayed — run it off the UI isolate. A fresh (stateless) service
+    // inside the isolate avoids capturing `this`.
+    return Isolate.run(
+      () => RepertoireService().parseRepertoirePgn(
+        content,
+        trainingColor: trainingColor,
+        colorFromStartingSide: colorFromStartingSide,
+      ),
+    );
   }
 
   /// Parses repertoire PGN content and extracts trainable lines.
@@ -55,9 +52,14 @@ class RepertoireService {
   /// knows the side.  Otherwise the colour is read from the `// Color:`
   /// comment that every app-created repertoire file contains.
   /// Falls back to 'white' if neither source provides a colour.
+  ///
+  /// [colorFromStartingSide] overrides both: each game's colour is the side
+  /// to move in its own start position ([FEN] header or standard start).
+  /// Used for studies-as-puzzles, where the solver always moves first.
   List<RepertoireLine> parseRepertoirePgn(
     String pgnContent, {
     String? trainingColor,
+    bool colorFromStartingSide = false,
   }) {
     pgnContent = pgn.stripBom(pgnContent);
     final lines = <RepertoireLine>[];
@@ -72,12 +74,17 @@ class RepertoireService {
       try {
         final game = PgnGame.parsePgn(gameText);
 
-        final mainlineMoves =
-            game.moves.mainline().map((node) => node.san).toList();
+        final mainlineMoves = game.moves
+            .mainline()
+            .map((node) => node.san)
+            .toList();
 
         if (mainlineMoves.isEmpty) continue;
 
-        final color = resolvedColor;
+        final startPosition = extractStartPosition(game);
+        final color = colorFromStartingSide
+            ? (startPosition.turn == Side.white ? 'white' : 'black')
+            : resolvedColor;
 
         final comments = <String, String>{};
         final moveNodes = game.moves.mainline().toList();
@@ -96,21 +103,22 @@ class RepertoireService {
 
         final lineName = _generateLineName(game, gameIndex);
         final lineId = _extractLineId(game, mainlineMoves, gameIndex);
-        final startPosition = extractStartPosition(game);
         final importance = _extractImportance(game, gameText);
 
-        lines.add(RepertoireLine(
-          id: lineId,
-          name: lineName,
-          moves: mainlineMoves,
-          color: color,
-          startPosition: startPosition,
-          fullPgn: gameText,
-          comments: comments,
-          variations: variations,
-          headers: Map<String, String>.from(game.headers),
-          importance: importance,
-        ));
+        lines.add(
+          RepertoireLine(
+            id: lineId,
+            name: lineName,
+            moves: mainlineMoves,
+            color: color,
+            startPosition: startPosition,
+            fullPgn: gameText,
+            comments: comments,
+            variations: variations,
+            headers: Map<String, String>.from(game.headers),
+            importance: importance,
+          ),
+        );
       } catch (e) {
         if (kDebugMode) {
           debugPrint('Error parsing game $gameIndex: $e');
@@ -193,8 +201,11 @@ class RepertoireService {
         event != 'Edited Line') {
       return event;
     } else {
-      final moves =
-          game.moves.mainline().take(3).map((node) => node.san).toList();
+      final moves = game.moves
+          .mainline()
+          .take(3)
+          .map((node) => node.san)
+          .toList();
       if (moves.isNotEmpty) {
         return 'Line: ${moves.join(' ')}';
       } else {
@@ -271,19 +282,29 @@ class RepertoireService {
 
     flushCurrentGame();
 
-    return (
-      preamble: preambleLines.join('\n').trimRight(),
-      games: games,
-    );
+    return (preamble: preambleLines.join('\n').trimRight(), games: games);
   }
 
   /// Extract a stable line identifier, preferring a PGN header if present.
-  String _extractLineId(PgnGame game, List<String> moves, int index) {
-    final headerId = game.headers['LineID'] ??
-        game.headers['LineId'] ??
-        game.headers['Id'] ??
-        game.headers['Line'] ??
-        game.headers['Guid'];
+  String _extractLineId(PgnGame game, List<String> moves, int index) =>
+      lineIdFromHeaders(game.headers, moves, index);
+
+  /// The line id the trainer assigns to a game: a `LineID`/`Id`/… header when
+  /// present, else the stable move-based fallback.  Callers that want to
+  /// target a specific line (e.g. "Train this chapter") must derive the id
+  /// this way — the header-blind [generateLineId] silently mismatches any
+  /// PGN that carries such a header.
+  String lineIdFromHeaders(
+    Map<String, String> headers,
+    List<String> moves,
+    int index,
+  ) {
+    final headerId =
+        headers['LineID'] ??
+        headers['LineId'] ??
+        headers['Id'] ??
+        headers['Line'] ??
+        headers['Guid'];
 
     if (headerId != null && headerId.trim().isNotEmpty) {
       return headerId.trim();
@@ -291,6 +312,20 @@ class RepertoireService {
 
     // Stable fallback based on moves so it persists across sessions.
     return _generateStableLineId(moves, index);
+  }
+
+  /// The line id the trainer will assign to the [index]-th game of [pgn].
+  /// Parses [pgn] through the same pipeline as the trainer ([PgnGame.parsePgn]
+  /// + [_extractLineId]) so the two agree regardless of how the source
+  /// serialized its headers.  Returns null when [pgn] doesn't parse.
+  String? lineIdForGamePgn(String pgn, int index) {
+    try {
+      final game = PgnGame.parsePgn(pgn);
+      final moves = game.moves.mainline().map((n) => n.san).toList();
+      return _extractLineId(game, moves, index);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Public access to generate a stable line ID from moves.
@@ -314,10 +349,7 @@ class RepertoireService {
 
   /// Reassemble a PGN document from preamble + game list.
   String _reassembleDocument(String preamble, List<String> games) {
-    final sections = <String>[
-      if (preamble.isNotEmpty) preamble,
-      ...games,
-    ];
+    final sections = <String>[if (preamble.isNotEmpty) preamble, ...games];
     return '${sections.join('\n\n').trimRight()}\n';
   }
 
@@ -328,8 +360,10 @@ class RepertoireService {
   }
 
   /// Creates training questions from repertoire lines for a specific color
-  List<TrainingQuestion> createTrainingQuestions(List<RepertoireLine> lines,
-      {String? colorFilter}) {
+  List<TrainingQuestion> createTrainingQuestions(
+    List<RepertoireLine> lines, {
+    String? colorFilter,
+  }) {
     final questions = <TrainingQuestion>[];
 
     for (final line in lines) {
@@ -339,7 +373,8 @@ class RepertoireService {
 
       for (int moveIndex = 0; moveIndex < line.moves.length; moveIndex++) {
         final isWhiteMove = moveIndex % 2 == 0;
-        final shouldIncludeMove = (line.color == 'white' && isWhiteMove) ||
+        final shouldIncludeMove =
+            (line.color == 'white' && isWhiteMove) ||
             (line.color == 'black' && !isWhiteMove);
 
         if (shouldIncludeMove) {
@@ -412,12 +447,18 @@ class RepertoireService {
 
     mutate(games, matchIndex);
 
-    await _writeAtomically(file, _reassembleDocument(document.preamble, games));
+    await writeTextFileAtomically(
+      file,
+      _reassembleDocument(document.preamble, games),
+    );
     return true;
   }
 
   Future<bool> updateLineTitle(
-      String filePath, String lineId, String newTitle) {
+    String filePath,
+    String lineId,
+    String newTitle,
+  ) {
     return _editLineInFile(filePath, lineId, (games, matchIndex) {
       final gameText = games[matchIndex];
       final eventRegex = RegExp(r'\[Event\s+"[^"]*"\]');
@@ -438,8 +479,61 @@ class RepertoireService {
     String newGamePgn,
   ) {
     return _editLineInFile(filePath, lineId, (games, matchIndex) {
-      games[matchIndex] = newGamePgn.trimRight();
+      games[matchIndex] = _mergeMissingHeaders(
+        games[matchIndex],
+        newGamePgn.trimRight(),
+      );
     });
+  }
+
+  /// The PGN editor serializes only the standard headers, so carry over any
+  /// header the old game had that the new text lacks (LineID, review
+  /// metadata, CumProb, …). Dropping LineID would orphan the line: every
+  /// later lookup by id — rename, autosave, delete — silently fails.
+  String _mergeMissingHeaders(String oldGame, String newGame) {
+    final keyPattern = RegExp(r'^\[(\w+)\s+"[^"]*"\]$');
+
+    List<String> headerLines(String game) {
+      final result = <String>[];
+      for (final line in game.split('\n')) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty) {
+          if (result.isNotEmpty) break;
+          continue;
+        }
+        if (keyPattern.hasMatch(trimmed)) {
+          result.add(trimmed);
+        } else {
+          break;
+        }
+      }
+      return result;
+    }
+
+    final newKeys = headerLines(
+      newGame,
+    ).map((h) => keyPattern.firstMatch(h)!.group(1)!).toSet();
+    final missing = headerLines(oldGame)
+        .where((h) => !newKeys.contains(keyPattern.firstMatch(h)!.group(1)!))
+        .toList();
+    if (missing.isEmpty) return newGame;
+
+    final lines = newGame.split('\n');
+    var lastHeader = -1;
+    for (int i = 0; i < lines.length; i++) {
+      final trimmed = lines[i].trim();
+      if (keyPattern.hasMatch(trimmed)) {
+        lastHeader = i;
+      } else if (trimmed.isNotEmpty) {
+        break;
+      }
+    }
+    if (lastHeader == -1) {
+      lines.insertAll(0, [...missing, '']);
+    } else {
+      lines.insertAll(lastHeader + 1, missing);
+    }
+    return lines.join('\n');
   }
 
   /// Removes a game identified by [lineId] from the PGN file on disk.
@@ -572,11 +666,13 @@ class RepertoireService {
       );
     } else {
       final fullPath = [...pathFromRoot, san];
-      games.add(buildMinimalGamePgn(
-        fullPath,
-        startingFen: startingFen,
-        isWhiteRepertoire: isWhiteRepertoire,
-      ));
+      games.add(
+        buildMinimalGamePgn(
+          fullPath,
+          startingFen: startingFen,
+          isWhiteRepertoire: isWhiteRepertoire,
+        ),
+      );
     }
 
     final sections = <String>[];
@@ -585,7 +681,7 @@ class RepertoireService {
     }
     sections.addAll(games);
     final updated = '${sections.join('\n\n').trimRight()}\n';
-    await _writeAtomically(file, updated);
+    await writeTextFileAtomically(file, updated);
     return (success: true, updatedContent: updated);
   }
 

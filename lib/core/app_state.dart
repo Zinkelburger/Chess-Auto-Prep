@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dartchess/dartchess.dart';
 import '../services/lichess_auth_service.dart';
+import '../utils/safe_change_notifier.dart';
 
 enum AppMode {
   tactics,
@@ -12,7 +13,7 @@ enum AppMode {
   study,
 }
 
-class AppState extends ChangeNotifier {
+class AppState extends ChangeNotifier with SafeChangeNotifier {
   AppMode _currentMode = AppMode.tactics;
   Position _currentPosition = Chess.initial;
   String? _lichessUsername;
@@ -35,26 +36,22 @@ class AppState extends ChangeNotifier {
   /// mode, pre-seeded with these PGN file paths.
   List<String>? pendingGenerationPgnPaths;
 
-  /// FEN to seed the puzzle creator with ("Make puzzle from this position"
-  /// hooks in other modes).  Set before switching to tactics mode; consumed
-  /// by the tactics panel on activation.
-  String? pendingPuzzleSeedFen;
+  /// Study PGN to train in the Repertoire Trainer ("Train" in Study mode).
+  /// Set before switching to trainer mode; consumed by the trainer screen on
+  /// activation.  [pendingLineId] optionally focuses one chapter's line.
+  String? pendingTrainStudyPath;
 
-  /// PGN file to open as an external puzzle set ("Review as flashcards" in
-  /// Study mode).  Set before switching to tactics mode; consumed by the
-  /// tactics panel on activation.
-  String? pendingReviewPgnPath;
-
-  /// Restrict the pending review to one PGN game (chapter) index;
-  /// null = the whole file.
-  int? pendingReviewGameIndex;
-
-  /// Whether the pending review expands variations into extra cards.
-  bool pendingReviewIncludeVariations = false;
-
-  /// PGN file to open for editing in Study mode ("Edit set in Study" in
-  /// Tactics mode).  Consumed by the study screen on activation.
+  /// PGN file to open for editing in Study mode ("Edit study" in the
+  /// Repertoire Trainer).  Consumed by the study screen on activation.
   String? pendingStudyPath;
+
+  /// PGN file to open in the PGN Viewer ("Open Games in PGN Viewer" in
+  /// Player Analysis).  Consumed by the PGN viewer screen on activation.
+  String? pendingPgnViewerPath;
+
+  /// Optional position filter applied after opening [pendingPgnViewerPath]:
+  /// the viewer slices the collection to games containing this FEN.
+  String? pendingPgnViewerSliceFen;
 
   AppMode get currentMode => _currentMode;
   Position get currentPosition => _currentPosition;
@@ -80,34 +77,31 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Switch to tactics mode and open the puzzle creator seeded with [seedFen].
-  void switchToPuzzleCreator({required String seedFen}) {
-    pendingPuzzleSeedFen = seedFen;
-    _currentMode = AppMode.tactics;
-    notifyListeners();
-  }
-
-  /// Switch to tactics mode reviewing the PGN file at [path] as a puzzle set
-  /// ("Review as flashcards" in Study mode).  [gameIndex] restricts the
-  /// review to one chapter; [includeVariations] expands variations into
-  /// extra cards.
-  void switchToTacticsReview({
-    required String path,
-    int? gameIndex,
-    bool includeVariations = false,
-  }) {
-    pendingReviewPgnPath = path;
-    pendingReviewGameIndex = gameIndex;
-    pendingReviewIncludeVariations = includeVariations;
-    _currentMode = AppMode.tactics;
+  /// Switch to the Repertoire Trainer with the study at [path] loaded as a
+  /// tactics-mode training source ("Train" in Study mode).  [lineId]
+  /// optionally starts on one chapter's line.
+  void switchToStudyTraining({required String path, String? lineId}) {
+    pendingTrainStudyPath = path;
+    pendingLineId = lineId;
+    _currentMode = AppMode.repertoireTrainer;
     notifyListeners();
   }
 
   /// Switch to Study mode with the PGN file at [path] opened for editing
-  /// ("Edit set in Study" in Tactics mode).
+  /// ("Edit study" in the Repertoire Trainer).
   void switchToStudyEdit({required String path}) {
     pendingStudyPath = path;
     _currentMode = AppMode.study;
+    notifyListeners();
+  }
+
+  /// Switch to the PGN Viewer with the file at [path] opened, optionally
+  /// sliced to games containing [sliceFen] ("Open Games in PGN Viewer" in
+  /// Player Analysis).
+  void switchToPgnViewer({required String path, String? sliceFen}) {
+    pendingPgnViewerPath = path;
+    pendingPgnViewerSliceFen = sliceFen;
+    _currentMode = AppMode.pgnViewer;
     notifyListeners();
   }
 
@@ -222,6 +216,10 @@ class AppState extends ChangeNotifier {
   }
 
   void setRepertoireGenerating(bool generating) {
+    // Called on every generation progress tick — only an actual transition
+    // may notify, or everything watching AppState rebuilds at the
+    // generator's tick rate for the whole build.
+    if (_isRepertoireGenerating == generating) return;
     _isRepertoireGenerating = generating;
     notifyListeners();
   }

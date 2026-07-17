@@ -76,9 +76,16 @@ class TacticsSessionSettings {
     if (pos.mistakeType == customMistakeType) return true;
     final played = pos.gameDateTime;
     if (played == null) return true;
+    // A window larger than any realistic game history means "all time". This
+    // also guards Duration's signed-64-bit microsecond field from overflowing
+    // (~1.07e8 days) and wrapping the cutoff into the future.
+    if (days >= 3650000) return true; // ~10,000 years
     final now = DateTime.now();
-    final cutoff = DateTime(now.year, now.month, now.day)
-        .subtract(Duration(days: days - 1));
+    final cutoff = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: days - 1));
     return !played.isBefore(cutoff);
   }
 
@@ -139,8 +146,9 @@ class TacticsSessionSettings {
       includeOneStar:
           prefs.getBool(_keyIncludeOneStar) ?? defaults.includeOneStar,
       skipReviewed: prefs.getBool(_keySkipReviewed) ?? defaults.skipReviewed,
-      mistakeTypes:
-          storedTypes != null ? storedTypes.toSet() : defaults.mistakeTypes,
+      mistakeTypes: storedTypes != null
+          ? storedTypes.toSet()
+          : defaults.mistakeTypes,
       maxAgeDays: storedMaxAge == null
           ? defaults.maxAgeDays
           : (storedMaxAge <= 0 ? null : storedMaxAge),

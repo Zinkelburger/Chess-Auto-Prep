@@ -58,8 +58,9 @@ class EngineWeaknessService {
     void collectFrom(OpeningTree tree, bool isWhite) {
       for (final nodes in tree.fenToNodes.values) {
         if (nodes.isEmpty) continue;
-        final best =
-            nodes.reduce((a, b) => a.gamesPlayed >= b.gamesPlayed ? a : b);
+        final best = nodes.reduce(
+          (a, b) => a.gamesPlayed >= b.gamesPlayed ? a : b,
+        );
         if (best.gamesPlayed >= minOccurrences) {
           positions.add(_PositionToEval(best, isWhite));
         }
@@ -96,8 +97,9 @@ class EngineWeaknessService {
           evalWhiteMate = whiteToMove ? eval.scoreMate! : -eval.scoreMate!;
           evalWhiteCp = evalWhiteMate > 0 ? kMateCpBase : -kMateCpBase;
         } else {
-          evalWhiteCp =
-              whiteToMove ? (eval.scoreCp ?? 0) : -(eval.scoreCp ?? 0);
+          evalWhiteCp = whiteToMove
+              ? (eval.scoreCp ?? 0)
+              : -(eval.scoreCp ?? 0);
         }
 
         final result = EngineWeaknessResult(
@@ -117,16 +119,19 @@ class EngineWeaknessService {
 
         if (kDebugMode) {
           final color = entry.playerIsWhite ? 'W' : 'B';
-          debugPrint('[Eval] $color ${result.evalDisplay} '
-              'd${eval.depth} ${node.gamesPlayed}g '
-              '${node.getMovePathString()}');
+          debugPrint(
+            '[Eval] $color ${result.evalDisplay} '
+            'd${eval.depth} ${node.gamesPlayed}g '
+            '${node.getMovePathString()}',
+          );
         }
       } catch (e) {
         failedCount++;
         if (kDebugMode && failedPositions.length < 5) {
           failedPositions.add(node.getMovePathString());
           debugPrint(
-              '[Eval] Failed to evaluate ${node.getMovePathString()}: $e');
+            '[Eval] Failed to evaluate ${node.getMovePathString()}: $e',
+          );
         }
       }
 
@@ -142,11 +147,14 @@ class EngineWeaknessService {
 
     if (!_cancelled && results.isEmpty && failedCount > 0) {
       throw Exception(
-          'Engine evaluation failed for all $failedCount positions.');
+        'Engine evaluation failed for all $failedCount positions.',
+      );
     }
     if (kDebugMode && failedCount > 0) {
-      debugPrint('[Eval] Failed on $failedCount/$total positions'
-          '${failedPositions.isEmpty ? '' : ' (${failedPositions.join(', ')})'}');
+      debugPrint(
+        '[Eval] Failed on $failedCount/$total positions'
+        '${failedPositions.isEmpty ? '' : ' (${failedPositions.join(', ')})'}',
+      );
     }
 
     return results;

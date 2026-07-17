@@ -21,6 +21,7 @@ import 'generation/generation_config.dart';
 import 'generation/tree_my_ease.dart';
 import 'maia_factory.dart';
 import 'tree_build_service.dart';
+import '../utils/safe_change_notifier.dart';
 
 enum OnTheFlyState { idle, computing, ready, cancelled }
 
@@ -52,7 +53,7 @@ class _MoveLineState {
   const _MoveLineState({required this.line, required this.lineDepth});
 }
 
-class OnTheFlyExpectimaxService extends ChangeNotifier {
+class OnTheFlyExpectimaxService extends ChangeNotifier with SafeChangeNotifier {
   final TreeBuildService _buildService = TreeBuildService();
   final EngineSettings _settings = EngineSettings.instance;
 
@@ -69,10 +70,21 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
   /// the user is just browsing.
   static const int _maxNodesPerPly = 800;
 
-  /// Minimum interval between partial line refreshes during a depth pass —
-  /// each refresh re-runs expectimax over the whole tree, so this bounds
-  /// that cost while keeping the pane visibly live.
-  static const Duration _partialRefreshInterval = Duration(milliseconds: 400);
+  /// Base / max interval between partial line refreshes during a depth pass.
+  /// Each refresh re-runs O(nodes) expectimax over the whole tree on the UI
+  /// isolate, so the cadence stretches as the tree grows — small trees stay
+  /// snappy while a large one can't repaint the whole pane several times a
+  /// second.
+  static const Duration _partialRefreshBase = Duration(milliseconds: 400);
+  static const Duration _partialRefreshMax = Duration(milliseconds: 1500);
+
+  Duration get _partialRefreshInterval {
+    final ms = (_partialRefreshBase.inMilliseconds + _nodesBuilt ~/ 4).clamp(
+      _partialRefreshBase.inMilliseconds,
+      _partialRefreshMax.inMilliseconds,
+    );
+    return Duration(milliseconds: ms);
+  }
 
   final Map<String, _CachedSubtree> _cache = {};
   final Map<String, _MoveLineState> _moveLines = {};
@@ -107,14 +119,14 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
   DateTime? _lastPartialNotify;
 
   OnTheFlyProgressiveLines get progressiveLines => OnTheFlyProgressiveLines(
-        lines: _rankedLines(),
-        targetMaxDepth: _targetMaxDepth,
-        computingDepth: _computingDepth,
-        bestCompletedDepth: _bestCompletedDepth,
-        isComputing: _state == OnTheFlyState.computing,
-        sourceLabel: _sourceLabel,
-        errorMessage: _lastError,
-      );
+    lines: _rankedLines(),
+    targetMaxDepth: _targetMaxDepth,
+    computingDepth: _computingDepth,
+    bestCompletedDepth: _bestCompletedDepth,
+    isComputing: _state == OnTheFlyState.computing,
+    sourceLabel: _sourceLabel,
+    errorMessage: _lastError,
+  );
 
   /// Whether cached or in-flight data exists for [fen].
   bool hasDataForFen(String fen) =>
@@ -186,7 +198,8 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
       _buildService.stopBuild();
       if (_runGeneration != generation) return false;
       if (DateTime.now().isAfter(deadline)) {
-        _lastError = 'Previous expectimax build did not stop — '
+        _lastError =
+            'Previous expectimax build did not stop — '
             'engine may be stuck. Toggle expectimax to retry.';
         _state = OnTheFlyState.idle;
         notifyListeners();
@@ -226,10 +239,13 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
     // Only use maiaDbExplore when the user has a local DB configured.
     final hasEvalDb =
         dbSettings.enableCdbDirect && dbSettings.cdbDirectPath.isNotEmpty;
-    final buildMode =
-        hasEvalDb ? BuildMode.maiaDbExplore : BuildMode.stockfishExpectimax;
-    debugPrint('[OnTheFlyExpectimax] buildMode=$buildMode '
-        'hasEvalDb=$hasEvalDb');
+    final buildMode = hasEvalDb
+        ? BuildMode.maiaDbExplore
+        : BuildMode.stockfishExpectimax;
+    debugPrint(
+      '[OnTheFlyExpectimax] buildMode=$buildMode '
+      'hasEvalDb=$hasEvalDb',
+    );
 
     for (var depth = 1; depth <= maxDepth; depth++) {
       if (_runGeneration != generation || _state != OnTheFlyState.computing) {
@@ -254,8 +270,10 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
       );
       final activeConfig = config;
 
-      debugPrint('[OnTheFlyExpectimax] depth=$depth/$maxDepth '
-          'mode=$buildMode fen=${fen.split(' ').take(2).join(' ')}');
+      debugPrint(
+        '[OnTheFlyExpectimax] depth=$depth/$maxDepth '
+        'mode=$buildMode fen=${fen.split(' ').take(2).join(' ')}',
+      );
 
       // Un-explore leaf nodes at the previous depth boundary so the
       // build service will expand them at the new, deeper maxPly.
@@ -269,46 +287,52 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
       try {
         tree = await _buildService
             .build(
-          config: activeConfig,
-          existingTree: tree,
-          onProgress: (progress) {
-            if (_runGeneration != generation ||
-                _state != OnTheFlyState.computing) {
-              return;
-            }
-            _nodesBuilt = progress.totalNodes;
-            final progressTree = _buildService.currentTree;
-            if (progressTree == null) return;
-            try {
-              _maybeRefreshPartialLines(
-                tree: progressTree,
-                config: activeConfig,
-                fenMap: fenMap,
-                targetPly: depth,
-                playAsWhite: playAsWhite,
-                generation: generation,
-              );
-            } catch (e, st) {
-              debugPrint(
-                  '[OnTheFlyExpectimax] Partial refresh failed: $e\n$st');
-            }
-          },
-          isCancelled: () =>
-              _runGeneration != generation || _state != OnTheFlyState.computing,
-        )
+              config: activeConfig,
+              existingTree: tree,
+              onProgress: (progress) {
+                if (_runGeneration != generation ||
+                    _state != OnTheFlyState.computing) {
+                  return;
+                }
+                _nodesBuilt = progress.totalNodes;
+                final progressTree = _buildService.currentTree;
+                if (progressTree == null) return;
+                try {
+                  _maybeRefreshPartialLines(
+                    tree: progressTree,
+                    config: activeConfig,
+                    fenMap: fenMap,
+                    targetPly: depth,
+                    playAsWhite: playAsWhite,
+                    generation: generation,
+                  );
+                } catch (e, st) {
+                  debugPrint(
+                    '[OnTheFlyExpectimax] Partial refresh failed: $e\n$st',
+                  );
+                }
+              },
+              isCancelled: () =>
+                  _runGeneration != generation ||
+                  _state != OnTheFlyState.computing,
+            )
             // Watchdog: a stalled pool/worker must surface as an error, not
             // an eternal spinner.  The orphaned build unwinds via isCancelled
             // once state leaves `computing` below.
             .timeout(_depthPassTimeout);
       } on TimeoutException {
         if (_runGeneration == generation && _state == OnTheFlyState.computing) {
-          debugPrint('[OnTheFlyExpectimax] Build TIMED OUT at depth $depth '
-              'after ${_depthPassTimeout.inSeconds}s');
-          _lastError = 'Timed out at depth $depth after '
+          debugPrint(
+            '[OnTheFlyExpectimax] Build TIMED OUT at depth $depth '
+            'after ${_depthPassTimeout.inSeconds}s',
+          );
+          _lastError =
+              'Timed out at depth $depth after '
               '${_depthPassTimeout.inSeconds}s — engine may be busy or stuck. '
               'Toggle expectimax to retry.';
-          _state =
-              _moveLines.isEmpty ? OnTheFlyState.idle : OnTheFlyState.ready;
+          _state = _moveLines.isEmpty
+              ? OnTheFlyState.idle
+              : OnTheFlyState.ready;
           _computingDepth = null;
           notifyListeners();
         }
@@ -316,10 +340,12 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
       } catch (e, st) {
         if (_runGeneration == generation && _state == OnTheFlyState.computing) {
           debugPrint(
-              '[OnTheFlyExpectimax] Build FAILED at depth $depth: $e\n$st');
+            '[OnTheFlyExpectimax] Build FAILED at depth $depth: $e\n$st',
+          );
           _lastError = 'Build failed at depth $depth ($buildMode): $e';
-          _state =
-              _moveLines.isEmpty ? OnTheFlyState.idle : OnTheFlyState.ready;
+          _state = _moveLines.isEmpty
+              ? OnTheFlyState.idle
+              : OnTheFlyState.ready;
           _computingDepth = null;
           notifyListeners();
         }
@@ -332,13 +358,18 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
 
       final rootChildren = tree.root.children.length;
       final totalNodes = tree.totalNodes;
-      debugPrint('[OnTheFlyExpectimax] depth=$depth/$maxDepth done: '
-          '$rootChildren root children, $totalNodes total nodes');
+      debugPrint(
+        '[OnTheFlyExpectimax] depth=$depth/$maxDepth done: '
+        '$rootChildren root children, $totalNodes total nodes',
+      );
 
       if (tree.root.children.isEmpty && depth == 1) {
-        debugPrint('[OnTheFlyExpectimax] No moves found at depth 1 via '
-            '$buildMode — check if Maia model is loaded or DB files exist');
-        _lastError = 'No candidate moves found at depth 1 ($buildMode). '
+        debugPrint(
+          '[OnTheFlyExpectimax] No moves found at depth 1 via '
+          '$buildMode — check if Maia model is loaded or DB files exist',
+        );
+        _lastError =
+            'No candidate moves found at depth 1 ($buildMode). '
             'Try switching candidate source to Stockfish in Study settings.';
         _state = OnTheFlyState.ready;
         _computingDepth = null;
@@ -369,9 +400,13 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
       _bestCompletedDepth = depth;
       final lines = _rankedLines();
       final maxLen = lines.fold<int>(
-          0, (best, l) => l.movesSan.length > best ? l.movesSan.length : best);
-      debugPrint('[OnTheFlyExpectimax] depth=$depth/$maxDepth complete: '
-          '${lines.length} lines, longest=$maxLen moves');
+        0,
+        (best, l) => l.movesSan.length > best ? l.movesSan.length : best,
+      );
+      debugPrint(
+        '[OnTheFlyExpectimax] depth=$depth/$maxDepth complete: '
+        '${lines.length} lines, longest=$maxLen moves',
+      );
       notifyListeners();
     }
 
@@ -414,7 +449,9 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
     final map = (fenMap ?? FenMap())..populate(tree.root);
     final eca = ExpectimaxCalculator(config: config, fenMap: map);
     eca.calculate(tree);
-    calculateMyEase(tree, playAsWhite: playAsWhite);
+    // myEase is not read by the progressive line display (it renders `.ease`)
+    // and is recomputed on every completed-depth pass — skip its full-tree
+    // walk here to keep each partial tick cheap.
 
     _currentTree = tree;
     _currentConfig = config;
@@ -496,9 +533,7 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
     final sorted = _moveLines.values.map((s) => s.line).toList()
       ..sort((a, b) => b.expectimaxValue.compareTo(a.expectimaxValue));
 
-    return [
-      for (var i = 0; i < sorted.length; i++) sorted[i].withRank(i + 1),
-    ];
+    return [for (var i = 0; i < sorted.length; i++) sorted[i].withRank(i + 1)];
   }
 
   TreeBuildConfig _buildConfig({
@@ -530,6 +565,9 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
       ourMultipv: _settings.expectimaxOurMultipv,
       oppMaxChildren: _settings.expectimaxOppMaxChildren,
       oppMassTarget: _settings.expectimaxOppMassTarget,
+      // Tight per-ply node budget: spend it on depth, not opening breadth
+      // (the analyzed position is the root and is wide regardless).
+      openingWidthPlies: 0,
     );
   }
 
@@ -552,8 +590,9 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
   void cancel() {
     if (_state == OnTheFlyState.computing) {
       _runGeneration++;
-      _state =
-          _moveLines.isEmpty ? OnTheFlyState.cancelled : OnTheFlyState.ready;
+      _state = _moveLines.isEmpty
+          ? OnTheFlyState.cancelled
+          : OnTheFlyState.ready;
       _computingDepth = null;
       notifyListeners();
     }

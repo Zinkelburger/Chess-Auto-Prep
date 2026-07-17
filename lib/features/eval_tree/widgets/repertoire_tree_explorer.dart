@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
 import '../../../utils/ease_utils.dart' show winProbability;
 import '../../../utils/eval_constants.dart';
 import '../tree_colors.dart';
@@ -165,7 +167,7 @@ class _RoleBadge extends StatelessWidget {
         isOurTurn ? 'Our move' : 'Opponent',
         style: const TextStyle(
           fontSize: 10,
-          color: Colors.white,
+          color: AppColors.ink,
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -184,34 +186,43 @@ class _PositionStatsBar extends StatelessWidget {
 
     final evalCp = currentNode.evalForUsCp;
     if (evalCp != null) {
-      chips.add(_StatChip(
-        label: 'Eval',
-        value: _formatEval(evalCp),
-        color: evalColor(evalCp),
-      ));
+      chips.add(
+        _StatChip(
+          label: 'Eval',
+          value: _formatEval(evalCp),
+          color: evalColor(evalCp),
+        ),
+      );
     }
 
     if (currentNode.ease != null) {
-      chips.add(_StatChip(
-        label: 'Ease',
-        value: currentNode.ease!.toStringAsFixed(2),
-        color: easeColor(currentNode.ease!),
-      ));
+      chips.add(
+        _StatChip(
+          label: 'Ease',
+          value: currentNode.ease!.toStringAsFixed(2),
+          color: easeColor(currentNode.ease!),
+        ),
+      );
     }
 
     if (currentNode.expectimaxValue != null) {
-      chips.add(_StatChip(
-        label: 'V',
-        value: '${(currentNode.expectimaxValue! * 100).toStringAsFixed(1)}%',
-        color: vColor(currentNode.expectimaxValue!),
-      ));
+      chips.add(
+        _StatChip(
+          label: 'V',
+          value: '${(currentNode.expectimaxValue! * 100).toStringAsFixed(1)}%',
+          color: vColor(currentNode.expectimaxValue!),
+        ),
+      );
     }
 
-    chips.add(_StatChip(
-      label: 'Reach',
-      value: '${(currentNode.cumulativeProbability * 100).toStringAsFixed(1)}%',
-      color: Colors.blue[300]!,
-    ));
+    chips.add(
+      _StatChip(
+        label: 'Reach',
+        value:
+            '${(currentNode.cumulativeProbability * 100).toStringAsFixed(1)}%',
+        color: AppColors.info,
+      ),
+    );
 
     if (chips.isEmpty) return const SizedBox.shrink();
 
@@ -235,7 +246,7 @@ class _WinProbBar extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: Colors.grey[700]!, width: 1),
+        border: Border.all(color: AppColors.outline, width: 1),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(3),
@@ -243,11 +254,11 @@ class _WinProbBar extends StatelessWidget {
           children: [
             Expanded(
               flex: (winProb * 1000).round().clamp(1, 999),
-              child: Container(color: Colors.white),
+              child: Container(color: AppColors.sideWhite),
             ),
             Expanded(
               flex: ((1 - winProb) * 1000).round().clamp(1, 999),
-              child: Container(color: Colors.grey[900]),
+              child: Container(color: AppColors.sideBlack),
             ),
           ],
         ),
@@ -263,15 +274,15 @@ class _CandidateTableHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = TextStyle(
+    const style = TextStyle(
       fontSize: 11,
       fontWeight: FontWeight.w600,
-      color: Colors.grey[500],
+      color: AppColors.onSurfaceMuted,
       letterSpacing: 0.4,
     );
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         children: [
           SizedBox(width: 22, child: Text('#', style: style)),
@@ -289,11 +300,7 @@ class _CandidateTableHeader extends StatelessWidget {
             child: Text('NATRL', style: style, textAlign: TextAlign.right),
           ),
           Expanded(
-            child: Text(
-              'EXP EASE',
-              style: style,
-              textAlign: TextAlign.right,
-            ),
+            child: Text('EXP EASE', style: style, textAlign: TextAlign.right),
           ),
           SizedBox(
             width: 44,
@@ -339,7 +346,7 @@ class _CandidateRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
           decoration: BoxDecoration(
             border: Border(
-              bottom: BorderSide(color: Colors.grey[800]!, width: 0.5),
+              bottom: const BorderSide(color: AppColors.divider, width: 0.5),
               left: isRepertoire
                   ? const BorderSide(color: kNodeAccentRepertoire, width: 3)
                   : BorderSide.none,
@@ -351,9 +358,9 @@ class _CandidateRow extends StatelessWidget {
                 width: 22,
                 child: Text(
                   '${row.rank}',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 11,
-                    color: Colors.grey[600],
+                    color: AppColors.onSurfaceMuted,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -364,10 +371,13 @@ class _CandidateRow extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (isRepertoire)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 2),
-                        child: Icon(Icons.star,
-                            size: 12, color: Colors.amber[400]),
+                      const Padding(
+                        padding: EdgeInsets.only(right: 2),
+                        child: Icon(
+                          Icons.star,
+                          size: 12,
+                          color: AppColors.starAccent,
+                        ),
                       ),
                     Flexible(
                       child: Text(
@@ -387,9 +397,12 @@ class _CandidateRow extends StatelessWidget {
                 width: 52,
                 child: evalCp != null
                     ? _EvalBadge(evalCp: evalCp)
-                    : Text(
+                    : const Text(
                         '—',
-                        style: TextStyle(color: Colors.grey[700], fontSize: 12),
+                        style: TextStyle(
+                          color: AppColors.onSurfaceMuted,
+                          fontSize: 12,
+                        ),
                       ),
               ),
               SizedBox(
@@ -421,18 +434,15 @@ class _CandidateRow extends StatelessWidget {
                       : 'Minimum opponent ease deeper in this reply',
                 ),
               ),
-              SizedBox(
-                width: 48,
-                child: _TrapCountBadge(count: trapCount),
-              ),
+              SizedBox(width: 48, child: _TrapCountBadge(count: trapCount)),
               SizedBox(
                 width: 40,
                 child: Text(
                   '${(node.moveProbability * 100).toStringAsFixed(0)}%',
                   textAlign: TextAlign.right,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 11,
-                    color: Colors.grey[500],
+                    color: AppColors.onSurfaceMuted,
                     fontFamily: 'monospace',
                   ),
                 ),
@@ -493,7 +503,7 @@ class _MetricText extends StatelessWidget {
       style: TextStyle(
         fontSize: 11,
         fontFamily: 'monospace',
-        color: color ?? Colors.grey[700],
+        color: color ?? AppColors.onSurfaceMuted,
         fontWeight: value != null ? FontWeight.w600 : FontWeight.normal,
       ),
     );
@@ -511,18 +521,18 @@ class _TrapCountBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (count == 0) {
-      return Text(
+      return const Text(
         '—',
         textAlign: TextAlign.right,
-        style: TextStyle(fontSize: 11, color: Colors.grey[700]),
+        style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
       );
     }
 
     final color = count >= 3
-        ? Colors.red[300]!
+        ? AppColors.danger
         : count >= 2
-            ? Colors.orange[300]!
-            : Colors.yellow[300]!;
+        ? AppColors.mistakeMistake
+        : AppColors.warning;
 
     return Tooltip(
       message: '$count trappy position${count == 1 ? '' : 's'} in this line',
@@ -568,12 +578,16 @@ class _LeafPlaceholder extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.flag_outlined, size: 36, color: Colors.grey[600]),
+            const Icon(
+              Icons.flag_outlined,
+              size: 36,
+              color: AppColors.onSurfaceDim,
+            ),
             const SizedBox(height: 12),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[500], fontSize: 13),
+              style: AppTextStyles.emptyStateBody,
             ),
           ],
         ),
@@ -600,7 +614,7 @@ class _StatChip extends StatelessWidget {
       children: [
         Text(
           '$label ',
-          style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+          style: const TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
         ),
         Text(
           value,

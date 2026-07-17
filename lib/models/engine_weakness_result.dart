@@ -47,18 +47,18 @@ class EngineWeaknessResult {
   }
 
   Map<String, dynamic> toJson() => {
-        'fen': fen,
-        'evalCp': evalCp,
-        if (evalMate != null) 'evalMate': evalMate,
-        'depth': depth,
-        'gamesPlayed': gamesPlayed,
-        'wins': wins,
-        'losses': losses,
-        'draws': draws,
-        'winRate': winRate,
-        'movePath': movePath,
-        'playerIsWhite': playerIsWhite,
-      };
+    'fen': fen,
+    'evalCp': evalCp,
+    if (evalMate != null) 'evalMate': evalMate,
+    'depth': depth,
+    'gamesPlayed': gamesPlayed,
+    'wins': wins,
+    'losses': losses,
+    'draws': draws,
+    'winRate': winRate,
+    'movePath': movePath,
+    'playerIsWhite': playerIsWhite,
+  };
 
   factory EngineWeaknessResult.fromJson(Map<String, dynamic> j) =>
       EngineWeaknessResult(

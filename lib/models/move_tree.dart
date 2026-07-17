@@ -133,8 +133,8 @@ class MoveNode implements MoveTreeNodeView {
     this.nags,
     this.isEphemeral = false,
     List<MoveNode>? children,
-  })  : id = _nextId++,
-        children = children ?? [];
+  }) : id = _nextId++,
+       children = children ?? [];
 
   /// First child matching [san], or `null`.
   MoveNode? findChild(String san) {
@@ -146,8 +146,11 @@ class MoveNode implements MoveTreeNodeView {
 
   /// Append a child move (or return an existing one with the same SAN).
   /// Returns the node plus whether it is the mainline continuation (`[0]`).
-  (MoveNode node, bool isMainLine) addChild(String san, String fen,
-      {bool isEphemeral = true}) {
+  (MoveNode node, bool isMainLine) addChild(
+    String san,
+    String fen, {
+    bool isEphemeral = true,
+  }) {
     final existing = findChild(san);
     if (existing != null) {
       return (existing, children.indexOf(existing) == 0);
@@ -181,11 +184,9 @@ class MoveTree {
   /// Root-level siblings (typically one first move, but PGN allows multiple).
   final List<MoveNode> roots;
 
-  MoveTree({
-    String? startingFen,
-    List<MoveNode>? roots,
-  })  : startingFen = startingFen ?? kStandardStartFen,
-        roots = roots ?? [];
+  MoveTree({String? startingFen, List<MoveNode>? roots})
+    : startingFen = startingFen ?? kStandardStartFen,
+      roots = roots ?? [];
 
   /// Deep copy whose nodes carry freshly minted ids.
   ///
@@ -193,18 +194,18 @@ class MoveTree {
   /// ids minted by that isolate's own counter, which can collide with ids
   /// of nodes created here; adopt such a tree only through this copy.
   MoveTree copyWithFreshIds() => MoveTree(
-        startingFen: startingFen,
-        roots: roots.map(_copyNodeWithFreshId).toList(),
-      );
+    startingFen: startingFen,
+    roots: roots.map(_copyNodeWithFreshId).toList(),
+  );
 
   static MoveNode _copyNodeWithFreshId(MoveNode node) => MoveNode(
-        san: node.san,
-        fen: node.fen,
-        comment: node.comment,
-        nags: node.nags,
-        isEphemeral: node.isEphemeral,
-        children: node.children.map(_copyNodeWithFreshId).toList(),
-      );
+    san: node.san,
+    fen: node.fen,
+    comment: node.comment,
+    nags: node.nags,
+    isEphemeral: node.isEphemeral,
+    children: node.children.map(_copyNodeWithFreshId).toList(),
+  );
 
   // ── Lookup ──────────────────────────────────────────────────────────
 
@@ -328,8 +329,9 @@ class MoveTree {
       roots.clear();
       return;
     }
-    final parentSiblings =
-        path.length == 1 ? roots : nodeAt(path.parent)?.children;
+    final parentSiblings = path.length == 1
+        ? roots
+        : nodeAt(path.parent)?.children;
     if (parentSiblings == null) return;
     if (path.last >= 0 && path.last < parentSiblings.length) {
       parentSiblings.removeAt(path.last);
@@ -413,22 +415,23 @@ class MoveTree {
     if (roots.isEmpty) return '';
     final buffer = StringBuffer();
     final (startMoveNumber, startIsWhite) = moveNumberFromFen(startingFen);
-    _writeNodes(buffer, roots, startMoveNumber, startIsWhite,
-        isFirstMove: true);
+    _writeNodes(
+      buffer,
+      roots,
+      startMoveNumber,
+      startIsWhite,
+      isFirstMove: true,
+    );
     return buffer.toString().trim();
   }
 
   /// Serialize to full PGN including headers.
-  String toPgn({
-    String? event,
-    String? white,
-    String? black,
-    String? result,
-  }) {
+  String toPgn({String? event, String? white, String? black, String? result}) {
     final headers = <String>[];
     headers.add('[Event "${event ?? "?"}"]');
-    headers
-        .add('[Date "${DateTime.now().toIso8601String().split('T').first}"]');
+    headers.add(
+      '[Date "${DateTime.now().toIso8601String().split('T').first}"]',
+    );
     headers.add('[White "${white ?? "?"}"]');
     headers.add('[Black "${black ?? "?"}"]');
     headers.add('[Result "${result ?? "*"}"]');
@@ -463,15 +466,17 @@ class MoveTree {
       final afterPos = parentPosition.play(move);
       final comment = node.data.comments?.join(' ');
       final nags = node.data.nags?.toList();
-      result.add(MoveNode(
-        san: san,
-        fen: afterPos.fen,
-        comment: (comment != null && comment.trim().isNotEmpty)
-            ? comment.trim()
-            : null,
-        nags: nags,
-        children: _convertDartchessNodes(node.children, afterPos),
-      ));
+      result.add(
+        MoveNode(
+          san: san,
+          fen: afterPos.fen,
+          comment: (comment != null && comment.trim().isNotEmpty)
+              ? comment.trim()
+              : null,
+          nags: nags,
+          children: _convertDartchessNodes(node.children, afterPos),
+        ),
+      );
     }
     return result;
   }
@@ -502,7 +507,7 @@ class MoveTree {
     }
 
     buffer.write('${main.san} ');
-    _writeNags(buffer, main.nags);
+    _writeNags(buffer, main);
     if (main.comment != null && main.comment!.isNotEmpty) {
       buffer.write('{${_sanitizeComment(main.comment!)}} ');
     }
@@ -517,23 +522,32 @@ class MoveTree {
 
       final variant = siblings[i];
       buffer.write('${variant.san} ');
-      _writeNags(buffer, variant.nags);
+      _writeNags(buffer, variant);
       if (variant.comment != null && variant.comment!.isNotEmpty) {
         buffer.write('{${_sanitizeComment(variant.comment!)}} ');
       }
 
-      _writeNodes(buffer, variant.children,
-          isWhite ? moveNumber : moveNumber + 1, !isWhite);
+      _writeNodes(
+        buffer,
+        variant.children,
+        isWhite ? moveNumber : moveNumber + 1,
+        !isWhite,
+      );
 
       buffer.write(') ');
     }
 
     _writeNodes(
-        buffer, main.children, isWhite ? moveNumber : moveNumber + 1, !isWhite);
+      buffer,
+      main.children,
+      isWhite ? moveNumber : moveNumber + 1,
+      !isWhite,
+    );
   }
 
   /// Write `$N` NAG tokens (PGN standard) so annotations survive a round-trip.
-  static void _writeNags(StringBuffer buffer, List<int>? nags) {
+  static void _writeNags(StringBuffer buffer, MoveNode node) {
+    final nags = node.nags;
     if (nags == null) return;
     for (final nag in nags) {
       buffer.write('\$$nag ');

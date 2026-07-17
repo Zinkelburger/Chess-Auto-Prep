@@ -18,15 +18,15 @@ const double kCplInaccuracyThreshold = 8;
 
 // ── Graph-node colors by move quality ─────────────────────────────────────
 
-const Color kNodeColorOurMoveRepertoire = Color(0xFF3D5245);
-const Color kNodeColorOurMove = Color(0xFF354840);
-const Color kNodeColorOpponentMove = Color(0xFF3A4248);
-const Color kNodeColorBlunder = Color(0xFF6E4545);
-const Color kNodeColorBigMistake = Color(0xFF6E4F3D);
-const Color kNodeColorMistake = Color(0xFF6E5A3D);
-const Color kNodeColorInaccuracy = Color(0xFF6E6640);
-const Color kNodeColorNeutral = Color(0xFF424242);
-const Color kNodeAccentRepertoire = Color(0xFF8A9E9A);
+const Color kNodeColorOurMoveRepertoire = AppColors.treeNodeOurMoveRepertoire;
+const Color kNodeColorOurMove = AppColors.treeNodeOurMove;
+const Color kNodeColorOpponentMove = AppColors.treeNodeOpponentMove;
+const Color kNodeColorBlunder = AppColors.treeNodeBlunder;
+const Color kNodeColorBigMistake = AppColors.treeNodeBigMistake;
+const Color kNodeColorMistake = AppColors.treeNodeMistake;
+const Color kNodeColorInaccuracy = AppColors.treeNodeInaccuracy;
+const Color kNodeColorNeutral = AppColors.treeNodeNeutral;
+const Color kNodeAccentRepertoire = AppColors.treeNodeAccentRepertoire;
 
 /// Returns true when the move represented by [node] was played by us.
 bool isOurMoveNode(EvalTreeSnapshot snapshot, EvalTreeNodeSnapshot node) {
@@ -93,21 +93,23 @@ Color graphNodeColor({
 }
 
 Color nodeTextColor(Color fillColor) {
-  return Colors.white;
+  return AppColors.ink;
 }
 
 Color nodeSecondaryTextColor(Color fillColor) {
-  return Colors.white.withValues(alpha: 0.86);
+  // 0.92 keeps the raw ratio at or above 4.5:1 even on the brightest fill
+  // (treeNodeInaccuracy: 4.66:1); the 1px glyph outline adds further margin.
+  return AppColors.ink.withValues(alpha: 0.92);
 }
 
 Color nodeSelectionColor(Color fillColor) {
   return ThemeData.estimateBrightnessForColor(fillColor) == Brightness.light
-      ? Colors.black.withValues(alpha: 0.88)
-      : Colors.white;
+      ? AppColors.onWarning
+      : AppColors.ink;
 }
 
 List<Shadow> nodeTextOutline(Color fillColor) {
-  final outlineColor = Colors.black.withValues(alpha: 0.9);
+  final outlineColor = AppColors.backdrop.withValues(alpha: 0.9);
   const outlineWidth = 1.0;
   return [
     Shadow(

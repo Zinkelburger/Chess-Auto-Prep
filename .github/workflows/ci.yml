@@ -1,13 +1,14 @@
-# Runs format check, static analysis, unit/widget tests, and integration tests
-# on every push and PR to main.
+# Runs format check, static analysis, unit/widget tests, and integration tests.
+# Only on tags (to conserve free Actions minutes) or manual dispatch from the
+# Actions tab — day-to-day pushes rely on the local checks in CLAUDE.md.
 
 name: CI
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    tags:
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   test:
@@ -15,8 +16,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pinned so the formatter can't drift between stable releases and
+      # start flagging files that are clean locally. Bump deliberately,
+      # re-running `dart format` in the same commit if output changes.
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: 3.44.2
           channel: stable
           cache: true
 
@@ -44,6 +49,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: 3.44.2
           channel: stable
           cache: true
 

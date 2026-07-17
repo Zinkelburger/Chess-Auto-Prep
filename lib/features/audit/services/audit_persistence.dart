@@ -34,12 +34,12 @@ class AuditSnapshot {
   });
 
   Map<String, dynamic> toJson() => {
-        'version': 2,
-        'isComplete': isComplete,
-        'config': config.toMap(),
-        'result': result.toJson(),
-        if (!isComplete) 'checkedFens': checkedFens.toList(),
-      };
+    'version': 2,
+    'isComplete': isComplete,
+    'config': config.toMap(),
+    'result': result.toJson(),
+    if (!isComplete) 'checkedFens': checkedFens.toList(),
+  };
 
   factory AuditSnapshot.fromJson(Map<String, dynamic> j) {
     final version = j['version'] as int? ?? 1;
@@ -95,11 +95,13 @@ class AuditPersistence {
         debugPrint('[AuditPersistence] load: file empty at $path');
         return null;
       }
-      final snapshot =
-          AuditSnapshot.fromJson(jsonDecode(json) as Map<String, dynamic>);
+      final snapshot = AuditSnapshot.fromJson(
+        jsonDecode(json) as Map<String, dynamic>,
+      );
       debugPrint(
-          '[AuditPersistence] load: restored ${snapshot.result.findings.length} '
-          'findings, isComplete=${snapshot.isComplete} from $path');
+        '[AuditPersistence] load: restored ${snapshot.result.findings.length} '
+        'findings, isComplete=${snapshot.isComplete} from $path',
+      );
       return snapshot;
     } catch (e) {
       debugPrint('[AuditPersistence] Failed to load: $e');
@@ -165,18 +167,23 @@ class AuditPersistence {
   }
 
   Future<void> _write(
-      String? repertoireFilePath, AuditSnapshot snapshot) async {
+    String? repertoireFilePath,
+    AuditSnapshot snapshot,
+  ) async {
     final path = auditPath(repertoireFilePath);
     if (path == null) {
       debugPrint(
-          '[AuditPersistence] _write: no path for "$repertoireFilePath"');
+        '[AuditPersistence] _write: no path for "$repertoireFilePath"',
+      );
       return;
     }
     try {
       final json = jsonEncode(snapshot.toJson());
       await StorageFactory.instance.writeFile(path, json);
-      debugPrint('[AuditPersistence] saved ${snapshot.result.findings.length} '
-          'findings (complete=${snapshot.isComplete}) to $path');
+      debugPrint(
+        '[AuditPersistence] saved ${snapshot.result.findings.length} '
+        'findings (complete=${snapshot.isComplete}) to $path',
+      );
     } catch (e) {
       debugPrint('[AuditPersistence] Failed to save: $e');
     }

@@ -13,6 +13,8 @@ import '../services/coherence_service.dart';
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import '../theme/app_colors.dart';
+import '../utils/lines_filter_helpers.dart' show isPlaceholderLineTitle;
+import '../utils/pgn_utils.dart' as pgn_utils;
 import 'analysis/analysis_settings_sheet.dart';
 import 'layout/edit_main_zone.dart';
 import 'repertoire_analysis_dock.dart';
@@ -111,8 +113,9 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
           _analysisFraction = analysis;
         } else {
           final legacy = prefs.getDouble(_kLegacyPgnFraction);
-          _analysisFraction =
-              legacy != null ? (1.0 - legacy).clamp(0.22, 0.65) : 0.42;
+          _analysisFraction = legacy != null
+              ? (1.0 - legacy).clamp(0.22, 0.65)
+              : 0.42;
         }
         _showDock = prefs.getBool(_kShowDock) ?? true;
       });
@@ -144,8 +147,10 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
                 return _buildPgnEditor();
               }
               final total = constraints.maxHeight;
-              final dockHeight =
-                  (total * _analysisFraction).clamp(120.0, total - 100);
+              final dockHeight = (total * _analysisFraction).clamp(
+                120.0,
+                total - 100,
+              );
               final pgnHeight = total - dockHeight - 8;
 
               return Column(
@@ -231,10 +236,20 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
     );
   }
 
+  /// Title of the selected line (its PGN Event header, falling back to the
+  /// display name), or null when composing a new line.
+  String? _selectedLineTitle() {
+    final line = widget.controller.selectedPgnLine;
+    if (line == null) return null;
+    final event = pgn_utils.extractEventTitle(line.fullPgn);
+    return isPlaceholderLineTitle(event) ? line.name : event;
+  }
+
   Widget _buildPgnEditor() {
     return EditMainZone(
       tree: widget.tree,
       currentPath: widget.currentPath,
+      lineTitle: _selectedLineTitle(),
       onJump: widget.onJump,
       onCommentChanged: widget.onCommentChanged,
       onToggleNag: widget.onToggleNag,
@@ -282,7 +297,9 @@ class _SplitHandleState extends State<_SplitHandle> {
               width: _dragging ? 56 : 40,
               height: 3,
               decoration: BoxDecoration(
-                color: _dragging ? AppColors.expectimax : Colors.grey[600],
+                color: _dragging
+                    ? AppColors.expectimax
+                    : AppColors.onSurfaceDim,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),

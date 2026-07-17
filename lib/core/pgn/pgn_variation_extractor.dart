@@ -53,7 +53,9 @@ Map<int, List<MoveNode>> extractPgnVariations(PgnGame game, Position startPos) {
 
 /// Recursively convert a [PgnChildNode] subtree into a [MoveNode] tree.
 MoveNode? _convertPgnSubtree(
-    PgnChildNode<PgnNodeData> pgnNode, Position posBeforeMove) {
+  PgnChildNode<PgnNodeData> pgnNode,
+  Position posBeforeMove,
+) {
   final san = pgnNode.data.san;
 
   Position posAfter;
@@ -71,8 +73,8 @@ MoveNode? _convertPgnSubtree(
 
   final comment =
       (pgnNode.data.comments != null && pgnNode.data.comments!.isNotEmpty)
-          ? pgnNode.data.comments!.first
-          : null;
+      ? pgnNode.data.comments!.first
+      : null;
 
   final nags = (pgnNode.data.nags != null && pgnNode.data.nags!.isNotEmpty)
       ? pgnNode.data.nags!.toList()

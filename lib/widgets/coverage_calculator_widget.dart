@@ -3,31 +3,13 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:chess_auto_prep/features/coverage/models/coverage_config.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../services/maia_factory.dart';
 import 'lichess_db_selector.dart';
 
-/// Configuration returned by the coverage dialog
-class CoverageConfig {
-  final double targetPercent;
-  final LichessDatabase database;
-  final Set<String> selectedRatings;
-  final Set<String> selectedSpeeds;
-  final bool useMaia;
-  final int maiaElo;
-
-  const CoverageConfig({
-    required this.targetPercent,
-    required this.database,
-    required this.selectedRatings,
-    required this.selectedSpeeds,
-    required this.useMaia,
-    required this.maiaElo,
-  });
-
-  String get ratingsString => (selectedRatings.toList()..sort()).join(',');
-  String get speedsString => selectedSpeeds.join(',');
-}
+export 'package:chess_auto_prep/features/coverage/models/coverage_config.dart'
+    show CoverageConfig;
 
 /// Shows the coverage config dialog and returns the config, or null if cancelled.
 Future<CoverageConfig?> showCoverageConfigDialog(BuildContext context) {
@@ -126,14 +108,16 @@ class _CoverageConfigDialogState extends State<_CoverageConfigDialog> {
   }
 
   void _submit() {
-    Navigator.of(context).pop(CoverageConfig(
-      targetPercent: _targetPercent,
-      database: _database,
-      selectedRatings: Set.of(_selectedRatings),
-      selectedSpeeds: Set.of(_selectedSpeeds),
-      useMaia: _useMaia,
-      maiaElo: _maiaElo,
-    ));
+    Navigator.of(context).pop(
+      CoverageConfig(
+        targetPercent: _targetPercent,
+        database: _database,
+        selectedRatings: Set.of(_selectedRatings),
+        selectedSpeeds: Set.of(_selectedSpeeds),
+        useMaia: _useMaia,
+        maiaElo: _maiaElo,
+      ),
+    );
   }
 
   // ── Threshold ──────────────────────────────────────────────────────────
@@ -142,14 +126,18 @@ class _CoverageConfigDialogState extends State<_CoverageConfigDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Target Threshold',
-            style: theme.textTheme.titleSmall
-                ?.copyWith(fontWeight: FontWeight.w600)),
+        Text(
+          'Target Threshold',
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         const SizedBox(height: 4),
         Text(
           'Stop expanding once a position has less than this chance of being reached from the root.',
           style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
         ),
         const SizedBox(height: 12),
         SizedBox(
@@ -160,10 +148,13 @@ class _CoverageConfigDialogState extends State<_CoverageConfigDialog> {
             decoration: InputDecoration(
               suffixText: '%',
               isDense: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-              border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 6,
+                vertical: 8,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+              ),
             ),
             style: const TextStyle(fontSize: 13),
             onChanged: (value) {
@@ -189,9 +180,12 @@ class _CoverageConfigDialogState extends State<_CoverageConfigDialog> {
         Row(
           children: [
             Expanded(
-              child: Text('Maia Fallback',
-                  style: theme.textTheme.titleSmall
-                      ?.copyWith(fontWeight: FontWeight.w600)),
+              child: Text(
+                'Maia Fallback',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
             Switch(
               value: _useMaia && maiaAvailable,
@@ -206,7 +200,8 @@ class _CoverageConfigDialogState extends State<_CoverageConfigDialog> {
               ? 'Use Maia neural network when Lichess DB has no data for a position.'
               : 'Maia is not available on this platform.',
           style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
         ),
         if (_useMaia && maiaAvailable) ...[
           const SizedBox(height: 8),
@@ -220,10 +215,13 @@ class _CoverageConfigDialogState extends State<_CoverageConfigDialog> {
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
                     isDense: true,
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 10,
+                    ),
                     border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                   style: const TextStyle(fontSize: 13),
                   onChanged: (value) {

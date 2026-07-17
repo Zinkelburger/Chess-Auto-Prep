@@ -19,11 +19,11 @@ void main() {
     clipboardText = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, (call) async {
-      if (call.method == 'Clipboard.setData') {
-        clipboardText = (call.arguments as Map)['text'] as String?;
-      }
-      return null;
-    });
+          if (call.method == 'Clipboard.setData') {
+            clipboardText = (call.arguments as Map)['text'] as String?;
+          }
+          return null;
+        });
   });
 
   tearDown(() {
@@ -33,20 +33,23 @@ void main() {
 
   Future<PgnViewerWidgetController> pumpViewer(WidgetTester tester) async {
     final controller = PgnViewerWidgetController();
-    await tester.pumpWidget(MaterialApp(
-      // The app theme uses floating snackbars; showAppSnackBar sets a width,
-      // which asserts under the default fixed behavior.
-      theme: ThemeData(
-        snackBarTheme:
-            const SnackBarThemeData(behavior: SnackBarBehavior.floating),
-      ),
-      home: Scaffold(
-        body: PgnViewerWidget(
-          pgnText: '1. e4 e5 2. Nf3 Nc6 3. Bb5',
-          controller: controller,
+    await tester.pumpWidget(
+      MaterialApp(
+        // The app theme uses floating snackbars; showAppSnackBar sets a width,
+        // which asserts under the default fixed behavior.
+        theme: ThemeData(
+          snackBarTheme: const SnackBarThemeData(
+            behavior: SnackBarBehavior.floating,
+          ),
+        ),
+        home: Scaffold(
+          body: PgnViewerWidget(
+            pgnText: '1. e4 e5 2. Nf3 Nc6 3. Bb5',
+            controller: controller,
+          ),
         ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
     return controller;
   }

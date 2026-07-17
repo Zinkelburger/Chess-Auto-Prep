@@ -8,6 +8,7 @@ import 'dart:ui' show Color;
 
 import 'package:dartchess/dartchess.dart';
 
+import '../theme/app_colors.dart';
 import 'movetext_builder.dart';
 
 // ---------------------------------------------------------------------------
@@ -34,12 +35,12 @@ class NagInfo {
 /// been lifted a step — #66BB6A/#EF5350 sat at ~7.9:1/~5.4:1, and the red in
 /// particular was hard to read at movetext sizes.)
 const kMoveNags = [
-  NagInfo(3, '!!', 'Brilliant', Color(0xFF2BD9C5)),
-  NagInfo(1, '!', 'Good move', Color(0xFF81C784)),
-  NagInfo(5, '!?', 'Interesting', Color(0xFFCDDC39)),
-  NagInfo(6, '?!', 'Dubious', Color(0xFFFFCA28)),
-  NagInfo(2, '?', 'Mistake', Color(0xFFFF9E45)),
-  NagInfo(4, '??', 'Blunder', Color(0xFFFF8A80)),
+  NagInfo(3, '!!', 'Brilliant', AppColors.nagBrilliant),
+  NagInfo(1, '!', 'Good move', AppColors.nagGood),
+  NagInfo(5, '!?', 'Interesting', AppColors.nagInteresting),
+  NagInfo(6, '?!', 'Dubious', AppColors.nagDubious),
+  NagInfo(2, '?', 'Mistake', AppColors.nagMistake),
+  NagInfo(4, '??', 'Blunder', AppColors.nagBlunder),
 ];
 
 /// Lookup NAG info by ID. Returns null for unknown NAGs.
@@ -54,7 +55,7 @@ NagInfo? nagInfoById(int id) {
 String nagSymbol(int id) => nagInfoById(id)?.symbol ?? '\$$id';
 
 /// Get the color for a NAG ID. Returns a neutral grey for unknown NAGs.
-Color nagColor(int id) => nagInfoById(id)?.color ?? const Color(0xFF9E9E9E);
+Color nagColor(int id) => nagInfoById(id)?.color ?? AppColors.onSurfaceMuted;
 
 /// The primary move-quality NAG (ids 1–6) on [nags], or null when none is set.
 /// Drives the move's colour in the movetext. Only one quality NAG is ever
@@ -90,10 +91,7 @@ List<int> toggleQualityNag(List<int>? current, int nagId) {
       if (n < 1 || n > 6) n,
   ];
   final alreadyOn = (current ?? const <int>[]).contains(nagId);
-  return <int>[
-    if (!alreadyOn && nagId >= 1 && nagId <= 6) nagId,
-    ...others,
-  ];
+  return <int>[if (!alreadyOn && nagId >= 1 && nagId <= 6) nagId, ...others];
 }
 
 // ---------------------------------------------------------------------------
@@ -259,7 +257,8 @@ final _clkRe = RegExp(r'\[%clk [^\]]+\]');
 final _anyPgnTokenRe = RegExp(r'\[%[a-zA-Z]+[^\]]*\]');
 final _scoreArrowRe = RegExp(r'\([+-]?\d+\.?\d*\s*[→-]\s*[+-]?\d+\.?\d*\)');
 final _classificationRe = RegExp(
-    r'(Inaccuracy|Mistake|Blunder|Good move|Excellent move|Best move)\.[^.]*\.');
+  r'(Inaccuracy|Mistake|Blunder|Good move|Excellent move|Best move)\.[^.]*\.',
+);
 final _wasBestRe = RegExp(r'[A-Za-z0-9+#-]+\s+was best\.?');
 final _whitespaceRe = RegExp(r'\s+');
 
@@ -319,14 +318,7 @@ List<String> formatProseComment(String comment) {
 // ---------------------------------------------------------------------------
 
 /// Segment types emitted by [parseRichComment].
-enum RichSegmentType {
-  text,
-  header,
-  blockQuote,
-  bracket,
-  fen,
-  link,
-}
+enum RichSegmentType { text, header, blockQuote, bracket, fen, link }
 
 /// A single segment of a rich (Chessable-style) PGN comment.
 class RichSegment {
@@ -339,7 +331,8 @@ class RichSegment {
   const RichSegment(this.type, this.content);
 
   @override
-  String toString() => 'RichSegment($type, "${content.length > 40 ? '${content.substring(0, 40)}...' : content}")';
+  String toString() =>
+      'RichSegment($type, "${content.length > 40 ? '${content.substring(0, 40)}...' : content}")';
 }
 
 /// Strip engine tokens but preserve Chessable `@@...@@` markers.
@@ -432,10 +425,7 @@ List<RichSegment> parseRichComment(String comment) {
     final endTag = _closingTag(tag);
     if (endTag != null) {
       // Find the matching end marker
-      final endIdx = markers.indexWhere(
-        (m) => m.group(1) == endTag,
-        i + 1,
-      );
+      final endIdx = markers.indexWhere((m) => m.group(1) == endTag, i + 1);
       if (endIdx != -1) {
         final innerStart = marker.end;
         final innerEnd = markers[endIdx].start;
@@ -584,7 +574,8 @@ class CommentMove extends CommentToken {
 /// capture, and promotion. The alternation is a single capturing group so
 /// callers embedding it can capture the core. Shared by [_commentMoveRe] here
 /// and the prose move detector in the movetext view.
-const String kSanCorePattern = r'(O-O-O|O-O|'
+const String kSanCorePattern =
+    r'(O-O-O|O-O|'
     r'(?:[KQRBN][a-h1-8]?x?[a-h][1-8]|[a-h]x[a-h][1-8]|[a-h][1-8])(?:=[QRBN])?)';
 
 /// Matches one move token: optional move number + dots, SAN core, optional
@@ -697,7 +688,8 @@ List<CommentToken> parseCommentTokens(String text) {
     // survive interspersed prose ("... is a draw: 43.Rxc4+ ...") but break
     // when the analysis jumps back to try a different move. A FEN always forces
     // a fresh run so its line isn't glued onto the preceding one.
-    final continues = !forceNewRun &&
+    final continues =
+        !forceNewRun &&
         number >= 0 &&
         expectedNumber != null &&
         number == expectedNumber &&
@@ -713,14 +705,16 @@ List<CommentToken> parseCommentTokens(String text) {
     }
     forceNewRun = false;
 
-    tokens.add(CommentMove(
-      san: m.group(3)!,
-      display: part,
-      moveNumber: number,
-      isWhite: white,
-      runId: runId,
-      anchorFen: runId == anchoredRunId ? activeRunAnchorFen : null,
-    ));
+    tokens.add(
+      CommentMove(
+        san: m.group(3)!,
+        display: part,
+        moveNumber: number,
+        isWhite: white,
+        runId: runId,
+        anchorFen: runId == anchoredRunId ? activeRunAnchorFen : null,
+      ),
+    );
 
     if (number >= 0) {
       lastNumber = number;

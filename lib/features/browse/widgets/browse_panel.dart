@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_colors.dart';
 import '../../../widgets/shortcut_tooltip.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
@@ -99,8 +100,9 @@ class _BrowsePanelState extends State<BrowsePanel> {
 
     if (!widget.isOurTurn) {
       _candidates = all.where((m) => (m.dbFrequency ?? 0.05) >= 0.01).toList();
-      _rareCandidates =
-          all.where((m) => (m.dbFrequency ?? 0.05) < 0.01).toList();
+      _rareCandidates = all
+          .where((m) => (m.dbFrequency ?? 0.05) < 0.01)
+          .toList();
     } else {
       _candidates = all;
       _rareCandidates = [];
@@ -132,7 +134,8 @@ class _BrowsePanelState extends State<BrowsePanel> {
         else
           Expanded(
             child: ListView.builder(
-              itemCount: _candidates.length +
+              itemCount:
+                  _candidates.length +
                   (_rareCandidates.isNotEmpty ? 1 : 0) +
                   (_showRare ? _rareCandidates.length : 0),
               itemBuilder: (ctx, i) {
@@ -156,8 +159,11 @@ class _BrowsePanelState extends State<BrowsePanel> {
     );
   }
 
-  Widget _buildCandidateItem(int index, CandidateMove candidate,
-      {bool isRare = false}) {
+  Widget _buildCandidateItem(
+    int index,
+    CandidateMove candidate, {
+    bool isRare = false,
+  }) {
     final trapCount = candidate.subtreeTrapCount ?? 0;
     final isExpanded = widget.expandedTrapIndex == index;
 
@@ -212,8 +218,9 @@ class _BrowsePanelState extends State<BrowsePanel> {
           const SizedBox(width: 8),
           Text(
             'CANDIDATE MOVES',
-            style: theme.textTheme.labelLarge
-                ?.copyWith(fontWeight: FontWeight.bold),
+            style: theme.textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const Spacer(),
           Text('${_candidates.length} moves', style: theme.textTheme.bodySmall),
@@ -243,7 +250,7 @@ class _BrowsePanelState extends State<BrowsePanel> {
             Icon(
               _showRare ? Icons.expand_less : Icons.expand_more,
               size: 16,
-              color: Colors.grey,
+              color: AppColors.onSurfaceMuted,
             ),
             const SizedBox(width: 4),
             Text(

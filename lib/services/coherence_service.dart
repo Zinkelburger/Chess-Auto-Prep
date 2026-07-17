@@ -12,16 +12,14 @@ import 'package:flutter/foundation.dart';
 
 import '../models/repertoire_line.dart';
 import 'fp_growth.dart';
+import '../utils/safe_change_notifier.dart';
 
 /// Serializable input for FP-Growth mining in a background isolate.
 class FpGrowthInput {
   final List<Set<String>> transactions;
   final double minSupport;
 
-  const FpGrowthInput({
-    required this.transactions,
-    required this.minSupport,
-  });
+  const FpGrowthInput({required this.transactions, required this.minSupport});
 }
 
 /// Top-level entry point for [Isolate.run] / background FP-Growth.
@@ -39,10 +37,7 @@ class CoherenceCandidateHint {
   final double score;
   final String? clusterName;
 
-  const CoherenceCandidateHint({
-    required this.score,
-    this.clusterName,
-  });
+  const CoherenceCandidateHint({required this.score, this.clusterName});
 }
 
 /// Returns a hint when [candidateSan] extends a frequent itemset or cluster.
@@ -113,8 +108,9 @@ double lineCoherence(
       score += mfi.support;
     }
   }
-  final maxPossible =
-      maximalItemsets.map((m) => m.support).reduce((a, b) => a + b);
+  final maxPossible = maximalItemsets
+      .map((m) => m.support)
+      .reduce((a, b) => a + b);
   return maxPossible > 0 ? (score / maxPossible).clamp(0.0, 1.0) : 0.0;
 }
 
@@ -171,7 +167,7 @@ class CoherenceResult {
   });
 }
 
-class CoherenceService extends ChangeNotifier {
+class CoherenceService extends ChangeNotifier with SafeChangeNotifier {
   CoherenceResult? _result;
   CoherenceResult? get result => _result;
   bool _computing = false;
@@ -184,15 +180,13 @@ class CoherenceService extends ChangeNotifier {
     if (_computing || lines.length < 5) return;
     _computing = true;
 
-    final transactions =
-        lines.map((l) => extractItemset(l, playAsWhite)).toList();
+    final transactions = lines
+        .map((l) => extractItemset(l, playAsWhite))
+        .toList();
 
     final maximal = await Isolate.run(
       () => runFpGrowthMining(
-        FpGrowthInput(
-          transactions: transactions,
-          minSupport: minSupport,
-        ),
+        FpGrowthInput(transactions: transactions, minSupport: minSupport),
       ),
     );
 
@@ -209,13 +203,15 @@ class CoherenceService extends ChangeNotifier {
     }
 
     final global = _weightedAverage(lineScores, lineProbabilities);
-    final riskWeighted =
-        computeRiskWeightedCoherence(lineScores, lineProbabilities);
+    final riskWeighted = computeRiskWeightedCoherence(
+      lineScores,
+      lineProbabilities,
+    );
     final topN = clusters.length >= 3
         ? clusters.take(3).map((c) => c.probabilityMass).reduce((a, b) => a + b)
         : clusters.isNotEmpty
-            ? clusters.map((c) => c.probabilityMass).reduce((a, b) => a + b)
-            : 0.0;
+        ? clusters.map((c) => c.probabilityMass).reduce((a, b) => a + b)
+        : 0.0;
 
     _result = CoherenceResult(
       globalCoherence: global,
@@ -242,8 +238,10 @@ class CoherenceService extends ChangeNotifier {
     bool playAsWhite,
   ) {
     final ranked = maximal.toList()
-      ..sort((a, b) =>
-          (b.support * b.items.length).compareTo(a.support * a.items.length));
+      ..sort(
+        (a, b) =>
+            (b.support * b.items.length).compareTo(a.support * a.items.length),
+      );
 
     final assigned = <String>{};
     final clusters = <CoherenceCluster>[];
@@ -263,27 +261,32 @@ class CoherenceService extends ChangeNotifier {
         assigned.add(m.id);
       }
 
-      clusters.add(CoherenceCluster(
-        id: 'cluster_${clusterId++}',
-        signature: mfi,
-        autoName: _generateClusterName(mfi),
-        lineIds: members.map((l) => l.id).toList(),
-        probabilityMass:
-            members.map((l) => l.importance ?? 0.01).fold(0.0, (a, b) => a + b),
-      ));
+      clusters.add(
+        CoherenceCluster(
+          id: 'cluster_${clusterId++}',
+          signature: mfi,
+          autoName: _generateClusterName(mfi),
+          lineIds: members.map((l) => l.id).toList(),
+          probabilityMass: members
+              .map((l) => l.importance ?? 0.01)
+              .fold(0.0, (a, b) => a + b),
+        ),
+      );
     }
 
     final unclustered = lines.where((l) => !assigned.contains(l.id)).toList();
     if (unclustered.isNotEmpty) {
-      clusters.add(CoherenceCluster(
-        id: 'unclustered',
-        signature: const FrequentItemset(items: {}, support: 0, count: 0),
-        autoName: 'Unclustered',
-        lineIds: unclustered.map((l) => l.id).toList(),
-        probabilityMass: unclustered
-            .map((l) => l.importance ?? 0.01)
-            .fold(0.0, (a, b) => a + b),
-      ));
+      clusters.add(
+        CoherenceCluster(
+          id: 'unclustered',
+          signature: const FrequentItemset(items: {}, support: 0, count: 0),
+          autoName: 'Unclustered',
+          lineIds: unclustered.map((l) => l.id).toList(),
+          probabilityMass: unclustered
+              .map((l) => l.importance ?? 0.01)
+              .fold(0.0, (a, b) => a + b),
+        ),
+      );
     }
 
     return clusters;

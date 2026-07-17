@@ -13,12 +13,14 @@ void main() {
       expect(winningChanceFromCp(0), closeTo(0.0, 1e-12));
     });
 
-    test('matches the unclamped Lichess logistic inside the clamp window',
-        () {
+    test('matches the unclamped Lichess logistic inside the clamp window', () {
       for (final cp in [-1000, -300, -1, 1, 250, 999, 1000]) {
         final expected = 2.0 / (1.0 + math.exp(-kWinProbK * cp)) - 1.0;
-        expect(winningChanceFromCp(cp), closeTo(expected, 1e-12),
-            reason: 'cp=$cp');
+        expect(
+          winningChanceFromCp(cp),
+          closeTo(expected, 1e-12),
+          reason: 'cp=$cp',
+        );
       }
     });
 
@@ -34,7 +36,10 @@ void main() {
 
     test('is antisymmetric', () {
       for (final cp in [50, 400, 1000, 3000]) {
-        expect(winningChanceFromCp(-cp), closeTo(-winningChanceFromCp(cp), 1e-12));
+        expect(
+          winningChanceFromCp(-cp),
+          closeTo(-winningChanceFromCp(cp), 1e-12),
+        );
       }
     });
   });

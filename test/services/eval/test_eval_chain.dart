@@ -25,15 +25,15 @@ void main() {
   });
 
   TreeBuildConfig baseConfig({int quota = 100}) => TreeBuildConfig(
-        startFen: fen,
-        playAsWhite: true,
-        enableLocalChessDb: true,
-        enableChessDbApi: true,
-        chessDbApiDailyQuota: quota,
-        enableExtEvalSubtreeSkip: true,
-        evalDepth: 20,
-        minAcceptableEvalDepth: 18,
-      );
+    startFen: fen,
+    playAsWhite: true,
+    enableLocalChessDb: true,
+    enableChessDbApi: true,
+    chessDbApiDailyQuota: quota,
+    enableExtEvalSubtreeSkip: true,
+    evalDepth: 20,
+    minAcceptableEvalDepth: 18,
+  );
 
   Future<({int stmCp, int depth})> fakeStockfish(String f, int depth) async {
     return (stmCp: 7, depth: depth);

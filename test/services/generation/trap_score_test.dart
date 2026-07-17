@@ -16,73 +16,80 @@ void main() {
     test('null for fewer than two children', () {
       final node = _opponentNode();
       makeNode(
-          fen: kFenAfterE4E5,
-          san: 'e5',
-          ply: 2,
-          isWhiteToMove: true,
-          evalCp: 30,
-          moveProbability: 1.0,
-          parent: node);
+        fen: kFenAfterE4E5,
+        san: 'e5',
+        ply: 2,
+        isWhiteToMove: true,
+        evalCp: 30,
+        moveProbability: 1.0,
+        parent: node,
+      );
       expect(analyzeTrapScore(node), isNull);
     });
 
     test('null when no child has an engine eval', () {
       final node = _opponentNode();
       makeNode(
-          fen: kFenAfterE4E5,
-          san: 'e5',
-          ply: 2,
-          isWhiteToMove: true,
-          moveProbability: 0.6,
-          parent: node);
+        fen: kFenAfterE4E5,
+        san: 'e5',
+        ply: 2,
+        isWhiteToMove: true,
+        moveProbability: 0.6,
+        parent: node,
+      );
       makeNode(
-          fen: kFenAfterE4C5,
-          san: 'c5',
-          ply: 2,
-          isWhiteToMove: true,
-          moveProbability: 0.4,
-          parent: node);
+        fen: kFenAfterE4C5,
+        san: 'c5',
+        ply: 2,
+        isWhiteToMove: true,
+        moveProbability: 0.4,
+        parent: node,
+      );
       expect(analyzeTrapScore(node), isNull);
     });
 
     test('null when the most popular move has no engine eval', () {
       final node = _opponentNode();
       makeNode(
-          fen: kFenAfterE4E5,
-          san: 'e5',
-          ply: 2,
-          isWhiteToMove: true,
-          moveProbability: 0.6, // popular but uneval'd
-          parent: node);
+        fen: kFenAfterE4E5,
+        san: 'e5',
+        ply: 2,
+        isWhiteToMove: true,
+        moveProbability: 0.6, // popular but uneval'd
+        parent: node,
+      );
       makeNode(
-          fen: kFenAfterE4C5,
-          san: 'c5',
-          ply: 2,
-          isWhiteToMove: true,
-          evalCp: 30,
-          moveProbability: 0.4,
-          parent: node);
+        fen: kFenAfterE4C5,
+        san: 'c5',
+        ply: 2,
+        isWhiteToMove: true,
+        evalCp: 30,
+        moveProbability: 0.4,
+        parent: node,
+      );
       expect(analyzeTrapScore(node), isNull);
     });
 
     test('score 0.0 when the popular move is also the best move', () {
       final node = _opponentNode();
       final popularBest = makeNode(
-          fen: kFenAfterE4E5,
-          san: 'e5',
-          ply: 2,
-          isWhiteToMove: true,
-          evalCp: 10, // mover eval -10: best for black
-          moveProbability: 0.7,
-          parent: node);
+        fen: kFenAfterE4E5,
+        san: 'e5',
+        ply: 2,
+        isWhiteToMove: true,
+        evalCp: 10, // mover eval -10: best for black
+        moveProbability: 0.7,
+        parent: node,
+      );
       makeNode(
-          fen: kFenAfterE4C5,
-          san: 'c5',
-          ply: 2,
-          isWhiteToMove: true,
-          evalCp: 150, // mover eval -150: worse
-          moveProbability: 0.3,
-          parent: node);
+        fen: kFenAfterE4C5,
+        san: 'c5',
+        ply: 2,
+        isWhiteToMove: true,
+        evalCp: 150, // mover eval -150: worse
+        moveProbability: 0.3,
+        parent: node,
+      );
 
       final analysis = analyzeTrapScore(node)!;
       expect(analysis.popularIsBest, isTrue);
@@ -94,21 +101,23 @@ void main() {
     test('trap = (evalDiff / 200) * highestProb below the clamp', () {
       final node = _opponentNode();
       final popular = makeNode(
-          fen: kFenAfterE4E5,
-          san: 'e5',
-          ply: 2,
-          isWhiteToMove: true,
-          evalCp: 100, // mover eval -100
-          moveProbability: 0.6,
-          parent: node);
+        fen: kFenAfterE4E5,
+        san: 'e5',
+        ply: 2,
+        isWhiteToMove: true,
+        evalCp: 100, // mover eval -100
+        moveProbability: 0.6,
+        parent: node,
+      );
       final best = makeNode(
-          fen: kFenAfterE4C5,
-          san: 'c5',
-          ply: 2,
-          isWhiteToMove: true,
-          evalCp: 0, // mover eval 0: best
-          moveProbability: 0.4,
-          parent: node);
+        fen: kFenAfterE4C5,
+        san: 'c5',
+        ply: 2,
+        isWhiteToMove: true,
+        evalCp: 0, // mover eval 0: best
+        moveProbability: 0.4,
+        parent: node,
+      );
 
       final analysis = analyzeTrapScore(node)!;
       expect(analysis.mostPopular, same(popular));
@@ -123,21 +132,23 @@ void main() {
     test('trap factor clamps at 1.0 for evalDiff > 200', () {
       final node = _opponentNode();
       makeNode(
-          fen: kFenAfterE4E5,
-          san: 'e5',
-          ply: 2,
-          isWhiteToMove: true,
-          evalCp: 500, // mover eval -500 (popular blunder)
-          moveProbability: 0.8,
-          parent: node);
+        fen: kFenAfterE4E5,
+        san: 'e5',
+        ply: 2,
+        isWhiteToMove: true,
+        evalCp: 500, // mover eval -500 (popular blunder)
+        moveProbability: 0.8,
+        parent: node,
+      );
       makeNode(
-          fen: kFenAfterE4C5,
-          san: 'c5',
-          ply: 2,
-          isWhiteToMove: true,
-          evalCp: 0,
-          moveProbability: 0.2,
-          parent: node);
+        fen: kFenAfterE4C5,
+        san: 'c5',
+        ply: 2,
+        isWhiteToMove: true,
+        evalCp: 0,
+        moveProbability: 0.2,
+        parent: node,
+      );
 
       final analysis = analyzeTrapScore(node)!;
       // evalDiff 500 → clamped factor 1.0 × 0.8

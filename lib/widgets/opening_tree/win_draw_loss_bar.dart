@@ -33,20 +33,20 @@ class WinDrawLossBar extends StatelessWidget {
   final WdlPerspective perspective;
   final double height;
 
-  static const _whiteSegment = Color(0xFFE8E8E8);
-  static const _blackSegment = Color(0xFF2B2B2B);
+  static const _whiteSegment = AppColors.wdlWhite;
+  static const _blackSegment = AppColors.wdlBlack;
 
   @override
   Widget build(BuildContext context) {
     final (winColor, lossColor) = switch (perspective) {
       WdlPerspective.playerIsWhite => (
-          AppColors.evalPositive,
-          AppColors.evalNegative
-        ),
+        AppColors.evalPositive,
+        AppColors.evalNegative,
+      ),
       WdlPerspective.playerIsBlack => (
-          AppColors.evalNegative,
-          AppColors.evalPositive
-        ),
+        AppColors.evalNegative,
+        AppColors.evalPositive,
+      ),
       WdlPerspective.whiteBlack => (_whiteSegment, _blackSegment),
     };
 
@@ -54,18 +54,27 @@ class WinDrawLossBar extends StatelessWidget {
       height: height,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(2),
-        border: Border.all(color: Colors.grey[700]!, width: 1),
+        border: Border.all(color: AppColors.outline, width: 1),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(1),
         child: Row(
           children: [
             if (wins > 0)
-              Expanded(flex: wins, child: Container(color: winColor)),
+              Expanded(
+                flex: wins,
+                child: Container(color: winColor),
+              ),
             if (draws > 0)
-              Expanded(flex: draws, child: Container(color: Colors.grey[600])),
+              Expanded(
+                flex: draws,
+                child: Container(color: AppColors.wdlDraw),
+              ),
             if (losses > 0)
-              Expanded(flex: losses, child: Container(color: lossColor)),
+              Expanded(
+                flex: losses,
+                child: Container(color: lossColor),
+              ),
           ],
         ),
       ),
