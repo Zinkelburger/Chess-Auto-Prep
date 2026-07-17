@@ -40,11 +40,27 @@ class _SortControl extends StatelessWidget {
             ),
             items: [
               for (final mode in LineSortMode.values)
-                DropdownMenuItem(value: mode, child: Text(mode.label)),
+                DropdownMenuItem(
+                  value: mode,
+                  child: Tooltip(
+                    message: mode.description,
+                    waitDuration: const Duration(milliseconds: 400),
+                    child: Text(mode.label),
+                  ),
+                ),
             ],
             onChanged: (mode) {
               if (mode != null) onChanged(mode);
             },
+          ),
+          const SizedBox(width: 6),
+          Tooltip(
+            message: value.description,
+            child: Icon(
+              Icons.help_outline,
+              size: 14,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
+            ),
           ),
         ],
       ),

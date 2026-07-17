@@ -41,6 +41,11 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
   /// activation.  [pendingLineId] optionally focuses one chapter's line.
   String? pendingTrainStudyPath;
 
+  /// SAN sequence the builder should navigate to after loading the pending
+  /// repertoire ("Explore this position" from the trainer). Consumed with
+  /// [pendingRepertoirePath].
+  List<String>? pendingMoveSequence;
+
   /// PGN file to open for editing in Study mode ("Edit study" in the
   /// Repertoire Trainer).  Consumed by the study screen on activation.
   String? pendingStudyPath;
@@ -114,9 +119,16 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
   }
 
   /// Switch to builder with a specific repertoire and optional line to focus.
-  void switchToBuilder({required String repertoirePath, String? lineId}) {
+  /// [moveSequence] navigates the builder board to that position after load
+  /// (used by the trainer's "Explore this position").
+  void switchToBuilder({
+    required String repertoirePath,
+    String? lineId,
+    List<String>? moveSequence,
+  }) {
     pendingRepertoirePath = repertoirePath;
     pendingLineId = lineId;
+    pendingMoveSequence = moveSequence;
     _currentMode = AppMode.repertoire;
     notifyListeners();
   }

@@ -136,6 +136,15 @@ class _StudyScreenState extends State<StudyScreen> {
     return KeyEventResult.ignored;
   }
 
+  /// Click on an engine-line move: play the PV into the chapter up to and
+  /// including the clicked move (existing moves are followed, new ones
+  /// become variations — same behavior as the PGN viewer).
+  void _addEngineLine(List<String> sanMoves, int clickedIndex) {
+    for (var i = 0; i <= clickedIndex && i < sanMoves.length; i++) {
+      if (!_study.playSan(sanMoves[i])) break;
+    }
+  }
+
   // ── Study / chapter management ───────────────────────────────────────
 
   Future<String?> _promptName(String title, {String? initial}) async {
@@ -672,7 +681,11 @@ class _StudyScreenState extends State<StudyScreen> {
     return Column(
       children: [
         // Engine on top of the side pane — same spot as the PGN viewer.
-        InlineEngineBar(fen: _study.currentPosition.fen),
+        InlineEngineBar(
+          fen: _study.currentPosition.fen,
+          previewFlipped: _study.flipped,
+          onLineMoveTapped: _addEngineLine,
+        ),
         const Divider(height: 1),
         // Chapter bar
         Padding(
