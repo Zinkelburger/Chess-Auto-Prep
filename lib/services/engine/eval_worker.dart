@@ -124,8 +124,12 @@ class EvalWorker {
   /// Run MultiPV analysis on a position. Returns when bestmove arrives.
   /// Calls [onProgress] on each info update for progressive UI.
   Future<DiscoveryResult> runDiscovery(
-      String fen, int depth, int multiPv, bool isWhiteToMove,
-      {void Function(DiscoveryResult)? onProgress}) async {
+    String fen,
+    int depth,
+    int multiPv,
+    bool isWhiteToMove, {
+    void Function(DiscoveryResult)? onProgress,
+  }) async {
     stop();
 
     _discoveryIsWhiteToMove = isWhiteToMove;
@@ -213,12 +217,14 @@ class EvalWorker {
       } else if (line.startsWith('bestmove')) {
         final lines = _discoveryLines.values.toList()
           ..sort((a, b) => a.pvNumber.compareTo(b.pvNumber));
-        _discoveryCompleter!.complete(DiscoveryResult(
-          lines: lines,
-          depth: _discoveryDepth,
-          nodes: _discoveryNodes,
-          nps: _discoveryNps,
-        ));
+        _discoveryCompleter!.complete(
+          DiscoveryResult(
+            lines: lines,
+            depth: _discoveryDepth,
+            nodes: _discoveryNodes,
+            nps: _discoveryNps,
+          ),
+        );
         _discoveryCompleter = null;
       }
       return;
@@ -230,12 +236,14 @@ class EvalWorker {
     if (line.startsWith('info') && line.contains('score')) {
       _parseSingleInfo(line);
     } else if (line.startsWith('bestmove')) {
-      _evalCompleter?.complete(EvalResult(
-        scoreCp: _scoreCp,
-        scoreMate: _scoreMate,
-        pv: List.from(_pv),
-        depth: _depth,
-      ));
+      _evalCompleter?.complete(
+        EvalResult(
+          scoreCp: _scoreCp,
+          scoreMate: _scoreMate,
+          pv: List.from(_pv),
+          depth: _depth,
+        ),
+      );
       _evalCompleter = null;
     }
   }
@@ -284,12 +292,14 @@ class EvalWorker {
 
       final current = _discoveryLines.values.toList()
         ..sort((a, b) => a.pvNumber.compareTo(b.pvNumber));
-      _discoveryOnProgress?.call(DiscoveryResult(
-        lines: current,
-        depth: _discoveryDepth,
-        nodes: _discoveryNodes,
-        nps: _discoveryNps,
-      ));
+      _discoveryOnProgress?.call(
+        DiscoveryResult(
+          lines: current,
+          depth: _discoveryDepth,
+          nodes: _discoveryNodes,
+          nps: _discoveryNps,
+        ),
+      );
     }
   }
 
@@ -321,7 +331,9 @@ class EvalWorker {
     _sub.cancel();
     try {
       engine.sendCommand('quit');
-    } catch (_) {/* engine may already be closed */}
+    } catch (_) {
+      /* engine may already be closed */
+    }
     engine.dispose();
   }
 }

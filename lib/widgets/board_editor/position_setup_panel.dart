@@ -93,15 +93,17 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
               SegmentedButton<Side>(
                 segments: const [
                   ButtonSegment(
-                      value: Side.white, label: Text('White to move')),
+                    value: Side.white,
+                    label: Text('White to move'),
+                  ),
                   ButtonSegment(
-                      value: Side.black, label: Text('Black to move')),
+                    value: Side.black,
+                    label: Text('Black to move'),
+                  ),
                 ],
                 selected: {_editor.turn},
                 onSelectionChanged: (sel) => _editor.setTurn(sel.first),
-                style: const ButtonStyle(
-                  visualDensity: VisualDensity.compact,
-                ),
+                style: const ButtonStyle(visualDensity: VisualDensity.compact),
               ),
             ],
           ),
@@ -127,18 +129,34 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
           Text('Castling', style: theme.textTheme.labelLarge),
           Row(
             children: [
-              _castleBox('White O-O', _editor.whiteKingside,
-                  _editor.whiteKingsideAllowed, _editor.setWhiteKingside),
-              _castleBox('White O-O-O', _editor.whiteQueenside,
-                  _editor.whiteQueensideAllowed, _editor.setWhiteQueenside),
+              _castleBox(
+                'White O-O',
+                _editor.whiteKingside,
+                _editor.whiteKingsideAllowed,
+                _editor.setWhiteKingside,
+              ),
+              _castleBox(
+                'White O-O-O',
+                _editor.whiteQueenside,
+                _editor.whiteQueensideAllowed,
+                _editor.setWhiteQueenside,
+              ),
             ],
           ),
           Row(
             children: [
-              _castleBox('Black O-O', _editor.blackKingside,
-                  _editor.blackKingsideAllowed, _editor.setBlackKingside),
-              _castleBox('Black O-O-O', _editor.blackQueenside,
-                  _editor.blackQueensideAllowed, _editor.setBlackQueenside),
+              _castleBox(
+                'Black O-O',
+                _editor.blackKingside,
+                _editor.blackKingsideAllowed,
+                _editor.setBlackKingside,
+              ),
+              _castleBox(
+                'Black O-O-O',
+                _editor.blackQueenside,
+                _editor.blackQueensideAllowed,
+                _editor.setBlackQueenside,
+              ),
             ],
           ),
 
@@ -206,14 +224,18 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
             const SizedBox(height: 8),
             Row(
               children: [
-                Icon(Icons.warning_amber,
-                    size: 16, color: theme.colorScheme.error),
+                Icon(
+                  Icons.warning_amber,
+                  size: 16,
+                  color: theme.colorScheme.error,
+                ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     error,
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: theme.colorScheme.error),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.error,
+                    ),
                   ),
                 ),
               ],
@@ -233,8 +255,12 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
     );
   }
 
-  Widget _castleBox(String label, bool value, bool allowed,
-      ValueChanged<bool> onChanged) {
+  Widget _castleBox(
+    String label,
+    bool value,
+    bool allowed,
+    ValueChanged<bool> onChanged,
+  ) {
     return Expanded(
       child: CheckboxListTile(
         title: Text(label, style: const TextStyle(fontSize: 13)),

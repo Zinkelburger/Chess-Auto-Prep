@@ -48,7 +48,8 @@ Future<void> importAndWaitForPositions(
     }
   }
   fail(
-      'Start button never appeared after importing $gameCount games for $username');
+    'Start button never appeared after importing $gameCount games for $username',
+  );
 }
 
 /// Tap the start-session button (whichever variant is visible).
@@ -96,10 +97,7 @@ Future<List<String>> showSolutionAndParseMoves(WidgetTester tester) async {
 ///
 /// [allMoves] is the interleaved list [userMove, opponentResponse, ...].
 /// Only user moves (even indices) are played; opponent moves are automatic.
-Future<void> playTacticMoves(
-  WidgetTester tester,
-  List<String> allMoves,
-) async {
+Future<void> playTacticMoves(WidgetTester tester, List<String> allMoves) async {
   final userMoveIndices = <int>[];
   for (var i = 0; i < allMoves.length; i += 2) {
     userMoveIndices.add(i);
@@ -113,16 +111,22 @@ Future<void> playTacticMoves(
     final fenBefore = position.fen;
 
     final uci = parseMoveToUci(position, moveStr);
-    expect(uci, isNotNull,
-        reason: 'Cannot parse move "$moveStr" for FEN: $fenBefore');
+    expect(
+      uci,
+      isNotNull,
+      reason: 'Cannot parse move "$moveStr" for FEN: $fenBefore',
+    );
 
     print('  Playing "$moveStr" as UCI "$uci"');
 
     await playMoveViaAppState(tester, uci!);
 
     final fenAfter = getAppState(tester).currentPosition.fen;
-    expect(fenAfter, isNot(equals(fenBefore)),
-        reason: 'Board should change after "$moveStr" (UCI: $uci)');
+    expect(
+      fenAfter,
+      isNot(equals(fenBefore)),
+      reason: 'Board should change after "$moveStr" (UCI: $uci)',
+    );
 
     final feedback = find.textContaining('Correct');
     if (feedback.evaluate().isEmpty) {

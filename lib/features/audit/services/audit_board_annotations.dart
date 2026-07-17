@@ -46,10 +46,12 @@ List<BoardAnnotation> buildAuditBoardAnnotations({
     final (brush, san) = switch (f.type) {
       AuditFindingType.mistake => (AnnotationBrush.red, f.ourMove),
       AuditFindingType.inaccuracy => (AnnotationBrush.yellow, f.ourMove),
-      AuditFindingType.missingResponse => (
-          AnnotationBrush.blue,
-          f.missingMove
-        ),
+      AuditFindingType.missingResponse => (AnnotationBrush.blue, f.missingMove),
+      AuditFindingType.uncoveredStrongMove => (
+        AnnotationBrush.blue,
+        f.missingMove,
+      ),
+      AuditFindingType.refutation => (AnnotationBrush.red, f.ourMove),
       _ => (AnnotationBrush.green, null as String?),
     };
 
@@ -57,11 +59,9 @@ List<BoardAnnotation> buildAuditBoardAnnotations({
 
     final squares = _sanToSquares(pos, san);
     if (squares != null) {
-      annotations.add(BoardAnnotation(
-        orig: squares.$1,
-        dest: squares.$2,
-        brush: brush,
-      ));
+      annotations.add(
+        BoardAnnotation(orig: squares.$1, dest: squares.$2, brush: brush),
+      );
     }
   }
 

@@ -1,10 +1,18 @@
 /// Position analysis widget – three-panel layout for the Player Analysis screen.
 ///
-/// Left: FEN list (or loading spinner). Centre: chess board. Right: tabbed pane.
+/// Left: FEN list (or loading spinner). Centre: chess board with an action
+/// bar (study / puzzle / PGN-viewer handoffs). Right: engine bar + tabbed pane
+/// (Move Tree · Games · PGN · Analysis · Holes).
 ///
 /// All position changes from *any* source (board drag, tree click, FEN list,
-/// PGN navigation) funnel through [_navigateTo] so the board, move tree,
-/// games list and PGN viewer always stay in sync.
+/// PGN navigation, scratch-tree click, engine line click) funnel through
+/// [_navigateTo] so the board, move tree, games list and PGN viewer always
+/// stay in sync.
+///
+/// The **Analysis tab** holds a scratch [MoveTree] (same editor as Study
+/// mode): off-book board moves land there as variations instead of
+/// dead-ending, engine PV clicks append there, and the result can be saved
+/// to a study chapter.
 library;
 
 import 'dart:math' as math;
@@ -12,16 +20,40 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:provider/provider.dart';
 
+import '../core/app_state.dart';
+import '../core/study_controller.dart';
+import '../features/audit/models/audit_finding.dart';
+import '../features/audit/models/audit_result.dart';
+import '../features/holes/services/hole_hunt_service.dart';
+import '../features/holes/widgets/holes_report_panel.dart';
+import '../models/move_tree.dart';
 import '../models/position_analysis.dart';
 import '../models/opening_tree.dart';
+import '../services/storage/storage_factory.dart';
+import '../theme/app_colors.dart';
+import '../screens/puzzle_creator_screen.dart';
+import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
+import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/fen_list_widget.dart';
 import '../widgets/games_list_widget.dart';
 import '../widgets/opening_tree_widget.dart';
 import 'chess_board_widget.dart';
+import 'engine/inline_engine_bar.dart';
+import 'interactive_pgn_editor.dart';
+import 'pgn/add_to_study_dialog.dart';
 import 'pgn_viewer_widget.dart';
-import 'pgn_with_engine.dart';
+
+part 'position_analysis_widget.scratch.dart';
+part 'position_analysis_widget.handoffs.dart';
+part 'position_analysis_widget.navigation.dart';
+
+const int _kAnalysisTabIndex = 3;
+
+/// Starting-position board, shown when no FEN has been selected yet.
+const Position _startingPosition = Chess.initial;
 
 class PositionAnalysisWidget extends StatefulWidget {
   final PositionAnalysis? analysis;
@@ -33,10 +65,39 @@ class PositionAnalysisWidget extends StatefulWidget {
   /// Whether engine eval data is available for the "Bad Eval" sort.
   final bool hasEvals;
 
+  /// Analyzed player's username — used in generated study-chapter names and
+  /// stats comments.
+  final String? playerName;
+
+  /// Path to the player's downloaded games PGN — enables "Open Games in
+  /// PGN Viewer".
+  final String? analysisPgnPath;
+
   /// When set (and [externalNavigateGeneration] changes), the widget
   /// navigates to this FEN.  Used by the engine-weakness dialog.
   final String? externalNavigateFen;
   final int externalNavigateGeneration;
+
+  // ── Hole hunt (Holes tab) — state owned by the host screen ──────────
+
+  /// Completed hole-hunt report for the displayed colour, if any.
+  final AuditResult? holesResult;
+
+  /// Findings streamed from an in-flight hunt on the displayed colour.
+  final List<AuditFinding> holesLiveFindings;
+
+  /// True while a hunt is running on the displayed colour's tree.
+  final bool isHoleHunting;
+  final HoleHuntProgress? holesProgress;
+
+  /// Show the "trap search skipped" note (Maia unavailable).
+  final bool holesTrapPassSkipped;
+
+  /// Re-persist after dismissal edits in the report panel.
+  final void Function(AuditResult result)? onHolesResultChanged;
+
+  /// Open the hunt config to start (or re-run) a hunt.
+  final VoidCallback? onStartHoleHunt;
 
   const PositionAnalysisWidget({
     super.key,
@@ -46,16 +107,28 @@ class PositionAnalysisWidget extends StatefulWidget {
     this.isLoading = false,
     this.onAnalyze,
     this.hasEvals = false,
+    this.playerName,
+    this.analysisPgnPath,
     this.externalNavigateFen,
     this.externalNavigateGeneration = 0,
+    this.holesResult,
+    this.holesLiveFindings = const [],
+    this.isHoleHunting = false,
+    this.holesProgress,
+    this.holesTrapPassSkipped = false,
+    this.onHolesResultChanged,
+    this.onStartHoleHunt,
   });
 
   @override
   State<PositionAnalysisWidget> createState() => _PositionAnalysisWidgetState();
 }
 
-class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
-    with SingleTickerProviderStateMixin {
+/// Shared state for [PositionAnalysisWidget], carried by the concrete State
+/// and the part-file mixins ([_ScratchAnalysisMixin], [_StudyHandoffMixin],
+/// [_NavigationMixin]) that operate on it.
+abstract class _PositionAnalysisWidgetStateBase
+    extends State<PositionAnalysisWidget> {
   // ── Canonical position state ───────────────────────────────────────
   //
   // Every position change flows through [_navigateTo], which updates
@@ -70,18 +143,59 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
   final PgnViewerWidgetController _pgnController = PgnViewerWidgetController();
   int _lastNavigateGeneration = 0;
 
-  /// Starting-position board, shown when no FEN has been selected yet.
-  static const Position _startingPosition = Chess.initial;
+  // ── Scratch analysis tree (Analysis tab) ───────────────────────────
+  //
+  // User workspace: off-book board moves, engine lines and manual
+  // exploration accumulate here.  Persists across position selections;
+  // cleared only by the user.
 
+  MoveTree _scratchTree = MoveTree();
+  TreePath _scratchCursor = TreePath.empty;
+
+  // ── Cross-mixin forward declarations ────────────────────────────────
+  //
+  // Provided by the concrete State / part-file mixins below; declared here
+  // so each mixin (which sees only this base) can call across groups.
+
+  void _navigateTo(String fen);
+  String? _statsCommentFor(String fen);
+  TreePath? _scratchAnchorFor(String fen);
+  List<String>? _openingTreePathFor(String fen);
+  void _recordScratchMove(String preFen, String san);
+  Future<void> _addScratchToStudy();
+}
+
+class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
+    with
+        SingleTickerProviderStateMixin,
+        _ScratchAnalysisMixin,
+        _StudyHandoffMixin,
+        _NavigationMixin {
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
+    _tabController.addListener(_onTabChanged);
   }
 
   @override
   void didUpdateWidget(PositionAnalysisWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // Tree swapped (colour switch or new player): each tree remembers its own
+    // cursor, so sync the board/games to wherever the incoming tree left off.
+    if (!identical(widget.openingTree, oldWidget.openingTree)) {
+      final tree = widget.openingTree;
+      if (tree != null) {
+        _navigateTo(tree.currentNode.fen);
+      } else {
+        setState(() {
+          _currentFen = null;
+          _currentBoard = null;
+          _currentGames = [];
+          _selectedGame = null;
+        });
+      }
+    }
     if (widget.externalNavigateFen != null &&
         widget.externalNavigateGeneration != _lastNavigateGeneration) {
       _lastNavigateGeneration = widget.externalNavigateGeneration;
@@ -93,8 +207,22 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
 
   @override
   void dispose() {
+    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     super.dispose();
+  }
+
+  /// Entering the Analysis tab: seed the scratch tree with the line to the
+  /// current position so the analysis starts with its opening context.
+  void _onTabChanged() {
+    if (_tabController.indexIsChanging) return;
+    if (_tabController.index != _kAnalysisTabIndex || _currentFen == null) {
+      return;
+    }
+    final path = _ensureScratchPathForFen(_currentFen!);
+    if (path != null) {
+      setState(() => _scratchCursor = path);
+    }
   }
 
   // =====================================================================
@@ -112,7 +240,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
             return Column(
               children: [
                 Expanded(flex: 4, child: _buildBoardPane()),
-                Container(height: 1, color: Colors.grey[700]),
+                Container(height: 1, color: AppColors.outline),
                 Expanded(flex: 5, child: _buildStackedPanels()),
               ],
             );
@@ -122,13 +250,13 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
             return Column(
               children: [
                 Expanded(flex: 4, child: _buildBoardPane()),
-                Container(height: 1, color: Colors.grey[700]),
+                Container(height: 1, color: AppColors.outline),
                 Expanded(
                   flex: 5,
                   child: Row(
                     children: [
                       Expanded(child: _buildLeftPanel()),
-                      Container(width: 1, color: Colors.grey[700]),
+                      Container(width: 1, color: AppColors.outline),
                       Expanded(child: _buildRightPanel()),
                     ],
                   ),
@@ -143,9 +271,9 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
           return Row(
             children: [
               SizedBox(width: leftWidth, child: _buildLeftPanel()),
-              Container(width: 1, color: Colors.grey[700]),
+              Container(width: 1, color: AppColors.outline),
               Expanded(child: _buildBoardPane()),
-              Container(width: 1, color: Colors.grey[700]),
+              Container(width: 1, color: AppColors.outline),
               SizedBox(width: rightWidth, child: _buildRightPanel()),
             ],
           );
@@ -155,19 +283,63 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
   }
 
   Widget _buildBoardPane() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: AspectRatio(
-          aspectRatio: 1.0,
-          child: ChessBoardWidget(
-            position: _currentBoard ?? _startingPosition,
-            flipped: widget.playerIsWhite != null
-                ? !widget.playerIsWhite!
-                : false,
-            onMove: _onBoardMove,
+    return Column(
+      children: [
+        Expanded(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: AspectRatio(
+                aspectRatio: 1.0,
+                child: ChessBoardWidget(
+                  position: _currentBoard ?? _startingPosition,
+                  flipped: widget.playerIsWhite != null
+                      ? !widget.playerIsWhite!
+                      : false,
+                  onMove: _onBoardMove,
+                ),
+              ),
+            ),
           ),
         ),
+        if (widget.analysis != null) _buildActionBar(),
+      ],
+    );
+  }
+
+  /// Handoff actions for the current position, pinned under the board.
+  Widget _buildActionBar() {
+    final hasFen = _currentFen != null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 4,
+        children: [
+          TextButton.icon(
+            icon: const Icon(Icons.menu_book_outlined, size: 16),
+            label: const Text(
+              'Add Line to Study',
+              style: TextStyle(fontSize: 12),
+            ),
+            onPressed: hasFen ? _addCurrentLineToStudy : null,
+          ),
+          TextButton.icon(
+            icon: const Icon(Icons.extension_outlined, size: 16),
+            label: const Text('Make Puzzle', style: TextStyle(fontSize: 12)),
+            onPressed: hasFen ? _makePuzzleFromPosition : null,
+          ),
+          TextButton.icon(
+            icon: const Icon(Icons.open_in_new, size: 16),
+            label: const Text(
+              'Open Games in PGN Viewer',
+              style: TextStyle(fontSize: 12),
+            ),
+            onPressed: widget.analysisPgnPath != null
+                ? _openGamesInPgnViewer
+                : null,
+          ),
+        ],
       ),
     );
   }
@@ -186,10 +358,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
           ),
           Expanded(
             child: TabBarView(
-              children: [
-                _buildLeftPanel(),
-                _buildRightPanel(),
-              ],
+              children: [_buildLeftPanel(), _buildRightPanel()],
             ),
           ),
         ],
@@ -203,6 +372,12 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (isTextInputFocused()) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.keyE && hasNoLetterModifiers) {
+      InlineEngineBar.toggleEngine();
+      return KeyEventResult.handled;
+    }
 
     // Move Tree tab: arrow keys navigate the tree.
     if (_tabController.index == 0 && widget.openingTree != null) {
@@ -228,6 +403,21 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
       }
     }
 
+    // Analysis tab: arrow keys move the scratch cursor.
+    if (_tabController.index == _kAnalysisTabIndex) {
+      if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+        if (_scratchCursor.isNotEmpty) _jumpScratch(_scratchCursor.parent);
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+        final children = _scratchCursor.isEmpty
+            ? _scratchTree.roots
+            : (_scratchTree.nodeAt(_scratchCursor)?.children ?? const []);
+        if (children.isNotEmpty) _jumpScratch(_scratchCursor.child(0));
+        return KeyEventResult.handled;
+      }
+    }
+
     return KeyEventResult.ignored;
   }
 
@@ -242,6 +432,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
         onFenSelected: _onFenSelected,
         playerIsWhite: widget.playerIsWhite ?? true,
         hasEvals: widget.hasEvals,
+        openingTree: widget.openingTree,
       );
     }
 
@@ -254,7 +445,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
             SizedBox(height: 16),
             Text(
               'Analyzing positions…',
-              style: TextStyle(color: Colors.grey),
+              style: TextStyle(color: AppColors.onSurfaceMuted),
             ),
           ],
         ),
@@ -267,26 +458,38 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
         child: Text(
           'Select a player to begin',
           textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.grey),
+          style: TextStyle(color: AppColors.onSurfaceMuted),
         ),
       ),
     );
   }
 
   // =====================================================================
-  // Right panel (tabs)
+  // Right panel (engine bar + tabs)
   // =====================================================================
 
   Widget _buildRightPanel() {
     return Column(
       children: [
+        // One shared engine bar tracks the current position across all tabs
+        // (the PGN tab feeds it through _onPgnPositionChanged).  Stored FENs
+        // may be 4-field normalised, so expand before handing to the engine.
+        InlineEngineBar(
+          fen: _currentFen != null
+              ? expandFen(_currentFen!)
+              : _startingPosition.fen,
+          onLineMoveTapped: _onEngineLineTapped,
+        ),
+        const Divider(height: 1),
         TabBar(
           controller: _tabController,
           isScrollable: true,
-          tabs: const [
-            Tab(text: 'Move Tree'),
-            Tab(text: 'Games'),
-            Tab(text: 'PGN'),
+          tabs: [
+            const Tab(text: 'Move Tree'),
+            const Tab(text: 'Games'),
+            const Tab(text: 'PGN'),
+            const Tab(text: 'Analysis'),
+            Tab(text: 'Holes${_holesCountLabel()}'),
           ],
         ),
         Expanded(
@@ -300,6 +503,8 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
                 onGameSelected: _onGameSelected,
               ),
               _buildPgnTab(),
+              _buildScratchTab(),
+              _buildHolesTab(),
             ],
           ),
         ),
@@ -312,7 +517,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
       return const Center(
         child: Text(
           'Opening tree not available',
-          style: TextStyle(color: Colors.grey),
+          style: TextStyle(color: AppColors.onSurfaceMuted),
         ),
       );
     }
@@ -342,6 +547,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
             tree: tree,
             onMoveSelected: _onTreeMoveSelected,
             onPositionSelected: _onTreePositionSelected,
+            onPathPlySelected: _onTreePathPlySelected,
             gamesAtPosition: _currentGames,
             onViewGamePgn: _onGameSelected,
           ),
@@ -355,12 +561,14 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
       return const Center(
         child: Text(
           'Select a game to view PGN',
-          style: TextStyle(color: Colors.grey),
+          style: TextStyle(color: AppColors.onSurfaceMuted),
         ),
       );
     }
 
-    return PgnWithEngine(
+    // The shared engine bar above the tabs covers this view too, so the
+    // plain viewer is used rather than PgnWithEngine.
+    return PgnViewerWidget(
       pgnText: _selectedGame!.pgnText!,
       controller: _pgnController,
       initialFen: _currentFen,
@@ -369,107 +577,46 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
   }
 
   // =====================================================================
-  // Central navigation — single source of truth
+  // Holes tab (hole-hunt report)
   // =====================================================================
 
-  /// Navigate to a position.  **Every** position change from any source
-  /// (board, tree, FEN list, PGN) must flow through here so all panels
-  /// stay in sync.
-  void _navigateTo(String fen) {
-    setState(() {
-      _currentFen = fen;
-      _currentBoard = _parseFen(fen);
-      _selectedGame = null;
-      _currentGames = widget.analysis?.getGamesForFen(fen) ?? [];
-    });
+  /// " (n)" suffix for the Holes tab label, or empty when nothing to count.
+  String _holesCountLabel() {
+    final count =
+        (widget.holesResult?.activeFindingCount ?? 0) +
+        widget.holesLiveFindings.length;
+    return count > 0 ? ' ($count)' : '';
   }
 
-  // =====================================================================
-  // Event handlers — each handler does its own tree logic, then calls
-  // _navigateTo for the canonical state update.
-  // =====================================================================
-
-  /// Board drag: try to advance the tree, then navigate.
-  void _onBoardMove(CompletedMove move) {
-    final tree = widget.openingTree;
-    if (tree != null) {
-      // Try the move by SAN first (keeps tree cursor aligned).
-      if (!tree.makeMove(move.san)) {
-        // Out of book — best-effort FEN jump.
-        tree.navigateToFen(move.fenAfter);
-      }
-    }
-    _navigateTo(move.fenAfter);
+  Widget _buildHolesTab() {
+    return HolesReportPanel(
+      result: widget.holesResult,
+      liveFindings: widget.holesLiveFindings,
+      isHunting: widget.isHoleHunting,
+      progress: widget.holesProgress,
+      trapPassSkipped: widget.holesTrapPassSkipped,
+      onFindingSelected: _onHoleFindingSelected,
+      onResultChanged: widget.onHolesResultChanged,
+      onStartHunt: widget.onStartHoleHunt,
+    );
   }
 
-  /// Tree: click a move.
-  void _onTreeMoveSelected(String move) {
-    final tree = widget.openingTree;
-    if (tree == null) return;
-    if (tree.makeMove(move)) {
-      _navigateTo(tree.currentNode.fen);
-    }
+  /// Clicking a finding jumps the board (and tree cursor) to its position.
+  void _onHoleFindingSelected(AuditFinding finding) {
+    widget.openingTree?.navigateToFen(finding.fen);
+    _navigateTo(finding.fen);
   }
+}
 
-  /// Tree: legacy FEN callback (no-op; navigation driven by move handler).
-  void _onTreePositionSelected(String fen) {}
+// =====================================================================
+// Helpers
+// =====================================================================
 
-  /// Tree: go back one move.
-  void _treeGoBack() {
-    final tree = widget.openingTree;
-    if (tree == null) return;
-    if (tree.goBack()) {
-      _navigateTo(tree.currentNode.fen);
-    }
-  }
-
-  /// Tree: advance to the most-played child (main line).
-  void _treeGoForward() {
-    final tree = widget.openingTree;
-    if (tree == null) return;
-    final children = tree.currentNode.sortedChildren;
-    if (children.isNotEmpty) {
-      tree.makeMove(children.first.move);
-      _navigateTo(tree.currentNode.fen);
-    }
-  }
-
-  /// FEN list (left panel): click a position.
-  void _onFenSelected(String fen) {
-    widget.openingTree?.navigateToFen(fen);
-    _navigateTo(fen);
-    _tabController.animateTo(0);
-  }
-
-  /// PGN viewer: user stepped through moves.
-  void _onPgnPositionChanged(String fen) {
-    widget.openingTree?.navigateToFen(fen);
-
-    // Update board and games, but don't clear the selected game (the user
-    // is still watching it).
-    setState(() {
-      _currentFen = fen;
-      _currentBoard = _parseFen(fen);
-      _currentGames = widget.analysis?.getGamesForFen(fen) ?? [];
-    });
-  }
-
-  /// Games list: click a game → switch to PGN tab.
-  void _onGameSelected(GameInfo game) {
-    setState(() => _selectedGame = game);
-    _tabController.animateTo(2);
-  }
-
-  // =====================================================================
-  // Helpers
-  // =====================================================================
-
-  /// Parse a (possibly 4-field) FEN into a [Position] instance.
-  static Position? _parseFen(String fen) {
-    try {
-      return Chess.fromSetup(Setup.parseFen(expandFen(fen)));
-    } catch (_) {
-      return null;
-    }
+/// Parse a (possibly 4-field) FEN into a [Position] instance.
+Position? _parseFen(String fen) {
+  try {
+    return Chess.fromSetup(Setup.parseFen(expandFen(fen)));
+  } catch (_) {
+    return null;
   }
 }

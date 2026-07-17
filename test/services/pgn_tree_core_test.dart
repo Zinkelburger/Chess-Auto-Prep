@@ -21,6 +21,98 @@ void main() {
       expect(isRepertoirePlayer('hikaru'), isFalse);
       expect(isRepertoirePlayer(''), isFalse);
     });
+
+    test('does not match patterns as substrings of real names', () {
+      expect(isRepertoirePlayer('Gamer123'), isFalse);
+      expect(isRepertoirePlayer('James'), isFalse);
+      expect(isRepertoirePlayer('SomeOpponent'), isFalse);
+      expect(isRepertoirePlayer('chessplayer99'), isFalse);
+    });
+  });
+
+  group('userNameMatchesHeader', () {
+    test('single name behaves like substring match', () {
+      expect(userNameMatchesHeader('carlsen, magnus', 'carlsen'), isTrue);
+      expect(userNameMatchesHeader('carlsen,m', 'carlsen'), isTrue);
+      expect(userNameMatchesHeader('nakamura', 'carlsen'), isFalse);
+    });
+
+    test('any of several ;-separated names may match', () {
+      const names = 'carlsen; drnykterstein';
+      expect(userNameMatchesHeader('carlsen, magnus', names), isTrue);
+      expect(userNameMatchesHeader('drnykterstein', names), isTrue);
+      expect(userNameMatchesHeader('nakamura', names), isFalse);
+    });
+
+    test('empty and separator-only inputs match nothing', () {
+      expect(userNameMatchesHeader('carlsen', ''), isFalse);
+      expect(userNameMatchesHeader('carlsen', ' ; ; '), isFalse);
+    });
+  });
+
+  group('summarizePlayerNameMatches', () {
+    const pairs = [
+      (white: 'Carlsen, Magnus', black: 'Nakamura, Hikaru'),
+      (white: 'Caruana, Fabiano', black: 'Carlsen,M'),
+      (white: 'Carlsen, Magnus', black: 'So, Wesley'),
+      (white: 'Ding, Liren', black: 'Nepomniachtchi, Ian'),
+    ];
+
+    test('counts matched games and distinct header spellings', () {
+      final summary = summarizePlayerNameMatches(
+        headerPairs: pairs,
+        namesInput: 'Carlsen',
+      );
+      expect(summary.totalGames, 4);
+      expect(summary.matchedGames, 3);
+      expect(summary.unmatchedGames, 1);
+      expect(summary.variantCounts, {'Carlsen, Magnus': 2, 'Carlsen,M': 1});
+    });
+
+    test('variants are ordered by count descending', () {
+      final summary = summarizePlayerNameMatches(
+        headerPairs: pairs,
+        namesInput: 'Carlsen',
+      );
+      expect(summary.variantCounts.keys.first, 'Carlsen, Magnus');
+    });
+
+    test('multiple ;-separated names union their matches', () {
+      final summary = summarizePlayerNameMatches(
+        headerPairs: pairs,
+        namesInput: 'Carlsen; Ding',
+      );
+      expect(summary.matchedGames, 4);
+      expect(summary.variantCounts.keys, contains('Ding, Liren'));
+    });
+
+    test('repertoire placeholders count only when opted in', () {
+      const repPairs = [
+        (white: 'Me', black: 'Rival2000'),
+        (white: 'Carlsen, Magnus', black: 'Nakamura, Hikaru'),
+      ];
+      final without = summarizePlayerNameMatches(
+        headerPairs: repPairs,
+        namesInput: 'Carlsen',
+      );
+      expect(without.matchedGames, 1);
+      final withPlaceholders = summarizePlayerNameMatches(
+        headerPairs: repPairs,
+        namesInput: 'Carlsen',
+        includeRepertoirePlaceholders: true,
+      );
+      expect(withPlaceholders.matchedGames, 2);
+      expect(withPlaceholders.variantCounts.keys, contains('Me'));
+    });
+
+    test('empty names input matches nothing', () {
+      final summary = summarizePlayerNameMatches(
+        headerPairs: pairs,
+        namesInput: '',
+      );
+      expect(summary.matchedGames, 0);
+      expect(summary.variantCounts, isEmpty);
+    });
   });
 
   group('resolveUserColor - strict matching', () {
@@ -55,6 +147,16 @@ void main() {
       expect(resolve(white: 'GM_TESTUSER_2000'), isTrue);
     });
 
+    test(';-separated aliases each attribute the user', () {
+      const aliases = 'testuser; othernick';
+      expect(resolve(white: 'TestUser', username: aliases), isTrue);
+      expect(resolve(black: 'OtherNick', username: aliases), isFalse);
+      expect(
+        resolve(filter: null, username: aliases),
+        isNull, // neither alias present → still ambiguous
+      );
+    });
+
     test('repertoire pattern in White header attributes user to White', () {
       expect(resolve(white: 'White Repertoire'), isTrue);
     });
@@ -65,49 +167,60 @@ void main() {
 
     test('ambiguous game (neither matches) with null filter is skipped '
         'under skip policy', () {
-      expect(resolve(filter: null, policy: UnattributableGamePolicy.skip),
-          isNull);
+      expect(
+        resolve(filter: null, policy: UnattributableGamePolicy.skip),
+        isNull,
+      );
     });
 
     test('ambiguous game (neither matches) with null filter defaults to '
         'White under assumeWhite policy', () {
       expect(
-          resolve(filter: null, policy: UnattributableGamePolicy.assumeWhite),
-          isTrue);
+        resolve(filter: null, policy: UnattributableGamePolicy.assumeWhite),
+        isTrue,
+      );
     });
 
     test('ambiguous game (both match) with null filter is skipped under '
         'skip policy', () {
       expect(
-          resolve(
-            white: 'TestUser',
-            black: 'My Repertoire',
-            filter: null,
-            policy: UnattributableGamePolicy.skip,
-          ),
-          isNull);
+        resolve(
+          white: 'TestUser',
+          black: 'My Repertoire',
+          filter: null,
+          policy: UnattributableGamePolicy.skip,
+        ),
+        isNull,
+      );
     });
 
     test('ambiguous game falls back to the filter under both policies', () {
       for (final policy in UnattributableGamePolicy.values) {
-        expect(resolve(filter: true, policy: policy), isTrue,
-            reason: 'filter=true, policy=$policy');
-        expect(resolve(filter: false, policy: policy), isFalse,
-            reason: 'filter=false, policy=$policy');
+        expect(
+          resolve(filter: true, policy: policy),
+          isTrue,
+          reason: 'filter=true, policy=$policy',
+        );
+        expect(
+          resolve(filter: false, policy: policy),
+          isFalse,
+          reason: 'filter=false, policy=$policy',
+        );
       }
     });
 
     test('both headers matching falls back to the filter', () {
       expect(
-          resolve(white: 'TestUser', black: 'TestUser2', filter: false),
-          isFalse);
+        resolve(white: 'TestUser', black: 'TestUser2', filter: false),
+        isFalse,
+      );
       expect(
-          resolve(white: 'TestUser', black: 'TestUser2', filter: true),
-          isTrue);
+        resolve(white: 'TestUser', black: 'TestUser2', filter: true),
+        isTrue,
+      );
     });
 
-    test('colour filter rejects games where user played the other colour',
-        () {
+    test('colour filter rejects games where user played the other colour', () {
       // User matched as Black, but filter demands White games.
       expect(resolve(black: 'TestUser', filter: true), isNull);
       // User matched as White, but filter demands Black games.
@@ -193,9 +306,17 @@ void main() {
     test('merges repeated lines and accumulates results', () {
       final tree = OpeningTree();
       walkMainlineIntoTree(
-          tree: tree, game: parse('1. e4 e5 *'), userResult: 1.0, maxDepth: 30);
+        tree: tree,
+        game: parse('1. e4 e5 *'),
+        userResult: 1.0,
+        maxDepth: 30,
+      );
       walkMainlineIntoTree(
-          tree: tree, game: parse('1. e4 c5 *'), userResult: 0.0, maxDepth: 30);
+        tree: tree,
+        game: parse('1. e4 c5 *'),
+        userResult: 0.0,
+        maxDepth: 30,
+      );
 
       final e4 = tree.root.children['e4']!;
       expect(e4.gamesPlayed, 2);
@@ -247,8 +368,7 @@ void main() {
       expect(e5!.fen, contains(' w '));
     });
 
-    test('invokes per-ply and completion callbacks with correct positions',
-        () {
+    test('invokes per-ply and completion callbacks with correct positions', () {
       final tree = OpeningTree();
       final beforeMoveFens = <String>[];
       String? finalFen;
@@ -270,14 +390,14 @@ void main() {
   });
 
   group('builder policies end-to-end', () {
-    const ambiguousPgn = '[White "Alice"]\n'
+    const ambiguousPgn =
+        '[White "Alice"]\n'
         '[Black "Bob"]\n'
         '[Result "1-0"]\n'
         '\n'
         '1. e4 e5 *';
 
-    test(
-        'OpeningTreeBuilder skips games it cannot attribute '
+    test('OpeningTreeBuilder skips games it cannot attribute '
         '(userIsWhite null)', () async {
       final tree = await OpeningTreeBuilder.buildTree(
         pgnList: [ambiguousPgn],
@@ -287,21 +407,20 @@ void main() {
       expect(tree.totalGames, 0);
     });
 
-    test('OpeningTreeBuilder keeps attributable games when userIsWhite null',
-        () async {
-      final tree = await OpeningTreeBuilder.buildTree(
-        pgnList: [
-          ambiguousPgn.replaceFirst('Alice', 'TestUser'),
-        ],
-        username: 'testuser',
-        userIsWhite: null,
-      );
-      expect(tree.totalGames, 1);
-      expect(tree.root.wins, 1);
-    });
+    test(
+      'OpeningTreeBuilder keeps attributable games when userIsWhite null',
+      () async {
+        final tree = await OpeningTreeBuilder.buildTree(
+          pgnList: [ambiguousPgn.replaceFirst('Alice', 'TestUser')],
+          username: 'testuser',
+          userIsWhite: null,
+        );
+        expect(tree.totalGames, 1);
+        expect(tree.root.wins, 1);
+      },
+    );
 
-    test('UnifiedAnalysisBuilder defaults ambiguous games to the filter',
-        () {
+    test('UnifiedAnalysisBuilder defaults ambiguous games to the filter', () {
       final (_, treeAsWhite) = UnifiedAnalysisBuilder.build(
         pgnList: [ambiguousPgn],
         username: 'testuser',

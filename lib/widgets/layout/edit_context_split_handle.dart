@@ -30,13 +30,15 @@ class _EditContextSplitHandleState extends State<EditContextSplitHandle> {
 
     return GestureDetector(
       onHorizontalDragStart: isVertical ? null : (_) => _setDragging(true),
-      onHorizontalDragUpdate:
-          isVertical ? null : (d) => widget.onDrag(d.delta.dx),
+      onHorizontalDragUpdate: isVertical
+          ? null
+          : (d) => widget.onDrag(d.delta.dx),
       onHorizontalDragEnd: isVertical ? null : (_) => _setDragging(false),
       onHorizontalDragCancel: isVertical ? null : () => _setDragging(false),
       onVerticalDragStart: isVertical ? (_) => _setDragging(true) : null,
-      onVerticalDragUpdate:
-          isVertical ? (d) => widget.onDrag(d.delta.dy) : null,
+      onVerticalDragUpdate: isVertical
+          ? (d) => widget.onDrag(d.delta.dy)
+          : null,
       onVerticalDragEnd: isVertical ? (_) => _setDragging(false) : null,
       onVerticalDragCancel: isVertical ? () => _setDragging(false) : null,
       child: MouseRegion(
@@ -75,7 +77,7 @@ class _EditContextSplitHandleState extends State<EditContextSplitHandle> {
       width: _dragging ? width * 1.4 : width,
       height: _dragging ? height * 1.4 : height,
       decoration: BoxDecoration(
-        color: _dragging ? AppColors.expectimax : Colors.grey[600],
+        color: _dragging ? AppColors.accent : AppColors.onSurfaceDim,
         borderRadius: BorderRadius.circular(2),
       ),
     );

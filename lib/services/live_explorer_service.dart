@@ -23,7 +23,8 @@ import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 
-import '../features/coverage/services/coverage_service.dart' show LichessDatabase;
+import '../features/coverage/services/coverage_service.dart'
+    show LichessDatabase;
 import '../models/explorer_response.dart';
 import 'lichess_api_client.dart';
 
@@ -44,13 +45,13 @@ class ExplorerState {
 
   const ExplorerState.idle() : this._(ExplorerStatus.idle);
   const ExplorerState.loading(String fen)
-      : this._(ExplorerStatus.loading, fen: fen);
+    : this._(ExplorerStatus.loading, fen: fen);
   ExplorerState.data(ExplorerResponse response)
-      : this._(ExplorerStatus.data, fen: response.fen, data: response);
+    : this._(ExplorerStatus.data, fen: response.fen, data: response);
   const ExplorerState.error(String fen)
-      : this._(ExplorerStatus.error, fen: fen);
+    : this._(ExplorerStatus.error, fen: fen);
   const ExplorerState.rateLimited(String fen)
-      : this._(ExplorerStatus.rateLimited, fen: fen);
+    : this._(ExplorerStatus.rateLimited, fen: fen);
 }
 
 /// Query parameters that identify a distinct explorer result.
@@ -81,13 +82,13 @@ class LiveExplorerService {
   final Duration debounce;
 
   /// UI listens to this for spinner / rows / error banner.
-  final ValueNotifier<ExplorerState> state =
-      ValueNotifier(const ExplorerState.idle());
+  final ValueNotifier<ExplorerState> state = ValueNotifier(
+    const ExplorerState.idle(),
+  );
 
   // ── Shared LRU cache (across instances so reopening keeps results) ──
   static const int _maxCacheEntries = 256;
-  static final LinkedHashMap<String, ExplorerResponse> _cache =
-      LinkedHashMap();
+  static final LinkedHashMap<String, ExplorerResponse> _cache = LinkedHashMap();
 
   Timer? _debounceTimer;
 

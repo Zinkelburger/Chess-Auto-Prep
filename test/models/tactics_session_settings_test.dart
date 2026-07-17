@@ -38,13 +38,15 @@ TacticsPosition _pos({
 
 void main() {
   group('TacticsSessionSettings.accepts / countMatching', () {
-    test('default settings include blunders and mistakes, exclude inaccuracies',
-        () {
-      const settings = TacticsSessionSettings();
-      expect(settings.accepts(_pos(fen: 'a', mistakeType: '??')), isTrue);
-      expect(settings.accepts(_pos(fen: 'b', mistakeType: '?')), isTrue);
-      expect(settings.accepts(_pos(fen: 'c', mistakeType: '?!')), isFalse);
-    });
+    test(
+      'default settings include blunders and mistakes, exclude inaccuracies',
+      () {
+        const settings = TacticsSessionSettings();
+        expect(settings.accepts(_pos(fen: 'a', mistakeType: '??')), isTrue);
+        expect(settings.accepts(_pos(fen: 'b', mistakeType: '?')), isTrue);
+        expect(settings.accepts(_pos(fen: 'c', mistakeType: '?!')), isFalse);
+      },
+    );
 
     test('1-star positions are excluded unless includeOneStar', () {
       const excluded = TacticsSessionSettings();
@@ -89,8 +91,10 @@ void main() {
     test('defaults to 14 days and filters out older games', () {
       const settings = TacticsSessionSettings();
       expect(settings.maxAgeDays, 14);
-      expect(settings.accepts(_pos(fen: 'old', gameDate: '2024.01.01')),
-          isFalse);
+      expect(
+        settings.accepts(_pos(fen: 'old', gameDate: '2024.01.01')),
+        isFalse,
+      );
       expect(settings.accepts(_pos(fen: 'new')), isTrue);
     });
 
@@ -99,51 +103,72 @@ void main() {
       final now = DateTime.now();
       expect(today.accepts(_pos(fen: 'a', gameDate: _dateStr(now))), isTrue);
       expect(
-          today.accepts(_pos(
-              fen: 'b',
-              gameDate: _dateStr(now.subtract(const Duration(days: 1))))),
-          isFalse);
+        today.accepts(
+          _pos(
+            fen: 'b',
+            gameDate: _dateStr(now.subtract(const Duration(days: 1))),
+          ),
+        ),
+        isFalse,
+      );
 
       const twoDays = TacticsSessionSettings(maxAgeDays: 2);
       expect(
-          twoDays.accepts(_pos(
-              fen: 'c',
-              gameDate: _dateStr(now.subtract(const Duration(days: 1))))),
-          isTrue);
+        twoDays.accepts(
+          _pos(
+            fen: 'c',
+            gameDate: _dateStr(now.subtract(const Duration(days: 1))),
+          ),
+        ),
+        isTrue,
+      );
       expect(
-          twoDays.accepts(_pos(
-              fen: 'd',
-              gameDate: _dateStr(now.subtract(const Duration(days: 2))))),
-          isFalse);
+        twoDays.accepts(
+          _pos(
+            fen: 'd',
+            gameDate: _dateStr(now.subtract(const Duration(days: 2))),
+          ),
+        ),
+        isFalse,
+      );
     });
 
     test('null means all time', () {
       const allTime = TacticsSessionSettings(maxAgeDays: null);
-      expect(
-          allTime.accepts(_pos(fen: 'a', gameDate: '2020.01.01')), isTrue);
+      expect(allTime.accepts(_pos(fen: 'a', gameDate: '2020.01.01')), isTrue);
     });
 
     test('custom puzzles and unparseable dates are never age-filtered', () {
       const settings = TacticsSessionSettings(
-          maxAgeDays: 1,
-          mistakeTypes: {'??', TacticsSessionSettings.customMistakeType});
+        maxAgeDays: 1,
+        mistakeTypes: {'??', TacticsSessionSettings.customMistakeType},
+      );
       expect(
-          settings.accepts(_pos(
-              fen: 'custom',
-              mistakeType: TacticsSessionSettings.customMistakeType,
-              gameDate: '2020.01.01')),
-          isTrue);
+        settings.accepts(
+          _pos(
+            fen: 'custom',
+            mistakeType: TacticsSessionSettings.customMistakeType,
+            gameDate: '2020.01.01',
+          ),
+        ),
+        isTrue,
+      );
       expect(settings.accepts(_pos(fen: 'nodate', gameDate: '')), isTrue);
-      expect(settings.accepts(_pos(fen: 'weird', gameDate: '????.??.??')),
-          isTrue);
+      expect(
+        settings.accepts(_pos(fen: 'weird', gameDate: '????.??.??')),
+        isTrue,
+      );
     });
 
     test('copyWith sets and clears the window', () {
       const settings = TacticsSessionSettings();
       expect(settings.copyWith(maxAgeDays: 7).maxAgeDays, 7);
       expect(settings.copyWith(clearMaxAgeDays: true).maxAgeDays, isNull);
-      expect(settings.copyWith(order: TacticsSessionOrder.random).maxAgeDays,
-          14, reason: 'unrelated copyWith keeps the window');
+      expect(
+        settings.copyWith(order: TacticsSessionOrder.random).maxAgeDays,
+        14,
+        reason: 'unrelated copyWith keeps the window',
+      );
     });
   });
 

@@ -66,10 +66,7 @@ class TrapNavigationButtons extends StatelessWidget {
   }
 
   /// Index of the trap at or before [currentPly], or -1 if before the first trap.
-  static int findCurrentTrapIndex(
-    List<TrapLineInfo> traps,
-    int currentPly,
-  ) {
+  static int findCurrentTrapIndex(List<TrapLineInfo> traps, int currentPly) {
     if (traps.isEmpty) return -1;
 
     var idx = -1;
@@ -91,10 +88,7 @@ class TrapNavigationButtons extends StatelessWidget {
     return trapIndex.trapsInLine(lineMovesForTraps(controller));
   }
 
-  static void jumpToTrap(
-    RepertoireController controller,
-    TrapLineInfo trap,
-  ) {
+  static void jumpToTrap(RepertoireController controller, TrapLineInfo trap) {
     final lineMoves = lineMovesForTraps(controller);
     if (lineMoves.length >= trap.movesSan.length &&
         _isPrefix(trap.movesSan, lineMoves)) {
@@ -117,8 +111,10 @@ class TrapNavigationButtons extends StatelessWidget {
     final traps = trapsInCurrentLine(trapIndex, controller);
     if (traps.isEmpty) return false;
 
-    final currentTrapIdx =
-        findCurrentTrapIndex(traps, controller.currentMoveIndex);
+    final currentTrapIdx = findCurrentTrapIndex(
+      traps,
+      controller.currentMoveIndex,
+    );
     if (currentTrapIdx <= 0) return false;
 
     jumpToTrap(controller, traps[currentTrapIdx - 1]);
@@ -134,8 +130,10 @@ class TrapNavigationButtons extends StatelessWidget {
     final traps = trapsInCurrentLine(trapIndex, controller);
     if (traps.isEmpty) return false;
 
-    final currentTrapIdx =
-        findCurrentTrapIndex(traps, controller.currentMoveIndex);
+    final currentTrapIdx = findCurrentTrapIndex(
+      traps,
+      controller.currentMoveIndex,
+    );
     final nextIdx = currentTrapIdx + 1;
     if (nextIdx >= traps.length) return false;
 
@@ -146,21 +144,21 @@ class TrapNavigationButtons extends StatelessWidget {
   Widget _buildTourButton() {
     if (onStartTour == null) return const SizedBox.shrink();
     return ShortcutTooltip(
-      description:
-          tourActive ? 'Trap tour is open' : 'Tour every trap on the board',
+      description: tourActive
+          ? 'Trap tour is open'
+          : 'Tour every trap on the board',
       shortcut: 'T',
       child: FilledButton.icon(
         onPressed: onStartTour,
         icon: const Icon(Icons.tour, size: 16),
         label: const Text('Tour'),
         style: FilledButton.styleFrom(
-          foregroundColor: tourActive ? Colors.black : AppColors.warning,
+          foregroundColor: tourActive ? AppColors.onWarning : AppColors.warning,
           backgroundColor: tourActive
               ? AppColors.warning
               : AppColors.warning.withValues(alpha: 0.15),
           padding: const EdgeInsets.symmetric(horizontal: 12),
-          textStyle:
-              const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
         ),
       ),
     );
@@ -172,8 +170,10 @@ class TrapNavigationButtons extends StatelessWidget {
       listenable: controller,
       builder: (context, _) {
         final traps = trapsInCurrentLine(trapIndex, controller);
-        final currentTrapIdx =
-            findCurrentTrapIndex(traps, controller.currentMoveIndex);
+        final currentTrapIdx = findCurrentTrapIndex(
+          traps,
+          controller.currentMoveIndex,
+        );
 
         if (traps.isEmpty) {
           return Row(
@@ -183,7 +183,10 @@ class TrapNavigationButtons extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
                   '0 traps in line',
-                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.onSurfaceMuted,
+                  ),
                 ),
               ),
               _buildTourButton(),

@@ -19,8 +19,8 @@ int groundTruthBaseIndex(
 ) {
   Position pos = Chess.fromSetup(Setup.parseFen(startFen));
   for (int ply = 0; ply <= mainlineSans.length; ply++) {
-    final atThisMove = pos.fullmoves == moveNumber &&
-        (pos.turn == Side.white) == isWhite;
+    final atThisMove =
+        pos.fullmoves == moveNumber && (pos.turn == Side.white) == isWhite;
     if (atThisMove) return ply;
     if (ply == mainlineSans.length) break;
     final m = pos.parseSan(mainlineSans[ply]);
@@ -32,8 +32,7 @@ int groundTruthBaseIndex(
 
 void main() {
   group('plyBeforeMove — White-to-move start (standard game)', () {
-    const startFen =
-        'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    const startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
     final mainline = ['e4', 'c5', 'Nf3', 'd6', 'd4', 'cxd4'];
 
     test('matches ground truth for every move in the line', () {
@@ -90,13 +89,15 @@ void main() {
 
         // Demonstrate the old bug: it overshoots by exactly one ply because it
         // never accounts for ply 0 being a Black move.
-        expect(oldBaseIndex(num, white, 1), truth + 1,
-            reason: 'OLD move $num ${white ? "w" : "b"} overshoots');
+        expect(
+          oldBaseIndex(num, white, 1),
+          truth + 1,
+          reason: 'OLD move $num ${white ? "w" : "b"} overshoots',
+        );
       }
     });
 
-    test('end-to-end: replay base + inline line lands on the right position',
-        () {
+    test('end-to-end: replay base + inline line lands on the right position', () {
       // User clicks "Nf3" in a comment line "2.Nf3 d6 3.d4". Run = [Nf3,d6,d4],
       // first move 2.Nf3 (white). Clicking index 0 should leave the board on
       // the position right after Nf3.

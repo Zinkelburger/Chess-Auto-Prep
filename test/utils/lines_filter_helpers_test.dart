@@ -36,48 +36,35 @@ Map<String, LineQualityInfo> _metricsFor(Iterable<RepertoireLine> lines) {
   };
 }
 
+List<RepertoireLine> _run(
+  List<RepertoireLine> lines, {
+  String searchTerm = '',
+  bool showOnlyMatchingPosition = false,
+  List<String> currentMoves = const [],
+  LineSortBy sortBy = LineSortBy.name,
+  bool sortAscending = true,
+  CoverageFilter coverageFilter = CoverageFilter.all,
+  Set<LineMetricsFilter> metricsFilters = const {},
+  Map<String, LineQualityInfo>? lineMetrics,
+}) {
+  return filterAndSortLines(
+    allLines: lines,
+    searchTerm: searchTerm,
+    showOnlyMatchingPosition: showOnlyMatchingPosition,
+    currentMoves: currentMoves,
+    sortBy: sortBy,
+    sortAscending: sortAscending,
+    coverageFilter: coverageFilter,
+    metricsFilters: metricsFilters,
+    lineCoverage: const {},
+    lineMetrics: lineMetrics ?? _metricsFor(lines),
+  );
+}
+
 void main() {
-  group('getLineGroupName', () {
-    test('group names use event title when present', () {
-      final line = _line(
-        id: '1',
-        name: 'Line',
-        moves: const ['e4', 'e5'],
-        fullPgn: '[Event "Sicilian Defense: Najdorf"]\n\n1. e4 e5',
-      );
-
-      expect(getLineGroupName(line), 'Sicilian Defense');
-    });
-
-    test('group names use first-move fallback when title is placeholder', () {
-      final line = _line(
-        id: '2',
-        name: 'Repertoire Line',
-        moves: const ['d4', 'd5', 'c4'],
-        fullPgn: '[Event "?"]\n\n1. d4 d5 2. c4',
-      );
-
-      expect(getLineGroupName(line), '1.d4 d5');
-    });
-  });
-
-  group('filterSortAndGroupLines', () {
+  group('filterAndSortLines', () {
     test('empty input returns empty output', () {
-      final result = filterSortAndGroupLines(
-        allLines: const [],
-        searchTerm: '',
-        showOnlyMatchingPosition: false,
-        currentMoves: const [],
-        sortBy: LineSortBy.name,
-        coverageFilter: CoverageFilter.all,
-        metricsFilter: LineMetricsFilter.all,
-        lineCoverage: const {},
-        lineMetrics: const {},
-      );
-
-      expect(result.filtered, isEmpty);
-      expect(result.grouped, isEmpty);
-      expect(result.groupsToExpand, isEmpty);
+      expect(_run(const []), isEmpty);
     });
 
     test('search term filters by move text', () {
@@ -86,19 +73,7 @@ void main() {
         _line(id: 'french', name: 'French', moves: const ['e4', 'e6']),
       ];
 
-      final result = filterSortAndGroupLines(
-        allLines: lines,
-        searchTerm: 'c5',
-        showOnlyMatchingPosition: false,
-        currentMoves: const [],
-        sortBy: LineSortBy.name,
-        coverageFilter: CoverageFilter.all,
-        metricsFilter: LineMetricsFilter.all,
-        lineCoverage: const {},
-        lineMetrics: _metricsFor(lines),
-      );
-
-      expect(result.filtered.map((l) => l.id), ['sic']);
+      expect(_run(lines, searchTerm: 'c5').map((l) => l.id), ['sic']);
     });
 
     test('showOnlyMatchingPosition filters to current FEN prefix', () {
@@ -107,112 +82,90 @@ void main() {
         _line(id: 'miss', name: 'Miss', moves: const ['e4', 'c5']),
       ];
 
-      final result = filterSortAndGroupLines(
-        allLines: lines,
-        searchTerm: '',
+      final result = _run(
+        lines,
         showOnlyMatchingPosition: true,
         currentMoves: const ['e4', 'e5'],
-        sortBy: LineSortBy.name,
-        coverageFilter: CoverageFilter.all,
-        metricsFilter: LineMetricsFilter.all,
-        lineCoverage: const {},
-        lineMetrics: _metricsFor(lines),
       );
 
-      expect(result.filtered.map((l) => l.id), ['match']);
+      expect(result.map((l) => l.id), ['match']);
     });
 
-    test('sort by playability is monotonically decreasing', () {
+    test('sort by ease ascending is monotonically increasing', () {
+      final lines = [
+        _line(id: 'high', name: 'High', moves: const ['e4']),
+        _line(id: 'low', name: 'Low', moves: const ['a4']),
+        _line(id: 'mid', name: 'Mid', moves: const ['d4']),
+      ];
+
+      final result = _run(lines, sortBy: LineSortBy.ease);
+
+      expect(result.map((l) => l.id), ['low', 'mid', 'high']);
+    });
+
+    test('sort by ease descending reverses the order', () {
       final lines = [
         _line(id: 'low', name: 'Low', moves: const ['a4']),
         _line(id: 'high', name: 'High', moves: const ['e4']),
         _line(id: 'mid', name: 'Mid', moves: const ['d4']),
       ];
 
-      final result = filterSortAndGroupLines(
-        allLines: lines,
-        searchTerm: '',
-        showOnlyMatchingPosition: false,
-        currentMoves: const [],
-        sortBy: LineSortBy.playability,
-        coverageFilter: CoverageFilter.all,
-        metricsFilter: LineMetricsFilter.all,
-        lineCoverage: const {},
-        lineMetrics: _metricsFor(lines),
-      );
+      final result = _run(lines, sortBy: LineSortBy.ease, sortAscending: false);
 
-      final scores = result.filtered
-          .map((l) => _metricsFor(lines)[l.id]!.playability!)
-          .toList();
-      for (var i = 0; i < scores.length - 1; i++) {
-        expect(scores[i], greaterThanOrEqualTo(scores[i + 1]));
+      expect(result.map((l) => l.id), ['high', 'mid', 'low']);
+    });
+
+    test('lines without a sort key always sort last', () {
+      final lines = [
+        _line(id: 'nometrics', name: 'Aardvark', moves: const ['b4']),
+        _line(id: 'high', name: 'High', moves: const ['e4']),
+      ];
+      final metrics = _metricsFor(lines)..remove('nometrics');
+
+      for (final ascending in [true, false]) {
+        final result = _run(
+          lines,
+          sortBy: LineSortBy.ease,
+          sortAscending: ascending,
+          lineMetrics: metrics,
+        );
+        expect(
+          result.last.id,
+          'nometrics',
+          reason: 'ascending=$ascending should keep null keys last',
+        );
       }
     });
 
-    test('sort is stable for equal playability values', () {
+    test('ties break by name for equal ease values', () {
       final lines = [
+        _line(id: 'c', name: 'Charlie', moves: const ['c4']),
         _line(id: 'a', name: 'Alpha', moves: const ['e4']),
         _line(id: 'b', name: 'Bravo', moves: const ['d4']),
-        _line(id: 'c', name: 'Charlie', moves: const ['c4']),
       ];
 
-      final result = filterSortAndGroupLines(
-        allLines: lines,
-        searchTerm: '',
-        showOnlyMatchingPosition: false,
-        currentMoves: const [],
-        sortBy: LineSortBy.playability,
-        coverageFilter: CoverageFilter.all,
-        metricsFilter: LineMetricsFilter.all,
-        lineCoverage: const {},
-        lineMetrics: _metricsFor(lines),
-      );
+      final result = _run(lines, sortBy: LineSortBy.ease);
 
-      expect(result.filtered.map((l) => l.id), ['a', 'b', 'c']);
+      expect(result.map((l) => l.id), ['a', 'b', 'c']);
     });
 
-    test('filtering then sorting equals sorting then filtering on result set',
-        () {
+    test('sort by moves orders by line length', () {
       final lines = [
-        _line(id: 'sic', name: 'Sicilian', moves: const ['e4', 'c5']),
-        _line(id: 'french', name: 'French', moves: const ['e4', 'e6']),
-        _line(id: 'queens', name: 'Queens', moves: const ['d4', 'd5']),
+        _line(id: 'long', name: 'Long', moves: const ['e4', 'e5', 'Nf3']),
+        _line(id: 'short', name: 'Short', moves: const ['e4']),
       ];
-      final metrics = _metricsFor(lines);
 
-      final filterThenSort = filterSortAndGroupLines(
-        allLines: lines,
-        searchTerm: 'e4',
-        showOnlyMatchingPosition: false,
-        currentMoves: const [],
-        sortBy: LineSortBy.playability,
-        coverageFilter: CoverageFilter.all,
-        metricsFilter: LineMetricsFilter.all,
-        lineCoverage: const {},
-        lineMetrics: metrics,
-      );
-
-      final sortedAll = filterSortAndGroupLines(
-        allLines: lines,
-        searchTerm: '',
-        showOnlyMatchingPosition: false,
-        currentMoves: const [],
-        sortBy: LineSortBy.playability,
-        coverageFilter: CoverageFilter.all,
-        metricsFilter: LineMetricsFilter.all,
-        lineCoverage: const {},
-        lineMetrics: metrics,
-      );
-
-      final sortThenFilter = sortedAll.filtered
-          .where((line) =>
-              line.name.toLowerCase().contains('e4') ||
-              line.moves.join(' ').toLowerCase().contains('e4'))
-          .toList();
-
+      expect(_run(lines, sortBy: LineSortBy.moves).map((l) => l.id), [
+        'short',
+        'long',
+      ]);
       expect(
-        filterThenSort.filtered.map((l) => l.id),
-        sortThenFilter.map((l) => l.id),
+        _run(
+          lines,
+          sortBy: LineSortBy.moves,
+          sortAscending: false,
+        ).map((l) => l.id),
+        ['long', 'short'],
       );
     });
 
@@ -223,20 +176,24 @@ void main() {
       ];
       final snapshot = List<RepertoireLine>.from(lines);
 
-      final result = filterSortAndGroupLines(
-        allLines: lines,
-        searchTerm: '',
-        showOnlyMatchingPosition: false,
-        currentMoves: const [],
-        sortBy: LineSortBy.name,
-        coverageFilter: CoverageFilter.all,
-        metricsFilter: LineMetricsFilter.trappy,
-        lineCoverage: const {},
-        lineMetrics: _metricsFor(lines),
+      final result = _run(lines, metricsFilters: {LineMetricsFilter.trappy});
+
+      expect(result.map((l) => l.id), ['trappy']);
+      expect(lines.map((l) => l.id), snapshot.map((l) => l.id));
+    });
+
+    test('multiple metrics filters are ANDed together', () {
+      final lines = [
+        _line(id: 'trappy', name: 'Trappy', moves: const ['d4']),
+        _line(id: 'plain', name: 'Plain', moves: const ['e4']),
+      ];
+      // Trappy but no hard move: both filters together should exclude it.
+      final result = _run(
+        lines,
+        metricsFilters: {LineMetricsFilter.trappy, LineMetricsFilter.hardMoves},
       );
 
-      expect(result.filtered.map((l) => l.id), ['trappy']);
-      expect(lines.map((l) => l.id), snapshot.map((l) => l.id));
+      expect(result, isEmpty);
     });
   });
 }

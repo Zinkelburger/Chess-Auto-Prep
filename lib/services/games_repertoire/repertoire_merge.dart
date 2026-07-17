@@ -37,10 +37,7 @@ class MergeConflict {
 
 /// Result of a merge: how much changed and what needs resolving.
 class MergeResult {
-  MergeResult({
-    required this.addedMoves,
-    required this.conflicts,
-  });
+  MergeResult({required this.addedMoves, required this.conflicts});
 
   /// Number of moves the draft added that weren't already present.
   final int addedMoves;
@@ -76,12 +73,14 @@ class RepertoireMerge {
           if (existing.isNotEmpty) {
             final fen = target.fenAt(targetParentPath);
             if (_sideToMoveIsMine(fen, isWhite)) {
-              conflicts.add(MergeConflict(
-                parentPath: targetParentPath,
-                draftPath: newPath,
-                draftSan: draftNode.san,
-                existingSans: existing,
-              ));
+              conflicts.add(
+                MergeConflict(
+                  parentPath: targetParentPath,
+                  draftPath: newPath,
+                  draftSan: draftNode.san,
+                  existingSans: existing,
+                ),
+              );
             }
           }
         }

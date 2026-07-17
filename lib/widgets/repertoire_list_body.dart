@@ -13,6 +13,7 @@ import '../models/repertoire_metadata.dart';
 import '../screens/repertoire_chapters_screen.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/storage/storage_factory.dart';
+import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
 import 'layout/empty_state_placeholder.dart';
 import 'pgn_import_dialog.dart';
@@ -23,7 +24,15 @@ class RepertoireListBody extends StatefulWidget {
   /// selected chapter is what the builder / trainer actually load.
   final ValueChanged<RepertoireMetadata> onSelected;
 
-  const RepertoireListBody({super.key, required this.onSelected});
+  /// When set, studies are listed in their own section (as trainable
+  /// custom-tactics sets) and tapping one calls this instead.
+  final ValueChanged<RepertoireMetadata>? onStudySelected;
+
+  const RepertoireListBody({
+    super.key,
+    required this.onSelected,
+    this.onStudySelected,
+  });
 
   @override
   State<RepertoireListBody> createState() => _RepertoireListBodyState();
@@ -31,6 +40,7 @@ class RepertoireListBody extends StatefulWidget {
 
 class _RepertoireListBodyState extends State<RepertoireListBody> {
   List<RepertoireMetadata> _repertoires = [];
+  List<RepertoireMetadata> _studies = [];
   bool _isLoading = true;
   String? _loadError;
 
@@ -49,10 +59,15 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
     try {
       final repertoires = await StorageFactory.instance.listRepertoires();
       repertoires.sort((a, b) => b.lastModified.compareTo(a.lastModified));
+      final studies = widget.onStudySelected == null
+          ? <RepertoireMetadata>[]
+          : await StorageFactory.instance.listStudyFiles();
+      studies.sort((a, b) => b.lastModified.compareTo(a.lastModified));
 
       if (!mounted) return;
       setState(() {
         _repertoires = repertoires;
+        _studies = studies;
         _isLoading = false;
         _loadError = null;
       });
@@ -80,7 +95,11 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, size: 64, color: Colors.red),
+              const Icon(
+                Icons.error_outline,
+                size: 64,
+                color: AppColors.danger,
+              ),
               const SizedBox(height: 16),
               Text(_loadError!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
@@ -95,7 +114,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
       );
     }
 
-    if (_repertoires.isEmpty) {
+    if (_repertoires.isEmpty && _studies.isEmpty) {
       return EmptyStatePlaceholder(
         icon: Icons.library_books,
         title: 'No Repertoires Found',
@@ -106,13 +125,21 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
       );
     }
 
+    final showSections = _studies.isNotEmpty;
     return Stack(
       children: [
-        ListView.builder(
+        ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-          itemCount: _repertoires.length,
-          itemBuilder: (context, index) =>
-              _buildRepertoireCard(_repertoires[index]),
+          children: [
+            if (showSections && _repertoires.isNotEmpty)
+              _buildSectionHeader('Repertoires'),
+            for (final repertoire in _repertoires)
+              _buildRepertoireCard(repertoire),
+            if (showSections) ...[
+              _buildSectionHeader('Studies — custom tactics'),
+              for (final study in _studies) _buildStudyCard(study),
+            ],
+          ],
         ),
         Positioned(
           right: 16,
@@ -124,6 +151,75 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 10),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          color: AppColors.onSurfaceMuted,
+        ),
+      ),
+    );
+  }
+
+  /// A study listed as a trainable custom-tactics set.  Managing studies
+  /// (rename/delete/edit) lives in Study mode, so no actions menu here.
+  Widget _buildStudyCard(RepertoireMetadata study) {
+    final chapterCount = study.gameCount;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        onTap: () => widget.onStudySelected?.call(study),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.infoTint,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.menu_book_outlined,
+                  color: AppColors.info,
+                  size: 32,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      study.name,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$chapterCount chapter${chapterCount == 1 ? '' : 's'}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: AppColors.onSurfaceMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -155,12 +251,12 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.1),
+                  color: AppColors.warningTint,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(
                   Icons.library_books,
-                  color: Colors.orange,
+                  color: AppColors.warning,
                   size: 32,
                 ),
               ),
@@ -179,12 +275,18 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
                     const SizedBox(height: 4),
                     Text(
                       '$chapterCount chapter${chapterCount == 1 ? '' : 's'}',
-                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: AppColors.onSurfaceMuted,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       'Modified $timeAgo',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.onSurfaceMuted,
+                      ),
                     ),
                   ],
                 ),
@@ -213,9 +315,12 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
                     value: 'delete',
                     child: Row(
                       children: [
-                        Icon(Icons.delete, size: 20, color: Colors.red),
+                        Icon(Icons.delete, size: 20, color: AppColors.danger),
                         SizedBox(width: 12),
-                        Text('Delete', style: TextStyle(color: Colors.red)),
+                        Text(
+                          'Delete',
+                          style: TextStyle(color: AppColors.danger),
+                        ),
                       ],
                     ),
                   ),
@@ -325,8 +430,10 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
                   (r) => r.name.toLowerCase() == name.toLowerCase(),
                 );
                 if (exists) {
-                  setState(() => nameError =
-                      'A repertoire named "$name" already exists');
+                  setState(
+                    () =>
+                        nameError = 'A repertoire named "$name" already exists',
+                  );
                   return;
                 }
                 Navigator.of(context).pop({
@@ -362,8 +469,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
       final storage = StorageFactory.instance;
       final dirPath = await storage.repertoireDirectoryPath(name);
 
-      if (_repertoires
-          .any((r) => r.name.toLowerCase() == name.toLowerCase())) {
+      if (_repertoires.any((r) => r.name.toLowerCase() == name.toLowerCase())) {
         if (mounted) {
           showAppSnackBar(context, AppMessages.repertoireExists(name));
         }
@@ -373,31 +479,40 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
       // New repertoires start with a single "Main" chapter; imported PGN lands
       // there. Additional chapters are added from the chapter list.
       final chapterPath = storage.chapterFilePath(dirPath, 'Main');
-      final header = '// Main\n'
+      final header =
+          '// Main\n'
           '// Color: $color\n'
           '// Created on ${DateTime.now().toString().split('.')[0]}\n\n';
 
       int gameCount = 0;
       if (pgnImport != null) {
-        await storage.writeFile(chapterPath, '$header${pgnImport.pgnContent}\n');
+        await storage.writeFile(
+          chapterPath,
+          '$header${pgnImport.pgnContent}\n',
+        );
         gameCount = pgnImport.gameCount;
       } else {
         await storage.writeFile(chapterPath, header);
       }
 
       if (mounted) {
-        widget.onSelected(RepertoireMetadata(
-          filePath: chapterPath,
-          name: 'Main',
-          gameCount: gameCount,
-          lastModified: DateTime.now(),
-        ));
+        widget.onSelected(
+          RepertoireMetadata(
+            filePath: chapterPath,
+            name: 'Main',
+            gameCount: gameCount,
+            lastModified: DateTime.now(),
+          ),
+        );
       }
     } catch (e) {
       debugPrint('Create repertoire failed: $e');
       if (mounted) {
-        showAppSnackBar(context, AppMessages.createRepertoireFailed,
-            isError: true);
+        showAppSnackBar(
+          context,
+          AppMessages.createRepertoireFailed,
+          isError: true,
+        );
       }
     }
   }
@@ -408,7 +523,8 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
       builder: (context) => AlertDialog(
         title: const Text('Delete Repertoire'),
         content: Text(
-            'Delete repertoire "${repertoire.name}"? This action cannot be undone.'),
+          'Delete repertoire "${repertoire.name}"? This action cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -416,7 +532,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
             child: const Text('Delete'),
           ),
         ],
@@ -425,14 +541,18 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
 
     if (confirmed == true) {
       try {
-        await StorageFactory.instance
-            .deleteRepertoireDirectory(repertoire.filePath);
+        await StorageFactory.instance.deleteRepertoireDirectory(
+          repertoire.filePath,
+        );
         await _loadRepertoires();
       } catch (e) {
         debugPrint('Delete repertoire failed: $e');
         if (mounted) {
-          showAppSnackBar(context, AppMessages.deleteRepertoireFailed,
-              isError: true);
+          showAppSnackBar(
+            context,
+            AppMessages.deleteRepertoireFailed,
+            isError: true,
+          );
         }
       }
     }
@@ -484,8 +604,10 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
                       r.filePath != repertoire.filePath,
                 );
                 if (exists) {
-                  setState(() =>
-                      nameError = 'A repertoire named "$newName" already exists');
+                  setState(
+                    () => nameError =
+                        'A repertoire named "$newName" already exists',
+                  );
                   return;
                 }
                 Navigator.of(context).pop(newName);
@@ -507,8 +629,11 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
       } catch (e) {
         debugPrint('Rename repertoire failed: $e');
         if (mounted) {
-          showAppSnackBar(context, AppMessages.renameRepertoireFailed,
-              isError: true);
+          showAppSnackBar(
+            context,
+            AppMessages.renameRepertoireFailed,
+            isError: true,
+          );
         }
       }
     }
@@ -530,10 +655,7 @@ class _InlinePgnAttach extends StatefulWidget {
   final PgnImportResult? importResult;
   final ValueChanged<PgnImportResult?> onChanged;
 
-  const _InlinePgnAttach({
-    required this.importResult,
-    required this.onChanged,
-  });
+  const _InlinePgnAttach({required this.importResult, required this.onChanged});
 
   @override
   State<_InlinePgnAttach> createState() => _InlinePgnAttachState();
@@ -567,7 +689,8 @@ class _InlinePgnAttachState extends State<_InlinePgnAttach> {
 
       if (count > 0) {
         widget.onChanged(
-            PgnImportResult(pgnContent: content, gameCount: count));
+          PgnImportResult(pgnContent: content, gameCount: count),
+        );
       } else {
         widget.onChanged(null);
       }
@@ -598,8 +721,10 @@ class _InlinePgnAttachState extends State<_InlinePgnAttach> {
             GestureDetector(
               onTap: _pickFile,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: cs.primaryContainer,
                   borderRadius: BorderRadius.circular(20),
@@ -627,7 +752,9 @@ class _InlinePgnAttachState extends State<_InlinePgnAttach> {
                 constraints: const BoxConstraints(maxWidth: 200),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 6),
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: cs.primaryContainer,
                     borderRadius: BorderRadius.circular(20),
@@ -635,8 +762,11 @@ class _InlinePgnAttachState extends State<_InlinePgnAttach> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.description,
-                          size: 13, color: cs.onPrimaryContainer),
+                      Icon(
+                        Icons.description,
+                        size: 13,
+                        color: cs.onPrimaryContainer,
+                      ),
                       const SizedBox(width: 5),
                       Flexible(
                         child: Text(
@@ -652,8 +782,11 @@ class _InlinePgnAttachState extends State<_InlinePgnAttach> {
                       const SizedBox(width: 6),
                       GestureDetector(
                         onTap: _clear,
-                        child: Icon(Icons.close,
-                            size: 13, color: cs.onPrimaryContainer),
+                        child: Icon(
+                          Icons.close,
+                          size: 13,
+                          color: cs.onPrimaryContainer,
+                        ),
                       ),
                     ],
                   ),
@@ -669,8 +802,7 @@ class _InlinePgnAttachState extends State<_InlinePgnAttach> {
             children: [
               Icon(Icons.warning_amber, size: 13, color: cs.error),
               const SizedBox(width: 5),
-              Text(_error!,
-                  style: TextStyle(fontSize: 11, color: cs.error)),
+              Text(_error!, style: TextStyle(fontSize: 11, color: cs.error)),
             ],
           ),
         ],

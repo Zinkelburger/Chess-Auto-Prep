@@ -3,23 +3,28 @@ import 'package:flutter/material.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../models/repertoire_line.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
+import '../../theme/app_colors.dart';
 import '../../utils/coverage_helpers.dart';
 import 'package:chess_auto_prep/services/line_metrics_helpers.dart';
+import '../../utils/lines_filter_helpers.dart';
 import '../layout/empty_state_placeholder.dart';
 import 'line_item_row.dart';
+import 'line_table_layout.dart';
 
-/// Scrollable list of repertoire lines, optionally grouped.
+/// Flat, sortable table of repertoire lines: a header row of clickable
+/// stat columns above the scrolling list.
 class LinesListPanel extends StatelessWidget {
   final ScrollController scrollController;
   final List<RepertoireLine> filteredLines;
-  final Map<String, List<RepertoireLine>> groupedLines;
-  final Set<String> expandedGroups;
-  final ValueChanged<String> onToggleGroup;
-  final bool isExpanded;
+  final LineTableLayout layout;
+  final LineSortBy sortBy;
+  final bool sortAscending;
+  final ValueChanged<LineSortBy> onSortChanged;
   final List<String> currentMoveSequence;
   final bool showCoverage;
   final Map<String, LineCoverageInfo> lineCoverage;
   final Map<String, LineQualityInfo> lineMetrics;
+  final Map<String, LineDisplayData> displayIndex;
   final void Function(RepertoireLine line)? onLineSelected;
   final void Function(RepertoireLine line, String newTitle)? onLineRenamed;
   final void Function(RepertoireLine line)? onLineDeleted;
@@ -29,18 +34,25 @@ class LinesListPanel extends StatelessWidget {
   final bool hasActiveFilters;
   final VoidCallback onResetFilters;
 
+  /// True when a coverage status filter is selected but no analysis exists;
+  /// the list then prompts for a run instead of showing an empty result.
+  final bool needsCoverageRun;
+  final bool isCoverageRunning;
+  final VoidCallback? onRunCoverage;
+
   const LinesListPanel({
     super.key,
     required this.scrollController,
     required this.filteredLines,
-    required this.groupedLines,
-    required this.expandedGroups,
-    required this.onToggleGroup,
-    this.isExpanded = false,
+    required this.layout,
+    required this.sortBy,
+    required this.sortAscending,
+    required this.onSortChanged,
     this.currentMoveSequence = const [],
     this.showCoverage = false,
     required this.lineCoverage,
     required this.lineMetrics,
+    this.displayIndex = const {},
     this.onLineSelected,
     this.onLineRenamed,
     this.onLineDeleted,
@@ -49,10 +61,21 @@ class LinesListPanel extends StatelessWidget {
     this.boardPreview,
     required this.hasActiveFilters,
     required this.onResetFilters,
+    this.needsCoverageRun = false,
+    this.isCoverageRunning = false,
+    this.onRunCoverage,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (needsCoverageRun) {
+      return _CoverageRunPrompt(
+        isCoverageRunning: isCoverageRunning,
+        onRunCoverage: onRunCoverage,
+        onResetFilters: onResetFilters,
+      );
+    }
+
     if (filteredLines.isEmpty) {
       return EmptyStatePlaceholder(
         icon: Icons.search_off,
@@ -69,158 +92,223 @@ class LinesListPanel extends StatelessWidget {
       );
     }
 
-    if (groupedLines.length <= 1) {
-      return ListView.builder(
-        controller: scrollController,
-        itemCount: filteredLines.length,
-        itemBuilder: (context, index) {
-          final line = filteredLines[index];
-          return LineItemRow(
-            line: line,
-            index: index,
-            isExpanded: isExpanded,
-            currentMoveSequence: currentMoveSequence,
-            showCoverage: showCoverage,
-            coverageInfo: lineCoverage[line.id],
-            metrics: lineMetrics[line.id],
-            onLineSelected: onLineSelected,
-            onLineRenamed: onLineRenamed,
-            onLineDeleted: onLineDeleted,
-            onNavigateToPosition: onNavigateToPosition,
-            navigationStack: navigationStack,
-            boardPreview: boardPreview,
-          );
-        },
-      );
-    }
-
-    final flatEntries = _buildGroupedFlatEntries(
-      groupedLines: groupedLines,
-      expandedGroups: expandedGroups,
-    );
-
-    return ListView.builder(
-      controller: scrollController,
-      itemCount: flatEntries.length,
-      itemBuilder: (context, index) {
-        final entry = flatEntries[index];
-        return switch (entry) {
-          _GroupHeaderEntry(:final groupName, :final lineCount) => _GroupHeader(
-              groupName: groupName,
-              lineCount: lineCount,
-              isExpanded: expandedGroups.contains(groupName),
-              onToggle: () => onToggleGroup(groupName),
-            ),
-          _GroupLineEntry(:final line, :final index) => LineItemRow(
-              line: line,
-              index: index,
-              indented: true,
-              isExpanded: isExpanded,
-              currentMoveSequence: currentMoveSequence,
-              showCoverage: showCoverage,
-              coverageInfo: lineCoverage[line.id],
-              metrics: lineMetrics[line.id],
-              onLineSelected: onLineSelected,
-              onLineRenamed: onLineRenamed,
-              onLineDeleted: onLineDeleted,
-              onNavigateToPosition: onNavigateToPosition,
-              navigationStack: navigationStack,
-              boardPreview: boardPreview,
-            ),
-        };
-      },
+    return Column(
+      children: [
+        _TableHeader(
+          layout: layout,
+          sortBy: sortBy,
+          sortAscending: sortAscending,
+          onSortChanged: onSortChanged,
+        ),
+        Expanded(
+          child: ListView.builder(
+            controller: scrollController,
+            itemCount: filteredLines.length,
+            itemBuilder: (context, index) {
+              final line = filteredLines[index];
+              return LineItemRow(
+                line: line,
+                index: index,
+                layout: layout,
+                currentMoveSequence: currentMoveSequence,
+                showCoverage: showCoverage,
+                coverageInfo: lineCoverage[line.id],
+                metrics: lineMetrics[line.id],
+                displayTitle: displayIndex[line.id]?.title,
+                onLineSelected: onLineSelected,
+                onLineRenamed: onLineRenamed,
+                onLineDeleted: onLineDeleted,
+                onNavigateToPosition: onNavigateToPosition,
+                navigationStack: navigationStack,
+                boardPreview: boardPreview,
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
 
-List<_GroupedListEntry> _buildGroupedFlatEntries({
-  required Map<String, List<RepertoireLine>> groupedLines,
-  required Set<String> expandedGroups,
-}) {
-  final entries = <_GroupedListEntry>[];
-  for (final groupName in groupedLines.keys) {
-    final lines = groupedLines[groupName]!;
-    entries.add(_GroupHeaderEntry(groupName, lines.length));
-    if (expandedGroups.contains(groupName)) {
-      for (var i = 0; i < lines.length; i++) {
-        entries.add(_GroupLineEntry(lines[i], i));
-      }
-    }
+/// Column headers; click to sort, click again to reverse.
+class _TableHeader extends StatelessWidget {
+  final LineTableLayout layout;
+  final LineSortBy sortBy;
+  final bool sortAscending;
+  final ValueChanged<LineSortBy> onSortChanged;
+
+  const _TableHeader({
+    required this.layout,
+    required this.sortBy,
+    required this.sortAscending,
+    required this.onSortChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: const BoxDecoration(
+        color: AppColors.surfaceInset,
+        border: Border(bottom: BorderSide(color: AppColors.outline, width: 1)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _HeaderCell(
+                label: 'Line',
+                sort: LineSortBy.name,
+                active: sortBy == LineSortBy.name,
+                ascending: sortAscending,
+                onTap: onSortChanged,
+              ),
+            ),
+          ),
+          if (layout.showMovesColumn)
+            _fixedCell(LineTableLayout.movesWidth, 'Moves', LineSortBy.moves),
+          _fixedCell(LineTableLayout.easeWidth, 'Ease', LineSortBy.ease),
+          _fixedCell(
+            LineTableLayout.coherenceWidth,
+            'Coherence',
+            LineSortBy.coherence,
+          ),
+          if (layout.showTrapsColumn)
+            _fixedCell(LineTableLayout.trapsWidth, 'Traps', LineSortBy.traps),
+          if (layout.showCoverageColumn)
+            _fixedCell(
+              LineTableLayout.coverageWidth,
+              'Coverage',
+              LineSortBy.coverage,
+            ),
+        ],
+      ),
+    );
   }
-  return entries;
+
+  Widget _fixedCell(double width, String label, LineSortBy sort) {
+    return SizedBox(
+      width: width,
+      child: Center(
+        child: _HeaderCell(
+          label: label,
+          sort: sort,
+          active: sortBy == sort,
+          ascending: sortAscending,
+          onTap: onSortChanged,
+        ),
+      ),
+    );
+  }
 }
 
-sealed class _GroupedListEntry {}
+class _HeaderCell extends StatelessWidget {
+  final String label;
+  final LineSortBy sort;
+  final bool active;
+  final bool ascending;
+  final ValueChanged<LineSortBy> onTap;
 
-final class _GroupHeaderEntry extends _GroupedListEntry {
-  final String groupName;
-  final int lineCount;
-
-  _GroupHeaderEntry(this.groupName, this.lineCount);
-}
-
-final class _GroupLineEntry extends _GroupedListEntry {
-  final RepertoireLine line;
-  final int index;
-
-  _GroupLineEntry(this.line, this.index);
-}
-
-class _GroupHeader extends StatelessWidget {
-  final String groupName;
-  final int lineCount;
-  final bool isExpanded;
-  final VoidCallback onToggle;
-
-  const _GroupHeader({
-    required this.groupName,
-    required this.lineCount,
-    required this.isExpanded,
-    required this.onToggle,
+  const _HeaderCell({
+    required this.label,
+    required this.sort,
+    required this.active,
+    required this.ascending,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: onToggle,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.grey[850],
-          border: Border(
-            bottom: BorderSide(color: Colors.grey[800]!, width: 1),
-          ),
-        ),
+      onTap: () => onTap(sort),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              isExpanded ? Icons.expand_more : Icons.chevron_right,
-              size: 18,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(width: 8),
-            Expanded(
+            Flexible(
               child: Text(
-                groupName,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: active ? FontWeight.w700 : FontWeight.w600,
+                  color: active ? AppColors.ink : AppColors.onSurfaceSoft,
                 ),
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.grey[700],
-                borderRadius: BorderRadius.circular(10),
+            if (active)
+              Icon(
+                ascending ? Icons.arrow_drop_up : Icons.arrow_drop_down,
+                size: 16,
+                color: AppColors.ink,
               ),
-              child: Text(
-                '$lineCount',
-                style: TextStyle(fontSize: 11, color: Colors.grey[300]),
-              ),
-            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Shown when a coverage status filter is active but coverage was never run.
+class _CoverageRunPrompt extends StatelessWidget {
+  final bool isCoverageRunning;
+  final VoidCallback? onRunCoverage;
+  final VoidCallback onResetFilters;
+
+  const _CoverageRunPrompt({
+    required this.isCoverageRunning,
+    required this.onRunCoverage,
+    required this.onResetFilters,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.analytics_outlined,
+            size: 48,
+            color: AppColors.onSurfaceDim,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            isCoverageRunning
+                ? 'Coverage analysis is running…'
+                : 'Coverage has not been analyzed yet',
+            style: const TextStyle(
+              color: AppColors.onSurfaceSoft,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            isCoverageRunning
+                ? 'Results will appear here when the run finishes.'
+                : 'Run a coverage analysis to see which lines are covered.',
+            style: const TextStyle(
+              color: AppColors.onSurfaceMuted,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (!isCoverageRunning && onRunCoverage != null)
+            FilledButton.icon(
+              onPressed: onRunCoverage,
+              icon: const Icon(Icons.play_arrow, size: 16),
+              label: const Text('Run coverage analysis'),
+            ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: onResetFilters,
+            child: const Text('Show all lines'),
+          ),
+        ],
       ),
     );
   }

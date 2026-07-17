@@ -4,6 +4,7 @@ import '../../models/repertoire_line.dart';
 import '../../models/repertoire_review_entry.dart';
 import '../../models/training_settings.dart';
 import '../../services/training/training_phase.dart';
+import '../../theme/app_colors.dart';
 
 /// Progress bars, session stats, line progress, and train-tab footer controls.
 class TrainingProgressPanel extends StatelessWidget {
@@ -71,11 +72,15 @@ class TrainingBottomControls extends StatelessWidget {
   final int dueQueueLength;
   final ValueChanged<bool> onAutoNextChanged;
 
+  /// Suffix after the queue count: 'due' (spaced) or 'left' (linear).
+  final String queueLabel;
+
   const TrainingBottomControls({
     super.key,
     required this.settings,
     required this.dueQueueLength,
     required this.onAutoNextChanged,
+    this.queueLabel = 'due',
   });
 
   @override
@@ -86,14 +91,11 @@ class TrainingBottomControls extends StatelessWidget {
         const SizedBox(width: 8),
         SizedBox(
           height: 24,
-          child: Switch(
-            value: settings.autoNext,
-            onChanged: onAutoNextChanged,
-          ),
+          child: Switch(value: settings.autoNext, onChanged: onAutoNextChanged),
         ),
         const Spacer(),
         Text(
-          '$dueQueueLength due',
+          '$dueQueueLength $queueLabel',
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
@@ -141,12 +143,12 @@ class RepertoireProgressBar extends StatelessWidget {
                   if (practiced > 0)
                     Expanded(
                       flex: practiced,
-                      child: Container(color: Colors.green),
+                      child: Container(color: AppColors.srsLearned),
                     ),
                   if (due > 0)
                     Expanded(
                       flex: due,
-                      child: Container(color: Colors.orange),
+                      child: Container(color: AppColors.srsDue),
                     ),
                   if (unseen > 0)
                     Expanded(
@@ -164,16 +166,26 @@ class RepertoireProgressBar extends StatelessWidget {
             style: theme.textTheme.bodySmall!,
             child: Row(
               children: [
-                Text('$practiced practiced',
-                    style: const TextStyle(color: Colors.green, fontSize: 11)),
+                Text(
+                  '$practiced practiced',
+                  style: const TextStyle(
+                    color: AppColors.srsLearned,
+                    fontSize: 11,
+                  ),
+                ),
                 const SizedBox(width: 8),
-                Text('$due due',
-                    style: const TextStyle(color: Colors.orange, fontSize: 11)),
+                Text(
+                  '$due due',
+                  style: const TextStyle(color: AppColors.srsDue, fontSize: 11),
+                ),
                 const SizedBox(width: 8),
-                Text('$unseen unseen',
-                    style: TextStyle(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontSize: 11)),
+                Text(
+                  '$unseen unseen',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontSize: 11,
+                  ),
+                ),
               ],
             ),
           ),
@@ -210,14 +222,30 @@ class SessionStatsBar extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _StatItem(Icons.check_circle_outline, '$sessionCorrect', Colors.green,
-              theme),
           _StatItem(
-              Icons.cancel_outlined, '$sessionIncorrect', Colors.red, theme),
+            Icons.check_circle_outline,
+            '$sessionCorrect',
+            AppColors.success,
+            theme,
+          ),
           _StatItem(
-              Icons.percent, '$accuracy%', theme.colorScheme.onSurface, theme),
-          _StatItem(Icons.local_fire_department, '$sessionStreak',
-              Colors.orange, theme),
+            Icons.cancel_outlined,
+            '$sessionIncorrect',
+            AppColors.danger,
+            theme,
+          ),
+          _StatItem(
+            Icons.percent,
+            '$accuracy%',
+            theme.colorScheme.onSurface,
+            theme,
+          ),
+          _StatItem(
+            Icons.local_fire_department,
+            '$sessionStreak',
+            AppColors.starAccent,
+            theme,
+          ),
         ],
       ),
     );
@@ -275,14 +303,20 @@ class LineProgressIndicator extends StatelessWidget {
             ),
             const Spacer(),
             if (phase == TrainingPhase.learning)
-              Text('Learning',
-                  style: TextStyle(color: Colors.blue[400], fontSize: 12)),
+              const Text(
+                'Learning',
+                style: TextStyle(color: AppColors.info, fontSize: 12),
+              ),
             if (phase == TrainingPhase.drilling)
-              Text('Drilling',
-                  style: TextStyle(color: Colors.orange[400], fontSize: 12)),
+              const Text(
+                'Drilling',
+                style: TextStyle(color: AppColors.srsDue, fontSize: 12),
+              ),
             if (phase == TrainingPhase.replaying)
-              Text('Replaying',
-                  style: TextStyle(color: Colors.red[400], fontSize: 12)),
+              const Text(
+                'Replaying',
+                style: TextStyle(color: AppColors.danger, fontSize: 12),
+              ),
           ],
         ),
         const SizedBox(height: 4),

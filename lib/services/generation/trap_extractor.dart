@@ -19,6 +19,7 @@ import 'trap_score.dart';
 
 class TrapExtractor {
   final bool playAsWhite;
+
   /// Minimum trap score to consider (matches C default 0.05).
   final double minTrapScore;
 
@@ -47,26 +48,28 @@ class TrapExtractor {
       if (!seenFens.add(canonicalizeFen4(c.fen))) continue;
       final moves = c.node.getLineSan();
 
-      results.add(TrapLineInfo(
-        movesSan: moves,
-        trapScore: c.trapScore,
-        popularProb: c.popularProb,
-        popularMove: c.popularMove,
-        bestMove: c.bestMove,
-        popularEvalCp: c.popularEvalUs,
-        bestEvalCp: c.bestEvalUs,
-        evalDiffCp: c.evalDiffUs,
-        cumulativeProb: c.node.cumulativeProbability,
-        trickSurplus: c.trickSurplus,
-        expectimaxValue: c.node.expectimaxValue,
-        wpEval: c.wpEval,
-        fen: c.fen,
-        openingName: c.openingName,
-        positionEvalCp: c.positionEvalCp,
-        allReplies: c.allReplies,
-        refutationMove: c.refutationMove,
-        refutationEvalCp: c.refutationEvalCp,
-      ));
+      results.add(
+        TrapLineInfo(
+          movesSan: moves,
+          trapScore: c.trapScore,
+          popularProb: c.popularProb,
+          popularMove: c.popularMove,
+          bestMove: c.bestMove,
+          popularEvalCp: c.popularEvalUs,
+          bestEvalCp: c.bestEvalUs,
+          evalDiffCp: c.evalDiffUs,
+          cumulativeProb: c.node.cumulativeProbability,
+          trickSurplus: c.trickSurplus,
+          expectimaxValue: c.node.expectimaxValue,
+          wpEval: c.wpEval,
+          fen: c.fen,
+          openingName: c.openingName,
+          positionEvalCp: c.positionEvalCp,
+          allReplies: c.allReplies,
+          refutationMove: c.refutationMove,
+          refutationEvalCp: c.refutationEvalCp,
+        ),
+      );
     }
 
     return results;
@@ -79,8 +82,9 @@ class TrapExtractor {
 
     // Only opponent-move nodes with at least 2 children
     // (analyzeTrapScore returns null for fewer than 2 children).
-    final isOpponentMove =
-        playAsWhite ? !node.isWhiteToMove : node.isWhiteToMove;
+    final isOpponentMove = playAsWhite
+        ? !node.isWhiteToMove
+        : node.isWhiteToMove;
     if (!isOpponentMove) return;
 
     final analysis = analyzeTrapScore(node);
@@ -115,24 +119,26 @@ class TrapExtractor {
 
     final refutation = _findRefutation(mostPopular);
 
-    candidates.add(_TrapCandidate(
-      node: node,
-      trapScore: trap,
-      popularProb: highestProb,
-      popularMove: mostPopular.moveSan,
-      bestMove: bestMoveNode.moveSan,
-      popularEvalUs: popularEvalUs,
-      bestEvalUs: bestEvalUs,
-      evalDiffUs: evalDiffUs,
-      trickSurplus: surplus,
-      wpEval: wpEval,
-      fen: node.fen,
-      openingName: node.openingName,
-      positionEvalCp: evalUs,
-      allReplies: _buildAllReplies(node, bestEvalUs),
-      refutationMove: refutation?.$1,
-      refutationEvalCp: refutation?.$2,
-    ));
+    candidates.add(
+      _TrapCandidate(
+        node: node,
+        trapScore: trap,
+        popularProb: highestProb,
+        popularMove: mostPopular.moveSan,
+        bestMove: bestMoveNode.moveSan,
+        popularEvalUs: popularEvalUs,
+        bestEvalUs: bestEvalUs,
+        evalDiffUs: evalDiffUs,
+        trickSurplus: surplus,
+        wpEval: wpEval,
+        fen: node.fen,
+        openingName: node.openingName,
+        positionEvalCp: evalUs,
+        allReplies: _buildAllReplies(node, bestEvalUs),
+        refutationMove: refutation?.$1,
+        refutationEvalCp: refutation?.$2,
+      ),
+    );
   }
 
   /// Find our best reply after the opponent's popular blunder.
@@ -166,15 +172,18 @@ class TrapExtractor {
   List<TrapReply> _buildAllReplies(BuildTreeNode node, int bestEvalUs) {
     final replies = <TrapReply>[];
     for (final child in node.children) {
-      final evalAfterCp =
-          child.hasEngineEval ? child.evalForUs(playAsWhite) : 0;
+      final evalAfterCp = child.hasEngineEval
+          ? child.evalForUs(playAsWhite)
+          : 0;
       final diffFromBest = evalAfterCp - bestEvalUs;
-      replies.add(TrapReply(
-        san: child.moveSan,
-        probability: child.moveProbability,
-        evalAfterCp: evalAfterCp,
-        classification: TrapReply.classify(diffFromBest),
-      ));
+      replies.add(
+        TrapReply(
+          san: child.moveSan,
+          probability: child.moveProbability,
+          evalAfterCp: evalAfterCp,
+          classification: TrapReply.classify(diffFromBest),
+        ),
+      );
     }
     replies.sort((a, b) => b.probability.compareTo(a.probability));
     return replies;
@@ -194,9 +203,9 @@ class TrapExtractor {
       'traps': traps.map((t) => t.toJson()).toList(),
     };
 
-    await File(trapPath).writeAsString(
-      const JsonEncoder.withIndent('  ').convert(data),
-    );
+    await File(
+      trapPath,
+    ).writeAsString(const JsonEncoder.withIndent('  ').convert(data));
   }
 
   /// Load trap lines from the JSON file for a given repertoire.

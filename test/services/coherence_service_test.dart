@@ -4,8 +4,11 @@ import 'package:chess_auto_prep/models/repertoire_line.dart';
 import 'package:chess_auto_prep/services/coherence_service.dart';
 import 'package:chess_auto_prep/services/fp_growth.dart';
 
-RepertoireLine _makeLine(String id, List<String> moves,
-    {double importance = 0.05}) {
+RepertoireLine _makeLine(
+  String id,
+  List<String> moves, {
+  double importance = 0.05,
+}) {
   return RepertoireLine(
     id: id,
     name: id,
@@ -37,7 +40,10 @@ void main() {
       final itemset = {'Nf3', 'g3', 'Bg2', 'd3'};
       final maximalItemsets = [
         const FrequentItemset(
-            items: {'Nf3', 'g3', 'Bg2'}, support: 0.6, count: 6),
+          items: {'Nf3', 'g3', 'Bg2'},
+          support: 0.6,
+          count: 6,
+        ),
       ];
       final score = lineCoherence(itemset, maximalItemsets);
       expect(score, greaterThan(0));
@@ -47,7 +53,10 @@ void main() {
       final itemset = {'e4', 'd4', 'f4'};
       final maximalItemsets = [
         const FrequentItemset(
-            items: {'Nf3', 'g3', 'Bg2'}, support: 0.6, count: 6),
+          items: {'Nf3', 'g3', 'Bg2'},
+          support: 0.6,
+          count: 6,
+        ),
       ];
       final score = lineCoherence(itemset, maximalItemsets);
       expect(score, 0);
@@ -61,17 +70,13 @@ void main() {
 
   group('computeRiskWeightedCoherence', () {
     test('penalizes low-prob incoherent lines', () {
-      final lineCoherences = {
-        'l1': 0.8,
-        'l2': 0.1,
-      };
-      final lineProbabilities = {
-        'l1': 0.5,
-        'l2': 0.01,
-      };
+      final lineCoherences = {'l1': 0.8, 'l2': 0.1};
+      final lineProbabilities = {'l1': 0.5, 'l2': 0.01};
 
-      final rwc =
-          computeRiskWeightedCoherence(lineCoherences, lineProbabilities);
+      final rwc = computeRiskWeightedCoherence(
+        lineCoherences,
+        lineProbabilities,
+      );
       expect(rwc, greaterThan(0));
       expect(rwc, lessThan(1));
     });
@@ -115,7 +120,9 @@ void main() {
 
     test('invalidate clears result', () async {
       final lines = List.generate(
-          6, (i) => _makeLine('l$i', ['d4', 'Nf6', 'c4', 'g6', 'Nc3']));
+        6,
+        (i) => _makeLine('l$i', ['d4', 'Nf6', 'c4', 'g6', 'Nc3']),
+      );
 
       final service = CoherenceService();
       await service.compute(lines: lines, playAsWhite: true);

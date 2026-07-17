@@ -75,14 +75,27 @@ class SuggestionWeights {
     this.coherenceExp = 0.0,
   });
 
-  static const maxCoverage =
-      SuggestionWeights(impactExp: 1.0, evalExp: 0, easeExp: 0);
-  static const balanced =
-      SuggestionWeights(impactExp: 0.5, evalExp: 0.3, easeExp: 0.2);
-  static const playable =
-      SuggestionWeights(impactExp: 0.3, evalExp: 0.2, easeExp: 0.5);
+  static const maxCoverage = SuggestionWeights(
+    impactExp: 1.0,
+    evalExp: 0,
+    easeExp: 0,
+  );
+  static const balanced = SuggestionWeights(
+    impactExp: 0.5,
+    evalExp: 0.3,
+    easeExp: 0.2,
+  );
+  static const playable = SuggestionWeights(
+    impactExp: 0.3,
+    evalExp: 0.2,
+    easeExp: 0.5,
+  );
   static const trappy = SuggestionWeights(
-      impactExp: 0.4, evalExp: 0.2, easeExp: 0.1, trapExp: 0.3);
+    impactExp: 0.4,
+    evalExp: 0.2,
+    easeExp: 0.1,
+    trapExp: 0.3,
+  );
 }
 
 class CoverageSuggestionService {
@@ -115,27 +128,32 @@ class CoverageSuggestionService {
 
     for (final um in coverage.unaccountedMoves) {
       final gameCount = um.gameCount;
-      gaps.add(GapCandidate(
-        pathToGap: [...um.parentMoves, um.move],
-        fen: '',
-        type: GapType.unaccounted,
-        gameCount: gameCount,
-        coverageImpact:
-            coverage.rootGameCount > 0 ? gameCount / coverage.rootGameCount : 0,
-        opponentMove: um.move,
-      ));
+      gaps.add(
+        GapCandidate(
+          pathToGap: [...um.parentMoves, um.move],
+          fen: '',
+          type: GapType.unaccounted,
+          gameCount: gameCount,
+          coverageImpact: coverage.rootGameCount > 0
+              ? gameCount / coverage.rootGameCount
+              : 0,
+          opponentMove: um.move,
+        ),
+      );
     }
 
     for (final leaf in coverage.tooShallowLeaves) {
-      gaps.add(GapCandidate(
-        pathToGap: leaf.moves,
-        fen: leaf.fen,
-        type: GapType.tooShallow,
-        gameCount: leaf.gameCount,
-        coverageImpact: coverage.rootGameCount > 0
-            ? leaf.gameCount / coverage.rootGameCount
-            : 0,
-      ));
+      gaps.add(
+        GapCandidate(
+          pathToGap: leaf.moves,
+          fen: leaf.fen,
+          type: GapType.tooShallow,
+          gameCount: leaf.gameCount,
+          coverageImpact: coverage.rootGameCount > 0
+              ? leaf.gameCount / coverage.rootGameCount
+              : 0,
+        ),
+      );
     }
 
     gaps.sort((a, b) => b.gameCount.compareTo(a.gameCount));
@@ -172,12 +190,14 @@ class CoverageSuggestionService {
     int trapCount = 0;
 
     for (var depth = 0; depth < 12 && current.children.isNotEmpty; depth++) {
-      final repertoireChild =
-          current.children.where((c) => c.isRepertoireMove).toList();
+      final repertoireChild = current.children
+          .where((c) => c.isRepertoireMove)
+          .toList();
       final next = repertoireChild.isNotEmpty
           ? repertoireChild.first
-          : current.children
-              .reduce((a, b) => a.expectimaxValue >= b.expectimaxValue ? a : b);
+          : current.children.reduce(
+              (a, b) => a.expectimaxValue >= b.expectimaxValue ? a : b,
+            );
 
       path.add(next.moveSan);
       if (next.trapScore > 0) trapCount++;
@@ -234,7 +254,9 @@ class CoverageSuggestionService {
   }
 
   List<SuggestedLine> _scoreAll(
-      List<SuggestedLine> candidates, SuggestionWeights w) {
+    List<SuggestedLine> candidates,
+    SuggestionWeights w,
+  ) {
     return candidates.map((line) {
       final score = _scoreLine(line, w);
       return SuggestedLine(
@@ -249,24 +271,25 @@ class CoverageSuggestionService {
         trapCount: line.trapCount,
         coherenceBonus: line.coherenceBonus,
       );
-    }).toList()
-      ..sort((a, b) => b.score.compareTo(a.score));
+    }).toList()..sort((a, b) => b.score.compareTo(a.score));
   }
 
   double _scoreLine(SuggestedLine line, SuggestionWeights w) {
     final impact = line.coverageGain / 100.0;
-    final eval =
-        line.leafEvalCp != null ? winProbability(line.leafEvalCp!) : 0.5;
+    final eval = line.leafEvalCp != null
+        ? winProbability(line.leafEvalCp!)
+        : 0.5;
     final ease = line.linePlayability ?? 0.5;
     final traps = line.trapCount > 0
         ? 0.7 + 0.3 * (line.trapCount / 5).clamp(0.0, 1.0)
         : 0.5;
 
-    var score = (pow(impact.clamp(0.001, 1.0), w.impactExp) *
-            pow(eval.clamp(0.001, 1.0), w.evalExp) *
-            pow(ease.clamp(0.001, 1.0), w.easeExp) *
-            pow(traps.clamp(0.001, 1.0), w.trapExp))
-        .toDouble();
+    var score =
+        (pow(impact.clamp(0.001, 1.0), w.impactExp) *
+                pow(eval.clamp(0.001, 1.0), w.evalExp) *
+                pow(ease.clamp(0.001, 1.0), w.easeExp) *
+                pow(traps.clamp(0.001, 1.0), w.trapExp))
+            .toDouble();
 
     if (line.coherenceBonus != null) {
       score *= pow(line.coherenceBonus!.clamp(0.001, 1.0), w.coherenceExp);

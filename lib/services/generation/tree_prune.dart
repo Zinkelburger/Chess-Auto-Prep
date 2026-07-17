@@ -21,25 +21,25 @@ class PrunedLine {
   final int subtreeNodes;
 
   PrunedLine.fromNode(BuildTreeNode node)
-      : nodeId = node.nodeId,
-        ply = node.ply,
-        lineSan = node.getLineSan().join(' '),
-        fen = node.fen,
-        engineEvalCp = node.engineEvalCp,
-        pruneEvalCp = node.pruneEvalCp,
-        cumulativeProbability = node.cumulativeProbability,
-        subtreeNodes = node.countSubtree();
+    : nodeId = node.nodeId,
+      ply = node.ply,
+      lineSan = node.getLineSan().join(' '),
+      fen = node.fen,
+      engineEvalCp = node.engineEvalCp,
+      pruneEvalCp = node.pruneEvalCp,
+      cumulativeProbability = node.cumulativeProbability,
+      subtreeNodes = node.countSubtree();
 
   Map<String, dynamic> toJson() => {
-        'node_id': nodeId,
-        'ply': ply,
-        'line_san': lineSan,
-        'fen': fen,
-        if (engineEvalCp != null) 'engine_eval_cp': engineEvalCp,
-        if (pruneEvalCp != null) 'prune_eval_cp': pruneEvalCp,
-        'cumulative_probability': cumulativeProbability,
-        'subtree_nodes': subtreeNodes,
-      };
+    'node_id': nodeId,
+    'ply': ply,
+    'line_san': lineSan,
+    'fen': fen,
+    if (engineEvalCp != null) 'engine_eval_cp': engineEvalCp,
+    if (pruneEvalCp != null) 'prune_eval_cp': pruneEvalCp,
+    'cumulative_probability': cumulativeProbability,
+    'subtree_nodes': subtreeNodes,
+  };
 }
 
 /// Remove every subtree whose root was flagged [PruneReason.evalTooLow],
@@ -101,8 +101,23 @@ void propagateHigherCumP(
   FrontierQueue queue,
 ) {
   if (newCumP <= canonical.cumulativeProbability) return;
-  final ratio = newCumP / canonical.cumulativeProbability;
+  final old = canonical.cumulativeProbability;
   canonical.cumulativeProbability = newCumP;
+  if (old <= 0.0) {
+    // Ratio would be Inf; rebuild descendant cumPs from edge probabilities
+    // so a zero→positive transposition still widens the frontier. Seed the
+    // priority baseline with the canonical's new cumP (its own discount-from-
+    // root is unrecoverable from the zeroed state, but relative discounts
+    // *within* the subtree are preserved from here down).
+    _rebuildCumPFromEdges(
+      canonical,
+      canonical.cumulativeProbability,
+      minProbability,
+      queue,
+    );
+    return;
+  }
+  final ratio = newCumP / old;
   _propagateCumPRecursive(canonical, ratio, minProbability, queue);
 }
 
@@ -117,6 +132,44 @@ void _propagateCumPRecursive(
     if (child.searchPriority >= 0.0) child.searchPriority *= ratio;
     if (child.children.isNotEmpty) {
       _propagateCumPRecursive(child, ratio, minProbability, queue);
+    } else if (!child.explored &&
+        child.cumulativeProbability >= minProbability) {
+      // If the leaf is still queued, [FrontierQueue.add] re-sifts it in place
+      // for its just-raised searchPriority instead of adding a duplicate; if
+      // it was already popped (below-floor) it is re-enqueued.
+      queue.add(child);
+    }
+  }
+}
+
+/// Absolute cumP assign when the canonical had zero/negative probability
+/// (ratio scaling is undefined). Uses each child's [BuildTreeNode.moveProbability]
+/// as the parent→child edge weight.
+///
+/// [parentSearchPriority] is the rebuilt priority of [node]; each child's
+/// priority is `parent × edge × searchPriorityDiscount`, mirroring how the
+/// finite-ratio path multiplies rather than overwriting — so our-move
+/// alternatives keep their discount instead of getting the raw (undiscounted)
+/// cumP, which would let them jump the frontier ahead of higher-value lines.
+void _rebuildCumPFromEdges(
+  BuildTreeNode node,
+  double parentSearchPriority,
+  double minProbability,
+  FrontierQueue queue,
+) {
+  for (final child in node.children) {
+    final edge = child.moveProbability;
+    child.cumulativeProbability = node.cumulativeProbability * edge;
+    if (child.searchPriority >= 0.0) {
+      child.searchPriority =
+          parentSearchPriority * edge * child.searchPriorityDiscount;
+    }
+    // Fall back to cumP for legacy nodes that never carried a priority.
+    final childSearchPriority = child.searchPriority >= 0.0
+        ? child.searchPriority
+        : child.cumulativeProbability;
+    if (child.children.isNotEmpty) {
+      _rebuildCumPFromEdges(child, childSearchPriority, minProbability, queue);
     } else if (!child.explored &&
         child.cumulativeProbability >= minProbability) {
       queue.add(child);

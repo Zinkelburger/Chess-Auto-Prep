@@ -96,10 +96,11 @@ class MaiaService {
     final legalMovesMask = inputData['legalMoves'] as Float32List;
     final isBlack = inputData['isBlack'] as bool;
     // Board: [1, 64, 12]
-    final inputOrt = OrtValueTensor.createTensorWithDataList(
-      floatInput,
-      [1, 64, 12],
-    );
+    final inputOrt = OrtValueTensor.createTensorWithDataList(floatInput, [
+      1,
+      64,
+      12,
+    ]);
 
     // Elo: Float32 [1]
     final eloSelfOrt = OrtValueTensor.createTensorWithDataList(
@@ -121,8 +122,8 @@ class MaiaService {
 
     // runAsync executes the native inference in the package's worker
     // isolate; the UI isolate only does the cheap pre/post-processing.
-    final outputs = await _session!.runAsync(runOptions, inputs) ??
-        const <OrtValue?>[];
+    final outputs =
+        await _session!.runAsync(runOptions, inputs) ?? const <OrtValue?>[];
     if (outputs.isEmpty) {
       inputOrt.release();
       eloSelfOrt.release();
@@ -190,7 +191,10 @@ class MaiaService {
   }
 
   Map<String, double> _processLogits(
-      List<double> logits, Float32List legalMask, bool isBlack) {
+    List<double> logits,
+    Float32List legalMask,
+    bool isBlack,
+  ) {
     final legalIndices = <int>[];
     final legalLogits = <double>[];
 

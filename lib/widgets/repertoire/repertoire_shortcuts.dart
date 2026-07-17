@@ -28,6 +28,7 @@ class RepertoireShortcuts extends StatelessWidget {
     this.onNextFinding,
     this.onPrevFinding,
     this.onDismissFinding,
+    this.onFocusComment,
     this.autofocus = true,
     required this.child,
   });
@@ -70,6 +71,10 @@ class RepertoireShortcuts extends StatelessWidget {
 
   /// D — dismiss current finding in the audit findings panel.
   final bool Function()? onDismissFinding;
+
+  /// C — focus the annotation panel's comment field for the current move.
+  /// Return true if a comment field was focused.
+  final bool Function()? onFocusComment;
 
   final Widget child;
 
@@ -136,6 +141,12 @@ class RepertoireShortcuts extends StatelessWidget {
       }
     }
 
+    if (event.logicalKey == LogicalKeyboardKey.keyC && hasNoLetterModifiers) {
+      if (onFocusComment != null && onFocusComment!()) {
+        return KeyEventResult.handled;
+      }
+    }
+
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
       if (keyboard.isShiftPressed && onGoToPreviousTrap()) {
         return KeyEventResult.handled;
@@ -158,14 +169,25 @@ class RepertoireShortcuts extends StatelessWidget {
   Widget build(BuildContext context) {
     return CallbackShortcuts(
       bindings: {
-        const SingleActivator(LogicalKeyboardKey.keyV,
-            control: true, shift: true): onPasteFenFromClipboard,
+        const SingleActivator(
+          LogicalKeyboardKey.keyV,
+          control: true,
+          shift: true,
+        ): onPasteFenFromClipboard,
         const SingleActivator(LogicalKeyboardKey.keyV, meta: true, shift: true):
             onPasteFenFromClipboard,
-        const SingleActivator(LogicalKeyboardKey.keyZ,
-            control: true, shift: false): () => _invokeWhenNotTyping(onUndo),
-        const SingleActivator(LogicalKeyboardKey.keyZ,
-            meta: true, shift: false): () => _invokeWhenNotTyping(onUndo),
+        const SingleActivator(
+          LogicalKeyboardKey.keyZ,
+          control: true,
+          shift: false,
+        ): () =>
+            _invokeWhenNotTyping(onUndo),
+        const SingleActivator(
+          LogicalKeyboardKey.keyZ,
+          meta: true,
+          shift: false,
+        ): () =>
+            _invokeWhenNotTyping(onUndo),
       },
       child: Focus(
         focusNode: focusNode,

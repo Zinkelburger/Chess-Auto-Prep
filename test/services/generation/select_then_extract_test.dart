@@ -38,8 +38,11 @@ void main() {
         fenMap: fenMap,
       );
       final selectedCount = selector.select(tree);
-      expect(selectedCount, greaterThan(0),
-          reason: 'Selector should mark at least one repertoire move');
+      expect(
+        selectedCount,
+        greaterThan(0),
+        reason: 'Selector should mark at least one repertoire move',
+      );
 
       tree.sortAllChildren();
       tree.computeMetadata();
@@ -48,8 +51,11 @@ void main() {
       final extractor = LineExtractor(config: config, fenMap: fenMap);
       final lines = extractor.extract(tree);
 
-      expect(lines, isNotEmpty,
-          reason: 'Full pipeline should produce at least one line');
+      expect(
+        lines,
+        isNotEmpty,
+        reason: 'Full pipeline should produce at least one line',
+      );
 
       for (final line in lines) {
         expect(line.movesSan, isNotEmpty);
@@ -92,8 +98,11 @@ void main() {
       final extractor = LineExtractor(config: config, fenMap: fenMap);
       final lines = extractor.extract(tree);
 
-      expect(lines, isNotEmpty,
-          reason: 'Black repertoire should also produce lines');
+      expect(
+        lines,
+        isNotEmpty,
+        reason: 'Black repertoire should also produce lines',
+      );
 
       for (final line in lines) {
         expect(line.movesSan, isNotEmpty);

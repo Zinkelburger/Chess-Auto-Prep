@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../theme/app_colors.dart';
 import 'game_nav_item.dart';
 
 const _visibleRows = 10;
@@ -66,13 +67,13 @@ class _GameEntry {
   });
 
   factory _GameEntry.fromGame(GameNavItem game) => _GameEntry(
-        white: _playerName(game.headers, 'White'),
-        black: _playerName(game.headers, 'Black'),
-        secondary: _formatSecondaryLine(game.headers),
-        summary: _isJunk(game.studySummary) ? '' : game.studySummary,
-        rating: game.studyRating,
-        searchText: _buildSearchableText(game),
-      );
+    white: _playerName(game.headers, 'White'),
+    black: _playerName(game.headers, 'Black'),
+    secondary: _formatSecondaryLine(game.headers),
+    summary: _isJunk(game.studySummary) ? '' : game.studySummary,
+    rating: game.studyRating,
+    searchText: _buildSearchableText(game),
+  );
 }
 
 bool _isJunk(String? value) {
@@ -109,7 +110,8 @@ String _formatDate(String raw) {
     final year = segments[0];
     final month = segments[1];
     final day = segments[2];
-    final yearOnly = !_isJunk(year) &&
+    final yearOnly =
+        !_isJunk(year) &&
         (RegExp(r'^\?+$').hasMatch(month) || _isJunk(month)) &&
         (RegExp(r'^\?+$').hasMatch(day) || _isJunk(day));
     if (yearOnly) return year;
@@ -148,11 +150,9 @@ List<_SearchResult> _computeResults(List<_GameEntry> entries, String query) {
     final n = int.parse(trimmed);
     final idx = n - 1;
     if (idx >= 0 && idx < entries.length) {
-      results.add(_SearchResult(
-        index: idx,
-        isGoToGame: true,
-        goToLabel: 'Go to game $n',
-      ));
+      results.add(
+        _SearchResult(index: idx, isGoToGame: true, goToLabel: 'Go to game $n'),
+      );
       seen.add(idx);
     }
   }
@@ -187,8 +187,9 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
   final _focusNode = FocusNode();
 
   // Display/search data precomputed once so scrolling and typing stay smooth.
-  late final List<_GameEntry> _entries =
-      widget.games.map(_GameEntry.fromGame).toList();
+  late final List<_GameEntry> _entries = widget.games
+      .map(_GameEntry.fromGame)
+      .toList();
 
   // Results cached and only recomputed when the query text changes.
   late List<_SearchResult> _results = _computeResults(_entries, '');
@@ -251,7 +252,10 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                   autofocus: true,
                   decoration: InputDecoration(
                     hintText: 'Search games or enter game #...',
-                    hintStyle: TextStyle(color: Colors.grey[600], fontSize: 13),
+                    hintStyle: const TextStyle(
+                      color: AppColors.onSurfaceMuted,
+                      fontSize: 13,
+                    ),
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 12,
@@ -259,17 +263,15 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                     ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(6),
-                      borderSide: BorderSide(color: Colors.grey[700]!),
+                      borderSide: const BorderSide(color: AppColors.outline),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(6),
-                      borderSide: BorderSide(color: Colors.grey[700]!),
+                      borderSide: const BorderSide(color: AppColors.outline),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(6),
-                      borderSide: BorderSide(
-                        color: theme.colorScheme.primary,
-                      ),
+                      borderSide: BorderSide(color: theme.colorScheme.primary),
                     ),
                   ),
                   style: const TextStyle(fontSize: 14),
@@ -280,17 +282,21 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                 SizedBox(
                   // Show up to _visibleRows at once, but never taller than the
                   // window allows (leaving room for the search field + margins).
-                  height: math.min(
-                    _visibleRows * _resultRowHeight,
-                    MediaQuery.of(context).size.height - 220,
-                  ).clamp(_resultRowHeight, _visibleRows * _resultRowHeight),
+                  height: math
+                      .min(
+                        _visibleRows * _resultRowHeight,
+                        MediaQuery.of(context).size.height - 220,
+                      )
+                      .clamp(_resultRowHeight, _visibleRows * _resultRowHeight),
                   child: results.isEmpty
                       ? Padding(
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           child: Text(
                             'No matches',
-                            style: TextStyle(
-                                color: Colors.grey[500], fontSize: 13),
+                            style: const TextStyle(
+                              color: AppColors.onSurfaceMuted,
+                              fontSize: 13,
+                            ),
                           ),
                         )
                       : ListView.builder(
@@ -318,7 +324,7 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
 
     final borderColor = isCurrent
         ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.6)
-        : Colors.grey[700]!;
+        : AppColors.outline;
     final bgColor = isCurrent
         ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.25)
         : Colors.transparent;
@@ -332,9 +338,9 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
             width: 32,
             child: Text(
               '${result.index + 1}',
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 12,
-                color: Colors.grey[500],
+                color: AppColors.onSurfaceMuted,
               ),
             ),
           ),
@@ -361,9 +367,9 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                       secondary,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 11,
-                        color: Colors.grey[500],
+                        color: AppColors.onSurfaceMuted,
                       ),
                     ),
                   ),
@@ -374,9 +380,9 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                       entry.summary,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 11,
-                        color: Colors.grey[500],
+                        color: AppColors.onSurfaceMuted,
                         fontStyle: FontStyle.italic,
                       ),
                     ),
@@ -389,7 +395,7 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
               '★' * rating,
               style: const TextStyle(
                 fontSize: 12,
-                color: Colors.amber,
+                color: AppColors.starAccent,
                 letterSpacing: -1,
               ),
             ),

@@ -7,9 +7,13 @@
 /// so behavior is identical to the inlined version.
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../core/pgn_viewer_controller.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import '../opening_tree_widget.dart';
 
 class PgnOpeningTreePanel extends StatelessWidget {
@@ -23,10 +27,8 @@ class PgnOpeningTreePanel extends StatelessWidget {
       children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: Colors.grey[700]!),
-            ),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: AppColors.outline)),
           ),
           child: Row(
             children: [
@@ -39,10 +41,8 @@ class PgnOpeningTreePanel extends StatelessWidget {
               const SizedBox(width: 4),
               Text(
                 'Opening Tree',
-                style: TextStyle(
+                style: AppTextStyles.subtitle.copyWith(
                   fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                  color: Colors.grey[200],
                 ),
               ),
               const Spacer(),
@@ -62,9 +62,9 @@ class PgnOpeningTreePanel extends StatelessWidget {
                           controller.treeBuildTotal > 0
                               ? 'Building ${controller.treeBuildProcessed} / ${controller.treeBuildTotal}'
                               : 'Building tree...',
-                          style: TextStyle(
+                          style: AppTextStyles.caption.copyWith(
                             fontSize: 11,
-                            color: Colors.grey[400],
+                            color: AppColors.onSurfaceSoft,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -91,14 +91,17 @@ class PgnOpeningTreePanel extends StatelessWidget {
                     controller.treeBuildTotal > 0
                         ? 'Building tree... ${controller.treeBuildProcessed} / ${controller.treeBuildTotal} games'
                         : 'Building tree...',
-                    style: TextStyle(color: Colors.grey[300], fontSize: 12),
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.onSurfaceSoft,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   if (controller.treeBuildTotal > 0)
                     SizedBox(
                       width: 220,
                       child: LinearProgressIndicator(
-                        value: controller.treeBuildProcessed /
+                        value:
+                            controller.treeBuildProcessed /
                             controller.treeBuildTotal,
                       ),
                     ),
@@ -112,7 +115,7 @@ class PgnOpeningTreePanel extends StatelessWidget {
               child: Text(
                 'No tree available.\nLoad games to build.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey[500]),
+                style: AppTextStyles.muted.copyWith(fontSize: 14),
               ),
             ),
           )
@@ -145,8 +148,8 @@ class _TreeGamesList extends StatelessWidget {
     if (matchingIndices.isEmpty) return const SizedBox.shrink();
     return Container(
       constraints: const BoxConstraints(maxHeight: 180),
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: Colors.grey[700]!)),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.outline)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -156,16 +159,21 @@ class _TreeGamesList extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
             child: Text(
               '${matchingIndices.length} game${matchingIndices.length == 1 ? '' : 's'} at this position',
-              style: TextStyle(
+              style: AppTextStyles.caption.copyWith(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: Colors.grey[400],
+                color: AppColors.onSurfaceSoft,
               ),
             ),
           ),
-          Flexible(
+          SizedBox(
+            // Fixed row height + a capped visible-row count lets the list
+            // build lazily. At the root position every filtered game matches,
+            // and `shrinkWrap: true` used to build a row for each one just to
+            // measure a list that only ever shows ~5 in its 180px box.
+            height: math.min(matchingIndices.length, 5) * 26.0 + 4,
             child: ListView.builder(
-              shrinkWrap: true,
+              itemExtent: 26,
               padding: const EdgeInsets.only(bottom: 4),
               itemCount: matchingIndices.length,
               itemBuilder: (context, idx) {
@@ -174,12 +182,17 @@ class _TreeGamesList extends StatelessWidget {
                 return InkWell(
                   onTap: () => controller.loadGameFromTree(gi),
                   child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 5,
+                    ),
                     child: Row(
                       children: [
-                        Icon(Icons.play_arrow,
-                            size: 14, color: Colors.blue[300]),
+                        const Icon(
+                          Icons.play_arrow,
+                          size: 14,
+                          color: AppColors.info,
+                        ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
@@ -190,9 +203,15 @@ class _TreeGamesList extends StatelessWidget {
                           ),
                         ),
                         if (game.studyRating > 0) ...[
-                          const Icon(Icons.star, size: 12, color: Colors.amber),
-                          Text('${game.studyRating}',
-                              style: const TextStyle(fontSize: 10)),
+                          const Icon(
+                            Icons.star,
+                            size: 12,
+                            color: AppColors.starAccent,
+                          ),
+                          Text(
+                            '${game.studyRating}',
+                            style: const TextStyle(fontSize: 10),
+                          ),
                         ],
                       ],
                     ),

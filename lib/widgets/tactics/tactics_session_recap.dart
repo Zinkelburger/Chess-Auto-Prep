@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/app_colors.dart';
+
 /// End-of-session recap card: outcome counts, accuracy, time, and a
 /// "retry mistakes" entry point.  Shown in the Tactic tab once the session
 /// queue is exhausted.
@@ -59,12 +61,17 @@ class TacticsSessionRecap extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.flag_circle_outlined,
-                    color: theme.colorScheme.primary),
+                Icon(
+                  Icons.flag_circle_outlined,
+                  color: theme.colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
-                Text('Session complete',
-                    style: theme.textTheme.titleLarge
-                        ?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  'Session complete',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 20),
@@ -72,20 +79,20 @@ class TacticsSessionRecap extends StatelessWidget {
               children: [
                 _StatTile(
                   icon: Icons.check_circle_outline,
-                  color: Colors.green[400]!,
+                  color: AppColors.success,
                   count: solved,
                   label: 'Solved',
                 ),
                 _StatTile(
                   icon: Icons.cancel_outlined,
-                  color: Colors.red[300]!,
+                  color: AppColors.danger,
                   count: failed,
                   label: 'Failed',
                 ),
                 if (skipped > 0)
                   _StatTile(
                     icon: Icons.skip_next_outlined,
-                    color: Colors.grey[500]!,
+                    color: AppColors.onSurfaceMuted,
                     count: skipped,
                     label: 'Skipped',
                   ),
@@ -97,8 +104,9 @@ class TacticsSessionRecap extends StatelessWidget {
                 'Accuracy ${(accuracy * 100).toStringAsFixed(0)}%'
                 ' · ${_formatSeconds(totalTimeSeconds)} total'
                 ' · avg ${_formatSeconds(totalTimeSeconds / _attempted)} per puzzle',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
             const SizedBox(height: 20),
             Row(
@@ -111,10 +119,7 @@ class TacticsSessionRecap extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                 ],
-                OutlinedButton(
-                  onPressed: onDone,
-                  child: const Text('Done'),
-                ),
+                OutlinedButton(onPressed: onDone, child: const Text('Done')),
               ],
             ),
           ],
@@ -145,12 +150,18 @@ class _StatTile extends StatelessWidget {
         children: [
           Icon(icon, color: color, size: 22),
           const SizedBox(height: 4),
-          Text('$count',
-              style: theme.textTheme.titleLarge
-                  ?.copyWith(fontWeight: FontWeight.bold)),
-          Text(label,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          Text(
+            '$count',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
         ],
       ),
     );

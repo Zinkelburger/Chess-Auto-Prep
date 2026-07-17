@@ -28,15 +28,14 @@ String? parseMoveToUci(Position position, String moveStr) {
 
 /// Send a UCI move through TacticsSessionController.handleMoveAttempted —
 /// the same path the board's onMove callback uses.
-Future<void> playMoveViaAppState(
-  WidgetTester tester,
-  String uci,
-) async {
+Future<void> playMoveViaAppState(WidgetTester tester, String uci) async {
   final appState = getAppState(tester);
   // Read the session controller from below the tactics MultiProvider.
   final context = tester.element(find.byType(TacticsControlPanel));
-  Provider.of<TacticsSessionController>(context, listen: false)
-      .handleMoveAttempted(
+  Provider.of<TacticsSessionController>(
+    context,
+    listen: false,
+  ).handleMoveAttempted(
     moveUci: uci,
     boardFen: appState.currentPosition.fen,
     inAnalysisMode: appState.isAnalysisMode,

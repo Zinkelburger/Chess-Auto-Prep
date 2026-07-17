@@ -2,10 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/eval_tree_snapshot.dart';
 
-enum EvalTreeMetricDisplayMode {
-  cpl,
-  eval,
-}
+enum EvalTreeMetricDisplayMode { cpl, eval }
 
 class EvalTreeController extends ChangeNotifier {
   EvalTreeSnapshot? _snapshot;
@@ -52,8 +49,8 @@ class EvalTreeController extends ChangeNotifier {
     _snapshot = snapshot;
     _selectedNodeId =
         selectedNodeId != null && snapshot.containsNode(selectedNodeId)
-            ? selectedNodeId
-            : snapshot.rootNodeId;
+        ? selectedNodeId
+        : snapshot.rootNodeId;
     if (resetView) {
       transformationController.value = Matrix4.identity();
       _requestFocus(_selectedNodeId, resetZoom: true);

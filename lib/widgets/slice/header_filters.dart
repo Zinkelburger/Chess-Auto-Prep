@@ -8,6 +8,10 @@ import 'package:flutter/material.dart';
 
 import '../../core/slice_filter_controller.dart';
 import '../../models/pgn_filter_models.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
+import '../../services/pgn_tree_core.dart'
+    show PlayerNameMatchSummary, summarizePlayerNameMatches;
 
 final _ecoExact = RegExp(r'^[A-E]\d{2}$');
 bool _isValidEco(String value) => _ecoExact.hasMatch(value.trim());
@@ -15,7 +19,13 @@ bool _isValidEco(String value) => _ecoExact.hasMatch(value.trim());
 class HeaderFilters extends StatelessWidget {
   final SliceFilterController controller;
 
-  const HeaderFilters({super.key, required this.controller});
+  /// When provided, [kPlayerHeaderField] rows show which header spellings
+  /// their names currently match across these games (and how often), so the
+  /// user can see e.g. "Carlsen, Magnus ×54 · Carlsen,M ×33" instead of
+  /// trusting substring matching blind.
+  final List<GameRecord>? games;
+
+  const HeaderFilters({super.key, required this.controller, this.games});
 
   @override
   Widget build(BuildContext context) {
@@ -27,11 +37,7 @@ class HeaderFilters extends StatelessWidget {
         children: [
           Text(
             'Header Filters',
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 14,
-              color: Colors.grey[300],
-            ),
+            style: AppTextStyles.subtitle.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           for (int i = 0; i < controller.headerRows.length; i++)
@@ -54,7 +60,9 @@ class HeaderFilters extends StatelessWidget {
     }
 
     String hintText;
-    if (f.field == 'ECO') {
+    if (f.field == kPlayerHeaderField) {
+      hintText = 'either colour — e.g. Carlsen; DrNykterstein';
+    } else if (f.field == 'ECO') {
       hintText = 'e.g. B12 or B1';
     } else if (f.field == 'Date') {
       hintText = 'e.g. 2000';
@@ -66,7 +74,8 @@ class HeaderFilters extends StatelessWidget {
       hintText = 'Value...';
     }
 
-    final showEcoWarn = f.field == 'ECO' &&
+    final showEcoWarn =
+        f.field == 'ECO' &&
         f.mode == MatchMode.exact &&
         f.value.isNotEmpty &&
         !_isValidEco(f.value);
@@ -87,14 +96,19 @@ class HeaderFilters extends StatelessWidget {
                   isExpanded: true,
                   decoration: const InputDecoration(
                     isDense: true,
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
                     border: OutlineInputBorder(),
                   ),
                   items: kHeaderFieldOptions
-                      .map((s) => DropdownMenuItem(
+                      .map(
+                        (s) => DropdownMenuItem(
                           value: s,
-                          child: Text(s, style: const TextStyle(fontSize: 12))))
+                          child: Text(s, style: const TextStyle(fontSize: 12)),
+                        ),
+                      )
                       .toList(),
                   onChanged: (v) => controller.setHeaderField(index, v!),
                 ),
@@ -108,18 +122,22 @@ class HeaderFilters extends StatelessWidget {
                   isExpanded: true,
                   decoration: const InputDecoration(
                     isDense: true,
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
                     border: OutlineInputBorder(),
                   ),
                   items: availableModes
-                      .map((m) => DropdownMenuItem(
-                            value: m,
-                            child: Text(
-                                matchModeLabel(m,
-                                    numeric: isNumericField(f.field)),
-                                style: const TextStyle(fontSize: 12)),
-                          ))
+                      .map(
+                        (m) => DropdownMenuItem(
+                          value: m,
+                          child: Text(
+                            matchModeLabel(m, numeric: isNumericField(f.field)),
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      )
                       .toList(),
                   onChanged: (v) => controller.setHeaderMode(index, v!),
                 ),
@@ -130,20 +148,27 @@ class HeaderFilters extends StatelessWidget {
                   controller: f.controller,
                   decoration: InputDecoration(
                     hintText: hintText,
-                    hintStyle: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    hintStyle: AppTextStyles.hint.copyWith(fontSize: 12),
                     isDense: true,
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 10,
+                    ),
                     border: const OutlineInputBorder(),
                     suffixIcon: showEcoWarn
                         ? Tooltip(
                             message: 'Not a standard ECO code (A00–E99)',
-                            child: Icon(Icons.warning_amber,
-                                size: 16, color: Colors.orange[400]),
+                            child: Icon(
+                              Icons.warning_amber,
+                              size: 16,
+                              color: AppColors.warning,
+                            ),
                           )
                         : null,
-                    suffixIconConstraints:
-                        const BoxConstraints(minWidth: 28, minHeight: 28),
+                    suffixIconConstraints: const BoxConstraints(
+                      minWidth: 28,
+                      minHeight: 28,
+                    ),
                   ),
                   style: const TextStyle(fontSize: 12),
                   onChanged: (v) => controller.setHeaderValue(index, v),
@@ -163,11 +188,59 @@ class HeaderFilters extends StatelessWidget {
               padding: const EdgeInsets.only(left: 248, top: 2),
               child: Text(
                 'Expected A00–E99',
-                style: TextStyle(fontSize: 10, color: Colors.orange[400]),
+                style: const TextStyle(fontSize: 10, color: AppColors.warning),
               ),
             ),
+          if (_showsNameMatches(f)) _buildNameMatchesLine(f.value),
         ],
       ),
     );
+  }
+
+  /// Matched-spellings feedback only makes sense for substring name search;
+  /// exact/regex/not-contains modes are left alone.
+  bool _showsNameMatches(HeaderFilterRow f) =>
+      games != null &&
+      f.field == kPlayerHeaderField &&
+      f.mode == MatchMode.contains &&
+      f.value.trim().isNotEmpty;
+
+  Widget _buildNameMatchesLine(String namesInput) {
+    final summary = summarizePlayerNameMatches(
+      headerPairs: [
+        for (final g in games!)
+          (white: g.headers['White'] ?? '', black: g.headers['Black'] ?? ''),
+      ],
+      namesInput: namesInput,
+    );
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, top: 2),
+      child: Text(
+        _nameMatchesLabel(summary),
+        style: TextStyle(
+          fontSize: 11,
+          color: summary.matchedGames == 0
+              ? AppColors.warning
+              : AppColors.onSurfaceMuted,
+        ),
+      ),
+    );
+  }
+
+  static String _nameMatchesLabel(PlayerNameMatchSummary summary) {
+    if (summary.matchedGames == 0) {
+      return 'No games match these names';
+    }
+    const maxShown = 8;
+    final variants = summary.variantCounts.entries.toList();
+    final shown = variants
+        .take(maxShown)
+        .map((e) => '${e.key} ×${e.value}')
+        .join(' · ');
+    final more = variants.length > maxShown
+        ? ' (+${variants.length - maxShown} more)'
+        : '';
+    return 'Matches ${summary.matchedGames} of ${summary.totalGames} games '
+        'as: $shown$more';
   }
 }

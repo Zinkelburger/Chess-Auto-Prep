@@ -30,6 +30,7 @@ class EditMainZone extends StatelessWidget {
     this.onPromote,
     this.onMakeMainLine,
     this.repertoireName,
+    this.lineTitle,
     required this.repertoireColor,
     required this.isEditingExistingLine,
     this.onLineEdited,
@@ -51,6 +52,7 @@ class EditMainZone extends StatelessWidget {
   final void Function(TreePath path)? onPromote;
   final void Function(TreePath path)? onMakeMainLine;
   final String? repertoireName;
+  final String? lineTitle;
   final String repertoireColor;
   final bool isEditingExistingLine;
   final void Function(String updatedPgn)? onLineEdited;
@@ -77,12 +79,14 @@ class EditMainZone extends StatelessWidget {
       onPromote: onPromote,
       onMakeMainLine: onMakeMainLine,
       currentRepertoireName: repertoireName,
+      lineTitle: lineTitle,
       repertoireColor: repertoireColor,
       isEditingExistingLine: isEditingExistingLine,
       onLineEdited: onLineEdited,
       onAutoSave: onAutoSave,
       onDirty: onDirty,
-      onCopyToClipboard: onCopyToClipboard ??
+      onCopyToClipboard:
+          onCopyToClipboard ??
           (text, message) => _copyToClipboard(context, text, message),
       onViewInLines: onViewInLines,
       trapIndex: trapIndex,

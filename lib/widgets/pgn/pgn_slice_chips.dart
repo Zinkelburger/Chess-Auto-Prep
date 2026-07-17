@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/pgn_viewer_controller.dart';
 import '../../models/pgn_filter_models.dart';
+import '../../theme/app_colors.dart';
 
 class PgnSliceChips extends StatelessWidget {
   final PgnViewerController controller;
@@ -47,17 +48,21 @@ class PgnSliceChips extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: Colors.blue.withAlpha(20),
+                color: AppColors.infoTint,
                 borderRadius: BorderRadius.circular(8),
-                border:
-                    Border.all(color: Colors.blue.withAlpha(60), width: 0.5),
+                border: Border.all(
+                  color: AppColors.info.withAlpha(60),
+                  width: 0.5,
+                ),
               ),
               child: Text(
                 '${controller.filteredGames.length}/${controller.allGames.length}',
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
-                  color: Colors.blue[300],
+                  // info, not chipActiveFg: on the pale infoTint wash the
+                  // near-white fg would erase the "filters active" signal.
+                  color: AppColors.info,
                   fontFamily: 'monospace',
                 ),
               ),
@@ -74,9 +79,9 @@ class PgnSliceChips extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: Colors.blue[900],
+          color: AppColors.chipActiveBg,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.blue.withAlpha(60), width: 0.5),
+          border: Border.all(color: AppColors.info.withAlpha(60), width: 0.5),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -85,10 +90,10 @@ class PgnSliceChips extends StatelessWidget {
               constraints: const BoxConstraints(maxWidth: 140),
               child: Text(
                 label,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: Colors.blue[100],
+                  color: AppColors.chipActiveFg,
                 ),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
@@ -97,8 +102,11 @@ class PgnSliceChips extends StatelessWidget {
             const SizedBox(width: 4),
             GestureDetector(
               onTap: () => controller.removeSliceChip(index),
-              child: Icon(Icons.close,
-                  size: 13, color: Colors.blue[300]!.withAlpha(180)),
+              child: Icon(
+                Icons.close,
+                size: 13,
+                color: AppColors.chipActiveFg.withAlpha(180),
+              ),
             ),
           ],
         ),
@@ -114,18 +122,20 @@ class PgnSliceChips extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: Colors.grey[850],
+            color: AppColors.surfaceInset,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.blue.withAlpha(70), width: 0.5),
+            border: Border.all(color: AppColors.info.withAlpha(70), width: 0.5),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.person_outline, size: 13, color: Colors.blue[200]),
+              const Icon(Icons.person_outline, size: 13, color: AppColors.info),
               const SizedBox(width: 3),
               Text(
                 label,
-                style: TextStyle(fontSize: 11, color: Colors.blue[100]),
+                // Matches the info icon beside it; chipActiveFg is reserved
+                // for text sitting on a chipActiveBg fill.
+                style: const TextStyle(fontSize: 11, color: AppColors.info),
               ),
             ],
           ),
@@ -142,12 +152,17 @@ class PgnSliceChips extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: Colors.grey[800],
+            // Fill flips to the active-chip blue when filters are applied so
+            // the Edit affordance reads as "on" at a glance (the fg colors
+            // alone were too close to tell apart on the grey fill).
+            color: controller.hasActiveFilters
+                ? AppColors.chipActiveBg
+                : AppColors.chipInactiveBg,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: controller.hasActiveFilters
-                  ? Colors.blue.withAlpha(40)
-                  : Colors.grey[700]!,
+                  ? AppColors.info.withAlpha(40)
+                  : AppColors.outline,
               width: 0.5,
             ),
           ),
@@ -158,8 +173,8 @@ class PgnSliceChips extends StatelessWidget {
                 Icons.add,
                 size: 13,
                 color: controller.hasActiveFilters
-                    ? Colors.blue[300]
-                    : Colors.grey[400],
+                    ? AppColors.chipActiveFg
+                    : AppColors.onSurfaceSoft,
               ),
               const SizedBox(width: 3),
               Text(
@@ -167,8 +182,8 @@ class PgnSliceChips extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   color: controller.hasActiveFilters
-                      ? Colors.blue[300]
-                      : Colors.grey[400],
+                      ? AppColors.chipActiveFg
+                      : AppColors.onSurfaceSoft,
                 ),
               ),
             ],

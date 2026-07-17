@@ -18,6 +18,7 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
 import '../analysis_games_service.dart';
+import '../chess_api_urls.dart';
 import '../storage/app_paths.dart';
 import 'game_filter.dart';
 
@@ -25,20 +26,21 @@ enum GamesPlatform { chesscom, lichess }
 
 /// Downloads a player's raw multi-game PGN. [maxGames] / [since] are hints to
 /// the underlying API; final filtering is always re-applied locally.
-typedef GameFetcher = Future<String> Function(
-  String username, {
-  int maxGames,
-  DateTime? since,
-  void Function(String message)? onProgress,
-});
+typedef GameFetcher =
+    Future<String> Function(
+      String username, {
+      int maxGames,
+      DateTime? since,
+      void Function(String message)? onProgress,
+    });
 
 class GamesLibraryService {
   GamesLibraryService({
     GameFetcher? chesscomFetcher,
     GameFetcher? lichessFetcher,
     this.cacheTtl = const Duration(hours: 12),
-  })  : _chesscom = chesscomFetcher ?? _defaultChesscomFetcher,
-        _lichess = lichessFetcher ?? _defaultLichessFetcher;
+  }) : _chesscom = chesscomFetcher ?? _defaultChesscomFetcher,
+       _lichess = lichessFetcher ?? _defaultLichessFetcher;
 
   final GameFetcher _chesscom;
   final GameFetcher _lichess;
@@ -85,7 +87,8 @@ class GamesLibraryService {
     final file = await _cacheFile(platform, username);
     String pgn;
 
-    final cacheUsable = !forceRefresh &&
+    final cacheUsable =
+        !forceRefresh &&
         await hasFreshCache(platform, username, respectTtl: !forceRefresh);
     if (cacheUsable) {
       pgn = await file.readAsString();
@@ -120,8 +123,7 @@ class GamesLibraryService {
     int? monthsBack;
     if (since != null) {
       final now = DateTime.now();
-      monthsBack =
-          (now.year - since.year) * 12 + (now.month - since.month) + 1;
+      monthsBack = (now.year - since.year) * 12 + (now.month - since.month) + 1;
       if (monthsBack < 1) monthsBack = 1;
     }
     return AnalysisGamesService().downloadChesscomGames(
@@ -148,9 +150,11 @@ class GamesLibraryService {
     if (since != null) {
       params['since'] = '${since.millisecondsSinceEpoch}';
     }
-    final uri = Uri.parse('https://lichess.org/api/games/user/$username')
-        .replace(queryParameters: params);
-    final resp = await http.get(uri, headers: {'Accept': 'application/x-chess-pgn'});
+    final uri = lichessUserGamesUrl(username, params);
+    final resp = await http.get(
+      uri,
+      headers: {'Accept': 'application/x-chess-pgn'},
+    );
     if (resp.statusCode != 200) return '';
     return resp.body;
   }

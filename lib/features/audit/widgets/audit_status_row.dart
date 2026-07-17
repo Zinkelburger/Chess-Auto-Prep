@@ -6,6 +6,8 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../theme/app_colors.dart';
+
 class AuditStatusRow extends StatelessWidget {
   const AuditStatusRow({
     super.key,
@@ -59,7 +61,7 @@ class AuditStatusRow extends StatelessWidget {
           LinearProgressIndicator(
             value: progressFraction,
             minHeight: 2,
-            backgroundColor: Colors.grey[800],
+            backgroundColor: AppColors.surfaceInset,
           ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -71,7 +73,7 @@ class AuditStatusRow extends StatelessWidget {
                   height: 10,
                   child: CircularProgressIndicator(
                     strokeWidth: 1.5,
-                    color: Colors.grey[500],
+                    color: AppColors.onSurfaceMuted,
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -79,40 +81,59 @@ class AuditStatusRow extends StatelessWidget {
                   totalNodes > 0
                       ? '$nodesChecked / $totalNodes positions · $visibleCount findings'
                       : 'Starting audit...',
-                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.onSurfaceMuted,
+                  ),
                 ),
               ] else ...[
                 if (totalMatching > visibleCount) ...[
-                  Text('Top',
-                      style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                  Text(
+                    'Top',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.onSurfaceMuted,
+                    ),
+                  ),
                   const SizedBox(width: 3),
                   SizedBox(
                     width: 34,
                     height: 20,
                     child: TextField(
                       controller: capController,
-                      style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.onSurfaceSoft,
+                      ),
                       textAlign: TextAlign.center,
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       decoration: InputDecoration(
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 4, vertical: 2),
+                          horizontal: 4,
+                          vertical: 2,
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(4),
-                          borderSide:
-                              BorderSide(color: Colors.grey[700]!, width: 0.5),
+                          borderSide: const BorderSide(
+                            color: AppColors.outline,
+                            width: 0.5,
+                          ),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(4),
-                          borderSide:
-                              BorderSide(color: Colors.grey[700]!, width: 0.5),
+                          borderSide: const BorderSide(
+                            color: AppColors.outline,
+                            width: 0.5,
+                          ),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(4),
-                          borderSide:
-                              BorderSide(color: Colors.grey[500]!, width: 1),
+                          borderSide: const BorderSide(
+                            color: AppColors.onSurfaceMuted,
+                            width: 1,
+                          ),
                         ),
                       ),
                       onSubmitted: (_) => onApplyCap(),
@@ -123,22 +144,39 @@ class AuditStatusRow extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 3),
-                  Text('of $totalMatching',
-                      style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                  Text(
+                    'of $totalMatching',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.onSurfaceMuted,
+                    ),
+                  ),
                   if (reachThreshold != null) ...[
                     const SizedBox(width: 4),
-                    Text('· ≥ $reachThreshold reach',
-                        style: TextStyle(
-                            fontSize: 11, color: Colors.blueGrey[300])),
+                    Text(
+                      '· ≥ $reachThreshold reach',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.engineLine,
+                      ),
+                    ),
                   ],
                 ] else ...[
-                  Text('$visibleCount findings',
-                      style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                  Text(
+                    '$visibleCount findings',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.onSurfaceMuted,
+                    ),
+                  ),
                   if (resultTimestamp != null) ...[
                     const SizedBox(width: 6),
                     Text(
                       '· ${_formatTimestamp(resultTimestamp!)}',
-                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.onSurfaceMuted,
+                      ),
                     ),
                   ],
                 ],
@@ -147,7 +185,10 @@ class AuditStatusRow extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   '${selectedIndex + 1} of $visibleCount',
-                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.onSurfaceMuted,
+                  ),
                 ),
               ],
               const Spacer(),
@@ -155,13 +196,18 @@ class AuditStatusRow extends StatelessWidget {
                 Tooltip(
                   message: 'New audit with different settings',
                   child: IconButton(
-                    icon:
-                        const Icon(Icons.refresh, size: 14, color: Colors.grey),
+                    icon: const Icon(
+                      Icons.refresh,
+                      size: 14,
+                      color: AppColors.onSurfaceMuted,
+                    ),
                     onPressed: onRerunAudit,
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 24, minHeight: 24),
+                    constraints: const BoxConstraints(
+                      minWidth: 24,
+                      minHeight: 24,
+                    ),
                   ),
                 ),
               Tooltip(
@@ -172,13 +218,15 @@ class AuditStatusRow extends StatelessWidget {
                         ? Icons.visibility_off_outlined
                         : Icons.visibility_outlined,
                     size: 14,
-                    color: Colors.grey,
+                    color: AppColors.onSurfaceMuted,
                   ),
                   onPressed: onToggleHideDismissed,
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 24, minHeight: 24),
+                  constraints: const BoxConstraints(
+                    minWidth: 24,
+                    minHeight: 24,
+                  ),
                 ),
               ),
             ],

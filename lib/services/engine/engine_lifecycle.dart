@@ -12,10 +12,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../analysis_service.dart';
 import 'stockfish_pool.dart';
+import '../../utils/safe_change_notifier.dart';
 
 enum EngineState { off, idle, analyzing, generating }
 
-class EngineLifecycle extends ChangeNotifier {
+class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
   /// Application-wide shared instance.
   static final EngineLifecycle instance = EngineLifecycle._();
 
@@ -79,8 +80,8 @@ class EngineLifecycle extends ChangeNotifier {
 
   /// Restart after [suspend] when the user preference allows it.
   Future<void> resume() => _serialExec(() async {
-        if (_userWantsEngine) await _doToggleOn();
-      });
+    if (_userWantsEngine) await _doToggleOn();
+  });
 
   Future<void> _doToggleOn() async {
     _userWantsEngine = true;
@@ -152,8 +153,7 @@ class EngineLifecycle extends ChangeNotifier {
 
   Future<void> _doPauseGeneration() async {
     if (_state != EngineState.generating) return;
-    _state =
-        _toggleStateBeforeGeneration ? EngineState.idle : EngineState.off;
+    _state = _toggleStateBeforeGeneration ? EngineState.idle : EngineState.off;
     notifyListeners();
   }
 

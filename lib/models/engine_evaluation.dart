@@ -8,7 +8,7 @@ class EngineEvaluation {
   final int nodes;
   final int nps;
   final List<int>?
-      wdl; // Win/Draw/Loss probabilities [wins, draws, losses] per 1000
+  wdl; // Win/Draw/Loss probabilities [wins, draws, losses] per 1000
 
   EngineEvaluation({
     this.depth = 0,

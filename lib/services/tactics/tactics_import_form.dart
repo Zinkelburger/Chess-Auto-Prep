@@ -15,7 +15,7 @@ import 'tactics_import_coordinator.dart';
 
 class TacticsImportForm extends ChangeNotifier {
   TacticsImportForm({int defaultCores = 1})
-      : coresText = TextEditingController(text: '$defaultCores');
+    : coresText = TextEditingController(text: '$defaultCores');
 
   final TextEditingController lichessUser = TextEditingController();
   final TextEditingController chessComUser = TextEditingController();
@@ -48,23 +48,28 @@ class TacticsImportForm extends ChangeNotifier {
   int get depth => (int.tryParse(depthText.text) ?? 15).clamp(1, 25);
 
   /// Parsed worker count, clamped to available cores.
-  int get cores => (int.tryParse(coresText.text) ?? 1)
-      .clamp(1, TacticsImportService.availableCores);
+  int get cores => (int.tryParse(coresText.text) ?? 1).clamp(
+    1,
+    TacticsImportService.availableCores,
+  );
 
   /// Parsed recent-games fetch count.
   int get count => int.tryParse(fetchCount.text) ?? 20;
 
   String usernameFor(TacticsImportSource source) =>
       source == TacticsImportSource.lichess
-          ? lichessUser.text.trim()
-          : chessComUser.text.trim();
+      ? lichessUser.text.trim()
+      : chessComUser.text.trim();
 
   /// Start of the sinceDate-mode window: midnight [sinceDays] days back
   /// (counting today as day 1).
   DateTime get sinceCutoff {
     final now = DateTime.now();
-    return DateTime(now.year, now.month, now.day)
-        .subtract(Duration(days: sinceDays - 1));
+    return DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: sinceDays - 1));
   }
 
   /// Import params for [source] from the current form values.

@@ -1,3 +1,5 @@
+import 'dart:isolate';
+
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
@@ -6,6 +8,8 @@ import '../../../models/build_tree_node.dart';
 import '../../../models/repertoire_metadata.dart';
 import '../services/eval_tree_file_loader.dart';
 import '../../../services/generation/tree_serialization.dart';
+import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
 import '../tree_colors.dart';
 import '../adapters/eval_tree_snapshot_adapter.dart';
 import '../controllers/eval_tree_controller.dart';
@@ -28,8 +32,8 @@ class EvalTreePositionSelection {
     required this.rootFen,
     required List<String> movePathSan,
     required List<String> rootStartMovesSan,
-  })  : movePathSan = List.unmodifiable(movePathSan),
-        rootStartMovesSan = List.unmodifiable(rootStartMovesSan);
+  }) : movePathSan = List.unmodifiable(movePathSan),
+       rootStartMovesSan = List.unmodifiable(rootStartMovesSan);
 
   List<String> get fullMovePathSan => [...rootStartMovesSan, ...movePathSan];
 
@@ -137,7 +141,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
             SizedBox(height: 16),
             Text(
               'Loading eval tree...',
-              style: TextStyle(color: Colors.grey, fontSize: 14),
+              style: TextStyle(color: AppColors.onSurfaceMuted, fontSize: 14),
             ),
           ],
         ),
@@ -157,8 +161,10 @@ class _EvalTreeTabState extends State<EvalTreeTab>
           return _buildEmptyState(context);
         }
 
-        final layoutFrame =
-            EvalTreeLayoutEngine.buildFrame(snapshot, _controller);
+        final layoutFrame = EvalTreeLayoutEngine.buildFrame(
+          snapshot,
+          _controller,
+        );
         return Column(
           children: [
             _buildSummaryBar(context, snapshot),
@@ -179,7 +185,8 @@ class _EvalTreeTabState extends State<EvalTreeTab>
                     child: RepertoireTreeExplorer(
                       snapshot: snapshot,
                       controller: _controller,
-                      metricsCache: _metricsCache ??
+                      metricsCache:
+                          _metricsCache ??
                           EvalTreeLineMetricsCache.fromSnapshot(snapshot),
                       currentNode: currentNode,
                     ),
@@ -204,7 +211,8 @@ class _EvalTreeTabState extends State<EvalTreeTab>
 
   Widget _buildEmptyState(BuildContext context) {
     final hasPath = _treePath() != null;
-    final message = _error ??
+    final message =
+        _error ??
         (hasPath
             ? 'Generate a repertoire tree or load a saved tree file.'
             : 'Select a repertoire first.');
@@ -231,19 +239,26 @@ class _EvalTreeTabState extends State<EvalTreeTab>
         runSpacing: 6,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Icon(Icons.insights, size: 16, color: Colors.grey[400]),
+          const Icon(Icons.insights, size: 16, color: AppColors.onSurfaceSoft),
           Text(
             '${snapshot.nodeCount} nodes • max ply $maxPly',
-            style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.onSurfaceSoft,
+            ),
           ),
           SizedBox(
             height: 28,
             child: TextButton.icon(
               onPressed: _reloadFromFile,
-              icon: Icon(Icons.refresh, size: 14, color: Colors.grey[400]),
-              label: Text(
+              icon: const Icon(
+                Icons.refresh,
+                size: 14,
+                color: AppColors.onSurfaceSoft,
+              ),
+              label: const Text(
                 'Reload',
-                style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                style: TextStyle(fontSize: 11, color: AppColors.onSurfaceSoft),
               ),
             ),
           ),
@@ -256,10 +271,14 @@ class _EvalTreeTabState extends State<EvalTreeTab>
                 });
                 _clearTreeState();
               },
-              icon: Icon(Icons.close, size: 14, color: Colors.grey[400]),
-              label: Text(
+              icon: const Icon(
+                Icons.close,
+                size: 14,
+                color: AppColors.onSurfaceSoft,
+              ),
+              label: const Text(
                 'Close',
-                style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                style: TextStyle(fontSize: 11, color: AppColors.onSurfaceSoft),
               ),
             ),
           ),
@@ -299,7 +318,9 @@ class _EvalTreeTabState extends State<EvalTreeTab>
           ),
         ),
         const SizedBox(width: 3),
-        Text(label, style: TextStyle(fontSize: 9, color: Colors.grey[500])),
+        // Deliberate 9→10px bump: 9px was below any legible floor on desktop
+        // (flagged in the theme audit as a readability fix, not a drift).
+        Text(label, style: AppTextStyles.caption.copyWith(fontSize: 10)),
       ],
     );
   }
@@ -348,7 +369,9 @@ class _EvalTreeTabState extends State<EvalTreeTab>
 
     try {
       final json = await readEvalTreeFile(path);
-      final tree = deserializeTree(json);
+      // Deserialize off the UI isolate: opening a large eval tree used to
+      // freeze the frame on jsonDecode + recursive node building.
+      final tree = await Isolate.run(() => deserializeTree(json));
       if (!mounted) return;
       _setTree(tree, resetView: true);
     } catch (error) {

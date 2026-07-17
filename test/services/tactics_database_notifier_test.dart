@@ -58,18 +58,20 @@ void main() {
       expect(notifications, greaterThan(0));
     });
 
-    test('deletePositionAt ignores an out-of-range index without notifying',
-        () async {
-      final db = TacticsDatabase();
-      await db.addPosition(_pos('a'));
+    test(
+      'deletePositionAt ignores an out-of-range index without notifying',
+      () async {
+        final db = TacticsDatabase();
+        await db.addPosition(_pos('a'));
 
-      var notifications = 0;
-      db.addListener(() => notifications++);
-      await db.deletePositionAt(5);
+        var notifications = 0;
+        db.addListener(() => notifications++);
+        await db.deletePositionAt(5);
 
-      expect(db.positions.length, 1);
-      expect(notifications, 0);
-    });
+        expect(db.positions.length, 1);
+        expect(notifications, 0);
+      },
+    );
 
     test('updatePositionAt replaces the entry and notifies', () async {
       final db = TacticsDatabase();

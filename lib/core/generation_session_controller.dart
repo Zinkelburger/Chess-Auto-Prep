@@ -39,66 +39,21 @@ import '../services/storage/storage_factory.dart';
 import '../services/tree_build_service.dart';
 import '../utils/fen_utils.dart';
 import 'generated_repertoire.dart';
+import '../utils/safe_change_notifier.dart';
+import 'generation_session_types.dart';
 
-/// One exported line from a completed generation run.
-class GeneratedLineExport {
-  /// Full SAN move list from the repertoire's starting position.
-  final List<String> moves;
-  final String title;
-  final String pgn;
+export 'generation_session_types.dart'
+    show GeneratedLineExport, GenerationRequest;
 
-  const GeneratedLineExport({
-    required this.moves,
-    required this.title,
-    required this.pgn,
-  });
-}
+part 'generation_session_progress.dart';
+part 'generation_session_snapshot.dart';
 
-/// Everything a generation run needs, captured at start time so the run is
-/// independent of any widget lifecycle.
-class GenerationRequest {
-  final TreeBuildConfig config;
-
-  /// Repertoire PGN file the generated lines are appended to.
-  final String repertoireFilePath;
-
-  /// Position the tree is built from (the current board position).
-  final String buildRootFen;
-
-  /// SAN moves from the repertoire's starting position to [buildRootFen].
-  /// Exported lines are prefixed with these so they replay from the
-  /// repertoire root.
-  final List<String> lineMovePrefix;
-
-  /// The repertoire's own starting position (standard FEN when the
-  /// repertoire starts from the initial position).  Used for the PGN
-  /// `[FEN]` header when [lineMovePrefix] is non-empty.
-  final String repertoireStartFen;
-
-  /// Partial tree to resume, or null for a fresh build.
-  final BuildTree? existingTree;
-
-  /// Called once with every exported line after the PGN file is written.
-  final void Function(List<GeneratedLineExport> lines) onLinesSaved;
-
-  const GenerationRequest({
-    required this.config,
-    required this.repertoireFilePath,
-    required this.buildRootFen,
-    required this.lineMovePrefix,
-    required this.repertoireStartFen,
-    required this.onLinesSaved,
-    this.existingTree,
-  });
-}
-
-class GenerationSessionController extends ChangeNotifier {
+class GenerationSessionController extends ChangeNotifier
+    with SafeChangeNotifier, _GenerationProgress, _SnapshotExport {
   final TreeBuildService buildService = TreeBuildService();
   final CoherenceService coherenceService = CoherenceService();
 
   static const int _pgnFlushEveryLines = 10;
-  static const Duration _notifyThrottle = Duration(milliseconds: 100);
-  static const Duration _elapsedTick = Duration(seconds: 1);
 
   bool _isGenerating = false;
   bool _isPaused = false;
@@ -124,14 +79,6 @@ class GenerationSessionController extends ChangeNotifier {
   /// the line prefix and repertoire-root FEN.  Null when idle.
   GenerationRequest? _activeRequest;
 
-  bool _snapshotExporting = false;
-
-  /// Live status of an in-flight snapshot export, shown in the Jobs panel.
-  /// Null when no snapshot is running.
-  String? snapshotStatus;
-
-  bool get isSnapshotExporting => _snapshotExporting;
-
   RepertoireJob? currentJob;
 
   /// Config of the most recent run (kept after the run ends so the config
@@ -145,31 +92,8 @@ class GenerationSessionController extends ChangeNotifier {
   /// Non-null when the most recent run failed.
   String? lastError;
 
-  // Progress state (owned by the pipeline, displayed by the Jobs panel).
-  String progressStatus = '';
-  GenerationPhase progressPhase = GenerationPhase.idle;
-  TreeBuildConfig? activeConfig;
-  int progressNodes = 0;
-  int progressDepth = 0;
-  int progressMaxPlyConfig = 20;
-  int progressUnexploredAtDepth = 0;
-  int progressTotalAtDepth = 0;
-  int progressLines = 0;
-  double? progressNodesPerMinute;
-  double? progressEtaSec;
-  int progressElapsedMs = 0;
-  bool progressBestFirst = false;
-  int progressFrontier = 0;
-  double? progressPriorityFraction;
-  int? progressRunEtaSec;
-  List<int> progressDepthTotals = const [];
-  List<int> progressDepthExplored = const [];
-
   final PgnBatchWriter _pgnWriter = PgnBatchWriter();
   Stopwatch _pipelineSw = Stopwatch();
-  Timer? _elapsedTicker;
-  Timer? _notifyTimer;
-  DateTime _lastNotify = DateTime.fromMillisecondsSinceEpoch(0);
 
   bool get isGenerating => _isGenerating;
   bool get isPaused => _isPaused;
@@ -261,8 +185,9 @@ class GenerationSessionController extends ChangeNotifier {
     var engineEntered = false;
     try {
       if (config.needsStockfish) {
-        await EngineLifecycle.instance
-            .enterGeneration(config.resolvedEngineThreads);
+        await EngineLifecycle.instance.enterGeneration(
+          config.resolvedEngineThreads,
+        );
         engineEntered = true;
       }
 
@@ -301,7 +226,7 @@ class GenerationSessionController extends ChangeNotifier {
         lastRunSummary = _discardRequested
             ? 'Build discarded (${tree.totalNodes} nodes).'
             : 'Build cancelled (${tree.totalNodes} nodes) — '
-                'resume it anytime from the Generate tab.';
+                  'resume it anytime from the Generate tab.';
         return;
       }
       final finishedEarly = _finishNowRequested;
@@ -358,8 +283,9 @@ class GenerationSessionController extends ChangeNotifier {
         );
         try {
           if (StockfishPool.instance.workerCount == 0) {
-            await StockfishPool.instance
-                .prepareForTreeBuild(config.resolvedEngineThreads);
+            await StockfishPool.instance.prepareForTreeBuild(
+              config.resolvedEngineThreads,
+            );
           }
           final verifier = RepertoireVerifier(config: config);
           final report = await verifier.verify(
@@ -385,7 +311,8 @@ class GenerationSessionController extends ChangeNotifier {
       }
 
       if (_cancelRequested) {
-        lastRunSummary = 'Cancelled during verification '
+        lastRunSummary =
+            'Cancelled during verification '
             '(${tree.totalNodes} nodes, nothing exported).';
         return;
       }
@@ -409,7 +336,9 @@ class GenerationSessionController extends ChangeNotifier {
       // Publish the bundle (tree + fen map + snapshot + trap index).
       onTreeBuilt(tree);
 
-      final rootFen = prefix.isEmpty ? tree.root.fen : request.repertoireStartFen;
+      final rootFen = prefix.isEmpty
+          ? tree.root.fen
+          : request.repertoireStartFen;
       final rootWhiteToMove = isWhiteToMove(rootFen);
       final saved = <GeneratedLineExport>[];
       for (int i = 0; i < extractedLines.length; i++) {
@@ -447,11 +376,15 @@ class GenerationSessionController extends ChangeNotifier {
 
       String? treeJson;
       try {
-        treeJson = serializeTree(tree);
+        // The build is finished here (no concurrent mutator), so the indented
+        // JSON encode of the whole tree can safely run off the UI isolate.
+        final json = await Isolate.run(() => serializeTree(tree));
+        treeJson = json;
         final base = p.withoutExtension(filePath);
-        await StorageFactory.instance.writeFile('${base}_tree.json', treeJson);
-      } catch (_) {
-        // Tree JSON save is best-effort
+        await StorageFactory.instance.writeFile('${base}_tree.json', json);
+      } catch (e) {
+        // Tree JSON save is best-effort — log so isolate/send failures aren't silent.
+        debugPrint('[GenerationController] Failed to save tree JSON: $e');
       }
 
       await writeRunDebugDump(
@@ -475,7 +408,8 @@ class GenerationSessionController extends ChangeNotifier {
       // Save trap lines from the bundle's index (always write the file so
       // the UI can distinguish "never generated" from "no traps found").
       try {
-        final trapLines = _current?.traps.allTraps ??
+        final trapLines =
+            _current?.traps.allTraps ??
             TrapExtractor(playAsWhite: config.playAsWhite).extract(tree);
         await TrapExtractor.saveToFile(trapLines, filePath);
       } catch (_) {
@@ -484,12 +418,14 @@ class GenerationSessionController extends ChangeNotifier {
 
       await _deletePartialTree(filePath);
 
-      lastRunSummary = 'Complete: ${tree.totalNodes} nodes, '
+      lastRunSummary =
+          'Complete: ${tree.totalNodes} nodes, '
           '$selectedCount repertoire moves, '
           '${extractedLines.length} lines. '
           '(ease=$easeCount, expectimax=$ecaCount)';
       if (finishedEarly && config.verifyFinal && config.needsStockfish) {
-        lastRunSummary = '$lastRunSummary '
+        lastRunSummary =
+            '$lastRunSummary '
             'Verification skipped (finished early).';
       }
       _setStatus(lastRunSummary, GenerationPhase.extractingLines);
@@ -567,7 +503,8 @@ class GenerationSessionController extends ChangeNotifier {
     progressNodes = existingTree?.totalNodes ?? 0;
     if (existingTree == null) return;
     final frontierPly = TreeBuildService.minFrontierPly(existingTree.root);
-    final seedPly = frontierPly ??
+    final seedPly =
+        frontierPly ??
         (existingTree.maxPlyReached > 0 ? existingTree.maxPlyReached : null);
     if (seedPly == null) return;
     final layer = TreeBuildProgressTracker.depthLayerStats(
@@ -583,9 +520,15 @@ class GenerationSessionController extends ChangeNotifier {
     final failedTree = buildService.currentTree;
     String? failedTreeJson;
     try {
-      if (failedTree != null) failedTreeJson = serializeTree(failedTree);
-    } catch (_) {
+      // Build has stopped (failure path) — serialize off the UI isolate.
+      if (failedTree != null) {
+        failedTreeJson = await Isolate.run(() => serializeTree(failedTree));
+      }
+    } catch (e) {
       // Partial tree may be unserializable; dump the log regardless.
+      debugPrint(
+        '[GenerationController] Failed to serialize failed-tree JSON: $e',
+      );
     }
     await writeRunDebugDump(
       log: buildService.runLog,
@@ -654,9 +597,11 @@ class GenerationSessionController extends ChangeNotifier {
       // Re-take the engine (cancels interactive analysis, restores the
       // build's thread config) before releasing the pause gate, so the
       // first build evals don't race user analysis.
-      unawaited(EngineLifecycle.instance
-          .enterGeneration(cfg.resolvedEngineThreads)
-          .whenComplete(buildService.resumeBuild));
+      unawaited(
+        EngineLifecycle.instance
+            .enterGeneration(cfg.resolvedEngineThreads)
+            .whenComplete(buildService.resumeBuild),
+      );
     } else {
       buildService.resumeBuild();
     }
@@ -709,298 +654,6 @@ class GenerationSessionController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Snapshot export (lines-so-far while the run continues) ──────────
-
-  /// Suggested repertoire name for a snapshot export at the current depth.
-  String snapshotNameSuggestion() {
-    final path = _activeRequest?.repertoireFilePath;
-    final base =
-        (path == null || path.isEmpty) ? 'Generated' : p.basenameWithoutExtension(path);
-    return '$base d$progressDepth snapshot';
-  }
-
-  /// Export the lines the build has found so far to a **new** repertoire
-  /// file named [repertoireName], without ending the run.
-  ///
-  /// Unverified exports serialize the tree and run every phase in a
-  /// background isolate — the build keeps exploring throughout.  When
-  /// [verify] is set (and the config uses Stockfish), exploration pauses
-  /// while the engine re-checks the snapshot's chosen moves (the pool is
-  /// shared with the build), then resumes automatically.
-  ///
-  /// Returns (success, user-facing message).
-  Future<(bool, String)> exportSnapshot({
-    required String repertoireName,
-    required bool verify,
-  }) async {
-    if (!_isGenerating ||
-        _cancelRequested ||
-        progressPhase != GenerationPhase.buildingTree) {
-      return (false, 'No active build to export from.');
-    }
-    if (_snapshotExporting) {
-      return (false, 'A snapshot export is already running.');
-    }
-    final request = _activeRequest;
-    final config = activeConfig;
-    final tree = buildService.currentTree;
-    if (request == null || config == null || tree == null) {
-      return (false, 'Build state unavailable — try again in a moment.');
-    }
-
-    final name = repertoireName.trim();
-    if (name.isEmpty) return (false, 'Please enter a repertoire name.');
-    final storage = StorageFactory.instance;
-    final targetPath = await storage.repertoireFilePath(name);
-    if (await storage.fileExists(targetPath)) {
-      return (false, 'A repertoire named "$name" already exists.');
-    }
-
-    final depth = progressDepth;
-    final doVerify = verify && config.needsStockfish;
-    // Verification shares the engine pool with the build, so exploration
-    // pauses for its duration.  Unverified exports never touch the run.
-    final pausedForVerify = doVerify && !_isPaused;
-
-    _snapshotExporting = true;
-    _setSnapshotStatus('Snapshot: preparing (depth $depth)…');
-    try {
-      if (pausedForVerify) buildService.pauseBuild();
-
-      // Synchronous, so atomic w.r.t. the async build loop — the copy is a
-      // consistent point-in-time snapshot even while BFS continues.
-      final exportRequest = SnapshotExportRequest(
-        treeJson: serializeTree(tree),
-        configJson: Map<String, dynamic>.from(config.toJson()),
-        prefix: List<String>.from(_startMoveSequence),
-        repertoireStartFen: request.repertoireStartFen,
-        stopAfterSelection: doVerify,
-      );
-
-      _setSnapshotStatus('Snapshot: computing lines (depth $depth)…');
-      final result = await Isolate.run(() => runSnapshotExport(exportRequest));
-
-      var pgnEntries = result.pgnEntries;
-      String verifyNote = 'unverified';
-      if (doVerify) {
-        final snapTree = deserializeTree(result.selectedTreeJson!);
-        final fenMap = FenMap()..populate(snapTree.root);
-        final ecaCalc = ExpectimaxCalculator(config: config, fenMap: fenMap);
-        var verified = false;
-        try {
-          _setSnapshotStatus(
-            'Snapshot: verifying (depth ${config.resolvedVerifyDepth})…',
-          );
-          if (StockfishPool.instance.workerCount == 0) {
-            await StockfishPool.instance
-                .prepareForTreeBuild(config.resolvedEngineThreads);
-          }
-          final verifier = RepertoireVerifier(config: config);
-          final report = await verifier.verify(
-            snapTree,
-            fenMap: fenMap,
-            ecaCalc: ecaCalc,
-            isCancelled: () => _cancelRequested,
-            onStatus: (s) => _setSnapshotStatus('Snapshot: $s'),
-          );
-          verified = report.completed;
-        } catch (e) {
-          // Verification is best-effort; export the unverified selection.
-          debugPrint('[Snapshot] verification failed: $e');
-        }
-        // Engine is free again — resume exploration before the extraction
-        // walk, which only reads the snapshot copy.
-        if (pausedForVerify && !_isPaused) buildService.resumeBuild();
-        _setSnapshotStatus('Snapshot: extracting lines…');
-        pgnEntries = extractSnapshotLines(
-          tree: snapTree,
-          config: config,
-          fenMap: fenMap,
-          prefix: List<String>.from(_startMoveSequence),
-          repertoireStartFen: request.repertoireStartFen,
-        );
-        verifyNote = verified
-            ? 'verified at depth ${config.resolvedVerifyDepth}'
-            : 'verification incomplete';
-      }
-
-      if (pgnEntries.isEmpty) {
-        return (
-          false,
-          'Snapshot produced no lines yet — let the build explore deeper.',
-        );
-      }
-
-      final header = '// $name Repertoire\n'
-          '// Color: ${config.playAsWhite ? 'White' : 'Black'}\n'
-          '// Created on ${DateTime.now().toString().split('.')[0]}\n'
-          '// Snapshot at depth $depth ($verifyNote) from an in-progress '
-          'generation run.\n';
-      final buffer = StringBuffer(header);
-      for (final pgn in pgnEntries) {
-        buffer.writeln();
-        buffer.writeln(pgn);
-      }
-      await storage.writeFile(targetPath, buffer.toString());
-      return (
-        true,
-        'Exported ${pgnEntries.length} lines to "$name" ($verifyNote).',
-      );
-    } catch (e) {
-      debugPrint('[Snapshot] export failed: $e');
-      return (false, 'Snapshot export failed: $e');
-    } finally {
-      if (pausedForVerify && !_isPaused) buildService.resumeBuild();
-      _snapshotExporting = false;
-      snapshotStatus = null;
-      notifyListeners();
-    }
-  }
-
-  void _setSnapshotStatus(String status) {
-    snapshotStatus = status;
-    notifyListeners();
-  }
-
-  // ── Progress plumbing ────────────────────────────────────────────────
-
-  void _handleBuildProgress(BuildProgress p) {
-    // Overwrite even with null: the ETA is per depth layer, and a stale
-    // value from the previous layer must not linger into the next one.
-    progressEtaSec = p.etaDepthSeconds?.toDouble();
-    progressBestFirst = p.bestFirst;
-    progressFrontier = p.frontierSize;
-    progressPriorityFraction = p.priorityProgress;
-    progressRunEtaSec = p.etaRunSeconds;
-    progressDepthTotals = p.depthTotals;
-    progressDepthExplored = p.depthExplored;
-    updateProgress(
-      nodes: p.totalNodes,
-      depth: p.currentDepth,
-      maxPlyConfig: p.maxPlyConfig,
-      unexploredAtDepth: p.unexploredAtDepth,
-      totalAtDepth: p.totalAtDepth,
-      nodesPerMinute: p.nodesPerMinute,
-      elapsedMs: _pipelineSw.elapsedMilliseconds,
-    );
-  }
-
-  void _setStatus(String status, GenerationPhase phase) {
-    progressStatus = status;
-    progressPhase = phase;
-    _flushProgressNotify();
-  }
-
-  /// Update observable progress fields.  Listener notification is
-  /// throttled: high-frequency build callbacks coalesce to at most one
-  /// notify per [_notifyThrottle].
-  void updateProgress({
-    int? nodes,
-    int? depth,
-    int? maxPlyConfig,
-    int? unexploredAtDepth,
-    int? totalAtDepth,
-    int? lines,
-    double? nodesPerMinute,
-    int? elapsedMs,
-  }) {
-    if (nodes != null) progressNodes = nodes;
-    if (depth != null) progressDepth = depth;
-    if (maxPlyConfig != null) progressMaxPlyConfig = maxPlyConfig;
-    if (unexploredAtDepth != null) {
-      progressUnexploredAtDepth = unexploredAtDepth;
-    }
-    if (totalAtDepth != null) progressTotalAtDepth = totalAtDepth;
-    if (lines != null) progressLines = lines;
-    if (nodesPerMinute != null) progressNodesPerMinute = nodesPerMinute;
-    if (elapsedMs != null) progressElapsedMs = elapsedMs;
-    _notifyThrottled();
-  }
-
-  void _notifyThrottled() {
-    final since = DateTime.now().difference(_lastNotify);
-    if (since >= _notifyThrottle) {
-      _flushProgressNotify();
-    } else {
-      _notifyTimer ??= Timer(_notifyThrottle - since, _flushProgressNotify);
-    }
-  }
-
-  void _flushProgressNotify() {
-    _notifyTimer?.cancel();
-    _notifyTimer = null;
-    _lastNotify = DateTime.now();
-    _syncProgressToJob();
-    notifyListeners();
-  }
-
-  void _syncProgressToJob() {
-    final job = currentJob;
-    if (job == null) return;
-    final statsLine = buildGenerationStatsLine(
-      phase: progressPhase,
-      nodes: progressNodes,
-      currentDepth: progressDepth,
-      maxPlyConfig: progressMaxPlyConfig,
-      unexploredAtDepth: progressUnexploredAtDepth,
-      totalAtDepth: progressTotalAtDepth,
-      nodesPerMinute: progressNodesPerMinute,
-      etaDepthSec: progressEtaSec?.round(),
-      linesExtracted: progressLines,
-      bestFirst: progressBestFirst,
-      frontierSize: progressFrontier,
-      etaRunSec: progressRunEtaSec,
-    );
-    job.updateProgress(JobProgress(
-      fraction: generationProgressFraction(
-            phase: progressPhase,
-            currentDepth: progressDepth,
-            maxPlyConfig: progressMaxPlyConfig,
-            unexploredAtDepth: progressUnexploredAtDepth,
-            totalAtDepth: progressTotalAtDepth,
-            bestFirst: progressBestFirst,
-            priorityProgress: progressPriorityFraction,
-          ) ??
-          0,
-      message: statsLine,
-      nodesProcessed: progressNodes,
-    ));
-  }
-
-  void _startElapsedTicker() {
-    _elapsedTicker?.cancel();
-    _elapsedTicker = Timer.periodic(_elapsedTick, (_) {
-      if (!_isGenerating || _isPaused) return;
-      updateProgress(elapsedMs: _pipelineSw.elapsedMilliseconds);
-    });
-  }
-
-  void _stopElapsedTicker() {
-    _elapsedTicker?.cancel();
-    _elapsedTicker = null;
-  }
-
-  void _resetProgress() {
-    progressStatus = '';
-    progressPhase = GenerationPhase.idle;
-    activeConfig = null;
-    progressNodes = 0;
-    progressDepth = 0;
-    progressMaxPlyConfig = 20;
-    progressUnexploredAtDepth = 0;
-    progressTotalAtDepth = 0;
-    progressLines = 0;
-    progressNodesPerMinute = null;
-    progressEtaSec = null;
-    progressElapsedMs = 0;
-    progressBestFirst = false;
-    progressFrontier = 0;
-    progressPriorityFraction = null;
-    progressRunEtaSec = null;
-    progressDepthTotals = const [];
-    progressDepthExplored = const [];
-  }
-
   // ── Generated tree lifecycle ─────────────────────────────────────────
 
   void onTreeBuilt(BuildTree tree) {
@@ -1015,7 +668,8 @@ class GenerationSessionController extends ChangeNotifier {
         debugPrint('[GenerationController] Config parse failed: $e');
       }
     }
-    final playAsWhite = config?.playAsWhite ??
+    final playAsWhite =
+        config?.playAsWhite ??
         tree.configSnapshot['play_as_white'] as bool? ??
         tree.root.isWhiteToMove;
     // Derive FenMap, eval-tree snapshot, and trap index once, here.

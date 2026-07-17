@@ -45,8 +45,10 @@ Future<void> showAuditConfigDialog(
                 children: [
                   const Icon(Icons.policy_outlined, size: 20),
                   const SizedBox(width: 8),
-                  Text('Audit Repertoire',
-                      style: Theme.of(dialogCtx).textTheme.titleMedium),
+                  Text(
+                    'Audit Repertoire',
+                    style: Theme.of(dialogCtx).textTheme.titleMedium,
+                  ),
                   const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.close, size: 20),

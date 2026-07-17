@@ -1,3 +1,4 @@
+import 'dart:isolate';
 import 'dart:math';
 
 import 'package:csv/csv.dart';
@@ -7,6 +8,7 @@ import '../models/tactics_session_settings.dart';
 import 'storage/storage_factory.dart';
 import 'tactics_pgn_codec.dart';
 import 'package:chess_auto_prep/utils/log.dart';
+import 'package:chess_auto_prep/utils/safe_change_notifier.dart';
 
 /// Manages tactical positions and review data.
 ///
@@ -22,7 +24,7 @@ import 'package:chess_auto_prep/utils/log.dart';
 /// [notifyListeners] so the UI can rebuild reactively instead of relying on
 /// each call site remembering to `setState`. Mutate the data only through the
 /// methods on this class — never poke [positions] directly from the UI.
-class TacticsDatabase extends ChangeNotifier {
+class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
   /// Name of the single set file backing the tactics database.
   static const String defaultSetName = 'Default';
 
@@ -31,6 +33,17 @@ class TacticsDatabase extends ChangeNotifier {
   ReviewSession currentSession = ReviewSession();
   int sessionPositionIndex = 0;
   Future<void> _pendingWrite = Future<void>.value();
+
+  /// Bumped on every [loadPositions] call.  The decode now runs off the UI
+  /// isolate, so a set switch / import reload can start a second load while
+  /// the first is still decoding; the load that owns the latest token clears
+  /// and repopulates [positions], and any older in-flight load bails instead
+  /// of appending its stale puzzles into the shared list.
+  int _loadGeneration = 0;
+
+  /// True while [loadPositions] is reading and decoding the set file, so the
+  /// browse UI can show a loading state instead of "no tactics yet".
+  bool isLoading = false;
 
   /// Display name of what's loaded into [positions]: [defaultSetName] for
   /// the tactics database, or the external file's name during a review.
@@ -79,9 +92,14 @@ class TacticsDatabase extends ChangeNotifier {
   /// legacy per-set CSV files to PGN, and moves leftover named sets from the
   /// multi-set era into the studies directory.
   Future<int> loadPositions() async {
+    final generation = ++_loadGeneration;
+    // Flag synchronously (the first build after a load call must see it),
+    // but notify only after the await: loadPositions is called from
+    // initState, and a synchronous notify there lands mid-build.
+    isLoading = true;
     await _pendingWrite;
-    positions.clear();
-    analyzedGameIds.clear();
+    if (generation != _loadGeneration) return positions.length;
+    notifyListeners();
 
     try {
       final storage = StorageFactory.instance;
@@ -90,22 +108,43 @@ class TacticsDatabase extends ChangeNotifier {
       await _migrateNamedSetsToStudies();
 
       final content = await storage.readFile(await activeSetFilePath());
+      if (generation != _loadGeneration) return positions.length;
 
       if (content == null || content.trim().isEmpty) {
         // No set file yet — load analyzed games list (legacy or empty state).
+        positions.clear();
+        analyzedGameIds.clear();
         await _loadAnalyzedGameIds();
+        if (generation != _loadGeneration) return positions.length;
+        isLoading = false;
         notifyListeners();
         return 0;
       }
 
       // External files (studies) may hold chapters from the standard start;
       // our own set files always carry [FEN].
-      final decoded = await compute(_decodePuzzlesEntry, (
-        content: content,
-        requireFen: !isExternalSet,
-        includeVariations: isExternalSet && _externalIncludeVariations,
-        onlyGame: isExternalSet ? _externalGameIndex : null,
-      ));
+      // Decode replays every puzzle's moves with dartchess — off the UI
+      // isolate so opening Tactics mode doesn't freeze the frame.
+      final requireFen = !isExternalSet;
+      final includeVariations = isExternalSet && _externalIncludeVariations;
+      final onlyGame = isExternalSet ? _externalGameIndex : null;
+      final decoded = await Isolate.run(
+        () => decodePuzzlesFromPgn(
+          content,
+          requireFen: requireFen,
+          includeVariations: includeVariations,
+          onlyGame: onlyGame,
+        ),
+      );
+      // A newer load (set switch, import reload) started while we decoded —
+      // it now owns [positions]; drop this stale decode instead of appending
+      // it onto the newer load's list.
+      if (generation != _loadGeneration) return positions.length;
+
+      // Clear + repopulate with no await in between, so an overlapping load
+      // can never interleave its puzzles into the list.
+      positions.clear();
+      analyzedGameIds.clear();
       for (final warning in decoded.errors) {
         log.w('Set "$_activeSetName": $warning');
       }
@@ -118,14 +157,21 @@ class TacticsDatabase extends ChangeNotifier {
 
       // Also load the separate analyzed games list (includes games with no blunders)
       await _loadAnalyzedGameIds();
+      if (generation != _loadGeneration) return positions.length;
 
       log.i(
-          'Loaded ${positions.length} tactics positions from set "$_activeSetName"');
+        'Loaded ${positions.length} tactics positions from set "$_activeSetName"',
+      );
       log.i('Tracking ${analyzedGameIds.length} analyzed game IDs');
+      isLoading = false;
       notifyListeners();
       return positions.length;
     } catch (e) {
       log.e('Error loading positions: $e');
+      if (generation != _loadGeneration) return positions.length;
+      positions.clear();
+      analyzedGameIds.clear();
+      isLoading = false;
       notifyListeners();
       return 0;
     }
@@ -150,7 +196,8 @@ class TacticsDatabase extends ChangeNotifier {
         await storage.writeFile(pgnPath, encoded.pgn);
         await storage.renameFile(legacy.path, '${legacy.path}.bak');
         log.i(
-            'Converted tactics set "${legacy.name}" from CSV to PGN (${parsed.positions.length} positions)');
+          'Converted tactics set "${legacy.name}" from CSV to PGN (${parsed.positions.length} positions)',
+        );
       } catch (e) {
         log.e('Error converting CSV set "${legacy.name}": $e');
       }
@@ -171,13 +218,16 @@ class TacticsDatabase extends ChangeNotifier {
       try {
         var targetName = set.name;
         var suffix = 1;
-        while (
-            await storage.fileExists(await storage.studyFilePath(targetName))) {
+        while (await storage.fileExists(
+          await storage.studyFilePath(targetName),
+        )) {
           suffix++;
           targetName = '${set.name} (tactics${suffix > 2 ? ' $suffix' : ''})';
         }
         await storage.renameFile(
-            set.filePath, await storage.studyFilePath(targetName));
+          set.filePath,
+          await storage.studyFilePath(targetName),
+        );
         log.i('Moved tactics set "${set.name}" to studies as "$targetName"');
       } catch (e) {
         log.e('Error moving tactics set "${set.name}" to studies: $e');
@@ -202,8 +252,12 @@ class TacticsDatabase extends ChangeNotifier {
     _activeSetPath = path;
     _externalGameIndex = gameIndex;
     _externalIncludeVariations = includeVariations;
-    _activeSetName = displayName ??
-        path.split('/').last.replaceAll(RegExp(r'\.pgn$', caseSensitive: false), '');
+    _activeSetName =
+        displayName ??
+        path
+            .split('/')
+            .last
+            .replaceAll(RegExp(r'\.pgn$', caseSensitive: false), '');
     _sessionQueue = [];
     _sessionQueueIndex = 0;
     _sessionMaxQueueIndex = 0;
@@ -266,8 +320,9 @@ class TacticsDatabase extends ChangeNotifier {
 
   /// Mark multiple games as analyzed
   Future<void> markGamesAnalyzed(Iterable<String> gameIds) async {
-    final newIds =
-        gameIds.where((id) => id.isNotEmpty && !analyzedGameIds.contains(id));
+    final newIds = gameIds.where(
+      (id) => id.isNotEmpty && !analyzedGameIds.contains(id),
+    );
     if (newIds.isNotEmpty) {
       analyzedGameIds.addAll(newIds);
       notifyListeners();
@@ -293,7 +348,8 @@ class TacticsDatabase extends ChangeNotifier {
   /// Parse tactics-CSV [content] (with header row) into positions.
   /// Bad rows are reported as warnings instead of failing the whole file.
   static ({List<TacticsPosition> positions, List<String> warnings}) parseCsv(
-      String content) {
+    String content,
+  ) {
     final positions = <TacticsPosition>[];
     final warnings = <String>[];
     if (content.trim().isEmpty) {
@@ -331,21 +387,30 @@ class TacticsDatabase extends ChangeNotifier {
             log.e('External set file vanished: $externalPath');
             return;
           }
-          await storage.writeFile(externalPath,
-              await compute(_patchStatsEntry, (existing, snapshot)));
+          final patched = await Isolate.run(
+            () => patchStatsInPgn(existing, snapshot),
+          );
+          await storage.writeFile(externalPath, patched);
         } else {
-          final encoded =
-              await compute(_encodePuzzlesEntry, (setName, snapshot));
+          // Encoding replays every stored puzzle with dartchess (lineToSan),
+          // so it is O(database) CPU — run it off the UI isolate.
+          final encoded = await Isolate.run(
+            () => encodePuzzlesToPgn(setName, snapshot),
+          );
           if (encoded.fallback > 0) {
             log.w(
-                '${encoded.fallback} position(s) stored with raw [CorrectLine] fallback');
+              '${encoded.fallback} position(s) stored with raw [CorrectLine] fallback',
+            );
           }
           if (encoded.dropped > 0) {
             log.w(
-                '${encoded.dropped} position(s) with unparsable FEN dropped on save');
+              '${encoded.dropped} position(s) with unparsable FEN dropped on save',
+            );
           }
           await storage.writeFile(
-              await storage.tacticsSetPath(setName), encoded.pgn);
+            await storage.tacticsSetPath(setName),
+            encoded.pgn,
+          );
         }
         log.i('Saved ${snapshot.length} tactics positions to set "$setName"');
       } catch (e) {
@@ -370,6 +435,22 @@ class TacticsDatabase extends ChangeNotifier {
     await savePositions();
   }
 
+  /// Delete several positions in one mutation: one notify, one file write —
+  /// batch delete from the browse list must not re-encode the whole set once
+  /// per selected row.  [sortedDescIndices] must be sorted descending so
+  /// removals don't shift the remaining indices.
+  Future<void> deletePositionsAt(List<int> sortedDescIndices) async {
+    var removed = 0;
+    for (final index in sortedDescIndices) {
+      if (index < 0 || index >= positions.length) continue;
+      positions.removeAt(index);
+      removed++;
+    }
+    if (removed == 0) return;
+    notifyListeners();
+    await savePositions();
+  }
+
   /// Replace the position at [index] with [updated] (e.g. after an edit).
   Future<void> updatePositionAt(int index, TacticsPosition updated) async {
     if (index < 0 || index >= positions.length) return;
@@ -379,8 +460,9 @@ class TacticsDatabase extends ChangeNotifier {
   }
 
   /// Start a new review session with the given [settings].
-  void startSession(
-      [TacticsSessionSettings settings = const TacticsSessionSettings()]) {
+  void startSession([
+    TacticsSessionSettings settings = const TacticsSessionSettings(),
+  ]) {
     currentSession = ReviewSession();
     _sessionSettings = settings;
 
@@ -394,13 +476,18 @@ class TacticsDatabase extends ChangeNotifier {
     switch (settings.order) {
       case TacticsSessionOrder.newestFirst:
         _sessionQueue.sort(
-            (a, b) => positions[b].gameDate.compareTo(positions[a].gameDate));
+          (a, b) => positions[b].gameDate.compareTo(positions[a].gameDate),
+        );
       case TacticsSessionOrder.leastReviewed:
-        _sessionQueue.sort((a, b) =>
-            positions[a].reviewCount.compareTo(positions[b].reviewCount));
+        _sessionQueue.sort(
+          (a, b) =>
+              positions[a].reviewCount.compareTo(positions[b].reviewCount),
+        );
       case TacticsSessionOrder.worstSuccessRate:
-        _sessionQueue.sort((a, b) =>
-            positions[a].successRate.compareTo(positions[b].successRate));
+        _sessionQueue.sort(
+          (a, b) =>
+              positions[a].successRate.compareTo(positions[b].successRate),
+        );
       case TacticsSessionOrder.random:
         _sessionQueue.shuffle(Random());
     }
@@ -580,18 +667,17 @@ class TacticsDatabase extends ChangeNotifier {
     final content = await storage.readFile(path);
     final existing = <TacticsPosition>[];
     if (content != null && content.trim().isNotEmpty) {
-      final decoded = await compute(_decodePuzzlesEntry, (
-        content: content,
-        requireFen: true,
-        includeVariations: false,
-        onlyGame: null,
-      ));
+      final text = content;
+      final decoded = await Isolate.run(
+        () => decodePuzzlesFromPgn(text, requireFen: true),
+      );
       existing.addAll(decoded.puzzles);
     }
     if (existing.any((p) => p.fen == position.fen)) return false;
     existing.add(position);
-    final encoded =
-        await compute(_encodePuzzlesEntry, (defaultSetName, existing));
+    final encoded = await Isolate.run(
+      () => encodePuzzlesToPgn(defaultSetName, existing),
+    );
     await storage.writeFile(path, encoded.pgn);
     return true;
   }
@@ -629,7 +715,8 @@ class TacticsDatabase extends ChangeNotifier {
       await savePositions();
       await _saveAnalyzedGameIds();
       log.w(
-          'Added $added new positions (${newPositions.length - added} duplicates skipped)');
+        'Added $added new positions (${newPositions.length - added} duplicates skipped)',
+      );
     }
   }
 
@@ -640,40 +727,8 @@ class TacticsDatabase extends ChangeNotifier {
   }
 }
 
-// ── compute() entry points ─────────────────────────────────────────────────
-// The PGN codec is pure CPU work: on a set of hundreds of puzzles a decode
-// or full re-encode blocks long enough to drop frames, and savePositions()
-// runs once per streamed tactic during imports.  These wrappers let the
-// database run the codec off the UI isolate.
-
-({List<TacticsPosition> puzzles, List<String> errors}) _decodePuzzlesEntry(
-        ({
-          String content,
-          bool requireFen,
-          bool includeVariations,
-          int? onlyGame,
-        }) args) =>
-    decodePuzzlesFromPgn(
-      args.content,
-      requireFen: args.requireFen,
-      includeVariations: args.includeVariations,
-      onlyGame: args.onlyGame,
-    );
-
-({String pgn, int encoded, int fallback, int dropped}) _encodePuzzlesEntry(
-        (String, List<TacticsPosition>) args) =>
-    encodePuzzlesToPgn(args.$1, args.$2);
-
-String _patchStatsEntry((String, List<TacticsPosition>) args) =>
-    patchStatsInPgn(args.$1, args.$2);
-
 /// Result of attempting a tactical position
-enum TacticsResult {
-  correct,
-  incorrect,
-  hint,
-  timeout,
-}
+enum TacticsResult { correct, incorrect, hint, timeout }
 
 /// Statistics for a review session
 class ReviewSession {

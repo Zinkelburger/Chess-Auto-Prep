@@ -41,8 +41,9 @@ void main() {
   group('solution recording', () {
     test('records SAN, including castling, and tracks the live board', () {
       final c = PuzzleCreatorController(
-          initialFen:
-              'r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4');
+        initialFen:
+            'r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4',
+      );
       c.startRecording();
 
       expect(c.playMoveSan('O-O'), isTrue);
@@ -65,8 +66,10 @@ void main() {
 
       c.undoLastMove();
       expect(c.solutionSan, ['e4', 'e5']);
-      expect(c.currentPosition!.fen,
-          contains('4p3')); // e5 pawn still on the board
+      expect(
+        c.currentPosition!.fen,
+        contains('4p3'),
+      ); // e5 pawn still on the board
       expect(c.currentPosition!.turn, Side.white);
 
       c.undoLastMove();
@@ -125,7 +128,8 @@ void main() {
       final row = puzzle.toCsvRow();
       expect(row.length, 20);
       final decoded = // simulate CSV write/read of the row values
-          puzzle.toJson();
+      puzzle
+          .toJson();
       expect(decoded['mistake_type'], 'custom');
     });
   });

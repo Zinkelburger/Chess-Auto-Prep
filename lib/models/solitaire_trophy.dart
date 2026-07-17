@@ -28,18 +28,18 @@ class SolitaireTrophy {
   });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'date': date.toIso8601String(),
-        'fen': fen,
-        'userMove': userMove,
-        'gmMove': gmMove,
-        'userEvalCp': userEvalCp,
-        'gmEvalCp': gmEvalCp,
-        'advantageCp': advantageCp,
-        'gameLabel': gameLabel,
-        'headers': headers,
-        'pgn': pgn,
-      };
+    'id': id,
+    'date': date.toIso8601String(),
+    'fen': fen,
+    'userMove': userMove,
+    'gmMove': gmMove,
+    'userEvalCp': userEvalCp,
+    'gmEvalCp': gmEvalCp,
+    'advantageCp': advantageCp,
+    'gameLabel': gameLabel,
+    'headers': headers,
+    'pgn': pgn,
+  };
 
   factory SolitaireTrophy.fromJson(Map<String, dynamic> json) {
     return SolitaireTrophy(

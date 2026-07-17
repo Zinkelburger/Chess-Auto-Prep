@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/analysis_player_info.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 
 /// How the download range is specified.
@@ -18,10 +20,17 @@ class AnalysisDownloadDialog extends StatefulWidget {
   final String? chesscomUsername;
   final String? lichessUsername;
 
+  /// Preselects the platform ('chesscom' or 'lichess'). Pass it when the
+  /// dialog re-downloads an existing player so the dialog targets that
+  /// player's platform instead of defaulting to whichever username field
+  /// happens to be filled.
+  final String? initialPlatform;
+
   const AnalysisDownloadDialog({
     super.key,
     this.chesscomUsername,
     this.lichessUsername,
+    this.initialPlatform,
   });
 
   @override
@@ -48,20 +57,25 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
   void initState() {
     super.initState();
 
-    final initialUsername =
-        widget.chesscomUsername ?? widget.lichessUsername ?? '';
-    _usernameController = TextEditingController(text: initialUsername);
-    _monthsController = TextEditingController(text: _months.toString());
-    _maxGamesController = TextEditingController(text: _maxGames.toString());
-
-    // Default to whichever platform already has a username.
-    if (widget.chesscomUsername != null &&
+    // An explicit platform wins; otherwise default to whichever platform
+    // already has a username.
+    if (widget.initialPlatform == 'chesscom' ||
+        widget.initialPlatform == 'lichess') {
+      _selectedPlatform = widget.initialPlatform!;
+    } else if (widget.chesscomUsername != null &&
         widget.chesscomUsername!.isNotEmpty) {
       _selectedPlatform = 'chesscom';
     } else if (widget.lichessUsername != null &&
         widget.lichessUsername!.isNotEmpty) {
       _selectedPlatform = 'lichess';
     }
+
+    final initialUsername = _selectedPlatform == 'chesscom'
+        ? (widget.chesscomUsername ?? widget.lichessUsername ?? '')
+        : (widget.lichessUsername ?? widget.chesscomUsername ?? '');
+    _usernameController = TextEditingController(text: initialUsername);
+    _monthsController = TextEditingController(text: _months.toString());
+    _maxGamesController = TextEditingController(text: _maxGames.toString());
 
     _loadPrefs();
   }
@@ -94,7 +108,9 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
   Future<void> _savePrefs() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
-        _keyMode, _mode == _DownloadMode.games ? 'games' : 'months');
+      _keyMode,
+      _mode == _DownloadMode.games ? 'games' : 'months',
+    );
     await prefs.setInt(_keyMonths, _months);
     await prefs.setInt(_keyMaxGames, _maxGames);
   }
@@ -266,10 +282,7 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        FilledButton(
-          onPressed: _onDownload,
-          child: const Text('Download'),
-        ),
+        FilledButton(onPressed: _onDownload, child: const Text('Download')),
       ],
     );
   }
@@ -301,7 +314,7 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
                   Center(
                     child: Text(
                       'Last $_months month${_months == 1 ? '' : 's'}',
-                      style: TextStyle(color: Colors.grey[700]),
+                      style: const TextStyle(color: AppColors.onSurfaceMuted),
                     ),
                   ),
                 ],
@@ -317,8 +330,10 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
                 decoration: InputDecoration(
                   labelText: 'Months',
                   border: const OutlineInputBorder(),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
                   errorText: _mode == _DownloadMode.months ? _rangeError : null,
                 ),
                 onChanged: (value) {
@@ -335,9 +350,9 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
           ],
         ),
         const SizedBox(height: 4),
-        Text(
+        const Text(
           'Fetch all non-bullet games from the last N months (up to 10 years)',
-          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          style: AppTextStyles.caption,
         ),
       ],
     );
@@ -370,7 +385,7 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
                   Center(
                     child: Text(
                       'Last $_maxGames game${_maxGames == 1 ? '' : 's'}',
-                      style: TextStyle(color: Colors.grey[700]),
+                      style: const TextStyle(color: AppColors.onSurfaceMuted),
                     ),
                   ),
                 ],
@@ -386,8 +401,10 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
                 decoration: InputDecoration(
                   labelText: 'Games',
                   border: const OutlineInputBorder(),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
                   errorText: _mode == _DownloadMode.games ? _rangeError : null,
                 ),
                 onChanged: (value) {
@@ -404,9 +421,9 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
           ],
         ),
         const SizedBox(height: 4),
-        Text(
+        const Text(
           'Download the last 1–500 games (excluding bullet)',
-          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          style: AppTextStyles.caption,
         ),
       ],
     );

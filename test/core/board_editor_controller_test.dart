@@ -11,7 +11,8 @@ void main() {
     });
 
     test('loadFen round-trips a full 6-field FEN', () {
-      const fen = 'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 1';
+      const fen =
+          'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 1';
       final c = BoardEditorController();
       expect(c.loadFen(fen), isTrue);
       expect(c.fen, fen);
@@ -110,8 +111,7 @@ void main() {
     test('white to move: candidate on rank 6 behind a black pawn', () {
       final c = BoardEditorController();
       // Simulate 1. e4 e6 2. e5 d5 → black pawn on d5, ep target d6.
-      c.loadFen(
-          'rnbqkbnr/ppp2ppp/4p3/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq - 0 3');
+      c.loadFen('rnbqkbnr/ppp2ppp/4p3/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq - 0 3');
       expect(c.epCandidates, contains(Square.d6));
       expect(c.epCandidates, isNot(contains(Square.e6))); // e-pawn is ours
 
@@ -121,23 +121,22 @@ void main() {
 
     test('black to move: candidate on rank 3 behind a white pawn', () {
       final c = BoardEditorController();
-      c.loadFen(
-          'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1');
+      c.loadFen('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1');
       expect(c.epCandidates, contains(Square.e3));
     });
 
     test('no candidate when the origin square is occupied', () {
       final c = BoardEditorController();
       // Black pawn on d5 but another piece on d7 → d7–d5 was impossible.
-      c.loadFen(
-          'rnbqkbnr/pppn1ppp/8/3pP3/8/8/PPPP1PPP/RNBQKB1R w KQkq - 0 3');
+      c.loadFen('rnbqkbnr/pppn1ppp/8/3pP3/8/8/PPPP1PPP/RNBQKB1R w KQkq - 0 3');
       expect(c.epCandidates, isNot(contains(Square.d6)));
     });
 
     test('ep square is cleared when the board change invalidates it', () {
       final c = BoardEditorController();
       c.loadFen(
-          'rnbqkbnr/ppp2ppp/4p3/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 3');
+        'rnbqkbnr/ppp2ppp/4p3/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 3',
+      );
       expect(c.epSquare, Square.d6);
 
       c.removePiece(Square.d5); // the pawn that could be captured
@@ -147,7 +146,8 @@ void main() {
     test('ep square is cleared when the turn changes', () {
       final c = BoardEditorController();
       c.loadFen(
-          'rnbqkbnr/ppp2ppp/4p3/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 3');
+        'rnbqkbnr/ppp2ppp/4p3/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 3',
+      );
       expect(c.epSquare, Square.d6);
       c.setTurn(Side.black);
       expect(c.epSquare, isNull);

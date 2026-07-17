@@ -12,8 +12,19 @@ import 'package:chess_auto_prep/models/move_tree.dart';
 TrapLineInfo _scandiTrap() {
   return const TrapLineInfo(
     movesSan: [
-      'e4', 'd5', 'exd5', 'Qxd5', 'Nc3', 'Qa5', 'Bc4', 'Nf6', 'd3', 'Bg4',
-      'f3', 'Bh5', 'Bd2',
+      'e4',
+      'd5',
+      'exd5',
+      'Qxd5',
+      'Nc3',
+      'Qa5',
+      'Bc4',
+      'Nf6',
+      'd3',
+      'Bg4',
+      'f3',
+      'Bh5',
+      'Bd2',
     ],
     trapScore: 0.5,
     popularProb: 0.4,
@@ -133,14 +144,14 @@ void main() {
       );
       final built = TrapLineBuilder.build(trap);
       expect(built, isNotNull);
-      final sans =
-          built!.tree.nodeAt(built.cursor)!.children.map((c) => c.san);
+      final sans = built!.tree.nodeAt(built.cursor)!.children.map((c) => c.san);
       expect(sans, containsAll(['Nf3', 'Nc3']));
     });
   });
 
-  testWidgets('tapping a trap row loads the annotated line onto the board',
-      (tester) async {
+  testWidgets('tapping a trap row loads the annotated line onto the board', (
+    tester,
+  ) async {
     final controller = RepertoireController();
     final trap = _scandiTrap();
 

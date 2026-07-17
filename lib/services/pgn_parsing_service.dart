@@ -41,8 +41,19 @@ List<String> splitPgnIntoGames(String content) {
   final games = <String>[];
   final lines = content.split('\n');
 
-  var currentGame = '';
+  // A StringBuffer keeps accumulation linear; the old `currentGame += line`
+  // re-copied the whole game on every line, which made splitting large
+  // multi-game files superlinear (same issue countPgnGamesFast works around).
+  final currentGame = StringBuffer();
   var inGame = false;
+
+  void flushGame() {
+    final text = currentGame.toString();
+    if (text.trim().isNotEmpty) {
+      games.add(text);
+    }
+    currentGame.clear();
+  }
 
   for (final line in lines) {
     final trimmedLine = line.trim();
@@ -55,25 +66,24 @@ List<String> splitPgnIntoGames(String content) {
     }
 
     if (trimmedLine.startsWith('[Event')) {
-      if (inGame && currentGame.trim().isNotEmpty) {
-        games.add(currentGame);
+      if (inGame) {
+        flushGame();
       }
-      currentGame = '$line\n';
+      currentGame.write('$line\n');
       inGame = true;
     } else if (inGame) {
-      currentGame += '$line\n';
+      currentGame.write('$line\n');
     } else if (trimmedLine.isNotEmpty) {
-      if (!inGame) {
-        currentGame =
-            '[Event "Repertoire Line"]\n[White "Training"]\n[Black "Me"]\n\n';
-        inGame = true;
-      }
-      currentGame += '$line\n';
+      currentGame.write(
+        '[Event "Repertoire Line"]\n[White "Training"]\n[Black "Me"]\n\n',
+      );
+      inGame = true;
+      currentGame.write('$line\n');
     }
   }
 
-  if (inGame && currentGame.trim().isNotEmpty) {
-    games.add(currentGame);
+  if (inGame) {
+    flushGame();
   }
 
   return games;
@@ -233,10 +243,52 @@ bool matchesField(String headerVal, String query, MatchMode mode) {
         return false;
       }
     case MatchMode.after:
-      return headerVal.compareTo(query) >= 0;
+      {
+        // Numeric fields (WhiteElo/BlackElo/StudyRating) must compare
+        // numerically, not lexicographically — otherwise "≥ 500" wrongly
+        // excludes a 2400 game ("2400" < "500"). Dates ("YYYY.MM.DD") don't
+        // parse as num, so they fall back to the correct string compare.
+        final hv = num.tryParse(headerVal);
+        final q = num.tryParse(query);
+        if (hv != null && q != null) return hv >= q;
+        return headerVal.compareTo(query) >= 0;
+      }
     case MatchMode.before:
-      return headerVal.compareTo(query) <= 0;
+      {
+        final hv = num.tryParse(headerVal);
+        final q = num.tryParse(query);
+        if (hv != null && q != null) return hv <= q;
+        return headerVal.compareTo(query) <= 0;
+      }
   }
+}
+
+/// [kPlayerHeaderField] filter: does either colour's header satisfy [query]?
+///
+/// [query] may hold several `;`-separated names ([splitPlayerNames]); a game
+/// passes when **any** name matches **either** side — except in
+/// [MatchMode.notContains], where **every** name must be absent from **both**
+/// sides (the natural reading of "player not contains X").
+bool playerFieldMatches(
+  String whiteHeader,
+  String blackHeader,
+  String query,
+  MatchMode mode,
+) {
+  final names = splitPlayerNames(query);
+  if (names.isEmpty) return true;
+  if (mode == MatchMode.notContains) {
+    return names.every(
+      (n) =>
+          matchesField(whiteHeader, n, mode) &&
+          matchesField(blackHeader, n, mode),
+    );
+  }
+  return names.any(
+    (n) =>
+        matchesField(whiteHeader, n, mode) ||
+        matchesField(blackHeader, n, mode),
+  );
 }
 
 // ── Sequence matching (isolate-safe) ─────────────────────────────────────────
@@ -265,7 +317,10 @@ List<List<String>> parseSequenceGroups(String pattern) {
 /// Check whether a game's mainline matches the sequence groups with the
 /// given max gap (in ply) between groups.
 bool gameMatchesSequence(
-    String pgnText, List<List<String>> groups, int maxGap) {
+  String pgnText,
+  List<List<String>> groups,
+  int maxGap,
+) {
   if (groups.isEmpty) return true;
   try {
     final game = PgnGame.parsePgn(pgnText);
@@ -299,13 +354,21 @@ String? parseTargetFen(String? input) {
       .where((t) => t.isNotEmpty)
       .toList();
   if (tokens.isEmpty) return null;
-  Position pos = Chess.initial;
-  for (final t in tokens) {
-    final move = pos.parseSan(t);
-    if (move == null) return null;
-    pos = pos.play(move);
+  try {
+    Position pos = Chess.initial;
+    for (final t in tokens) {
+      final move = pos.parseSan(t);
+      if (move == null) return null;
+      pos = pos.play(move);
+    }
+    return normalizeFen(pos.fen);
+  } catch (_) {
+    // dartchess' parseSan/play can throw (e.g. RangeError) on some malformed
+    // tokens — a stray '(' from pasted variation movetext, an 'x'-prefixed
+    // token — rather than returning null. Treat any such input as "no target",
+    // matching the FEN branch above and this function's documented contract.
+    return null;
   }
-  return normalizeFen(pos.fen);
 }
 
 // ── FEN position index ───────────────────────────────────────────────────────
@@ -320,7 +383,8 @@ String? parseTargetFen(String? input) {
 ///
 /// Isolate-safe: no instance state captured.
 Map<String, List<int>> buildFenIndex(
-    List<({Map<String, String> headers, String pgnText})> games) {
+  List<({Map<String, String> headers, String pgnText})> games,
+) {
   final index = <String, List<int>>{};
 
   void record(String fen, int gameIdx) {
@@ -390,11 +454,13 @@ Future<List<int>> computeSliceMatches({
     if (!hasOtherFilters) return Future.value(List<int>.from(candidates));
 
     final candidateData = candidates
-        .map((i) => (
-              origIdx: i,
-              headers: Map<String, String>.from(games[i].headers),
-              pgnText: games[i].pgnText,
-            ))
+        .map(
+          (i) => (
+            origIdx: i,
+            headers: Map<String, String>.from(games[i].headers),
+            pgnText: games[i].pgnText,
+          ),
+        )
         .toList();
     final filterData = filters
         .map((f) => (field: f.field, modeName: f.mode.name, value: f.value))
@@ -405,7 +471,12 @@ Future<List<int>> computeSliceMatches({
       final result = <int>[];
       for (final c in candidateData) {
         if (!_passesNonPositionFilters(
-            c.headers, c.pgnText, filterData, seqCopy, seqGap)) {
+          c.headers,
+          c.pgnText,
+          filterData,
+          seqCopy,
+          seqGap,
+        )) {
           continue;
         }
         result.add(c.origIdx);
@@ -419,8 +490,10 @@ Future<List<int>> computeSliceMatches({
       .map((f) => (field: f.field, modeName: f.mode.name, value: f.value))
       .toList();
   final gameData = games
-      .map((g) =>
-          (headers: Map<String, String>.from(g.headers), pgnText: g.pgnText))
+      .map(
+        (g) =>
+            (headers: Map<String, String>.from(g.headers), pgnText: g.pgnText),
+      )
       .toList();
   final seqCopy = seqGroups.map((g) => List<String>.from(g)).toList();
 
@@ -436,7 +509,12 @@ Future<List<int>> computeSliceMatches({
 
       if (matches &&
           !_passesNonPositionFilters(
-              game.headers, game.pgnText, filterData, seqCopy, seqGap)) {
+            game.headers,
+            game.pgnText,
+            filterData,
+            seqCopy,
+            seqGap,
+          )) {
         matches = false;
       }
 
@@ -460,9 +538,22 @@ bool _passesNonPositionFilters(
   }
   for (final f in filterData) {
     if (f.value.isEmpty) continue;
+    final mode = MatchMode.values.firstWhere(
+      (m) => m.name == f.modeName,
+      orElse: () => MatchMode.contains,
+    );
+    if (f.field == kPlayerHeaderField) {
+      if (!playerFieldMatches(
+        headers['White'] ?? '',
+        headers['Black'] ?? '',
+        f.value,
+        mode,
+      )) {
+        return false;
+      }
+      continue;
+    }
     final headerVal = headers[f.field] ?? '';
-    final mode = MatchMode.values.firstWhere((m) => m.name == f.modeName,
-        orElse: () => MatchMode.contains);
     if (!matchesField(headerVal, f.value, mode)) return false;
   }
   return true;
@@ -545,7 +636,12 @@ Map<String, List<int>>? deserializeFenIndex(
 }
 
 bool _matchGroupsAt(
-    List<String> moves, List<List<String>> groups, int gi, int mi, int maxGap) {
+  List<String> moves,
+  List<List<String>> groups,
+  int gi,
+  int mi,
+  int maxGap,
+) {
   if (gi >= groups.length) return true;
   final group = groups[gi];
   if (group.length > moves.length) return false;

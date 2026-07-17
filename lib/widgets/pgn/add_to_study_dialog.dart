@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/repertoire_metadata.dart';
 import '../../services/storage/storage_factory.dart';
+import '../../theme/app_colors.dart';
 
 /// Outcome of [AddToStudyDialog]: exactly one of [existingPath] /
 /// [newStudyName] is set.
@@ -28,8 +29,13 @@ class AddToStudyResult {
 
 class AddToStudyDialog extends StatefulWidget {
   final String initialChapterName;
+  final String title;
 
-  const AddToStudyDialog({super.key, required this.initialChapterName});
+  const AddToStudyDialog({
+    super.key,
+    required this.initialChapterName,
+    this.title = 'Add line to study',
+  });
 
   @override
   State<AddToStudyDialog> createState() => _AddToStudyDialogState();
@@ -104,11 +110,12 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
     final studies = _studies;
     final filtered = _filtered;
     final query = _query.trim();
-    final hasExactMatch = filtered
-        .any((s) => s.name.toLowerCase() == query.toLowerCase());
+    final hasExactMatch = filtered.any(
+      (s) => s.name.toLowerCase() == query.toLowerCase(),
+    );
 
     return AlertDialog(
-      title: const Text('Add line to study'),
+      title: Text(widget.title),
       content: SizedBox(
         width: 420,
         height: 420,
@@ -161,14 +168,18 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
                               'No studies yet — type a name above to '
                               'create one.',
                               textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.grey[500]),
+                              style: const TextStyle(
+                                color: AppColors.onSurfaceMuted,
+                              ),
                             ),
                           ),
                         for (final s in filtered)
                           ListTile(
                             dense: true,
-                            leading:
-                                const Icon(Icons.menu_book_outlined, size: 20),
+                            leading: const Icon(
+                              Icons.menu_book_outlined,
+                              size: 20,
+                            ),
                             title: Text(s.name),
                             subtitle: Text(
                               '${s.gameCount} chapter'

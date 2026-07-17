@@ -90,10 +90,10 @@ int countShallowLines(Map<String, LineCoverageInfo> lineCoverage) =>
         .where((i) => i.leaf?.category == LeafCategory.tooShallow)
         .length;
 
-int countDeepLines(Map<String, LineCoverageInfo> lineCoverage) =>
-    lineCoverage.values
-        .where((i) => i.leaf?.category == LeafCategory.tooDeep)
-        .length;
+int countDeepLines(Map<String, LineCoverageInfo> lineCoverage) => lineCoverage
+    .values
+    .where((i) => i.leaf?.category == LeafCategory.tooDeep)
+    .length;
 
 int countUnaccountedLines(Map<String, LineCoverageInfo> lineCoverage) =>
     lineCoverage.values.where((i) => i.unaccountedMoves.isNotEmpty).length;

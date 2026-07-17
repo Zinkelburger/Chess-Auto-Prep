@@ -7,6 +7,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../models/pgn_filter_models.dart';
+import '../theme/app_colors.dart';
 import 'shortcut_tooltip.dart';
 import 'game_nav_item.dart';
 import 'game_search_dialog.dart';
@@ -86,9 +87,7 @@ class GameNavBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        border: Border(
-          top: BorderSide(color: Colors.grey[700]!),
-        ),
+        border: const Border(top: BorderSide(color: AppColors.outline)),
       ),
       child: isSolitaireMode
           ? _buildSolitaireLayout(context)
@@ -153,26 +152,30 @@ class GameNavBar extends StatelessWidget {
             description: canReveal
                 ? 'Give up and show the correct move'
                 : countdown > 0
-                    ? 'Available in ${countdown}s'
-                    : 'Available on your turn',
+                ? 'Available in ${countdown}s'
+                : 'Available on your turn',
             shortcut: 'R',
             child: ActionChip(
               onPressed: canReveal ? onReveal : null,
               avatar: Icon(
                 Icons.visibility,
                 size: 16,
-                color: canReveal ? Colors.white : Colors.white38,
+                color: canReveal
+                    ? AppColors.onWarning
+                    : AppColors.onSurfaceDisabled,
               ),
               label: Text(
                 countdown > 0 ? 'Reveal in ${countdown}s' : 'Reveal',
                 style: TextStyle(
                   fontSize: 12,
-                  color: canReveal ? Colors.white : Colors.white38,
+                  color: canReveal
+                      ? AppColors.onWarning
+                      : AppColors.onSurfaceDisabled,
                 ),
               ),
               backgroundColor: canReveal
-                  ? Colors.orange.withValues(alpha: 0.9)
-                  : Colors.grey.withValues(alpha: 0.4),
+                  ? AppColors.warningSurface.withValues(alpha: 0.9)
+                  : AppColors.onSurfaceMuted.withValues(alpha: 0.4),
               side: BorderSide.none,
               visualDensity: VisualDensity.compact,
             ),
@@ -182,7 +185,11 @@ class GameNavBar extends StatelessWidget {
           description: 'Fullscreen',
           shortcut: 'Ctrl+F',
           onPressed: games.isNotEmpty ? onToggleFullScreen : null,
-          icon: Icon(Icons.fullscreen, size: 24, color: Colors.grey[400]),
+          icon: const Icon(
+            Icons.fullscreen,
+            size: 24,
+            color: AppColors.onSurfaceSoft,
+          ),
           visualDensity: VisualDensity.compact,
         ),
         const SizedBox(width: 4),
@@ -244,11 +251,13 @@ class GameNavBar extends StatelessWidget {
                 icon: Icon(
                   Icons.edit_note,
                   size: 22,
-                  color: isEditMode ? Colors.amber[600] : null,
+                  color: isEditMode ? AppColors.starAccent : null,
                 ),
                 style: isEditMode
                     ? IconButton.styleFrom(
-                        backgroundColor: Colors.amber.withValues(alpha: 0.12),
+                        backgroundColor: AppColors.starAccent.withValues(
+                          alpha: 0.12,
+                        ),
                       )
                     : null,
                 visualDensity: VisualDensity.compact,
@@ -298,21 +307,18 @@ class GameNavBar extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: Colors.grey[700]!),
+          border: Border.all(color: AppColors.outline),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.sort, size: 16, color: Colors.grey[400]),
+            const Icon(Icons.sort, size: 16, color: AppColors.onSurfaceSoft),
             const SizedBox(width: 4),
-            Text(
-              switch (sortMode) {
-                GameSortMode.fileOrder => 'File order',
-                GameSortMode.ratingDesc => 'Stars ↓',
-                GameSortMode.ratingAsc => 'Stars ↑',
-              },
-              style: const TextStyle(fontSize: 11),
-            ),
+            Text(switch (sortMode) {
+              GameSortMode.fileOrder => 'File order',
+              GameSortMode.ratingDesc => 'Stars ↓',
+              GameSortMode.ratingAsc => 'Stars ↑',
+            }, style: const TextStyle(fontSize: 11)),
           ],
         ),
       ),
@@ -329,7 +335,7 @@ class GameNavBar extends StatelessWidget {
           child: Icon(
             star <= current ? Icons.star : Icons.star_border,
             size: 22,
-            color: star <= current ? Colors.amber : Colors.grey[600],
+            color: star <= current ? AppColors.starAccent : AppColors.starEmpty,
           ),
         ),
       );
@@ -357,7 +363,7 @@ class GameNavBar extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: Colors.grey[700]!),
+            border: Border.all(color: AppColors.outline),
           ),
           child: Text(
             'Game ${currentIndex + 1} / ${games.length}',
@@ -379,19 +385,27 @@ class GameNavBar extends StatelessWidget {
           icon: Icon(
             isAutoPlaying ? Icons.pause_circle : Icons.play_circle,
             size: 28,
-            color: isAutoPlaying ? Colors.amber : null,
+            color: isAutoPlaying ? AppColors.starAccent : null,
           ),
         ),
         ShortcutIconButton(
           description: 'Fullscreen',
           shortcut: 'Ctrl+F',
           onPressed: games.isNotEmpty ? onToggleFullScreen : null,
-          icon: Icon(Icons.fullscreen, size: 24, color: Colors.grey[400]),
+          icon: const Icon(
+            Icons.fullscreen,
+            size: 24,
+            color: AppColors.onSurfaceSoft,
+          ),
           visualDensity: VisualDensity.compact,
         ),
         IconButton(
           onPressed: games.isNotEmpty ? onCopyPgn : null,
-          icon: Icon(Icons.copy_outlined, size: 20, color: Colors.grey[400]),
+          icon: const Icon(
+            Icons.copy_outlined,
+            size: 20,
+            color: AppColors.onSurfaceSoft,
+          ),
           tooltip: 'Copy current game PGN',
           visualDensity: VisualDensity.compact,
         ),
@@ -399,17 +413,23 @@ class GameNavBar extends StatelessWidget {
           onPressed: games.isNotEmpty && hasEphemeralAnnotations
               ? onClearAnnotations
               : null,
-          icon: Icon(Icons.layers_clear_outlined,
-              size: 20,
-              color: hasEphemeralAnnotations
-                  ? Colors.grey[400]
-                  : Colors.grey[700]),
+          icon: Icon(
+            Icons.layers_clear_outlined,
+            size: 20,
+            color: hasEphemeralAnnotations
+                ? AppColors.onSurfaceSoft
+                : AppColors.onSurfaceDisabled,
+          ),
           tooltip: 'Clear analysis annotations',
           visualDensity: VisualDensity.compact,
         ),
         PopupMenuButton<double>(
           tooltip: 'Auto-play speed',
-          icon: Icon(Icons.speed, size: 20, color: Colors.grey[400]),
+          icon: const Icon(
+            Icons.speed,
+            size: 20,
+            color: AppColors.onSurfaceSoft,
+          ),
           onSelected: onSetSpeed,
           itemBuilder: (ctx) => [
             for (final s in kAutoPlaySpeeds)

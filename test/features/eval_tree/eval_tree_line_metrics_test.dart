@@ -18,8 +18,9 @@ void main() {
     });
 
     test('counts trap positions in subtree', () {
-      final e4 = cache.snapshot.nodesById.values
-          .firstWhere((node) => node.moveSan == 'e4');
+      final e4 = cache.snapshot.nodesById.values.firstWhere(
+        (node) => node.moveSan == 'e4',
+      );
 
       // e4 is an opponent-turn node with trapScore 0.32 in the test tree.
       expect(cache.metricsFor(e4.id).subtreeTrapCount, 1);

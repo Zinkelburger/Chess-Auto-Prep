@@ -3,7 +3,11 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import '../models/position_analysis.dart';
+import '../theme/app_colors.dart';
+import '../utils/app_messages.dart';
 
 class GamesListWidget extends StatefulWidget {
   final List<GameInfo> games;
@@ -23,6 +27,20 @@ class GamesListWidget extends StatefulWidget {
 
 class _GamesListWidgetState extends State<GamesListWidget> {
   int? _selectedIndex;
+
+  Future<void> _openGameUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    bool ok;
+    try {
+      // launchUrl throws (rather than returning false) on some platforms.
+      ok = uri != null && await launchUrl(uri);
+    } catch (_) {
+      ok = false;
+    }
+    if (!ok && mounted) {
+      showAppSnackBar(context, 'Could not open $url', isError: true);
+    }
+  }
 
   @override
   void didUpdateWidget(GamesListWidget oldWidget) {
@@ -44,7 +62,7 @@ class _GamesListWidgetState extends State<GamesListWidget> {
           padding: const EdgeInsets.all(16),
           child: Text(
             message,
-            style: const TextStyle(color: Colors.grey),
+            style: const TextStyle(color: AppColors.onSurfaceMuted),
             textAlign: TextAlign.center,
           ),
         ),
@@ -58,18 +76,11 @@ class _GamesListWidgetState extends State<GamesListWidget> {
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface,
-            border: Border(
-              bottom: BorderSide(
-                color: Colors.grey.shade700,
-              ),
-            ),
+            border: const Border(bottom: BorderSide(color: AppColors.outline)),
           ),
           child: Text(
             '${widget.games.length} game${widget.games.length == 1 ? '' : 's'} with this position',
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             textAlign: TextAlign.center,
           ),
         ),
@@ -84,11 +95,22 @@ class _GamesListWidgetState extends State<GamesListWidget> {
 
               return ListTile(
                 selected: isSelected,
-                selectedTileColor:
-                    Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                selectedTileColor: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: 0.3),
                 dense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+                trailing: game.gameUrl != null
+                    ? IconButton(
+                        icon: const Icon(Icons.open_in_new, size: 16),
+                        tooltip: 'Open game in browser',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => _openGameUrl(game.gameUrl!),
+                      )
+                    : null,
                 title: Text(
                   game.title,
                   style: const TextStyle(
@@ -103,14 +125,17 @@ class _GamesListWidgetState extends State<GamesListWidget> {
                       const SizedBox(height: 2),
                       Row(
                         children: [
-                          Icon(Icons.bar_chart, size: 12,
-                              color: Colors.amber.shade300),
+                          const Icon(
+                            Icons.bar_chart,
+                            size: 12,
+                            color: AppColors.starAccent,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             game.eloDisplay,
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 11,
-                              color: Colors.amber.shade300,
+                              color: AppColors.starAccent,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -119,18 +144,15 @@ class _GamesListWidgetState extends State<GamesListWidget> {
                     ],
                     if (game.subtitle.isNotEmpty) ...[
                       const SizedBox(height: 2),
-                      Text(
-                        game.subtitle,
-                        style: const TextStyle(fontSize: 11),
-                      ),
+                      Text(game.subtitle, style: const TextStyle(fontSize: 11)),
                     ],
                     if (game.site.isNotEmpty) ...[
                       const SizedBox(height: 2),
                       Text(
                         game.site,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 10,
-                          color: Colors.blue.shade300,
+                          color: AppColors.info,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

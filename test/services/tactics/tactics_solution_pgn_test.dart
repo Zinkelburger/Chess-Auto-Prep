@@ -3,18 +3,18 @@ import 'package:chess_auto_prep/services/tactics/tactics_solution_pgn.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 TacticsPosition _tactic({required String fen}) => TacticsPosition(
-      fen: fen,
-      gameWhite: 'Alice "Ace"',
-      gameBlack: 'Bob',
-      gameResult: '1-0',
-      gameDate: '2024.01.01',
-      gameId: 'g1',
-      positionContext: 'Move 1 — White to play',
-      userMove: 'd4',
-      correctLine: const ['e4'],
-      mistakeType: '?',
-      mistakeAnalysis: 'test',
-    );
+  fen: fen,
+  gameWhite: 'Alice "Ace"',
+  gameBlack: 'Bob',
+  gameResult: '1-0',
+  gameDate: '2024.01.01',
+  gameId: 'g1',
+  positionContext: 'Move 1 — White to play',
+  userMove: 'd4',
+  correctLine: const ['e4'],
+  mistakeType: '?',
+  mistakeAnalysis: 'test',
+);
 
 void main() {
   test('numbers moves from a white-to-move position', () {
@@ -30,7 +30,8 @@ void main() {
   test('starts with ellipsis when black is to move', () {
     final pgn = buildSolutionPgn(
       _tactic(
-          fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 3'),
+        fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 3',
+      ),
       ['e5', 'Nf3'],
     );
     expect(pgn, contains('3... e5 4. Nf3 *'));

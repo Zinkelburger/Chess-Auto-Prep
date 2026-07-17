@@ -10,6 +10,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/board_editor_controller.dart';
+import '../../theme/app_colors.dart';
 import '../common/piece_image.dart';
 
 class BoardEditorWidget extends StatefulWidget {
@@ -22,10 +23,10 @@ class BoardEditorWidget extends StatefulWidget {
 }
 
 class _BoardEditorWidgetState extends State<BoardEditorWidget> {
-  // Same palette as ChessBoardWidget (private there; duplicated by design —
-  // the editor may diverge visually later).
-  static const Color lightSquareColor = Color(0xFFF0D9B5);
-  static const Color darkSquareColor = Color(0xFFB58863);
+  // Same palette as ChessBoardWidget, both sourced from the shared board
+  // tokens (the editor may still diverge visually later).
+  static const Color lightSquareColor = AppColors.boardLightSquare;
+  static const Color darkSquareColor = AppColors.boardDarkSquare;
 
   Square? _dragFrom;
   Piece? _draggedPiece;
@@ -85,8 +86,7 @@ class _BoardEditorWidgetState extends State<BoardEditorWidget> {
 
   void _onPanUpdate(DragUpdateDetails details) {
     if (_draggedPiece == null || _panStart == null) return;
-    if (!_isDragging &&
-        (details.localPosition - _panStart!).distance > 3) {
+    if (!_isDragging && (details.localPosition - _panStart!).distance > 3) {
       _isDragging = true;
     }
     if (_isDragging) {
@@ -157,7 +157,9 @@ class _BoardEditorWidgetState extends State<BoardEditorWidget> {
                     top: _dragPosition!.dy - squareSize / 2,
                     child: IgnorePointer(
                       child: PieceImage(
-                          piece: _draggedPiece!, size: squareSize),
+                        piece: _draggedPiece!,
+                        size: squareSize,
+                      ),
                     ),
                   ),
               ],
@@ -176,15 +178,17 @@ class _BoardEditorWidgetState extends State<BoardEditorWidget> {
       if (piece == null) continue;
       if (_isDragging && square == _dragFrom) continue;
       final (x, y) = _squareOrigin(square, squareSize);
-      widgets.add(Positioned(
-        left: x,
-        top: y,
-        width: squareSize,
-        height: squareSize,
-        child: IgnorePointer(
-          child: PieceImage(piece: piece, size: squareSize),
+      widgets.add(
+        Positioned(
+          left: x,
+          top: y,
+          width: squareSize,
+          height: squareSize,
+          child: IgnorePointer(
+            child: PieceImage(piece: piece, size: squareSize),
+          ),
         ),
-      ));
+      );
     }
     return widgets;
   }
@@ -204,7 +208,11 @@ class _EditorBoardPainter extends CustomPainter {
         final isLight = (col + row) % 2 == 0;
         canvas.drawRect(
           Rect.fromLTWH(
-              col * squareSize, row * squareSize, squareSize, squareSize),
+            col * squareSize,
+            row * squareSize,
+            squareSize,
+            squareSize,
+          ),
           Paint()..color = isLight ? lightColor : darkColor,
         );
       }
@@ -212,7 +220,7 @@ class _EditorBoardPainter extends CustomPainter {
     canvas.drawRect(
       Offset.zero & size,
       Paint()
-        ..color = Colors.black
+        ..color = AppColors.boardOutline
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2,
     );

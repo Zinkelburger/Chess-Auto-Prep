@@ -69,11 +69,7 @@ class TrapMoveIndicator extends StatelessWidget {
     Widget child = Tooltip(message: _tooltip, child: dot);
 
     if (boardPreview != null && (previewFen ?? trap.fen) != null) {
-      child = MouseRegion(
-        onEnter: _onEnter,
-        onExit: _onExit,
-        child: child,
-      );
+      child = MouseRegion(onEnter: _onEnter, onExit: _onExit, child: child);
     }
 
     return child;

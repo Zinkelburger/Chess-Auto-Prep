@@ -102,9 +102,9 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
   Future<void> _copyCommand(String text) async {
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Copied to clipboard')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Copied to clipboard')));
   }
 
   @override
@@ -116,8 +116,10 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
       children: [
         Row(
           children: [
-            Text('Database Downloads',
-                style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'Database Downloads',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(width: 4),
             IconButton(
               icon: const Icon(Icons.info_outline, size: 18),
@@ -127,10 +129,10 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
           ],
         ),
         const SizedBox(height: 4),
-        Text(
+        const Text(
           'Download once, point at the data/ folder, and evals use local data '
           'first — then API, then Stockfish.',
-          style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+          style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
         ),
         if (!_libraryAvailable) ...[
           const SizedBox(height: 12),
@@ -138,15 +140,20 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
             width: double.infinity,
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.amber.withValues(alpha: 0.12),
+              color: AppColors.warning.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.amber.withValues(alpha: 0.35)),
+              border: Border.all(
+                color: AppColors.warning.withValues(alpha: 0.35),
+              ),
             ),
             child: const Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.warning_amber_rounded,
-                    size: 18, color: AppColors.warning),
+                Icon(
+                  Icons.warning_amber_rounded,
+                  size: 18,
+                  color: AppColors.warning,
+                ),
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -182,8 +189,10 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
                     spacing: 8,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      const Text('Or Hugging Face:',
-                          style: TextStyle(fontSize: 12)),
+                      const Text(
+                        'Or Hugging Face:',
+                        style: TextStyle(fontSize: 12),
+                      ),
                       TextButton.icon(
                         onPressed: () =>
                             launchUrl(Uri.parse(_huggingFaceDatasetUrl)),
@@ -198,19 +207,19 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
             _setupStep(
               '2',
               'Point the field below at the data/ directory',
-              child: Text(
+              child: const Text(
                 'Select the folder that contains CURRENT and .sst files — '
                 'often …/chess-20251115/data after download.',
-                style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
               ),
             ),
             _setupStep(
               '3',
               'Done',
-              child: Text(
+              child: const Text(
                 'Enable local ChessDB and run repertoire generation. Eval chain: '
                 'local dump → SQLite slice → ChessDB API → Stockfish.',
-                style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
               ),
             ),
           ],
@@ -231,7 +240,8 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
               ),
             ),
             Tooltip(
-              message: 'Download the ChessDB database (~1TB) to use offline '
+              message:
+                  'Download the ChessDB database (~1TB) to use offline '
                   'evals for 50+ billion positions.\n\n'
                   'Run:\n$kChessDbRsyncCommand',
               child: IconButton(
@@ -242,9 +252,9 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
             ),
           ],
         ),
-        Text(
+        const Text(
           'Point this at the data/ directory containing .sst files',
-          style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+          style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
         ),
         const SizedBox(height: 6),
         Row(
@@ -329,8 +339,10 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title,
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 4),
                 child,
               ],
@@ -383,8 +395,10 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
                 'the app.',
               ),
               const SizedBox(height: 12),
-              const Text('Download:',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
+              const Text(
+                'Download:',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 4),
               _commandRow(kChessDbRsyncCommand),
               const SizedBox(height: 8),

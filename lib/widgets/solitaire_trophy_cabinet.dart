@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/solitaire_trophy.dart';
 import '../services/solitaire_trophy_service.dart';
+import '../theme/app_colors.dart';
 import '../utils/pgn_date_utils.dart';
 
 /// Dialog that shows the user's collection of solitaire trophies.
@@ -51,7 +52,11 @@ class _SolitaireTrophyCabinetState extends State<SolitaireTrophyCabinet> {
               padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
               child: Row(
                 children: [
-                  const Icon(Icons.emoji_events, color: Colors.amber, size: 24),
+                  const Icon(
+                    Icons.emoji_events,
+                    color: AppColors.starAccent,
+                    size: 24,
+                  ),
                   const SizedBox(width: 10),
                   const Text(
                     'Trophy Cabinet',
@@ -61,7 +66,10 @@ class _SolitaireTrophyCabinetState extends State<SolitaireTrophyCabinet> {
                   if (_trophies.isNotEmpty)
                     Text(
                       '${_trophies.length} ${_trophies.length == 1 ? 'trophy' : 'trophies'}',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.onSurfaceMuted,
+                      ),
                     ),
                   const SizedBox(width: 8),
                   IconButton(
@@ -83,19 +91,28 @@ class _SolitaireTrophyCabinetState extends State<SolitaireTrophyCabinet> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.emoji_events_outlined,
-                        size: 48, color: Colors.grey[700]),
+                    const Icon(
+                      Icons.emoji_events_outlined,
+                      size: 48,
+                      color: AppColors.onSurfaceDim,
+                    ),
                     const SizedBox(height: 12),
-                    Text(
+                    const Text(
                       'No trophies yet',
-                      style: TextStyle(color: Colors.grey[500], fontSize: 14),
+                      style: TextStyle(
+                        color: AppColors.onSurfaceMuted,
+                        fontSize: 14,
+                      ),
                     ),
                     const SizedBox(height: 8),
-                    Text(
+                    const Text(
                       'Play solitaire mode, then analyze the game.\n'
                       'If your guess beats the GM\'s move, you earn a trophy!',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                      style: TextStyle(
+                        color: AppColors.onSurfaceMuted,
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),
@@ -128,7 +145,7 @@ class _SolitaireTrophyCabinetState extends State<SolitaireTrophyCabinet> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.emoji_events, color: Colors.amber, size: 20),
+          const Icon(Icons.emoji_events, color: AppColors.starAccent, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -160,28 +177,38 @@ class _SolitaireTrophyCabinetState extends State<SolitaireTrophyCabinet> {
                 const SizedBox(height: 2),
                 Text(
                   '+$advStr advantage  |  ${_formatCp(trophy.userEvalCp)} vs ${_formatCp(trophy.gmEvalCp)}',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 11,
                     fontFamily: 'monospace',
-                    color: Colors.grey[400],
+                    color: AppColors.onSurfaceSoft,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   gameInfo,
-                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.onSurfaceMuted,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   _formatDate(trophy.date),
-                  style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: AppColors.onSurfaceMuted,
+                  ),
                 ),
               ],
             ),
           ),
           IconButton(
             onPressed: () => _deleteTrophy(trophy.id),
-            icon: Icon(Icons.close, size: 14, color: Colors.grey[600]),
+            icon: const Icon(
+              Icons.close,
+              size: 14,
+              color: AppColors.onSurfaceMuted,
+            ),
             tooltip: 'Remove trophy',
             visualDensity: VisualDensity.compact,
             constraints: const BoxConstraints(),

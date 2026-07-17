@@ -12,7 +12,8 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../constants/ui_breakpoints.dart';
-import 'repertoire_mode.dart';
+import '../../models/repertoire_mode.dart';
+import '../../theme/app_colors.dart';
 
 /// Flex weight for the board column — 40% of wide layout width.
 const int kBoardZoneFlex = 4;
@@ -173,5 +174,5 @@ class _CompactStackedLayout extends StatelessWidget {
 }
 
 Widget _verticalZoneDivider() {
-  return Container(width: 1, color: Colors.grey[700]);
+  return Container(width: 1, color: AppColors.outline);
 }

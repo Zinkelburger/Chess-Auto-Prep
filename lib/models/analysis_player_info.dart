@@ -7,6 +7,9 @@ library;
 ///   • **Game-count mode** ([monthsBack] is `null`): download up to [maxGames].
 ///   • **Months mode** ([monthsBack] is set): download all games from the
 ///     last N months.
+///
+/// A third source is local PGN files ([platform] == 'import'), where the
+/// games were imported rather than downloaded and no range applies.
 class AnalysisPlayerInfo {
   final String platform;
   final String username;
@@ -31,15 +34,31 @@ class AnalysisPlayerInfo {
   /// Whether the download is/was limited by calendar months.
   bool get isMonthsMode => monthsBack != null;
 
+  /// True when the games came from local PGN files instead of a download.
+  bool get isImported => platform == 'import';
+
   /// Human-readable platform name.
-  String get platformDisplayName =>
-      platform == 'chesscom' ? 'Chess.com' : 'Lichess';
+  String get platformDisplayName {
+    if (isImported) return 'PGN file';
+    return platform == 'chesscom' ? 'Chess.com' : 'Lichess';
+  }
 
   /// Unique key used for file-system storage.
-  String get playerKey => '${platform}_${username.toLowerCase()}';
+  ///
+  /// Free-text names (the 'import' platform) may contain characters that are
+  /// invalid or hazardous in filenames (`/` would silently nest the files in
+  /// a subdirectory the player list never scans), so everything outside
+  /// [a-z0-9_-] is folded to `_`. Chess.com/Lichess usernames are already
+  /// limited to that alphabet, so their keys — and existing on-disk data —
+  /// are unchanged.
+  String get playerKey {
+    final safe = username.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]'), '_');
+    return '${platform}_$safe';
+  }
 
   /// Human-readable description of the download range.
   String get rangeDescription {
+    if (isImported) return 'imported PGN';
     if (isMonthsMode) {
       return 'last $monthsBack month${monthsBack == 1 ? '' : 's'}';
     }
@@ -58,24 +77,24 @@ class AnalysisPlayerInfo {
   // ── Serialisation ──────────────────────────────────────────────────
 
   Map<String, dynamic> toJson() => {
-        'platform': platform,
-        'username': username,
-        'maxGames': maxGames,
-        'monthsBack': monthsBack,
-        'downloadedAt': downloadedAt?.toIso8601String(),
-        'gameCount': gameCount,
-      };
+    'platform': platform,
+    'username': username,
+    'maxGames': maxGames,
+    'monthsBack': monthsBack,
+    'downloadedAt': downloadedAt?.toIso8601String(),
+    'gameCount': gameCount,
+  };
 
   factory AnalysisPlayerInfo.fromJson(Map<String, dynamic> json) {
     return AnalysisPlayerInfo(
       platform: json['platform'] as String? ?? 'unknown',
       username: json['username'] as String? ?? 'unknown',
-      maxGames: json['maxGames'] as int? ?? 100,
-      monthsBack: json['monthsBack'] as int?,
+      maxGames: (json['maxGames'] as num?)?.toInt() ?? 100,
+      monthsBack: (json['monthsBack'] as num?)?.toInt(),
       downloadedAt: json['downloadedAt'] != null
           ? DateTime.tryParse(json['downloadedAt'] as String)
           : null,
-      gameCount: json['gameCount'] as int? ?? 0,
+      gameCount: (json['gameCount'] as num?)?.toInt() ?? 0,
     );
   }
 

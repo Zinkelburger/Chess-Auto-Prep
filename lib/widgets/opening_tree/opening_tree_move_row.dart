@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/opening_tree.dart';
+import '../../theme/app_colors.dart';
 import 'coverage_annotation.dart';
 import 'win_draw_loss_bar.dart';
 
@@ -35,13 +36,13 @@ class OpeningTreeMoveRow extends StatelessWidget {
 
     Color winRateColor;
     if (perspective == WdlPerspective.whiteBlack) {
-      winRateColor = Colors.grey[300]!;
+      winRateColor = AppColors.inkSoft;
     } else if (displayRate >= 0.55) {
-      winRateColor = Colors.green;
+      winRateColor = AppColors.success;
     } else if (displayRate >= 0.45) {
-      winRateColor = Colors.orange;
+      winRateColor = AppColors.warning;
     } else {
-      winRateColor = Colors.red;
+      winRateColor = AppColors.danger;
     }
 
     return InkWell(
@@ -49,11 +50,8 @@ class OpeningTreeMoveRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: Colors.grey[800]!,
-              width: 0.5,
-            ),
+          border: const Border(
+            bottom: BorderSide(color: AppColors.divider, width: 0.5),
           ),
           // Frequency "heat": more-played moves get a heavier left-anchored
           // wash, so the eye weights common continuations. Shared visual
@@ -65,10 +63,7 @@ class OpeningTreeMoveRow extends StatelessWidget {
               (playedPercent / 100).clamp(0.0, 1.0),
               (playedPercent / 100).clamp(0.0, 1.0),
             ],
-            colors: [
-              Colors.white.withValues(alpha: 0.05),
-              Colors.transparent,
-            ],
+            colors: [Colors.white.withValues(alpha: 0.05), Colors.transparent],
           ),
         ),
         child: Column(
@@ -93,9 +88,9 @@ class OpeningTreeMoveRow extends StatelessWidget {
                 Expanded(
                   child: Text(
                     '${node.gamesPlayed} games (${playedPercent.toStringAsFixed(1)}%)',
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 12,
-                      color: Colors.grey[400],
+                      color: AppColors.onSurfaceSoft,
                     ),
                   ),
                 ),
@@ -116,9 +111,9 @@ class OpeningTreeMoveRow extends StatelessWidget {
                   width: 100,
                   child: Text(
                     '${node.wins}-${node.draws}-${node.losses}',
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 11,
-                      color: Colors.grey[500],
+                      color: AppColors.onSurfaceMuted,
                       fontFamily: 'monospace',
                     ),
                   ),

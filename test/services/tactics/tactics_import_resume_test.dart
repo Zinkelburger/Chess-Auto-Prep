@@ -25,7 +25,8 @@ class _FakePathProvider extends PathProviderPlatform
 
 /// A lichess-export-shaped game: lichess natively includes a *bare*
 /// [GameId] header (no `lichess_` prefix) alongside the Site URL.
-String _lichessGame(String id, {String? date}) => '''
+String _lichessGame(String id, {String? date}) =>
+    '''
 [Event "Rated blitz game"]
 [Site "https://lichess.org/$id"]
 ${date != null ? '[UTCDate "$date"]\n' : ''}[White "userA"]
@@ -36,7 +37,8 @@ ${date != null ? '[UTCDate "$date"]\n' : ''}[White "userA"]
 1. e4 e5 1-0''';
 
 /// A game as stored by our own importer, with a prefixed GameId injected.
-String _prefixedGame(String prefixedId) => '''
+String _prefixedGame(String prefixedId) =>
+    '''
 [Event "Live Chess"]
 [White "userA"]
 [Black "userB"]
@@ -69,22 +71,27 @@ void main() {
 
   group('countPendingGames', () {
     test('native lichess GameId headers count as lichess games', () async {
-      await StorageFactory.instance.saveImportedPgns([
-        _lichessGame('abc12345'),
-        _prefixedGame('chesscom_111'),
-        _prefixedGame('lichess_def67890'),
-      ].join('\n\n'));
+      await StorageFactory.instance.saveImportedPgns(
+        [
+          _lichessGame('abc12345'),
+          _prefixedGame('chesscom_111'),
+          _prefixedGame('lichess_def67890'),
+        ].join('\n\n'),
+      );
       final service = await serviceWithAnalyzed([]);
 
       final both = await service.countPendingGames(
-          lichessUsername: 'userA', chesscomUsername: 'userA');
+        lichessUsername: 'userA',
+        chesscomUsername: 'userA',
+      );
       expect(both.total, 3);
       expect(both.pending, 3);
 
       // Without a lichess username the bare-header game must not be
       // counted either — resume could not process it.
-      final chessComOnly =
-          await service.countPendingGames(chesscomUsername: 'userA');
+      final chessComOnly = await service.countPendingGames(
+        chesscomUsername: 'userA',
+      );
       expect(chessComOnly.pending, 1);
 
       final none = await service.countPendingGames();
@@ -92,15 +99,24 @@ void main() {
     });
 
     test('games before the window are expired, not pending', () async {
-      String fmt(DateTime d) => '${d.year}.'
+      String fmt(DateTime d) =>
+          '${d.year}.'
           '${d.month.toString().padLeft(2, '0')}.'
           '${d.day.toString().padLeft(2, '0')}';
       final now = DateTime.now();
-      await StorageFactory.instance.saveImportedPgns([
-        _lichessGame('old00000', date: fmt(now.subtract(const Duration(days: 90)))),
-        _lichessGame('new00000', date: fmt(now.subtract(const Duration(days: 2)))),
-        _lichessGame('nodate00'), // no date header: kept (lenient)
-      ].join('\n\n'));
+      await StorageFactory.instance.saveImportedPgns(
+        [
+          _lichessGame(
+            'old00000',
+            date: fmt(now.subtract(const Duration(days: 90))),
+          ),
+          _lichessGame(
+            'new00000',
+            date: fmt(now.subtract(const Duration(days: 2))),
+          ),
+          _lichessGame('nodate00'), // no date header: kept (lenient)
+        ].join('\n\n'),
+      );
       final service = await serviceWithAnalyzed([]);
 
       final counts = await service.countPendingGames(
@@ -110,47 +126,59 @@ void main() {
       expect(counts.total, 3);
       expect(counts.pending, 2);
 
-      final noWindow =
-          await service.countPendingGames(lichessUsername: 'userA');
+      final noWindow = await service.countPendingGames(
+        lichessUsername: 'userA',
+      );
       expect(noWindow.pending, 3);
     });
 
-    test('legacy bare analyzed IDs still mark lichess games analyzed',
-        () async {
-      await StorageFactory.instance.saveImportedPgns([
-        _lichessGame('abc12345'),
-        _lichessGame('zzz98765'),
-      ].join('\n\n'));
-      // Old builds recorded the bare ID; the game must not re-pend now
-      // that extraction returns lichess_-prefixed IDs.
-      final service = await serviceWithAnalyzed(['abc12345']);
+    test(
+      'legacy bare analyzed IDs still mark lichess games analyzed',
+      () async {
+        await StorageFactory.instance.saveImportedPgns(
+          [_lichessGame('abc12345'), _lichessGame('zzz98765')].join('\n\n'),
+        );
+        // Old builds recorded the bare ID; the game must not re-pend now
+        // that extraction returns lichess_-prefixed IDs.
+        final service = await serviceWithAnalyzed(['abc12345']);
 
-      final counts = await service.countPendingGames(
-          lichessUsername: 'userA', chesscomUsername: 'userA');
-      expect(counts.total, 2);
-      expect(counts.pending, 1);
-    });
+        final counts = await service.countPendingGames(
+          lichessUsername: 'userA',
+          chesscomUsername: 'userA',
+        );
+        expect(counts.total, 2);
+        expect(counts.pending, 1);
+      },
+    );
   });
 
   group('pruneStoredPgns', () {
-    String fmt(DateTime d) => '${d.year}.'
+    String fmt(DateTime d) =>
+        '${d.year}.'
         '${d.month.toString().padLeft(2, '0')}.'
         '${d.day.toString().padLeft(2, '0')}';
 
     test('drops analyzed and expired games, keeps the live queue', () async {
       final now = DateTime.now();
-      await StorageFactory.instance.saveImportedPgns([
-        _lichessGame('done1111', date: fmt(now)), // analyzed (legacy bare id)
-        _lichessGame('old00000',
-            date: fmt(now.subtract(const Duration(days: 90)))), // expired
-        _lichessGame('new00000',
-            date: fmt(now.subtract(const Duration(days: 2)))), // pending
-        _prefixedGame('chesscom_111'), // pending, no date: kept
-      ].join('\n\n'));
+      await StorageFactory.instance.saveImportedPgns(
+        [
+          _lichessGame('done1111', date: fmt(now)), // analyzed (legacy bare id)
+          _lichessGame(
+            'old00000',
+            date: fmt(now.subtract(const Duration(days: 90))),
+          ), // expired
+          _lichessGame(
+            'new00000',
+            date: fmt(now.subtract(const Duration(days: 2))),
+          ), // pending
+          _prefixedGame('chesscom_111'), // pending, no date: kept
+        ].join('\n\n'),
+      );
       final service = await serviceWithAnalyzed(['done1111']);
 
       final removed = await service.pruneStoredPgns(
-          since: now.subtract(const Duration(days: 14)));
+        since: now.subtract(const Duration(days: 14)),
+      );
       expect(removed, 2);
 
       final content = await StorageFactory.instance.readImportedPgns();
@@ -174,7 +202,8 @@ void main() {
       final service = await serviceWithAnalyzed([]);
 
       final removed = await service.pruneStoredPgns(
-          since: DateTime.now().subtract(const Duration(days: 14)));
+        since: DateTime.now().subtract(const Duration(days: 14)),
+      );
       expect(removed, 0);
       expect(await StorageFactory.instance.readImportedPgns(), pgn);
     });

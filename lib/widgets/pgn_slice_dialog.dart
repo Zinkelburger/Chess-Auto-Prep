@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import '../core/slice_filter_controller.dart';
 import '../models/pgn_filter_models.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
+import '../theme/app_colors.dart';
 import 'lines_preview_panel.dart';
 import 'slice/header_filters.dart';
 import 'slice/position_filter.dart';
@@ -22,8 +23,8 @@ import 'slice/sequence_filter.dart';
 export '../models/pgn_filter_models.dart';
 
 /// Callback signature: passes matching indices + the config that produced them.
-typedef SliceApplyCallback = void Function(
-    List<int> matchingIndices, SliceConfig config);
+typedef SliceApplyCallback =
+    void Function(List<int> matchingIndices, SliceConfig config);
 
 class PgnSliceDialog extends StatefulWidget {
   final List<GameRecord> allGames;
@@ -94,20 +95,20 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
 
     pgn
         .computeSliceMatches(
-      games: widget.allGames,
-      targetFen: _filters.positionFen,
-      filters: _filters.rawHeaderFilters,
-      seqGroups: _filters.sequenceGroups,
-      seqGap: _filters.sequenceGap,
-      fenIndex: widget.fenIndex,
-    )
+          games: widget.allGames,
+          targetFen: _filters.positionFen,
+          filters: _filters.rawHeaderFilters,
+          seqGroups: _filters.sequenceGroups,
+          seqGap: _filters.sequenceGap,
+          fenIndex: widget.fenIndex,
+        )
         .then((indices) {
-      if (!mounted || generation != _computeGeneration) return;
-      setState(() {
-        _matchingIndices = indices;
-        _computing = false;
-      });
-    });
+          if (!mounted || generation != _computeGeneration) return;
+          setState(() {
+            _matchingIndices = indices;
+            _computing = false;
+          });
+        });
   }
 
   void _reset() {
@@ -123,10 +124,10 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
       children: [
         Text(
           'Quick Presets',
-          style: TextStyle(
+          style: const TextStyle(
             fontWeight: FontWeight.w600,
             fontSize: 14,
-            color: Colors.grey[300],
+            color: AppColors.inkSoft,
           ),
         ),
         const SizedBox(height: 8),
@@ -138,12 +139,18 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
             children: [
               for (final preset in widget.presets)
                 FilterChip(
-                  label: Text(preset.label,
-                      style: const TextStyle(fontSize: 12)),
+                  label: Text(
+                    preset.label,
+                    style: const TextStyle(fontSize: 12),
+                  ),
                   selected: _filters.hasPresetHeaderFilter(
-                      preset.filter.field, preset.filter.value),
+                    preset.filter.field,
+                    preset.filter.value,
+                  ),
                   onSelected: (_) => _filters.togglePresetHeaderFilter(
-                      preset.filter.field, preset.filter.value),
+                    preset.filter.field,
+                    preset.filter.value,
+                  ),
                   visualDensity: VisualDensity.compact,
                 ),
             ],
@@ -175,7 +182,7 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
               const Divider(),
               SequenceFilter(controller: _filters),
               const Divider(),
-              HeaderFilters(controller: _filters),
+              HeaderFilters(controller: _filters, games: widget.allGames),
               const SizedBox(height: 16),
               SizedBox(
                 height: 200,
@@ -191,10 +198,7 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: _reset,
-          child: const Text('Reset'),
-        ),
+        TextButton(onPressed: _reset, child: const Text('Reset')),
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancel'),
@@ -206,9 +210,11 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
                   Navigator.pop(context);
                 }
               : null,
-          child: Text(_computing
-              ? 'Apply (${_matchingIndices.isEmpty ? '…' : _matchingIndices.length})'
-              : 'Apply (${_matchingIndices.length})'),
+          child: Text(
+            _computing
+                ? 'Apply (${_matchingIndices.isEmpty ? '…' : _matchingIndices.length})'
+                : 'Apply (${_matchingIndices.length})',
+          ),
         ),
       ],
     );

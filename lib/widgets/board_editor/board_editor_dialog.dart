@@ -31,10 +31,8 @@ class BoardEditorDialog extends StatefulWidget {
   }) {
     return showDialog<Position>(
       context: context,
-      builder: (_) => BoardEditorDialog(
-        initialFen: initialFen,
-        actionLabel: actionLabel,
-      ),
+      builder: (_) =>
+          BoardEditorDialog(initialFen: initialFen, actionLabel: actionLabel),
     );
   }
 
@@ -89,8 +87,10 @@ class _BoardEditorDialogState extends State<BoardEditorDialog> {
                 children: [
                   Row(
                     children: [
-                      Text('Set up position',
-                          style: Theme.of(context).textTheme.titleMedium),
+                      Text(
+                        'Set up position',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
                       const Spacer(),
                       IconButton(
                         icon: const Icon(Icons.close),
@@ -104,8 +104,7 @@ class _BoardEditorDialogState extends State<BoardEditorDialog> {
                     child: PositionSetupPanel(
                       controller: _controller,
                       actionLabel: widget.actionLabel,
-                      onAction: (position) =>
-                          Navigator.pop(context, position),
+                      onAction: (position) => Navigator.pop(context, position),
                     ),
                   ),
                 ],

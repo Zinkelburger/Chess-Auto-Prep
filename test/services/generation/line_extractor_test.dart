@@ -9,10 +9,10 @@ import 'generation_test_helpers.dart';
 const _startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
 TreeBuildConfig _config({bool playAsWhite = true}) => TreeBuildConfig(
-      startFen: _startFen,
-      playAsWhite: playAsWhite,
-      minProbability: 0.01,
-    );
+  startFen: _startFen,
+  playAsWhite: playAsWhite,
+  minProbability: 0.01,
+);
 
 void main() {
   group('LineExtractor', () {
@@ -147,7 +147,8 @@ void main() {
         evalCp: 35,
         nodeId: 999,
       );
-      final continuation = makeNode(
+      // Attaches itself as a child of `canonical` via `parent:`.
+      makeNode(
         fen: kFenAfterE4E5Nf3,
         san: 'Nf3',
         uci: 'g1f3',
@@ -155,7 +156,7 @@ void main() {
         isWhiteToMove: false,
         evalCp: -30,
         parent: canonical,
-      )..isRepertoireMove = true;
+      ).isRepertoireMove = true;
 
       final fenMap = FenMap();
       fenMap.putCanonical(canonical.fen, canonical);

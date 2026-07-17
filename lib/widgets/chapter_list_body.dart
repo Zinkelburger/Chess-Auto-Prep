@@ -52,8 +52,7 @@ class _ChapterListBodyState extends State<ChapterListBody> {
     });
 
     try {
-      final chapters =
-          await StorageFactory.instance.listChapters(_dirPath);
+      final chapters = await StorageFactory.instance.listChapters(_dirPath);
       if (!mounted) return;
       setState(() {
         _chapters = chapters;
@@ -74,8 +73,7 @@ class _ChapterListBodyState extends State<ChapterListBody> {
   /// comment so new chapters inherit it. Defaults to White.
   Future<String> _repertoireColor() async {
     for (final chapter in _chapters) {
-      final content =
-          await StorageFactory.instance.readFile(chapter.filePath);
+      final content = await StorageFactory.instance.readFile(chapter.filePath);
       if (content == null) continue;
       final color = pgn.extractRepertoireColor(content);
       if (color != null && color.isNotEmpty) {
@@ -117,7 +115,8 @@ class _ChapterListBodyState extends State<ChapterListBody> {
       return EmptyStatePlaceholder(
         icon: Icons.menu_book,
         title: 'No Chapters Yet',
-        subtitle: 'Add a chapter (e.g. "King\'s Gambit") to start organizing '
+        subtitle:
+            'Add a chapter (e.g. "King\'s Gambit") to start organizing '
             'this repertoire',
         actionLabel: 'Add Chapter',
         actionIcon: Icons.add,
@@ -161,8 +160,11 @@ class _ChapterListBodyState extends State<ChapterListBody> {
                   color: Colors.orange.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.menu_book,
-                    color: Colors.orange, size: 32),
+                child: const Icon(
+                  Icons.menu_book,
+                  color: Colors.orange,
+                  size: 32,
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -226,9 +228,11 @@ class _ChapterListBodyState extends State<ChapterListBody> {
 
   // ── Create / Rename / Delete ──────────────────────────────────────────
 
-  bool _nameTaken(String name, {String? except}) => _chapters.any((c) =>
-      c.name.toLowerCase() == name.toLowerCase() &&
-      c.name.toLowerCase() != except?.toLowerCase());
+  bool _nameTaken(String name, {String? except}) => _chapters.any(
+    (c) =>
+        c.name.toLowerCase() == name.toLowerCase() &&
+        c.name.toLowerCase() != except?.toLowerCase(),
+  );
 
   Future<void> _showCreateDialog() async {
     final controller = TextEditingController();
@@ -294,7 +298,8 @@ class _ChapterListBodyState extends State<ChapterListBody> {
         if (mounted) showAppSnackBar(context, 'That chapter already exists.');
         return;
       }
-      final header = '// $name\n'
+      final header =
+          '// $name\n'
           '// Color: $color\n'
           '// Created on ${DateTime.now().toString().split('.')[0]}\n\n';
       await storage.writeFile(path, header);
@@ -385,7 +390,8 @@ class _ChapterListBodyState extends State<ChapterListBody> {
       builder: (context) => AlertDialog(
         title: const Text('Delete Chapter'),
         content: Text(
-            'Delete chapter "${chapter.name}"? This cannot be undone.'),
+          'Delete chapter "${chapter.name}"? This cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -408,8 +414,11 @@ class _ChapterListBodyState extends State<ChapterListBody> {
     } catch (e) {
       debugPrint('Delete chapter failed: $e');
       if (mounted) {
-        showAppSnackBar(context, AppMessages.deleteRepertoireFailed,
-            isError: true);
+        showAppSnackBar(
+          context,
+          AppMessages.deleteRepertoireFailed,
+          isError: true,
+        );
       }
     }
   }

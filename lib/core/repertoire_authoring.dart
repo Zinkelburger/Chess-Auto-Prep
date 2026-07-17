@@ -18,7 +18,7 @@ class RepertoireAuthoring {
   final RepertoireService _service;
 
   RepertoireAuthoring([RepertoireService? service])
-      : _service = service ?? RepertoireService();
+    : _service = service ?? RepertoireService();
 
   /// Build a complete PGN game (headers + movetext) from [moveLines].
   /// Returns null when there are no moves.
@@ -58,10 +58,7 @@ class RepertoireAuthoring {
   }
 
   /// Index of the line whose moves exactly equal [prefix], or null.
-  int? findLineIndexForPrefix(
-    List<RepertoireLine> lines,
-    List<String> prefix,
-  ) {
+  int? findLineIndexForPrefix(List<RepertoireLine> lines, List<String> prefix) {
     for (int i = 0; i < lines.length; i++) {
       final moves = lines[i].moves;
       if (moves.length == prefix.length && _listEquals(moves, prefix)) {
@@ -86,10 +83,11 @@ class RepertoireAuthoring {
     final name = title.isNotEmpty && title != 'Repertoire Line'
         ? title
         : (moves.length >= 3
-            ? 'Line: ${moves.take(3).join(' ')}'
-            : 'Repertoire Line ${index + 1}');
-    final Position startPosition =
-        _service.extractStartPositionFromPgn(pgnContent);
+              ? 'Line: ${moves.take(3).join(' ')}'
+              : 'Repertoire Line ${index + 1}');
+    final Position startPosition = _service.extractStartPositionFromPgn(
+      pgnContent,
+    );
 
     return RepertoireLine(
       id: id,

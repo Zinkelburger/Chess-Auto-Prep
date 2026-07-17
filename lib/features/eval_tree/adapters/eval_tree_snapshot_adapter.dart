@@ -92,8 +92,10 @@ class EvalTreeSnapshotAdapter {
     if (trimmed.isEmpty) return const [];
     return trimmed
         .split(RegExp(r'\s+'))
-        .where((token) =>
-            token.isNotEmpty && !RegExp(r'^\d+\.(?:\.\.)?$').hasMatch(token))
+        .where(
+          (token) =>
+              token.isNotEmpty && !RegExp(r'^\d+\.(?:\.\.)?$').hasMatch(token),
+        )
         .toList(growable: false);
   }
 }

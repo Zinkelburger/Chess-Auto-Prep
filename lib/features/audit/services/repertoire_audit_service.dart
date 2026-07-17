@@ -6,7 +6,6 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:io' as io;
 
-import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../models/opening_tree.dart';
@@ -16,6 +15,7 @@ import '../../../services/maia_factory.dart';
 import '../../../services/opening_tree_builder.dart';
 import '../../../services/pgn_parsing_service.dart' as pgn;
 import '../../../services/probability_service.dart';
+import '../../../utils/chess_move_utils.dart' as move_utils;
 import '../../../utils/fen_utils.dart';
 import '../models/audit_finding.dart';
 import '../models/audit_result.dart';
@@ -93,7 +93,10 @@ class RepertoireAuditService {
     // Build a merged opening tree from clash PGNs (books/courses) if provided.
     OpeningTree? clashTree;
     if (config.clashPgnPaths.isNotEmpty) {
-      clashTree = await _buildClashTree(config.clashPgnPaths, isWhiteRepertoire);
+      clashTree = await _buildClashTree(
+        config.clashPgnPaths,
+        isWhiteRepertoire,
+      );
     }
 
     final startNode = _resolveStartNode(tree, startFen);
@@ -114,12 +117,14 @@ class RepertoireAuditService {
     // BFS traversal.
     final queue = Queue<_AuditQueueEntry>();
     final startPath = startNode.getMovePath();
-    queue.add(_AuditQueueEntry(
-      node: startNode,
-      movePath: startPath,
-      ply: 0,
-      cumProb: 1.0,
-    ));
+    queue.add(
+      _AuditQueueEntry(
+        node: startNode,
+        movePath: startPath,
+        ply: 0,
+        cumProb: 1.0,
+      ),
+    );
 
     int checked = 0;
 
@@ -140,17 +145,20 @@ class RepertoireAuditService {
 
       // Determine whose turn it is at this node.
       final isWhiteTurn = _isWhiteTurnAtNode(node);
-      final isOurTurn = (isWhiteRepertoire && isWhiteTurn) ||
+      final isOurTurn =
+          (isWhiteRepertoire && isWhiteTurn) ||
           (!isWhiteRepertoire && !isWhiteTurn);
 
       // Report progress periodically.
       if (checked % 5 == 0 || checked == totalNodes) {
-        onProgress?.call(AuditProgress(
-          nodesChecked: checked,
-          totalNodes: totalNodes,
-          findingsCount: findings.length,
-          currentFen: node.fen,
-        ));
+        onProgress?.call(
+          AuditProgress(
+            nodesChecked: checked,
+            totalNodes: totalNodes,
+            findingsCount: findings.length,
+            currentFen: node.fen,
+          ),
+        );
       }
 
       final isLeaf = node.children.isEmpty;
@@ -211,31 +219,37 @@ class RepertoireAuditService {
 
       // Enqueue children with updated cumulative probability.
       // Opponent moves attenuate probability; our moves don't (we always play them).
-      final parentTotal =
-          node.children.values.fold<int>(0, (sum, c) => sum + c.gamesPlayed);
+      final parentTotal = node.children.values.fold<int>(
+        0,
+        (sum, c) => sum + c.gamesPlayed,
+      );
       for (final childEntry in node.children.entries) {
         final child = childEntry.value;
         double childProb = entry.cumProb;
         if (!isOurTurn && parentTotal > 0) {
           childProb *= child.gamesPlayed / parentTotal;
         }
-        queue.add(_AuditQueueEntry(
-          node: child,
-          movePath: [...entry.movePath, childEntry.key],
-          ply: ply + 1,
-          cumProb: childProb,
-        ));
+        queue.add(
+          _AuditQueueEntry(
+            node: child,
+            movePath: [...entry.movePath, childEntry.key],
+            ply: ply + 1,
+            cumProb: childProb,
+          ),
+        );
       }
     }
 
     stopwatch.stop();
 
     // Final progress.
-    onProgress?.call(AuditProgress(
-      nodesChecked: checked,
-      totalNodes: totalNodes,
-      findingsCount: findings.length,
-    ));
+    onProgress?.call(
+      AuditProgress(
+        nodesChecked: checked,
+        totalNodes: totalNodes,
+        findingsCount: findings.length,
+      ),
+    );
 
     return AuditResult(
       findings: findings,
@@ -322,48 +336,55 @@ class RepertoireAuditService {
 
         // Compute eval loss from our perspective.
         // Positive = our move is worse than best.
-        final evalLoss =
-            isWhiteRepertoire ? (bestCp - repCp) : (repCp - bestCp);
+        final evalLoss = isWhiteRepertoire
+            ? (bestCp - repCp)
+            : (repCp - bestCp);
 
         if (evalLoss >= config.mistakeThresholdCp) {
-          findings.add(AuditFinding(
-            type: AuditFindingType.mistake,
-            severity: AuditSeverity.critical,
-            movePath: [...movePath, repMoveSan],
-            fen: node.fen,
-            ourMove: repMoveSan,
-            bestMove: bestMoveSan,
-            evalLossCp: evalLoss,
-            positionEvalCp: repCp,
-            bestMoveEvalCp: bestCp,
-            cumulativeProbability: cumulativeProbability,
-          ));
+          findings.add(
+            AuditFinding(
+              type: AuditFindingType.mistake,
+              severity: AuditSeverity.critical,
+              movePath: [...movePath, repMoveSan],
+              fen: node.fen,
+              ourMove: repMoveSan,
+              bestMove: bestMoveSan,
+              evalLossCp: evalLoss,
+              positionEvalCp: repCp,
+              bestMoveEvalCp: bestCp,
+              cumulativeProbability: cumulativeProbability,
+            ),
+          );
         } else if (evalLoss >= config.inaccuracyThresholdCp) {
-          findings.add(AuditFinding(
-            type: AuditFindingType.inaccuracy,
-            severity: AuditSeverity.warning,
-            movePath: [...movePath, repMoveSan],
-            fen: node.fen,
-            ourMove: repMoveSan,
-            bestMove: bestMoveSan,
-            evalLossCp: evalLoss,
-            positionEvalCp: repCp,
-            bestMoveEvalCp: bestCp,
-            cumulativeProbability: cumulativeProbability,
-          ));
+          findings.add(
+            AuditFinding(
+              type: AuditFindingType.inaccuracy,
+              severity: AuditSeverity.warning,
+              movePath: [...movePath, repMoveSan],
+              fen: node.fen,
+              ourMove: repMoveSan,
+              bestMove: bestMoveSan,
+              evalLossCp: evalLoss,
+              positionEvalCp: repCp,
+              bestMoveEvalCp: bestCp,
+              cumulativeProbability: cumulativeProbability,
+            ),
+          );
         }
 
         // Check for weak resulting position.
         final ourPerspectiveCp = isWhiteRepertoire ? repCp : -repCp;
         if (ourPerspectiveCp < config.weakPositionThresholdCp) {
-          findings.add(AuditFinding(
-            type: AuditFindingType.weakPosition,
-            severity: AuditSeverity.warning,
-            movePath: [...movePath, repMoveSan],
-            fen: repMoveEntry.value.fen,
-            positionEvalCp: repCp,
-            cumulativeProbability: cumulativeProbability,
-          ));
+          findings.add(
+            AuditFinding(
+              type: AuditFindingType.weakPosition,
+              severity: AuditSeverity.warning,
+              movePath: [...movePath, repMoveSan],
+              fen: repMoveEntry.value.fen,
+              positionEvalCp: repCp,
+              cumulativeProbability: cumulativeProbability,
+            ),
+          );
         }
       }
     } catch (e) {
@@ -400,21 +421,27 @@ class RepertoireAuditService {
             if (move.total < config.minGames) continue;
             if (coveredMoves.contains(move.san)) continue;
 
-            findings.add(AuditFinding(
-              type: AuditFindingType.missingResponse,
-              severity: move.total >= config.minGames * 3
-                  ? AuditSeverity.critical
-                  : AuditSeverity.warning,
-              movePath: movePath,
-              fen: node.fen,
-              missingMove: move.san,
-              gameCount: move.total,
-              probability: move.playFraction,
-              source: MissingResponseSource.lichess,
-              cumulativeProbability: cumulativeProbability * move.playFraction,
-              transposesIntoRepertoire:
-                  _doesMoveTranspose(node.fen, move.san, tree),
-            ));
+            findings.add(
+              AuditFinding(
+                type: AuditFindingType.missingResponse,
+                severity: move.total >= config.minGames * 3
+                    ? AuditSeverity.critical
+                    : AuditSeverity.warning,
+                movePath: movePath,
+                fen: node.fen,
+                missingMove: move.san,
+                gameCount: move.total,
+                probability: move.playFraction,
+                source: MissingResponseSource.lichess,
+                cumulativeProbability:
+                    cumulativeProbability * move.playFraction,
+                transposesIntoRepertoire: _doesMoveTranspose(
+                  node.fen,
+                  move.san,
+                  tree,
+                ),
+              ),
+            );
           }
         }
       } catch (e) {
@@ -437,24 +464,28 @@ class RepertoireAuditService {
           if (coveredMoves.contains(san)) continue;
 
           // Skip if already reported by Lichess.
-          final alreadyReported = findings.any((f) =>
-              f.type == AuditFindingType.missingResponse &&
-              f.missingMove == san);
+          final alreadyReported = findings.any(
+            (f) =>
+                f.type == AuditFindingType.missingResponse &&
+                f.missingMove == san,
+          );
           if (alreadyReported) continue;
 
-          findings.add(AuditFinding(
-            type: AuditFindingType.missingResponse,
-            severity: entry.value >= 0.20
-                ? AuditSeverity.critical
-                : AuditSeverity.info,
-            movePath: movePath,
-            fen: node.fen,
-            missingMove: san,
-            probability: entry.value,
-            source: MissingResponseSource.maia,
-            cumulativeProbability: cumulativeProbability * entry.value,
-            transposesIntoRepertoire: _doesMoveTranspose(node.fen, san, tree),
-          ));
+          findings.add(
+            AuditFinding(
+              type: AuditFindingType.missingResponse,
+              severity: entry.value >= 0.20
+                  ? AuditSeverity.critical
+                  : AuditSeverity.info,
+              movePath: movePath,
+              fen: node.fen,
+              missingMove: san,
+              probability: entry.value,
+              source: MissingResponseSource.maia,
+              cumulativeProbability: cumulativeProbability * entry.value,
+              transposesIntoRepertoire: _doesMoveTranspose(node.fen, san, tree),
+            ),
+          );
         }
       } catch (e) {
         if (kDebugMode) {
@@ -469,36 +500,46 @@ class RepertoireAuditService {
       final clashNodes = clashTree.fenToNodes[key];
       if (clashNodes != null) {
         for (final clashNode in clashNodes) {
-          final totalAtParent = clashNode.children.values
-              .fold<int>(0, (sum, c) => sum + c.gamesPlayed);
+          final totalAtParent = clashNode.children.values.fold<int>(
+            0,
+            (sum, c) => sum + c.gamesPlayed,
+          );
 
           for (final entry in clashNode.children.entries) {
             final san = entry.key;
             if (coveredMoves.contains(san)) continue;
 
-            final alreadyReported = findings.any((f) =>
-                f.type == AuditFindingType.missingResponse &&
-                f.missingMove == san);
+            final alreadyReported = findings.any(
+              (f) =>
+                  f.type == AuditFindingType.missingResponse &&
+                  f.missingMove == san,
+            );
             if (alreadyReported) continue;
 
             final prob = totalAtParent > 0
                 ? entry.value.gamesPlayed / totalAtParent
                 : 0.0;
 
-            findings.add(AuditFinding(
-              type: AuditFindingType.missingResponse,
-              severity:
-                  prob >= 0.20 ? AuditSeverity.critical : AuditSeverity.info,
-              movePath: movePath,
-              fen: node.fen,
-              missingMove: san,
-              gameCount: entry.value.gamesPlayed,
-              probability: prob,
-              source: MissingResponseSource.clash,
-              cumulativeProbability: cumulativeProbability * prob,
-              transposesIntoRepertoire:
-                  _doesMoveTranspose(node.fen, san, tree),
-            ));
+            findings.add(
+              AuditFinding(
+                type: AuditFindingType.missingResponse,
+                severity: prob >= 0.20
+                    ? AuditSeverity.critical
+                    : AuditSeverity.info,
+                movePath: movePath,
+                fen: node.fen,
+                missingMove: san,
+                gameCount: entry.value.gamesPlayed,
+                probability: prob,
+                source: MissingResponseSource.clash,
+                cumulativeProbability: cumulativeProbability * prob,
+                transposesIntoRepertoire: _doesMoveTranspose(
+                  node.fen,
+                  san,
+                  tree,
+                ),
+              ),
+            );
           }
         }
       }
@@ -518,7 +559,8 @@ class RepertoireAuditService {
         final content = await io.File(path).readAsString();
         allGames.addAll(pgn.splitPgnIntoGames(content));
       } catch (e) {
-        if (kDebugMode) debugPrint('[Audit] Failed to read clash PGN $path: $e');
+        if (kDebugMode)
+          debugPrint('[Audit] Failed to read clash PGN $path: $e');
       }
     }
     return OpeningTreeBuilder.buildTree(
@@ -532,21 +574,8 @@ class RepertoireAuditService {
 
   /// Check if playing [san] from [fen] transposes into a position already
   /// covered in [tree] (the FEN after the move exists as a tree node).
-  bool _doesMoveTranspose(String fen, String san, OpeningTree tree) {
-    try {
-      final pos = Chess.fromSetup(Setup.parseFen(fen));
-      final move = pos.parseSan(san);
-      if (move == null) return false;
-      final after = pos.play(move);
-      final afterPrefix = after.fen.split(' ').take(4).join(' ');
-      for (final key in tree.fenToNodes.keys) {
-        if (key.split(' ').take(4).join(' ') == afterPrefix) return true;
-      }
-    } catch (_) {
-      // Best-effort; failure here is non-fatal and intentionally ignored.
-    }
-    return false;
-  }
+  bool _doesMoveTranspose(String fen, String san, OpeningTree tree) =>
+      move_utils.doesMoveTranspose(fen, san, tree);
 
   // ── Dead-end check ───────────────────────────────────────────────────────
 
@@ -578,8 +607,10 @@ class RepertoireAuditService {
     if (moveSet.length < config.deadEndMinContinuations) {
       if (config.useMaia && MaiaFactory.isAvailable) {
         try {
-          final result =
-              await MaiaFactory.instance!.evaluate(node.fen, config.maiaElo);
+          final result = await MaiaFactory.instance!.evaluate(
+            node.fen,
+            config.maiaElo,
+          );
           for (final entry in result.policy.entries) {
             if (entry.value >= config.minMaiaProb) {
               final san = _uciToSan(node.fen, entry.key);
@@ -597,8 +628,9 @@ class RepertoireAuditService {
       return [
         AuditFinding(
           type: AuditFindingType.deadEnd,
-          severity:
-              moveSet.length >= 4 ? AuditSeverity.warning : AuditSeverity.info,
+          severity: moveSet.length >= 4
+              ? AuditSeverity.warning
+              : AuditSeverity.info,
           movePath: movePath,
           fen: node.fen,
           continuationCount: moveSet.length,
@@ -641,60 +673,16 @@ class RepertoireAuditService {
     return node.fen.contains(' w ');
   }
 
-  String? _uciToSan(String fen, String uci) {
-    try {
-      final pos = Chess.fromSetup(Setup.parseFen(fen));
-      final move = Move.parse(uci);
-      if (move == null) return null;
-      final (_, san) = pos.makeSan(move);
-      return san;
-    } catch (_) {
-      return null;
-    }
-  }
+  String? _uciToSan(String fen, String uci) => move_utils.uciToSan(fen, uci);
 
-  String? _sanToUci(String fen, String san) {
-    try {
-      final pos = Chess.fromSetup(Setup.parseFen(fen));
-      final move = pos.parseSan(san);
-      if (move == null) return null;
-      return move.uci;
-    } catch (_) {
-      return null;
-    }
-  }
+  String? _sanToUci(String fen, String san) => move_utils.sanToUci(fen, san);
 
   /// Returns (whiteCp, cacheHits, cacheMisses).
   Future<(int?, int, int)> _evalAfterMove(
     String fen,
     String moveUci,
     int depth,
-  ) async {
-    try {
-      final pos = Chess.fromSetup(Setup.parseFen(fen));
-      final move = Move.parse(moveUci);
-      if (move == null) return (null, 0, 0);
-      final newPos = pos.play(move);
-      final newFen = newPos.fen;
-
-      // Check EvalCache first — shared with generation pipeline.
-      final cached = await _evalCache.getEvalCpWhite(newFen, minDepth: depth);
-      if (cached != null) return (cached, 1, 0);
-
-      final result = await _pool.evaluateFen(newFen, depth);
-      final isWhiteAfter = newPos.turn == Side.white;
-      final whiteCp =
-          isWhiteAfter ? (result.scoreCp ?? 0) : -(result.scoreCp ?? 0);
-
-      // Write back so generation (and future audits) can reuse.
-      _evalCache.putEvalCpWhite(newFen, whiteCp, depth);
-
-      return (whiteCp, 0, 1);
-    } catch (e) {
-      if (kDebugMode) debugPrint('[Audit] Eval after move failed: $e');
-      return (null, 0, 0);
-    }
-  }
+  ) => move_utils.evalAfterMoveCached(_pool, _evalCache, fen, moveUci, depth);
 }
 
 class _AuditQueueEntry {

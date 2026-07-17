@@ -3,7 +3,8 @@ library;
 
 ///
 /// Pushed as a full-screen route from [AnalysisScreen]. Lists every cached
-/// player game-set and lets the user select one, re-download, or delete.
+/// player game-set — downloaded by username or imported from PGN files —
+/// and lets the user select one, re-download, or delete.
 /// Pops with the chosen [AnalysisPlayerInfo].
 
 import 'package:flutter/material.dart';
@@ -12,8 +13,11 @@ import 'package:provider/provider.dart';
 import '../core/app_state.dart';
 import '../models/analysis_player_info.dart';
 import '../services/analysis_games_service.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 import '../widgets/analysis_download_dialog.dart';
+import '../widgets/analysis_import_dialog.dart';
 
 class PlayerSelectionScreen extends StatefulWidget {
   const PlayerSelectionScreen({super.key});
@@ -79,10 +83,24 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _buildBody(),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showDownloadDialog,
-        icon: const Icon(Icons.add),
-        label: const Text('Download New'),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton.extended(
+            heroTag: 'import_pgn',
+            onPressed: _showImportDialog,
+            icon: const Icon(Icons.file_open),
+            label: const Text('Import PGN Files'),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton.extended(
+            heroTag: 'download_new',
+            onPressed: _showDownloadDialog,
+            icon: const Icon(Icons.add),
+            label: const Text('Download New'),
+          ),
+        ],
       ),
     );
   }
@@ -95,12 +113,13 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, size: 64, color: Colors.red),
-              const SizedBox(height: 16),
-              Text(
-                _loadError!,
-                textAlign: TextAlign.center,
+              const Icon(
+                Icons.error_outline,
+                size: 64,
+                color: AppColors.danger,
               ),
+              const SizedBox(height: 16),
+              Text(_loadError!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
               FilledButton.icon(
                 onPressed: _loadCachedPlayers,
@@ -118,7 +137,11 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.person_search, size: 64, color: Colors.grey[400]),
+            const Icon(
+              Icons.person_search,
+              size: 64,
+              color: AppColors.onSurfaceDim,
+            ),
             const SizedBox(height: 24),
             Text(
               'No Players Downloaded',
@@ -126,17 +149,28 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Download games for a player to get started',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
-                  ?.copyWith(color: Colors.grey[600]),
+              'Download games for a player, or import PGN files,'
+              ' to get started',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: AppColors.onSurfaceMuted),
             ),
             const SizedBox(height: 32),
-            FilledButton.icon(
-              onPressed: _showDownloadDialog,
-              icon: const Icon(Icons.download),
-              label: const Text('Download Games'),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FilledButton.icon(
+                  onPressed: _showDownloadDialog,
+                  icon: const Icon(Icons.download),
+                  label: const Text('Download Games'),
+                ),
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: _showImportDialog,
+                  icon: const Icon(Icons.file_open),
+                  label: const Text('Import PGN Files'),
+                ),
+              ],
             ),
           ],
         ),
@@ -153,10 +187,16 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
   // ── Player card ──────────────────────────────────────────────────
 
   Widget _buildPlayerCard(AnalysisPlayerInfo player) {
-    final platformIcon =
-        player.platform == 'chesscom' ? Icons.language : Icons.bolt;
-    final platformColor =
-        player.platform == 'chesscom' ? Colors.green : Colors.blue;
+    final platformIcon = player.isImported
+        ? Icons.file_open
+        : player.platform == 'chesscom'
+        ? Icons.language
+        : Icons.bolt;
+    final platformColor = player.isImported
+        ? AppColors.platformImported
+        : player.platform == 'chesscom'
+        ? AppColors.platformChessCom
+        : AppColors.platformLichess;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -185,7 +225,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
                   children: [
                     Text(
                       player.username,
-                      style: const TextStyle(
+                      style: AppTextStyles.body.copyWith(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
@@ -194,12 +234,15 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
                     Text(
                       '${player.gameCount} games · ${player.platformDisplayName}'
                       ' · ${player.rangeDescription}',
-                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.onSurfaceMuted,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Downloaded ${player.downloadTimeAgo}',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      '${player.isImported ? 'Imported' : 'Downloaded'} '
+                      '${player.downloadTimeAgo}',
+                      style: AppTextStyles.caption,
                     ),
                   ],
                 ),
@@ -218,34 +261,40 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
                       _redownloadPlayerCustom(player);
                   }
                 },
-                itemBuilder: (_) => const [
-                  PopupMenuItem(
-                    value: 'redownload',
-                    child: Row(
-                      children: [
-                        Icon(Icons.refresh, size: 20),
-                        SizedBox(width: 12),
-                        Text('Re-download (last 6 months)'),
-                      ],
+                itemBuilder: (_) => [
+                  // Imported game-sets have no source to re-download from.
+                  if (!player.isImported) ...const [
+                    PopupMenuItem(
+                      value: 'redownload',
+                      child: Row(
+                        children: [
+                          Icon(Icons.refresh, size: 20),
+                          SizedBox(width: 12),
+                          Text('Re-download (last 6 months)'),
+                        ],
+                      ),
                     ),
-                  ),
-                  PopupMenuItem(
-                    value: 'redownload_custom',
-                    child: Row(
-                      children: [
-                        Icon(Icons.settings, size: 20),
-                        SizedBox(width: 12),
-                        Text('Re-download (custom)'),
-                      ],
+                    PopupMenuItem(
+                      value: 'redownload_custom',
+                      child: Row(
+                        children: [
+                          Icon(Icons.settings, size: 20),
+                          SizedBox(width: 12),
+                          Text('Re-download (custom)'),
+                        ],
+                      ),
                     ),
-                  ),
-                  PopupMenuItem(
+                  ],
+                  const PopupMenuItem(
                     value: 'delete',
                     child: Row(
                       children: [
-                        Icon(Icons.delete, size: 20, color: Colors.red),
+                        Icon(Icons.delete, size: 20, color: AppColors.danger),
                         SizedBox(width: 12),
-                        Text('Delete', style: TextStyle(color: Colors.red)),
+                        Text(
+                          'Delete',
+                          style: TextStyle(color: AppColors.danger),
+                        ),
                       ],
                     ),
                   ),
@@ -277,7 +326,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
             child: const Text('Delete'),
           ),
         ],
@@ -285,10 +334,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     );
 
     if (confirmed == true) {
-      await _gamesService.deletePlayerData(
-        player.platform,
-        player.username,
-      );
+      await _gamesService.deletePlayerData(player.platform, player.username);
       await _loadCachedPlayers();
     }
   }
@@ -313,11 +359,67 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
         lichessUsername: player.platform == 'lichess'
             ? player.username
             : appState.lichessUsername,
+        initialPlatform: player.platform,
       ),
     );
 
     if (result != null && mounted) {
       await _downloadGames(result);
+    }
+  }
+
+  Future<void> _showImportDialog() async {
+    final result = await showDialog<AnalysisImportResult>(
+      context: context,
+      builder: (_) => const AnalysisImportDialog(),
+    );
+    if (result == null || !mounted) return;
+
+    // Names that sanitize to the same storage key (e.g. "AC/DC" vs "AC DC")
+    // land in the same files, so check the disk rather than the raw name.
+    final existing = await _gamesService.findExistingPlayer(
+      'import',
+      result.playerName,
+    );
+    if (!mounted) return;
+    if (existing != null) {
+      final replace = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Replace Imported Games?'),
+          content: Text(
+            '"${existing.username}" already has ${existing.gameCount} '
+            'imported game${existing.gameCount == 1 ? '' : 's'}. Importing '
+            'will replace them and clear their cached analysis.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Replace'),
+            ),
+          ],
+        ),
+      );
+      if (replace != true || !mounted) return;
+    }
+
+    try {
+      await _gamesService.saveAnalysisGames(
+        result.pgns,
+        platform: 'import',
+        username: result.playerName,
+        maxGames: result.gameCount,
+      );
+      await _loadCachedPlayers();
+    } catch (e) {
+      debugPrint('Import failed: $e');
+      if (mounted) {
+        showAppSnackBar(context, AppMessages.genericError, isError: true);
+      }
     }
   }
 

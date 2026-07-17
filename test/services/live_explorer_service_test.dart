@@ -12,8 +12,8 @@ class _FakeClient extends LichessApiClient {
   _FakeClient() : super.fresh();
 
   final List<String> requested = [];
-  ExplorerResponse? Function(String fen) responder =
-      (fen) => ExplorerResponse(fen: fen, moves: const [], totalGames: 1);
+  ExplorerResponse? Function(String fen) responder = (fen) =>
+      ExplorerResponse(fen: fen, moves: const [], totalGames: 1);
   bool backingOff = false;
 
   @override

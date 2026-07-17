@@ -139,8 +139,10 @@ void main() {
           '[Event "G1"]\n1. e4 *\n\n[Event "G2"]\n1. d4 *\n\n[Event "G3"]\n1. c4 *\n',
       'back-to-back':
           '[Event "L1"]\n1. e4 *\n[Event "L2"]\n1. d4 *\n[Event "L3"]\n1. c4 *\n',
-      'brace-preamble': '{Build stats}\n[Event "L1"]\n1. e4 *\n[Event "L2"]\n1. d4 *\n',
-      'comment-preamble': '// My Repertoire\n// Color: White\n\n[Event "L1"]\n1. e4 *\n',
+      'brace-preamble':
+          '{Build stats}\n[Event "L1"]\n1. e4 *\n[Event "L2"]\n1. d4 *\n',
+      'comment-preamble':
+          '// My Repertoire\n// Color: White\n\n[Event "L1"]\n1. e4 *\n',
       'header-less': '1. e4 e5 2. Nf3 *\n',
       'empty': '',
       'blank-only': '\n\n  \n',
@@ -175,6 +177,134 @@ void main() {
     test('stops before first Event header', () {
       const content = '[Event "Test"]\n// Color: White\n1. e4 *';
       expect(extractRepertoireColor(content), isNull);
+    });
+  });
+
+  group('splitPlayerNames', () {
+    test('single name passes through trimmed', () {
+      expect(splitPlayerNames('  Carlsen '), ['Carlsen']);
+    });
+
+    test('splits on ; and drops empties', () {
+      expect(splitPlayerNames('Carlsen; DrNykterstein; ;'), [
+        'Carlsen',
+        'DrNykterstein',
+      ]);
+    });
+
+    test('commas stay inside a single name', () {
+      expect(splitPlayerNames('Carlsen, Magnus'), ['Carlsen, Magnus']);
+    });
+
+    test('empty input yields no names', () {
+      expect(splitPlayerNames(''), isEmpty);
+      expect(splitPlayerNames(' ; '), isEmpty);
+    });
+  });
+
+  group('playerFieldMatches', () {
+    test('contains matches either colour, any alias', () {
+      expect(
+        playerFieldMatches(
+          'Carlsen, Magnus',
+          'Nakamura, Hikaru',
+          'carlsen',
+          MatchMode.contains,
+        ),
+        isTrue,
+      );
+      expect(
+        playerFieldMatches(
+          'Nakamura, Hikaru',
+          'Carlsen,M',
+          'carlsen; ding',
+          MatchMode.contains,
+        ),
+        isTrue,
+      );
+      expect(
+        playerFieldMatches(
+          'Nakamura, Hikaru',
+          'So, Wesley',
+          'carlsen',
+          MatchMode.contains,
+        ),
+        isFalse,
+      );
+    });
+
+    test('notContains requires every alias absent from both sides', () {
+      expect(
+        playerFieldMatches(
+          'Nakamura, Hikaru',
+          'So, Wesley',
+          'carlsen',
+          MatchMode.notContains,
+        ),
+        isTrue,
+      );
+      expect(
+        playerFieldMatches(
+          'Carlsen, Magnus',
+          'So, Wesley',
+          'carlsen; nakamura',
+          MatchMode.notContains,
+        ),
+        isFalse,
+      );
+    });
+
+    test('empty query matches everything', () {
+      expect(playerFieldMatches('A', 'B', '', MatchMode.contains), isTrue);
+    });
+  });
+
+  group('computeSliceMatches - Player field', () {
+    List<GameRecord> games() => [
+      (
+        headers: {'White': 'Carlsen, Magnus', 'Black': 'Nakamura, Hikaru'},
+        pgnText: '1. e4 e5 *',
+      ),
+      (
+        headers: {'White': 'Caruana, Fabiano', 'Black': 'Carlsen,M'},
+        pgnText: '1. d4 d5 *',
+      ),
+      (
+        headers: {'White': 'Ding, Liren', 'Black': 'So, Wesley'},
+        pgnText: '1. c4 e5 *',
+      ),
+    ];
+
+    test('matches either colour with aliases', () async {
+      final indices = await computeSliceMatches(
+        games: games(),
+        filters: [
+          (
+            field: kPlayerHeaderField,
+            mode: MatchMode.contains,
+            value: 'carlsen; ding',
+          ),
+        ],
+        seqGroups: const [],
+        seqGap: 4,
+      );
+      expect(indices, [0, 1, 2]);
+    });
+
+    test('excludes games matching no alias', () async {
+      final indices = await computeSliceMatches(
+        games: games(),
+        filters: [
+          (
+            field: kPlayerHeaderField,
+            mode: MatchMode.contains,
+            value: 'carlsen',
+          ),
+        ],
+        seqGroups: const [],
+        seqGap: 4,
+      );
+      expect(indices, [0, 1]);
     });
   });
 

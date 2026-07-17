@@ -51,6 +51,7 @@ Consolidated list of planned or incomplete capabilities (from `tree_builder/TODO
 | **Accounts** section (Lichess OAuth UI, disconnect, Chess.com username) | **Not started** | `LichessAuthService` exists; settings screen has no account panel (login via `LichessDbInfoIcon` elsewhere) |
 | **Training** settings in global settings | **Not started** | Training settings only in trainer UI |
 | **Display** settings (board theme, piece set, coordinates, default Edit/Analyze mode) | **Not started** | |
+| Shared `AppTextStyles` + gradual UI token migration | **Partial** | `AppTextStyles` / `PgnTextStyles` + `ThemeData.textTheme` landed; many legacy `Colors.grey` / hard-coded `fontSize` call sites remain |
 | Stockfish binary path picker + validation | **Not started** | Auto-detect only |
 | ChessDB.cn API quota display / toggle | **Not started** | |
 | Queue engine setting changes during generation + toast | **Not started** | |

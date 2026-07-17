@@ -97,7 +97,8 @@ class _DraftTreeViewState extends State<DraftTreeView> {
   /// children, so deep lines are folded away on first paint.
   void _seedCollapsed(OpeningTreeNode node, int depth) {
     for (final child in node.sortedChildren) {
-      if (depth >= widget.autoCollapseDepth && child.sortedChildren.isNotEmpty) {
+      if (depth >= widget.autoCollapseDepth &&
+          child.sortedChildren.isNotEmpty) {
         _collapsed.add(child);
       }
       _seedCollapsed(child, depth + 1);
@@ -137,24 +138,27 @@ class _DraftTreeViewState extends State<DraftTreeView> {
       final sans = [...pathSans, child.move];
       final info = widget.draft.diff[child];
       final collapsed = _collapsed.contains(child);
-      final hasKids = child.sortedChildren
-          .any((c) => c.gamesPlayed >= widget.minGames);
+      final hasKids = child.sortedChildren.any(
+        (c) => c.gamesPlayed >= widget.minGames,
+      );
 
-      out.add(_DraftRow(
-        node: child,
-        sans: sans,
-        depth: depth,
-        info: info,
-        hasChildren: hasKids,
-        collapsed: collapsed,
-        onToggle: hasKids
-            ? () => setState(() {
+      out.add(
+        _DraftRow(
+          node: child,
+          sans: sans,
+          depth: depth,
+          info: info,
+          hasChildren: hasKids,
+          collapsed: collapsed,
+          onToggle: hasKids
+              ? () => setState(() {
                   if (!_collapsed.remove(child)) _collapsed.add(child);
                 })
-            : null,
-        onSelect: () => widget.onSelectLine?.call(sans),
-        onPrune: () => _prune(child),
-      ));
+              : null,
+          onSelect: () => widget.onSelectLine?.call(sans),
+          onPrune: () => _prune(child),
+        ),
+      );
 
       if (!collapsed) _build(child, sans, depth + 1, out);
     }
@@ -191,8 +195,9 @@ class _DraftRow extends StatelessWidget {
     final ply = sans.length;
     final moveNumber = (ply + 1) ~/ 2;
     final isWhiteMove = ply.isOdd;
-    final label =
-        isWhiteMove ? '$moveNumber. ${node.move}' : '$moveNumber… ${node.move}';
+    final label = isWhiteMove
+        ? '$moveNumber. ${node.move}'
+        : '$moveNumber… ${node.move}';
     final winPct = (node.winRate * 100).round();
 
     // Tapping the row drills in (expand/collapse) when there are children;
@@ -245,7 +250,9 @@ class _DraftRow extends StatelessWidget {
                 '${node.gamesPlayed}',
                 textAlign: TextAlign.right,
                 style: const TextStyle(
-                    fontSize: 11, color: AppColors.onSurfaceDim),
+                  fontSize: 11,
+                  color: AppColors.onSurfaceDim,
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -267,7 +274,9 @@ class _DraftRow extends StatelessWidget {
                 '$winPct%',
                 textAlign: TextAlign.right,
                 style: const TextStyle(
-                    fontSize: 11, color: AppColors.onSurfaceMuted),
+                  fontSize: 11,
+                  color: AppColors.onSurfaceMuted,
+                ),
               ),
             ),
             // Discard subtree.
@@ -294,20 +303,29 @@ class DraftLegend extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget chip(DraftMoveStatus s) => Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Container(width: 10, height: 10, color: statusColor(s)),
-            const SizedBox(width: 4),
-            Text(statusLabel(s),
-                style: const TextStyle(
-                    fontSize: 11, color: AppColors.onSurfaceMuted)),
-          ]),
-        );
-    return Wrap(children: [
-      chip(DraftMoveStatus.inRepertoire),
-      chip(DraftMoveStatus.myDeviation),
-      chip(DraftMoveStatus.opponentDeviation),
-      chip(DraftMoveStatus.beyondBook),
-    ]);
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(width: 10, height: 10, color: statusColor(s)),
+          const SizedBox(width: 4),
+          Text(
+            statusLabel(s),
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.onSurfaceMuted,
+            ),
+          ),
+        ],
+      ),
+    );
+    return Wrap(
+      children: [
+        chip(DraftMoveStatus.inRepertoire),
+        chip(DraftMoveStatus.myDeviation),
+        chip(DraftMoveStatus.opponentDeviation),
+        chip(DraftMoveStatus.beyondBook),
+      ],
+    );
   }
 }

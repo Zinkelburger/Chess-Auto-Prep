@@ -108,13 +108,14 @@ class _ExplorerMoveRowState extends State<ExplorerMoveRow> {
                         ),
                         padding: EdgeInsets.zero,
                         visualDensity: VisualDensity.compact,
-                        constraints:
-                            const BoxConstraints(minWidth: 28, minHeight: 28),
+                        constraints: const BoxConstraints(
+                          minWidth: 28,
+                          minHeight: 28,
+                        ),
                         tooltip: widget.inRepertoire
                             ? 'Already in repertoire'
                             : 'Add ${move.san} to repertoire',
-                        onPressed:
-                            widget.inRepertoire ? null : widget.onAdd,
+                        onPressed: widget.inRepertoire ? null : widget.onAdd,
                       )
                     : Text(
                         move.formattedPlayRate,

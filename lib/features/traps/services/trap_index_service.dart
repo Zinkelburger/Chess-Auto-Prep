@@ -30,9 +30,11 @@ class TrapIndexService {
 
   List<TrapLineInfo> trapsInLine(List<String> lineMoves) {
     return _traps
-        .where((t) =>
-            t.movesSan.length <= lineMoves.length &&
-            _isPrefix(t.movesSan, lineMoves))
+        .where(
+          (t) =>
+              t.movesSan.length <= lineMoves.length &&
+              _isPrefix(t.movesSan, lineMoves),
+        )
         .toList()
       ..sort((a, b) => a.movesSan.length.compareTo(b.movesSan.length));
   }
@@ -67,11 +69,12 @@ class TrapIndexService {
     metrics = TrapRepertoireMetrics(
       totalTraps: _traps.length,
       highQualityCount: _traps.where((t) => t.trickSurplus > 0.10).length,
-      avgReach: _traps.map((t) => t.cumulativeProb).reduce((a, b) => a + b) /
+      avgReach:
+          _traps.map((t) => t.cumulativeProb).reduce((a, b) => a + b) /
           _traps.length,
       avgEvalGain:
           _traps.map((t) => t.evalDiffCp.toDouble()).reduce((a, b) => a + b) /
-              _traps.length,
+          _traps.length,
       expectedTrapValue: _traps
           .map((t) => t.cumulativeProb * t.popularProb * t.evalDiffCp)
           .reduce((a, b) => a + b),

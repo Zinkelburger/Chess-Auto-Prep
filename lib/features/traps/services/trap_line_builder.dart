@@ -29,7 +29,8 @@ class TrapLineBuilder {
   /// `null` when a SAN fails to parse or the replay lands on a position other
   /// than the recorded trap FEN (moves are relative to a different root).
   static ({MoveTree tree, TreePath cursor})? _buildFromMoves(
-      TrapLineInfo trap) {
+    TrapLineInfo trap,
+  ) {
     final tree = MoveTree();
     var cursor = TreePath.empty;
     for (final san in trap.movesSan) {
@@ -70,7 +71,11 @@ class TrapLineBuilder {
   /// Append the opponent's replies (blunder first, punished + annotated) as
   /// continuations of the node at [cursor], then promote the blunder so
   /// stepping forward from the trap position walks into it.
-  static void _attachReplies(MoveTree tree, TreePath cursor, TrapLineInfo trap) {
+  static void _attachReplies(
+    MoveTree tree,
+    TreePath cursor,
+    TrapLineInfo trap,
+  ) {
     for (final reply in trap.allReplies ?? _syntheticReplies(trap)) {
       final replyPath = tree.addMove(cursor, reply.san);
       if (replyPath == null) continue;
@@ -91,10 +96,12 @@ class TrapLineBuilder {
     }
 
     // Stepping forward from the trap position should walk into the blunder.
-    final trapChildren =
-        cursor.isEmpty ? tree.roots : tree.nodeAt(cursor)?.children ?? const [];
-    final popularIdx =
-        trapChildren.indexWhere((c) => c.san == trap.popularMove);
+    final trapChildren = cursor.isEmpty
+        ? tree.roots
+        : tree.nodeAt(cursor)?.children ?? const [];
+    final popularIdx = trapChildren.indexWhere(
+      (c) => c.san == trap.popularMove,
+    );
     if (popularIdx > 0) {
       tree.promoteVariation(cursor.child(popularIdx));
     }
@@ -105,7 +112,8 @@ class TrapLineBuilder {
   /// trailing fields differently from dartchess, and a formatting-only mismatch
   /// must not downgrade an otherwise-correct full replay to a rooted line.
   static bool _samePosition(String a, String b) {
-    List<String> key(String fen) => fen.trim().split(RegExp(r'\s+')).take(2).toList();
+    List<String> key(String fen) =>
+        fen.trim().split(RegExp(r'\s+')).take(2).toList();
     final ka = key(a);
     final kb = key(b);
     return ka.length >= 2 && kb.length >= 2 && ka[0] == kb[0] && ka[1] == kb[1];
@@ -113,19 +121,19 @@ class TrapLineBuilder {
 
   /// Fallback replies for legacy trap files without `all_replies`.
   static List<TrapReply> _syntheticReplies(TrapLineInfo trap) => [
-        TrapReply(
-          san: trap.popularMove,
-          probability: trap.popularProb,
-          evalAfterCp: trap.popularEvalCp,
-          classification: TrapReplyClass.blunder,
-        ),
-        TrapReply(
-          san: trap.bestMove,
-          probability: 0,
-          evalAfterCp: trap.bestEvalCp,
-          classification: TrapReplyClass.good,
-        ),
-      ];
+    TrapReply(
+      san: trap.popularMove,
+      probability: trap.popularProb,
+      evalAfterCp: trap.popularEvalCp,
+      classification: TrapReplyClass.blunder,
+    ),
+    TrapReply(
+      san: trap.bestMove,
+      probability: 0,
+      evalAfterCp: trap.bestEvalCp,
+      classification: TrapReplyClass.good,
+    ),
+  ];
 
   static String _trapComment(TrapLineInfo trap) {
     final prob = (trap.popularProb * 100).toStringAsFixed(0);
@@ -154,10 +162,10 @@ class TrapLineBuilder {
 
   /// Standard NAG codes: $4 = ??, $2 = ?, $6 = ?!, $1 = !.
   static List<int>? _nagsFor(TrapReplyClass cls) => switch (cls) {
-        TrapReplyClass.blunder => [4],
-        TrapReplyClass.mistake => [2],
-        TrapReplyClass.inaccuracy => [6],
-        TrapReplyClass.acceptable => null,
-        TrapReplyClass.good => [1],
-      };
+    TrapReplyClass.blunder => [4],
+    TrapReplyClass.mistake => [2],
+    TrapReplyClass.inaccuracy => [6],
+    TrapReplyClass.acceptable => null,
+    TrapReplyClass.good => [1],
+  };
 }

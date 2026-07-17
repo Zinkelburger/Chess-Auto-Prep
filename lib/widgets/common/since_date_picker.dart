@@ -4,6 +4,8 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../theme/app_colors.dart';
+
 /// A tappable field that opens a date picker for a "since this date" filter.
 ///
 /// [date] is the current value (null = nothing chosen yet). [onChanged] fires
@@ -24,7 +26,8 @@ class SinceDatePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final displayDate = date ?? DateTime.now().subtract(const Duration(days: 7));
+    final displayDate =
+        date ?? DateTime.now().subtract(const Duration(days: 7));
     return Row(
       children: [
         Expanded(
@@ -43,7 +46,7 @@ class SinceDatePicker extends StatelessWidget {
                 date != null ? formatDate(date!) : 'Tap to select date',
                 style: TextStyle(
                   fontSize: 14,
-                  color: date != null ? null : Colors.grey[500],
+                  color: date != null ? null : AppColors.onSurfaceMuted,
                 ),
               ),
             ),
@@ -74,8 +77,18 @@ class SinceDatePicker extends StatelessWidget {
 
   static String formatDate(DateTime d) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${months[d.month - 1]} ${d.day}, ${d.year}';
   }

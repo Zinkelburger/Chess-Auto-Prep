@@ -19,6 +19,10 @@ class OpeningTreeWidget extends StatefulWidget {
   final OpeningTree tree;
   final Function(String fen)? onPositionSelected;
   final Function(String move)? onMoveSelected;
+
+  /// When set, the move-path header becomes clickable: tapping a move jumps
+  /// to that ply (0 = starting position). When null the path is plain text.
+  final Function(int ply)? onPathPlySelected;
   final Function(String searchTerm)? onSearchChanged;
   final Function(RepertoireLine line)? onLineSelected;
   final VoidCallback? onGoBack;
@@ -42,6 +46,7 @@ class OpeningTreeWidget extends StatefulWidget {
     required this.tree,
     this.onPositionSelected,
     this.onMoveSelected,
+    this.onPathPlySelected,
     this.onSearchChanged,
     this.onLineSelected,
     this.onGoBack,
@@ -150,10 +155,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
             border: Border(
-              bottom: BorderSide(
-                color: Colors.grey[700]!,
-                width: 1,
-              ),
+              bottom: BorderSide(color: AppColors.outline, width: 1),
             ),
           ),
           child: Column(
@@ -162,24 +164,29 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
               Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      movePath,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[300],
-                        fontWeight: FontWeight.w500,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    child: widget.onPathPlySelected != null
+                        ? _buildClickablePath(currentNode)
+                        : Text(
+                            movePath,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.inkSoft,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                   ),
                   const SizedBox(width: 8),
                   SizedBox(
                     width: 32,
                     height: 32,
                     child: IconButton(
-                      icon: Icon(Icons.arrow_back,
-                          size: 18, color: Colors.grey[400]),
+                      icon: Icon(
+                        Icons.arrow_back,
+                        size: 18,
+                        color: AppColors.onSurfaceSoft,
+                      ),
                       padding: EdgeInsets.zero,
                       tooltip: 'Back',
                       onPressed: currentNode.parent != null
@@ -191,8 +198,11 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                     width: 32,
                     height: 32,
                     child: IconButton(
-                      icon: Icon(Icons.arrow_forward,
-                          size: 18, color: Colors.grey[400]),
+                      icon: Icon(
+                        Icons.arrow_forward,
+                        size: 18,
+                        color: AppColors.onSurfaceSoft,
+                      ),
                       padding: EdgeInsets.zero,
                       tooltip: 'Forward',
                       onPressed: sortedChildren.isNotEmpty
@@ -205,7 +215,11 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                     width: 32,
                     height: 32,
                     child: IconButton(
-                      icon: Icon(Icons.copy, size: 16, color: Colors.grey[400]),
+                      icon: Icon(
+                        Icons.copy,
+                        size: 16,
+                        color: AppColors.onSurfaceSoft,
+                      ),
                       padding: EdgeInsets.zero,
                       tooltip: 'Copy FEN',
                       onPressed: () {
@@ -222,10 +236,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                 '${currentNode.gamesPlayed} games • '
                 '${currentNode.winRatePercent.toStringAsFixed(1)}% '
                 '(${currentNode.wins}-${currentNode.losses}-${currentNode.draws})',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.grey[300],
-                ),
+                style: TextStyle(fontSize: 11, color: AppColors.inkSoft),
               ),
             ],
           ),
@@ -239,7 +250,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
             color: AppColors.warningSurface,
             child: const Text(
               'Current position is out of book',
-              style: TextStyle(fontSize: 11, color: Colors.white),
+              style: TextStyle(fontSize: 11, color: AppColors.onWarning),
             ),
           ),
 
@@ -253,7 +264,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                         ? const Text(
                             'No games found.\nAnalyze a player to build the tree.',
                             textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey),
+                            style: TextStyle(color: AppColors.onSurfaceMuted),
                           )
                         : _buildLeafState(),
                   ),
@@ -287,10 +298,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
               border: Border(
-                top: BorderSide(
-                  color: Colors.grey[700]!,
-                  width: 1,
-                ),
+                top: BorderSide(color: AppColors.outline, width: 1),
               ),
             ),
             child: Column(
@@ -298,15 +306,22 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.library_books,
-                        size: 14, color: Colors.grey[400]),
+                    Icon(
+                      Icons.library_books,
+                      size: 14,
+                      color: AppColors.onSurfaceSoft,
+                    ),
                     const SizedBox(width: 6),
-                    Text(
-                      'Search Repertoire Lines',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey[300],
+                    Flexible(
+                      child: Text(
+                        'Search Repertoire Lines',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.inkSoft,
+                        ),
                       ),
                     ),
                   ],
@@ -316,33 +331,44 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                   controller: _searchController,
                   decoration: InputDecoration(
                     hintText: 'Type to filter lines...',
-                    hintStyle: TextStyle(color: Colors.grey[500], fontSize: 11),
-                    prefixIcon:
-                        Icon(Icons.search, size: 16, color: Colors.grey[500]),
+                    hintStyle: TextStyle(
+                      color: AppColors.onSurfaceMuted,
+                      fontSize: 11,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.search,
+                      size: 16,
+                      color: AppColors.onSurfaceMuted,
+                    ),
                     suffixIcon: _searchController.text.isNotEmpty
                         ? IconButton(
-                            icon: Icon(Icons.clear,
-                                size: 16, color: Colors.grey[500]),
+                            icon: Icon(
+                              Icons.clear,
+                              size: 16,
+                              color: AppColors.onSurfaceMuted,
+                            ),
                             onPressed: () => _searchController.clear(),
                             padding: const EdgeInsets.all(4),
                             constraints: const BoxConstraints(
-                                minWidth: 24, minHeight: 24),
+                              minWidth: 24,
+                              minHeight: 24,
+                            ),
                           )
                         : null,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(6),
-                      borderSide: BorderSide(color: Colors.grey[700]!),
+                      borderSide: const BorderSide(color: AppColors.outline),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(6),
-                      borderSide: BorderSide(color: Colors.grey[700]!),
+                      borderSide: const BorderSide(color: AppColors.outline),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(6),
-                      borderSide: BorderSide(color: Colors.blue[400]!),
+                      borderSide: const BorderSide(color: AppColors.info),
                     ),
                     filled: true,
-                    fillColor: Colors.grey[850],
+                    fillColor: AppColors.surfaceInset,
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -359,7 +385,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                     '${_filteredLines.length} matching line${_filteredLines.length == 1 ? '' : 's'}',
                     style: TextStyle(
                       fontSize: 10,
-                      color: Colors.grey[500],
+                      color: AppColors.onSurfaceMuted,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -383,13 +409,75 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
     );
   }
 
+  /// Move path rendered as tappable tokens: tap a move to jump to that ply,
+  /// tap the leading restart icon to return to the starting position.
+  Widget _buildClickablePath(OpeningTreeNode currentNode) {
+    final moves = currentNode.getMovePath();
+    if (moves.isEmpty) {
+      return Text(
+        'Starting position',
+        style: TextStyle(
+          fontSize: 12,
+          color: AppColors.inkSoft,
+          fontWeight: FontWeight.w500,
+        ),
+      );
+    }
+
+    final tokens = <Widget>[
+      InkWell(
+        onTap: () => widget.onPathPlySelected!(0),
+        borderRadius: BorderRadius.circular(3),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+          child: Icon(
+            Icons.restart_alt,
+            size: 14,
+            color: AppColors.onSurfaceSoft,
+          ),
+        ),
+      ),
+    ];
+
+    for (int i = 0; i < moves.length; i++) {
+      final label = i % 2 == 0 ? '${i ~/ 2 + 1}.${moves[i]}' : moves[i];
+      final isCurrent = i == moves.length - 1;
+      tokens.add(
+        InkWell(
+          onTap: () => widget.onPathPlySelected!(i + 1),
+          borderRadius: BorderRadius.circular(3),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: isCurrent ? AppColors.pgnMove : AppColors.inkSoft,
+                fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Long lines wrap; cap the height and keep the latest moves in view.
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 56),
+      child: SingleChildScrollView(
+        reverse: true,
+        child: Wrap(spacing: 2, runSpacing: 2, children: tokens),
+      ),
+    );
+  }
+
   Widget _buildLeafState() {
     final games = widget.gamesAtPosition;
     if (games.isEmpty || widget.onViewGamePgn == null) {
       return const Text(
         'No more moves in the tree.',
         textAlign: TextAlign.center,
-        style: TextStyle(color: Colors.grey),
+        style: TextStyle(color: AppColors.onSurfaceMuted),
       );
     }
 
@@ -399,7 +487,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
         Text(
           'End of opening tree',
           textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.grey[400]),
+          style: TextStyle(color: AppColors.onSurfaceSoft),
         ),
         const SizedBox(height: 12),
         if (games.length == 1) ...[
@@ -412,42 +500,55 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
           Text(
             games.first.title,
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+            style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
           ),
         ] else ...[
           Text(
             '${games.length} games reach this position',
-            style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
           ),
           const SizedBox(height: 8),
-          ...games.take(5).map((game) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: () => widget.onViewGamePgn!(game),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      alignment: Alignment.centerLeft,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(game.title, style: const TextStyle(fontSize: 12)),
-                        if (game.date.isNotEmpty || game.eloDisplay.isNotEmpty)
+          ...games
+              .take(5)
+              .map(
+                (game) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () => widget.onViewGamePgn!(game),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        alignment: Alignment.centerLeft,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Text(
-                            [game.date, game.eloDisplay]
-                                .where((s) => s.isNotEmpty)
-                                .join(' · '),
-                            style: TextStyle(
-                                fontSize: 10, color: Colors.grey[500]),
+                            game.title,
+                            style: const TextStyle(fontSize: 12),
                           ),
-                      ],
+                          if (game.date.isNotEmpty ||
+                              game.eloDisplay.isNotEmpty)
+                            Text(
+                              [
+                                game.date,
+                                game.eloDisplay,
+                              ].where((s) => s.isNotEmpty).join(' · '),
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: AppColors.onSurfaceMuted,
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              )),
+              ),
         ],
       ],
     );
@@ -463,9 +564,9 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
-          color: isEven ? Colors.grey[850] : Colors.grey[800],
+          color: isEven ? AppColors.surfaceInset : AppColors.chipInactiveBg,
           borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: Colors.grey[700]!, width: 0.5),
+          border: Border.all(color: AppColors.outline, width: 0.5),
         ),
         margin: const EdgeInsets.symmetric(vertical: 1),
         child: Column(
@@ -474,10 +575,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
             // Title
             Text(
               displayTitle,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 11,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -490,7 +588,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                   child: Text(
                     line.moves.take(4).join(' '),
                     style: TextStyle(
-                      color: Colors.grey[400],
+                      color: AppColors.onSurfaceSoft,
                       fontSize: 10,
                       fontFamily: 'monospace',
                     ),
@@ -501,7 +599,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                 Text(
                   '${line.moves.length}m',
                   style: TextStyle(
-                    color: Colors.grey[500],
+                    color: AppColors.onSurfaceMuted,
                     fontSize: 9,
                   ),
                 ),

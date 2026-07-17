@@ -1,5 +1,32 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// What kind of content the trainer drills.
+///
+/// Repertoire mode walks new lines through the learn phase before quizzing;
+/// tactics mode always quizzes cold (showing a puzzle's solution first would
+/// spoil it).
+enum TrainingMode { repertoire, tactics }
+
+extension TrainingModeLabel on TrainingMode {
+  String get label => switch (this) {
+    TrainingMode.repertoire => 'Repertoire',
+    TrainingMode.tactics => 'Tactics',
+  };
+}
+
+/// How completed lines are scheduled.
+///
+/// Spaced repetition builds a due-queue with Again/Hard/Good/Easy ratings;
+/// linear runs through every line once, in order, with no scheduling.
+enum RepetitionMode { spaced, linear }
+
+extension RepetitionModeLabel on RepetitionMode {
+  String get label => switch (this) {
+    RepetitionMode.spaced => 'Spaced repetition',
+    RepetitionMode.linear => 'Linear',
+  };
+}
+
 /// How the repertoire trainer orders lines for review.
 enum ReviewOrder {
   byImportance,
@@ -11,13 +38,12 @@ enum ReviewOrder {
 
 extension ReviewOrderLabel on ReviewOrder {
   String get label => switch (this) {
-        ReviewOrder.byImportance =>
-          'By cumulative probability (most likely first)',
-        ReviewOrder.random => 'Random',
-        ReviewOrder.weakestFirst => 'Weakest first',
-        ReviewOrder.hardestFirst => 'Hardest to play first',
-        ReviewOrder.sequential => 'Sequential',
-      };
+    ReviewOrder.byImportance => 'By cumulative probability (most likely first)',
+    ReviewOrder.random => 'Random',
+    ReviewOrder.weakestFirst => 'Weakest first',
+    ReviewOrder.hardestFirst => 'Hardest to play first',
+    ReviewOrder.sequential => 'Sequential',
+  };
 
   static ReviewOrder fromStorage(String? value) {
     switch (value) {
@@ -35,12 +61,12 @@ extension ReviewOrderLabel on ReviewOrder {
   }
 
   String get storageValue => switch (this) {
-        ReviewOrder.byImportance => 'byImportance',
-        ReviewOrder.random => 'random',
-        ReviewOrder.weakestFirst => 'weakestFirst',
-        ReviewOrder.hardestFirst => 'hardestFirst',
-        ReviewOrder.sequential => 'sequential',
-      };
+    ReviewOrder.byImportance => 'byImportance',
+    ReviewOrder.random => 'random',
+    ReviewOrder.weakestFirst => 'weakestFirst',
+    ReviewOrder.hardestFirst => 'hardestFirst',
+    ReviewOrder.sequential => 'sequential',
+  };
 }
 
 class TrainingSettings {
@@ -67,6 +93,14 @@ class TrainingSettings {
   /// Base delay in milliseconds for opponent/auto moves (200–2000).
   int moveSpeedMs;
 
+  /// If true, moves before the first commented move are auto-played on the
+  /// board (at intro speed) instead of being quizzed; training starts at the
+  /// first move that has a comment.
+  bool skipToFirstComment;
+
+  /// Delay in milliseconds between auto-played intro moves.
+  int introSpeedMs;
+
   TrainingSettings({
     this.correctStreakThreshold = 3,
     this.trainingDepth,
@@ -77,6 +111,8 @@ class TrainingSettings {
     this.showRatingButtons = true,
     this.reviewOrder = ReviewOrder.byImportance,
     this.moveSpeedMs = 700,
+    this.skipToFirstComment = true,
+    this.introSpeedMs = 600,
   });
 
   static const _keyStreakThreshold = 'trainer_streak_threshold';
@@ -88,6 +124,8 @@ class TrainingSettings {
   static const _keyShowRatingButtons = 'trainer_show_rating_buttons';
   static const _keyReviewOrder = 'trainer_review_order';
   static const _keyMoveSpeedMs = 'trainer_move_speed_ms';
+  static const _keySkipToFirstComment = 'trainer_skip_to_first_comment';
+  static const _keyIntroSpeedMs = 'trainer_intro_speed_ms';
 
   static Future<TrainingSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -99,9 +137,12 @@ class TrainingSettings {
       learnRequiresClick: prefs.getBool(_keyLearnRequiresClick) ?? true,
       learnDelaySec: prefs.getInt(_keyLearnDelaySec) ?? 3,
       showRatingButtons: prefs.getBool(_keyShowRatingButtons) ?? true,
-      reviewOrder:
-          ReviewOrderLabel.fromStorage(prefs.getString(_keyReviewOrder)),
+      reviewOrder: ReviewOrderLabel.fromStorage(
+        prefs.getString(_keyReviewOrder),
+      ),
       moveSpeedMs: prefs.getInt(_keyMoveSpeedMs) ?? 700,
+      skipToFirstComment: prefs.getBool(_keySkipToFirstComment) ?? true,
+      introSpeedMs: prefs.getInt(_keyIntroSpeedMs) ?? 600,
     );
   }
 
@@ -120,5 +161,7 @@ class TrainingSettings {
     await prefs.setBool(_keyShowRatingButtons, showRatingButtons);
     await prefs.setString(_keyReviewOrder, reviewOrder.storageValue);
     await prefs.setInt(_keyMoveSpeedMs, moveSpeedMs);
+    await prefs.setBool(_keySkipToFirstComment, skipToFirstComment);
+    await prefs.setInt(_keyIntroSpeedMs, introSpeedMs);
   }
 }

@@ -8,22 +8,13 @@ import 'package:flutter/material.dart';
 
 import '../../services/games_library/game_filter.dart';
 import '../../services/games_library/games_library_service.dart';
+import '../../services/games_repertoire/games_source_config.dart';
+import '../../theme/app_colors.dart';
 import '../common/since_date_picker.dart';
+import '../starting_position_card.dart';
 
-/// What the user chose on the source form.
-class GamesSourceConfig {
-  const GamesSourceConfig({
-    required this.platform,
-    required this.username,
-    required this.isWhite,
-    required this.selection,
-  });
-
-  final GamesPlatform platform;
-  final String username;
-  final bool isWhite;
-  final GameSelection selection;
-}
+export '../../services/games_repertoire/games_source_config.dart'
+    show GamesSourceConfig;
 
 /// Show the form; resolves to the chosen config, or null if cancelled.
 ///
@@ -31,11 +22,19 @@ class GamesSourceConfig {
 /// field from whatever is already saved app-wide (e.g. the tactics trainer), so
 /// the user doesn't have to retype it. The platform defaults to whichever one
 /// has a saved username.
+///
+/// [currentFen]/[currentMoveSans] feed the "From current position" option and
+/// its starting-position preview. [atRoot] disables that option when the
+/// board is already at the game start.
 Future<GamesSourceConfig?> showGamesSourceForm(
   BuildContext context, {
   bool initialIsWhite = true,
   String? initialChesscomUsername,
   String? initialLichessUsername,
+  bool atRoot = true,
+  String? rootFen,
+  String? currentFen,
+  List<String> currentMoveSans = const [],
 }) {
   return showDialog<GamesSourceConfig>(
     context: context,
@@ -43,6 +42,10 @@ Future<GamesSourceConfig?> showGamesSourceForm(
       initialIsWhite: initialIsWhite,
       initialChesscomUsername: initialChesscomUsername,
       initialLichessUsername: initialLichessUsername,
+      atRoot: atRoot,
+      rootFen: rootFen,
+      currentFen: currentFen,
+      currentMoveSans: currentMoveSans,
     ),
   );
 }
@@ -52,10 +55,18 @@ class _GamesSourceDialog extends StatefulWidget {
     required this.initialIsWhite,
     this.initialChesscomUsername,
     this.initialLichessUsername,
+    required this.atRoot,
+    required this.rootFen,
+    required this.currentFen,
+    required this.currentMoveSans,
   });
   final bool initialIsWhite;
   final String? initialChesscomUsername;
   final String? initialLichessUsername;
+  final bool atRoot;
+  final String? rootFen;
+  final String? currentFen;
+  final List<String> currentMoveSans;
 
   @override
   State<_GamesSourceDialog> createState() => _GamesSourceDialogState();
@@ -65,6 +76,7 @@ class _GamesSourceDialogState extends State<_GamesSourceDialog> {
   late GamesPlatform _platform;
   late final TextEditingController _usernameCtrl;
   late bool _isWhite = widget.initialIsWhite;
+  bool _fromCurrentPosition = false;
 
   // Selection mode: by date (default — usually what you want for a repertoire)
   // or by a fixed count of most-recent games.
@@ -78,10 +90,9 @@ class _GamesSourceDialogState extends State<_GamesSourceDialog> {
   };
   String? _error;
 
-  String? get _savedFor =>
-      _platform == GamesPlatform.chesscom
-          ? widget.initialChesscomUsername
-          : widget.initialLichessUsername;
+  String? get _savedFor => _platform == GamesPlatform.chesscom
+      ? widget.initialChesscomUsername
+      : widget.initialLichessUsername;
 
   @override
   void initState() {
@@ -115,14 +126,17 @@ class _GamesSourceDialogState extends State<_GamesSourceDialog> {
       setState(() => _error = 'Enter a username first.');
       return;
     }
-    Navigator.of(context).pop(GamesSourceConfig(
-      platform: _platform,
-      username: username,
-      isWhite: _isWhite,
-      selection: _useDate
-          ? GameSelection(since: _since, speeds: _speeds)
-          : GameSelection(maxGames: _maxGames, speeds: _speeds),
-    ));
+    Navigator.of(context).pop(
+      GamesSourceConfig(
+        platform: _platform,
+        username: username,
+        isWhite: _isWhite,
+        selection: _useDate
+            ? GameSelection(since: _since, speeds: _speeds)
+            : GameSelection(maxGames: _maxGames, speeds: _speeds),
+        startMoves: _fromCurrentPosition ? widget.currentMoveSans : const [],
+      ),
+    );
   }
 
   @override
@@ -139,9 +153,13 @@ class _GamesSourceDialogState extends State<_GamesSourceDialog> {
               SegmentedButton<GamesPlatform>(
                 segments: const [
                   ButtonSegment(
-                      value: GamesPlatform.chesscom, label: Text('Chess.com')),
+                    value: GamesPlatform.chesscom,
+                    label: Text('Chess.com'),
+                  ),
                   ButtonSegment(
-                      value: GamesPlatform.lichess, label: Text('Lichess')),
+                    value: GamesPlatform.lichess,
+                    label: Text('Lichess'),
+                  ),
                 ],
                 selected: {_platform},
                 onSelectionChanged: (s) => _onPlatformChanged(s.first),
@@ -166,17 +184,59 @@ class _GamesSourceDialogState extends State<_GamesSourceDialog> {
                 selected: {_isWhite},
                 onSelectionChanged: (s) => setState(() => _isWhite = s.first),
               ),
+              if (widget.rootFen != null) ...[
+                const SizedBox(height: 12),
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(value: false, label: Text('All my games')),
+                    ButtonSegment(
+                      value: true,
+                      label: Text('From current position'),
+                    ),
+                  ],
+                  selected: {_fromCurrentPosition},
+                  onSelectionChanged: widget.atRoot
+                      ? null
+                      : (s) => setState(() => _fromCurrentPosition = s.first),
+                ),
+                const SizedBox(height: 8),
+                StartingPositionCard(
+                  label: _fromCurrentPosition
+                      ? 'ONLY GAMES THROUGH'
+                      : 'DRAFTING FROM',
+                  fen: _fromCurrentPosition
+                      ? (widget.currentFen ?? widget.rootFen!)
+                      : widget.rootFen!,
+                  moveSans: _fromCurrentPosition
+                      ? widget.currentMoveSans
+                      : const [],
+                  flipped: !_isWhite,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _fromCurrentPosition
+                      ? 'Only games that reach this position are drafted; '
+                            'all other openings are left out.'
+                      : 'Every downloaded game is used, drafting lines from '
+                            'the first move.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.onSurfaceMuted,
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               SegmentedButton<bool>(
                 segments: const [
                   ButtonSegment(
-                      value: true,
-                      label: Text('From date'),
-                      icon: Icon(Icons.event, size: 16)),
+                    value: true,
+                    label: Text('From date'),
+                    icon: Icon(Icons.event, size: 16),
+                  ),
                   ButtonSegment(
-                      value: false,
-                      label: Text('Most recent'),
-                      icon: Icon(Icons.format_list_numbered, size: 16)),
+                    value: false,
+                    label: Text('Most recent'),
+                    icon: Icon(Icons.format_list_numbered, size: 16),
+                  ),
                 ],
                 selected: {_useDate},
                 onSelectionChanged: (s) => setState(() => _useDate = s.first),
@@ -187,14 +247,17 @@ class _GamesSourceDialogState extends State<_GamesSourceDialog> {
                   date: _since,
                   label: 'Games since',
                   onChanged: (d) => setState(
-                      () => _since = d ?? DateTime.now()
-                          .subtract(const Duration(days: 180))),
+                    () => _since =
+                        d ?? DateTime.now().subtract(const Duration(days: 180)),
+                  ),
                 )
               else ...[
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: Text('Most recent $_maxGames games',
-                      style: const TextStyle(fontSize: 13)),
+                  child: Text(
+                    'Most recent $_maxGames games',
+                    style: const TextStyle(fontSize: 13),
+                  ),
                 ),
                 Slider(
                   value: _maxGames.toDouble(),
@@ -230,10 +293,13 @@ class _GamesSourceDialogState extends State<_GamesSourceDialog> {
               ),
               if (_error != null) ...[
                 const SizedBox(height: 8),
-                Text(_error!,
-                    style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                        fontSize: 12)),
+                Text(
+                  _error!,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                    fontSize: 12,
+                  ),
+                ),
               ],
             ],
           ),

@@ -7,6 +7,7 @@
 library;
 
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
@@ -15,12 +16,12 @@ import '../core/generation_session_controller.dart';
 import '../models/build_tree_node.dart';
 import '../models/repertoire_metadata.dart';
 import '../services/generation/generation_config.dart';
-import '../services/generation/pgn_export.dart';
 import '../services/generation/tree_serialization.dart';
 import '../services/storage/storage_factory.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
 import 'generation/generation_config_form.dart';
+import 'starting_position_card.dart';
 
 class RepertoireGenerationTab extends StatefulWidget {
   final String fen;
@@ -106,12 +107,14 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     final form = _configFormKey.currentState;
     if (form == null) {
       if (triesLeft <= 0) return;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _seedWhenFormReady(
-            pgnPaths: pgnPaths,
-            minGames: minGames,
-            autoStart: autoStart,
-            triesLeft: triesLeft - 1,
-          ));
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _seedWhenFormReady(
+          pgnPaths: pgnPaths,
+          minGames: minGames,
+          autoStart: autoStart,
+          triesLeft: triesLeft - 1,
+        ),
+      );
       return;
     }
     form.seedDbExplorer(pgnPaths: pgnPaths, minGames: minGames);
@@ -141,7 +144,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       try {
         final json = await storage.readFile(path);
         if (json == null) return;
-        final tree = deserializeTree(json);
+        final tree = await Isolate.run(() => deserializeTree(json));
         if (!tree.buildComplete && mounted) {
           setState(() {
             final md = tree.configSnapshot['max_depth'];
@@ -229,9 +232,11 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       existingTree: existingTree,
       onLinesSaved: widget.onLinesSaved,
     );
-    unawaited(ctrl.startBuild(request).whenComplete(() {
-      if (mounted) _checkForPartialTree();
-    }));
+    unawaited(
+      ctrl.startBuild(request).whenComplete(() {
+        if (mounted) _checkForPartialTree();
+      }),
+    );
   }
 
   // ── UI ───────────────────────────────────────────────────────────────
@@ -242,15 +247,18 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       listenable: widget.generationController,
       builder: (context, _) {
         final ctrl = widget.generationController;
-        final statusText =
-            ctrl.isGenerating ? ctrl.progressStatus : ctrl.lastRunSummary;
+        final statusText = ctrl.isGenerating
+            ? ctrl.progressStatus
+            : ctrl.lastRunSummary;
         return SingleChildScrollView(
           padding: const EdgeInsets.all(8.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Generate Repertoire',
-                  style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                'Generate Repertoire',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const SizedBox(height: 8),
               _buildStartingPositionBanner(context),
               const SizedBox(height: 8),
@@ -275,15 +283,19 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                 Text(
                   statusText,
                   style: TextStyle(
-                    color:
-                        ctrl.lastError != null ? AppColors.danger : Colors.grey,
+                    color: ctrl.lastError != null
+                        ? AppColors.danger
+                        : AppColors.onSurfaceMuted,
                   ),
                 ),
               ],
               const SizedBox(height: 8),
               Text(
                 _configFormKey.currentState?.selectionModeDescription() ?? '',
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.onSurfaceMuted,
+                ),
               ),
             ],
           ),
@@ -293,83 +305,11 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   }
 
   Widget _buildStartingPositionBanner(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
-    final fromInitial = widget.currentMoveSequence.isEmpty;
-    final positionText = fromInitial
-        ? 'Initial Position'
-        : movesToPgnMoveText(widget.currentMoveSequence);
-    final sideLabel = widget.isWhiteRepertoire ? 'White' : 'Black';
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: primary.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: primary, width: 1.5),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.my_location, size: 28, color: primary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'GENERATING A $sideLabel REPERTOIRE FROM',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.2,
-                    color: primary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  positionText,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          _buildSideChip(context),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSideChip(BuildContext context) {
-    final isWhite = widget.isWhiteRepertoire;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey.withValues(alpha: 0.5)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 14,
-            height: 14,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: isWhite ? Colors.white : Colors.black,
-              border: Border.all(color: Colors.grey.withValues(alpha: 0.7)),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            isWhite ? 'White' : 'Black',
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-          ),
-        ],
-      ),
+    return StartingPositionCard(
+      label: 'GENERATING FROM',
+      fen: widget.fen,
+      moveSans: widget.currentMoveSequence,
+      flipped: !widget.isWhiteRepertoire,
     );
   }
 
@@ -402,7 +342,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           Text(
             '${tree.totalNodes} nodes, depth ${tree.maxPlyReached}'
             '${tree.startMoves.isNotEmpty ? '\nFrom: ${tree.startMoves}' : ''}',
-            style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.onSurfaceSoft,
+            ),
           ),
           if (!canResume) ...[
             const SizedBox(height: 4),

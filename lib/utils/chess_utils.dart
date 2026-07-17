@@ -21,6 +21,23 @@ String uciToSan(String fen, String uci) {
   }
 }
 
+/// Bounded memo over [uciToSan]. The unified move table re-derives SAN for
+/// every candidate move on every notifier tick during a live search (its
+/// merged-move map is rebuilt each tick, so the cached `san` field is always
+/// empty); `(fen, uci)` fully determines the result, so caching is safe.
+final Map<String, String> _uciSanCache = {};
+const int _uciSanCacheMax = 2048;
+
+String uciToSanCached(String fen, String uci) {
+  final key = '$fen|$uci';
+  final hit = _uciSanCache[key];
+  if (hit != null) return hit;
+  if (_uciSanCache.length >= _uciSanCacheMax) _uciSanCache.clear();
+  final san = uciToSan(fen, uci);
+  _uciSanCache[key] = san;
+  return san;
+}
+
 /// Convert a SAN move to standard UCI in the position given by [fen].
 ///
 /// Returns `null` when the SAN is not legal in the position.  Castling is
@@ -127,10 +144,7 @@ int plyBeforeMove({
   required bool startWhiteToMove,
 }) {
   final abs = ply + (startWhiteToMove ? 0 : 1);
-  return (
-    moveNumber: (abs ~/ 2) + startFullmoves,
-    isWhite: abs.isEven,
-  );
+  return (moveNumber: (abs ~/ 2) + startFullmoves, isWhite: abs.isEven);
 }
 
 /// Parse an algebraic square name (e.g. 'e4') to a dartchess [Square].
@@ -191,13 +205,13 @@ String toStandardUci(Position position, Square from, Square to) =>
 
 /// Role to uppercase character for SVG asset filenames (e.g. Role.pawn → 'P').
 String roleChar(Role role) => switch (role) {
-      Role.pawn => 'P',
-      Role.knight => 'N',
-      Role.bishop => 'B',
-      Role.rook => 'R',
-      Role.queen => 'Q',
-      Role.king => 'K',
-    };
+  Role.pawn => 'P',
+  Role.knight => 'N',
+  Role.bishop => 'B',
+  Role.rook => 'R',
+  Role.queen => 'Q',
+  Role.king => 'K',
+};
 
 /// Format a centipawn / mate score for display (e.g. `+1.3`, `-0.5`, `#3`).
 ///
@@ -234,10 +248,32 @@ List<String> uciPvToSan(String fen, List<String> uciMoves, {int maxMoves = 8}) {
   }
 }
 
+/// Bounded memo over [uciPvToSan] (whole PV, no `maxMoves` cap). During a live
+/// engine search the same (position, PV) recurs on every widget rebuild —
+/// several MultiPV lines re-parsing the FEN and replaying the line each frame
+/// is what drops frames. The key `(fen, pv)` fully determines the output, so
+/// caching is always correct; the map is cleared wholesale past a size cap.
+final Map<String, List<String>> _pvSanCache = {};
+const int _pvSanCacheMax = 512;
+
+List<String> uciPvToSanCached(String fen, List<String> uciMoves) {
+  if (uciMoves.isEmpty) return const [];
+  final key = '$fen|${uciMoves.join(' ')}';
+  final hit = _pvSanCache[key];
+  if (hit != null) return hit;
+  if (_pvSanCache.length >= _pvSanCacheMax) _pvSanCache.clear();
+  final san = uciPvToSan(fen, uciMoves, maxMoves: uciMoves.length);
+  _pvSanCache[key] = san;
+  return san;
+}
+
 /// Format a large integer with k/M suffixes, using [mDecimals] decimal places
 /// at the millions threshold and [kDecimals] at the thousands threshold.
-String _formatWithSuffix(int value,
-    {required int mDecimals, required int kDecimals}) {
+String _formatWithSuffix(
+  int value, {
+  required int mDecimals,
+  required int kDecimals,
+}) {
   if (value >= 1000000) {
     return '${(value / 1000000).toStringAsFixed(mDecimals)}M';
   }
@@ -254,8 +290,7 @@ String formatNodes(int nodes) =>
     _formatWithSuffix(nodes, mDecimals: 1, kDecimals: 1);
 
 /// Format NPS with k/M suffixes.
-String formatNps(int nps) =>
-    _formatWithSuffix(nps, mDecimals: 1, kDecimals: 0);
+String formatNps(int nps) => _formatWithSuffix(nps, mDecimals: 1, kDecimals: 0);
 
 /// Compute the FEN after playing [sanMoves] from [startFen] up to [upToIndex].
 ///

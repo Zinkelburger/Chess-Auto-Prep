@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_colors.dart';
 import '../controllers/eval_tree_controller.dart';
 import '../models/eval_tree_snapshot.dart';
 
@@ -26,8 +27,8 @@ class EvalTreeToolbar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        border: Border(
-          bottom: BorderSide(color: Colors.grey[800]!, width: 0.5),
+        border: const Border(
+          bottom: BorderSide(color: AppColors.divider, width: 0.5),
         ),
       ),
       child: Wrap(
@@ -43,8 +44,9 @@ class EvalTreeToolbar extends StatelessWidget {
           _toolButton(
             icon: Icons.arrow_upward,
             tooltip: 'Go to parent',
-            onPressed:
-                currentNode.parentId == null ? null : controller.goParent,
+            onPressed: currentNode.parentId == null
+                ? null
+                : controller.goParent,
           ),
           _toolButton(
             icon: Icons.center_focus_strong,
@@ -52,8 +54,9 @@ class EvalTreeToolbar extends StatelessWidget {
             onPressed: () => controller.requestFocusSelection(),
           ),
           _toolButton(
-            icon:
-                controller.showAncestorSpine ? Icons.account_tree : Icons.park,
+            icon: controller.showAncestorSpine
+                ? Icons.account_tree
+                : Icons.park,
             tooltip: controller.showAncestorSpine
                 ? 'Hide path to root'
                 : 'Show path to root',
@@ -63,9 +66,9 @@ class EvalTreeToolbar extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
+              const Text(
                 'Metric',
-                style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                style: TextStyle(fontSize: 10, color: AppColors.onSurfaceMuted),
               ),
               const SizedBox(width: 6),
               SegmentedButton<EvalTreeMetricDisplayMode>(
@@ -91,15 +94,14 @@ class EvalTreeToolbar extends StatelessWidget {
                   padding: WidgetStatePropertyAll(
                     EdgeInsets.symmetric(horizontal: 8, vertical: 0),
                   ),
-                  textStyle: WidgetStatePropertyAll(
-                    TextStyle(fontSize: 10),
-                  ),
+                  textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 10)),
                 ),
               ),
               const SizedBox(width: 4),
               Tooltip(
                 richMessage: TextSpan(
-                  children: controller.metricDisplayMode ==
+                  children:
+                      controller.metricDisplayMode ==
                           EvalTreeMetricDisplayMode.cpl
                       ? const [
                           TextSpan(
@@ -127,10 +129,10 @@ class EvalTreeToolbar extends StatelessWidget {
                           ),
                         ],
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.info_outline,
                   size: 14,
-                  color: Colors.grey[500],
+                  color: AppColors.onSurfaceMuted,
                 ),
               ),
             ],
@@ -138,22 +140,24 @@ class EvalTreeToolbar extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
+              const Text(
                 'Ahead',
-                style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                style: TextStyle(fontSize: 10, color: AppColors.onSurfaceMuted),
               ),
               SizedBox(
                 width: 132,
                 child: SliderTheme(
                   data: SliderThemeData(
                     trackHeight: 3,
-                    thumbShape:
-                        const RoundSliderThumbShape(enabledThumbRadius: 6),
-                    overlayShape:
-                        const RoundSliderOverlayShape(overlayRadius: 12),
-                    activeTrackColor: Colors.blue[400],
-                    inactiveTrackColor: Colors.grey[700],
-                    thumbColor: Colors.blue[300],
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 6,
+                    ),
+                    overlayShape: const RoundSliderOverlayShape(
+                      overlayRadius: 12,
+                    ),
+                    activeTrackColor: AppColors.info,
+                    inactiveTrackColor: AppColors.outline,
+                    thumbColor: AppColors.info,
                   ),
                   child: Slider(
                     value: controller.visiblePly.toDouble(),
@@ -168,9 +172,9 @@ class EvalTreeToolbar extends StatelessWidget {
               ),
               Text(
                 '${controller.visiblePly} ply',
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 11,
-                  color: Colors.grey[400],
+                  color: AppColors.onSurfaceSoft,
                   fontFamily: 'monospace',
                 ),
               ),
@@ -185,19 +189,24 @@ class EvalTreeToolbar extends StatelessWidget {
                   child: Icon(
                     Icons.warning_amber,
                     size: 13,
-                    color: Colors.amber[400],
+                    color: AppColors.warning,
                   ),
                 ),
               Text(
                 '$visibleNodeCount / $totalNodeCount',
                 style: TextStyle(
                   fontSize: 10,
-                  color: hitDisplayCap ? Colors.amber[400] : Colors.grey[600],
+                  color: hitDisplayCap
+                      ? AppColors.warning
+                      : AppColors.onSurfaceMuted,
                 ),
               ),
               Text(
                 '  |  ${currentNode.subtreeSize} subtree',
-                style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: AppColors.onSurfaceMuted,
+                ),
               ),
             ],
           ),
@@ -220,10 +229,10 @@ class EvalTreeToolbar extends StatelessWidget {
           icon,
           size: 16,
           color: onPressed == null
-              ? Colors.grey[700]
+              ? AppColors.onSurfaceDisabled
               : active
-                  ? Colors.blue[300]
-                  : Colors.grey[400],
+              ? AppColors.info
+              : AppColors.onSurfaceSoft,
         ),
         padding: EdgeInsets.zero,
         tooltip: tooltip,

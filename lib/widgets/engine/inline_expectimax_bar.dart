@@ -28,6 +28,10 @@ class InlineExpectimaxBar extends StatefulWidget {
   final bool isGenerating;
   final bool isGenerationPaused;
 
+  /// Analyze this FEN instead of the controller cursor (e.g. the
+  /// build-by-playing scratchpad position).
+  final String? fenOverride;
+
   const InlineExpectimaxBar({
     super.key,
     required this.controller,
@@ -38,6 +42,7 @@ class InlineExpectimaxBar extends StatefulWidget {
     this.coherenceResult,
     this.isGenerating = false,
     this.isGenerationPaused = false,
+    this.fenOverride,
   });
 
   static bool get isEnabled => _InlineExpectimaxBarState._enabled;
@@ -111,6 +116,7 @@ class _InlineExpectimaxBarState extends State<InlineExpectimaxBar> {
               isGenerationPaused: widget.isGenerationPaused,
               compact: true,
               autoComputeEnabled: _enabled,
+              fenOverride: widget.fenOverride,
             ),
           ),
         ],
@@ -140,7 +146,7 @@ class _InlineExpectimaxBarState extends State<InlineExpectimaxBar> {
               message: 'Toggle expectimax (X)',
               child: Text(
                 'Expectimax',
-                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
               ),
             ),
           ),

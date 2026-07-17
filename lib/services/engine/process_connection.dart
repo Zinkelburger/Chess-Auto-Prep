@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'engine_connection.dart';
@@ -55,14 +56,28 @@ class ProcessConnection implements EngineConnection {
       log.i('Extracting Stockfish binary to ${file.path}...');
       await file.parent.create(recursive: true);
 
-      final byteData =
-          await rootBundle.load('assets/executables/$binaryName.gz');
-      final compressed = byteData.buffer.asUint8List(
-        byteData.offsetInBytes,
-        byteData.lengthInBytes,
+      final byteData = await rootBundle.load(
+        'assets/executables/$binaryName.gz',
       );
-      final decompressed = gzip.decode(compressed);
-      await file.writeAsBytes(decompressed, flush: true);
+      // Copy out of the shared asset buffer so the bytes can be sent to the
+      // worker isolate (the asUint8List view is a non-transferable window
+      // over rootBundle-owned memory).
+      final compressed = Uint8List.fromList(
+        byteData.buffer.asUint8List(
+          byteData.offsetInBytes,
+          byteData.lengthInBytes,
+        ),
+      );
+      final targetPath = file.path;
+      // gzip.decode is fully synchronous over a ~73MB asset (~90MB decoded) —
+      // decoding on the UI isolate froze the first frame for hundreds of ms.
+      // Decode AND write on a worker isolate so neither the compressed input
+      // nor the decoded output ever touches the UI isolate. Runs at most once
+      // (guarded by the file.exists check above).
+      await Isolate.run(() {
+        final decompressed = gzip.decode(compressed);
+        File(targetPath).writeAsBytesSync(decompressed, flush: true);
+      });
 
       if (!Platform.isWindows) {
         await Process.run('chmod', ['+x', file.path]);
@@ -84,10 +99,10 @@ class ProcessConnection implements EngineConnection {
           .transform(utf8.decoder)
           .transform(const LineSplitter())
           .listen((line) {
-        if (!_isDisposed) {
-          _stdoutController.add(line);
-        }
-      });
+            if (!_isDisposed) {
+              _stdoutController.add(line);
+            }
+          });
 
       // Drain stderr to prevent buffer fill-up that can stall the process.
       _process!.stderr.drain<void>();
@@ -145,7 +160,9 @@ class ProcessConnection implements EngineConnection {
     if (proc != null) {
       try {
         proc.stdin.writeln('quit');
-      } catch (_) {/* stdin may be closed */}
+      } catch (_) {
+        /* stdin may be closed */
+      }
       proc.kill(); // SIGTERM on POSIX, TerminateProcess on Windows
       if (!Platform.isWindows) {
         // On POSIX, the initial kill() sends SIGTERM which the process may
@@ -155,7 +172,9 @@ class ProcessConnection implements EngineConnection {
         Future.delayed(const Duration(seconds: 2), () {
           try {
             proc.kill(ProcessSignal.sigkill);
-          } catch (_) {/* process may have already exited */}
+          } catch (_) {
+            /* process may have already exited */
+          }
         });
       }
     }

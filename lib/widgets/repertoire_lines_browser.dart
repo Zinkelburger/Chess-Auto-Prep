@@ -1,10 +1,11 @@
 /// Repertoire Lines Browser Widget
-/// A comprehensive view of all lines in a repertoire with filtering,
-/// grouping, detailed previews, and optional coverage annotations
+/// A flat, sortable table of all lines in a repertoire with search,
+/// toggle filters, per-line stats, and optional coverage annotations.
 library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
@@ -14,12 +15,14 @@ import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
 import '../services/coherence_service.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../services/generation/fen_map.dart';
+import '../theme/app_colors.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
 import '../utils/coverage_helpers.dart';
 import 'package:chess_auto_prep/services/line_metrics_helpers.dart';
 import '../utils/lines_filter_helpers.dart';
 import 'lines/line_filter_controls.dart';
 import 'lines/line_metrics_panel.dart';
+import 'lines/line_table_layout.dart';
 import 'lines/lines_list_panel.dart';
 
 export '../utils/lines_filter_helpers.dart' show CoverageFilter;
@@ -30,6 +33,10 @@ class RepertoireLinesBrowser extends StatefulWidget {
   final Function(RepertoireLine line)? onLineSelected;
   final Function(RepertoireLine line, String newTitle)? onLineRenamed;
   final Function(RepertoireLine line)? onLineDeleted;
+
+  /// Starts a coverage analysis run (config dialog + run). Wired to the
+  /// "Run coverage analysis" prompt shown when a coverage filter is selected
+  /// before any analysis exists.
   final VoidCallback? onCoveragePressed;
   final bool isCoverageRunning;
   final bool isExpanded;
@@ -83,16 +90,16 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
   Timer? _searchDebounce;
 
   List<RepertoireLine> _filteredLines = [];
-  Map<String, List<RepertoireLine>> _groupedLines = {};
-  final Set<String> _expandedGroups = {};
 
   bool _showOnlyMatchingPosition = true;
   LineSortBy _sortBy = LineSortBy.name;
+  bool _sortAscending = true;
   CoverageFilter _coverageFilter = CoverageFilter.all;
-  LineMetricsFilter _metricsFilter = LineMetricsFilter.all;
+  final Set<LineMetricsFilter> _metricsFilters = {};
 
   Map<String, LineCoverageInfo> _lineCoverage = {};
   Map<String, LineQualityInfo> _lineMetrics = {};
+  Map<String, LineDisplayData> _displayIndex = {};
 
   @override
   void initState() {
@@ -100,7 +107,8 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     _searchController.addListener(_onSearchChanged);
     _computeLineCoverage();
     _computeLineMetrics();
-    _filterAndGroupLines();
+    _displayIndex = buildLineDisplayIndex(widget.lines);
+    _applyFilters();
   }
 
   @override
@@ -109,17 +117,28 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     if (oldWidget.coverageResult != widget.coverageResult) {
       _computeLineCoverage();
     }
-    final metricsChanged = oldWidget.tree != widget.tree ||
+    final metricsChanged =
+        oldWidget.tree != widget.tree ||
         oldWidget.traps != widget.traps ||
         oldWidget.coherenceResult != widget.coherenceResult;
     if (metricsChanged) {
       _computeLineMetrics();
     }
+    if (oldWidget.lines != widget.lines) {
+      _displayIndex = buildLineDisplayIndex(widget.lines);
+    }
+    // Content compare, not identity: the parent hands us a fresh
+    // currentMoveSequence list on every rebuild, so an identity `!=` was
+    // always true and re-ran the O(N log N) filter+sort over all lines on
+    // every parent repaint. Only an actual move change should re-filter.
     if (oldWidget.lines != widget.lines ||
-        oldWidget.currentMoveSequence != widget.currentMoveSequence ||
+        !listEquals(
+          oldWidget.currentMoveSequence,
+          widget.currentMoveSequence,
+        ) ||
         oldWidget.coverageResult != widget.coverageResult ||
         metricsChanged) {
-      _filterAndGroupLines();
+      _applyFilters();
     }
   }
 
@@ -135,7 +154,7 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     _searchDebounce?.cancel();
     _searchDebounce = Timer(const Duration(milliseconds: 300), () {
       if (!mounted) return;
-      _filterAndGroupLines();
+      _applyFilters();
     });
   }
 
@@ -158,30 +177,26 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     );
   }
 
-  void _filterAndGroupLines({bool rebuild = true}) {
-    final result = filterSortAndGroupLines(
+  void _applyFilters({bool rebuild = true}) {
+    final filtered = filterAndSortLines(
       allLines: widget.lines,
       searchTerm: _searchController.text,
       showOnlyMatchingPosition: _showOnlyMatchingPosition,
       currentMoves: widget.currentMoveSequence,
       sortBy: _sortBy,
+      sortAscending: _sortAscending,
       coverageFilter: _coverageFilter,
-      metricsFilter: _metricsFilter,
+      metricsFilters: _metricsFilters,
       lineCoverage: _lineCoverage,
       lineMetrics: _lineMetrics,
       coverageResult: widget.coverageResult,
+      displayIndex: _displayIndex,
     );
 
-    void apply() {
-      _filteredLines = result.filtered;
-      _groupedLines = result.grouped;
-      _expandedGroups.addAll(result.groupsToExpand);
-    }
-
     if (rebuild) {
-      setState(apply);
+      setState(() => _filteredLines = filtered);
     } else {
-      apply();
+      _filteredLines = filtered;
     }
   }
 
@@ -189,7 +204,7 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
       _searchController.text.isNotEmpty ||
       _showOnlyMatchingPosition ||
       _coverageFilter != CoverageFilter.all ||
-      _metricsFilter != LineMetricsFilter.all;
+      _metricsFilters.isNotEmpty;
 
   void _resetAllFilters() {
     _searchDebounce?.cancel();
@@ -197,87 +212,126 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
       _searchController.clear();
       _showOnlyMatchingPosition = false;
       _coverageFilter = CoverageFilter.all;
-      _metricsFilter = LineMetricsFilter.all;
-      _filterAndGroupLines(rebuild: false);
+      _metricsFilters.clear();
+      _applyFilters(rebuild: false);
     });
   }
 
-  void _toggleGroup(String groupName) {
+  /// First click on a stat column sorts "problems first"; a second click
+  /// on the same column reverses.
+  void _onSortChanged(LineSortBy sort) {
     setState(() {
-      if (_expandedGroups.contains(groupName)) {
-        _expandedGroups.remove(groupName);
+      if (_sortBy == sort) {
+        _sortAscending = !_sortAscending;
       } else {
-        _expandedGroups.add(groupName);
+        _sortBy = sort;
+        _sortAscending = switch (sort) {
+          LineSortBy.name => true,
+          LineSortBy.moves => true,
+          // Low ease / low coherence are the lines needing work.
+          LineSortBy.ease => true,
+          LineSortBy.coherence => true,
+          // Most traps first; worst coverage first.
+          LineSortBy.traps => false,
+          LineSortBy.coverage => false,
+        };
       }
     });
+    _applyFilters();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        LineFilterControls(
-          searchController: _searchController,
-          showOnlyMatchingPosition: _showOnlyMatchingPosition,
-          onShowOnlyMatchingPositionChanged: (value) {
-            setState(() => _showOnlyMatchingPosition = value);
-            _filterAndGroupLines();
-          },
-          onCoveragePressed: widget.onCoveragePressed,
-          isCoverageRunning: widget.isCoverageRunning,
-          sortBy: _sortBy,
-          onSortByChanged: (value) {
-            setState(() => _sortBy = value);
-            _filterAndGroupLines();
-          },
-          metricsFilter: _metricsFilter,
-          onMetricsFilterChanged: (value) {
-            setState(() => _metricsFilter = value);
-            _filterAndGroupLines();
-          },
-          coverageResult: widget.coverageResult,
-          coverageFilter: _coverageFilter,
-          onCoverageFilterChanged: (filter) {
-            setState(() => _coverageFilter = filter);
-            _filterAndGroupLines();
-          },
-          lineCoverage: _lineCoverage,
-          totalLineCount: widget.lines.length,
-        ),
-        LineMetricsPanel(
-          showCoverageProgress: widget.isCoverageRunning,
-          coverageProgress: widget.coverageProgress,
-          coverageProgressMessage: widget.coverageProgressMessage,
-          coverageResult: widget.coverageResult,
-          lineCoverage: _lineCoverage,
-          filteredLines: _filteredLines,
-          groupedLines: _groupedLines,
-          currentMoveSequence: widget.currentMoveSequence,
-          onNavigateToPosition: widget.onNavigateToPosition,
-        ),
-        Expanded(
-          child: LinesListPanel(
-            scrollController: _scrollController,
-            filteredLines: _filteredLines,
-            groupedLines: _groupedLines,
-            expandedGroups: _expandedGroups,
-            onToggleGroup: _toggleGroup,
-            isExpanded: widget.isExpanded,
-            currentMoveSequence: widget.currentMoveSequence,
-            showCoverage: widget.coverageResult != null,
-            lineCoverage: _lineCoverage,
-            lineMetrics: _lineMetrics,
-            onLineSelected: widget.onLineSelected,
-            onLineRenamed: widget.onLineRenamed,
-            onLineDeleted: widget.onLineDeleted,
-            onNavigateToPosition: widget.onNavigateToPosition,
-            navigationStack: widget.navigationStack,
-            boardPreview: widget.boardPreview,
-            hasActiveFilters: _hasActiveFilters,
-            onResetFilters: _resetAllFilters,
-          ),
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final layout = LineTableLayout.forWidth(constraints.maxWidth);
+        final needsCoverageRun =
+            _coverageFilter != CoverageFilter.all &&
+            widget.coverageResult == null;
+
+        return Column(
+          children: [
+            // The filter/metrics block has a fixed natural height; when the
+            // pane is short (e.g. the bottom pane's Lines tab) cap it at half
+            // the pane and scroll inside instead of overflowing the list.
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: (constraints.maxHeight / 2).clamp(0, 320),
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    LineFilterControls(
+                      searchController: _searchController,
+                      showOnlyMatchingPosition: _showOnlyMatchingPosition,
+                      onShowOnlyMatchingPositionChanged: (value) {
+                        setState(() => _showOnlyMatchingPosition = value);
+                        _applyFilters();
+                      },
+                      metricsFilters: _metricsFilters,
+                      onMetricsFilterToggled: (filter, active) {
+                        setState(() {
+                          if (active) {
+                            _metricsFilters.add(filter);
+                          } else {
+                            _metricsFilters.remove(filter);
+                          }
+                        });
+                        _applyFilters();
+                      },
+                      coverageResult: widget.coverageResult,
+                      coverageFilter: _coverageFilter,
+                      onCoverageFilterChanged: (filter) {
+                        setState(() => _coverageFilter = filter);
+                        _applyFilters();
+                      },
+                      lineCoverage: _lineCoverage,
+                      totalLineCount: widget.lines.length,
+                    ),
+                    LineMetricsPanel(
+                      showCoverageProgress: widget.isCoverageRunning,
+                      coverageProgress: widget.coverageProgress,
+                      coverageProgressMessage: widget.coverageProgressMessage,
+                      coverageResult: widget.coverageResult,
+                      lineCoverage: _lineCoverage,
+                      filteredLines: _filteredLines,
+                      currentMoveSequence: widget.currentMoveSequence,
+                      onNavigateToPosition: widget.onNavigateToPosition,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Expanded(
+              child: LinesListPanel(
+                scrollController: _scrollController,
+                filteredLines: _filteredLines,
+                layout: layout,
+                sortBy: _sortBy,
+                sortAscending: _sortAscending,
+                onSortChanged: _onSortChanged,
+                currentMoveSequence: widget.currentMoveSequence,
+                showCoverage: widget.coverageResult != null,
+                lineCoverage: _lineCoverage,
+                lineMetrics: _lineMetrics,
+                displayIndex: _displayIndex,
+                onLineSelected: widget.onLineSelected,
+                onLineRenamed: widget.onLineRenamed,
+                onLineDeleted: widget.onLineDeleted,
+                onNavigateToPosition: widget.onNavigateToPosition,
+                navigationStack: widget.navigationStack,
+                boardPreview: widget.boardPreview,
+                hasActiveFilters: _hasActiveFilters,
+                onResetFilters: _resetAllFilters,
+                needsCoverageRun: needsCoverageRun,
+                isCoverageRunning: widget.isCoverageRunning,
+                onRunCoverage: widget.onCoveragePressed,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -316,17 +370,14 @@ class RepertoireLinesBrowserDialog extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 border: Border(
-                  bottom: BorderSide(color: Colors.grey[700]!, width: 1),
+                  bottom: BorderSide(color: AppColors.outline, width: 1),
                 ),
               ),
               child: Row(
                 children: [
                   const Text(
                     'Browse Repertoire Lines',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const Spacer(),
                   IconButton(

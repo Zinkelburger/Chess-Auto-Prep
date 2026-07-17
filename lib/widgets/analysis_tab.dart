@@ -21,6 +21,7 @@ import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
+import '../theme/app_text_styles.dart';
 import 'opening_tree_widget.dart';
 
 class AnalysisTab extends StatefulWidget {
@@ -96,8 +97,9 @@ class _AnalysisTabState extends State<AnalysisTab> {
   }
 
   void _rebuildTrapIndex() {
-    _trapIndexCache =
-        widget.traps.isEmpty ? null : TrapIndexService(widget.traps);
+    _trapIndexCache = widget.traps.isEmpty
+        ? null
+        : TrapIndexService(widget.traps);
   }
 
   void _rebuildCandidateService() {
@@ -197,7 +199,8 @@ class _AnalysisTabState extends State<AnalysisTab> {
 
   List<CandidateMove> _getCandidates() {
     if (_candidateService == null) return [];
-    final isOurTurn = widget.controller.position.turn ==
+    final isOurTurn =
+        widget.controller.position.turn ==
         (widget.controller.isRepertoireWhite ? Side.white : Side.black);
     return _candidateService!.getTreeCandidates(
       fen: widget.controller.fen,
@@ -246,7 +249,8 @@ class _AnalysisTabState extends State<AnalysisTab> {
   @override
   Widget build(BuildContext context) {
     final candidates = _getCandidates();
-    final isOurTurn = widget.controller.position.turn ==
+    final isOurTurn =
+        widget.controller.position.turn ==
         (widget.controller.isRepertoireWhite ? Side.white : Side.black);
 
     final hasCandidates = candidates.isNotEmpty;
@@ -260,11 +264,11 @@ class _AnalysisTabState extends State<AnalysisTab> {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(
+          child: const Text(
             'Generate a tree to see candidate moves here.\n'
             'Stockfish and expectimax are on the PGN tab.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey[500], fontSize: 13),
+            style: AppTextStyles.muted,
           ),
         ),
       );
@@ -331,13 +335,15 @@ class _AnalysisTabState extends State<AnalysisTab> {
                 });
               },
               onTrapGo: (trap) {
-                widget.navigationStack.push(NavigationEntry(
-                  tabIndex: 1,
-                  fen: widget.controller.fen,
-                  label:
-                      'PGN · ${widget.controller.currentMoveSequence.lastOrNull ?? 'start'}',
-                  reason: 'trap',
-                ));
+                widget.navigationStack.push(
+                  NavigationEntry(
+                    tabIndex: 1,
+                    fen: widget.controller.fen,
+                    label:
+                        'PGN · ${widget.controller.currentMoveSequence.lastOrNull ?? 'start'}',
+                    reason: 'trap',
+                  ),
+                );
                 widget.controller.loadMoveSequence(trap.movesSan);
               },
               onBack: widget.controller.goBack,
@@ -348,10 +354,7 @@ class _AnalysisTabState extends State<AnalysisTab> {
           ),
         if (_showTree) ...[
           const Divider(height: 1),
-          Expanded(
-            flex: 2,
-            child: _buildTreeSection(),
-          ),
+          Expanded(flex: 2, child: _buildTreeSection()),
         ],
       ],
     );
@@ -360,8 +363,7 @@ class _AnalysisTabState extends State<AnalysisTab> {
   Widget _buildTreeSection() {
     if (widget.controller.openingTree == null) {
       return const Center(
-        child: Text('No opening tree available',
-            style: TextStyle(color: Colors.grey, fontSize: 13)),
+        child: Text('No opening tree available', style: AppTextStyles.muted),
       );
     }
     return OpeningTreeWidget(

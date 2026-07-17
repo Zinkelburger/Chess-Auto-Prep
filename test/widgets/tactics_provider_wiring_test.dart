@@ -26,14 +26,12 @@ void main() {
             create: (_) => TacticsDatabase(),
           ),
           ChangeNotifierProvider<TacticsSessionController>(
-            create: (ctx) => TacticsSessionController(
-              database: ctx.read<TacticsDatabase>(),
-            ),
+            create: (ctx) =>
+                TacticsSessionController(database: ctx.read<TacticsDatabase>()),
           ),
           ChangeNotifierProvider<TacticsImportCoordinator>(
-            create: (ctx) => TacticsImportCoordinator(
-              database: ctx.read<TacticsDatabase>(),
-            ),
+            create: (ctx) =>
+                TacticsImportCoordinator(database: ctx.read<TacticsDatabase>()),
           ),
         ],
         child: Builder(

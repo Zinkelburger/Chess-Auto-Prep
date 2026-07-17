@@ -20,7 +20,8 @@ class EngineMoveRow extends StatelessWidget {
   final String fen;
   final BoardPreviewController? boardPreview;
   final void Function(String uci)? onMoveSelected;
-  final void Function(List<String> sanMoves, int clickedIndex)? onLineMoveTapped;
+  final void Function(List<String> sanMoves, int clickedIndex)?
+  onLineMoveTapped;
   final GlobalKey previewStackKey;
 
   const EngineMoveRow({
@@ -64,8 +65,9 @@ class EngineMoveRow extends StatelessWidget {
                     return MouseRegion(
                       onEnter: boardPreview != null
                           ? (_) {
-                              final box = anchorContext.findRenderObject()
-                                  as RenderBox?;
+                              final box =
+                                  anchorContext.findRenderObject()
+                                      as RenderBox?;
                               if (box == null) return;
                               final anchor = box.localToGlobal(
                                 Offset(box.size.width / 2, box.size.height),
@@ -93,12 +95,16 @@ class EngineMoveRow extends StatelessWidget {
                 ),
                 Container(
                   width: evalWidth,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: move.hasStockfish
-                        ? AppColors.cpEvalBg(move.effectiveCp, muted: evalMuted)
-                            .withValues(alpha: evalMuted ? 0.5 : 0.85)
+                        ? AppColors.cpEvalBg(
+                            move.effectiveCp,
+                            muted: evalMuted,
+                          ).withValues(alpha: evalMuted ? 0.5 : 0.85)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(4),
                   ),
@@ -115,9 +121,7 @@ class EngineMoveRow extends StatelessWidget {
                   ),
                 ),
                 if (!narrow) const SizedBox(width: 8),
-                Expanded(
-                  child: _buildContinuation(move, muted: lineMuted),
-                ),
+                Expanded(child: _buildContinuation(move, muted: lineMuted)),
                 if (showMaia)
                   SizedBox(
                     width: narrow ? 40 : 46,
@@ -145,7 +149,7 @@ class EngineMoveRow extends StatelessWidget {
   }
 
   Widget _buildContinuation(MergedMove move, {bool muted = false}) {
-    final lineColor = muted ? AppColors.onSurfaceDim : Colors.grey[500];
+    final lineColor = muted ? AppColors.onSurfaceDim : AppColors.onSurfaceMuted;
     if (move.fullPv.length <= 1 || boardPreview == null) {
       final continuation = formatContinuation(fen, move.fullPv);
       return Text(
@@ -164,8 +168,9 @@ class EngineMoveRow extends StatelessWidget {
     if (afterFirstMove == null) return const SizedBox.shrink();
 
     final continuationUci = move.fullPv.sublist(1);
-    final sanMoves = uciPvToSan(afterFirstMove, continuationUci,
-        maxMoves: continuationUci.length);
+    // Cached: MultiPV rows re-render on every info line during a live search;
+    // re-parsing the FEN + replaying the PV each frame is what drops frames.
+    final sanMoves = uciPvToSanCached(afterFirstMove, continuationUci);
     if (sanMoves.isEmpty) return const SizedBox.shrink();
 
     final fenParts = afterFirstMove.split(' ');
