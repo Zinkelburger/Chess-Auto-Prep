@@ -540,7 +540,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
                   style: const TextStyle(
                     fontFamily: 'monospace',
                     fontSize: 12,
-                    color: AppColors.onSurfaceSoft,
+                    color: AppColors.pgnMove,
                   ),
                 ),
               ],
@@ -592,11 +592,11 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
       ),
       TextSpan(
         text: '$playedEval ',
-        style: monoStyle.copyWith(color: AppColors.onSurfaceSoft),
+        style: monoStyle.copyWith(color: AppColors.pgnMove),
       ),
       TextSpan(
         text: '${(e.maiaProb! * 100).toStringAsFixed(0)}% likely',
-        style: monoStyle.copyWith(color: AppColors.onSurfaceMuted),
+        style: monoStyle.copyWith(color: AppColors.pgnMove),
       ),
     ];
 
@@ -648,11 +648,11 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
         if (bestEval != null)
           TextSpan(
             text: '$bestEval ',
-            style: monoStyle.copyWith(color: AppColors.onSurfaceSoft),
+            style: monoStyle.copyWith(color: AppColors.pgnMove),
           ),
         TextSpan(
           text: '${(e.maiaTopProb! * 100).toStringAsFixed(0)}% expected',
-          style: monoStyle.copyWith(color: AppColors.onSurfaceMuted),
+          style: monoStyle.copyWith(color: AppColors.pgnMove),
         ),
       ]);
     }

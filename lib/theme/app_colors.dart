@@ -207,13 +207,16 @@ abstract final class AppColors {
   /// movetext ink on it hits maximum contrast.
   static const pgnSurface = Color(0xFF000000);
 
-  /// Movetext ink: near-white hierarchy. Sidelines use structure (parens +
-  /// line breaks), not a separate hue — see `PgnTextStyles` in theme/.
-  /// 16.7:1 on [surface].
-  static const pgnMove = ink;
+  // PGN text policy: pure white on pure black, no tinted or dimmed tones.
+  // Hierarchy comes from weight/italics/pills/rows, never from graying text.
 
-  /// Move numbers (`1.` / `2...`) — one step softer than SAN, 15.3:1.
-  static const pgnMoveNumber = inkSoft;
+  /// Movetext ink: pure white (21:1 on [pgnSurface]). Sidelines use structure
+  /// (parens + line breaks), not a separate hue — see `PgnTextStyles`.
+  static const pgnMove = Color(0xFFFFFFFF);
+
+  /// Move numbers (`1.` / `2...`) — same white as moves; dimming them ever
+  /// read as "disabled gray".
+  static const pgnMoveNumber = pgnMove;
 
   /// Current navigation position — the sole "you are here" hue accent.
   static const pgnMoveCurrent = info;
@@ -221,16 +224,16 @@ abstract final class AppColors {
   /// Fill of the current-move pill (pairs with [pgnMoveCurrent] border).
   static const pgnMoveCurrentBg = Color(0xFF1F6FB2);
 
-  /// Text on the current-move / active pill (4.6:1 on [pgnMoveCurrentBg]).
-  static const pgnMoveCurrentFg = Color(0xFFE3F2FD);
+  /// Text on the current-move / active pill.
+  static const pgnMoveCurrentFg = Color(0xFFFFFFFF);
 
   /// Sideline / variation SAN and brackets — same ink as mainline; distinguish
   /// with `( )` and own-row layout, not mint/teal.
   static const pgnVariation = pgnMove;
 
-  /// Solitaire / scratch analysis moves — subtle cool tint only so wrong tries
-  /// stay distinguishable from repertoire sidelines without muddy gray-blue.
-  static const pgnEphemeralMove = Color(0xFFC5D0DC);
+  /// Solitaire / scratch analysis moves — same white; the ephemeral pill fill
+  /// and row placement distinguish unsaved analysis from repertoire moves.
+  static const pgnEphemeralMove = pgnMove;
 
   /// Fill of the current ephemeral node pill.
   static const pgnEphemeralBg = Color(0xFF42607D);
