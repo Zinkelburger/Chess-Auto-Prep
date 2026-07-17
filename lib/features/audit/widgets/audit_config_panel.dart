@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import '../../../models/opening_tree.dart';
 import '../../../services/engine/engine_lifecycle.dart';
 import '../../../services/engine/stockfish_pool.dart';
+import '../../../theme/app_colors.dart';
 import '../../../widgets/engine/engine_gate.dart';
 import '../models/audit_finding.dart';
 import '../models/audit_result.dart';
@@ -220,15 +221,18 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
           // Scope toggle + label
           Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.account_tree_outlined,
                 size: 14,
-                color: Colors.grey[500],
+                color: AppColors.onSurfaceMuted,
               ),
               const SizedBox(width: 6),
               Text(
                 scopeLabel,
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.onSurfaceMuted,
+                ),
               ),
               const Spacer(),
               SizedBox(
@@ -254,11 +258,15 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
           // Uses Stockfish + Maia (always on)
           Row(
             children: [
-              Icon(Icons.memory, size: 13, color: Colors.grey[500]),
+              const Icon(
+                Icons.memory,
+                size: 13,
+                color: AppColors.onSurfaceMuted,
+              ),
               const SizedBox(width: 4),
-              Text(
+              const Text(
                 'Stockfish + Maia',
-                style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
               ),
             ],
           ),
@@ -284,12 +292,15 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
                 Icon(
                   _showAdvanced ? Icons.expand_less : Icons.expand_more,
                   size: 16,
-                  color: Colors.grey[500],
+                  color: AppColors.onSurfaceMuted,
                 ),
                 const SizedBox(width: 4),
-                Text(
+                const Text(
                   'More thresholds',
-                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.onSurfaceMuted,
+                  ),
                 ),
               ],
             ),
@@ -311,11 +322,15 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
           // Repertoire Clashes
           Row(
             children: [
-              Icon(Icons.menu_book_outlined, size: 14, color: Colors.grey[500]),
+              const Icon(
+                Icons.menu_book_outlined,
+                size: 14,
+                color: AppColors.onSurfaceMuted,
+              ),
               const SizedBox(width: 6),
-              Text(
+              const Text(
                 'Repertoire Clashes',
-                style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
               ),
               const Spacer(),
               SizedBox(
@@ -360,7 +375,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
               padding: const EdgeInsets.only(left: 20),
               child: Text(
                 'Check against book & course lines',
-                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
               ),
             ),
           const SizedBox(height: 10),
@@ -411,7 +426,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
                         '$_liveFindingCount findings',
                         style: const TextStyle(
                           fontSize: 10,
-                          color: Colors.grey,
+                          color: AppColors.onSurfaceMuted,
                         ),
                       ),
                     ],

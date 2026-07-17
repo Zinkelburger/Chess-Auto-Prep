@@ -153,7 +153,7 @@ class TrapNavigationButtons extends StatelessWidget {
         icon: const Icon(Icons.tour, size: 16),
         label: const Text('Tour'),
         style: FilledButton.styleFrom(
-          foregroundColor: tourActive ? Colors.black : AppColors.warning,
+          foregroundColor: tourActive ? AppColors.onWarning : AppColors.warning,
           backgroundColor: tourActive
               ? AppColors.warning
               : AppColors.warning.withValues(alpha: 0.15),
@@ -183,7 +183,10 @@ class TrapNavigationButtons extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
                   '0 traps in line',
-                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.onSurfaceMuted,
+                  ),
                 ),
               ),
               _buildTourButton(),

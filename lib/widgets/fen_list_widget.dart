@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 
 import '../models/opening_tree.dart';
 import '../models/position_analysis.dart';
+import '../theme/app_colors.dart';
 import '../utils/fen_utils.dart';
 
 class FenListWidget extends StatefulWidget {
@@ -290,7 +291,7 @@ class _FenListWidgetState extends State<FenListWidget> {
                 ? 'No evaluated positions found.\nRun "Analyze with Engine" first.'
                 : 'No positions found.\nTry lowering the minimum games or depth filters.',
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.grey),
+            style: const TextStyle(color: AppColors.onSurfaceMuted),
           ),
         ),
       );
@@ -315,13 +316,13 @@ class _FenListWidgetState extends State<FenListWidget> {
           ? (stats.evalCp! < -50)
           : (stats.evalCp! > 100);
       if (bad) {
-        backgroundColor = Colors.red.withValues(alpha: 0.15);
+        backgroundColor = AppColors.dangerTint;
       }
     } else {
       if (stats.winRate < 0.3) {
-        backgroundColor = Colors.red.withValues(alpha: 0.2);
+        backgroundColor = AppColors.dangerTint;
       } else if (stats.winRate < 0.4) {
-        backgroundColor = Colors.yellow.withValues(alpha: 0.2);
+        backgroundColor = AppColors.warningTint;
       }
     }
 

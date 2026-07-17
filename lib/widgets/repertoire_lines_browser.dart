@@ -5,6 +5,7 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
@@ -14,6 +15,7 @@ import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
 import '../services/coherence_service.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../services/generation/fen_map.dart';
+import '../theme/app_colors.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
 import '../utils/coverage_helpers.dart';
 import 'package:chess_auto_prep/services/line_metrics_helpers.dart';
@@ -125,8 +127,15 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     if (oldWidget.lines != widget.lines) {
       _displayIndex = buildLineDisplayIndex(widget.lines);
     }
+    // Content compare, not identity: the parent hands us a fresh
+    // currentMoveSequence list on every rebuild, so an identity `!=` was
+    // always true and re-ran the O(N log N) filter+sort over all lines on
+    // every parent repaint. Only an actual move change should re-filter.
     if (oldWidget.lines != widget.lines ||
-        oldWidget.currentMoveSequence != widget.currentMoveSequence ||
+        !listEquals(
+          oldWidget.currentMoveSequence,
+          widget.currentMoveSequence,
+        ) ||
         oldWidget.coverageResult != widget.coverageResult ||
         metricsChanged) {
       _applyFilters();
@@ -361,7 +370,7 @@ class RepertoireLinesBrowserDialog extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 border: Border(
-                  bottom: BorderSide(color: Colors.grey[700]!, width: 1),
+                  bottom: BorderSide(color: AppColors.outline, width: 1),
                 ),
               ),
               child: Row(

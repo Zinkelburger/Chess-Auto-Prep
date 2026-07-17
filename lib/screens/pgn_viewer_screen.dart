@@ -25,6 +25,8 @@ import '../core/pgn_viewer_controller.dart';
 import '../core/pgn/solitaire_controller.dart';
 import '../services/storage/storage_factory.dart';
 import '../services/game_analysis_controller.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
 import '../utils/keyboard_shortcut_utils.dart';
@@ -497,7 +499,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                     if (_controller.isLoading)
                       Positioned.fill(
                         child: ColoredBox(
-                          color: Colors.black26,
+                          color: AppColors.scrim,
                           child: Center(
                             child: CircularProgressIndicator(
                               color: theme.colorScheme.primary,

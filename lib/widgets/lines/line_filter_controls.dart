@@ -43,7 +43,9 @@ class LineFilterControls extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        border: Border(bottom: BorderSide(color: Colors.grey[700]!, width: 1)),
+        border: const Border(
+          bottom: BorderSide(color: AppColors.outline, width: 1),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -102,28 +104,39 @@ class LineFilterControls extends StatelessWidget {
       controller: searchController,
       decoration: InputDecoration(
         hintText: 'Search by name or moves...',
-        hintStyle: TextStyle(color: Colors.grey[500], fontSize: 12),
-        prefixIcon: Icon(Icons.search, size: 18, color: Colors.grey[500]),
+        hintStyle: const TextStyle(
+          color: AppColors.onSurfaceMuted,
+          fontSize: 12,
+        ),
+        prefixIcon: const Icon(
+          Icons.search,
+          size: 18,
+          color: AppColors.onSurfaceMuted,
+        ),
         suffixIcon: searchController.text.isNotEmpty
             ? IconButton(
-                icon: Icon(Icons.clear, size: 18, color: Colors.grey[500]),
+                icon: const Icon(
+                  Icons.clear,
+                  size: 18,
+                  color: AppColors.onSurfaceMuted,
+                ),
                 onPressed: searchController.clear,
               )
             : null,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: Colors.grey[700]!),
+          borderSide: const BorderSide(color: AppColors.outline),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: Colors.grey[700]!),
+          borderSide: const BorderSide(color: AppColors.outline),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: AppColors.info),
         ),
         filled: true,
-        fillColor: Colors.grey[850],
+        fillColor: AppColors.surfaceInset,
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 12,
@@ -172,9 +185,9 @@ class _CoverageFilterRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(
+        const Text(
           'Coverage:',
-          style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+          style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
         ),
         const SizedBox(width: 8),
         Expanded(
@@ -192,28 +205,28 @@ class _CoverageFilterRow extends StatelessWidget {
                 _chip(
                   'Covered',
                   CoverageFilter.covered,
-                  const Color(0xFF4CAF50),
+                  AppColors.coverageCovered,
                   hasCoverageResult ? countCoveredLines(lineCoverage) : null,
                 ),
                 const SizedBox(width: 6),
                 _chip(
                   'Too shallow',
                   CoverageFilter.tooShallow,
-                  const Color(0xFFFFA726),
+                  AppColors.coverageShallow,
                   hasCoverageResult ? countShallowLines(lineCoverage) : null,
                 ),
                 const SizedBox(width: 6),
                 _chip(
                   'Too deep',
                   CoverageFilter.tooDeep,
-                  const Color(0xFF42A5F5),
+                  AppColors.coverageDeep,
                   hasCoverageResult ? countDeepLines(lineCoverage) : null,
                 ),
                 const SizedBox(width: 6),
                 _chip(
                   'Unaccounted',
                   CoverageFilter.unaccounted,
-                  const Color(0xFFEF5350),
+                  AppColors.coverageUnaccounted,
                   hasCoverageResult
                       ? countUnaccountedLines(lineCoverage)
                       : null,
@@ -263,7 +276,9 @@ class _CoverageChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: isSelected ? (color ?? AppColors.info) : Colors.grey[800],
+          color: isSelected
+              ? (color ?? AppColors.info)
+              : AppColors.chipInactiveBg,
           borderRadius: BorderRadius.circular(12),
           border: color != null && !isSelected
               ? Border.all(color: color!.withValues(alpha: 0.4), width: 1)
@@ -277,7 +292,9 @@ class _CoverageChip extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected ? Colors.white : Colors.grey[400],
+                color: isSelected
+                    ? AppColors.onWarning
+                    : AppColors.onSurfaceSoft,
               ),
             ),
             if (count != null) ...[
@@ -286,8 +303,8 @@ class _CoverageChip extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? Colors.white.withValues(alpha: 0.25)
-                      : Colors.grey[700],
+                      ? AppColors.ink.withValues(alpha: 0.25)
+                      : AppColors.outline,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -295,7 +312,7 @@ class _CoverageChip extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 9,
                     fontWeight: FontWeight.bold,
-                    color: isSelected ? Colors.white : Colors.grey[400],
+                    color: isSelected ? AppColors.onWarning : AppColors.ink,
                   ),
                 ),
               ),

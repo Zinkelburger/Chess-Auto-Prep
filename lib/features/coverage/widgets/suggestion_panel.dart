@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_suggestion_service.dart';
+import '../../../theme/app_colors.dart';
 import '../../../utils/chess_utils.dart';
 import '../../../widgets/clickable_move_line.dart';
 
@@ -70,10 +71,10 @@ class _SuggestionPanelState extends State<SuggestionPanel> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.auto_fix_high,
                     size: 48,
-                    color: Colors.grey.shade400,
+                    color: AppColors.onSurfaceSoft,
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -258,7 +259,7 @@ class _SuggestionRow extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: Colors.green,
+                      color: AppColors.coverageCovered,
                     ),
                   ),
                   const Spacer(),
@@ -268,7 +269,7 @@ class _SuggestionRow extends StatelessWidget {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade200,
+                      color: AppColors.surfaceInset,
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
@@ -359,7 +360,7 @@ class _MetricChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
+        color: AppColors.surfaceInset,
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text('$label: $value', style: const TextStyle(fontSize: 10)),

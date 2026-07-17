@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../models/repertoire_line.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
+import '../../theme/app_colors.dart';
 import '../../utils/coverage_helpers.dart';
 import 'package:chess_auto_prep/services/line_metrics_helpers.dart';
 import '../../utils/lines_filter_helpers.dart';
@@ -147,9 +148,9 @@ class _TableHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: Colors.grey[850],
-        border: Border(bottom: BorderSide(color: Colors.grey[700]!, width: 1)),
+      decoration: const BoxDecoration(
+        color: AppColors.surfaceInset,
+        border: Border(bottom: BorderSide(color: AppColors.outline, width: 1)),
       ),
       child: Row(
         children: [
@@ -234,7 +235,7 @@ class _HeaderCell extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: active ? FontWeight.w700 : FontWeight.w600,
-                  color: active ? Colors.grey[100] : Colors.grey[400],
+                  color: active ? AppColors.ink : AppColors.onSurfaceSoft,
                 ),
               ),
             ),
@@ -242,7 +243,7 @@ class _HeaderCell extends StatelessWidget {
               Icon(
                 ascending ? Icons.arrow_drop_up : Icons.arrow_drop_down,
                 size: 16,
-                color: Colors.grey[100],
+                color: AppColors.ink,
               ),
           ],
         ),
@@ -269,14 +270,18 @@ class _CoverageRunPrompt extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.analytics_outlined, size: 48, color: Colors.grey[700]),
+          const Icon(
+            Icons.analytics_outlined,
+            size: 48,
+            color: AppColors.onSurfaceDim,
+          ),
           const SizedBox(height: 12),
           Text(
             isCoverageRunning
                 ? 'Coverage analysis is running…'
                 : 'Coverage has not been analyzed yet',
-            style: TextStyle(
-              color: Colors.grey[400],
+            style: const TextStyle(
+              color: AppColors.onSurfaceSoft,
               fontSize: 14,
               fontWeight: FontWeight.w600,
             ),
@@ -286,7 +291,10 @@ class _CoverageRunPrompt extends StatelessWidget {
             isCoverageRunning
                 ? 'Results will appear here when the run finishes.'
                 : 'Run a coverage analysis to see which lines are covered.',
-            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+            style: const TextStyle(
+              color: AppColors.onSurfaceMuted,
+              fontSize: 12,
+            ),
           ),
           const SizedBox(height: 16),
           if (!isCoverageRunning && onRunCoverage != null)

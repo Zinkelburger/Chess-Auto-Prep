@@ -19,6 +19,8 @@ import '../services/generation/fen_map.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
 import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import 'opening_tree_widget.dart';
 
 class ExplorerSection extends StatefulWidget {
@@ -215,12 +217,12 @@ class _ExplorerSectionState extends State<ExplorerSection> {
           children: [
             Icon(_expanded ? Icons.expand_more : Icons.chevron_right, size: 16),
             const SizedBox(width: 4),
-            Text(
+            const Text(
               'Explorer',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: Colors.grey[400],
+                color: AppColors.onSurfaceSoft,
               ),
             ),
             const Spacer(),
@@ -295,10 +297,7 @@ class _ExplorerSectionState extends State<ExplorerSection> {
     if (widget.controller.openingTree == null) {
       return const Padding(
         padding: EdgeInsets.all(12),
-        child: Text(
-          'No opening tree available',
-          style: TextStyle(color: Colors.grey, fontSize: 12),
-        ),
+        child: Text('No opening tree available', style: AppTextStyles.caption),
       );
     }
     return SizedBox(

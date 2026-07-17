@@ -245,9 +245,9 @@ class _CoverageOverviewCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey[900],
+        color: AppColors.surfaceElevated,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[800]!),
+        border: Border.all(color: AppColors.outline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -260,7 +260,10 @@ class _CoverageOverviewCard extends StatelessWidget {
           Text(
             'Target ${result.targetPercent.toStringAsFixed(0)}% '
             '(${result.rootGameCount} games at ${result.rootDescription})',
-            style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.onSurfaceSoft,
+            ),
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -297,7 +300,7 @@ class _StatChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       '$label: $value',
-      style: TextStyle(fontSize: 11, color: Colors.grey[300]),
+      style: const TextStyle(fontSize: 11, color: AppColors.inkSoft),
     );
   }
 }
@@ -338,7 +341,7 @@ class _CoverageSection extends StatelessWidget {
             contentPadding: EdgeInsets.zero,
             title: Text(
               item,
-              style: TextStyle(fontSize: 11, color: Colors.grey[300]),
+              style: const TextStyle(fontSize: 11, color: AppColors.inkSoft),
             ),
             onTap: onItemTap == null ? null : () => onItemTap!(index),
           );

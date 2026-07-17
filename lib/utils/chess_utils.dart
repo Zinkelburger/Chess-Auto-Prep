@@ -21,6 +21,23 @@ String uciToSan(String fen, String uci) {
   }
 }
 
+/// Bounded memo over [uciToSan]. The unified move table re-derives SAN for
+/// every candidate move on every notifier tick during a live search (its
+/// merged-move map is rebuilt each tick, so the cached `san` field is always
+/// empty); `(fen, uci)` fully determines the result, so caching is safe.
+final Map<String, String> _uciSanCache = {};
+const int _uciSanCacheMax = 2048;
+
+String uciToSanCached(String fen, String uci) {
+  final key = '$fen|$uci';
+  final hit = _uciSanCache[key];
+  if (hit != null) return hit;
+  if (_uciSanCache.length >= _uciSanCacheMax) _uciSanCache.clear();
+  final san = uciToSan(fen, uci);
+  _uciSanCache[key] = san;
+  return san;
+}
+
 /// Convert a SAN move to standard UCI in the position given by [fen].
 ///
 /// Returns `null` when the SAN is not legal in the position.  Castling is
@@ -229,6 +246,25 @@ List<String> uciPvToSan(String fen, List<String> uciMoves, {int maxMoves = 8}) {
   } catch (_) {
     return const [];
   }
+}
+
+/// Bounded memo over [uciPvToSan] (whole PV, no `maxMoves` cap). During a live
+/// engine search the same (position, PV) recurs on every widget rebuild —
+/// several MultiPV lines re-parsing the FEN and replaying the line each frame
+/// is what drops frames. The key `(fen, pv)` fully determines the output, so
+/// caching is always correct; the map is cleared wholesale past a size cap.
+final Map<String, List<String>> _pvSanCache = {};
+const int _pvSanCacheMax = 512;
+
+List<String> uciPvToSanCached(String fen, List<String> uciMoves) {
+  if (uciMoves.isEmpty) return const [];
+  final key = '$fen|${uciMoves.join(' ')}';
+  final hit = _pvSanCache[key];
+  if (hit != null) return hit;
+  if (_pvSanCache.length >= _pvSanCacheMax) _pvSanCache.clear();
+  final san = uciPvToSan(fen, uciMoves, maxMoves: uciMoves.length);
+  _pvSanCache[key] = san;
+  return san;
 }
 
 /// Format a large integer with k/M suffixes, using [mDecimals] decimal places

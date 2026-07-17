@@ -146,7 +146,7 @@ class _InlineExpectimaxBarState extends State<InlineExpectimaxBar> {
               message: 'Toggle expectimax (X)',
               child: Text(
                 'Expectimax',
-                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
               ),
             ),
           ),

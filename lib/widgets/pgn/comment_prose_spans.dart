@@ -9,7 +9,7 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../theme/app_colors.dart';
+import '../../theme/pgn_text_styles.dart';
 import '../../utils/pgn_comment_utils.dart'
     show
         filterDisplayComment,
@@ -35,20 +35,18 @@ List<InlineSpan> commentProseSpans(
   );
   if (filtered.isEmpty) return const [];
 
-  final proseStyle = TextStyle(
+  final proseStyle = PgnTextStyles.comment.copyWith(
     fontSize: fontSize,
     height: height,
-    color: AppColors.pgnComment,
   );
   if (!bookFormatting) {
     return [TextSpan(text: '$filtered ', style: proseStyle)];
   }
 
-  final moveStyle = TextStyle(
-    fontFamily: 'monospace',
+  final moveStyle = PgnTextStyles.move.copyWith(
     fontSize: fontSize,
     height: height,
-    color: AppColors.pgnComment,
+    color: proseStyle.color,
   );
   final spans = <InlineSpan>[];
   for (final t in parseCommentTokens(stripEngineTokens(filtered))) {

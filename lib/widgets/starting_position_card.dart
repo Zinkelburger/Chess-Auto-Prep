@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 
 import '../constants/chess_constants.dart';
 import '../services/generation/pgn_export.dart';
+import '../theme/app_colors.dart';
 import 'chess_board_widget.dart';
 
 class StartingPositionCard extends StatelessWidget {
@@ -97,7 +98,11 @@ class StartingPositionCard extends StatelessWidget {
       return const SizedBox(
         width: _boardSize,
         height: _boardSize,
-        child: Icon(Icons.broken_image_outlined, size: 24, color: Colors.grey),
+        child: Icon(
+          Icons.broken_image_outlined,
+          size: 24,
+          color: AppColors.onSurfaceDim,
+        ),
       );
     }
     return SizedBox(

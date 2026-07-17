@@ -10,6 +10,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/board_editor_controller.dart';
+import '../../theme/app_colors.dart';
 import '../common/piece_image.dart';
 
 class BoardEditorWidget extends StatefulWidget {
@@ -22,10 +23,10 @@ class BoardEditorWidget extends StatefulWidget {
 }
 
 class _BoardEditorWidgetState extends State<BoardEditorWidget> {
-  // Same palette as ChessBoardWidget (private there; duplicated by design —
-  // the editor may diverge visually later).
-  static const Color lightSquareColor = Color(0xFFF0D9B5);
-  static const Color darkSquareColor = Color(0xFFB58863);
+  // Same palette as ChessBoardWidget, both sourced from the shared board
+  // tokens (the editor may still diverge visually later).
+  static const Color lightSquareColor = AppColors.boardLightSquare;
+  static const Color darkSquareColor = AppColors.boardDarkSquare;
 
   Square? _dragFrom;
   Piece? _draggedPiece;
@@ -219,7 +220,7 @@ class _EditorBoardPainter extends CustomPainter {
     canvas.drawRect(
       Offset.zero & size,
       Paint()
-        ..color = Colors.black
+        ..color = AppColors.boardOutline
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2,
     );

@@ -460,12 +460,19 @@ abstract class NodeExpander {
     BuildTreeNode? incumbent;
     var bestCp = 0;
     for (final child in node.children) {
+      // evalForUs returns 0 for an eval-less child; skip those so a missing
+      // eval can never masquerade as a 0cp incumbent over real (negative-eval)
+      // siblings.  Every our-move child currently carries an eval, so this is
+      // a guard for future expanders, not a behavior change today.
+      if (!child.hasEngineEval) continue;
       final cp = child.evalForUs(config.playAsWhite);
       if (incumbent == null || cp > bestCp) {
         bestCp = cp;
         incumbent = child;
       }
     }
+    // Fall back to the first child only when none carry an eval.
+    incumbent ??= node.children.first;
     for (final child in node.children) {
       child.searchPriority = identical(child, incumbent)
           ? basePri
@@ -486,7 +493,9 @@ abstract class NodeExpander {
   ///
   /// Everything expands under Pure (exhaustive by contract), under trappy
   /// selection (worse-eval moves are the point and need searched subtrees),
-  /// and for preferred-setup candidates (the setup bias needs them alive).
+  /// in the wide-opening band (the first [TreeBuildConfig.openingWidthPlies]
+  /// of our moves grow every in-window alternative), and for preferred-setup
+  /// candidates (the setup bias needs them alive).
   List<BuildTreeNode> ourChildrenToExpand(
     BuildTreeNode node,
     BuildTreeNode? incumbent,
@@ -494,6 +503,7 @@ abstract class NodeExpander {
     final children = List.of(node.children);
     if (config.searchAlgorithm == SearchAlgorithm.pure ||
         config.selectionMode == SelectionMode.trappy ||
+        config.widensOpeningAtPly(node.ply) ||
         config.fastAltGapCp <= 0 ||
         incumbent == null ||
         !incumbent.hasEngineEval) {

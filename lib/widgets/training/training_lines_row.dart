@@ -42,9 +42,9 @@ class _SectionHeader extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             '($count)',
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 11,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+              color: AppColors.onSurfaceMuted,
             ),
           ),
         ],
@@ -106,9 +106,9 @@ class _CollapsibleSectionState extends State<_CollapsibleSection> {
                 const SizedBox(width: 6),
                 Text(
                   '(${widget.count})',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 11,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                    color: AppColors.onSurfaceMuted,
                   ),
                 ),
                 const Spacer(),
@@ -166,9 +166,9 @@ class _LineRow extends StatelessWidget {
   }
 
   Color _statusColor(ThemeData theme) {
-    if (entry == null || entry!.isNew) return Colors.blue;
-    if (entry!.isDue) return Colors.orange;
-    return Colors.green;
+    if (entry == null || entry!.isNew) return AppColors.srsNew;
+    if (entry!.isDue) return AppColors.srsDue;
+    return AppColors.srsLearned;
   }
 
   double _moveMastery() {
@@ -212,8 +212,8 @@ class _LineRow extends StatelessWidget {
                   decoration: BoxDecoration(
                     color:
                         (line.color.toLowerCase() == 'white'
-                                ? Colors.white
-                                : Colors.black)
+                                ? AppColors.sideWhite
+                                : AppColors.sideBlack)
                             .withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(4),
                   ),
@@ -253,9 +253,9 @@ class _LineRow extends StatelessWidget {
               children: [
                 Text(
                   '${line.moves.length} moves',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 11,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                    color: AppColors.onSurfaceMuted,
                   ),
                 ),
                 if (playability != null) ...[
@@ -307,16 +307,19 @@ class _PassFailChip extends StatelessWidget {
           style: const TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
-            color: Colors.green,
+            color: AppColors.success,
           ),
         ),
-        Text('/', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+        const Text(
+          '/',
+          style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+        ),
         Text(
           '$fail',
           style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
-            color: fail > 0 ? Colors.red : Colors.grey,
+            color: fail > 0 ? AppColors.danger : AppColors.onSurfaceMuted,
           ),
         ),
       ],
@@ -341,7 +344,9 @@ class _MasteryBar extends StatelessWidget {
             context,
           ).colorScheme.surfaceContainerHighest,
           valueColor: AlwaysStoppedAnimation(
-            value >= 1.0 ? Colors.green : Colors.blue.withValues(alpha: 0.7),
+            value >= 1.0
+                ? AppColors.success
+                : AppColors.srsNew.withValues(alpha: 0.7),
           ),
         ),
       ),
@@ -363,13 +368,13 @@ class _PlayabilityChip extends StatelessWidget {
     final Color color;
     final String label;
     if (value >= 0.7) {
-      color = Colors.green;
+      color = AppColors.success;
       label = 'Easy';
     } else if (value >= 0.4) {
-      color = Colors.orange;
+      color = AppColors.warning;
       label = 'Medium';
     } else {
-      color = Colors.red;
+      color = AppColors.danger;
       label = 'Hard';
     }
 
@@ -426,9 +431,16 @@ class _BottleneckHint extends StatelessWidget {
       padding: const EdgeInsets.only(top: 3),
       child: Row(
         children: [
-          const Icon(Icons.warning_amber_rounded, size: 11, color: Colors.red),
+          const Icon(
+            Icons.warning_amber_rounded,
+            size: 11,
+            color: AppColors.danger,
+          ),
           const SizedBox(width: 3),
-          Text(label, style: const TextStyle(fontSize: 10, color: Colors.red)),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 10, color: AppColors.danger),
+          ),
         ],
       ),
     );

@@ -11,6 +11,7 @@ import 'models/engine_settings.dart';
 import 'models/eval_database_settings.dart';
 import 'screens/main_screen.dart';
 import 'theme/app_colors.dart';
+import 'theme/app_text_styles.dart';
 
 import 'services/browser_extension_server/browser_extension_server_factory.dart';
 import 'services/default_pgn_service.dart';
@@ -42,12 +43,24 @@ void main() {
 }
 
 Future<void> _initializeApp() async {
+  // Required before runApp (configures the native window).
   await windowManager.ensureInitialized();
 
-  await EngineSettings.instance.loadFromPrefs();
-  await EvalDatabaseSettings.instance.load();
-  await EngineLifecycle.instance.loadPersistedState();
-  await EvalCache.instance.init();
+  // These three are independent SharedPreferences/settings loads — run them
+  // concurrently instead of serially so the first frame isn't gated on three
+  // sequential disk round-trips. They must finish before runApp so the first
+  // render reflects the user's saved engine/eval preferences.
+  await Future.wait([
+    EngineSettings.instance.loadFromPrefs(),
+    EvalDatabaseSettings.instance.load(),
+    EngineLifecycle.instance.loadPersistedState(),
+  ]);
+
+  // The persistent eval cache opens a SQLite database — nothing on the first
+  // screen (Tactics) needs it. Warm it in the background; get/put await the
+  // same idempotent init() future so early engine-pane writes wait for the
+  // DB instead of sticking in the L1 memory map only.
+  unawaited(EvalCache.instance.init());
 
   _startBrowserExtensionServer();
   DefaultPgnService.ensureExtracted();
@@ -81,7 +94,7 @@ class StartupErrorApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: const ColorScheme.dark(
           surface: AppColors.surface,
-          onSurface: Colors.white,
+          onSurface: AppColors.ink,
           error: AppColors.danger,
         ),
         scaffoldBackgroundColor: AppColors.surface,
@@ -165,48 +178,46 @@ class ChessAutoPrepApp extends StatelessWidget {
         theme: ThemeData(
           colorScheme: const ColorScheme.dark(
             surface: AppColors.surface,
-            onSurface: Colors.white,
-            primary: Colors.white,
+            onSurface: AppColors.ink,
+            primary: AppColors.ink,
             onPrimary: AppColors.surface,
             primaryContainer: AppColors.surfaceContainer,
-            onPrimaryContainer: Colors.white,
-            secondary: Color(0xFF606060),
-            onSecondary: Colors.white,
+            onPrimaryContainer: AppColors.ink,
+            secondary: AppColors.surfaceHighlight,
+            onSecondary: AppColors.ink,
             tertiary: AppColors.expectimax,
             onTertiary: AppColors.surface,
             error: AppColors.danger,
-            onError: Colors.white,
+            onError: AppColors.ink,
           ),
           scaffoldBackgroundColor: AppColors.surface,
           dividerColor: AppColors.divider,
+          textTheme: AppTextStyles.materialTextTheme(),
           appBarTheme: const AppBarTheme(
             backgroundColor: AppColors.surfaceElevated,
-            foregroundColor: Colors.white,
+            foregroundColor: AppColors.ink,
           ),
           elevatedButtonTheme: ElevatedButtonThemeData(
             style: ElevatedButton.styleFrom(
-              foregroundColor: Colors.white,
-              backgroundColor: const Color(0xFF404040),
+              foregroundColor: AppColors.ink,
+              backgroundColor: AppColors.buttonSurface,
             ),
           ),
           textButtonTheme: TextButtonThemeData(
-            style: TextButton.styleFrom(foregroundColor: Colors.white),
+            style: TextButton.styleFrom(foregroundColor: AppColors.ink),
           ),
           outlinedButtonTheme: OutlinedButtonThemeData(
-            style: OutlinedButton.styleFrom(foregroundColor: Colors.white),
+            style: OutlinedButton.styleFrom(foregroundColor: AppColors.ink),
           ),
           filledButtonTheme: FilledButtonThemeData(
             style: FilledButton.styleFrom(
-              foregroundColor: Colors.white,
-              backgroundColor: const Color(0xFF404040),
+              foregroundColor: AppColors.ink,
+              backgroundColor: AppColors.buttonSurface,
             ),
           ),
           snackBarTheme: SnackBarThemeData(
-            backgroundColor: Colors.grey[850],
-            contentTextStyle: const TextStyle(
-              color: Colors.white,
-              fontSize: 15,
-            ),
+            backgroundColor: AppColors.surfaceInset,
+            contentTextStyle: AppTextStyles.body.copyWith(fontSize: 15),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),

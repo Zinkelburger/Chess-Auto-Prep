@@ -9,7 +9,17 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import '../services/game_analysis_controller.dart';
+import '../theme/app_colors.dart';
 import '../utils/chess_utils.dart' show formatEvalDisplay;
+
+// Chart-local aliases for the AppColors.chart* tokens (the app is dark-only).
+// These are chart marks — the white/black area fills represent the two sides,
+// not UI chrome.
+const _evalLineColor = AppColors.chartEvalLine;
+const _medianLineColor = AppColors.chartMedianLine;
+const _gridlineColor = AppColors.chartGridline;
+const _whiteAreaFill = AppColors.chartAreaWhite;
+const _blackAreaFill = AppColors.chartAreaBlack;
 
 class GameAnalysisChart extends StatefulWidget {
   final List<MoveEval> evals;
@@ -88,16 +98,12 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
     }
 
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     const double defaultCap = 200;
     final spots = <FlSpot>[
       const FlSpot(0, 0),
       for (final e in evals) FlSpot(e.ply.toDouble(), _clampCp(e).toDouble()),
     ];
-
-    final whiteColor = isDark ? Colors.white70 : Colors.white;
-    final blackColor = isDark ? Colors.grey[850]! : Colors.black87;
 
     final maxAbs = spots.fold<double>(
       0.0,
@@ -118,10 +124,6 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
           ? cpValues[mid]
           : (cpValues[mid - 1] + cpValues[mid]) / 2;
     }
-    final medianColor = isDark
-        ? const Color(0xFF6FBF8F)
-        : const Color(0xFF2E7D52);
-
     const double minPxPerPly = 12.0;
     final plyCount = evals.isEmpty ? 1.0 : evals.last.ply.toDouble();
 
@@ -151,15 +153,15 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
                   getDrawingHorizontalLine: (value) {
                     if (value.abs() < 1) {
                       // Zero line
-                      return FlLine(
-                        color: isDark ? Colors.grey[600]! : Colors.grey[400]!,
+                      return const FlLine(
+                        color: _gridlineColor,
                         strokeWidth: 1,
                       );
                     }
                     if ((value - 100).abs() < 1 || (value + 100).abs() < 1) {
                       // ±1 pawn reference line
-                      return FlLine(
-                        color: isDark ? Colors.grey[600]! : Colors.grey[400]!,
+                      return const FlLine(
+                        color: _gridlineColor,
                         strokeWidth: 0.5,
                         dashArray: [4, 4],
                       );
@@ -231,16 +233,16 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
                     if (medianCp != null)
                       HorizontalLine(
                         y: medianCp,
-                        color: medianColor.withAlpha(170),
+                        color: _medianLineColor.withAlpha(170),
                         strokeWidth: 1,
                         dashArray: [2, 4],
                         label: HorizontalLineLabel(
                           show: true,
                           alignment: Alignment.topRight,
                           padding: const EdgeInsets.only(right: 4, bottom: 2),
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 9,
-                            color: medianColor,
+                            color: _medianLineColor,
                             fontWeight: FontWeight.w600,
                           ),
                           labelResolver: (_) => 'median',
@@ -278,9 +280,7 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
                     isCurved: true,
                     curveSmoothness: 0.2,
                     preventCurveOverShooting: true,
-                    color: isDark
-                        ? const Color(0xFFD08030)
-                        : const Color(0xFFD85000),
+                    color: _evalLineColor,
                     barWidth: 2,
                     isStrokeCapRound: true,
                     dotData: FlDotData(
@@ -308,7 +308,7 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
                               radius: 4,
                               color: theme.colorScheme.primary,
                               strokeWidth: 1.5,
-                              strokeColor: Colors.white,
+                              strokeColor: AppColors.sideWhite,
                             );
                           }
                           return FlDotCirclePainter(
@@ -316,7 +316,8 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
                             color: Colors.transparent,
                           );
                         }
-                        final color = _classColor(cls) ?? Colors.grey;
+                        final color =
+                            _classColor(cls) ?? AppColors.onSurfaceMuted;
                         final radius = cls == MoveClassification.blunder
                             ? 5.0
                             : 4.0;
@@ -324,19 +325,19 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
                           radius: radius,
                           color: color,
                           strokeWidth: 1.5,
-                          strokeColor: isDark ? Colors.black : Colors.white,
+                          strokeColor: AppColors.backdrop,
                         );
                       },
                     ),
                     belowBarData: BarAreaData(
                       show: true,
-                      color: whiteColor.withAlpha(isDark ? 30 : 50),
+                      color: _whiteAreaFill.withAlpha(30),
                       cutOffY: 0,
                       applyCutOffY: true,
                     ),
                     aboveBarData: BarAreaData(
                       show: true,
-                      color: blackColor.withAlpha(isDark ? 40 : 30),
+                      color: _blackAreaFill.withAlpha(40),
                       cutOffY: 0,
                       applyCutOffY: true,
                     ),
@@ -384,10 +385,10 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
   };
 
   static Color? _classColor(MoveClassification cls) => switch (cls) {
-    MoveClassification.blunder => const Color(0xFFDB3B21),
-    MoveClassification.mistake => const Color(0xFFE69F00),
-    MoveClassification.inaccuracy => const Color(0xFF56B4E9),
-    MoveClassification.interesting => const Color(0xFF9C27B0),
+    MoveClassification.blunder => AppColors.moveClassBlunder,
+    MoveClassification.mistake => AppColors.moveClassMistake,
+    MoveClassification.inaccuracy => AppColors.moveClassInaccuracy,
+    MoveClassification.interesting => AppColors.moveClassInteresting,
     MoveClassification.normal => null,
   };
 }
@@ -410,7 +411,12 @@ class GameAnalysisSummary extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: _buildSideStats(context, 'White', whiteEvals, Colors.white),
+            child: _buildSideStats(
+              context,
+              'White',
+              whiteEvals,
+              AppColors.sideWhite,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -418,7 +424,7 @@ class GameAnalysisSummary extends StatelessWidget {
               context,
               'Black',
               blackEvals,
-              Colors.grey[700]!,
+              AppColors.sideBlack,
             ),
           ),
         ],
@@ -459,7 +465,7 @@ class GameAnalysisSummary extends StatelessWidget {
                 height: 12,
                 decoration: BoxDecoration(
                   color: accent,
-                  border: Border.all(color: Colors.grey),
+                  border: Border.all(color: AppColors.onSurfaceMuted),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -475,32 +481,35 @@ class GameAnalysisSummary extends StatelessWidget {
               if (acpl != null)
                 Text(
                   'ACPL: $acpl',
-                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.onSurfaceMuted,
+                  ),
                 ),
             ],
           ),
           const SizedBox(height: 6),
           _StatRow(
             icon: '??',
-            color: const Color(0xFFDB3B21),
+            color: AppColors.moveClassBlunder,
             label: 'Blunder',
             count: blunders,
           ),
           _StatRow(
             icon: '?',
-            color: const Color(0xFFE69F00),
+            color: AppColors.moveClassMistake,
             label: 'Mistake',
             count: mistakes,
           ),
           _StatRow(
             icon: '?!',
-            color: const Color(0xFF56B4E9),
+            color: AppColors.moveClassInaccuracy,
             label: 'Inaccuracy',
             count: inaccuracies,
           ),
           _StatRow(
             icon: '!?',
-            color: const Color(0xFF9C27B0),
+            color: AppColors.moveClassInteresting,
             label: 'Interesting',
             count: interesting,
           ),
@@ -592,7 +601,7 @@ class _StatRow extends StatelessWidget {
             style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 13,
-              color: count > 0 ? color : Colors.grey[600],
+              color: count > 0 ? color : AppColors.onSurfaceMuted,
             ),
           ),
         ],

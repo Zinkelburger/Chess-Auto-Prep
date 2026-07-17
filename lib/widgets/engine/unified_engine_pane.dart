@@ -217,9 +217,9 @@ class _UnifiedEnginePaneState extends _UnifiedEnginePaneStateBase
                           'Depth ${ps.discoveryDepth} • '
                           '${formatNodes(ps.discoveryNodes)} nodes • '
                           '${formatNps(ps.discoveryNps)} n/s',
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 12,
-                            color: Colors.grey[400],
+                            color: AppColors.onSurfaceSoft,
                           ),
                           overflow: TextOverflow.ellipsis,
                         );
@@ -233,9 +233,9 @@ class _UnifiedEnginePaneState extends _UnifiedEnginePaneStateBase
                           'Evaluating ${ps.completedMoves}/${ps.totalMoves}: '
                           '$sans  |  '
                           'Workers: ${ps.activeWorkers}',
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 12,
-                            color: Colors.grey[400],
+                            color: AppColors.onSurfaceSoft,
                           ),
                           overflow: TextOverflow.ellipsis,
                         );
@@ -244,16 +244,19 @@ class _UnifiedEnginePaneState extends _UnifiedEnginePaneStateBase
                       if (ps.isComplete) {
                         return Text(
                           '${ps.totalMoves} moves analyzed',
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 12,
-                            color: Colors.grey[400],
+                            color: AppColors.onSurfaceSoft,
                           ),
                         );
                       }
 
-                      return Text(
+                      return const Text(
                         'Initializing...',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.onSurfaceSoft,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       );
                     },

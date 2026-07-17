@@ -29,9 +29,9 @@ mixin _TacticsImportPanelImportCard on _TacticsImportPanelStateBase {
                 ],
               ),
               const SizedBox(height: 4),
-              Text(
+              const Text(
                 'Fetch your games and turn your mistakes into puzzles.',
-                style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
               ),
               const SizedBox(height: 14),
               _buildImportSourceRow(
@@ -121,7 +121,8 @@ mixin _TacticsImportPanelImportCard on _TacticsImportPanelStateBase {
     final isRecent = widget.fetchMode == TacticsImportMode.recent;
     final isSince = !isRecent;
 
-    Color dimmed(bool active) => active ? Colors.grey[400]! : Colors.grey[700]!;
+    Color dimmed(bool active) =>
+        active ? AppColors.onSurfaceSoft : AppColors.onSurfaceDisabled;
 
     // The two fetch modes sit side by side on one line, both phrased the
     // same way ("Last [N] days" / "Latest [N] games") so no separator word
@@ -278,11 +279,17 @@ mixin _TacticsImportPanelImportCard on _TacticsImportPanelStateBase {
             children: [
               Text(
                 syncedLabel('Lichess', appState.lichessLastFetch),
-                style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.onSurfaceMuted,
+                ),
               ),
               Text(
                 syncedLabel('Chess.com', appState.chesscomLastFetch),
-                style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.onSurfaceMuted,
+                ),
               ),
             ],
           ),
@@ -309,10 +316,13 @@ mixin _TacticsImportPanelImportCard on _TacticsImportPanelStateBase {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Used when analyzing imported games. Higher depth finds '
                   'better lines but is slower.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.onSurfaceSoft,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 TextField(

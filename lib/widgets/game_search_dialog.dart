@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../theme/app_colors.dart';
 import 'game_nav_item.dart';
 
 const _visibleRows = 10;
@@ -251,7 +252,10 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                   autofocus: true,
                   decoration: InputDecoration(
                     hintText: 'Search games or enter game #...',
-                    hintStyle: TextStyle(color: Colors.grey[600], fontSize: 13),
+                    hintStyle: const TextStyle(
+                      color: AppColors.onSurfaceMuted,
+                      fontSize: 13,
+                    ),
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 12,
@@ -259,11 +263,11 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                     ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(6),
-                      borderSide: BorderSide(color: Colors.grey[700]!),
+                      borderSide: const BorderSide(color: AppColors.outline),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(6),
-                      borderSide: BorderSide(color: Colors.grey[700]!),
+                      borderSide: const BorderSide(color: AppColors.outline),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(6),
@@ -289,8 +293,8 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           child: Text(
                             'No matches',
-                            style: TextStyle(
-                              color: Colors.grey[500],
+                            style: const TextStyle(
+                              color: AppColors.onSurfaceMuted,
                               fontSize: 13,
                             ),
                           ),
@@ -320,7 +324,7 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
 
     final borderColor = isCurrent
         ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.6)
-        : Colors.grey[700]!;
+        : AppColors.outline;
     final bgColor = isCurrent
         ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.25)
         : Colors.transparent;
@@ -334,7 +338,10 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
             width: 32,
             child: Text(
               '${result.index + 1}',
-              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.onSurfaceMuted,
+              ),
             ),
           ),
           Expanded(
@@ -360,7 +367,10 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                       secondary,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.onSurfaceMuted,
+                      ),
                     ),
                   ),
                 if (!result.isGoToGame && entry.summary.isNotEmpty)
@@ -370,9 +380,9 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                       entry.summary,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 11,
-                        color: Colors.grey[500],
+                        color: AppColors.onSurfaceMuted,
                         fontStyle: FontStyle.italic,
                       ),
                     ),
@@ -385,7 +395,7 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
               '★' * rating,
               style: const TextStyle(
                 fontSize: 12,
-                color: Colors.amber,
+                color: AppColors.starAccent,
                 letterSpacing: -1,
               ),
             ),

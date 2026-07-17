@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
 import 'package:chess_auto_prep/features/traps/models/trap_reply.dart';
 import '../../../constants/chess_constants.dart';
+import '../../../theme/app_colors.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../../utils/chess_utils.dart';
 import '../../../widgets/clickable_move_line.dart';
@@ -142,7 +143,7 @@ class TrapDetailCard extends StatelessWidget {
             evalText: trap.formatEval(trap.popularEvalCp),
             probText: '${(trap.popularProb * 100).toStringAsFixed(0)}%',
             classification: 'BLUNDER',
-            classColor: Colors.red,
+            classColor: AppColors.danger,
             icon: Icons.close,
           ),
         ),
@@ -154,7 +155,7 @@ class TrapDetailCard extends StatelessWidget {
             evalText: trap.formatEval(trap.bestEvalCp),
             probText: _bestMoveProb(),
             classification: 'BEST',
-            classColor: Colors.green,
+            classColor: AppColors.success,
             icon: Icons.check,
           ),
         ),
@@ -169,13 +170,13 @@ class TrapDetailCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.green.withAlpha(15),
+        color: AppColors.success.withAlpha(15),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.green.withAlpha(60)),
+        border: Border.all(color: AppColors.success.withAlpha(60)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.reply, size: 18, color: Colors.green),
+          const Icon(Icons.reply, size: 18, color: AppColors.success),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
@@ -186,7 +187,7 @@ class TrapDetailCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
-                    color: Colors.green[700],
+                    color: AppColors.success,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -235,7 +236,7 @@ class TrapDetailCard extends StatelessWidget {
         _StatChip(
           label: 'YOU GAIN',
           value: '+${trap.evalDiffCp}cp',
-          color: Colors.green,
+          color: AppColors.success,
         ),
         _StatChip(
           label: 'REACH',
@@ -245,7 +246,7 @@ class TrapDetailCard extends StatelessWidget {
         _StatChip(
           label: 'SURPLUS',
           value: '${(trap.trickSurplus * 100).toStringAsFixed(1)}%',
-          color: Colors.orange,
+          color: AppColors.warning,
         ),
       ],
     );
@@ -339,7 +340,7 @@ class TrapDetailCard extends StatelessWidget {
         style: const TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.bold,
-          color: Colors.grey,
+          color: AppColors.onSurfaceMuted,
         ),
       ),
     );
@@ -347,15 +348,27 @@ class TrapDetailCard extends StatelessWidget {
 
   (String, IconData, Color) _classInfo(TrapReplyClass c) {
     return switch (c) {
-      TrapReplyClass.blunder => ('BLUNDER', Icons.close, Colors.red),
-      TrapReplyClass.mistake => ('MISTAKE', Icons.error_outline, Colors.orange),
+      TrapReplyClass.blunder => (
+        'BLUNDER',
+        Icons.close,
+        AppColors.replyBlunder,
+      ),
+      TrapReplyClass.mistake => (
+        'MISTAKE',
+        Icons.error_outline,
+        AppColors.replyMistake,
+      ),
       TrapReplyClass.inaccuracy => (
         'INACCURACY',
         Icons.warning_amber,
-        Colors.amber,
+        AppColors.replyInaccuracy,
       ),
-      TrapReplyClass.acceptable => ('ACCEPTABLE', Icons.remove, Colors.grey),
-      TrapReplyClass.good => ('GOOD', Icons.check, Colors.green),
+      TrapReplyClass.acceptable => (
+        'ACCEPTABLE',
+        Icons.remove,
+        AppColors.replyAcceptable,
+      ),
+      TrapReplyClass.good => ('GOOD', Icons.check, AppColors.replyGood),
     };
   }
 
@@ -487,7 +500,10 @@ class _StatChip extends StatelessWidget {
             color: color,
           ),
         ),
-        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 10, color: AppColors.onSurfaceMuted),
+        ),
       ],
     );
   }

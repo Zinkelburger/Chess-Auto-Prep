@@ -149,7 +149,7 @@ class EngineMoveRow extends StatelessWidget {
   }
 
   Widget _buildContinuation(MergedMove move, {bool muted = false}) {
-    final lineColor = muted ? AppColors.onSurfaceDim : Colors.grey[500];
+    final lineColor = muted ? AppColors.onSurfaceDim : AppColors.onSurfaceMuted;
     if (move.fullPv.length <= 1 || boardPreview == null) {
       final continuation = formatContinuation(fen, move.fullPv);
       return Text(
@@ -168,11 +168,9 @@ class EngineMoveRow extends StatelessWidget {
     if (afterFirstMove == null) return const SizedBox.shrink();
 
     final continuationUci = move.fullPv.sublist(1);
-    final sanMoves = uciPvToSan(
-      afterFirstMove,
-      continuationUci,
-      maxMoves: continuationUci.length,
-    );
+    // Cached: MultiPV rows re-render on every info line during a live search;
+    // re-parsing the FEN + replaying the PV each frame is what drops frames.
+    final sanMoves = uciPvToSanCached(afterFirstMove, continuationUci);
     if (sanMoves.isEmpty) return const SizedBox.shrink();
 
     final fenParts = afterFirstMove.split(' ');

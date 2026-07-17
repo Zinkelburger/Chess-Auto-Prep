@@ -1,9 +1,9 @@
-import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/tactics_position.dart';
-import '../chess_board_widget.dart';
+import '../../theme/app_colors.dart';
+import '../common/static_board_thumbnail.dart';
 import 'puzzle_stats_display.dart';
 
 part 'tactics_browse_row.dart';
@@ -35,6 +35,7 @@ class TacticsBrowsePanel extends StatefulWidget {
   const TacticsBrowsePanel({
     super.key,
     required this.positions,
+    this.isLoading = false,
     this.selectedFen,
     required this.onSelectTactic,
     required this.onDeleteTactic,
@@ -46,6 +47,11 @@ class TacticsBrowsePanel extends StatefulWidget {
   });
 
   final List<TacticsPosition> positions;
+
+  /// True while the database is still loading — shows a progress state
+  /// instead of the misleading "no tactics yet" empty card.
+  final bool isLoading;
+
   final String? selectedFen;
 
   /// Play this tactic. [visibleIndices] is the whole list as currently
@@ -151,6 +157,9 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
     final positions = widget.positions;
 
     if (positions.isEmpty) {
+      if (widget.isLoading) {
+        return const Center(child: CircularProgressIndicator());
+      }
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16.0),

@@ -13,6 +13,7 @@ import '../widgets/clickable_move_line.dart';
 import '../widgets/engine/engine_gate.dart';
 import '../widgets/game_analysis_chart.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import '../widgets/pgn_viewer_widget.dart';
 
 class GameAnalysisTab extends StatefulWidget {
@@ -236,7 +237,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
       return Center(
         child: Text(
           'Load a PGN to analyze',
-          style: TextStyle(color: Colors.grey[500]),
+          style: const TextStyle(color: AppColors.onSurfaceMuted),
         ),
       );
     }
@@ -308,7 +309,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
           Expanded(child: _buildMoveList(evals)),
         ] else if (!isAnalyzing) ...[
           const Spacer(),
-          Icon(Icons.show_chart, size: 48, color: Colors.grey[700]),
+          const Icon(Icons.show_chart, size: 48, color: AppColors.onSurfaceDim),
           const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: _startAnalysis,
@@ -326,7 +327,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text('Depth:', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+        const Text('Depth:', style: AppTextStyles.caption),
         const SizedBox(width: 4),
         PopupMenuButton<int>(
           tooltip: 'Analysis depth',
@@ -352,7 +353,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.grey[700]!),
+              border: Border.all(color: AppColors.outline),
             ),
             child: Text(
               '${widget.analysisController.depth}',
@@ -384,7 +385,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
           padding: const EdgeInsets.all(16),
           child: Text(
             'No inaccuracies, mistakes, blunders, or interesting moves found.',
-            style: TextStyle(color: Colors.grey[500], fontSize: 13),
+            style: AppTextStyles.muted,
           ),
         ),
       );
@@ -415,13 +416,13 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.amber.withValues(alpha: 0.12),
+        color: AppColors.starAccent.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+        border: Border.all(color: AppColors.starAccent.withValues(alpha: 0.4)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.emoji_events, color: Colors.amber, size: 20),
+          const Icon(Icons.emoji_events, color: AppColors.starAccent, size: 20),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -431,7 +432,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: Colors.amber,
+                color: AppColors.starAccent,
               ),
             ),
           ),
@@ -455,19 +456,19 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
     final String classLabel;
     switch (e.classification) {
       case MoveClassification.blunder:
-        classColor = const Color(0xFFDB3B21);
+        classColor = AppColors.moveClassBlunder;
         classLabel = 'Blunder';
       case MoveClassification.mistake:
-        classColor = const Color(0xFFE69F00);
+        classColor = AppColors.moveClassMistake;
         classLabel = 'Mistake';
       case MoveClassification.inaccuracy:
-        classColor = const Color(0xFF56B4E9);
+        classColor = AppColors.moveClassInaccuracy;
         classLabel = 'Inaccuracy';
       case MoveClassification.interesting:
-        classColor = const Color(0xFF9C27B0);
+        classColor = AppColors.moveClassInteresting;
         classLabel = 'Interesting';
       case MoveClassification.normal:
-        classColor = Colors.grey;
+        classColor = AppColors.onSurfaceMuted;
         classLabel = '';
     }
 
@@ -481,7 +482,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: isNearest
             ? BoxDecoration(
-                color: Colors.white.withAlpha(12),
+                color: AppColors.hoverOverlay,
                 border: Border(left: BorderSide(color: classColor, width: 3)),
               )
             : null,
@@ -492,10 +493,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
               children: [
                 SizedBox(
                   width: 48,
-                  child: Text(
-                    '$moveNum$dots',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                  ),
+                  child: Text('$moveNum$dots', style: AppTextStyles.caption),
                 ),
                 Text(
                   e.san,
@@ -531,7 +529,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
                     message: 'You found a better move here!',
                     child: Icon(
                       Icons.emoji_events,
-                      color: Colors.amber,
+                      color: AppColors.starAccent,
                       size: 16,
                     ),
                   ),
@@ -539,10 +537,10 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
                 const Spacer(),
                 Text(
                   evalStr,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontFamily: 'monospace',
                     fontSize: 12,
-                    color: Colors.grey[400],
+                    color: AppColors.onSurfaceSoft,
                   ),
                 ),
               ],
@@ -594,11 +592,11 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
       ),
       TextSpan(
         text: '$playedEval ',
-        style: monoStyle.copyWith(color: Colors.grey[400]),
+        style: monoStyle.copyWith(color: AppColors.onSurfaceSoft),
       ),
       TextSpan(
         text: '${(e.maiaProb! * 100).toStringAsFixed(0)}% likely',
-        style: monoStyle.copyWith(color: Colors.grey[500]),
+        style: monoStyle.copyWith(color: AppColors.onSurfaceMuted),
       ),
     ];
 
@@ -609,7 +607,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
       spans.addAll([
         TextSpan(
           text: '  ·  ',
-          style: monoStyle.copyWith(color: Colors.grey[600]),
+          style: monoStyle.copyWith(color: AppColors.onSurfaceMuted),
         ),
         WidgetSpan(
           alignment: PlaceholderAlignment.baseline,
@@ -622,7 +620,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
                 padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
                 decoration: isExpectedActive
                     ? BoxDecoration(
-                        color: AppColors.pgnMainLine,
+                        color: AppColors.pgnMoveCurrentBg,
                         borderRadius: BorderRadius.circular(2),
                       )
                     : null,
@@ -630,7 +628,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
                   e.maiaTopMove!,
                   style: monoStyle.copyWith(
                     color: isExpectedActive
-                        ? Colors.white
+                        ? AppColors.pgnMoveCurrentFg
                         : AppColors.pgnMainLine,
                     fontWeight: FontWeight.bold,
                     decoration: isExpectedActive
@@ -650,11 +648,11 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
         if (bestEval != null)
           TextSpan(
             text: '$bestEval ',
-            style: monoStyle.copyWith(color: Colors.grey[400]),
+            style: monoStyle.copyWith(color: AppColors.onSurfaceSoft),
           ),
         TextSpan(
           text: '${(e.maiaTopProb! * 100).toStringAsFixed(0)}% expected',
-          style: monoStyle.copyWith(color: Colors.grey[500]),
+          style: monoStyle.copyWith(color: AppColors.onSurfaceMuted),
         ),
       ]);
     }

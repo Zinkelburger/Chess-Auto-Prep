@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/position_analysis.dart';
+import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
 
 class GamesListWidget extends StatefulWidget {
@@ -61,7 +62,7 @@ class _GamesListWidgetState extends State<GamesListWidget> {
           padding: const EdgeInsets.all(16),
           child: Text(
             message,
-            style: const TextStyle(color: Colors.grey),
+            style: const TextStyle(color: AppColors.onSurfaceMuted),
             textAlign: TextAlign.center,
           ),
         ),
@@ -75,7 +76,7 @@ class _GamesListWidgetState extends State<GamesListWidget> {
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface,
-            border: Border(bottom: BorderSide(color: Colors.grey.shade700)),
+            border: const Border(bottom: BorderSide(color: AppColors.outline)),
           ),
           child: Text(
             '${widget.games.length} game${widget.games.length == 1 ? '' : 's'} with this position',
@@ -124,17 +125,17 @@ class _GamesListWidgetState extends State<GamesListWidget> {
                       const SizedBox(height: 2),
                       Row(
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.bar_chart,
                             size: 12,
-                            color: Colors.amber.shade300,
+                            color: AppColors.starAccent,
                           ),
                           const SizedBox(width: 4),
                           Text(
                             game.eloDisplay,
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 11,
-                              color: Colors.amber.shade300,
+                              color: AppColors.starAccent,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -149,9 +150,9 @@ class _GamesListWidgetState extends State<GamesListWidget> {
                       const SizedBox(height: 2),
                       Text(
                         game.site,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 10,
-                          color: Colors.blue.shade300,
+                          color: AppColors.info,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

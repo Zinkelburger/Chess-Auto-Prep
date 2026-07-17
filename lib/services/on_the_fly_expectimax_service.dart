@@ -70,10 +70,21 @@ class OnTheFlyExpectimaxService extends ChangeNotifier with SafeChangeNotifier {
   /// the user is just browsing.
   static const int _maxNodesPerPly = 800;
 
-  /// Minimum interval between partial line refreshes during a depth pass —
-  /// each refresh re-runs expectimax over the whole tree, so this bounds
-  /// that cost while keeping the pane visibly live.
-  static const Duration _partialRefreshInterval = Duration(milliseconds: 400);
+  /// Base / max interval between partial line refreshes during a depth pass.
+  /// Each refresh re-runs O(nodes) expectimax over the whole tree on the UI
+  /// isolate, so the cadence stretches as the tree grows — small trees stay
+  /// snappy while a large one can't repaint the whole pane several times a
+  /// second.
+  static const Duration _partialRefreshBase = Duration(milliseconds: 400);
+  static const Duration _partialRefreshMax = Duration(milliseconds: 1500);
+
+  Duration get _partialRefreshInterval {
+    final ms = (_partialRefreshBase.inMilliseconds + _nodesBuilt ~/ 4).clamp(
+      _partialRefreshBase.inMilliseconds,
+      _partialRefreshMax.inMilliseconds,
+    );
+    return Duration(milliseconds: ms);
+  }
 
   final Map<String, _CachedSubtree> _cache = {};
   final Map<String, _MoveLineState> _moveLines = {};
@@ -438,7 +449,9 @@ class OnTheFlyExpectimaxService extends ChangeNotifier with SafeChangeNotifier {
     final map = (fenMap ?? FenMap())..populate(tree.root);
     final eca = ExpectimaxCalculator(config: config, fenMap: map);
     eca.calculate(tree);
-    calculateMyEase(tree, playAsWhite: playAsWhite);
+    // myEase is not read by the progressive line display (it renders `.ease`)
+    // and is recomputed on every completed-depth pass — skip its full-tree
+    // walk here to keep each partial tick cheap.
 
     _currentTree = tree;
     _currentConfig = config;
@@ -552,6 +565,9 @@ class OnTheFlyExpectimaxService extends ChangeNotifier with SafeChangeNotifier {
       ourMultipv: _settings.expectimaxOurMultipv,
       oppMaxChildren: _settings.expectimaxOppMaxChildren,
       oppMassTarget: _settings.expectimaxOppMassTarget,
+      // Tight per-ply node budget: spend it on depth, not opening breadth
+      // (the analyzed position is the root and is wide regardless).
+      openingWidthPlies: 0,
     );
   }
 

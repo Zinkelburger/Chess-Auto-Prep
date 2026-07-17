@@ -8,6 +8,8 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../theme/app_colors.dart';
+
 class PgnCommentEditor extends StatefulWidget {
   final String initialText;
   final ValueChanged<String> onSave;
@@ -45,7 +47,7 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.grey.withValues(alpha: 0.12),
+        color: AppColors.surfaceInset,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
@@ -55,7 +57,7 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
               controller: _controller,
               autofocus: true,
               maxLines: null,
-              style: TextStyle(fontSize: 13, color: Colors.grey[200]),
+              style: const TextStyle(fontSize: 13, color: AppColors.ink),
               decoration: InputDecoration(
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(
@@ -64,21 +66,32 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
                 ),
                 border: InputBorder.none,
                 hintText: 'Comment',
-                hintStyle: TextStyle(color: Colors.grey[600], fontSize: 13),
+                hintStyle: const TextStyle(
+                  color: AppColors.onSurfaceMuted,
+                  fontSize: 13,
+                ),
               ),
               onSubmitted: (v) => widget.onSave(v),
             ),
           ),
           IconButton(
             onPressed: () => widget.onSave(_controller.text),
-            icon: Icon(Icons.check, size: 18, color: Colors.grey[400]),
+            icon: const Icon(
+              Icons.check,
+              size: 18,
+              color: AppColors.onSurfaceSoft,
+            ),
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
             tooltip: 'Save comment',
           ),
           IconButton(
             onPressed: widget.onCancel,
-            icon: Icon(Icons.close, size: 18, color: Colors.grey[500]),
+            icon: const Icon(
+              Icons.close,
+              size: 18,
+              color: AppColors.onSurfaceMuted,
+            ),
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
             tooltip: 'Cancel',

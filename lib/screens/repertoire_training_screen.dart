@@ -10,6 +10,8 @@ import '../core/app_state.dart';
 import '../models/repertoire_metadata.dart';
 import '../services/training/training_phase.dart';
 import '../services/training/training_session_controller.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/pgn_viewer_widget.dart';
@@ -420,11 +422,17 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.lock_outline, size: 48, color: Colors.grey[400]),
+            const Icon(
+              Icons.lock_outline,
+              size: 48,
+              color: AppColors.onSurfaceDim,
+            ),
             const SizedBox(height: 12),
             Text(
               'Complete the line to review PGN',
-              style: TextStyle(color: Colors.grey[600]),
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.onSurfaceMuted,
+              ),
             ),
           ],
         ),

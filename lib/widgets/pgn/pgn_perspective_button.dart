@@ -9,6 +9,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../core/pgn_viewer_controller.dart';
+import '../../theme/app_colors.dart';
 
 class PgnPerspectiveButton extends StatelessWidget {
   final PgnViewerController controller;
@@ -117,7 +118,7 @@ class PgnPerspectiveButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: Colors.grey[700]!),
+          border: Border.all(color: AppColors.outline),
         ),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 120),

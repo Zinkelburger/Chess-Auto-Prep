@@ -68,8 +68,8 @@ class _CoverageProgressBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: AppColors.info.withValues(alpha: 0.2),
-        border: Border(
-          bottom: BorderSide(color: Colors.grey[800]!, width: 0.5),
+        border: const Border(
+          bottom: BorderSide(color: AppColors.divider, width: 0.5),
         ),
       ),
       child: Column(
@@ -78,14 +78,14 @@ class _CoverageProgressBar extends StatelessWidget {
           if (message != null)
             Text(
               message!,
-              style: const TextStyle(fontSize: 11, color: AppColors.lichessDb),
+              style: const TextStyle(fontSize: 11, color: AppColors.info),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
           const SizedBox(height: 6),
           LinearProgressIndicator(
             value: progress,
-            backgroundColor: Colors.grey[800],
+            backgroundColor: AppColors.buttonSurface,
             minHeight: 4,
           ),
         ],
@@ -123,10 +123,10 @@ class _CoverageSummaryBar extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.grey[900],
+      decoration: const BoxDecoration(
+        color: AppColors.surfaceElevated,
         border: Border(
-          bottom: BorderSide(color: Colors.grey[800]!, width: 0.5),
+          bottom: BorderSide(color: AppColors.divider, width: 0.5),
         ),
       ),
       child: Column(
@@ -136,29 +136,29 @@ class _CoverageSummaryBar extends StatelessWidget {
               _CoverageStat(
                 label: 'Covered',
                 percent: pct(covered),
-                color: const Color(0xFF4CAF50),
+                color: AppColors.coverageCovered,
               ),
               const SizedBox(width: 4),
-              Text(
+              const Text(
                 '|',
-                style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                style: TextStyle(fontSize: 10, color: AppColors.onSurfaceMuted),
               ),
               const SizedBox(width: 4),
               _CoverageStat(
                 label: 'Shallow',
                 percent: pct(shallow),
-                color: const Color(0xFFFFA726),
+                color: AppColors.coverageShallow,
               ),
               const SizedBox(width: 4),
-              Text(
+              const Text(
                 '|',
-                style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                style: TextStyle(fontSize: 10, color: AppColors.onSurfaceMuted),
               ),
               const SizedBox(width: 4),
               _CoverageStat(
                 label: 'Deep',
                 percent: pct(deep),
-                color: const Color(0xFF42A5F5),
+                color: AppColors.coverageDeep,
               ),
               if (totalUnaccounted > 0) ...[
                 const Spacer(),
@@ -169,14 +169,17 @@ class _CoverageSummaryBar extends StatelessWidget {
                       width: 8,
                       height: 8,
                       decoration: const BoxDecoration(
-                        color: Color(0xFFEF5350),
+                        color: AppColors.coverageUnaccounted,
                         shape: BoxShape.circle,
                       ),
                     ),
                     const SizedBox(width: 4),
                     Text(
                       '$totalUnaccounted unaccounted',
-                      style: TextStyle(fontSize: 10, color: Colors.grey[300]),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: AppColors.onSurfaceSoft,
+                      ),
                     ),
                   ],
                 ),
@@ -239,7 +242,7 @@ class _GapButton extends StatelessWidget {
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 8),
           visualDensity: VisualDensity.compact,
-          side: BorderSide(color: Colors.grey[600]!),
+          side: const BorderSide(color: AppColors.outline),
         ),
       ),
     );
@@ -270,7 +273,7 @@ class _CoverageStat extends StatelessWidget {
         const SizedBox(width: 4),
         Text(
           '$label: ${percent.toStringAsFixed(1)}%',
-          style: TextStyle(fontSize: 10, color: Colors.grey[300]),
+          style: const TextStyle(fontSize: 10, color: AppColors.onSurfaceSoft),
         ),
       ],
     );
@@ -294,18 +297,24 @@ class _StatsBar extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      color: Colors.grey[900],
+      color: AppColors.surfaceElevated,
       child: Row(
         children: [
           Text(
             '${filteredLines.length} line${filteredLines.length == 1 ? '' : 's'}',
-            style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.onSurfaceSoft,
+            ),
           ),
           if (currentMoveSequence.isNotEmpty) ...[
-            Text(' • ', style: TextStyle(color: Colors.grey[600])),
+            const Text(
+              ' • ',
+              style: TextStyle(color: AppColors.onSurfaceMuted),
+            ),
             Text(
               '$matchingCount at current position',
-              style: const TextStyle(fontSize: 11, color: AppColors.lichessDb),
+              style: const TextStyle(fontSize: 11, color: AppColors.info),
             ),
           ],
         ],

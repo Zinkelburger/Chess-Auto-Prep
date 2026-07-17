@@ -12,6 +12,7 @@ import 'package:path/path.dart' as p;
 import '../models/repertoire_metadata.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/storage/storage_factory.dart';
+import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
 import 'layout/empty_state_placeholder.dart';
 import 'pgn_import_dialog.dart';
@@ -77,7 +78,11 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, size: 64, color: Colors.red),
+              const Icon(
+                Icons.error_outline,
+                size: 64,
+                color: AppColors.danger,
+              ),
               const SizedBox(height: 16),
               Text(_loadError!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
@@ -152,12 +157,12 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.1),
+                  color: AppColors.warningTint,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(
                   Icons.library_books,
-                  color: Colors.orange,
+                  color: AppColors.warning,
                   size: 32,
                 ),
               ),
@@ -176,12 +181,18 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
                     const SizedBox(height: 4),
                     Text(
                       '$gameCount game${gameCount == 1 ? '' : 's'}',
-                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: AppColors.onSurfaceMuted,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       'Modified $timeAgo',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.onSurfaceMuted,
+                      ),
                     ),
                   ],
                 ),
@@ -210,9 +221,12 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
                     value: 'delete',
                     child: Row(
                       children: [
-                        Icon(Icons.delete, size: 20, color: Colors.red),
+                        Icon(Icons.delete, size: 20, color: AppColors.danger),
                         SizedBox(width: 12),
-                        Text('Delete', style: TextStyle(color: Colors.red)),
+                        Text(
+                          'Delete',
+                          style: TextStyle(color: AppColors.danger),
+                        ),
                       ],
                     ),
                   ),
@@ -400,7 +414,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
             child: const Text('Delete'),
           ),
         ],

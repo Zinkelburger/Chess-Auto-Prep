@@ -81,7 +81,7 @@ class _ActionBar extends StatelessWidget {
               label: 'Learn',
               count: newCount,
               icon: Icons.school_outlined,
-              color: Colors.blue,
+              color: AppColors.srsNew,
               onPressed: onLearn,
               theme: theme,
             ),
@@ -92,7 +92,7 @@ class _ActionBar extends StatelessWidget {
               label: 'Review',
               count: dueCount,
               icon: Icons.replay_outlined,
-              color: Colors.orange,
+              color: AppColors.srsDue,
               onPressed: onReview,
               theme: theme,
             ),
@@ -189,13 +189,13 @@ class _NeedsScoringBanner extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.amber.withValues(alpha: 0.1),
+        color: AppColors.warning.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.auto_fix_high, size: 18, color: Colors.amber),
+          const Icon(Icons.auto_fix_high, size: 18, color: AppColors.warning),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -205,7 +205,7 @@ class _NeedsScoringBanner extends StatelessWidget {
                   'Lines not scored by ease',
                   style: theme.textTheme.labelMedium?.copyWith(
                     fontWeight: FontWeight.w600,
-                    color: Colors.amber,
+                    color: AppColors.warning,
                   ),
                 ),
                 Text(

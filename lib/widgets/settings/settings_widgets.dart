@@ -110,7 +110,7 @@ class SettingsGroup extends StatelessWidget {
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Colors.grey[800]!, width: 0.5),
+            side: const BorderSide(color: AppColors.divider, width: 0.5),
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
@@ -243,9 +243,9 @@ class SettingsSliderTile extends StatelessWidget {
             width: 60,
             child: Text(
               suffix != null ? '$value $suffix' : '$value',
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 12,
-                color: Colors.grey[400],
+                color: AppColors.onSurfaceSoft,
                 fontFamily: 'monospace',
               ),
             ),

@@ -96,7 +96,7 @@ mixin _AppBarBuildersMixin
               icon: const Icon(
                 Icons.emoji_events,
                 size: 20,
-                color: Colors.amber,
+                color: AppColors.starAccent,
               ),
               tooltip: 'Trophies (${_controller.totalTrophyCount})',
             ),
@@ -155,7 +155,7 @@ mixin _AppBarBuildersMixin
                     leading: const Icon(
                       Icons.emoji_events,
                       size: 20,
-                      color: Colors.amber,
+                      color: AppColors.starAccent,
                     ),
                     title: Text(
                       'Trophy cabinet (${_controller.totalTrophyCount})',

@@ -205,7 +205,7 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
               child: Icon(
                 Icons.info_outline,
                 size: 16,
-                color: Colors.grey[500],
+                color: AppColors.onSurfaceMuted,
               ),
             ),
           ],
@@ -223,7 +223,7 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
                       : Icons.storage_outlined,
                   color: dbSettings.enableCdbDirect
                       ? AppColors.evalPositive
-                      : Colors.grey,
+                      : AppColors.onSurfaceMuted,
                 ),
                 title: const Text(
                   'Local ChessDB (full dump)',
@@ -334,7 +334,10 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
             ),
             Text(
               '$_chessDbApiUsedToday / $_chessDbApiQuotaLimit requests used today',
-              style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.onSurfaceSoft,
+              ),
             ),
           ],
         ),

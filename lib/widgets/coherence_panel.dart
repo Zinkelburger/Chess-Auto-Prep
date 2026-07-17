@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../services/coherence_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 
 class CoherencePanel extends StatelessWidget {
   final CoherenceResult result;
@@ -252,7 +253,7 @@ class _SummaryItem extends StatelessWidget {
             color: color,
           ),
         ),
-        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+        Text(label, style: AppTextStyles.caption.copyWith(fontSize: 10)),
       ],
     );
   }

@@ -8,6 +8,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
+import '../../theme/app_colors.dart';
 import '../../utils/chess_utils.dart' show uciHighlightSquares;
 import '../chess_board_widget.dart';
 
@@ -130,7 +131,7 @@ class _FloatingBoardPreviewState extends State<FloatingBoardPreview> {
       child: IgnorePointer(
         child: Material(
           elevation: 8,
-          shadowColor: Colors.black54,
+          shadowColor: AppColors.shadow,
           borderRadius: BorderRadius.circular(4),
           clipBehavior: Clip.antiAlias,
           child: ChessBoardWidget(

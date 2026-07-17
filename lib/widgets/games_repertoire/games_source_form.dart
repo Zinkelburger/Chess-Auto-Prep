@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import '../../services/games_library/game_filter.dart';
 import '../../services/games_library/games_library_service.dart';
 import '../../services/games_repertoire/games_source_config.dart';
+import '../../theme/app_colors.dart';
 import '../common/since_date_picker.dart';
 import '../starting_position_card.dart';
 
@@ -218,9 +219,9 @@ class _GamesSourceDialogState extends State<_GamesSourceDialog> {
                             'all other openings are left out.'
                       : 'Every downloaded game is used, drafting lines from '
                             'the first move.',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.onSurfaceMuted,
+                  ),
                 ),
               ],
               const SizedBox(height: 12),

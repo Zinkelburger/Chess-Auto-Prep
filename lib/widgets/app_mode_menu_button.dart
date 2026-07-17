@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
+import '../theme/app_colors.dart';
 
 class AppModeMenuButton extends StatelessWidget {
   const AppModeMenuButton({super.key, this.tooltip = 'Switch mode'});
@@ -78,7 +79,7 @@ class AppModeMenuButton extends StatelessWidget {
           if (isSelected)
             const Padding(
               padding: EdgeInsets.only(left: 12),
-              child: Icon(Icons.check, size: 16, color: Colors.green),
+              child: Icon(Icons.check, size: 16, color: AppColors.success),
             ),
         ],
       ),

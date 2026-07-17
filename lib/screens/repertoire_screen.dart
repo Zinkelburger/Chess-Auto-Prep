@@ -2,6 +2,8 @@
 /// Shows repertoire positions with board + PGN + context tabs layout.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dartchess/dartchess.dart';
@@ -63,6 +65,7 @@ import '../services/build_by_playing/build_by_playing_controller.dart';
 import '../services/games_library/games_library_service.dart';
 import '../services/games_repertoire/games_draft_controller.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import '../widgets/build_by_playing/build_by_playing_form.dart';
 import '../widgets/build_by_playing/build_session_board_bar.dart';
 import '../widgets/build_by_playing/build_session_pane.dart';
@@ -118,6 +121,13 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
 
   bool _boardFlipped = false;
   bool _wasGenerating = false;
+
+  /// Generated tree the last coherence pass ran against, so progress notifies
+  /// don't re-run clustering over unchanged lines (see _onGenerationChanged).
+  Object? _lastCoherenceTree;
+
+  /// Coalesces whole-screen rebuilds during generation progress ticks.
+  Timer? _genRebuildThrottle;
 
   /// Currently previewed missing-move finding (ephemeral board state).
   AuditFinding? _ephemeralFinding;
@@ -449,7 +459,15 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         actions: [
           TextButton.icon(
             onPressed: () => Navigator.pop(context, false),
-            icon: const Icon(Icons.circle, color: Colors.black),
+            // Near-black fill + visible outline: a plain black disc is
+            // invisible on the dark dialog surface.
+            icon: const Stack(
+              alignment: Alignment.center,
+              children: [
+                Icon(Icons.circle, color: AppColors.surface),
+                Icon(Icons.circle_outlined, color: AppColors.onSurfaceSoft),
+              ],
+            ),
             label: const Text('Black'),
           ),
           FilledButton.icon(
@@ -470,6 +488,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     if (_auditController.isAuditing) {
       _auditController.saveProgress(_repertoireFilePath);
     }
+    _genRebuildThrottle?.cancel();
     _toolsTabController.dispose();
     _sidePanelTabController.dispose();
     _focusNode.dispose();
@@ -542,7 +561,11 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                const Icon(
+                  Icons.error_outline,
+                  size: 64,
+                  color: AppColors.danger,
+                ),
                 const SizedBox(height: 16),
                 Text(loadError, textAlign: TextAlign.center),
                 const SizedBox(height: 24),

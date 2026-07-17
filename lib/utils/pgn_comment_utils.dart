@@ -8,6 +8,7 @@ import 'dart:ui' show Color;
 
 import 'package:dartchess/dartchess.dart';
 
+import '../theme/app_colors.dart';
 import 'movetext_builder.dart';
 
 // ---------------------------------------------------------------------------
@@ -26,12 +27,12 @@ class NagInfo {
 
 /// The 6 standard move-quality NAGs with Lichess-inspired colors.
 const kMoveNags = [
-  NagInfo(3, '!!', 'Brilliant', Color(0xFF168226)),
-  NagInfo(1, '!', 'Good move', Color(0xFF4CAF50)),
-  NagInfo(5, '!?', 'Interesting', Color(0xFFEA45D8)),
-  NagInfo(6, '?!', 'Dubious', Color(0xFF56B4E9)),
-  NagInfo(2, '?', 'Mistake', Color(0xFFE69F00)),
-  NagInfo(4, '??', 'Blunder', Color(0xFFDF5353)),
+  NagInfo(3, '!!', 'Brilliant', AppColors.nagBrilliant),
+  NagInfo(1, '!', 'Good move', AppColors.nagGood),
+  NagInfo(5, '!?', 'Interesting', AppColors.nagInteresting),
+  NagInfo(6, '?!', 'Dubious', AppColors.nagDubious),
+  NagInfo(2, '?', 'Mistake', AppColors.nagMistake),
+  NagInfo(4, '??', 'Blunder', AppColors.nagBlunder),
 ];
 
 /// Lookup NAG info by ID. Returns null for unknown NAGs.
@@ -46,7 +47,7 @@ NagInfo? nagInfoById(int id) {
 String nagSymbol(int id) => nagInfoById(id)?.symbol ?? '\$$id';
 
 /// Get the color for a NAG ID. Returns a neutral grey for unknown NAGs.
-Color nagColor(int id) => nagInfoById(id)?.color ?? const Color(0xFF9E9E9E);
+Color nagColor(int id) => nagInfoById(id)?.color ?? AppColors.onSurfaceMuted;
 
 // ---------------------------------------------------------------------------
 // PGN comment-token regexes

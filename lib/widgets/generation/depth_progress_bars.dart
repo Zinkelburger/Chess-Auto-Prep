@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/app_colors.dart';
+
 /// Compact per-depth explored/total mini-bars for the tree-build phase —
 /// one vertical bar per ply, filled by the explored fraction at that depth.
 ///
@@ -40,7 +42,7 @@ class DepthProgressBars extends StatelessWidget {
             width: 7,
             height: 22,
             decoration: BoxDecoration(
-              color: Colors.grey[850],
+              color: AppColors.surfaceInset,
               borderRadius: BorderRadius.circular(2),
             ),
             alignment: Alignment.bottomCenter,

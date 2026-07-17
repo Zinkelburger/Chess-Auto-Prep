@@ -5,6 +5,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../services/lichess_auth_service.dart';
+import '../theme/app_colors.dart';
 
 class LichessDbInfoIcon extends StatelessWidget {
   const LichessDbInfoIcon({super.key, this.size = 14});
@@ -23,7 +24,11 @@ class LichessDbInfoIcon extends StatelessWidget {
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           iconSize: size,
           splashRadius: 24,
-          icon: Icon(Icons.info_outline, size: size, color: Colors.grey[500]),
+          icon: Icon(
+            Icons.info_outline,
+            size: size,
+            color: AppColors.onSurfaceMuted,
+          ),
           tooltip: 'Lichess database info',
           onPressed: () => _showInfoPopup(context),
         );
@@ -81,10 +86,9 @@ class _InfoPopupOverlayState extends State<_InfoPopupOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF2A2A2E) : Colors.white;
-    final textColor = isDark ? Colors.grey[300]! : Colors.grey[800]!;
+    // Dark-only app: popover chrome comes straight from the shared palette.
+    const bgColor = AppColors.surfaceContainer;
+    const textColor = AppColors.inkSoft;
 
     return Stack(
       children: [
@@ -110,7 +114,7 @@ class _InfoPopupOverlayState extends State<_InfoPopupOverlay> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     'Lichess Database',
                     style: TextStyle(
                       fontSize: 13,
@@ -119,7 +123,7 @@ class _InfoPopupOverlayState extends State<_InfoPopupOverlay> {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  Text(
+                  const Text(
                     'Database features require a Lichess account. '
                     'Log in to enable database queries.',
                     style: TextStyle(

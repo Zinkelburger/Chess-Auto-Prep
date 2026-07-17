@@ -11,10 +11,13 @@ class StockfishExpander extends NodeExpander {
     FrontierQueue queue, {
     bool coverageOnly = false,
   }) async {
-    // Fast: MultiPV shrinks with reach priority; Pure: constant.  Root
-    // always gets a wide sweep — everything descends from it.
+    // Fast: MultiPV shrinks with reach priority; Pure: constant.  The root —
+    // and, with "Wide opening search", the first [openingWidthPlies] of our
+    // moves — always gets the wide [rootMultipv] sweep so early alternatives
+    // are never missed (they can't be recovered later).
     final nodePriority = effectiveSearchPriority(node);
-    final mpvCount = node.ply == 0
+    final wideOpening = node.ply == 0 || config.widensOpeningAtPly(node.ply);
+    final mpvCount = wideOpening
         ? config.rootMultipv
         : config.effectiveMultipv(nodePriority);
     final whiteToMove = isWhiteToMove(node.fen);
@@ -59,9 +62,10 @@ class StockfishExpander extends NodeExpander {
     }
 
     // Filter candidates by eval loss (direction depends on STM).  Fast
-    // halves the window at cold nodes; the root keeps the full window.
+    // halves the window at cold nodes; the root and the wide-opening band
+    // keep the full window.
     final bestCp = discovery.lines.first.effectiveCp;
-    final evalLossWindow = node.ply == 0
+    final evalLossWindow = wideOpening
         ? config.maxEvalLossCp
         : config.effectiveMaxEvalLossCp(nodePriority);
 

@@ -53,6 +53,7 @@ abstract class _GenerationConfigFormStateBase
     text: '30',
   );
   SearchAlgorithm _searchAlgorithm = SearchAlgorithm.fast;
+  bool _wideOpening = true;
   bool _verifyFinal = true;
 
   final List<String> _pgnFilePaths = [];

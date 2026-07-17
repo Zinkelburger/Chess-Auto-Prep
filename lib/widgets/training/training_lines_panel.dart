@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/repertoire_line.dart';
 import '../../models/repertoire_move_progress.dart';
 import '../../models/repertoire_review_entry.dart';
+import '../../theme/app_colors.dart';
 
 part 'training_lines_controls.dart';
 part 'training_lines_row.dart';
@@ -156,7 +157,7 @@ class _TrainingLinesPanelState extends State<TrainingLinesPanel> {
                 _SectionHeader(
                   title: 'Due for Review',
                   count: dueLines.length,
-                  color: Colors.orange,
+                  color: AppColors.srsDue,
                 ),
                 for (final line in dueLines)
                   _LineRow(
@@ -173,7 +174,7 @@ class _TrainingLinesPanelState extends State<TrainingLinesPanel> {
                 _SectionHeader(
                   title: 'New',
                   count: newLines.length,
-                  color: Colors.blue,
+                  color: AppColors.srsNew,
                 ),
                 for (final line in newLines)
                   _LineRow(
@@ -190,7 +191,7 @@ class _TrainingLinesPanelState extends State<TrainingLinesPanel> {
                 _CollapsibleSection(
                   title: 'Learned',
                   count: learnedLines.length,
-                  color: Colors.green,
+                  color: AppColors.srsLearned,
                   children: [
                     for (final line in learnedLines)
                       _LineRow(

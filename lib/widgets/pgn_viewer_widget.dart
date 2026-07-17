@@ -13,6 +13,8 @@ import 'package:chess_auto_prep/utils/chess_utils.dart'
     show coordsAtPly, plyBeforeMove;
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/theme/app_colors.dart';
+import 'package:chess_auto_prep/theme/app_text_styles.dart';
+import 'package:chess_auto_prep/theme/pgn_text_styles.dart';
 import 'package:chess_auto_prep/widgets/pgn/add_to_study_dialog.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_movetext_view.dart';
@@ -510,9 +512,9 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
         for (final line in lines.skip(1))
           Text(
             line,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.7),
-            ),
+            // bodySmall is already muted (onSurfaceMuted) — dimming it further
+            // with alpha would drop below WCAG AA at this 12px size.
+            style: theme.textTheme.bodySmall,
             textAlign: TextAlign.center,
           ),
       ],
@@ -541,11 +543,11 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error, size: 64, color: Colors.red),
+            const Icon(Icons.error, size: 64, color: AppColors.danger),
             const SizedBox(height: 16),
             Text(
               _error!,
-              style: const TextStyle(color: Colors.red),
+              style: const TextStyle(color: AppColors.danger),
               textAlign: TextAlign.center,
             ),
           ],
@@ -610,7 +612,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
         ?_buildBranchChips(),
         if (_isInVariation)
           Padding(
-            padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
             child: SizedBox(
               width: double.infinity,
               child: Tooltip(
@@ -618,25 +620,20 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
                 waitDuration: const Duration(milliseconds: 400),
                 child: FilledButton.tonalIcon(
                   onPressed: _returnToMainline,
-                  icon: const Icon(Icons.subdirectory_arrow_left, size: 18),
+                  icon: const Icon(Icons.subdirectory_arrow_left, size: 22),
                   label: const Text('Return to mainline'),
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.pgnMainLine.withValues(
-                      alpha: 0.16,
-                    ),
-                    foregroundColor: AppColors.pgnMainLine,
-                    textStyle: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    backgroundColor: AppColors.surfaceContainer,
+                    foregroundColor: AppTextStyles.ink,
+                    textStyle: AppTextStyles.bodyStrong.copyWith(fontSize: 15),
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
+                      horizontal: 18,
+                      vertical: 16,
                     ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                       side: BorderSide(
-                        color: AppColors.pgnMainLine.withValues(alpha: 0.35),
+                        color: AppColors.onSurfaceMuted.withValues(alpha: 0.45),
                       ),
                     ),
                   ),
@@ -645,7 +642,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
             ),
           ),
         Container(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -653,22 +650,26 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
                 IconButton(
                   onPressed: _canGoBack ? _goToStart : null,
                   icon: const Icon(Icons.skip_previous),
+                  iconSize: 30,
                   tooltip: 'Start (Home)',
                 ),
               IconButton(
                 onPressed: _canGoBack ? _goBack : null,
                 icon: const Icon(Icons.chevron_left),
+                iconSize: 32,
                 tooltip: 'Back (←)',
               ),
               IconButton(
                 onPressed: _canGoForward ? _goForward : null,
                 icon: const Icon(Icons.chevron_right),
+                iconSize: 32,
                 tooltip: 'Forward (→)',
               ),
               if (widget.showStartEndButtons)
                 IconButton(
                   onPressed: _canGoForward ? _goToEnd : null,
                   icon: const Icon(Icons.skip_next),
+                  iconSize: 30,
                   tooltip: 'End (End)',
                 ),
             ],

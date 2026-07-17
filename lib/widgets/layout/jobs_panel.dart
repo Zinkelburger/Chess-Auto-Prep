@@ -13,6 +13,7 @@ import '../../services/generation/generation_config.dart';
 import '../../services/jobs/generation_job_display.dart';
 import '../../services/jobs/repertoire_job.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import '../generation/depth_progress_bars.dart';
 
 class JobsPanel extends StatelessWidget {
@@ -89,9 +90,8 @@ class JobsPanel extends StatelessWidget {
               children: [
                 Text(
                   'Completed',
-                  style: TextStyle(
+                  style: AppTextStyles.caption.copyWith(
                     fontSize: 11,
-                    color: Colors.grey[500],
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -114,20 +114,22 @@ class JobsPanel extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.work_outline, size: 40, color: Colors.grey[700]),
+          const Icon(
+            Icons.work_outline,
+            size: 40,
+            color: AppColors.onSurfaceDim,
+          ),
           const SizedBox(height: 12),
           Text(
             'No active jobs',
-            style: TextStyle(
-              color: Colors.grey[400],
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
+            style: AppTextStyles.bodyStrong.copyWith(
+              color: AppColors.onSurfaceSoft,
             ),
           ),
           const SizedBox(height: 4),
-          Text(
+          const Text(
             'Generate a repertoire or audit an existing one',
-            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+            style: AppTextStyles.caption,
           ),
           const SizedBox(height: 20),
           Row(
@@ -236,12 +238,9 @@ class JobsPanel extends StatelessWidget {
                     onPressed: gc.isSnapshotExporting
                         ? null
                         : onExportLinesGeneration,
-                    child: Text(
+                    child: const Text(
                       'Export Lines',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.lightBlue[300],
-                      ),
+                      style: TextStyle(fontSize: 11, color: AppColors.info),
                     ),
                   ),
                 ),
@@ -252,9 +251,9 @@ class JobsPanel extends StatelessWidget {
                       'what\'s been found so far',
                   child: TextButton(
                     onPressed: onFinishNowGeneration,
-                    child: Text(
+                    child: const Text(
                       'Finish Now',
-                      style: TextStyle(fontSize: 11, color: Colors.orange[300]),
+                      style: TextStyle(fontSize: 11, color: AppColors.warning),
                     ),
                   ),
                 ),
@@ -350,11 +349,11 @@ class JobsPanel extends StatelessWidget {
     };
     final statusColor = switch (job.status) {
       JobStatus.running => Theme.of(context).colorScheme.primary,
-      JobStatus.paused => Colors.orange,
+      JobStatus.paused => AppColors.warning,
       JobStatus.completed => AppColors.success,
       JobStatus.failed => AppColors.danger,
-      JobStatus.cancelled => Colors.grey,
-      JobStatus.queued => Colors.grey,
+      JobStatus.cancelled => AppColors.onSurfaceMuted,
+      JobStatus.queued => AppColors.onSurfaceMuted,
     };
     final statusLabel = switch (job.status) {
       JobStatus.running => 'Running',
@@ -386,7 +385,7 @@ class JobsPanel extends StatelessWidget {
       ),
       subtitle: Text(
         subtitleParts.join(' · '),
-        style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+        style: AppTextStyles.caption.copyWith(fontSize: 11),
         overflow: TextOverflow.ellipsis,
       ),
       trailing: Icon(
@@ -462,10 +461,10 @@ class _ActiveJobCard extends StatelessWidget {
                 width: 16,
                 height: 16,
                 child: isPaused
-                    ? Icon(
+                    ? const Icon(
                         Icons.pause_circle_filled,
                         size: 16,
-                        color: Colors.orange[300],
+                        color: AppColors.warning,
                       )
                     : CircularProgressIndicator(
                         strokeWidth: 1.5,
@@ -494,10 +493,10 @@ class _ActiveJobCard extends StatelessWidget {
                         if (elapsed != null)
                           Text(
                             elapsed!,
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 10,
                               fontFamily: 'monospace',
-                              color: Colors.grey[500],
+                              color: AppColors.onSurfaceMuted,
                             ),
                           ),
                       ],
@@ -506,7 +505,10 @@ class _ActiveJobCard extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         subtitle!,
-                        style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: AppColors.onSurfaceMuted,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
@@ -565,15 +567,15 @@ class _ActiveJobCard extends StatelessWidget {
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.grey[850],
+                    color: AppColors.surfaceInset,
                     borderRadius: BorderRadius.circular(5),
                   ),
                   child: Text(
                     part,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: Colors.grey[300],
+                      color: AppColors.inkSoft,
                     ),
                   ),
                 ),
@@ -587,7 +589,7 @@ class _ActiveJobCard extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: progress!.clamp(0.0, 1.0),
                 minHeight: 3,
-                backgroundColor: Colors.grey[850],
+                backgroundColor: AppColors.surfaceInset,
                 color: accent,
               ),
             ),
@@ -597,7 +599,7 @@ class _ActiveJobCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(2),
               child: LinearProgressIndicator(
                 minHeight: 3,
-                backgroundColor: Colors.grey[850],
+                backgroundColor: AppColors.surfaceInset,
                 color: accent,
               ),
             ),

@@ -7,6 +7,8 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../theme/app_colors.dart';
+
 enum BottomPaneTab { findings, jobs, lines }
 
 class BottomPane extends StatefulWidget {
@@ -189,8 +191,8 @@ class BottomPaneState extends State<BottomPane>
               ),
               unselectedLabelStyle: const TextStyle(fontSize: 11),
               tabs: [
-                _buildTab('Findings', widget.findingsBadge, Colors.orange),
-                _buildTab('Jobs', widget.jobsBadge, Colors.teal),
+                _buildTab('Findings', widget.findingsBadge, AppColors.warning),
+                _buildTab('Jobs', widget.jobsBadge, AppColors.accent),
                 _buildTab('Lines', widget.linesBadge, null),
               ],
             ),
@@ -224,7 +226,7 @@ class BottomPaneState extends State<BottomPane>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
               decoration: BoxDecoration(
-                color: (badgeColor ?? Colors.grey).withAlpha(40),
+                color: (badgeColor ?? AppColors.onSurfaceMuted).withAlpha(40),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -232,7 +234,7 @@ class BottomPaneState extends State<BottomPane>
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
-                  color: badgeColor ?? Colors.grey,
+                  color: badgeColor ?? AppColors.onSurfaceMuted,
                 ),
               ),
             ),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/app_colors.dart';
+
 /// End-of-session recap card: outcome counts, accuracy, time, and a
 /// "retry mistakes" entry point.  Shown in the Tactic tab once the session
 /// queue is exhausted.
@@ -77,20 +79,20 @@ class TacticsSessionRecap extends StatelessWidget {
               children: [
                 _StatTile(
                   icon: Icons.check_circle_outline,
-                  color: Colors.green[400]!,
+                  color: AppColors.success,
                   count: solved,
                   label: 'Solved',
                 ),
                 _StatTile(
                   icon: Icons.cancel_outlined,
-                  color: Colors.red[300]!,
+                  color: AppColors.danger,
                   count: failed,
                   label: 'Failed',
                 ),
                 if (skipped > 0)
                   _StatTile(
                     icon: Icons.skip_next_outlined,
-                    color: Colors.grey[500]!,
+                    color: AppColors.onSurfaceMuted,
                     count: skipped,
                     label: 'Skipped',
                   ),

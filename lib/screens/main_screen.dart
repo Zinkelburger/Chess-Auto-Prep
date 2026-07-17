@@ -6,6 +6,7 @@ import '../core/app_state.dart';
 import '../services/tactics/tactics_import_coordinator.dart';
 import '../services/tactics/tactics_session_controller.dart';
 import '../services/tactics_database.dart';
+import '../theme/app_colors.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/tactics_control_panel.dart';
@@ -36,6 +37,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   ];
 
   final Map<AppMode, Widget> _modeViews = <AppMode, Widget>{};
+
+  /// Modes whose first build is scheduled for the next frame (see [build]).
+  final Set<AppMode> _scheduledModeBuilds = <AppMode>{};
+
   AppState? _appState;
   AppMode? _lastMode;
 
@@ -89,21 +94,39 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AppState>(
-      builder: (context, appState, child) {
-        final activeMode = appState.currentMode;
-        _modeViews[activeMode] ??= _createModeView(activeMode);
+    // select, not watch: only a mode change should rebuild the stack, not
+    // every AppState notification (board moves, analysis flags, …).
+    final activeMode = context.select<AppState, AppMode>(
+      (state) => state.currentMode,
+    );
 
-        return Scaffold(
-          body: IndexedStack(
-            index: _supportedModes.indexOf(activeMode),
-            children: [
-              for (final mode in _supportedModes)
-                _modeViews[mode] ?? const SizedBox.shrink(),
-            ],
-          ),
-        );
-      },
+    // First visit to a mode: constructing the whole screen inside the same
+    // frame as the menu tap is what made switching feel frozen. Present a
+    // lightweight loading frame immediately and build the real screen on the
+    // next frame instead.
+    if (_modeViews[activeMode] == null &&
+        !_scheduledModeBuilds.contains(activeMode)) {
+      _scheduledModeBuilds.add(activeMode);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() {
+          _scheduledModeBuilds.remove(activeMode);
+          _modeViews[activeMode] ??= _createModeView(activeMode);
+        });
+      });
+    }
+
+    return Scaffold(
+      body: IndexedStack(
+        index: _supportedModes.indexOf(activeMode),
+        children: [
+          for (final mode in _supportedModes)
+            _modeViews[mode] ??
+                (mode == activeMode
+                    ? const _ModeLoadingView()
+                    : const SizedBox.shrink()),
+        ],
+      ),
     );
   }
 
@@ -122,6 +145,17 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       case AppMode.study:
         return const StudyScreen();
     }
+  }
+}
+
+/// One-frame placeholder shown while a mode's screen is built for the first
+/// time (see [_MainScreenState.build]).
+class _ModeLoadingView extends StatelessWidget {
+  const _ModeLoadingView();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }
 
@@ -165,8 +199,10 @@ class _TacticsModeScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final appState = context.watch<AppState>();
-
+    // No AppState watch here: board-state changes rebuild only
+    // [_TacticsBoardPane]; the scaffold, app bar, and control panel would
+    // otherwise rebuild on every AppState notification from any mode — even
+    // while this screen sits hidden in the IndexedStack.
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 16,
@@ -180,10 +216,7 @@ class _TacticsModeScaffold extends StatelessWidget {
           return isCompact
               ? Column(
                   children: [
-                    Expanded(
-                      flex: 4,
-                      child: _TacticsBoardPane(appState: appState),
-                    ),
+                    const Expanded(flex: 4, child: _TacticsBoardPane()),
                     const Divider(height: 1, thickness: 1),
                     Expanded(
                       flex: 6,
@@ -196,11 +229,8 @@ class _TacticsModeScaffold extends StatelessWidget {
                 )
               : Row(
                   children: [
-                    Expanded(
-                      flex: 5,
-                      child: _TacticsBoardPane(appState: appState),
-                    ),
-                    Container(width: 1, color: Colors.grey[700]),
+                    const Expanded(flex: 5, child: _TacticsBoardPane()),
+                    Container(width: 1, color: AppColors.outline),
                     Expanded(
                       flex: 5,
                       child: Padding(
@@ -217,13 +247,12 @@ class _TacticsModeScaffold extends StatelessWidget {
 }
 
 class _TacticsBoardPane extends StatelessWidget {
-  const _TacticsBoardPane({required this.appState});
-
-  final AppState appState;
+  const _TacticsBoardPane();
 
   /// Route a board/input move into the tactics session (puzzle validation or
   /// free-play analysis, decided by the session controller).
   void _attemptMove(BuildContext context, String uci) {
+    final appState = context.read<AppState>();
     context.read<TacticsSessionController>().handleMoveAttempted(
       moveUci: uci,
       boardFen: appState.currentPosition.fen,
@@ -233,6 +262,7 @@ class _TacticsBoardPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
     return Container(
       padding: const EdgeInsets.all(12),
       child: Column(

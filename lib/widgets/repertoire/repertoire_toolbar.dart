@@ -109,10 +109,18 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
               PopupMenuItem(
                 value: 'switch_color',
                 child: ListTile(
-                  leading: Icon(
-                    Icons.circle,
-                    size: 20,
-                    color: isWhiteRepertoire! ? Colors.black : Colors.white,
+                  // Bordered swatch, not a bare Icon: the sideBlack disc is
+                  // near-invisible on the popup surface without an outline.
+                  leading: Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isWhiteRepertoire!
+                          ? AppColors.sideBlack
+                          : AppColors.sideWhite,
+                      border: Border.all(color: AppColors.outline),
+                    ),
                   ),
                   title: Text(
                     'Switch to ${isWhiteRepertoire! ? 'Black' : 'White'}',
@@ -167,7 +175,9 @@ class RepertoireSwitcherTitle extends StatelessWidget {
               Icon(
                 Icons.arrow_drop_down,
                 size: 20,
-                color: onTap == null ? Colors.grey[700] : Colors.grey[400],
+                color: onTap == null
+                    ? AppColors.onSurfaceDisabled
+                    : AppColors.onSurfaceSoft,
               ),
             ],
           ),
@@ -247,15 +257,22 @@ class RepertoireGenerationStatusChip extends StatelessWidget {
                       height: 12,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.white,
+                        color: AppColors.onWarning,
                       ),
                     )
                   else
-                    const Icon(Icons.pause, size: 12, color: Colors.white),
+                    const Icon(
+                      Icons.pause,
+                      size: 12,
+                      color: AppColors.onWarning,
+                    ),
                   const SizedBox(width: 6),
                   Text(
                     isPaused ? 'Paused' : 'Building...',
-                    style: const TextStyle(fontSize: 11, color: Colors.white),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.onWarning,
+                    ),
                   ),
                 ],
               ),

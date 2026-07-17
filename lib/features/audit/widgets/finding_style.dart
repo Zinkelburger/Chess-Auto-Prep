@@ -10,17 +10,18 @@ import '../models/audit_finding.dart';
 Color findingColor(AuditFinding finding) {
   if (finding.type == AuditFindingType.missingResponse &&
       finding.source == MissingResponseSource.clash) {
-    return Colors.purple;
+    return AppColors.findingClash;
   }
   return switch (finding.type) {
     AuditFindingType.mistake => AppColors.evalNegative,
-    AuditFindingType.inaccuracy => Colors.orange,
-    AuditFindingType.missingResponse => Colors.blue,
-    AuditFindingType.weakPosition => Colors.deepOrange,
+    AuditFindingType.inaccuracy => AppColors.findingInaccuracy,
+    AuditFindingType.missingResponse => AppColors.findingMissingResponse,
+    AuditFindingType.weakPosition => AppColors.findingWeakPosition,
     AuditFindingType.deadEnd => AppColors.onSurfaceMuted,
-    AuditFindingType.uncoveredStrongMove => Colors.cyan,
+    AuditFindingType.uncoveredStrongMove =>
+      AppColors.findingUncoveredStrongMove,
     AuditFindingType.refutation => AppColors.evalNegative,
-    AuditFindingType.practicalTrap => Colors.purpleAccent,
+    AuditFindingType.practicalTrap => AppColors.findingPracticalTrap,
   };
 }
 

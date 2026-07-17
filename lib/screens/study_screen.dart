@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 import '../constants/ui_breakpoints.dart';
 import '../core/app_state.dart';
 import '../core/study_controller.dart';
+import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_mode_menu_button.dart';
@@ -206,7 +207,9 @@ class _StudyScreenState extends State<StudyScreen> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700]),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.dangerSurface,
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete'),
           ),
@@ -337,7 +340,9 @@ class _StudyScreenState extends State<StudyScreen> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700]),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.dangerSurface,
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete'),
           ),
@@ -426,7 +431,7 @@ class _StudyScreenState extends State<StudyScreen> {
                 : Row(
                     children: [
                       Expanded(flex: 5, child: board),
-                      Container(width: 1, color: Colors.grey[700]),
+                      Container(width: 1, color: AppColors.outline),
                       Expanded(flex: 4, child: side),
                     ],
                   );

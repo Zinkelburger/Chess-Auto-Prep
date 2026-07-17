@@ -693,7 +693,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `eval/sqlite_eval_provider.dart` | Local SQLite cache |
 | `eval/in_memory_eval_provider.dart` | Session hash |
 | `eval/external_eval_provider.dart` | Remote eval abstraction |
-| `eval_cache.dart` | Eval cache facade (SQLite v2): Stockfish evals + `maia_cache` table keyed by `(fen, elo)` (policy JSON, win prob); `MaiaCache` get/put with L1 in-memory mirror; shared by generation, audit, and interactive engine panes |
+| `eval_cache.dart` | Eval cache facade (SQLite v2): Stockfish evals + `maia_cache` table keyed by `(fen, elo)` (policy JSON, win prob); `MaiaCache` get/put with L1 in-memory mirror; get/put await idempotent `init()` so background warm-up in `main` cannot leave early writes memory-only; shared by generation, audit, and interactive engine panes |
 | `eval/eval_canonicalize.dart` | FEN normalization for lookup |
 
 #### Generation pipeline
@@ -869,7 +869,8 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `fen_list_widget.dart` | FEN list display helper |
 | `pgn_with_analysis_pane.dart` | PGN + analysis dock split |
 | `pgn_with_engine.dart` | PGN pane with inline engine bar |
-| `pgn_viewer_widget.dart` | Game list + board for viewer; `_variationsByPly` holds mainline + **multiple ephemeral RAVs** per branch point (`addEphemeralMove` / `clearEphemeralMoves`); PGN tab renders each root as `( … )`; **Edit mode** (`editMode` prop): NAG inline display, `_AnnotationToolbar` with 6 glyph buttons + comment, right-click context menu with promote/delete gated by `protectOriginal`; `_toggleNag` modifies `PgnNodeData.nags` and persists via `buildMovetext` |
+| `pgn_viewer_widget.dart` | Game list + board for viewer; `_variationsByPly` holds mainline + **multiple ephemeral RAVs** per branch point (`addEphemeralMove` / `clearEphemeralMoves`); movetext via `PgnMovetextView` (near-white `PgnTextStyles`, comments/variations on own rows); larger branch chips + Return-to-mainline + nav icons; **Edit mode** (`editMode` prop): NAG inline display, annotation panel, right-click context menu with promote/delete gated by `protectOriginal`; `_toggleNag` modifies `PgnNodeData.nags` and persists via `buildMovetext` |
+| `pgn/pgn_movetext_view.dart` | Mainline + sideline + comment rendering; uses `PgnTextStyles`; flushes comments and each variation root onto full-width rows to reduce spaghetti |
 | `pgn_import_dialog.dart` | Compact PGN import `AlertDialog` — file picker pill + paste textarea with live line count via `countPgnGames`; used for repertoire append and create-with-PGN flows. Multi-source contexts use `PgnSourcesPanel` instead |
 | `pgn_sources_panel.dart` | **Compact multi-source PGN attachment panel** — replaces the oversized import dialog; supports multiple PGN files/pastes, per-source slicing via `InlineSliceEditor`, embedded `LinesPreviewPanel` |
 | `pgn_inline_slice_editor.dart` | **Inline slice editor** — "All Lines" / "Slice" radio + position/header/sequence filters + match count via `computeSliceMatches` + preview panel; accepts optional `fenIndex` for instant position lookups; used inside `PgnSourcesPanel` per source |
@@ -920,7 +921,11 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 
 | File | Purpose |
 |------|---------|
-| `app_colors.dart` | Dark theme palette, semantic colors; canonical `success`/`danger`/`warning` with eval/analysis aliases (`evalPositive`, `evalNegative`, `difficulty`) |
+| `app_colors.dart` | Dark theme palette, semantic colors; canonical `success`/`danger`/`warning` with eval/analysis aliases (`evalPositive`, `evalNegative`, `difficulty`). PGN movetext tokens (`pgnMove`, `pgnMoveNumber`, `pgnComment`, `pgnVariation`) are a near-white hierarchy — sidelines are distinguished by structure, not mint/teal hue. |
+| `app_text_styles.dart` | Shared text roles (`body`, `muted`, `caption`, `mono`, `title`, …) built from `AppColors` / near-white ink. Wired into `ThemeData.textTheme` in `main.dart`. Prefer these over ad-hoc `Colors.grey` / hard-coded sizes. |
+| `pgn_text_styles.dart` | Movetext domain styles (`move`, `moveNumber`, `comment` italic, `variation`, `branchChip`, …) on top of `AppColors` + `AppTextStyles`. Single knobs file for PGN viewer/editor look. |
+
+**Style convention:** new and touched UI should use `AppColors` / `AppTextStyles` / `theme.textTheme` (and domain packs like `PgnTextStyles`) instead of inline `Colors.grey[n]` or one-off `TextStyle(fontSize: …)`. Gradual migration of legacy call sites is tracked in FUTURE_FEATURES.
 
 ---
 

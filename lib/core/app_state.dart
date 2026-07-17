@@ -241,6 +241,10 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
   }
 
   void setRepertoireGenerating(bool generating) {
+    // Called on every generation progress tick — only an actual transition
+    // may notify, or everything watching AppState rebuilds at the
+    // generator's tick rate for the whole build.
+    if (_isRepertoireGenerating == generating) return;
     _isRepertoireGenerating = generating;
     notifyListeners();
   }

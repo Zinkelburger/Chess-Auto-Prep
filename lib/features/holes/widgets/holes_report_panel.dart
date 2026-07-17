@@ -7,6 +7,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_colors.dart';
 import '../../audit/models/audit_finding.dart';
 import '../../audit/models/audit_result.dart';
 import '../../audit/widgets/finding_style.dart';
@@ -122,7 +123,7 @@ class _HolesReportPanelState extends State<HolesReportPanel> {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
             child: Text(
               'Trap search skipped — Maia unavailable',
-              style: TextStyle(fontSize: 11, color: Colors.orange[300]),
+              style: TextStyle(fontSize: 11, color: AppColors.warning),
             ),
           ),
         const Divider(height: 1),
@@ -133,7 +134,10 @@ class _HolesReportPanelState extends State<HolesReportPanel> {
                     widget.isHunting
                         ? 'Hunting for holes...'
                         : 'No holes match the current filters',
-                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                    style: const TextStyle(
+                      color: AppColors.onSurfaceMuted,
+                      fontSize: 12,
+                    ),
                   ),
                 )
               : ListView.builder(
@@ -165,7 +169,10 @@ class _HolesReportPanelState extends State<HolesReportPanel> {
               children: [
                 Text(
                   '$dismissedCount dismissed',
-                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.onSurfaceMuted,
+                  ),
                 ),
                 const Spacer(),
                 TextButton(
@@ -200,7 +207,10 @@ class _HolesReportPanelState extends State<HolesReportPanel> {
               padding: const EdgeInsets.only(right: 8),
               child: Text(
                 progress.message,
-                style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.onSurfaceMuted,
+                ),
               ),
             )
           else if (widget.onStartHunt != null)
@@ -218,7 +228,10 @@ class _HolesReportPanelState extends State<HolesReportPanel> {
               ),
             ),
           const SizedBox(width: 6),
-          Text('Show', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+          const Text(
+            'Show',
+            style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+          ),
           const SizedBox(width: 4),
           SizedBox(
             width: 40,
@@ -269,22 +282,22 @@ class _HolesReportPanelState extends State<HolesReportPanel> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.gps_fixed, size: 40, color: Colors.grey[700]),
+          const Icon(Icons.gps_fixed, size: 40, color: AppColors.onSurfaceDim),
           const SizedBox(height: 12),
-          Text(
+          const Text(
             'No hole report yet',
             style: TextStyle(
-              color: Colors.grey[400],
+              color: AppColors.onSurfaceSoft,
               fontSize: 14,
               fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 6),
-          Text(
+          const Text(
             'Run Find Holes to search these lines for uncovered '
             'strong moves, refutations, and practical traps.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+            style: TextStyle(color: AppColors.onSurfaceMuted, fontSize: 12),
           ),
           const SizedBox(height: 16),
           if (widget.onStartHunt != null)

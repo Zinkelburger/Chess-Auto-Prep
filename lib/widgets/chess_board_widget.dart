@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:dartchess/dartchess.dart';
 
 import '../models/completed_move.dart';
+import '../theme/app_colors.dart';
 import '../utils/chess_utils.dart'
     show parseSquare, toAlgebraic, castlingKingDestination;
 import 'common/piece_image.dart';
@@ -14,11 +15,11 @@ export '../models/completed_move.dart' show CompletedMove;
 
 /// Predefined annotation brushes (color + opacity + stroke width).
 enum AnnotationBrush {
-  green(Color(0xCC15781B), 3.0),
-  red(Color(0xCCCC2222), 3.0),
-  blue(Color(0xCC003088), 3.0),
-  yellow(Color(0xCCE6A800), 3.0),
-  purple(Color(0xCC9B59B6), 3.0);
+  green(AppColors.boardArrowGreen, 3.0),
+  red(AppColors.boardArrowRed, 3.0),
+  blue(AppColors.boardArrowBlue, 3.0),
+  yellow(AppColors.boardArrowYellow, 3.0),
+  purple(AppColors.boardArrowPurple, 3.0);
 
   final Color color;
   final double strokeWidthFactor;
@@ -82,13 +83,18 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
   String? _dragStartSquare;
   bool _isDragging = false;
   Offset? _dragStartPosition;
-  Offset? _currentDragPosition;
   Piece? _draggedPiece;
 
-  static const Color lightSquareColor = Color(0xFFF0D9B5);
-  static const Color darkSquareColor = Color(0xFFB58863);
-  static const Color selectedSquareColor = Color(0xFFFFFF00);
-  static const Color highlightColor = Color(0x806496FF);
+  // Drives only the floating dragged-piece layer. Following the cursor now
+  // repaints one Positioned widget via ValueListenableBuilder instead of
+  // setState-rebuilding the whole board (64-square painter + up to 32 piece
+  // widgets) on every pointer-move event.
+  final ValueNotifier<Offset?> _currentDragPosition = ValueNotifier(null);
+
+  static const Color lightSquareColor = AppColors.boardLightSquare;
+  static const Color darkSquareColor = AppColors.boardDarkSquare;
+  static const Color selectedSquareColor = AppColors.boardSelected;
+  static const Color highlightColor = AppColors.boardHighlight;
 
   @override
   Widget build(BuildContext context) {
@@ -150,10 +156,19 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
                     ),
                     size: Size(boardSize, boardSize),
                   ),
-                if (_isDragging &&
-                    _draggedPiece != null &&
-                    _currentDragPosition != null)
-                  _buildDraggedPiece(squareSize),
+                // Only this layer repaints as the pointer moves during a drag;
+                // the board painter and static pieces above stay put.
+                ValueListenableBuilder<Offset?>(
+                  valueListenable: _currentDragPosition,
+                  builder: (context, dragPos, _) {
+                    if (!_isDragging ||
+                        _draggedPiece == null ||
+                        dragPos == null) {
+                      return const SizedBox.shrink();
+                    }
+                    return _buildDraggedPiece(squareSize, dragPos);
+                  },
+                ),
               ],
             ),
           ),
@@ -252,20 +267,19 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
       }
 
       if (_isDragging) {
-        setState(() {
-          _currentDragPosition = details.localPosition;
-        });
+        _currentDragPosition.value = details.localPosition;
       }
     }
   }
 
   void _onPanEnd(DragEndDetails details, double squareSize) {
+    final dragPos = _currentDragPosition.value;
     if (_isDragging &&
         _draggedPiece != null &&
         _dragStartSquare != null &&
-        _currentDragPosition != null) {
-      final col = (_currentDragPosition!.dx / squareSize).floor();
-      final row = (_currentDragPosition!.dy / squareSize).floor();
+        dragPos != null) {
+      final col = (dragPos.dx / squareSize).floor();
+      final row = (dragPos.dy / squareSize).floor();
 
       if (col >= 0 && col < 8 && row >= 0 && row < 8) {
         final endSquare = _coordsToSquare(col, row);
@@ -291,7 +305,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
     _dragStartSquare = null;
     _isDragging = false;
     _dragStartPosition = null;
-    _currentDragPosition = null;
+    _currentDragPosition.value = null;
     _draggedPiece = null;
   }
 
@@ -375,14 +389,12 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
     return null;
   }
 
-  Widget _buildDraggedPiece(double squareSize) {
-    if (_draggedPiece == null || _currentDragPosition == null) {
-      return const SizedBox.shrink();
-    }
+  Widget _buildDraggedPiece(double squareSize, Offset dragPos) {
+    if (_draggedPiece == null) return const SizedBox.shrink();
 
     return Positioned(
-      left: _currentDragPosition!.dx - squareSize / 2,
-      top: _currentDragPosition!.dy - squareSize / 2,
+      left: dragPos.dx - squareSize / 2,
+      top: dragPos.dy - squareSize / 2,
       child: IgnorePointer(
         child: PieceImage(piece: _draggedPiece!, size: squareSize),
       ),
@@ -397,6 +409,12 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
         widget.flipped != oldWidget.flipped) {
       _resetDragState();
     }
+  }
+
+  @override
+  void dispose() {
+    _currentDragPosition.dispose();
+    super.dispose();
   }
 
   void _tryMakeMove(String from, String to) {
@@ -525,7 +543,7 @@ class _BoardPainter extends CustomPainter {
     canvas.drawRect(
       Offset.zero & size,
       Paint()
-        ..color = Colors.black
+        ..color = AppColors.boardOutline
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2,
     );
@@ -666,7 +684,11 @@ class _AnnotationPainter extends CustomPainter {
       text: TextSpan(
         text: a.label,
         style: TextStyle(
-          color: Colors.white,
+          // Light ink clears 3:1 on every brush except the amber one
+          // (1.7:1 there); the yellow badge takes dark ink (9.2:1).
+          color: a.brush == AnnotationBrush.yellow
+              ? AppColors.onWarning
+              : AppColors.ink,
           fontSize: radius * 1.1,
           fontWeight: FontWeight.bold,
         ),

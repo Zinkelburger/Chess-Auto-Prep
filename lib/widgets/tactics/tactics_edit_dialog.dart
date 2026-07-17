@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/tactics_position.dart';
+import '../../theme/app_text_styles.dart';
 import '../../utils/app_messages.dart';
 
 class TacticsEditDialog extends StatefulWidget {
@@ -396,10 +397,7 @@ class _TacticsEditDialogState extends State<TacticsEditDialog> {
         children: [
           SizedBox(
             width: 80,
-            child: Text(
-              '$label:',
-              style: const TextStyle(color: Colors.grey, fontSize: 12),
-            ),
+            child: Text('$label:', style: AppTextStyles.caption),
           ),
           Expanded(
             child: SelectableText(

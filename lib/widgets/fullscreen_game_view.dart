@@ -9,6 +9,7 @@ import 'dart:async';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
+import '../theme/app_colors.dart';
 import 'chess_board_widget.dart';
 import 'game_nav_bar.dart' show kAutoPlaySpeeds;
 
@@ -56,7 +57,7 @@ class FullscreenGameView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: Colors.black,
+      color: AppColors.backdrop,
       child: Stack(
         children: [
           Center(
@@ -86,7 +87,10 @@ class FullscreenGameView extends StatelessWidget {
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Colors.black.withAlpha(180), Colors.transparent],
+                    colors: [
+                      AppColors.backdrop.withAlpha(180),
+                      Colors.transparent,
+                    ],
                   ),
                 ),
                 child: Row(
@@ -94,8 +98,8 @@ class FullscreenGameView extends StatelessWidget {
                     Expanded(
                       child: Text(
                         gameLabel,
-                        style: TextStyle(
-                          color: Colors.white.withAlpha(200),
+                        style: const TextStyle(
+                          color: AppColors.overlayInk,
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                         ),
@@ -107,8 +111,8 @@ class FullscreenGameView extends StatelessWidget {
                         padding: const EdgeInsets.only(left: 12),
                         child: Text(
                           '${currentIndex + 1} / $totalGames',
-                          style: TextStyle(
-                            color: Colors.white.withAlpha(140),
+                          style: const TextStyle(
+                            color: AppColors.overlayInkMuted,
                             fontSize: 12,
                             fontFamily: 'monospace',
                           ),
@@ -134,7 +138,10 @@ class FullscreenGameView extends StatelessWidget {
                   gradient: LinearGradient(
                     begin: Alignment.bottomCenter,
                     end: Alignment.topCenter,
-                    colors: [Colors.black.withAlpha(180), Colors.transparent],
+                    colors: [
+                      AppColors.backdrop.withAlpha(180),
+                      Colors.transparent,
+                    ],
                   ),
                 ),
                 child: Row(
@@ -142,17 +149,17 @@ class FullscreenGameView extends StatelessWidget {
                   children: [
                     IconButton(
                       onPressed: currentIndex > 0 ? onPrev : null,
-                      icon: Icon(
+                      icon: const Icon(
                         Icons.skip_previous,
-                        color: Colors.white.withAlpha(180),
+                        color: AppColors.overlayInk,
                       ),
                       tooltip: 'Previous game (P)',
                     ),
                     IconButton(
                       onPressed: onGoBack,
-                      icon: Icon(
+                      icon: const Icon(
                         Icons.chevron_left,
-                        color: Colors.white.withAlpha(180),
+                        color: AppColors.overlayInk,
                       ),
                       tooltip: 'Back (←)',
                     ),
@@ -165,8 +172,8 @@ class FullscreenGameView extends StatelessWidget {
                             : Icons.play_circle_filled,
                         size: 40,
                         color: isAutoPlaying
-                            ? Colors.amber
-                            : Colors.white.withAlpha(220),
+                            ? AppColors.starAccent
+                            : AppColors.overlayInk,
                       ),
                       tooltip: isAutoPlaying
                           ? 'Pause (Space)'
@@ -175,29 +182,29 @@ class FullscreenGameView extends StatelessWidget {
                     const SizedBox(width: 8),
                     IconButton(
                       onPressed: onGoForward,
-                      icon: Icon(
+                      icon: const Icon(
                         Icons.chevron_right,
-                        color: Colors.white.withAlpha(180),
+                        color: AppColors.overlayInk,
                       ),
                       tooltip: 'Forward (→)',
                     ),
                     IconButton(
                       onPressed: currentIndex < totalGames - 1 ? onNext : null,
-                      icon: Icon(
+                      icon: const Icon(
                         Icons.skip_next,
-                        color: Colors.white.withAlpha(180),
+                        color: AppColors.overlayInk,
                       ),
                       tooltip: 'Next game (N)',
                     ),
                     const SizedBox(width: 12),
                     PopupMenuButton<double>(
                       tooltip: 'Auto-play speed',
-                      icon: Icon(
+                      icon: const Icon(
                         Icons.speed,
                         size: 20,
-                        color: Colors.white.withAlpha(160),
+                        color: AppColors.overlayInkMuted,
                       ),
-                      color: Colors.grey[900],
+                      color: AppColors.surfaceElevated,
                       onSelected: onSetSpeed,
                       itemBuilder: (ctx) => [
                         for (final s in kAutoPlaySpeeds)
@@ -209,7 +216,7 @@ class FullscreenGameView extends StatelessWidget {
                                   const Icon(
                                     Icons.check,
                                     size: 16,
-                                    color: Colors.amber,
+                                    color: AppColors.starAccent,
                                   )
                                 else
                                   const SizedBox(width: 16),
@@ -217,7 +224,7 @@ class FullscreenGameView extends StatelessWidget {
                                 Text(
                                   '${s}s / move',
                                   style: const TextStyle(
-                                    color: Colors.white,
+                                    color: AppColors.ink,
                                     fontSize: 13,
                                   ),
                                 ),
@@ -238,12 +245,12 @@ class FullscreenGameView extends StatelessWidget {
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(12),
                             color: autoNextGame
-                                ? Colors.amber.withAlpha(40)
-                                : Colors.white.withAlpha(15),
+                                ? AppColors.starAccent.withAlpha(40)
+                                : AppColors.hoverOverlay,
                             border: Border.all(
                               color: autoNextGame
-                                  ? Colors.amber.withAlpha(120)
-                                  : Colors.white.withAlpha(40),
+                                  ? AppColors.starAccent.withAlpha(120)
+                                  : AppColors.divider,
                             ),
                           ),
                           child: Text(
@@ -251,8 +258,8 @@ class FullscreenGameView extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 11,
                               color: autoNextGame
-                                  ? Colors.amber
-                                  : Colors.white.withAlpha(160),
+                                  ? AppColors.starAccent
+                                  : AppColors.overlayInkMuted,
                               fontWeight: autoNextGame
                                   ? FontWeight.bold
                                   : FontWeight.normal,
@@ -272,9 +279,9 @@ class FullscreenGameView extends StatelessWidget {
             right: 8,
             child: IconButton(
               onPressed: onExit,
-              icon: Icon(
+              icon: const Icon(
                 Icons.fullscreen_exit,
-                color: Colors.white.withAlpha(120),
+                color: AppColors.overlayInkMuted,
                 size: 28,
               ),
               tooltip: 'Exit fullscreen (Esc)',

@@ -57,7 +57,7 @@ mixin _RepertoireTabContent
         child: Text(
           'No opening tree available.\nLoad a repertoire to build the tree.',
           textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.grey),
+          style: TextStyle(color: AppColors.onSurfaceMuted),
         ),
       );
     }
@@ -316,7 +316,9 @@ mixin _RepertoireTabContent
                             icon: Icon(
                               Icons.warning_amber_rounded,
                               size: 14,
-                              color: _showTrapsInLinesTab ? null : Colors.grey,
+                              color: _showTrapsInLinesTab
+                                  ? null
+                                  : AppColors.onSurfaceMuted,
                             ),
                           ),
                         ],

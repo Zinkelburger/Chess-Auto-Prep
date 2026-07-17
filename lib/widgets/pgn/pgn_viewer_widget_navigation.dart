@@ -152,7 +152,7 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
           _moveHistory[ply].san != '--') {
         candidates.add((
           san: _moveHistory[ply].san,
-          color: AppColors.pgnMainLine,
+          color: AppColors.pgnMove,
           onTap: () => _goToMainLineMove(ply + 1),
           emphasized: true,
         ));
@@ -204,13 +204,17 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
         ),
     ];
     return Padding(
-      padding: const EdgeInsets.only(left: 8, right: 8, top: 4),
+      padding: const EdgeInsets.only(left: 8, right: 8, top: 6),
       child: Wrap(
-        spacing: 6,
-        runSpacing: 4,
+        spacing: 8,
+        runSpacing: 6,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          const Icon(Icons.call_split, size: 13, color: AppColors.onSurfaceDim),
+          const Icon(
+            Icons.call_split,
+            size: 18,
+            color: AppColors.onSurfaceMuted,
+          ),
           ...chips,
         ],
       ),
@@ -226,46 +230,37 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(4),
+      borderRadius: BorderRadius.circular(6),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: emphasized ? 0.20 : 0.12),
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: color.withValues(alpha: 0.5), width: 1),
+          color: color.withValues(alpha: emphasized ? 0.22 : 0.12),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withValues(alpha: 0.55), width: 1),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (shortcutNumber != null) ...[
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 4,
-                  vertical: 0.5,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.25),
-                  borderRadius: BorderRadius.circular(3),
+                  // 0.20 keeps the keycap text ≥4.5:1 over the blended fill.
+                  color: color.withValues(alpha: 0.20),
+                  borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
                   '$shortcutNumber',
-                  style: TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 10.5,
-                    color: color,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: PgnTextStyles.branchChipBadge.copyWith(color: color),
                 ),
               ),
-              const SizedBox(width: 5),
+              const SizedBox(width: 6),
             ],
             Text(
               san,
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 12.5,
+              style: PgnTextStyles.branchChip.copyWith(
                 color: color,
-                fontWeight: emphasized ? FontWeight.w600 : FontWeight.normal,
+                fontWeight: emphasized ? FontWeight.w600 : FontWeight.w500,
               ),
             ),
           ],

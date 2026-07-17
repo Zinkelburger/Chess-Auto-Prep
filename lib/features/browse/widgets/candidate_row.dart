@@ -88,7 +88,7 @@ class CandidateRow extends StatelessWidget {
       if (candidate.dbGames != null) ...[
         Text(
           _formatGames(candidate.dbGames!),
-          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          style: const TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
         ),
         const SizedBox(width: 6),
       ],
@@ -169,7 +169,9 @@ class _EaseBar extends StatelessWidget {
           height: 10,
           margin: const EdgeInsets.only(right: 1),
           decoration: BoxDecoration(
-            color: i < filled ? AppColors.lichessDb : Colors.grey.shade300,
+            // outline, not a surface tone: empty slots must stay visible on
+            // the row background or the 5-slot scale disappears.
+            color: i < filled ? AppColors.lichessDb : AppColors.outline,
             borderRadius: BorderRadius.circular(1),
           ),
         );
@@ -300,15 +302,15 @@ class _ResultBar extends StatelessWidget {
         children: [
           Expanded(
             flex: (white * 100).round(),
-            child: Container(color: Colors.white),
+            child: Container(color: AppColors.wdlWhite),
           ),
           Expanded(
             flex: (draw * 100).round(),
-            child: Container(color: Colors.grey.shade400),
+            child: Container(color: AppColors.wdlDraw),
           ),
           Expanded(
             flex: (black * 100).round(),
-            child: Container(color: Colors.grey.shade800),
+            child: Container(color: AppColors.wdlBlack),
           ),
         ],
       ),

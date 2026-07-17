@@ -53,7 +53,10 @@ mixin _ScratchAnalysisMixin on _PositionAnalysisWidgetStateBase {
                       'player\'s games land here) or click an engine '
                       'line to build variations, then save them to a study.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                      style: TextStyle(
+                        color: AppColors.onSurfaceMuted,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 )

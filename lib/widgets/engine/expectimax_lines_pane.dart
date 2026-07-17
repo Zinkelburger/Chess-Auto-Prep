@@ -239,10 +239,10 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Expectimax failed',
                   style: TextStyle(
-                    color: Colors.grey[400],
+                    color: AppColors.onSurfaceSoft,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -250,7 +250,10 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
                 const SizedBox(height: 2),
                 Text(
                   message,
-                  style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                  style: const TextStyle(
+                    color: AppColors.onSurfaceMuted,
+                    fontSize: 11,
+                  ),
                 ),
                 if (widget.onRetry != null) ...[
                   const SizedBox(height: 6),
@@ -285,7 +288,11 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.pause_circle_outline, size: 18, color: Colors.grey[500]),
+          const Icon(
+            Icons.pause_circle_outline,
+            size: 18,
+            color: AppColors.onSurfaceMuted,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
@@ -294,7 +301,10 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
               children: [
                 Text(
                   reason ?? 'Expectimax not running',
-                  style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                  style: const TextStyle(
+                    color: AppColors.onSurfaceSoft,
+                    fontSize: 12,
+                  ),
                 ),
                 if (widget.onRetry != null) ...[
                   const SizedBox(height: 6),
@@ -346,7 +356,10 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
                 if (done > 0)
                   Text(
                     '$done',
-                    style: TextStyle(fontSize: 8, color: Colors.grey[400]),
+                    style: const TextStyle(
+                      fontSize: 8,
+                      color: AppColors.onSurfaceSoft,
+                    ),
                   ),
               ],
             ),
@@ -355,7 +368,10 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
           Expanded(
             child: Text(
               'Computing $done/$target',
-              style: TextStyle(color: Colors.grey[400], fontSize: 12),
+              style: const TextStyle(
+                color: AppColors.onSurfaceSoft,
+                fontSize: 12,
+              ),
             ),
           ),
         ],
@@ -374,16 +390,20 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.analytics_outlined, size: 36, color: Colors.grey[600]),
+            const Icon(
+              Icons.analytics_outlined,
+              size: 36,
+              color: AppColors.onSurfaceDim,
+            ),
             const SizedBox(height: 12),
-            Text(
+            const Text(
               'No tree loaded',
-              style: TextStyle(color: Colors.grey[500], fontSize: 13),
+              style: TextStyle(color: AppColors.onSurfaceMuted, fontSize: 13),
             ),
             const SizedBox(height: 4),
-            Text(
+            const Text(
               'Generate a repertoire tree to see expectimax lines',
-              style: TextStyle(color: Colors.grey[600], fontSize: 11),
+              style: TextStyle(color: AppColors.onSurfaceMuted, fontSize: 11),
               textAlign: TextAlign.center,
             ),
           ],
@@ -399,11 +419,15 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.search_off, size: 36, color: Colors.grey[600]),
+            const Icon(
+              Icons.search_off,
+              size: 36,
+              color: AppColors.onSurfaceDim,
+            ),
             const SizedBox(height: 12),
-            Text(
+            const Text(
               'Position not in tree',
-              style: TextStyle(color: Colors.grey[500], fontSize: 13),
+              style: TextStyle(color: AppColors.onSurfaceMuted, fontSize: 13),
             ),
           ],
         ),
@@ -448,9 +472,9 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
               padding: const EdgeInsets.only(left: 6),
               child: Text(
                 '$depthDone/$depthTarget',
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 11,
-                  color: Colors.grey[500],
+                  color: AppColors.onSurfaceMuted,
                   fontFamily: 'monospace',
                 ),
               ),
@@ -487,7 +511,9 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
         annotations.add(
           MoveAnnotation(
             suffix: ' $pct%',
-            suffixColor: pct >= 50 ? AppColors.warning : Colors.grey[500],
+            suffixColor: pct >= 50
+                ? AppColors.warning
+                : AppColors.onSurfaceMuted,
             suffixFontWeight: FontWeight.w600,
           ),
         );

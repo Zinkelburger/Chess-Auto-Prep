@@ -69,7 +69,7 @@ class LineItemRow extends StatelessWidget {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red[300]),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
             child: const Text('Delete'),
           ),
         ],
@@ -155,12 +155,14 @@ class LineItemRow extends StatelessWidget {
         decoration: BoxDecoration(
           color: isExactMatch
               ? AppColors.info.withValues(alpha: 0.2)
-              : (index % 2 == 0 ? Colors.grey[900] : Colors.grey[850]),
+              : (index % 2 == 0
+                    ? AppColors.surfaceElevated
+                    : AppColors.surfaceInset),
           border: Border(
             left: isExactMatch
                 ? const BorderSide(color: AppColors.info, width: 3)
                 : BorderSide.none,
-            bottom: BorderSide(color: Colors.grey[800]!, width: 0.5),
+            bottom: const BorderSide(color: AppColors.divider, width: 0.5),
           ),
         ),
         child: Row(
@@ -172,10 +174,10 @@ class LineItemRow extends StatelessWidget {
                 width: LineTableLayout.movesWidth,
                 child: Text(
                   '${line.moves.length}',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 11,
                     fontFamily: 'monospace',
-                    color: Colors.grey[400],
+                    color: AppColors.onSurfaceSoft,
                   ),
                 ),
               ),
@@ -246,7 +248,11 @@ class LineItemRow extends StatelessWidget {
                 width: 28,
                 height: 28,
                 child: IconButton(
-                  icon: Icon(Icons.edit, size: 14, color: Colors.grey[500]),
+                  icon: const Icon(
+                    Icons.edit,
+                    size: 14,
+                    color: AppColors.onSurfaceMuted,
+                  ),
                   padding: EdgeInsets.zero,
                   tooltip: 'Rename line',
                   onPressed: () => showRenameDialog(
@@ -261,10 +267,10 @@ class LineItemRow extends StatelessWidget {
                 width: 28,
                 height: 28,
                 child: IconButton(
-                  icon: Icon(
+                  icon: const Icon(
                     Icons.delete_outline,
                     size: 14,
-                    color: Colors.grey[600],
+                    color: AppColors.onSurfaceMuted,
                   ),
                   padding: EdgeInsets.zero,
                   tooltip: 'Delete line',
@@ -331,7 +337,10 @@ class _ScoreText extends StatelessWidget {
   Widget build(BuildContext context) {
     final v = value;
     if (v == null) {
-      return Text('—', style: TextStyle(fontSize: 11, color: Colors.grey[600]));
+      return const Text(
+        '—',
+        style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+      );
     }
     final color = v >= goodAbove
         ? AppColors.success
@@ -352,7 +361,10 @@ class _TrapsCellText extends StatelessWidget {
   Widget build(BuildContext context) {
     final count = metrics?.trapCount ?? 0;
     if (count == 0) {
-      return Text('—', style: TextStyle(fontSize: 11, color: Colors.grey[600]));
+      return const Text(
+        '—',
+        style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+      );
     }
     final evalDiff = metrics?.bestTrapEvalDiff;
     final text = Text(
@@ -399,10 +411,10 @@ class _ImportanceBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(
-        color: Colors.blueGrey.withValues(alpha: 0.25),
+        color: AppColors.engineLine.withValues(alpha: 0.25),
         borderRadius: BorderRadius.circular(4),
         border: Border.all(
-          color: Colors.blueGrey.withValues(alpha: 0.4),
+          color: AppColors.engineLine.withValues(alpha: 0.4),
           width: 0.5,
         ),
       ),
@@ -411,7 +423,7 @@ class _ImportanceBadge extends StatelessWidget {
         style: const TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.bold,
-          color: Colors.blueGrey,
+          color: AppColors.engineLine,
           fontFamily: 'monospace',
         ),
       ),
@@ -429,7 +441,10 @@ class _CoverageStatus extends StatelessWidget {
   Widget build(BuildContext context) {
     final leaf = info?.leaf;
     if (leaf == null) {
-      return Text('—', style: TextStyle(fontSize: 11, color: Colors.grey[600]));
+      return const Text(
+        '—',
+        style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+      );
     }
 
     late final Color color;
@@ -438,13 +453,13 @@ class _CoverageStatus extends StatelessWidget {
 
     switch (leaf.category) {
       case LeafCategory.covered:
-        color = const Color(0xFF4CAF50);
+        color = AppColors.coverageCovered;
         text = 'Covered';
       case LeafCategory.tooShallow:
-        color = const Color(0xFFFFA726);
+        color = AppColors.coverageShallow;
         text = 'Shallow';
       case LeafCategory.tooDeep:
-        color = const Color(0xFF42A5F5);
+        color = AppColors.coverageDeep;
         text = 'Deep';
         tooltip = '${leaf.excessPly} ply past target depth';
     }
@@ -496,12 +511,12 @@ class _UnaccountedAnnotation extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              const Text(
                 'Unaccounted: ',
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
-                  color: const Color(0xFFEF5350).withValues(alpha: 0.8),
+                  color: AppColors.coverageUnaccounted,
                 ),
               ),
               Expanded(
@@ -524,32 +539,31 @@ class _UnaccountedAnnotation extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 10,
                               fontFamily: 'monospace',
-                              color: const Color(
-                                0xFFEF5350,
-                              ).withValues(alpha: 0.9),
+                              color: AppColors.coverageUnaccounted,
                               decoration: TextDecoration.underline,
-                              decorationColor: const Color(
-                                0xFFEF5350,
-                              ).withValues(alpha: 0.5),
+                              decorationColor: AppColors.coverageUnaccounted
+                                  .withValues(alpha: 0.5),
                             ),
                           ),
                         );
                       }
                       return Text(
                         label,
-                        style: TextStyle(
+                        // Muted relative to the clickable moves above so the
+                        // tappable/plain hierarchy survives tokenization.
+                        style: const TextStyle(
                           fontSize: 10,
                           fontFamily: 'monospace',
-                          color: const Color(0xFFEF5350).withValues(alpha: 0.7),
+                          color: AppColors.dangerMuted,
                         ),
                       );
                     }),
                     if (moves.length > LineItemRow.maxUnaccountedMovesPreview)
                       Text(
                         '+${moves.length - LineItemRow.maxUnaccountedMovesPreview} more',
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 10,
-                          color: const Color(0xFFEF5350).withValues(alpha: 0.5),
+                          color: AppColors.dangerMuted,
                           fontStyle: FontStyle.italic,
                         ),
                       ),
@@ -640,7 +654,7 @@ class _HardMoveWarning extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: Colors.grey.withAlpha(80)),
+                  border: Border.all(color: AppColors.outline),
                 ),
                 child: const Text('Go', style: TextStyle(fontSize: 10)),
               ),
