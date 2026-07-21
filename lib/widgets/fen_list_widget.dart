@@ -17,10 +17,10 @@ class FenListWidget extends StatefulWidget {
   final Function(String) onFenSelected;
 
   /// Whether the player is White in this analysis view.
-  /// Determines the eval sort direction for "Bad Eval".
+  /// Determines the eval sort direction for "Bad Eval" / "Good Eval".
   final bool playerIsWhite;
 
-  /// Whether engine eval data is available for the "Bad Eval" sort.
+  /// Whether engine eval data is available for the eval sorts.
   final bool hasEvals;
 
   /// Opening tree for the displayed colour — used to derive each position's
@@ -58,16 +58,25 @@ class _FenListWidgetState extends State<FenListWidget> {
   /// FEN → move number, memoised per tree (null = position not in tree).
   final Map<String, int?> _moveNumberCache = {};
 
+  /// FEN → reach estimate, memoised per tree (null = position not in tree).
+  final Map<String, ReachEstimate?> _reachCache = {};
+
   Map<String, String> get _sortMap => {
-    if (widget.hasEvals) 'Bad Eval': _evalSortKey,
+    if (widget.hasEvals) 'Bad Eval': _badEvalSortKey,
+    if (widget.hasEvals) 'Good Eval': _goodEvalSortKey,
     'Lowest Win Rate': 'win_rate',
     'Highest Win Rate': 'win_rate_desc',
     'Most Games': 'games',
     'Most Losses': 'losses',
   };
 
-  String get _evalSortKey =>
+  String get _badEvalSortKey =>
       widget.playerIsWhite ? 'eval_bad_white' : 'eval_bad_black';
+
+  String get _goodEvalSortKey =>
+      widget.playerIsWhite ? 'eval_good_white' : 'eval_good_black';
+
+  bool get _isEvalSort => _sortBy == 'Bad Eval' || _sortBy == 'Good Eval';
 
   @override
   void initState() {
@@ -85,8 +94,10 @@ class _FenListWidgetState extends State<FenListWidget> {
     if (!_sortMap.containsKey(_sortBy)) {
       setState(() => _sortBy = _sortMap.keys.first);
     }
-    if (!identical(widget.openingTree, old.openingTree)) {
+    if (!identical(widget.openingTree, old.openingTree) ||
+        widget.playerIsWhite != old.playerIsWhite) {
       _moveNumberCache.clear();
+      _reachCache.clear();
       _selectedFen = null;
     }
   }
@@ -114,6 +125,18 @@ class _FenListWidgetState extends State<FenListWidget> {
         if (ply < minPly) minPly = ply;
       }
       return (minPly + 1) ~/ 2;
+    });
+  }
+
+  /// How likely the analyzed player is to steer the game into this position
+  /// (summed across transpositions). Null if the position isn't in the tree.
+  ReachEstimate? _reachForFen(String fen) {
+    return _reachCache.putIfAbsent(fen, () {
+      final nodes = widget.openingTree?.fenToNodes[normalizeFen(fen)];
+      if (nodes == null || nodes.isEmpty) return null;
+      return PositionGroup(
+        nodes,
+      ).reachEstimate(protagonistIsWhite: widget.playerIsWhite);
     });
   }
 
@@ -282,7 +305,7 @@ class _FenListWidgetState extends State<FenListWidget> {
     }
 
     if (positions.isEmpty) {
-      final isEvalSort = _sortBy == 'Bad Eval';
+      final isEvalSort = _isEvalSort;
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -308,15 +331,20 @@ class _FenListWidgetState extends State<FenListWidget> {
 
   Widget _buildPositionItem(int rank, PositionStats stats) {
     final isSelected = _selectedFen == stats.fen;
-    final showingEval = _sortBy == 'Bad Eval';
+    final showingEval = _isEvalSort;
 
     Color? backgroundColor;
     if (showingEval && stats.hasEval) {
       final bad = widget.playerIsWhite
           ? (stats.evalCp! < -50)
           : (stats.evalCp! > 100);
+      final good = widget.playerIsWhite
+          ? (stats.evalCp! > 100)
+          : (stats.evalCp! < -50);
       if (bad) {
         backgroundColor = AppColors.dangerTint;
+      } else if (good) {
+        backgroundColor = AppColors.successTint;
       }
     } else {
       if (stats.winRate < 0.3) {
@@ -331,6 +359,19 @@ class _FenListWidgetState extends State<FenListWidget> {
     final movePrefix = moveNumber == null
         ? ''
         : (moveNumber == 0 ? 'start · ' : 'move $moveNumber · ');
+
+    // Reach stats are more useful at a glance than the raw FEN (which is a
+    // click away via the board's Copy FEN button); fall back to the FEN for
+    // positions the tree doesn't know.
+    final reach = _reachForFen(stats.fen);
+    final subtitle = reach != null
+        ? '$movePrefix${reach.percentLabel}% reached · '
+              '${reach.decisionPoints} branch '
+              'pt${reach.decisionPoints == 1 ? '' : 's'}'
+        : movePrefix +
+              (stats.fen.length > 40
+                  ? '${stats.fen.substring(0, 40)}...'
+                  : stats.fen);
 
     return ListTile(
       selected: isSelected,
@@ -349,10 +390,7 @@ class _FenListWidgetState extends State<FenListWidget> {
         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
       ),
       subtitle: Text(
-        movePrefix +
-            (stats.fen.length > 40
-                ? '${stats.fen.substring(0, 40)}...'
-                : stats.fen),
+        subtitle,
         style: const TextStyle(fontSize: 10, fontFamily: 'monospace'),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,

@@ -31,10 +31,21 @@ final pgnHeaderRe = RegExp(r'\[(\w+)\s+"([^"]*)"\]');
 
 // ── Multi-game splitting ─────────────────────────────────────────────────────
 
+/// Whether a trimmed line is a top-level comment/escape line: `//` (this
+/// app's repertoire metadata), `;` (PGN spec rest-of-line comment), `{`
+/// (brace comment), or `%` (PGN spec escape). Downloaded collections often
+/// open with a `;`-comment banner, which must not become a game.
+bool isPgnCommentLine(String trimmedLine) =>
+    trimmedLine.startsWith('//') ||
+    trimmedLine.startsWith(';') ||
+    trimmedLine.startsWith('{') ||
+    trimmedLine.startsWith('%');
+
 /// Splits a multi-game PGN string into individual game chunks.
 ///
 /// Handles both `[Event`-delimited and header-less move-only text.
-/// Comment-only lines (`// ...`) at the top level are stripped.
+/// Comment-only lines (`// ...`, spec `; ...` rest-of-line comments, `%`
+/// escapes) at the top level are stripped.
 ///
 /// This is isolate-safe (no instance state captured).
 List<String> splitPgnIntoGames(String content) {
@@ -58,14 +69,14 @@ List<String> splitPgnIntoGames(String content) {
   for (final line in lines) {
     final trimmedLine = line.trim();
 
-    if (!inGame &&
-        (trimmedLine.startsWith('//') ||
-            trimmedLine.startsWith('{') ||
-            trimmedLine.startsWith('%'))) {
+    if (!inGame && isPgnCommentLine(trimmedLine)) {
       continue;
     }
 
-    if (trimmedLine.startsWith('[Event')) {
+    // The trailing space is load-bearing: a bare `[Event` prefix also matches
+    // `[EventDate "..."]`, which would split every game with that header in
+    // two.
+    if (trimmedLine.startsWith('[Event ')) {
       if (inGame) {
         flushGame();
       }
@@ -129,7 +140,7 @@ int countPgnGamesFast(String pgnContent) {
     final idx = content.indexOf(marker, from);
     if (idx < 0) break;
     // Only headers that begin a line (start of file or just after a newline)
-    // start a new game — mirrors `trimmedLine.startsWith('[Event')`.
+    // start a new game — mirrors `trimmedLine.startsWith('[Event ')`.
     if (idx == 0 || content[idx - 1] == '\n') count++;
     from = idx + marker.length;
   }
@@ -139,10 +150,7 @@ int countPgnGamesFast(String pgnContent) {
   // non-comment, non-blank content.
   for (final line in content.split('\n')) {
     final t = line.trim();
-    if (t.isEmpty ||
-        t.startsWith('//') ||
-        t.startsWith('{') ||
-        t.startsWith('%')) {
+    if (t.isEmpty || isPgnCommentLine(t)) {
       continue;
     }
     return 1;

@@ -322,7 +322,7 @@ class _AddPgnPill extends StatelessWidget {
 
     return PopupMenuButton<String>(
       padding: EdgeInsets.zero,
-      tooltip: 'Add PGN (I)',
+      tooltip: 'Add PGN',
       onSelected: (v) {
         if (v == 'file') onFile();
         if (v == 'paste') onPaste();

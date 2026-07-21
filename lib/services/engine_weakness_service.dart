@@ -15,9 +15,9 @@ import '../utils/fen_utils.dart';
 import 'engine/stockfish_pool.dart';
 
 class _PositionToEval {
-  final OpeningTreeNode node;
+  final PositionGroup group;
   final bool playerIsWhite;
-  _PositionToEval(this.node, this.playerIsWhite);
+  _PositionToEval(this.group, this.playerIsWhite);
 }
 
 class EngineWeaknessService {
@@ -27,16 +27,21 @@ class EngineWeaknessService {
   int get workerCount => _pool.workerCount;
 
   /// Evaluate every unique position in the given trees that appears in
-  /// >= [minOccurrences] games, at the given [depth].
+  /// >= [minOccurrences] games (summed across transpositions), at the
+  /// given [depth].
   ///
   /// Accepts separate trees for the player's White and Black games.
   /// Returns results for ALL evaluated positions — the caller filters
   /// by eval threshold.
+  ///
+  /// [onResult] streams each result as its position finishes (in completion
+  /// order, not input order), firing before the matching [onProgress] tick.
   Future<List<EngineWeaknessResult>> analyze({
     OpeningTree? whiteTree,
     OpeningTree? blackTree,
     int minOccurrences = 3,
     int depth = 20,
+    void Function(EngineWeaknessResult result)? onResult,
     void Function(int completed, int total)? onProgress,
     void Function(int workerCount, int hashMb)? onWorkersReady,
   }) async {
@@ -58,11 +63,11 @@ class EngineWeaknessService {
     void collectFrom(OpeningTree tree, bool isWhite) {
       for (final nodes in tree.fenToNodes.values) {
         if (nodes.isEmpty) continue;
-        final best = nodes.reduce(
-          (a, b) => a.gamesPlayed >= b.gamesPlayed ? a : b,
-        );
-        if (best.gamesPlayed >= minOccurrences) {
-          positions.add(_PositionToEval(best, isWhite));
+        // Sum across transpositions: a position reached 3 times via two
+        // move orders must still qualify (a per-path count would miss it).
+        final group = PositionGroup(nodes);
+        if (group.gamesPlayed >= minOccurrences) {
+          positions.add(_PositionToEval(group, isWhite));
         }
       }
     }
@@ -81,8 +86,8 @@ class EngineWeaknessService {
     onProgress?.call(0, total);
 
     Future<void> evalPosition(EvalWorker worker, _PositionToEval entry) async {
-      final node = entry.node;
-      final fullFen = expandFen(node.fen);
+      final group = entry.group;
+      final fullFen = expandFen(group.fen);
 
       try {
         final eval = await worker.evaluateFen(fullFen, depth);
@@ -103,35 +108,35 @@ class EngineWeaknessService {
         }
 
         final result = EngineWeaknessResult(
-          fen: node.fen,
+          fen: group.fen,
           evalCp: evalWhiteCp,
           evalMate: evalWhiteMate,
           depth: eval.depth,
-          gamesPlayed: node.gamesPlayed,
-          wins: node.wins,
-          losses: node.losses,
-          draws: node.draws,
-          winRate: node.winRate,
-          movePath: node.getMovePathString(),
+          gamesPlayed: group.gamesPlayed,
+          wins: group.wins,
+          losses: group.losses,
+          draws: group.draws,
+          winRate: group.winRate,
+          movePath: group.primaryNode.getMovePathString(),
           playerIsWhite: entry.playerIsWhite,
         );
         results.add(result);
+        onResult?.call(result);
 
         if (kDebugMode) {
           final color = entry.playerIsWhite ? 'W' : 'B';
           debugPrint(
             '[Eval] $color ${result.evalDisplay} '
-            'd${eval.depth} ${node.gamesPlayed}g '
-            '${node.getMovePathString()}',
+            'd${eval.depth} ${group.gamesPlayed}g '
+            '${result.movePath}',
           );
         }
       } catch (e) {
         failedCount++;
         if (kDebugMode && failedPositions.length < 5) {
-          failedPositions.add(node.getMovePathString());
-          debugPrint(
-            '[Eval] Failed to evaluate ${node.getMovePathString()}: $e',
-          );
+          final path = group.primaryNode.getMovePathString();
+          failedPositions.add(path);
+          debugPrint('[Eval] Failed to evaluate $path: $e');
         }
       }
 

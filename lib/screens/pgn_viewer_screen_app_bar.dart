@@ -114,7 +114,7 @@ mixin _AppBarBuildersMixin
             IconButton(
               onPressed: _exportSlice,
               icon: const Icon(Icons.file_upload_outlined, size: 20),
-              tooltip: 'Export filtered games (Ctrl+E)',
+              tooltip: 'Export filtered games',
             ),
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert, size: 20),

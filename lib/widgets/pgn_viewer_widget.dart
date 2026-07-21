@@ -353,20 +353,27 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
     });
 
     try {
-      String pgnText;
+      String pgnText = '';
 
-      if (widget.pgnText != null) {
-        pgnText = widget.pgnText!;
-      } else {
+      // Prefer the full source game (looked up by id) so the viewer shows the
+      // whole game; fall back to any explicit pgnText — e.g. a tactic's
+      // solution-only PGN — when the source game isn't in storage (external
+      // sets, custom puzzles, pruned games).
+      if (widget.gameId != null && widget.gameId!.isNotEmpty) {
         pgnText = await _findGamePgn(widget.gameId!);
         if (!mounted) return;
-        if (pgnText.isEmpty) {
-          setState(() {
-            _error = 'Game not found in PGN files';
-            _isLoading = false;
-          });
-          return;
-        }
+      }
+      if (pgnText.isEmpty && widget.pgnText != null) {
+        pgnText = widget.pgnText!;
+      }
+      if (pgnText.isEmpty) {
+        setState(() {
+          _error = widget.gameId != null
+              ? 'Game not found in PGN files'
+              : 'No game ID or PGN text provided';
+          _isLoading = false;
+        });
+        return;
       }
 
       final game = PgnGame.parsePgn(pgnText);

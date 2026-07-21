@@ -6,33 +6,42 @@ import 'coverage_annotation.dart';
 import 'win_draw_loss_bar.dart';
 
 /// A single child move row in the opening tree list.
+///
+/// [entry] is a transposition-aware group: its stats are summed over every
+/// path that reaches this continuation.
 class OpeningTreeMoveRow extends StatelessWidget {
-  final OpeningTreeNode node;
+  final PositionGroup entry;
   final int parentGamesPlayed;
   final CoverageStatus? coverageStatus;
   final VoidCallback? onTap;
   final WdlPerspective perspective;
 
+  /// Cumulative chance the analyzed player reaches the position after this
+  /// move (see [ReachEstimate]). Only set when this move is theirs to make;
+  /// null hides the annotation.
+  final ReachEstimate? reachEstimate;
+
   const OpeningTreeMoveRow({
     super.key,
-    required this.node,
+    required this.entry,
     required this.parentGamesPlayed,
     this.coverageStatus,
     this.onTap,
     this.perspective = WdlPerspective.playerIsWhite,
+    this.reachEstimate,
   });
 
   @override
   Widget build(BuildContext context) {
     final playedPercent = parentGamesPlayed > 0
-        ? (node.gamesPlayed / parentGamesPlayed * 100)
+        ? (entry.gamesPlayed / parentGamesPlayed * 100)
         : 0.0;
 
     // Score from the displayed point of view: the protagonist's when known,
     // otherwise White's (shown without a good/bad color).
     final displayRate = perspective == WdlPerspective.playerIsBlack
-        ? 1.0 - node.winRate
-        : node.winRate;
+        ? 1.0 - entry.winRate
+        : entry.winRate;
 
     Color winRateColor;
     if (perspective == WdlPerspective.whiteBlack) {
@@ -76,7 +85,7 @@ class OpeningTreeMoveRow extends StatelessWidget {
                 SizedBox(
                   width: 60,
                   child: Text(
-                    node.move,
+                    entry.move,
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
@@ -87,7 +96,8 @@ class OpeningTreeMoveRow extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '${node.gamesPlayed} games (${playedPercent.toStringAsFixed(1)}%)',
+                    '${entry.gamesPlayed} games (${playedPercent.toStringAsFixed(1)}%)'
+                    '${reachEstimate != null ? ' • ${reachEstimate!.percentLabel}% reached' : ''}',
                     style: const TextStyle(
                       fontSize: 12,
                       color: AppColors.onSurfaceSoft,
@@ -110,7 +120,7 @@ class OpeningTreeMoveRow extends StatelessWidget {
                 SizedBox(
                   width: 100,
                   child: Text(
-                    '${node.wins}-${node.draws}-${node.losses}',
+                    '${entry.wins}-${entry.draws}-${entry.losses}',
                     style: const TextStyle(
                       fontSize: 11,
                       color: AppColors.onSurfaceMuted,
@@ -121,9 +131,9 @@ class OpeningTreeMoveRow extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: WinDrawLossBar(
-                    wins: node.wins,
-                    draws: node.draws,
-                    losses: node.losses,
+                    wins: entry.wins,
+                    draws: entry.draws,
+                    losses: entry.losses,
                     perspective: perspective,
                   ),
                 ),

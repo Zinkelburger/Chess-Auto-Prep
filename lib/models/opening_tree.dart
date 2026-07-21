@@ -24,6 +24,30 @@ enum WdlPerspective {
   whiteBlack,
 }
 
+/// Estimated likelihood that the tree's protagonist steers the game into a
+/// position, together with how many real choices they had on the way.
+///
+/// [probability] is the product of the protagonist's empirical move
+/// frequencies at each of *their* turns along the path. Moves by the other
+/// side are treated as certain (probability 1) — the viewer controls those.
+/// [decisionPoints] counts the protagonist's moves on the path where the
+/// database shows they did not always continue this way (frequency < 100%).
+class ReachEstimate {
+  final double probability;
+  final int decisionPoints;
+
+  const ReachEstimate(this.probability, this.decisionPoints);
+
+  double get percent => probability * 100;
+
+  /// Compact percentage label: '100', '<0.1', or one decimal place.
+  String get percentLabel {
+    if (percent >= 99.95) return '100';
+    if (percent > 0 && percent < 0.05) return '<0.1';
+    return percent.toStringAsFixed(1);
+  }
+}
+
 class OpeningTreeNode {
   /// The move that led to this node (SAN notation, e.g. "e4", "Nf3")
   /// Empty string for root node
@@ -129,6 +153,36 @@ class OpeningTreeNode {
     return children[movesan]!;
   }
 
+  /// Whether the move leading to this node was played by White. [fen] is the
+  /// position *after* the move, so the mover is the side that is no longer to
+  /// move. FEN-derived (rather than ply parity) so custom start positions and
+  /// transposed paths stay correct.
+  bool get moverWasWhite {
+    final parts = fen.split(' ');
+    return parts.length > 1 && parts[1] == 'b';
+  }
+
+  /// How likely the protagonist (the player whose games built this tree,
+  /// playing White when [protagonistIsWhite]) is to reach this node's
+  /// position, assuming the viewer plays down this exact path themselves.
+  /// See [ReachEstimate].
+  ReachEstimate reachEstimate({required bool protagonistIsWhite}) {
+    var probability = 1.0;
+    var decisionPoints = 0;
+    for (
+      OpeningTreeNode? node = this;
+      node != null && node.parent != null;
+      node = node.parent
+    ) {
+      if (node.moverWasWhite != protagonistIsWhite) continue;
+      final parentGames = node.parent!.gamesPlayed;
+      if (parentGames <= 0) continue;
+      probability *= node.gamesPlayed / parentGames;
+      if (node.gamesPlayed < parentGames) decisionPoints++;
+    }
+    return ReachEstimate(probability, decisionPoints);
+  }
+
   /// Get path from root to this node (list of moves)
   List<String> getMovePath() {
     final path = <String>[];
@@ -170,6 +224,81 @@ class OpeningTreeNode {
   }
 }
 
+/// A transposition-aware view of one position: every tree node that reaches
+/// the same position (same normalized FEN) via a different move order, with
+/// statistics summed across them.
+///
+/// The tree itself is path-based, so a position reached by transposition is
+/// split across several [OpeningTreeNode]s. Summing here is what makes tree
+/// counts agree with the FEN-keyed position statistics shown elsewhere
+/// (e.g. the FEN list in player analysis).
+class PositionGroup {
+  /// The nodes sharing this position. Never empty.
+  final List<OpeningTreeNode> nodes;
+
+  PositionGroup(this.nodes) : assert(nodes.isNotEmpty);
+
+  /// The node reached by the most games — the representative concrete path
+  /// used where a single node is required (navigation cursor, move-path
+  /// display, coverage checks).
+  OpeningTreeNode get primaryNode =>
+      nodes.reduce((a, b) => b.gamesPlayed > a.gamesPlayed ? b : a);
+
+  /// Full FEN of the position (from [primaryNode]).
+  String get fen => primaryNode.fen;
+
+  /// SAN of the move leading here. Continuation groups built by [children]
+  /// share one SAN; for an arbitrary position group this is the primary
+  /// node's last move.
+  String get move => primaryNode.move;
+
+  int get gamesPlayed => nodes.fold(0, (sum, n) => sum + n.gamesPlayed);
+  int get wins => nodes.fold(0, (sum, n) => sum + n.wins);
+  int get losses => nodes.fold(0, (sum, n) => sum + n.losses);
+  int get draws => nodes.fold(0, (sum, n) => sum + n.draws);
+
+  /// Win rate across all paths (user perspective, like
+  /// [OpeningTreeNode.winRate]).
+  double get winRate {
+    final games = gamesPlayed;
+    if (games == 0) return 0.0;
+    return (wins + 0.5 * draws) / games;
+  }
+
+  double get winRatePercent => winRate * 100;
+
+  /// Reach estimate summed across every path (transposition) into this
+  /// position — the paths are disjoint, so their probabilities add. Decision
+  /// points are reported for the most-played path ([primaryNode]).
+  ReachEstimate reachEstimate({required bool protagonistIsWhite}) {
+    var probability = 0.0;
+    for (final node in nodes) {
+      probability += node
+          .reachEstimate(protagonistIsWhite: protagonistIsWhite)
+          .probability;
+    }
+    return ReachEstimate(
+      probability.clamp(0.0, 1.0),
+      primaryNode
+          .reachEstimate(protagonistIsWhite: protagonistIsWhite)
+          .decisionPoints,
+    );
+  }
+
+  /// Continuations from this position, merged across all [nodes] (grouped by
+  /// SAN) and sorted by games played, descending.
+  List<PositionGroup> get children {
+    final bySan = <String, List<OpeningTreeNode>>{};
+    for (final node in nodes) {
+      for (final child in node.children.values) {
+        (bySan[child.move] ??= []).add(child);
+      }
+    }
+    return bySan.values.map(PositionGroup.new).toList()
+      ..sort((a, b) => b.gamesPlayed.compareTo(a.gamesPlayed));
+  }
+}
+
 /// Opening tree - contains the root node and provides navigation
 class OpeningTree {
   late final OpeningTreeNode root;
@@ -188,11 +317,25 @@ class OpeningTree {
     currentNode = rootNode;
   }
 
-  /// Navigate to a child node by move
+  /// Navigate to a child node by move.
+  ///
+  /// Transposition-aware: if the current path never continued with [move]
+  /// but another path reaching the same position did, the cursor jumps to
+  /// that path's child instead of failing.
   bool makeMove(String move) {
-    if (currentNode.children.containsKey(move)) {
-      currentNode = currentNode.children[move]!;
+    final direct = currentNode.children[move];
+    if (direct != null) {
+      currentNode = direct;
       return true;
+    }
+    final transpositions =
+        fenToNodes[normalizeFen(currentNode.fen)] ?? const <OpeningTreeNode>[];
+    for (final node in transpositions) {
+      final child = node.children[move];
+      if (child != null) {
+        currentNode = child;
+        return true;
+      }
     }
     return false;
   }
@@ -211,21 +354,32 @@ class OpeningTree {
     currentNode = root;
   }
 
-  /// Navigate to a specific FEN position (finds the first matching node)
+  /// Navigate to a position by FEN. When several paths (transpositions)
+  /// reach it, the cursor lands on the most-played one.
   bool navigateToFen(String fen) {
-    final key = normalizeFen(fen);
-    final nodes = fenToNodes[key];
-    if (nodes != null && nodes.isNotEmpty) {
-      currentNode = nodes.first;
-      return true;
-    }
-    return false;
+    final nodes = fenToNodes[normalizeFen(fen)];
+    if (nodes == null || nodes.isEmpty) return false;
+    currentNode = PositionGroup(nodes).primaryNode;
+    return true;
   }
 
-  /// Add a FEN to node mapping
+  /// Transposition-aware view of [node]'s position: the node itself plus any
+  /// nodes reaching the same position via other move orders.
+  PositionGroup groupFor(OpeningTreeNode node) {
+    final indexed = fenToNodes[normalizeFen(node.fen)];
+    if (indexed == null || indexed.isEmpty) return PositionGroup([node]);
+    return PositionGroup(indexed.contains(node) ? indexed : [node, ...indexed]);
+  }
+
+  /// Transposition-aware view of the current position.
+  PositionGroup get currentGroup => groupFor(currentNode);
+
+  /// Add a FEN to node mapping (idempotent — a node is indexed once even
+  /// when re-visited by later games, so [PositionGroup] sums stay correct).
   void indexNode(OpeningTreeNode node) {
     final key = normalizeFen(node.fen);
-    (fenToNodes[key] ??= []).add(node);
+    final nodes = fenToNodes[key] ??= [];
+    if (!nodes.contains(node)) nodes.add(node);
   }
 
   /// Get total number of games in the tree (games at root)
@@ -275,7 +429,7 @@ class OpeningTree {
     final nodesAtFen = fenToNodes[normalizedStart];
 
     if (nodesAtFen != null && nodesAtFen.isNotEmpty) {
-      node = nodesAtFen.first;
+      node = PositionGroup(nodesAtFen).primaryNode;
       position = Chess.fromSetup(Setup.parseFen(node.fen));
     } else if (normalizedStart == normalizeFen(kStandardStartFen)) {
       position = Chess.initial;

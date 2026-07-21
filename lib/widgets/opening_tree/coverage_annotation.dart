@@ -8,16 +8,20 @@ import '../../utils/fen_utils.dart';
 /// Coverage classification for an opening-tree move row.
 enum CoverageStatus { covered, tooShallow, tooDeep, unaccounted }
 
-/// Resolves coverage status for a child node based on [coverageResult] and [tree].
+/// Resolves coverage status for a child move (a transposition [group]) based
+/// on [coverageResult] and [tree].
 CoverageStatus? resolveCoverageStatus({
-  required OpeningTreeNode node,
+  required PositionGroup group,
   required OpeningTree tree,
   CoverageResult? coverageResult,
 }) {
   if (coverageResult == null) return null;
 
-  var status = _coverageStatusForNode(node, coverageResult);
-  if (status == null && _hasUnaccountedFrom(node, tree, coverageResult)) {
+  // FEN-based classification is identical for every node in the group.
+  var status = _coverageStatusForNode(group.primaryNode, coverageResult);
+  // The unaccounted check is path-dependent, so any path may trigger it.
+  if (status == null &&
+      group.nodes.any((n) => _hasUnaccountedFrom(n, tree, coverageResult))) {
     status = CoverageStatus.unaccounted;
   }
   return status;

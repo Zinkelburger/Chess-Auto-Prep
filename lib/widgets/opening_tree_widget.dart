@@ -41,6 +41,14 @@ class OpeningTreeWidget extends StatefulWidget {
   /// How win/draw/loss stats are colored (see [WdlPerspective]).
   final WdlPerspective wdlPerspective;
 
+  /// Color the analyzed player (the tree's protagonist) plays in these
+  /// games. When set, positions are annotated with the chance the
+  /// protagonist steers the game there (see [ReachEstimate]); null hides
+  /// the annotation. Independent of [wdlPerspective], which for
+  /// player-analysis trees describes whose perspective the W/D/L counts
+  /// use, not the player's color.
+  final bool? protagonistIsWhite;
+
   const OpeningTreeWidget({
     super.key,
     required this.tree,
@@ -58,6 +66,7 @@ class OpeningTreeWidget extends StatefulWidget {
     this.gamesAtPosition = const [],
     this.onViewGamePgn,
     this.wdlPerspective = WdlPerspective.playerIsWhite,
+    this.protagonistIsWhite,
   });
 
   @override
@@ -145,7 +154,21 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
   Widget build(BuildContext context) {
     final currentNode = widget.tree.currentNode;
     final movePath = currentNode.getMovePathString();
-    final sortedChildren = currentNode.sortedChildren;
+    // Transposition-aware: stats and continuations are merged across every
+    // path that reaches this position, so counts match the FEN list.
+    final position = widget.tree.groupFor(currentNode);
+    final continuations = position.children;
+
+    // Reach annotation: how likely the analyzed player is to end up here.
+    final protagonistIsWhite = widget.protagonistIsWhite;
+    final reach = protagonistIsWhite != null
+        ? position.reachEstimate(protagonistIsWhite: protagonistIsWhite)
+        : null;
+    final fenParts = currentNode.fen.split(' ');
+    final protagonistToMove =
+        protagonistIsWhite != null &&
+        fenParts.length > 1 &&
+        (fenParts[1] == 'w') == protagonistIsWhite;
 
     return Column(
       children: [
@@ -205,7 +228,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                       ),
                       padding: EdgeInsets.zero,
                       tooltip: 'Forward',
-                      onPressed: sortedChildren.isNotEmpty
+                      onPressed: continuations.isNotEmpty
                           ? () => widget.onGoForward?.call()
                           : null,
                     ),
@@ -231,13 +254,10 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                 ],
               ),
               const SizedBox(height: 8),
-              // Stats for current position
-              Text(
-                '${currentNode.gamesPlayed} games • '
-                '${currentNode.winRatePercent.toStringAsFixed(1)}% '
-                '(${currentNode.wins}-${currentNode.losses}-${currentNode.draws})',
-                style: TextStyle(fontSize: 11, color: AppColors.inkSoft),
-              ),
+              // Stats for current position (summed across transpositions).
+              // The reach annotation stays terse to keep this on one line;
+              // the tooltip carries the explanation.
+              _buildStatsLine(position, reach, currentNode),
             ],
           ),
         ),
@@ -256,7 +276,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
 
         // Move list
         Expanded(
-          child: sortedChildren.isEmpty
+          child: continuations.isEmpty
               ? Center(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
@@ -270,15 +290,31 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                   ),
                 )
               : ListView.builder(
-                  itemCount: sortedChildren.length,
+                  itemCount: continuations.length,
                   itemBuilder: (context, index) {
-                    final child = sortedChildren[index];
+                    final child = continuations[index];
+                    // Cumulative reach after this move — only meaningful for
+                    // the analyzed player's own moves (their choice extends
+                    // the product; ours would leave it unchanged).
+                    ReachEstimate? childReach;
+                    if (reach != null &&
+                        protagonistToMove &&
+                        position.gamesPlayed > 0) {
+                      childReach = ReachEstimate(
+                        reach.probability *
+                            child.gamesPlayed /
+                            position.gamesPlayed,
+                        reach.decisionPoints +
+                            (child.gamesPlayed < position.gamesPlayed ? 1 : 0),
+                      );
+                    }
                     return OpeningTreeMoveRow(
-                      node: child,
-                      parentGamesPlayed: currentNode.gamesPlayed,
+                      entry: child,
+                      parentGamesPlayed: position.gamesPlayed,
                       perspective: widget.wdlPerspective,
+                      reachEstimate: childReach,
                       coverageStatus: resolveCoverageStatus(
-                        node: child,
+                        group: child,
                         tree: widget.tree,
                         coverageResult: widget.coverageResult,
                       ),
@@ -406,6 +442,36 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
           ),
         ],
       ],
+    );
+  }
+
+  /// One-line position stats, with the reach annotation appended when the
+  /// protagonist's color is known and we're past the starting position.
+  Widget _buildStatsLine(
+    PositionGroup position,
+    ReachEstimate? reach,
+    OpeningTreeNode currentNode,
+  ) {
+    final showReach = reach != null && currentNode.parent != null;
+    final text = Text(
+      '${position.gamesPlayed} games • '
+      '${position.winRatePercent.toStringAsFixed(1)}% '
+      '(${position.wins}-${position.losses}-${position.draws})'
+      '${position.nodes.length > 1 ? ' • ${position.nodes.length} move orders' : ''}'
+      '${showReach ? ' • ${reach.percentLabel}% reached' : ''}',
+      style: TextStyle(fontSize: 11, color: AppColors.inkSoft),
+    );
+    if (!showReach) return text;
+    return Tooltip(
+      message:
+          '${reach.percentLabel}% reached: chance this player plays into '
+          'this position when you head down this line — the product of how '
+          'often they chose each of their moves along the path '
+          '(${reach.decisionPoints} branch '
+          'point${reach.decisionPoints == 1 ? '' : 's'} where they sometimes '
+          'play something else). Your own moves count as 100% — you pick '
+          'those.',
+      child: text,
     );
   }
 

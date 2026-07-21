@@ -272,7 +272,9 @@ class PositionAnalysis {
   ///
   /// `eval_bad_white` — worst eval for White first (most negative evalCp).
   /// `eval_bad_black` — worst eval for Black first (most positive evalCp).
-  /// Both `eval_bad_*` sorts only include positions that have engine eval.
+  /// `eval_good_white` — best eval for White first (most positive evalCp).
+  /// `eval_good_black` — best eval for Black first (most negative evalCp).
+  /// All `eval_*` sorts only include positions that have engine eval.
   List<PositionStats> getSortedPositions({
     int minGames = 3,
     String sortBy = 'win_rate',
@@ -281,10 +283,10 @@ class PositionAnalysis {
         .where((stats) => stats.games >= minGames)
         .toList();
 
-    if (sortBy == 'eval_bad_white') {
+    if (sortBy == 'eval_bad_white' || sortBy == 'eval_good_black') {
       filtered = filtered.where((s) => s.hasEval).toList();
       filtered.sort((a, b) => (a.evalCp ?? 0).compareTo(b.evalCp ?? 0));
-    } else if (sortBy == 'eval_bad_black') {
+    } else if (sortBy == 'eval_bad_black' || sortBy == 'eval_good_white') {
       filtered = filtered.where((s) => s.hasEval).toList();
       filtered.sort((a, b) => (b.evalCp ?? 0).compareTo(a.evalCp ?? 0));
     } else if (sortBy == 'win_rate') {

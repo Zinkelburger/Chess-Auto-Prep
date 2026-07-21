@@ -47,6 +47,48 @@ void main() {
       expect(games[0], isNot(contains('Build stats')));
     });
 
+    test('strips semicolon rest-of-line comments before first Event', () {
+      // Real-world shape: chessgames.com collection downloads open with a
+      // `;`-comment banner (PGN spec rest-of-line comments).
+      const pgn = '''
+; Alexander Alekhine's Best Games
+; Compiled by KingG on chessgames.com
+; 120 games
+;
+[Event "Game 1"]
+
+1. e4 e5 *
+
+[Event "Game 2"]
+
+1. d4 d5 *
+''';
+      final games = splitPgnIntoGames(pgn);
+      expect(games, hasLength(2));
+      expect(games[0], startsWith('[Event "Game 1"]'));
+      expect(games[0], isNot(contains('Compiled by')));
+    });
+
+    test('does not split on [EventDate headers', () {
+      // `[EventDate` shares the `[Event` prefix; splitting there would cut
+      // every chessgames.com-style game in two.
+      const pgn = '''
+[Event "Game 1"]
+[EventDate "1907.??.??"]
+
+1. e4 e5 *
+
+[Event "Game 2"]
+[EventDate "1908.??.??"]
+
+1. d4 d5 *
+''';
+      final games = splitPgnIntoGames(pgn);
+      expect(games, hasLength(2));
+      expect(games[0], contains('[EventDate "1907.??.??"]'));
+      expect(countPgnGames(pgn), 2);
+    });
+
     test('wraps bare movetext without headers', () {
       const pgn = '1. e4 e5 2. Nf3 *';
       final games = splitPgnIntoGames(pgn);
@@ -147,6 +189,9 @@ void main() {
       'empty': '',
       'blank-only': '\n\n  \n',
       'comment-only': '// just a note\n',
+      'semicolon-preamble':
+          '; Best games collection\n; 2 games\n;\n[Event "G1"]\n1. e4 *\n\n[Event "G2"]\n1. d4 *\n',
+      'semicolon-only': '; just a note\n;\n',
     };
 
     fixtures.forEach((name, pgn) {

@@ -370,56 +370,56 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
   // Keyboard navigation
   // =====================================================================
 
-  KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (isTextInputFocused()) return KeyEventResult.ignored;
-
-    if (event.logicalKey == LogicalKeyboardKey.keyE && hasNoLetterModifiers) {
-      InlineEngineBar.toggleEngine();
-      return KeyEventResult.handled;
-    }
-
+  /// Shortcuts, dispatched through [handleKeyBindings] (never while typing).
+  /// Arrow-key meaning depends on the active tab.
+  List<KeyBinding> get _keyBindings => [
+    KeyBinding.run(
+      LogicalKeyboardKey.keyE,
+      'Toggle engine',
+      InlineEngineBar.toggleEngine,
+    ),
     // Move Tree tab: arrow keys navigate the tree.
-    if (_tabController.index == 0 && widget.openingTree != null) {
-      if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-        _treeGoBack();
-        return KeyEventResult.handled;
-      }
-      if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-        _treeGoForward();
-        return KeyEventResult.handled;
-      }
-    }
-
+    if (_tabController.index == 0 && widget.openingTree != null) ...[
+      KeyBinding.run(
+        LogicalKeyboardKey.arrowLeft,
+        'Back one move',
+        _treeGoBack,
+      ),
+      KeyBinding.run(
+        LogicalKeyboardKey.arrowRight,
+        'Forward one move',
+        _treeGoForward,
+      ),
+    ],
     // PGN tab: arrow keys navigate the PGN.
-    if (_tabController.index == 2) {
-      if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-        _pgnController.goBack();
-        return KeyEventResult.handled;
-      }
-      if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-        _pgnController.goForward();
-        return KeyEventResult.handled;
-      }
-    }
-
+    if (_tabController.index == 2) ...[
+      KeyBinding.run(
+        LogicalKeyboardKey.arrowLeft,
+        'Back one move',
+        _pgnController.goBack,
+      ),
+      KeyBinding.run(
+        LogicalKeyboardKey.arrowRight,
+        'Forward one move',
+        _pgnController.goForward,
+      ),
+    ],
     // Analysis tab: arrow keys move the scratch cursor.
-    if (_tabController.index == _kAnalysisTabIndex) {
-      if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+    if (_tabController.index == _kAnalysisTabIndex) ...[
+      KeyBinding.run(LogicalKeyboardKey.arrowLeft, 'Back one move', () {
         if (_scratchCursor.isNotEmpty) _jumpScratch(_scratchCursor.parent);
-        return KeyEventResult.handled;
-      }
-      if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      }),
+      KeyBinding.run(LogicalKeyboardKey.arrowRight, 'Forward one move', () {
         final children = _scratchCursor.isEmpty
             ? _scratchTree.roots
             : (_scratchTree.nodeAt(_scratchCursor)?.children ?? const []);
         if (children.isNotEmpty) _jumpScratch(_scratchCursor.child(0));
-        return KeyEventResult.handled;
-      }
-    }
+      }),
+    ],
+  ];
 
-    return KeyEventResult.ignored;
-  }
+  KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) =>
+      handleKeyBindings(_keyBindings, event);
 
   // =====================================================================
   // Left panel
@@ -545,6 +545,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
         Expanded(
           child: OpeningTreeWidget(
             tree: tree,
+            protagonistIsWhite: widget.playerIsWhite,
             onMoveSelected: _onTreeMoveSelected,
             onPositionSelected: _onTreePositionSelected,
             onPathPlySelected: _onTreePathPlySelected,

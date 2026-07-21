@@ -23,6 +23,14 @@ List<PgnGameEntry> parseMultiGamePgn(String content) {
   for (final chunk in chunks) {
     final trimmed = chunk.trim();
     if (trimmed.isEmpty) continue;
+    // A comment-only chunk (e.g. a `;`-comment banner before the first
+    // `[Event` header, as in chessgames.com collection downloads) is not a
+    // game; without this it would surface as a blank extra game.
+    if (trimmed
+        .split('\n')
+        .every((l) => l.trim().isEmpty || pgn.isPgnCommentLine(l.trim()))) {
+      continue;
+    }
     final headers = pgn.extractHeaders(trimmed);
     final rating = int.tryParse(headers['StudyRating'] ?? '') ?? 0;
     entries.add(

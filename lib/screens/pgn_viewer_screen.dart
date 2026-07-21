@@ -354,126 +354,167 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _reclaimFocus();
   }
 
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-      return KeyEventResult.ignored;
-    }
+  static const _digitKeys = [
+    LogicalKeyboardKey.digit1,
+    LogicalKeyboardKey.digit2,
+    LogicalKeyboardKey.digit3,
+    LogicalKeyboardKey.digit4,
+    LogicalKeyboardKey.digit5,
+    LogicalKeyboardKey.digit6,
+    LogicalKeyboardKey.digit7,
+    LogicalKeyboardKey.digit8,
+    LogicalKeyboardKey.digit9,
+  ];
 
-    if (isTextInputFocused()) return KeyEventResult.ignored;
-
-    final key = event.logicalKey;
-
-    // Solitaire: arrows/home/end browse the revealed region (the PGN widget
-    // caps mainline navigation at the frontier); autoplay and tab-switching
-    // stay disabled.
-    if (_controller.isSolitaireMode) {
-      // R reveals the current move once the reveal countdown has elapsed
-      // (return-to-mainline's R is inert during solitaire).
-      if (key == LogicalKeyboardKey.keyR && hasNoLetterModifiers) {
+  /// The viewer's keyboard shortcuts, dispatched through [handleKeyBindings]
+  /// (never while typing). Order matters: the solitaire block shadows keys
+  /// that would disturb a puzzle. Keep descriptions in sync with the button
+  /// tooltips that advertise them.
+  List<KeyBinding> get _keyBindings => [
+    // Solitaire: arrows/Home/End still browse the revealed region (the PGN
+    // widget caps mainline navigation at the frontier); R reveals, and the
+    // autoplay/tab-switch/engine/amend keys are swallowed so they can't
+    // disturb the puzzle.
+    if (_controller.isSolitaireMode) ...[
+      KeyBinding.run(LogicalKeyboardKey.keyR, 'Reveal current move', () {
         if (_controller.solitaire.canReveal) _controller.revealCurrentMove();
-        return KeyEventResult.handled;
-      }
-      if (key == LogicalKeyboardKey.space ||
-          key == LogicalKeyboardKey.tab ||
-          ((key == LogicalKeyboardKey.keyE || key == LogicalKeyboardKey.keyA) &&
-              hasNoLetterModifiers)) {
-        return KeyEventResult.handled;
-      }
-    }
-
-    if (key == LogicalKeyboardKey.arrowLeft) {
-      _controller.navigateBack();
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.arrowRight) {
-      _controller.navigateForward();
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.home) {
-      _controller.navigateToStart();
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.end) {
-      _controller.navigateToEnd();
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyN && hasNoLetterModifiers) {
-      _controller.nextGame();
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyP && hasNoLetterModifiers) {
-      _controller.prevGame();
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.f11 ||
-        (key == LogicalKeyboardKey.keyF &&
-            HardwareKeyboard.instance.isControlPressed)) {
-      _controller.toggleFullScreen();
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyF && hasNoLetterModifiers) {
-      _controller.toggleBoardFlipped();
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyE &&
-        HardwareKeyboard.instance.isControlPressed) {
-      _exportSlice();
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyV &&
-        HardwareKeyboard.instance.isControlPressed) {
-      _pastePgn();
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyE && hasNoLetterModifiers) {
-      InlineEngineBar.toggleEngine();
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.space) {
-      _controller.toggleAutoPlay();
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyW && hasNoLetterModifiers) {
-      _controller.setAutoNextGame(!_controller.autoNextGame);
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyA && hasNoLetterModifiers) {
-      _toggleEditMode();
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyS && hasNoLetterModifiers) {
-      _openGameSearch();
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.escape) {
-      if (_editMode) {
-        _toggleEditMode();
-      } else if (_controller.isFullScreen) {
-        _controller.exitFullScreen();
-      } else {
-        _pgnWidgetController.clearEphemeralMoves();
-      }
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.tab) {
-      _tabController.animateTo(
+      }),
+      for (final key in [
+        LogicalKeyboardKey.space,
+        LogicalKeyboardKey.tab,
+        LogicalKeyboardKey.keyE,
+        LogicalKeyboardKey.keyA,
+      ])
+        KeyBinding(key, 'Disabled during solitaire', () => true),
+    ],
+    KeyBinding.run(
+      LogicalKeyboardKey.arrowLeft,
+      'Back one move',
+      _controller.navigateBack,
+      repeats: true,
+    ),
+    KeyBinding.run(
+      LogicalKeyboardKey.arrowRight,
+      'Forward one move',
+      _controller.navigateForward,
+      repeats: true,
+    ),
+    KeyBinding.run(
+      LogicalKeyboardKey.home,
+      'Go to start',
+      _controller.navigateToStart,
+    ),
+    KeyBinding.run(
+      LogicalKeyboardKey.end,
+      'Go to end',
+      _controller.navigateToEnd,
+    ),
+    KeyBinding.run(
+      LogicalKeyboardKey.keyN,
+      'Next game',
+      _controller.nextGame,
+      repeats: true,
+    ),
+    KeyBinding.run(
+      LogicalKeyboardKey.keyP,
+      'Previous game',
+      _controller.prevGame,
+      repeats: true,
+    ),
+    KeyBinding.run(
+      LogicalKeyboardKey.f11,
+      'Toggle fullscreen',
+      _controller.toggleFullScreen,
+    ),
+    KeyBinding.run(
+      LogicalKeyboardKey.keyF,
+      'Toggle fullscreen',
+      _controller.toggleFullScreen,
+      control: true,
+    ),
+    KeyBinding.run(
+      LogicalKeyboardKey.keyF,
+      'Flip board',
+      _controller.toggleBoardFlipped,
+    ),
+    KeyBinding.run(
+      LogicalKeyboardKey.keyV,
+      'Paste PGN',
+      _pastePgn,
+      control: true,
+    ),
+    KeyBinding.run(
+      LogicalKeyboardKey.keyE,
+      'Toggle engine',
+      InlineEngineBar.toggleEngine,
+    ),
+    KeyBinding.run(
+      LogicalKeyboardKey.space,
+      'Toggle auto-play',
+      _controller.toggleAutoPlay,
+    ),
+    KeyBinding.run(
+      LogicalKeyboardKey.keyW,
+      'Toggle auto next game',
+      () => _controller.setAutoNextGame(!_controller.autoNextGame),
+    ),
+    KeyBinding.run(
+      LogicalKeyboardKey.keyA,
+      'Toggle amend mode',
+      _toggleEditMode,
+    ),
+    KeyBinding.run(LogicalKeyboardKey.keyS, 'Search games', _openGameSearch),
+    KeyBinding.run(
+      LogicalKeyboardKey.escape,
+      'Exit amend mode / fullscreen, clear analysis moves',
+      () {
+        if (_editMode) {
+          _toggleEditMode();
+        } else if (_controller.isFullScreen) {
+          _controller.exitFullScreen();
+        } else {
+          _pgnWidgetController.clearEphemeralMoves();
+        }
+      },
+    ),
+    KeyBinding.run(
+      LogicalKeyboardKey.tab,
+      'Next tab',
+      () => _tabController.animateTo(
         (_tabController.index + 1) % _tabController.length,
-      );
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyR && hasNoLetterModifiers) {
+      ),
+    ),
+    KeyBinding.run(LogicalKeyboardKey.keyR, 'Return to mainline', () {
       if (_pgnWidgetController.inVariation) {
         _pgnWidgetController.returnToMainline();
       }
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyT && hasNoLetterModifiers) {
-      _controller.toggleOpeningTree();
-      return KeyEventResult.handled;
-    } else if (key.keyId >= LogicalKeyboardKey.digit1.keyId &&
-        key.keyId <= LogicalKeyboardKey.digit9.keyId &&
-        hasNoLetterModifiers) {
-      // Play the numbered branch candidate shown in the fork bar.
-      final index = key.keyId - LogicalKeyboardKey.digit1.keyId;
-      if (_pgnWidgetController.selectBranchCandidate(index)) {
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    } else if (key == LogicalKeyboardKey.keyS &&
-        HardwareKeyboard.instance.isShiftPressed &&
-        !isPrimaryModifierPressed) {
+    }),
+    KeyBinding.run(
+      LogicalKeyboardKey.keyT,
+      'Toggle opening tree',
+      _controller.toggleOpeningTree,
+    ),
+    // Play the numbered branch candidate shown in the fork bar.
+    for (var i = 0; i < _digitKeys.length; i++)
+      KeyBinding(
+        _digitKeys[i],
+        'Play fork candidate ${i + 1}',
+        () => _pgnWidgetController.selectBranchCandidate(i),
+      ),
+    KeyBinding(LogicalKeyboardKey.keyS, 'Toggle solitaire mode', () {
       if (!_controller.showOpeningTree) _controller.toggleSolitaire();
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyC && hasNoLetterModifiers) {
-      // Jump into the annotation panel's comment field (amend mode only).
-      if (PgnAnnotationPanel.focusActive()) {
-        return KeyEventResult.handled;
-      }
-    }
-    return KeyEventResult.ignored;
-  }
+      return true;
+    }, shift: true),
+    // Jump into the annotation panel's comment field (amend mode only).
+    KeyBinding(
+      LogicalKeyboardKey.keyC,
+      'Comment current move',
+      PgnAnnotationPanel.focusActive,
+    ),
+  ];
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) =>
+      handleKeyBindings(_keyBindings, event);
 
   @override
   Widget build(BuildContext context) {
