@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/models/opening_tree.dart';
+import 'package:chess_auto_prep/utils/fen_utils.dart';
 
 void main() {
   group('OpeningTree', () {
@@ -297,6 +298,88 @@ void main() {
       });
     });
 
+    group('Transpositions', () {
+      // Mirrors the real-world discrepancy this guards against: a position
+      // reached via two move orders (1 game on path A, 2 games on path B)
+      // must present 3 games and both continuations, not just path A's.
+      late OpeningTree transTree;
+      late OpeningTreeNode viaA;
+      late OpeningTreeNode viaB;
+      const sharedFen = 'shared/pos w KQkq - 0 5';
+
+      setUp(() {
+        final transRoot = OpeningTreeNode(move: '', fen: 'start w KQkq - 0 1');
+        transTree = OpeningTree(root: transRoot);
+
+        // Path A (1 game, loss): a1 → x → Bd3
+        final a1 = transRoot.getOrCreateChild('a1', 'afen b KQkq - 0 1');
+        viaA = a1.getOrCreateChild('x', sharedFen);
+        final bd3 = viaA.getOrCreateChild('Bd3', 'bd3fen b KQkq - 0 5');
+        for (final node in [transRoot, a1, viaA, bd3]) {
+          node.updateStats(0.0);
+        }
+
+        // Path B (2 games, losses): b1 → y → Qd2
+        final b1 = transRoot.getOrCreateChild('b1', 'bfen b KQkq - 0 1');
+        viaB = b1.getOrCreateChild('y', sharedFen);
+        final qd2 = viaB.getOrCreateChild('Qd2', 'qd2fen b KQkq - 0 5');
+        for (var game = 0; game < 2; game++) {
+          for (final node in [transRoot, b1, viaB, qd2]) {
+            node.updateStats(0.0);
+          }
+        }
+
+        void indexRecursive(OpeningTreeNode node) {
+          transTree.indexNode(node);
+          for (final child in node.children.values) {
+            indexRecursive(child);
+          }
+        }
+
+        indexRecursive(transRoot);
+      });
+
+      test('indexNode is idempotent', () {
+        final key = normalizeFen(sharedFen);
+        final before = transTree.fenToNodes[key]!.length;
+        transTree.indexNode(viaA);
+        expect(transTree.fenToNodes[key]!.length, equals(before));
+      });
+
+      test('groupFor sums stats across move orders', () {
+        final group = transTree.groupFor(viaA);
+        expect(group.nodes.length, equals(2));
+        expect(group.gamesPlayed, equals(3));
+        expect(group.losses, equals(3));
+        expect(group.winRate, equals(0.0));
+      });
+
+      test('groupFor falls back to the node itself when unindexed', () {
+        final orphan = OpeningTreeNode(move: 'z', fen: 'orphan w - - 0 1');
+        final group = transTree.groupFor(orphan);
+        expect(group.nodes, equals([orphan]));
+      });
+
+      test('group children merge continuations from all move orders', () {
+        final moves = transTree.groupFor(viaA).children;
+        expect(moves.map((m) => m.move).toList(), equals(['Qd2', 'Bd3']));
+        expect(moves.first.gamesPlayed, equals(2));
+        expect(moves.last.gamesPlayed, equals(1));
+      });
+
+      test('navigateToFen lands on the most-played path', () {
+        expect(transTree.navigateToFen(sharedFen), isTrue);
+        expect(transTree.currentNode, same(viaB));
+      });
+
+      test('makeMove follows a continuation from another move order', () {
+        transTree.navigateToFen(sharedFen); // Cursor on viaB (no Bd3 child).
+        expect(transTree.makeMove('Bd3'), isTrue);
+        expect(transTree.currentNode.move, equals('Bd3'));
+        expect(transTree.currentNode.getMovePath(), equals(['a1', 'x', 'Bd3']));
+      });
+    });
+
     group('appendLineFromFen', () {
       test('adds new branch from standard start', () {
         tree.appendLineFromFen(root.fen, ['a4']);
@@ -310,6 +393,101 @@ void main() {
         tree.appendLineFromFen(fen, ['Bc4']);
         expect(tree.hasMove(fen, 'Bc4'), isTrue);
       });
+    });
+  });
+
+  group('reachEstimate', () {
+    // 10 games: White always plays 1.e4 (10/10). Black answers 1...e5 in 6
+    // and 1...c5 in 4. After 1...e5, White plays 2.Nf3 in 4 and 2.f4 in 2.
+    late OpeningTreeNode root;
+    late OpeningTreeNode e4;
+    late OpeningTreeNode e5;
+    late OpeningTreeNode nf3;
+    late OpeningTreeNode f4;
+
+    void addGames(OpeningTreeNode node, int count) {
+      for (var i = 0; i < count; i++) {
+        node.updateStats(0.5);
+      }
+    }
+
+    setUp(() {
+      root = OpeningTreeNode(
+        move: '',
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      );
+      e4 = root.getOrCreateChild(
+        'e4',
+        'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1',
+      );
+      e5 = e4.getOrCreateChild(
+        'e5',
+        'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2',
+      );
+      final c5 = e4.getOrCreateChild(
+        'c5',
+        'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2',
+      );
+      nf3 = e5.getOrCreateChild(
+        'Nf3',
+        'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2',
+      );
+      f4 = e5.getOrCreateChild(
+        'f4',
+        'rnbqkbnr/pppp1ppp/8/4p3/4PP2/8/PPPP2PP/RNBQKBNR b KQkq f3 0 2',
+      );
+      addGames(root, 10);
+      addGames(e4, 10);
+      addGames(e5, 6);
+      addGames(c5, 4);
+      addGames(nf3, 4);
+      addGames(f4, 2);
+    });
+
+    test('root position is certain with no decisions', () {
+      final est = root.reachEstimate(protagonistIsWhite: true);
+      expect(est.probability, equals(1.0));
+      expect(est.decisionPoints, equals(0));
+    });
+
+    test('white protagonist: only White\'s choices multiply', () {
+      // 1.e4 was 10/10 (no decision); 1...e5 is Black's move (free for the
+      // viewer); 2.Nf3 was 4/6 — the only real decision point.
+      final est = nf3.reachEstimate(protagonistIsWhite: true);
+      expect(est.probability, closeTo(4 / 6, 1e-9));
+      expect(est.decisionPoints, equals(1));
+    });
+
+    test('black protagonist: only Black\'s choices multiply', () {
+      // 1...e5 was 6/10; White's 1.e4 and 2.Nf3 count as certain.
+      final est = nf3.reachEstimate(protagonistIsWhite: false);
+      expect(est.probability, closeTo(0.6, 1e-9));
+      expect(est.decisionPoints, equals(1));
+    });
+
+    test('unanimous move is not a decision point', () {
+      final est = e4.reachEstimate(protagonistIsWhite: true);
+      expect(est.probability, equals(1.0));
+      expect(est.decisionPoints, equals(0));
+    });
+
+    test('PositionGroup sums probabilities across paths', () {
+      // Not a real transposition, but exercises the summing contract:
+      // 4/6 + 2/6 covers every White continuation after 1.e4 e5.
+      final est = PositionGroup([
+        nf3,
+        f4,
+      ]).reachEstimate(protagonistIsWhite: true);
+      expect(est.probability, closeTo(1.0, 1e-9));
+      // Decision points come from the most-played path (Nf3).
+      expect(est.decisionPoints, equals(1));
+    });
+
+    test('percentLabel formats extremes readably', () {
+      expect(const ReachEstimate(1.0, 0).percentLabel, equals('100'));
+      expect(const ReachEstimate(0.0004, 3).percentLabel, equals('<0.1'));
+      expect(const ReachEstimate(0.345, 2).percentLabel, equals('34.5'));
+      expect(const ReachEstimate(0.0, 0).percentLabel, equals('0.0'));
     });
   });
 }

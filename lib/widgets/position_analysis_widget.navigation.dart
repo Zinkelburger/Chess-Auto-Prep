@@ -86,13 +86,13 @@ mixin _NavigationMixin on _PositionAnalysisWidgetStateBase {
     }
   }
 
-  /// Tree: advance to the most-played child (main line).
+  /// Tree: advance to the most-played child (main line, merged across
+  /// transpositions).
   void _treeGoForward() {
     final tree = widget.openingTree;
     if (tree == null) return;
-    final children = tree.currentNode.sortedChildren;
-    if (children.isNotEmpty) {
-      tree.makeMove(children.first.move);
+    final moves = tree.currentGroup.children;
+    if (moves.isNotEmpty && tree.makeMove(moves.first.move)) {
       _navigateTo(tree.currentNode.fen);
     }
   }

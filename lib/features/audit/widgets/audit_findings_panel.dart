@@ -265,36 +265,26 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
     setState(() {});
   }
 
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-      return KeyEventResult.ignored;
-    }
+  /// Panel shortcuts, dispatched through [handleKeyBindings] (never while
+  /// typing).
+  List<KeyBinding> get _keyBindings => [
+    for (final key in [LogicalKeyboardKey.keyN, LogicalKeyboardKey.arrowDown])
+      KeyBinding.run(key, 'Next finding', () {
+        if (_selectedIndex < _visibleFindings.length - 1) {
+          _selectFinding(_selectedIndex + 1);
+        }
+      }, repeats: true),
+    for (final key in [LogicalKeyboardKey.keyP, LogicalKeyboardKey.arrowUp])
+      KeyBinding.run(key, 'Previous finding', () {
+        if (_selectedIndex > 0) {
+          _selectFinding(_selectedIndex - 1);
+        }
+      }, repeats: true),
+    KeyBinding.run(LogicalKeyboardKey.keyD, 'Dismiss finding', _dismissCurrent),
+  ];
 
-    if (isTextInputFocused()) {
-      return KeyEventResult.ignored;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.keyN ||
-        event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      if (_selectedIndex < _visibleFindings.length - 1) {
-        _selectFinding(_selectedIndex + 1);
-      }
-      return KeyEventResult.handled;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.keyP ||
-        event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      if (_selectedIndex > 0) {
-        _selectFinding(_selectedIndex - 1);
-      }
-      return KeyEventResult.handled;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.keyD && hasNoLetterModifiers) {
-      _dismissCurrent();
-      return KeyEventResult.handled;
-    }
-
-    return KeyEventResult.ignored;
-  }
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) =>
+      handleKeyBindings(_keyBindings, event);
 
   // ── Bulk dismiss ──────────────────────────────────────────────────────
 

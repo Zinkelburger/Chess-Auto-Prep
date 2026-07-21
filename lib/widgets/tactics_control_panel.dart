@@ -41,16 +41,12 @@ part 'tactics_control_panel/tactics_control_panel_browse.dart';
 part 'tactics_control_panel/tactics_control_panel_keyboard.dart';
 part 'tactics_control_panel/tactics_control_panel_playback.dart';
 
-class _ToggleInlineEngineIntent extends Intent {
-  const _ToggleInlineEngineIntent();
-}
-
 /// Tactics training control panel with import, review, and analysis.
 class TacticsControlPanel extends StatefulWidget {
   const TacticsControlPanel({super.key});
 
-  /// Shared key for the tactics move-input widget so the `/` shortcut can
-  /// focus it from the control panel.
+  /// Shared key for the tactics move-input widget so the `/` and Tab
+  /// shortcuts can focus it from the control panel.
   static final moveInputKey = GlobalKey<MoveInputWidgetState>();
 
   @override
@@ -280,27 +276,13 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
   Widget build(BuildContext context) {
     // holdsFocus: the panel keeps keyboard focus for its navigation shortcuts
     // and hands focus to the move input when typing is wanted. While the move
-    // input owns focus, keys that navigate the trainer (Space, S/P, J, arrows)
-    // are routed back here through _handleTrainerNavigationKey — the field is a
-    // focus-tree sibling, so they can't bubble to _handleKeyEvent.
+    // input owns focus, keys that navigate the trainer (Space, S/P, J,
+    // arrows) are routed back here through _handleTrainerNavigationKey — the
+    // field is a focus-tree sibling, so they can't bubble to _handleKeyEvent.
     return TrainerKeyboardScope(
       holdsFocus: true,
       focusNode: _focusNode,
       onKeyEvent: _handleKeyEvent,
-      shortcuts: const {
-        SingleActivator(LogicalKeyboardKey.keyE): _ToggleInlineEngineIntent(),
-      },
-      actions: {
-        _ToggleInlineEngineIntent: CallbackAction<_ToggleInlineEngineIntent>(
-          onInvoke: (_) {
-            if (_session.currentPosition == null || isTextInputFocused()) {
-              return null;
-            }
-            InlineEngineBar.toggleEngine();
-            return null;
-          },
-        ),
-      },
       child: Column(
         children: [
           if (_database.isExternalSet) _buildReviewBanner(),
@@ -414,10 +396,12 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
                   isLastSessionPuzzle: _session.isAtLastSessionPuzzle,
                   onAutoAdvanceChanged: _session.setAutoAdvance,
                   onCopyFen: _copyFen,
-                  onBackToBrowse:
-                      _session.playSource == TacticsPlaySource.browse
+                  onBack: _session.playSource == TacticsPlaySource.browse
                       ? _returnToBrowse
-                      : null,
+                      : _leaveSession,
+                  backTooltip: _session.playSource == TacticsPlaySource.browse
+                      ? 'Back to browse'
+                      : 'End session',
                   // Editing is gated by the controller (locked at the unsolved
                   // head of a session) and off entirely for external sets.
                   onEdit: !_database.isExternalSet && _session.canEditCurrent
@@ -513,9 +497,17 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
     final pgnText = _solutionPgnText!;
 
     return PgnWithEngine(
-      key: ValueKey('analysis_${tactic.fen}'),
+      key: ValueKey('analysis_${tactic.gameId}_${tactic.fen}'),
+      // Show the full source game (looked up by id) and land on the tactic's
+      // starting position via [initialFen]. Falls back to the solution-only
+      // PGN when the source game isn't in storage; [initialFen] then no-ops
+      // harmlessly since that PGN already starts at the tactic position.
+      gameId: tactic.gameId.isNotEmpty ? tactic.gameId : null,
       pgnText: pgnText,
-      showStartEndButtons: false,
+      initialFen: tactic.fen,
+      // Full game now shown — offer jump-to-start / jump-to-end so the whole
+      // game is reachable in one click, not just move-by-move stepping.
+      showStartEndButtons: true,
       controller: _pgnViewerController,
       onPositionChanged: (position) {
         if (_tabController.index != 1) return;

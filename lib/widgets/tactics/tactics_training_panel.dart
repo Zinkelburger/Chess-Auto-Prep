@@ -84,7 +84,8 @@ class TacticsTrainingPanel extends StatelessWidget {
     this.isLastSessionPuzzle = false,
     required this.onAutoAdvanceChanged,
     required this.onCopyFen,
-    this.onBackToBrowse,
+    this.onBack,
+    this.backTooltip = 'Back',
     this.onEdit,
     required this.onSetRating,
     this.solutionSanMoves = const [],
@@ -119,9 +120,13 @@ class TacticsTrainingPanel extends StatelessWidget {
   final ValueChanged<bool> onAutoAdvanceChanged;
   final VoidCallback onCopyFen;
 
-  /// Returns to the browse list this tactic was launched from. Non-null only
-  /// for browse-launched play; sessions have no back button.
-  final VoidCallback? onBackToBrowse;
+  /// Leaves the current puzzle: back to the browse list for browse-launched
+  /// play, or ends the session and returns to the home panel. Hidden when
+  /// null.
+  final VoidCallback? onBack;
+
+  /// Tooltip for the header back arrow (varies with where back leads).
+  final String backTooltip;
 
   /// Opens the edit dialog for this tactic. Hidden when null (external sets,
   /// or the unsolved head of a session where editing would reveal the answer).
@@ -167,7 +172,8 @@ class TacticsTrainingPanel extends StatelessWidget {
         TacticsPositionInfo(
           position: position,
           engine: engine,
-          onBack: onBackToBrowse,
+          onBack: onBack,
+          backTooltip: backTooltip,
           onEdit: onEdit,
         ),
         const SizedBox(height: 16),
@@ -499,14 +505,18 @@ class TacticsPositionInfo extends StatelessWidget {
     required this.position,
     required this.engine,
     this.onBack,
+    this.backTooltip = 'Back',
     this.onEdit,
   });
 
   final TacticsPosition position;
   final TacticsEngine engine;
 
-  /// Back to the browse list. Hidden when null.
+  /// Leaves the current puzzle (browse list or home panel). Hidden when null.
   final VoidCallback? onBack;
+
+  /// Tooltip for the back arrow.
+  final String backTooltip;
 
   /// Opens the edit dialog for this tactic. Hidden when null.
   final VoidCallback? onEdit;
@@ -514,9 +524,6 @@ class TacticsPositionInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pos = position;
-    // Clamp to at least 1 so a single-move tactic reads "1-move tactic"
-    // instead of dropping the line — the disappearing line used to shove
-    // every control below it, bouncing the panel on each Next/Previous.
     final moveCount = math.max(1, engine.userMoveCount(pos));
 
     return Column(
@@ -528,7 +535,7 @@ class TacticsPositionInfo extends StatelessWidget {
               IconButton(
                 onPressed: onBack,
                 icon: const Icon(Icons.arrow_back, size: 18),
-                tooltip: 'Back to browse',
+                tooltip: backTooltip,
                 visualDensity: VisualDensity.compact,
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                 padding: EdgeInsets.zero,
@@ -583,9 +590,18 @@ class TacticsPositionInfo extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 4),
-        // Shown for every puzzle (single-move tactics read "1-move tactic") so
-        // this line never appears/disappears between puzzles.
-        Text('$moveCount-move tactic', style: const TextStyle(fontSize: 14)),
+        // Single-move tactics show nothing here, but the line's height is
+        // always reserved so the panel doesn't bounce on Next/Previous.
+        Visibility(
+          visible: moveCount > 1,
+          maintainSize: true,
+          maintainAnimation: true,
+          maintainState: true,
+          child: Text(
+            '$moveCount-move tactic',
+            style: const TextStyle(fontSize: 14),
+          ),
+        ),
       ],
     );
   }

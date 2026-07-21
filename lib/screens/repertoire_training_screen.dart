@@ -244,39 +244,34 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       }
     }
 
-    if (isTextInputFocused()) {
-      return KeyEventResult.ignored;
-    }
+    return handleKeyBindings(_keyBindings, event);
+  }
 
-    if (event.logicalKey == LogicalKeyboardKey.slash && hasNoLetterModifiers) {
-      _moveInputKey.currentState?.focus();
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.keyJ && hasNoLetterModifiers) {
+  /// Trainer shortcuts, dispatched through [handleKeyBindings] (never while
+  /// typing a move).
+  List<KeyBinding> get _keyBindings => [
+    KeyBinding.run(
+      LogicalKeyboardKey.slash,
+      'Focus move input',
+      () => _moveInputKey.currentState?.focus(),
+    ),
+    KeyBinding.run(LogicalKeyboardKey.keyJ, 'Toggle manual advance', () {
       final settings = _training.settings;
       settings.learnRequiresClick = !settings.learnRequiresClick;
       settings.save();
       setState(() {});
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.keyS &&
-        hasNoLetterModifiers &&
-        _training.currentLine != null) {
+    }),
+    KeyBinding(LogicalKeyboardKey.keyS, 'Skip to next line', () {
+      if (_training.currentLine == null) return false;
       _training.skipLine();
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.keyR &&
-        hasNoLetterModifiers &&
-        _training.currentLine != null) {
+      return true;
+    }),
+    KeyBinding(LogicalKeyboardKey.keyR, 'Restart line', () {
+      if (_training.currentLine == null) return false;
       _training.restartLine();
-      return KeyEventResult.handled;
-    }
-
-    return KeyEventResult.ignored;
-  }
+      return true;
+    }),
+  ];
 
   PreferredSizeWidget _buildAppBar() {
     final theme = Theme.of(context);
@@ -431,6 +426,10 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       waitingForUser: _training.waitingForUser,
       onMove: _training.handleUserMove,
       moveInputKey: _moveInputKey,
+      // Non-move keys (S skip, J manual-advance, …) keep working as
+      // shortcuts while a move is being typed; R stays typeable ("Rd1").
+      onNavigationKey: (event) =>
+          handleMoveInputNavigationKey(_keyBindings, event),
     );
   }
 
@@ -535,12 +534,12 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
                 ),
                 _trainTabIconButton(
                   icon: Icons.replay,
-                  tooltip: 'Restart line (R)',
+                  tooltip: 'Restart line',
                   onPressed: _training.restartLine,
                 ),
                 _trainTabIconButton(
                   icon: Icons.skip_next,
-                  tooltip: 'Skip to next line (S)',
+                  tooltip: 'Skip to next line',
                   onPressed: _training.skipLine,
                 ),
                 _trainTabIconButton(

@@ -23,12 +23,14 @@ class MoveInputWidget extends StatefulWidget {
   final void Function(CompletedMove move) onMove;
   final bool enabled;
 
-  /// Optional hook for keys that should navigate the trainer rather than edit
-  /// the move text (e.g. Space, S/P, the arrow keys). The field offers every
-  /// key that isn't plain editing here; if this returns true the key is
+  /// Optional hook for keys that should act as screen shortcuts rather than
+  /// edit the move text (e.g. Space, S/P, the arrow keys). The field offers
+  /// every key that isn't plain editing here; if this returns true the key is
   /// swallowed so it never types into — or moves the caret within — the field.
-  /// Used by the tactics trainer, whose shortcut handler is a focus-tree
-  /// sibling and so can't receive these keys by bubbling.
+  /// Hosts pass `handleMoveInputNavigationKey` (keyboard_shortcut_utils.dart),
+  /// which only claims keys that can never appear in typed move text — so
+  /// "e4"/"Nf3" always type normally while non-move shortcut keys keep
+  /// working mid-type.
   final bool Function(KeyEvent event)? onNavigationKey;
 
   const MoveInputWidget({

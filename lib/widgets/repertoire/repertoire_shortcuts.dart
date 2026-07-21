@@ -3,12 +3,13 @@ import 'package:flutter/services.dart';
 
 import '../../utils/keyboard_shortcut_utils.dart';
 
-/// Keyboard shortcuts for the repertoire screen.
+/// Keyboard shortcuts for the repertoire screen, declared as [KeyBinding]s
+/// and dispatched through [handleKeyBindings] — so none of them can fire
+/// while a text field has focus.
 ///
-/// Modifier chords use [CallbackShortcuts]; letter and navigation keys use
-/// [Focus.onKeyEvent]. Shortcuts are suppressed while a text field has focus,
-/// except [onPasteFenFromClipboard] (Ctrl/Cmd+Shift+V) which stays active in
-/// text fields.
+/// The one exception is [onPasteFenFromClipboard] (Ctrl/Cmd+Shift+V), which
+/// deliberately stays active in text fields and therefore uses
+/// [CallbackShortcuts].
 class RepertoireShortcuts extends StatelessWidget {
   const RepertoireShortcuts({
     super.key,
@@ -78,92 +79,81 @@ class RepertoireShortcuts extends StatelessWidget {
 
   final Widget child;
 
-  void _invokeWhenNotTyping(VoidCallback action) {
-    if (!isTextInputFocused()) action();
-  }
-
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-      return KeyEventResult.ignored;
-    }
-
-    if (isTextInputFocused()) return KeyEventResult.ignored;
-
-    final keyboard = HardwareKeyboard.instance;
-
-    if (event.logicalKey == LogicalKeyboardKey.keyX && hasNoLetterModifiers) {
-      onToggleExpectimax();
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.keyL && hasNoLetterModifiers) {
-      onToggleLinesTab();
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.escape) {
-      if (onCollapseBottomPane()) {
-        return KeyEventResult.handled;
-      }
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.keyF && hasNoLetterModifiers) {
-      onFlip();
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.keyT && hasNoLetterModifiers) {
-      if (onToggleTrapTour()) {
-        return KeyEventResult.handled;
-      }
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.keyE && hasNoLetterModifiers) {
-      onToggleEngine();
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.keyN && hasNoLetterModifiers) {
-      if (onNextFinding != null && onNextFinding!()) {
-        return KeyEventResult.handled;
-      }
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.keyP && hasNoLetterModifiers) {
-      if (onPrevFinding != null && onPrevFinding!()) {
-        return KeyEventResult.handled;
-      }
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.keyD && hasNoLetterModifiers) {
-      if (onDismissFinding != null && onDismissFinding!()) {
-        return KeyEventResult.handled;
-      }
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.keyC && hasNoLetterModifiers) {
-      if (onFocusComment != null && onFocusComment!()) {
-        return KeyEventResult.handled;
-      }
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      if (keyboard.isShiftPressed && onGoToPreviousTrap()) {
-        return KeyEventResult.handled;
-      }
-      onGoBack();
-      return KeyEventResult.handled;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      if (keyboard.isShiftPressed && onGoToNextTrap()) {
-        return KeyEventResult.handled;
-      }
-      onGoForward();
-      return KeyEventResult.handled;
-    }
-
-    return KeyEventResult.ignored;
-  }
+  List<KeyBinding> get _keyBindings => [
+    // Ctrl+Z lives here (not in CallbackShortcuts) so text fields keep
+    // their native undo while typing.
+    KeyBinding.run(LogicalKeyboardKey.keyZ, 'Undo', onUndo, control: true),
+    KeyBinding.run(
+      LogicalKeyboardKey.keyX,
+      'Toggle expectimax bar',
+      onToggleExpectimax,
+    ),
+    KeyBinding.run(
+      LogicalKeyboardKey.keyL,
+      'Toggle lines panel',
+      onToggleLinesTab,
+    ),
+    KeyBinding(
+      LogicalKeyboardKey.escape,
+      'Collapse bottom pane',
+      onCollapseBottomPane,
+    ),
+    KeyBinding.run(LogicalKeyboardKey.keyF, 'Flip board', onFlip),
+    KeyBinding(LogicalKeyboardKey.keyT, 'Toggle trap tour', onToggleTrapTour),
+    KeyBinding.run(LogicalKeyboardKey.keyE, 'Toggle engine', onToggleEngine),
+    KeyBinding(
+      LogicalKeyboardKey.keyN,
+      'Next trap stop / finding',
+      () => onNextFinding?.call() ?? false,
+    ),
+    KeyBinding(
+      LogicalKeyboardKey.keyP,
+      'Previous trap stop / finding',
+      () => onPrevFinding?.call() ?? false,
+    ),
+    KeyBinding(
+      LogicalKeyboardKey.keyD,
+      'Dismiss finding',
+      () => onDismissFinding?.call() ?? false,
+    ),
+    KeyBinding(
+      LogicalKeyboardKey.keyC,
+      'Comment current move',
+      () => onFocusComment?.call() ?? false,
+    ),
+    // Shift+←/→ jump between traps, falling back to plain navigation when
+    // there is no trap to jump to.
+    KeyBinding.run(
+      LogicalKeyboardKey.arrowLeft,
+      'Previous trap',
+      () {
+        if (!onGoToPreviousTrap()) onGoBack();
+      },
+      shift: true,
+      repeats: true,
+    ),
+    KeyBinding.run(
+      LogicalKeyboardKey.arrowRight,
+      'Next trap',
+      () {
+        if (!onGoToNextTrap()) onGoForward();
+      },
+      shift: true,
+      repeats: true,
+    ),
+    KeyBinding.run(
+      LogicalKeyboardKey.arrowLeft,
+      'Back one move',
+      onGoBack,
+      repeats: true,
+    ),
+    KeyBinding.run(
+      LogicalKeyboardKey.arrowRight,
+      'Forward one move',
+      onGoForward,
+      repeats: true,
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -176,23 +166,11 @@ class RepertoireShortcuts extends StatelessWidget {
         ): onPasteFenFromClipboard,
         const SingleActivator(LogicalKeyboardKey.keyV, meta: true, shift: true):
             onPasteFenFromClipboard,
-        const SingleActivator(
-          LogicalKeyboardKey.keyZ,
-          control: true,
-          shift: false,
-        ): () =>
-            _invokeWhenNotTyping(onUndo),
-        const SingleActivator(
-          LogicalKeyboardKey.keyZ,
-          meta: true,
-          shift: false,
-        ): () =>
-            _invokeWhenNotTyping(onUndo),
       },
       child: Focus(
         focusNode: focusNode,
         autofocus: autofocus,
-        onKeyEvent: _handleKeyEvent,
+        onKeyEvent: (node, event) => handleKeyBindings(_keyBindings, event),
         child: child,
       ),
     );

@@ -22,8 +22,8 @@ import '../widgets/app_mode_menu_button.dart';
 import '../widgets/board_editor/board_editor_dialog.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/engine/inline_engine_bar.dart';
-import '../widgets/interactive_pgn_editor.dart';
 import '../widgets/pgn/pgn_annotation_panel.dart';
+import '../widgets/interactive_pgn_editor.dart';
 import '../widgets/trainer_keyboard_scope.dart';
 import '../widgets/training/move_input_widget.dart';
 import 'puzzle_creator_screen.dart';
@@ -95,46 +95,44 @@ class _StudyScreenState extends State<StudyScreen> {
 
   // ── Keyboard ─────────────────────────────────────────────────────────
 
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent || isTextInputFocused()) {
-      return KeyEventResult.ignored;
-    }
-    final key = event.logicalKey;
-    if (key == LogicalKeyboardKey.arrowLeft) {
-      _study.goBack();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowRight) {
-      _study.goForward();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowUp) {
-      _study.goToStart();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowDown) {
-      _study.goToEnd();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.keyE && hasNoLetterModifiers) {
-      InlineEngineBar.toggleEngine();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.keyF && hasNoLetterModifiers) {
-      _study.toggleFlipped();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.slash) {
-      _moveInputKey.currentState?.focus();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.keyC && hasNoLetterModifiers) {
-      if (PgnAnnotationPanel.focusActive()) {
-        return KeyEventResult.handled;
-      }
-    }
-    return KeyEventResult.ignored;
-  }
+  /// Study-mode shortcuts, dispatched through [handleKeyBindings] (never
+  /// while typing).
+  List<KeyBinding> get _keyBindings => [
+    KeyBinding.run(
+      LogicalKeyboardKey.arrowLeft,
+      'Back one move',
+      _study.goBack,
+      repeats: true,
+    ),
+    KeyBinding.run(
+      LogicalKeyboardKey.arrowRight,
+      'Forward one move',
+      _study.goForward,
+      repeats: true,
+    ),
+    KeyBinding.run(LogicalKeyboardKey.arrowUp, 'Go to start', _study.goToStart),
+    KeyBinding.run(LogicalKeyboardKey.arrowDown, 'Go to end', _study.goToEnd),
+    KeyBinding.run(
+      LogicalKeyboardKey.keyE,
+      'Toggle engine',
+      InlineEngineBar.toggleEngine,
+    ),
+    KeyBinding.run(LogicalKeyboardKey.keyF, 'Flip board', _study.toggleFlipped),
+    KeyBinding.run(
+      LogicalKeyboardKey.slash,
+      'Focus move input',
+      () => _moveInputKey.currentState?.focus(),
+    ),
+    // Jump into the annotation panel's comment field for the current move.
+    KeyBinding(
+      LogicalKeyboardKey.keyC,
+      'Comment current move',
+      PgnAnnotationPanel.focusActive,
+    ),
+  ];
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) =>
+      handleKeyBindings(_keyBindings, event);
 
   /// Click on an engine-line move: play the PV into the chapter up to and
   /// including the clicked move (existing moves are followed, new ones
@@ -483,7 +481,7 @@ class _StudyScreenState extends State<StudyScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.swap_vert, size: 20),
-            tooltip: 'Flip board (F)',
+            tooltip: 'Flip board',
             onPressed: _study.toggleFlipped,
           ),
           IconButton(
@@ -669,6 +667,11 @@ class _StudyScreenState extends State<StudyScreen> {
               key: _moveInputKey,
               position: _study.currentPosition,
               onMove: (move) => _study.playSan(move.san),
+              // Non-move keys (↑/↓, empty-field ←/→, …) keep working as
+              // shortcuts while a move is being typed; move characters
+              // ("e4", "Nf3") always type normally.
+              onNavigationKey: (event) =>
+                  handleMoveInputNavigationKey(_keyBindings, event),
             ),
           ),
         ],

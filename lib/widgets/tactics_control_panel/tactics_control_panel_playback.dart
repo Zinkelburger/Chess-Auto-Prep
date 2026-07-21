@@ -101,6 +101,15 @@ mixin _TacticsPlayback on _TacticsControlPanelStateBase {
     _tabController.animateTo(1);
   }
 
+  /// The header back arrow during a session: abandon the queue (no recap)
+  /// and land back on the home/import panel.
+  void _leaveSession() {
+    _session.endSession();
+    _showRecap = false;
+    _resetBoardToStart();
+    setState(() {});
+  }
+
   void _loadPositionSetup(TacticsPositionSetup setup) {
     _solutionNav.reset();
     _applyPositionSetup(setup);

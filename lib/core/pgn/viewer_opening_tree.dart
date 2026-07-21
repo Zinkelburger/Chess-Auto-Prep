@@ -205,9 +205,9 @@ class ViewerOpeningTree {
 
   void goForward() {
     if (openingTree == null) return;
-    final children = openingTree!.currentNode.sortedChildren;
-    if (children.isNotEmpty) {
-      onMoveSelected(children.first.move);
+    final moves = openingTree!.currentGroup.children;
+    if (moves.isNotEmpty) {
+      onMoveSelected(moves.first.move);
     }
   }
 
@@ -219,15 +219,19 @@ class ViewerOpeningTree {
   }
 
   void goToEnd() {
-    while (openingTree != null &&
-        openingTree!.currentNode.sortedChildren.isNotEmpty) {
-      openingTree!.makeMove(openingTree!.currentNode.sortedChildren.first.move);
+    final tree = openingTree;
+    if (tree == null) return;
+    // Follow the most-played continuation (merged across transpositions).
+    // Transposition jumps can revisit positions (move repetitions), so track
+    // visited nodes to guarantee termination.
+    final visited = <OpeningTreeNode>{};
+    while (visited.add(tree.currentNode)) {
+      final moves = tree.currentGroup.children;
+      if (moves.isEmpty || !tree.makeMove(moves.first.move)) break;
     }
-    if (openingTree != null) {
-      treeCurrentMoveSequence = openingTree!.currentNode.getMovePath();
-      _updatePositionFromTree();
-      onChanged();
-    }
+    treeCurrentMoveSequence = tree.currentNode.getMovePath();
+    _updatePositionFromTree();
+    onChanged();
   }
 
   /// Sync the opening tree cursor to the current board position via FEN

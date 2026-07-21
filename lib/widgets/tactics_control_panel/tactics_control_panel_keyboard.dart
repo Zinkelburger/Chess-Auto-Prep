@@ -1,7 +1,7 @@
 // Keyboard-shortcut handling for the tactics control panel: the training
-// navigation keys (solution toggle, prev/next/skip, auto-advance, PGN/board
-// arrows, focus move input, tab switching). Split out of
-// tactics_control_panel.dart (pure code motion).
+// navigation keys (solution toggle, prev/next/skip, auto-advance, engine
+// toggle, PGN/board arrows, focus move input, tab switching), declared as
+// [KeyBinding] lists. Split out of tactics_control_panel.dart.
 part of '../tactics_control_panel.dart';
 
 mixin _TacticsKeyboardActions
@@ -35,85 +35,59 @@ mixin _TacticsKeyboardActions
     return _dispatchTrainerKey(key, typingMove: true) == KeyEventResult.handled;
   }
 
-  /// Core trainer key dispatch, shared by the panel's own [Focus] handler and
-  /// the move-input bridge.
-  ///
-  /// [typingMove] is true when the move-input field owns focus. Keys that can
-  /// never be part of a move (Space, S/P, J, ↑/↓) navigate in either case —
-  /// that's what lets S/P switch puzzles even mid-type. ←/→ also navigate, but
-  /// only reach here when the move field is empty: with text in it the field
-  /// keeps ←/→ for caret editing (see [MoveInputWidget]) and never forwards
-  /// them. Keys that overlap the move alphabet (N, A) or (re)focus the field
-  /// (/, Tab, Escape) only fire when a move is *not* being typed.
-  KeyEventResult _dispatchTrainerKey(
-    LogicalKeyboardKey key, {
-    required bool typingMove,
-  }) {
-    // ── Always-on keys (never part of a move) ──────────────────────────────
-    if (key == LogicalKeyboardKey.space) {
-      _session.toggleSolution();
-      return KeyEventResult.handled;
-    }
-
+  /// All trainer shortcuts. While a move is being typed, only bindings whose
+  /// key can never appear in move text fire ([KeyBinding.safeWhileTypingMoves]
+  /// filters in [_dispatchTrainerKey]) — that's what lets Space/S/P/J work
+  /// mid-type while N/A/E still type as move characters. ←/→ also navigate,
+  /// but only reach here when the move field is empty: with text in it the
+  /// field keeps ←/→ for caret editing (see [MoveInputWidget]) and never
+  /// forwards them.
+  List<KeyBinding> get _keyBindings => [
+    KeyBinding.run(
+      LogicalKeyboardKey.space,
+      'Show/hide solution',
+      _session.toggleSolution,
+    ),
     // Mirror the button enablement: at the ends of the queue the shortcuts do
     // nothing, same as the grayed-out Previous/Next.
-    if ((key == LogicalKeyboardKey.keyP || key == LogicalKeyboardKey.arrowUp) &&
-        hasNoLetterModifiers) {
-      if (_session.hasPrevious) {
-        _loadCurrentPosition(_session.previousPosition());
-      }
-      return KeyEventResult.handled;
-    }
-
-    if ((key == LogicalKeyboardKey.keyS ||
-            key == LogicalKeyboardKey.arrowDown) &&
-        hasNoLetterModifiers) {
-      if (_session.hasNext) {
-        _loadCurrentPosition(_session.skipPosition());
-      }
-      return KeyEventResult.handled;
-    }
-
-    if (key == LogicalKeyboardKey.keyJ && hasNoLetterModifiers) {
-      _session.setAutoAdvance(!_session.autoAdvance);
-      return KeyEventResult.handled;
-    }
-
+    for (final key in [LogicalKeyboardKey.keyP, LogicalKeyboardKey.arrowUp])
+      KeyBinding.run(key, 'Previous position', () {
+        if (_session.hasPrevious) {
+          _loadCurrentPosition(_session.previousPosition());
+        }
+      }),
+    for (final key in [LogicalKeyboardKey.keyS, LogicalKeyboardKey.arrowDown])
+      KeyBinding.run(key, 'Skip/next position', () {
+        if (_session.hasNext) {
+          _loadCurrentPosition(_session.skipPosition());
+        }
+      }),
+    KeyBinding.run(
+      LogicalKeyboardKey.keyJ,
+      'Toggle auto-advance',
+      () => _session.setAutoAdvance(!_session.autoAdvance),
+    ),
     // ←/→ walk the solution line (Tactic tab) or the PGN (Analysis tab).
-    // While a move is being typed they're kept by the field for caret editing
-    // (they only reach here when the move input is empty).
-    if (key == LogicalKeyboardKey.arrowRight) {
+    KeyBinding.run(LogicalKeyboardKey.arrowRight, 'Forward one move', () {
       if (_tabController.index == 0 && _session.showSolution) {
         if (_solutionNav.arrowForward()) setState(() {});
       } else {
         _pgnViewerController.goForward();
       }
-      return KeyEventResult.handled;
-    }
-
-    if (key == LogicalKeyboardKey.arrowLeft) {
+    }),
+    KeyBinding.run(LogicalKeyboardKey.arrowLeft, 'Back one move', () {
       if (_tabController.index == 0 && _session.showSolution) {
         if (_solutionNav.arrowBack()) setState(() {});
       } else {
         _pgnViewerController.goBack();
       }
-      return KeyEventResult.handled;
-    }
-
-    // ── Keys below overlap move letters (n/a) or (re)focus the field ────────
-    // They must not fire while a move is being typed.
-    if (typingMove) {
-      return KeyEventResult.ignored;
-    }
-
-    if (key == LogicalKeyboardKey.keyN && hasNoLetterModifiers) {
+    }),
+    KeyBinding.run(LogicalKeyboardKey.keyN, 'Skip/next position', () {
       if (_session.hasNext) {
         _loadCurrentPosition(_session.skipPosition());
       }
-      return KeyEventResult.handled;
-    }
-
-    if (key == LogicalKeyboardKey.keyA && hasNoLetterModifiers) {
+    }),
+    KeyBinding.run(LogicalKeyboardKey.keyA, 'Analyze / reset analysis', () {
       final appState = context.read<AppState>();
       final isAtStartingPosition =
           appState.currentPosition.fen == _session.currentPosition!.fen;
@@ -122,26 +96,43 @@ mixin _TacticsKeyboardActions
       } else {
         _resetAnalysis();
       }
-      return KeyEventResult.handled;
-    }
+    }),
+    KeyBinding.run(
+      LogicalKeyboardKey.keyE,
+      'Toggle engine',
+      InlineEngineBar.toggleEngine,
+    ),
+    for (final key in [LogicalKeyboardKey.slash, LogicalKeyboardKey.tab])
+      KeyBinding.run(
+        key,
+        'Focus move input',
+        () => TacticsControlPanel.moveInputKey.currentState?.focus(),
+      ),
+    KeyBinding(LogicalKeyboardKey.escape, 'Back to Tactic tab', () {
+      if (_tabController.index == 0) return false;
+      _tabController.animateTo(0);
+      return true;
+    }),
+  ];
 
-    if (key == LogicalKeyboardKey.slash && hasNoLetterModifiers) {
-      TacticsControlPanel.moveInputKey.currentState?.focus();
-      return KeyEventResult.handled;
-    }
-
-    if (key == LogicalKeyboardKey.tab) {
-      TacticsControlPanel.moveInputKey.currentState?.focus();
-      return KeyEventResult.handled;
-    }
-
-    if (key == LogicalKeyboardKey.escape) {
-      if (_tabController.index != 0) {
-        _tabController.animateTo(0);
-        return KeyEventResult.handled;
-      }
-    }
-
-    return KeyEventResult.ignored;
+  /// Core trainer key dispatch, shared by the panel's own [Focus] handler and
+  /// the move-input bridge. [typingMove] is true when the move-input field
+  /// owns focus — then only [KeyBinding.safeWhileTypingMoves] bindings fire.
+  ///
+  /// Uses [runKeyBindings] (no text-input guard) because the bridge runs
+  /// precisely while the move field has focus; the field forwards keys
+  /// explicitly and swallows what this claims. The panel path re-adds the
+  /// guard in [_handleKeyEvent].
+  KeyEventResult _dispatchTrainerKey(
+    LogicalKeyboardKey key, {
+    required bool typingMove,
+  }) {
+    final bindings = typingMove
+        ? [
+            for (final binding in _keyBindings)
+              if (binding.safeWhileTypingMoves) binding,
+          ]
+        : _keyBindings;
+    return runKeyBindings(bindings, key);
   }
 }

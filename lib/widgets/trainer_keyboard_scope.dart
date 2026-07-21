@@ -6,8 +6,7 @@ import 'package:flutter/material.dart';
 /// keyboard shortcuts. Getting the focus contract subtly wrong breaks either
 /// typing (an ancestor steals the keystrokes) or shortcuts (nothing is focused
 /// to receive them). This widget centralises that contract so each trainer only
-/// has to supply its own key meanings via [onKeyEvent] (and optional
-/// [shortcuts]/[actions]).
+/// has to supply its own key meanings via [onKeyEvent].
 ///
 /// Two focus modes, chosen with [holdsFocus]:
 ///
@@ -23,9 +22,11 @@ import 'package:flutter/material.dart';
 ///    input explicitly (e.g. `moveInputKey.currentState?.focus()`) when the
 ///    trainer wants keystrokes to go there instead.
 ///
-/// [onKeyEvent] should guard trainer-specific keys with `isTextInputFocused()`
-/// so they don't fire while the user is typing a move (see
-/// `keyboard_shortcut_utils.dart`).
+/// [onKeyEvent] must dispatch through `handleKeyBindings` (or otherwise guard
+/// with `isTextInputFocused()`) so keys never fire while the user is typing a
+/// move. Deliberately no [Shortcuts]/[Actions] support: a `Shortcuts` ancestor
+/// intercepts keys before descendant text fields see them, which once made
+/// "e" un-typeable in the tactics import form.
 class TrainerKeyboardScope extends StatelessWidget {
   /// Handles panel-level keys. Receives events bubbled from focused
   /// descendants (board, move input, buttons).
@@ -38,11 +39,6 @@ class TrainerKeyboardScope extends StatelessWidget {
   /// the scope after the user clicks elsewhere.
   final FocusNode? focusNode;
 
-  /// Optional declarative shortcuts (paired with [actions]), wrapped outside
-  /// the [Focus] so they resolve regardless of the mode above.
-  final Map<ShortcutActivator, Intent>? shortcuts;
-  final Map<Type, Action<Intent>>? actions;
-
   final Widget child;
 
   const TrainerKeyboardScope({
@@ -51,15 +47,9 @@ class TrainerKeyboardScope extends StatelessWidget {
     required this.child,
     this.holdsFocus = false,
     this.focusNode,
-    this.shortcuts,
-    this.actions,
   }) : assert(
          !holdsFocus || focusNode != null,
          'holdsFocus requires a focusNode for tap-to-refocus',
-       ),
-       assert(
-         (shortcuts == null) == (actions == null),
-         'shortcuts and actions must be provided together',
        );
 
   @override
@@ -76,7 +66,7 @@ class TrainerKeyboardScope extends StatelessWidget {
       );
     }
 
-    Widget result = Focus(
+    return Focus(
       focusNode: focusNode,
       autofocus: holdsFocus,
       // When the scope must not steal typing focus, it stays an ancestor-only
@@ -85,14 +75,5 @@ class TrainerKeyboardScope extends StatelessWidget {
       onKeyEvent: onKeyEvent,
       child: content,
     );
-
-    if (shortcuts != null) {
-      result = Shortcuts(
-        shortcuts: shortcuts!,
-        child: Actions(actions: actions!, child: result),
-      );
-    }
-
-    return result;
   }
 }
