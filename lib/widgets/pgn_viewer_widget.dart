@@ -156,6 +156,12 @@ class PgnViewerWidgetController implements PgnViewerHandle {
   @override
   void addGuessAnnotations(Map<int, String> notes) =>
       _state?._addGuessAnnotations(notes);
+
+  /// Persist wrong solitaire guesses as sideline variations (keyed by 0-based
+  /// mainline ply), promoting the live ephemeral nodes so they survive the save.
+  @override
+  void addGuessVariations(Map<int, List<String>> wrongByPly) =>
+      _state?._addGuessVariations(wrongByPly);
 }
 
 class PgnViewerWidget extends StatefulWidget {

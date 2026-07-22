@@ -114,6 +114,64 @@ mixin _PgnViewerMoveEdits on _PgnViewerWidgetStateBase {
     });
   }
 
+  /// Persist the user's wrong solitaire guesses as real (non-ephemeral) sideline
+  /// variations at each guessed ply, so the saved / exported game shows what the
+  /// solver tried beside the actual move. [wrongByPly] maps a 0-based mainline
+  /// ply to the SANs tried there. Any matching live ephemeral node (added by
+  /// [_recordVariationMove] during play) is promoted rather than duplicated.
+  void _addGuessVariations(Map<int, List<String>> wrongByPly) {
+    if (wrongByPly.isEmpty || _moveHistory.isEmpty) return;
+    var changed = false;
+    setState(() {
+      wrongByPly.forEach((ply, sans) {
+        if (ply < 0 || ply >= _moveHistory.length || sans.isEmpty) return;
+        // Replay the mainline to the position *before* the move at `ply` — the
+        // position the solver was guessing from.
+        Position pos = _startPosition;
+        var reached = true;
+        for (int i = 0; i < ply; i++) {
+          final m = pos.parseSan(_moveHistory[i].san);
+          if (m == null) {
+            reached = false;
+            break;
+          }
+          pos = pos.play(m);
+        }
+        if (!reached) return;
+
+        final roots = _variationsByPly.putIfAbsent(ply, () => []);
+        for (final san in sans) {
+          MoveNode? existing;
+          for (final r in roots) {
+            if (r.san == san) {
+              existing = r;
+              break;
+            }
+          }
+          if (existing != null) {
+            // Promote the live ephemeral guess so the serializer keeps it.
+            if (existing.isEphemeral) {
+              existing.isEphemeral = false;
+              changed = true;
+            }
+            continue;
+          }
+          final move = pos.parseSan(san);
+          if (move == null) continue;
+          final Position newPos;
+          try {
+            newPos = pos.play(move);
+          } catch (_) {
+            continue;
+          }
+          roots.add(MoveNode(san: san, fen: newPos.fen, isEphemeral: false));
+          changed = true;
+        }
+      });
+    });
+    if (changed) _notifyCommentsChanged();
+  }
+
   // ── Clear / delete ──
 
   @override
