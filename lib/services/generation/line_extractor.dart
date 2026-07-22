@@ -32,6 +32,23 @@ class MoveProbabilityAnnotation {
   static const none = MoveProbabilityAnnotation();
 }
 
+// ── Coverage unit ────────────────────────────────────────────────────────
+
+/// One our-move a line teaches, for [LinePruner]'s greedy set cover.
+///
+/// [key] is the our-move projection prefix (space-joined UCI of OUR moves
+/// up to and including this one, opponent moves excluded) — two lines that
+/// answer different opponent deviations with the same sequence of our moves
+/// share every key and are training duplicates.  [value] is the reach
+/// probability of the position it was played in, scaled up when the move is
+/// an only-move (large eval gap to the best non-selected sibling).
+class LineCoverageUnit {
+  final String key;
+  final double value;
+
+  const LineCoverageUnit({required this.key, required this.value});
+}
+
 // ── Extracted line ───────────────────────────────────────────────────────
 
 class ExtractedLine {
@@ -44,6 +61,7 @@ class ExtractedLine {
   final String? openingEco;
   final int? leafEvalCp;
   final List<MoveProbabilityAnnotation> moveAnnotations;
+  final List<LineCoverageUnit> coverageUnits;
 
   const ExtractedLine({
     required this.movesSan,
@@ -55,6 +73,7 @@ class ExtractedLine {
     this.openingEco,
     this.leafEvalCp,
     this.moveAnnotations = const [],
+    this.coverageUnits = const [],
   });
 
   /// Format as PGN movetext with annotations.
@@ -146,11 +165,39 @@ class LineExtractor {
       movesSan: const [],
       movesUci: const [],
       moveAnnotations: const [],
+      coverageUnits: const [],
       lines: lines,
       maxLines: maxLines,
       visited: <String>{},
     );
     return lines;
+  }
+
+  /// Eval gaps beyond this add no extra only-move weight.
+  static const int _sharpnessCapCp = 200;
+
+  /// Coverage unit for choosing [selected] at [position].  [projectionKey]
+  /// is the our-move projection prefix including [selected].
+  LineCoverageUnit _coverageUnit(
+    BuildTreeNode position,
+    BuildTreeNode selected,
+    String projectionKey,
+  ) {
+    final ourEval = selected.evalForUs(config.playAsWhite);
+    int? bestAlt;
+    for (final c in position.children) {
+      if (identical(c, selected) || !c.hasEngineEval) continue;
+      final v = c.evalForUs(config.playAsWhite);
+      if (bestAlt == null || v > bestAlt) bestAlt = v;
+    }
+    // No evaluated sibling means every alternative fell outside the build's
+    // eval-loss window, so the move is at least that much better.
+    final gapCp = (bestAlt == null ? config.maxEvalLossCp : ourEval - bestAlt)
+        .clamp(0, _sharpnessCapCp);
+    return LineCoverageUnit(
+      key: projectionKey,
+      value: selected.cumulativeProbability * (1.0 + gapCp / 100.0),
+    );
   }
 
   MoveProbabilityAnnotation _annotationForChild(BuildTreeNode child) {
@@ -190,6 +237,7 @@ class LineExtractor {
     required List<String> movesSan,
     required List<String> movesUci,
     required List<MoveProbabilityAnnotation> moveAnnotations,
+    required List<LineCoverageUnit> coverageUnits,
     required List<ExtractedLine> lines,
     required int maxLines,
     required Set<String> visited,
@@ -216,6 +264,9 @@ class LineExtractor {
             .firstOrNull;
         if (selected != null) {
           pushedAny = true;
+          final projectionKey = coverageUnits.isEmpty
+              ? selected.moveUci
+              : '${coverageUnits.last.key} ${selected.moveUci}';
           _extractDfs(
             node: selected,
             movesSan: [...movesSan, selected.moveSan],
@@ -223,6 +274,10 @@ class LineExtractor {
             moveAnnotations: [
               ...moveAnnotations,
               MoveProbabilityAnnotation.none,
+            ],
+            coverageUnits: [
+              ...coverageUnits,
+              _coverageUnit(resolved, selected, projectionKey),
             ],
             lines: lines,
             maxLines: maxLines,
@@ -245,6 +300,7 @@ class LineExtractor {
             movesSan: [...movesSan, child.moveSan],
             movesUci: [...movesUci, child.moveUci],
             moveAnnotations: [...moveAnnotations, _annotationForChild(child)],
+            coverageUnits: coverageUnits,
             lines: lines,
             maxLines: maxLines,
             visited: visited,
@@ -281,6 +337,7 @@ class LineExtractor {
         openingEco: openingEco,
         leafEvalCp: node.engineEvalCp,
         moveAnnotations: moveAnnotations,
+        coverageUnits: coverageUnits,
       ),
     );
   }

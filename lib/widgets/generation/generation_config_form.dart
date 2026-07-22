@@ -97,6 +97,7 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
     _verifyDepthCtrl.dispose();
     _setupMovesCtrl.dispose();
     _setupToleranceCtrl.dispose();
+    _targetLinesCtrl.dispose();
     super.dispose();
   }
 
@@ -695,6 +696,17 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
                 ],
               ),
               _sectionHeader('PGN export'),
+              _numField(
+                _targetLinesCtrl,
+                'Max unique lines (0 = keep all)',
+                tooltip:
+                    'Prune similar lines before export: lines that differ only\n'
+                    'in opponent moves (we play the same moves in each) collapse\n'
+                    'to one representative, and the survivors are the lines that\n'
+                    'teach the most new, likely, sharpest of our moves — up to\n'
+                    'this many. 0 exports every extracted line.',
+              ),
+              const SizedBox(height: 8),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 dense: true,

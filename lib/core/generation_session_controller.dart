@@ -23,6 +23,7 @@ import '../services/generation/eca_calculator.dart';
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import '../services/generation/line_extractor.dart';
+import '../services/generation/line_pruner.dart';
 import '../services/generation/pgn_export.dart';
 import '../services/generation/repertoire_selector.dart';
 import '../services/generation/repertoire_verifier.dart';
@@ -327,7 +328,21 @@ class GenerationSessionController extends ChangeNotifier
         GenerationPhase.extractingLines,
       );
       final extractor = LineExtractor(config: config, fenMap: fenMap);
-      final extractedLines = extractor.extract(tree);
+      var extractedLines = extractor.extract(tree);
+      final rawLineCount = extractedLines.length;
+      if (config.targetLineCount > 0) {
+        extractedLines = LinePruner.prune(
+          extractedLines,
+          targetCount: config.targetLineCount,
+        );
+        if (extractedLines.length < rawLineCount) {
+          _setStatus(
+            'Phase 3: kept ${extractedLines.length} of $rawLineCount lines '
+            '(similarity pruning)...',
+            GenerationPhase.extractingLines,
+          );
+        }
+      }
       if (config.rankLinesByImportance) {
         extractedLines.sort((a, b) => b.probability.compareTo(a.probability));
       }
@@ -402,6 +417,7 @@ class GenerationSessionController extends ChangeNotifier
           'expectimax_nodes': ecaCount,
           'selected_moves': selectedCount,
           'extracted_lines': extractedLines.length,
+          'raw_extracted_lines': rawLineCount,
         },
       );
 
@@ -418,10 +434,13 @@ class GenerationSessionController extends ChangeNotifier
 
       await _deletePartialTree(filePath);
 
+      final pruneNote = extractedLines.length < rawLineCount
+          ? ' (pruned from $rawLineCount)'
+          : '';
       lastRunSummary =
           'Complete: ${tree.totalNodes} nodes, '
           '$selectedCount repertoire moves, '
-          '${extractedLines.length} lines. '
+          '${extractedLines.length} lines$pruneNote. '
           '(ease=$easeCount, expectimax=$ecaCount)';
       if (finishedEarly && config.verifyFinal && config.needsStockfish) {
         lastRunSummary =

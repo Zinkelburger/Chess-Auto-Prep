@@ -191,6 +191,13 @@ class TreeBuildConfig {
   final bool maiaOnly;
 
   // ── PGN export ──
+  /// Cap on exported lines after similarity pruning: extracted lines are
+  /// reduced by greedy set cover over the our-moves each line teaches, so
+  /// lines differing only in opponent moves collapse to one representative
+  /// and the survivors are the lines covering the most new, likely,
+  /// sharp our-moves.  0 keeps every extracted line (no pruning).
+  final int targetLineCount;
+
   /// Sort extracted lines by cumulative probability (most likely first).
   final bool rankLinesByImportance;
 
@@ -259,6 +266,7 @@ class TreeBuildConfig {
     this.maiaElo = 2200,
     this.maiaMinProb = 0.05,
     this.maiaOnly = true,
+    this.targetLineCount = 100,
     this.rankLinesByImportance = true,
     this.annotateMoveProbabilities = true,
     this.annotateMaiaOnly = true,
@@ -324,6 +332,7 @@ class TreeBuildConfig {
       maiaElo: (json['maia_elo'] as num?)?.toInt() ?? 2200,
       maiaMinProb: (json['maia_min_prob'] as num?)?.toDouble() ?? 0.05,
       maiaOnly: json['maia_only'] as bool? ?? true,
+      targetLineCount: (json['target_line_count'] as num?)?.toInt() ?? 100,
       rankLinesByImportance: json['rank_lines_by_importance'] as bool? ?? true,
       annotateMoveProbabilities:
           json['annotate_move_probabilities'] as bool? ?? true,
@@ -541,6 +550,7 @@ class TreeBuildConfig {
     'maia_elo': maiaElo,
     'maia_min_prob': maiaMinProb,
     'maia_only': maiaOnly,
+    'target_line_count': targetLineCount,
     'rank_lines_by_importance': rankLinesByImportance,
     'annotate_move_probabilities': annotateMoveProbabilities,
     'annotate_maia_only': annotateMaiaOnly,
@@ -598,6 +608,7 @@ class TreeBuildConfig {
     int? maiaElo,
     double? maiaMinProb,
     bool? maiaOnly,
+    int? targetLineCount,
     bool? rankLinesByImportance,
     bool? annotateMoveProbabilities,
     bool? annotateMaiaOnly,
@@ -654,6 +665,7 @@ class TreeBuildConfig {
       maiaElo: maiaElo ?? this.maiaElo,
       maiaMinProb: maiaMinProb ?? this.maiaMinProb,
       maiaOnly: maiaOnly ?? this.maiaOnly,
+      targetLineCount: targetLineCount ?? this.targetLineCount,
       rankLinesByImportance:
           rankLinesByImportance ?? this.rankLinesByImportance,
       annotateMoveProbabilities:

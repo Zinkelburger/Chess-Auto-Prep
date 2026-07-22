@@ -17,6 +17,7 @@ import 'eca_calculator.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
 import 'line_extractor.dart';
+import 'line_pruner.dart';
 import 'pgn_export.dart';
 import 'repertoire_selector.dart';
 import 'tree_ease.dart';
@@ -130,7 +131,13 @@ List<String> extractSnapshotLines({
   tree.computeMetadata();
 
   final extractor = LineExtractor(config: config, fenMap: fenMap);
-  final extractedLines = extractor.extract(tree);
+  var extractedLines = extractor.extract(tree);
+  if (config.targetLineCount > 0) {
+    extractedLines = LinePruner.prune(
+      extractedLines,
+      targetCount: config.targetLineCount,
+    );
+  }
   if (config.rankLinesByImportance) {
     extractedLines.sort((a, b) => b.probability.compareTo(a.probability));
   }
