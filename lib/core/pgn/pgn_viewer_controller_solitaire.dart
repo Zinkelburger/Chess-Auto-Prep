@@ -90,15 +90,22 @@ mixin _SolitaireOps on ChangeNotifier {
     );
   }
 
-  /// Append solitaire guess notes ("1st try", "Tried: …") to the guessed
-  /// moves' comments via the PGN widget's serializer, so the game's own
-  /// annotations and variations survive intact.
+  /// On completion, save the solitaire results into the game: each guessed
+  /// move's wrong attempts become real sideline variations (so the exported
+  /// game shows what the solver tried), and a short note ("1st try",
+  /// "Tried: …") rides on the move's comment. Both persist through the PGN
+  /// widget's serializer, so the game's own annotations survive intact.
   void _injectGuessComments() {
     if (filteredGames.isEmpty || filePath == null) return;
     final notes = <int, String>{};
+    final wrongByPly = <int, List<String>>{};
     for (final g in solitaire.guessLog) {
       notes[g.ply] = g.note;
+      if (g.wrongAttempts.isNotEmpty) {
+        wrongByPly[g.ply] = g.wrongAttempts;
+      }
     }
+    pgnWidgetController.addGuessVariations(wrongByPly);
     pgnWidgetController.addGuessAnnotations(notes);
   }
 

@@ -49,4 +49,9 @@ abstract interface class PgnViewerHandle {
   /// Append solitaire guess notes to mainline move comments ([notes] keyed
   /// by 0-based move index), persisted through the movetext serializer.
   void addGuessAnnotations(Map<int, String> notes);
+
+  /// Persist the user's wrong solitaire guesses as real sideline variations,
+  /// keyed by the 0-based mainline ply they were tried at, so the saved /
+  /// exported game shows what the solver tried beside the actual move.
+  void addGuessVariations(Map<int, List<String>> wrongByPly);
 }
