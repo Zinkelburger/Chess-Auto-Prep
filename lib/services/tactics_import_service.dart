@@ -17,6 +17,7 @@ import 'pgn_parsing_service.dart';
 import 'storage/storage_factory.dart';
 import '../utils/chesscom_lichess_elo.dart';
 import '../utils/log.dart';
+import '../utils/movetext_builder.dart';
 import 'tactics_parallel_analyzer_stub.dart'
     if (dart.library.io) 'tactics_parallel_analyzer.dart'
     as parallel;

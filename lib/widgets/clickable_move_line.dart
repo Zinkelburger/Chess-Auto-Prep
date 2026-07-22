@@ -117,7 +117,10 @@ class ClickableMoveLineWidget extends StatelessWidget {
       );
     }
 
-    final hasCallback = onMoveTapped != null;
+    // Render moves as interactive spans whenever either interaction is wired.
+    // Hover previews must work even when the moves aren't tappable (e.g. the
+    // tactics engine tab supplies a preview callback but no navigation).
+    final hasCallback = onMoveTapped != null || onMoveHovered != null;
     final end = (startIndex + maxMoves).clamp(startIndex, sanMoves.length);
 
     for (int i = startIndex; i < end; i++) {
@@ -176,7 +179,9 @@ class ClickableMoveLineWidget extends StatelessWidget {
             child: Builder(
               builder: (anchorContext) {
                 return MouseRegion(
-                  cursor: SystemMouseCursors.click,
+                  cursor: onMoveTapped != null
+                      ? SystemMouseCursors.click
+                      : SystemMouseCursors.basic,
                   onEnter: onMoveHovered != null
                       ? (_) {
                           final box =
@@ -190,7 +195,9 @@ class ClickableMoveLineWidget extends StatelessWidget {
                       : null,
                   onExit: onHoverExit != null ? (_) => onHoverExit!() : null,
                   child: GestureDetector(
-                    onTap: () => onMoveTapped!(idx),
+                    onTap: onMoveTapped != null
+                        ? () => onMoveTapped!(idx)
+                        : null,
                     child: Container(
                       padding: movePadding,
                       decoration: isActive
@@ -222,7 +229,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
                           fontWeight: isActive
                               ? FontWeight.bold
                               : FontWeight.normal,
-                          decoration: isActive
+                          decoration: (isActive || onMoveTapped == null)
                               ? null
                               : TextDecoration.underline,
                           decorationColor: Colors.white38,

@@ -23,6 +23,7 @@ import '../constants/ui_breakpoints.dart';
 import '../core/app_state.dart';
 import '../core/pgn_viewer_controller.dart';
 import '../core/pgn/solitaire_controller.dart';
+import '../core/study_controller.dart';
 import '../services/storage/storage_factory.dart';
 import '../services/game_analysis_controller.dart';
 import '../theme/app_colors.dart';
@@ -38,6 +39,7 @@ import '../widgets/fullscreen_game_view.dart';
 import '../widgets/game_analysis_tab.dart';
 import '../widgets/game_nav_bar.dart';
 import '../widgets/game_search_dialog.dart';
+import '../widgets/pgn/add_to_study_dialog.dart';
 import '../widgets/pgn/generate_repertoire_dialog.dart';
 import '../widgets/pgn/pgn_annotation_panel.dart';
 import '../widgets/pgn/pgn_opening_tree_panel.dart';
@@ -289,6 +291,56 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     await Clipboard.setData(ClipboardData(text: pgnText));
     if (!mounted) return;
     showAppSnackBar(context, AppMessages.pgnCopied);
+    _reclaimFocus();
+  }
+
+  @override
+  Future<void> _addCurrentGameToStudy() async {
+    if (_controller.filteredGames.isEmpty) return;
+    final game = _controller.filteredGames[_controller.currentGameIndex];
+    // The guess notes are already merged into this game's movetext by the time
+    // the completion banner shows, so the stored PGN is the annotated artifact.
+    final pgn = game.pgnText;
+    final white = game.headers['White'] ?? 'White';
+    final black = game.headers['Black'] ?? 'Black';
+    final suggested = '$white – $black (solitaire)';
+
+    final result = await showDialog<AddToStudyResult>(
+      context: context,
+      builder: (_) => AddToStudyDialog(
+        initialChapterName: suggested,
+        title: 'Add game to study',
+      ),
+    );
+    if (result == null || !mounted) {
+      _reclaimFocus();
+      return;
+    }
+
+    final study = context.read<StudyController>();
+    final appState = context.read<AppState>();
+    try {
+      final path =
+          result.existingPath ??
+          await StorageFactory.instance.studyFilePath(result.newStudyName!);
+      await study.addChapterToStudyFile(path, result.chapterName, pgn);
+      if (!mounted) return;
+      showAppSnackBar(
+        context,
+        'Added "${result.chapterName}" to ${result.studyName}',
+        actionLabel: 'Open',
+        onAction: () async {
+          await study.openStudy(path);
+          study.selectChapter(study.doc.chapters.length - 1);
+          appState.setMode(AppMode.study);
+        },
+      );
+    } catch (e) {
+      debugPrint('Add game to study failed: $e');
+      if (mounted) {
+        showAppSnackBar(context, 'Failed to add game to study.', isError: true);
+      }
+    }
     _reclaimFocus();
   }
 

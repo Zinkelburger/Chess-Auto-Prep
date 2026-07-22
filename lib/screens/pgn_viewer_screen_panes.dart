@@ -15,6 +15,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
   Future<void> _pickFile();
   Future<void> _loadFile(String path);
   Future<void> _copyCurrentGamePgn();
+  Future<void> _addCurrentGameToStudy();
   void _reclaimFocus();
 
   Widget _buildFullScreenView(ThemeData theme) {
@@ -360,7 +361,11 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
             onReclaimFocus: _reclaimFocus,
           ),
         if (_controller.isSolitaireMode && _controller.solitaire.isComplete)
-          SolitaireCompleteBanner(controller: _controller),
+          SolitaireCompleteBanner(
+            controller: _controller,
+            onCopyPgn: _copyCurrentGamePgn,
+            onAddToStudy: _addCurrentGameToStudy,
+          ),
         const Divider(height: 1),
         if (_editMode) _buildEditModeBar(),
         Expanded(
