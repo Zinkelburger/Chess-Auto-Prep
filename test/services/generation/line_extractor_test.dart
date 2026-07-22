@@ -256,6 +256,59 @@ void main() {
       }
     });
 
+    test('coverage units carry our-move projection keys and values', () {
+      final t = StandardTree();
+      t.e4.isRepertoireMove = true;
+      t.e4e5nf3.isRepertoireMove = true;
+      t.e4c5nf3.isRepertoireMove = true;
+      // Model real cumP propagation (our moves inherit the parent's cumP).
+      t.e4e5nf3.cumulativeProbability = 0.55;
+      t.e4c5nf3.cumulativeProbability = 0.35;
+
+      final extractor = LineExtractor(config: _config());
+      final lines = extractor.extract(t.toTree());
+
+      expect(lines.length, 2);
+      final e5Line = lines.firstWhere((l) => l.movesSan[1] == 'e5');
+      final c5Line = lines.firstWhere((l) => l.movesSan[1] == 'c5');
+
+      // Both lines play e4 then Nf3 — identical projections, so identical
+      // keys even though the opponent moves differ.
+      expect(e5Line.coverageUnits.map((u) => u.key), ['e2e4', 'e2e4 g1f3']);
+      expect(c5Line.coverageUnits.map((u) => u.key), ['e2e4', 'e2e4 g1f3']);
+
+      // e4 at the root: d4 sibling evals better for us (30 vs 25), so the
+      // gap clamps to 0 and the value is the bare reach probability 1.0.
+      expect(e5Line.coverageUnits[0].value, closeTo(1.0, 1e-9));
+      // Nf3 has no evaluated sibling: gap defaults to maxEvalLossCp (50),
+      // weight 1.5, scaled by the node's reach probability.
+      expect(e5Line.coverageUnits[1].value, closeTo(0.55 * 1.5, 1e-9));
+      expect(c5Line.coverageUnits[1].value, closeTo(0.35 * 1.5, 1e-9));
+    });
+
+    test('coverage value grows with the eval gap to the best sibling', () {
+      final t = StandardTree();
+      t.e4.isRepertoireMove = true;
+      t.e4e5nf3.isRepertoireMove = true;
+      t.e4e5nf3.cumulativeProbability = 0.55;
+      // Evaluated alternative 20cp worse than Nf3 (30 vs 10 for us).
+      makeNode(
+        fen: 'rnbqkbnr/pppp1ppp/8/4p2Q/4P3/8/PPPP1PPP/RNB1KBNR b KQkq - 1 2',
+        san: 'Qh5',
+        uci: 'd1h5',
+        ply: 3,
+        isWhiteToMove: false,
+        evalCp: -10,
+        parent: t.e4e5,
+      );
+
+      final extractor = LineExtractor(config: _config());
+      final lines = extractor.extract(t.toTree());
+
+      final e5Line = lines.firstWhere((l) => l.movesSan[1] == 'e5');
+      expect(e5Line.coverageUnits[1].value, closeTo(0.55 * 1.2, 1e-9));
+    });
+
     test('exportPgn produces valid PGN text', () {
       final t = StandardTree();
       t.e4.isRepertoireMove = true;

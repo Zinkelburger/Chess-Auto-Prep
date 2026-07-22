@@ -35,6 +35,7 @@ mixin _GenerationConfigIo
     _selectionMode = config.selectionMode;
     _relativeEval = config.relativeEval;
     _preferNovelties = config.noveltyWeight > 0;
+    _targetLinesCtrl.text = config.targetLineCount.toString();
     _rankLinesByImportance = config.rankLinesByImportance;
     _annotateMoveProbabilities = config.annotateMoveProbabilities;
     _annotateMaiaOnly = config.annotateMaiaOnly;
@@ -185,6 +186,8 @@ mixin _GenerationConfigIo
           int.tryParse(_maxEvalCtrl.text.trim()) ?? (playAsWhite ? 200 : 100),
       maiaElo: int.tryParse(_maiaEloCtrl.text.trim()) ?? 2200,
       maiaOnly: _lichessDbOverride == null,
+      targetLineCount: (int.tryParse(_targetLinesCtrl.text.trim()) ?? 100)
+          .clamp(0, 100000),
       rankLinesByImportance: _rankLinesByImportance,
       annotateMoveProbabilities: _annotateMoveProbabilities,
       annotateMaiaOnly: _annotateMaiaOnly,

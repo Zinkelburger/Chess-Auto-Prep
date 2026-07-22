@@ -69,6 +69,9 @@ abstract class _GenerationConfigFormStateBase
   bool _relativeEval = true;
   bool _preferNovelties = false;
 
+  final TextEditingController _targetLinesCtrl = TextEditingController(
+    text: '100',
+  );
   bool _rankLinesByImportance = true;
   bool _annotateMoveProbabilities = true;
   bool _annotateMaiaOnly = true;

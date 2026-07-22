@@ -16,7 +16,15 @@ The Dart implementation ports a proven C `tree_builder`; comments saying
 | 1 | Build the tree: engine/DB/Maia expansion, eval-window pruning, transpositions, coverage sweep | `tree_build_service.dart`, `node_expander.dart` (+ `stockfish_expander.dart`, `maia_db_expander.dart` parts), `build_run.dart`, `frontier_queue.dart` |
 | 2 | Value + select: ease, expectimax, CPL, trap scores, selection | `tree_ease.dart`, `tree_my_ease.dart`, `eca_calculator.dart`, `repertoire_selector.dart`, `node_selection.dart` |
 | 2.5 | Deep verification of the selected moves | `repertoire_verifier.dart` |
-| 3 | Extract lines, export PGN / snapshots / traps | `line_extractor.dart`, `pgn_export.dart`, `snapshot_export.dart`, `trap_extractor.dart` |
+| 3 | Extract lines, prune similar ones, export PGN / snapshots / traps | `line_extractor.dart`, `line_pruner.dart`, `pgn_export.dart`, `snapshot_export.dart`, `trap_extractor.dart` |
+
+`line_pruner.dart` runs after extraction when `targetLineCount > 0`
+(default 100): greedy weighted set cover over each line's
+`LineCoverageUnit`s — keyed by our-move projection prefix (opponent moves
+excluded), valued by reach probability × only-move sharpness — so lines
+that answer different opponent deviations with the same our-moves collapse
+to one representative. The build tree itself is never pruned by this; it is
+an export-time view.
 
 Phase 1 is the only phase that touches engines or the network. Phases 2–3
 are pure functions over the tree — keep them that way; it is what makes
