@@ -126,7 +126,7 @@ void main() {
       final puzzle = c.buildPuzzle(note: 'note with, comma');
 
       final row = puzzle.toCsvRow();
-      expect(row.length, 20);
+      expect(row.length, 21);
       final decoded = // simulate CSV write/read of the row values
       puzzle
           .toJson();

@@ -490,20 +490,26 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
     final cacheKey = '${tactic.fen}|${tactic.correctLine.join(' ')}';
     if (_solutionPgnKey != cacheKey) {
       _solutionPgnKey = cacheKey;
-      _solutionPgnText = buildSolutionPgn(
-        tactic,
-        _session.engine.correctLineToSan(tactic),
-      );
+      // Prefer the full source game captured at mine time — it's self-contained
+      // and survives the source game being pruned from storage. Legacy/custom
+      // puzzles with no stored game fall back to the solution-only PGN.
+      final sourceGame = buildSourceGamePgn(tactic);
+      _solutionPgnText = sourceGame.isNotEmpty
+          ? sourceGame
+          : buildSolutionPgn(tactic, _session.engine.correctLineToSan(tactic));
     }
     final pgnText = _solutionPgnText!;
 
     return PgnWithEngine(
       key: ValueKey('analysis_${tactic.gameId}_${tactic.fen}'),
-      // Show the full source game (looked up by id) and land on the tactic's
-      // starting position via [initialFen]. Falls back to the solution-only
-      // PGN when the source game isn't in storage; [initialFen] then no-ops
-      // harmlessly since that PGN already starts at the tactic position.
-      gameId: tactic.gameId.isNotEmpty ? tactic.gameId : null,
+      // With a stored source game the full movetext is already in [pgnText], so
+      // land on the tactic's position via [initialFen] and skip the by-id
+      // lookup (which fails for pruned games). Only legacy puzzles without a
+      // stored game still try the lookup; [initialFen] then no-ops harmlessly
+      // since the solution-only PGN already starts at the tactic position.
+      gameId: (tactic.sourceMovetext.isEmpty && tactic.gameId.isNotEmpty)
+          ? tactic.gameId
+          : null,
       pgnText: pgnText,
       initialFen: tactic.fen,
       // Full game now shown — offer jump-to-start / jump-to-end so the whole

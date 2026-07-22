@@ -66,6 +66,36 @@ void main() {
       expect(decoded.puzzles[1].positionContext, 'Move 1, Black to play');
     });
 
+    test('SourceMovetext survives encode → decode', () {
+      final puzzle = _puzzle(
+        fen:
+            'r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4',
+        line: ['Qxf7#'],
+      ).copyWith(sourceMovetext: '1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7#');
+
+      final encoded = encodePuzzlesToPgn('Test Set', [puzzle]);
+      expect(encoded.pgn, contains('[SourceMovetext '));
+
+      final decoded = decodePuzzlesFromPgn(encoded.pgn);
+      expect(decoded.puzzles, hasLength(1));
+      expect(
+        decoded.puzzles[0].sourceMovetext,
+        '1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7#',
+      );
+    });
+
+    test('missing SourceMovetext decodes to empty (legacy puzzles)', () {
+      final puzzle = _puzzle(
+        fen: '6k1/5ppp/8/8/8/8/r7/6K1 b - - 0 1',
+        line: ['Ra1+', 'Kh2', 'Ra2'],
+      );
+      final encoded = encodePuzzlesToPgn('Test Set', [puzzle]);
+      expect(encoded.pgn, isNot(contains('SourceMovetext')));
+
+      final decoded = decodePuzzlesFromPgn(encoded.pgn);
+      expect(decoded.puzzles[0].sourceMovetext, '');
+    });
+
     test('UCI-encoded correctLine is exported as SAN', () {
       final puzzle = _puzzle(
         fen:

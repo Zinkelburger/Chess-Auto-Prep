@@ -65,12 +65,21 @@ Future<List<TacticsPosition>> _analyzeGameWithWorker({
   final positions = <TacticsPosition>[];
   final setupFlag = game.headers['SetUp'] ?? game.headers['Setup'] ?? '';
   final fenHeader = game.headers['FEN'] ?? '';
+  final startsFromStandard = !(setupFlag == '1' && fenHeader.isNotEmpty);
   Position pos;
-  if (setupFlag == '1' && fenHeader.isNotEmpty) {
-    pos = Chess.fromSetup(Setup.parseFen(fenHeader));
-  } else {
+  if (startsFromStandard) {
     pos = Chess.initial;
+  } else {
+    pos = Chess.fromSetup(Setup.parseFen(fenHeader));
   }
+  // Capture the whole game once so every tactic mined from it can show the
+  // full game in the analysis tab without re-fetching. Only for standard
+  // starts — a numbered movetext replayed from move 1 would be illegal for a
+  // game that began from a custom position (rare; those fall back to
+  // solution-only display).
+  final sourceMovetext = startsFromStandard
+      ? buildNumberedMovetext(moves, startMoveNumber: 1, whiteToMoveFirst: true)
+      : '';
   int moveNumber = 1;
 
   for (final san in moves) {
@@ -179,6 +188,7 @@ Future<List<TacticsPosition>> _analyzeGameWithWorker({
             gameResult: game.headers['Result'] ?? '*',
             gameDate: game.headers['Date'] ?? '',
             gameId: gameId,
+            sourceMovetext: sourceMovetext,
           ),
         );
       }

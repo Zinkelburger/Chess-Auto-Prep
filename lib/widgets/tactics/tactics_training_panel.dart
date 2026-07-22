@@ -199,7 +199,7 @@ class TacticsTrainingPanel extends StatelessWidget {
               child: isAtStartingPosition
                   ? shortcutTooltip(
                       description: 'Analyze',
-                      shortcut: 'A',
+                      shortcut: 'A or V',
                       child: SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
@@ -210,7 +210,7 @@ class TacticsTrainingPanel extends StatelessWidget {
                     )
                   : shortcutTooltip(
                       description: 'Reset analysis',
-                      shortcut: 'A',
+                      shortcut: 'A or V',
                       child: SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(

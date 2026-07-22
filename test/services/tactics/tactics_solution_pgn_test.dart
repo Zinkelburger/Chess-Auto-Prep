@@ -45,4 +45,29 @@ void main() {
     expect(pgn, contains(r'[White "Alice \"Ace\""]'));
     expect(pgn.trimRight(), endsWith('*'));
   });
+
+  group('buildSourceGamePgn', () {
+    test('reconstructs a full game from stored source movetext', () {
+      final tactic = _tactic(
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      ).copyWith(sourceMovetext: '1. e4 e5 2. Nf3 Nc6');
+      final pgn = buildSourceGamePgn(tactic);
+
+      // Game headers (no [FEN]/[SetUp] — it starts from the standard position)
+      // and the full movetext ending with the game result.
+      expect(pgn, contains(r'[White "Alice \"Ace\""]'));
+      expect(pgn, contains('[Black "Bob"]'));
+      expect(pgn, contains('[Result "1-0"]'));
+      expect(pgn, isNot(contains('[SetUp')));
+      expect(pgn, isNot(contains('[FEN')));
+      expect(pgn, contains('1. e4 e5 2. Nf3 Nc6 1-0'));
+    });
+
+    test('returns empty when no source movetext was captured', () {
+      final tactic = _tactic(
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      );
+      expect(buildSourceGamePgn(tactic), isEmpty);
+    });
+  });
 }

@@ -13,37 +13,80 @@ import '../../theme/app_colors.dart';
 class SolitaireCompleteBanner extends StatelessWidget {
   final PgnViewerController controller;
 
-  const SolitaireCompleteBanner({super.key, required this.controller});
+  /// Copies the current game's annotated PGN (with guess notes) to the clipboard.
+  final VoidCallback onCopyPgn;
+
+  /// Opens the "Add game to study" picker for the annotated game.
+  final VoidCallback onAddToStudy;
+
+  const SolitaireCompleteBanner({
+    super.key,
+    required this.controller,
+    required this.onCopyPgn,
+    required this.onAddToStudy,
+  });
 
   @override
   Widget build(BuildContext context) {
     final s = controller.solitaire;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       color: AppColors.success.withValues(alpha: 0.12),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Icon(Icons.flag, size: 16, color: AppColors.success),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Complete — ${s.correctFirstTry}/${s.totalUserMoves} first-try'
-              '${s.revealedCount > 0 ? ', ${s.revealedCount} revealed' : ''}'
-              '. Guess notes saved; browse and annotate freely.',
-              style: const TextStyle(fontSize: 12),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 2,
-            ),
+          Row(
+            children: [
+              const Icon(Icons.flag, size: 16, color: AppColors.success),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Complete — ${s.correctFirstTry}/${s.totalUserMoves} '
+                  'first-try'
+                  '${s.revealedCount > 0 ? ', ${s.revealedCount} revealed' : ''}'
+                  '.',
+                  style: const TextStyle(fontSize: 12),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          FilledButton.tonal(
-            onPressed: controller.nextGame,
-            style: FilledButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              textStyle: const TextStyle(fontSize: 12),
-            ),
-            child: const Text('Next game (N)'),
+          const SizedBox(height: 6),
+          // Actions wrap when the panel is narrow so nothing clips.
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              TextButton.icon(
+                onPressed: onCopyPgn,
+                icon: const Icon(Icons.copy_outlined, size: 16),
+                label: const Text('Copy PGN'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  textStyle: const TextStyle(fontSize: 12),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: onAddToStudy,
+                icon: const Icon(Icons.menu_book_outlined, size: 16),
+                label: const Text('Add to study…'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  textStyle: const TextStyle(fontSize: 12),
+                ),
+              ),
+              FilledButton.tonal(
+                onPressed: controller.nextGame,
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  textStyle: const TextStyle(fontSize: 12),
+                ),
+                child: const Text('Next game (N)'),
+              ),
+            ],
           ),
         ],
       ),

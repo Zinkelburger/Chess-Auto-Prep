@@ -20,6 +20,8 @@
 ///     StarRating — review stats.
 ///   SolutionPv — longer engine PV for display, SAN, space-separated
 ///     (the mainline holds only the trainable line).
+///   SourceMovetext — the whole source game as numbered movetext on one line,
+///     so the analysis tab shows the full game independently of PGN storage.
 ///   CorrectLine — raw solution tokens, written *only* when the stored line
 ///     cannot be converted to SAN (corrupt data); keeps saves lossless.
 library;
@@ -139,6 +141,11 @@ String encodePuzzlePgn(
   if (solutionPvSan.isNotEmpty && !_sameLine(solutionPvSan, solutionSan)) {
     header('SolutionPv', solutionPvSan.join(' '));
   }
+
+  // Full source game, so the analysis tab can show the whole game even after
+  // the source game is pruned from storage. Numbered movetext on one line
+  // (no comments/newlines), so it rides safely in a single header value.
+  header('SourceMovetext', puzzle.sourceMovetext);
 
   // Lossless fallback for lines that could not be converted to SAN.
   if (solutionSan.isEmpty && puzzle.correctLine.isNotEmpty) {
@@ -296,6 +303,7 @@ bool _sameLine(List<String> a, List<String> b) {
           gameDate: headers['Date'] ?? '',
           gameId: headers['GameId'] ?? '',
           gameUrl: _cleanName(headers['Site']),
+          sourceMovetext: headers['SourceMovetext'] ?? '',
           opponentBestResponse: headers['OpponentBestResponse'] ?? '',
           reviewCount: int.tryParse(headers['ReviewCount'] ?? '') ?? 0,
           successCount: int.tryParse(headers['SuccessCount'] ?? '') ?? 0,

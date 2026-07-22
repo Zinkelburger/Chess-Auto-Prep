@@ -13,6 +13,12 @@ class TacticsPosition {
   final String gameDate;
   final String gameId;
   final String gameUrl;
+
+  /// Full source-game mainline as numbered movetext (e.g. "1. e4 e5 2. Nf3 …"),
+  /// captured at mine time so the analysis tab can show the whole game even
+  /// after the source game is pruned from storage. Empty for legacy tactics
+  /// mined before this was captured, and for custom / variation puzzles.
+  final String sourceMovetext;
   final DateTime? lastReviewed;
   final int reviewCount; // Number of times reviewed
   final int successCount; // Number of times solved correctly
@@ -36,6 +42,7 @@ class TacticsPosition {
     required this.gameDate,
     required this.gameId,
     this.gameUrl = '',
+    this.sourceMovetext = '',
     this.lastReviewed,
     this.reviewCount = 0,
     this.successCount = 0,
@@ -60,6 +67,7 @@ class TacticsPosition {
     String? gameDate,
     String? gameId,
     String? gameUrl,
+    String? sourceMovetext,
     DateTime? lastReviewed,
     bool clearLastReviewed = false,
     int? reviewCount,
@@ -83,6 +91,7 @@ class TacticsPosition {
       gameDate: gameDate ?? this.gameDate,
       gameId: gameId ?? this.gameId,
       gameUrl: gameUrl ?? this.gameUrl,
+      sourceMovetext: sourceMovetext ?? this.sourceMovetext,
       lastReviewed: clearLastReviewed
           ? null
           : (lastReviewed ?? this.lastReviewed),
@@ -132,8 +141,8 @@ class TacticsPosition {
     return match != null ? int.tryParse(match.group(1)!) ?? 1 : 1;
   }
 
-  /// CSV column count.  Old files may have 17–19; current format has 20.
-  static const int csvColumnCount = 20;
+  /// CSV column count.  Old files may have 17–20; current format has 21.
+  static const int csvColumnCount = 21;
 
   /// Create from CSV row (18 columns; tolerates legacy 17-column rows).
   factory TacticsPosition.fromCsv(List<dynamic> row) {
@@ -175,6 +184,8 @@ class TacticsPosition {
       solutionPv: row.length > 19
           ? row[19].toString().split('|').where((s) => s.isNotEmpty).toList()
           : const [],
+      // Column 20 — source-game movetext; tolerate pre-source-game files.
+      sourceMovetext: row.length > 20 ? row[20].toString() : '',
     );
   }
 
@@ -216,6 +227,7 @@ class TacticsPosition {
       gameDate: json['game_date'] ?? '',
       gameId: json['game_id'] ?? '',
       gameUrl: json['game_url'] ?? '',
+      sourceMovetext: json['source_movetext'] ?? '',
       lastReviewed: json['last_reviewed'] != null
           ? DateTime.tryParse(json['last_reviewed'])
           : null,
@@ -244,6 +256,7 @@ class TacticsPosition {
       'game_date': gameDate,
       'game_id': gameId,
       'game_url': gameUrl,
+      'source_movetext': sourceMovetext,
       'last_reviewed': lastReviewed?.toIso8601String(),
       'review_count': reviewCount,
       'success_count': successCount,
@@ -277,6 +290,7 @@ class TacticsPosition {
       opponentBestResponse,
       rating,
       solutionPv.join('|'),
+      sourceMovetext,
     ];
   }
 }
