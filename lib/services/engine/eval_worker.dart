@@ -55,6 +55,11 @@ class EvalWorker {
 
   // ── Single eval state ──
   Completer<EvalResult>? _evalCompleter;
+
+  /// Bumped by [stop] so an [evaluateFen] whose completer isn't set up yet
+  /// (mid `isready` handshake) still observes the stop instead of silently
+  /// starting its search anyway.
+  int _stopGen = 0;
   int? _scoreCp;
   int? _scoreMate;
   List<String> _pv = [];
@@ -162,6 +167,7 @@ class EvalWorker {
   /// perspective — negate when converting to White's viewpoint on a
   /// Black-to-move position.
   Future<EvalResult> evaluateFen(String fen, int depth) async {
+    final gen = _stopGen;
     if (_evalCompleter != null && !_evalCompleter!.isCompleted) {
       _evalCompleter!.completeError(StateError('Cancelled by new eval'));
     }
@@ -171,6 +177,10 @@ class EvalWorker {
     // readyok is guaranteed to arrive AFTER all pending output.
     engine.sendCommand('stop');
     await _syncReady();
+
+    // A stop() that landed during the handshake above had no completer to
+    // fail; honor it here instead of running the search anyway.
+    if (gen != _stopGen) throw StateError('Eval stopped');
 
     // Pipeline is clean — safe to set up the new eval.
     _evalCompleter = Completer<EvalResult>();
@@ -186,6 +196,7 @@ class EvalWorker {
   }
 
   void stop() {
+    _stopGen++;
     engine.sendCommand('stop');
     if (_evalCompleter != null && !_evalCompleter!.isCompleted) {
       _evalCompleter!.completeError(StateError('Eval stopped'));

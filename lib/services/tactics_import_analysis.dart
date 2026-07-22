@@ -33,6 +33,10 @@ Future<List<TacticsPosition>> _analyzeGameWithWorker({
   required String gameId,
   MaiaEvaluator? maia,
   int maiaElo = 2200,
+
+  /// Polled between engine calls so a cancelled import stops launching new
+  /// searches mid-game instead of only between games.
+  bool Function()? shouldAbort,
 }) async {
   final game = PgnGame.parsePgn(gameText);
 
@@ -70,6 +74,7 @@ Future<List<TacticsPosition>> _analyzeGameWithWorker({
   int moveNumber = 1;
 
   for (final san in moves) {
+    if (shouldAbort?.call() ?? false) break;
     final isUserTurn = pos.turn == userColor;
 
     if (isUserTurn) {
@@ -85,6 +90,7 @@ Future<List<TacticsPosition>> _analyzeGameWithWorker({
         continue;
       }
 
+      if (shouldAbort?.call() ?? false) break;
       final evalB = await worker.evaluateFen(pos.fen, depth);
       final fenAfter = pos.fen;
 
@@ -103,6 +109,9 @@ Future<List<TacticsPosition>> _analyzeGameWithWorker({
       final isInaccuracy = delta >= 0.1 && delta < 0.2;
 
       if ((isBlunder || isMistake || isInaccuracy) && evalA.pv.isNotEmpty) {
+        // Cancelled games are discarded and re-analyzed on resume, so bail
+        // before buildTrainableLine burns more Maia/Stockfish calls.
+        if (shouldAbort?.call() ?? false) break;
         final bestMoveUci = evalA.pv.first;
 
         final allPvSan = <String>[];

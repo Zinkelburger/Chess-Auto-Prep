@@ -435,6 +435,7 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
                 TacticsImportPanel(
                   importStatus: _import.importStatus,
                   isImporting: _import.isImporting,
+                  isCancelling: _import.isCancelling,
                   activeImport: _import.activeImport,
                   lichessUserController: _form.lichessUser,
                   lichessCountController: _form.fetchCount,

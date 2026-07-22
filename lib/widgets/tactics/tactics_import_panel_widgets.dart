@@ -299,6 +299,7 @@ class TacticsImportStatusBanner extends StatelessWidget {
     required this.status,
     required this.isImporting,
     required this.hasActiveImport,
+    this.isCancelling = false,
     required this.onCancelImport,
     required this.onDismiss,
   });
@@ -306,6 +307,10 @@ class TacticsImportStatusBanner extends StatelessWidget {
   final String status;
   final bool isImporting;
   final bool hasActiveImport;
+
+  /// Pause was clicked and the run is winding down: the pause button greys
+  /// out instead of accepting further clicks.
+  final bool isCancelling;
   final VoidCallback onCancelImport;
   final VoidCallback onDismiss;
 
@@ -340,11 +345,11 @@ class TacticsImportStatusBanner extends StatelessWidget {
               Expanded(child: Text(status)),
               if (hasActiveImport)
                 IconButton(
-                  icon: const Icon(Icons.stop_circle_outlined, size: 20),
-                  tooltip: 'Cancel analysis',
+                  icon: const Icon(Icons.pause_circle_outlined, size: 20),
+                  tooltip: isCancelling ? 'Pausing…' : 'Pause analysis',
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
-                  onPressed: onCancelImport,
+                  onPressed: isCancelling ? null : onCancelImport,
                 ),
               if (!isImporting)
                 IconButton(
