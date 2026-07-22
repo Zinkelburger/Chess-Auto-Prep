@@ -150,6 +150,7 @@ class TacticsImportService {
     ProgressCallback? progressCallback,
     OnPositionFoundCallback? onPositionFound,
   }) async {
+    _cancelled = false;
     final content = await StorageFactory.instance.readImportedPgns();
     if (content == null || content.isEmpty) {
       return (
@@ -242,6 +243,7 @@ class TacticsImportService {
     Function(String)? progressCallback,
     OnPositionFoundCallback? onPositionFound,
   }) async {
+    _cancelled = false;
     final params = <String, String>{
       'evals': 'false',
       'clocks': 'false',
@@ -304,6 +306,7 @@ class TacticsImportService {
     Function(String)? progressCallback,
     OnPositionFoundCallback? onPositionFound,
   }) async {
+    _cancelled = false;
     int targetGames = maxGames ?? (since != null ? 200 : 10);
     List<String> allGames = [];
 
@@ -343,7 +346,7 @@ class TacticsImportService {
     // Walk backwards from the most recent archive.
     for (
       int i = archives.length - 1;
-      i >= startArchiveIndex && allGames.length < targetGames;
+      i >= startArchiveIndex && allGames.length < targetGames && !_cancelled;
       i--
     ) {
       progressCallback?.call(
@@ -362,6 +365,13 @@ class TacticsImportService {
     }
 
     if (allGames.isEmpty) {
+      if (_cancelled) {
+        return (
+          positions: <TacticsPosition>[],
+          gamesAnalyzed: 0,
+          gamesSkipped: 0,
+        );
+      }
       throw Exception('No games found for $username on Chess.com');
     }
 
@@ -462,7 +472,16 @@ class TacticsImportService {
     /// via [chessComBlitzToLichessBlitz] before Maia line extension.
     bool mapChessComEloForMaia = false,
   }) async {
-    _cancelled = false;
+    // A cancel during the fetch/download phase must stick — resetting
+    // `_cancelled` here used to silently un-cancel the run once analysis
+    // started. The flag is reset by the public run entry points instead.
+    if (_cancelled) {
+      return (
+        positions: <TacticsPosition>[],
+        gamesAnalyzed: 0,
+        gamesSkipped: 0,
+      );
+    }
     final games = splitPgnIntoGames(pgnContent);
     final usernameLower = username.toLowerCase();
 
@@ -585,6 +604,7 @@ class TacticsImportService {
           gameId: gameId,
           maia: maia,
           maiaElo: maiaElo,
+          shouldAbort: () => _cancelled,
         );
         if (_cancelled) return;
         gamePositions[gameId] = positions;

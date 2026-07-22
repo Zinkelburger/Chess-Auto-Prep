@@ -42,6 +42,11 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
 
   String? importStatus;
   bool isImporting = false;
+
+  /// True from the pause click until the run has fully wound down. Keeps the
+  /// pause button single-shot and stops progress messages from overwriting
+  /// the "Pausing…" status.
+  bool isCancelling = false;
   int newPositionsFound = 0;
   TacticsImportService? activeImport;
 
@@ -191,15 +196,17 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
 
       await _flushFoundPositions();
       await database.loadPositions();
-      // Cancelled: clear the "Stopping…" note instead of claiming success.
+      // Cancelled: clear the "Pausing…" note instead of claiming success.
       importStatus = importService.wasCancelled ? null : _statusMessage(result);
-      notifyListeners();
     } finally {
       // On an abnormal exit the try block never flushed — persist what the
       // cancelled/failed run found so far.
       await _flushFoundPositions();
       activeImport = null;
       isImporting = false;
+      isCancelling = false;
+      // Single notify (inside refreshPendingCount) so the status banner and
+      // the resume banner swap in one frame instead of flickering.
       await refreshPendingCount(
         lichessUsername: lichessUsername,
         chesscomUsername: chesscomUsername,
@@ -268,11 +275,9 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
       // advance their last-fetch timestamp past unanalyzed games.
       if (importService.wasCancelled) {
         importStatus = null;
-        notifyListeners();
         return false;
       }
       importStatus = _statusMessage(result);
-      notifyListeners();
       return true;
     } finally {
       // On an abnormal exit the try block never flushed — persist what the
@@ -280,6 +285,9 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
       await _flushFoundPositions();
       activeImport = null;
       isImporting = false;
+      isCancelling = false;
+      // Single notify (inside refreshPendingCount) so the status banner and
+      // the resume banner swap in one frame instead of flickering.
       await refreshPendingCount(
         lichessUsername: source == TacticsImportSource.lichess
             ? params.username
@@ -348,11 +356,12 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
   /// Ask the running import to stop. `isImporting` stays true until the run
   /// actually winds down (its finally block clears it) — flipping it here
   /// would let a second import start while the first still holds the engine
-  /// pool.
+  /// pool. Idempotent: repeat clicks while winding down are no-ops.
   void cancelImport() {
-    if (activeImport == null) return;
+    if (activeImport == null || isCancelling) return;
+    isCancelling = true;
     activeImport?.cancel();
-    importStatus = 'Stopping…';
+    importStatus = 'Pausing…';
     notifyListeners();
   }
 
@@ -362,6 +371,9 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
   }
 
   void _onProgress(String message) {
+    // In-flight games still report progress while winding down; don't let
+    // them overwrite the "Pausing…" status.
+    if (isCancelling) return;
     importStatus = message;
     _notifyThrottled();
   }

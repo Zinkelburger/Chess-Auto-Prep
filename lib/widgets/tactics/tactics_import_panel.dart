@@ -24,6 +24,7 @@ class TacticsImportPanel extends StatefulWidget {
     super.key,
     this.importStatus,
     required this.isImporting,
+    this.isCancelling = false,
     this.activeImport,
     required this.lichessUserController,
     required this.lichessCountController,
@@ -56,6 +57,7 @@ class TacticsImportPanel extends StatefulWidget {
 
   final String? importStatus;
   final bool isImporting;
+  final bool isCancelling;
   final TacticsImportService? activeImport;
   final TextEditingController lichessUserController;
   final TextEditingController lichessCountController;
@@ -154,6 +156,7 @@ class _TacticsImportPanelState extends _TacticsImportPanelStateBase
             status: widget.importStatus!,
             isImporting: widget.isImporting,
             hasActiveImport: widget.activeImport != null,
+            isCancelling: widget.isCancelling,
             onCancelImport: widget.onCancelImport,
             onDismiss: widget.onDismissImportStatus,
           ),
