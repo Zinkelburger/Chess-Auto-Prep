@@ -69,6 +69,43 @@ extension ReviewOrderLabel on ReviewOrder {
   };
 }
 
+/// Where the trainer reads chapter names from when grouping lines.
+enum ChapterGroupingMode { auto, namePrefix, off }
+
+extension ChapterGroupingModeLabel on ChapterGroupingMode {
+  String get label => switch (this) {
+    ChapterGroupingMode.auto => 'Automatic (course headers)',
+    ChapterGroupingMode.namePrefix => 'Line-name prefix',
+    ChapterGroupingMode.off => 'Off',
+  };
+
+  String get description => switch (this) {
+    ChapterGroupingMode.auto =>
+      'Chapters from the file\'s own metadata (Chessable exports name the '
+          'chapter in every game\'s White header).',
+    ChapterGroupingMode.namePrefix =>
+      'Everything in the line name before the delimiter is the chapter.',
+    ChapterGroupingMode.off => 'No chapter grouping.',
+  };
+
+  static ChapterGroupingMode fromStorage(String? value) {
+    switch (value) {
+      case 'namePrefix':
+        return ChapterGroupingMode.namePrefix;
+      case 'off':
+        return ChapterGroupingMode.off;
+      default:
+        return ChapterGroupingMode.auto;
+    }
+  }
+
+  String get storageValue => switch (this) {
+    ChapterGroupingMode.auto => 'auto',
+    ChapterGroupingMode.namePrefix => 'namePrefix',
+    ChapterGroupingMode.off => 'off',
+  };
+}
+
 class TrainingSettings {
   int correctStreakThreshold;
   int? trainingDepth; // null = full line
@@ -101,6 +138,13 @@ class TrainingSettings {
   /// Delay in milliseconds between auto-played intro moves.
   int introSpeedMs;
 
+  /// Where chapter names come from when grouping the line list.
+  ChapterGroupingMode chapterGrouping;
+
+  /// Delimiter for [ChapterGroupingMode.namePrefix]: the chapter is
+  /// everything in the line name before its first occurrence.
+  String chapterDelimiter;
+
   TrainingSettings({
     this.correctStreakThreshold = 3,
     this.trainingDepth,
@@ -113,6 +157,8 @@ class TrainingSettings {
     this.moveSpeedMs = 700,
     this.skipToFirstComment = true,
     this.introSpeedMs = 600,
+    this.chapterGrouping = ChapterGroupingMode.auto,
+    this.chapterDelimiter = '#',
   });
 
   static const _keyStreakThreshold = 'trainer_streak_threshold';
@@ -126,6 +172,8 @@ class TrainingSettings {
   static const _keyMoveSpeedMs = 'trainer_move_speed_ms';
   static const _keySkipToFirstComment = 'trainer_skip_to_first_comment';
   static const _keyIntroSpeedMs = 'trainer_intro_speed_ms';
+  static const _keyChapterGrouping = 'trainer_chapter_grouping';
+  static const _keyChapterDelimiter = 'trainer_chapter_delimiter';
 
   static Future<TrainingSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -143,6 +191,10 @@ class TrainingSettings {
       moveSpeedMs: prefs.getInt(_keyMoveSpeedMs) ?? 700,
       skipToFirstComment: prefs.getBool(_keySkipToFirstComment) ?? true,
       introSpeedMs: prefs.getInt(_keyIntroSpeedMs) ?? 600,
+      chapterGrouping: ChapterGroupingModeLabel.fromStorage(
+        prefs.getString(_keyChapterGrouping),
+      ),
+      chapterDelimiter: prefs.getString(_keyChapterDelimiter) ?? '#',
     );
   }
 
@@ -163,5 +215,7 @@ class TrainingSettings {
     await prefs.setInt(_keyMoveSpeedMs, moveSpeedMs);
     await prefs.setBool(_keySkipToFirstComment, skipToFirstComment);
     await prefs.setInt(_keyIntroSpeedMs, introSpeedMs);
+    await prefs.setString(_keyChapterGrouping, chapterGrouping.storageValue);
+    await prefs.setString(_keyChapterDelimiter, chapterDelimiter);
   }
 }

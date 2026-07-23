@@ -21,6 +21,11 @@ class RepertoireLine {
   /// Cumulative path probability from PGN ([CumProb] header or comment).
   final double? importance;
 
+  /// Chapter this line belongs to, when the source file carries chapter
+  /// metadata (Chessable exports title every game with the chapter in the
+  /// [White] header). Null for files without chapters.
+  final String? chapter;
+
   RepertoireLine({
     required this.id,
     required this.name,
@@ -32,6 +37,7 @@ class RepertoireLine {
     this.variations = const [],
     this.headers = const {},
     this.importance,
+    this.chapter,
   });
 
   /// Creates a training question at the specified move index

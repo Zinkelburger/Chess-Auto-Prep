@@ -291,6 +291,7 @@ class TrainingSessionController extends ChangeNotifier
       }
 
       _linearDone.clear();
+      activeChapter = null;
       dueQueue = _buildQueue();
       notifyListeners();
 
@@ -360,6 +361,54 @@ class TrainingSessionController extends ChangeNotifier
   // LINE MANAGEMENT
   // ---------------------------------------------------------------------------
 
+  /// Chapter the trainer is currently scoped to, or null for all lines.
+  /// Filters the line list, the due queue, and Learn/Review advancement.
+  String? activeChapter;
+
+  /// The chapter a line belongs to under the current grouping setting.
+  String? chapterOf(RepertoireLine line) {
+    switch (settings.chapterGrouping) {
+      case ChapterGroupingMode.off:
+        return null;
+      case ChapterGroupingMode.auto:
+        return line.chapter;
+      case ChapterGroupingMode.namePrefix:
+        final delimiter = settings.chapterDelimiter;
+        if (delimiter.isEmpty) return null;
+        final cut = line.name.indexOf(delimiter);
+        if (cut <= 0) return null;
+        final prefix = line.name.substring(0, cut).trim();
+        return prefix.isEmpty ? null : prefix;
+    }
+  }
+
+  /// Distinct chapters in file order. Empty when the source has none.
+  List<String> get chapters {
+    final seen = <String>{};
+    final ordered = <String>[];
+    for (final line in lines) {
+      final chapter = chapterOf(line);
+      if (chapter != null && seen.add(chapter)) ordered.add(chapter);
+    }
+    return ordered;
+  }
+
+  /// Scope training to [chapter] (null = all chapters) and rebuild the queue.
+  void setActiveChapter(String? chapter) {
+    if (activeChapter == chapter) return;
+    activeChapter = chapter;
+    dueQueue = _buildQueue();
+    notifyListeners();
+  }
+
+  /// The chapter grouping source changed — the old filter may not exist
+  /// under the new scheme, so drop it and rebuild.
+  void onChapterSettingsChanged() {
+    activeChapter = null;
+    dueQueue = _buildQueue();
+    notifyListeners();
+  }
+
   /// The review queue under the active repetition mode: spaced = due/new
   /// lines only; linear = every line not yet completed this session.
   List<RepertoireLine> _buildQueue() {
@@ -369,8 +418,14 @@ class TrainingSessionController extends ChangeNotifier
     if (sourceIsStudy && order == ReviewOrder.byImportance) {
       order = ReviewOrder.sequential;
     }
+    final scoped = activeChapter == null
+        ? lines
+        : [
+            for (final line in lines)
+              if (chapterOf(line) == activeChapter) line,
+          ];
     final ordered = reviewService.orderLinesForReview(
-      lines,
+      scoped,
       reviewMap,
       order,
       playabilityMap: playabilityMap,
@@ -897,8 +952,96 @@ class TrainingSessionController extends ChangeNotifier
   }
 
   void updateDueQueue(List<RepertoireLine> queue) {
-    dueQueue = queue;
+    // Rebuilt internally (rather than trusting the caller's list) so chapter
+    // scoping and the linear-mode completed filter stay applied.
+    dueQueue = _buildQueue();
     notifyListeners();
+  }
+
+  /// Bulk-set which lines count as learned without training them — for lines
+  /// the user already knows from elsewhere (another tool, over-the-board
+  /// experience). Lines in [checkedLineIds] that are new get seeded as
+  /// learned; learned lines left unchecked are reset to new. Returns how
+  /// many lines changed state.
+  ///
+  /// [within] limits the pass to those line ids (the lines the user could
+  /// actually see): with a chapter filter active, learned lines outside the
+  /// chapter must not be reset just because they weren't on screen.
+  Future<int> applyLearnedSelection(
+    Set<String> checkedLineIds, {
+    Set<String>? within,
+  }) async {
+    final now = DateTime.now().toUtc();
+    final history = <RepertoireReviewHistoryEntry>[];
+    final headerUpdates = <String, RepertoireReviewEntry>{};
+    int seeded = 0;
+
+    for (final line in lines) {
+      if (within != null && !within.contains(line.id)) continue;
+      final entry = reviewMap[line.id];
+      final isLearned = entry != null && !entry.isNew;
+      final wantLearned = checkedLineIds.contains(line.id);
+      if (wantLearned == isLearned) continue;
+
+      final RepertoireReviewEntry updated;
+      if (wantLearned) {
+        final existing =
+            entry ??
+            RepertoireReviewEntry(
+              repertoireId: repertoireId,
+              lineId: line.id,
+              lineName: line.name,
+            );
+        // Stagger seeded intervals (1–3 days) so a big bulk import doesn't
+        // dump every line into the same future review day.
+        final interval = 1.0 + (seeded++ % 5) * 0.5;
+        updated = existing.copyWith(
+          intervalDays: interval,
+          dueDateUtc: now.add(Duration(hours: (interval * 24).round())),
+          lastRating: ReviewRating.good.name,
+          lastReviewedUtc: now,
+        );
+      } else {
+        // Back to new: scheduling cleared, pass/fail history kept. A fresh
+        // entry rather than copyWith because copyWith can't null the dates.
+        updated = RepertoireReviewEntry(
+          repertoireId: repertoireId,
+          lineId: line.id,
+          lineName: line.name,
+          difficulty: entry!.difficulty,
+          passCount: entry.passCount,
+          failCount: entry.failCount,
+        );
+      }
+      reviewMap[line.id] = updated;
+      headerUpdates[line.id] = updated;
+      history.add(
+        RepertoireReviewHistoryEntry(
+          repertoireId: repertoireId,
+          lineId: line.id,
+          timestampUtc: now,
+          rating: wantLearned ? ReviewRating.good.name : '',
+          hadMistake: false,
+          sessionType: 'marked',
+        ),
+      );
+    }
+
+    if (headerUpdates.isEmpty) return 0;
+
+    dueQueue = _buildQueue();
+    notifyListeners();
+
+    await reviewService.saveAll([
+      ..._otherRepertoireEntries,
+      ...reviewMap.values,
+    ]);
+    await reviewService.appendHistory(history);
+    await repertoireService.updateManyLineReviewHeaders(
+      repertoireId,
+      headerUpdates,
+    );
+    return headerUpdates.length;
   }
 
   void updateMoveProgress(

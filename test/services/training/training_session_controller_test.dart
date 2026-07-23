@@ -63,6 +63,15 @@ class _FakeRepertoireService extends RepertoireService {
     headerUpdates.add(lineId);
     return true;
   }
+
+  @override
+  Future<bool> updateManyLineReviewHeaders(
+    String filePath,
+    Map<String, RepertoireReviewEntry> entriesByLineId,
+  ) async {
+    headerUpdates.addAll(entriesByLineId.keys);
+    return true;
+  }
 }
 
 /// In-memory [RepertoireReviewService]: the pure scheduling logic
@@ -110,6 +119,7 @@ RepertoireLine _line(
   List<String> moves, {
   double? importance,
   Map<String, String> comments = const {},
+  String? chapter,
 }) {
   return RepertoireLine(
     id: id,
@@ -120,6 +130,7 @@ RepertoireLine _line(
     fullPgn: '',
     comments: comments,
     importance: importance,
+    chapter: chapter,
   );
 }
 
@@ -323,6 +334,150 @@ void main() {
       final controller = buildController();
       await controller.loadRepertoire();
       expect(controller.isLoading, isTrue, reason: 'untouched initial state');
+      controller.dispose();
+    });
+  });
+
+  group('applyLearnedSelection', () {
+    Future<TrainingSessionController> loadedController() async {
+      repService.lines = [
+        _line('A', ['e4', 'e5']),
+        _line('B', ['d4', 'd5']),
+        _line('C', ['c4', 'c5']),
+      ];
+      // A is already learned (not due until tomorrow); B and C are new.
+      reviewService.entries = [
+        _entry(
+          repPath(),
+          'A',
+          due: DateTime.now().toUtc().add(const Duration(days: 1)),
+        ),
+        _entry('other.pgn', 'X'),
+      ];
+      final controller = buildController()..setRepertoire(meta());
+      await controller.loadRepertoire();
+      return controller;
+    }
+
+    test('checking new lines seeds them learned with staggered dues', () async {
+      final controller = await loadedController();
+
+      final changed = await controller.applyLearnedSelection({'A', 'B', 'C'});
+
+      expect(changed, 2, reason: 'A was already learned');
+      final b = controller.reviewMap['B']!;
+      final c = controller.reviewMap['C']!;
+      expect(b.isNew, isFalse);
+      expect(c.isNew, isFalse);
+      expect(b.lastRating, 'good');
+      expect(b.dueDateUtc, isNotNull);
+      expect(
+        b.dueDateUtc,
+        isNot(equals(c.dueDateUtc)),
+        reason: 'seeded due dates stagger to avoid a same-day review spike',
+      );
+
+      // Seeded entries persist (other repertoires untouched) and PGN headers
+      // update in one bulk call; history records the bulk mark.
+      expect(
+        reviewService.entries.map((e) => e.repertoireId),
+        contains('other.pgn'),
+      );
+      expect(repService.headerUpdates, containsAll(['B', 'C']));
+      expect(reviewService.history.map((h) => h.sessionType).toSet(), {
+        'marked',
+      });
+
+      // Learned lines leave the spaced-mode due queue.
+      expect(controller.dueQueue, isEmpty);
+      controller.dispose();
+    });
+
+    test('unchecking a learned line resets it to new', () async {
+      final controller = await loadedController();
+
+      final changed = await controller.applyLearnedSelection({'B'});
+
+      expect(changed, 2, reason: 'A unlearned + B learned');
+      final a = controller.reviewMap['A']!;
+      expect(a.isNew, isTrue);
+      expect(a.dueDateUtc, isNull);
+      expect(a.intervalDays, 0);
+      expect(controller.reviewMap['B']!.isNew, isFalse);
+      controller.dispose();
+    });
+
+    test('selection matching current state is a no-op', () async {
+      final controller = await loadedController();
+      final savesBefore = reviewService.saveAllCalls;
+
+      final changed = await controller.applyLearnedSelection({'A'});
+
+      expect(changed, 0);
+      expect(reviewService.saveAllCalls, savesBefore);
+      expect(reviewService.history, isEmpty);
+      expect(repService.headerUpdates, isEmpty);
+      controller.dispose();
+    });
+  });
+
+  group('chapter scoping', () {
+    Future<TrainingSessionController> loadedController() async {
+      repService.lines = [
+        _line('A', ['e4', 'e5'], chapter: 'One'),
+        _line('B', ['d4', 'd5'], chapter: 'One'),
+        _line('C', ['c4', 'c5'], chapter: 'Two'),
+      ];
+      final controller = buildController()..setRepertoire(meta());
+      await controller.loadRepertoire();
+      return controller;
+    }
+
+    test('setActiveChapter filters the queue; null restores all', () async {
+      final controller = await loadedController();
+      expect(controller.chapters, ['One', 'Two']);
+      expect(controller.dueQueue, hasLength(3));
+
+      controller.setActiveChapter('Two');
+      expect(controller.dueQueue.map((l) => l.id), ['C']);
+
+      controller.setActiveChapter(null);
+      expect(controller.dueQueue, hasLength(3));
+      controller.dispose();
+    });
+
+    test('grouping mode off hides chapters; namePrefix derives them from '
+        'line names', () async {
+      final controller = await loadedController();
+
+      controller.settings.chapterGrouping = ChapterGroupingMode.off;
+      expect(controller.chapters, isEmpty);
+      expect(controller.chapterOf(controller.lines.first), isNull);
+
+      // Names are 'Line A' / 'Line B' / 'Line C' — prefix before 'A' etc.
+      controller.settings.chapterGrouping = ChapterGroupingMode.namePrefix;
+      controller.settings.chapterDelimiter = 'A';
+      expect(controller.chapterOf(controller.lines.first), 'Line');
+      controller.dispose();
+    });
+
+    test('applyLearnedSelection within a chapter leaves other chapters '
+        'untouched', () async {
+      final controller = await loadedController();
+      // Mark A learned first.
+      await controller.applyLearnedSelection({'A'});
+      expect(controller.reviewMap['A']!.isNew, isFalse);
+
+      // A selection pass scoped to chapter Two: checking C must not reset A
+      // (it was simply not on screen).
+      final changed = await controller.applyLearnedSelection(
+        {'C'},
+        within: {'C'},
+      );
+      expect(changed, 1);
+      expect(controller.reviewMap['A']!.isNew, isFalse);
+      expect(controller.reviewMap['C']!.isNew, isFalse);
+      expect(controller.reviewMap['B']!.isNew, isTrue);
       controller.dispose();
     });
   });

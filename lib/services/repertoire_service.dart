@@ -9,6 +9,7 @@ import 'dart:isolate';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 import '../models/repertoire_line.dart';
+import '../models/repertoire_review_entry.dart' show RepertoireReviewEntry;
 import '../utils/atomic_file.dart';
 import '../utils/file_text_reader.dart';
 import '../utils/pgn_comment_utils.dart';
@@ -68,12 +69,36 @@ class RepertoireService {
 
     final games = pgn.splitPgnIntoGames(pgnContent);
 
+    // Chapter titles are a whole-file property (do the [White] headers group
+    // the games?), so games are parsed before any line is built.
+    final parsedGames =
+        <({PgnGame<PgnNodeData> game, String text, int index})>[];
     for (int gameIndex = 0; gameIndex < games.length; gameIndex++) {
-      final gameText = games[gameIndex];
+      try {
+        parsedGames.add((
+          game: PgnGame.parsePgn(games[gameIndex]),
+          text: games[gameIndex],
+          index: gameIndex,
+        ));
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('Error parsing game $gameIndex: $e');
+        }
+        continue;
+      }
+    }
+
+    final chapterTitles = detectHeaderChapters([
+      for (final p in parsedGames) p.game.headers,
+    ]);
+
+    for (int i = 0; i < parsedGames.length; i++) {
+      final game = parsedGames[i].game;
+      final gameText = parsedGames[i].text;
+      final gameIndex = parsedGames[i].index;
+      final chapter = chapterTitles?[i];
 
       try {
-        final game = PgnGame.parsePgn(gameText);
-
         final mainlineMoves = game.moves
             .mainline()
             .map((node) => node.san)
@@ -101,7 +126,15 @@ class RepertoireService {
         final variations = <String>[];
         _extractVariations(game.moves, variations);
 
-        final lineName = _generateLineName(game, gameIndex);
+        // Chapter-titled games (Chessable exports) name the variation in the
+        // [Black] header; everything else keeps the Opening/Event naming.
+        final variationTitle = (game.headers['Black'] ?? '').trim();
+        final lineName =
+            chapter != null &&
+                variationTitle.isNotEmpty &&
+                variationTitle != '?'
+            ? variationTitle
+            : _generateLineName(game, gameIndex);
         final lineId = _extractLineId(game, mainlineMoves, gameIndex);
         final importance = _extractImportance(game, gameText);
 
@@ -117,6 +150,7 @@ class RepertoireService {
             variations: variations,
             headers: Map<String, String>.from(game.headers),
             importance: importance,
+            chapter: chapter,
           ),
         );
       } catch (e) {
@@ -128,6 +162,42 @@ class RepertoireService {
     }
 
     return lines;
+  }
+
+  /// Detects chapter titles carried in game headers, the way Chessable
+  /// course exports encode them: every game titles its chapter in [White]
+  /// and its variation in [Black], with [Result] always "*".
+  ///
+  /// Returns one chapter name (or null) per game, or null when the file does
+  /// not look chapter-titled. The guards keep real-game collections (decisive
+  /// results, player names) and this app's own exports ([White "Me"],
+  /// [Result "1-0"]) from producing bogus chapters.
+  List<String?>? detectHeaderChapters(
+    List<Map<String, String>> headersPerGame,
+  ) {
+    const ignoredTitles = {'', '?', 'me', 'opponent', 'white', 'black', 'n.n.'};
+
+    var titled = 0;
+    final counts = <String, int>{};
+    final chapters = <String?>[];
+    for (final headers in headersPerGame) {
+      final white = (headers['White'] ?? '').trim();
+      final result = (headers['Result'] ?? '*').trim();
+      final isChapterTitle =
+          result == '*' && !ignoredTitles.contains(white.toLowerCase());
+      chapters.add(isChapterTitle ? white : null);
+      if (isChapterTitle) {
+        titled++;
+        counts[white] = (counts[white] ?? 0) + 1;
+      }
+    }
+
+    // Chapter-style only when titles actually group games: more than one
+    // chapter, at least one with multiple games, covering most of the file.
+    if (counts.length < 2) return null;
+    if (!counts.values.any((c) => c >= 2)) return null;
+    if (titled * 2 < headersPerGame.length) return null;
+    return chapters;
   }
 
   Position extractStartPositionFromPgn(String pgnText) {
@@ -558,72 +628,133 @@ class RepertoireService {
     required int failCount,
   }) {
     return _editLineInFile(filePath, lineId, (games, matchIndex) {
-      final gameText = games[matchIndex];
-      final headerPattern = RegExp(r'^\[(\w+)\s+"([^"]*)"\]', multiLine: true);
-      final headers = <String, String>{};
-      String moveText = '';
-
-      final lines = gameText.split('\n');
-      bool pastHeaders = false;
-      final moveLines = <String>[];
-
-      for (final line in lines) {
-        final trimmed = line.trim();
-        if (!pastHeaders && headerPattern.hasMatch(trimmed)) {
-          final match = headerPattern.firstMatch(trimmed)!;
-          headers[match.group(1)!] = match.group(2)!;
-        } else {
-          pastHeaders = true;
-          moveLines.add(line);
-        }
-      }
-      moveText = moveLines.join('\n').trim();
-
-      String fmtDate(DateTime? d) =>
-          d == null ? '' : d.toUtc().toIso8601String();
-      headers['LastReview'] = fmtDate(lastReview);
-      headers['Difficulty'] = difficulty.toStringAsFixed(2);
-      headers['Interval'] = intervalDays.toStringAsFixed(2);
-      headers['DueDate'] = fmtDate(dueDate);
-      headers['PassCount'] = passCount.toString();
-      headers['FailCount'] = failCount.toString();
-
-      final buffer = StringBuffer();
-      const standardOrder = [
-        'Event',
-        'Site',
-        'Date',
-        'Round',
-        'White',
-        'Black',
-        'Result',
-        'FEN',
-        'SetUp',
-        'ECO',
-        'Opening',
-        'LineID',
-        'LineId',
-        'Id',
-        'Line',
-        'Guid',
-      ];
-      final written = <String>{};
-      for (final key in standardOrder) {
-        if (headers.containsKey(key)) {
-          buffer.writeln('[$key "${headers[key]}"]');
-          written.add(key);
-        }
-      }
-      for (final entry in headers.entries) {
-        if (!written.contains(entry.key)) {
-          buffer.writeln('[${entry.key} "${entry.value}"]');
-        }
-      }
-      buffer.writeln();
-      buffer.write(moveText);
-
-      games[matchIndex] = buffer.toString().trimRight();
+      games[matchIndex] = _gameWithReviewHeaders(
+        games[matchIndex],
+        lastReview: lastReview,
+        difficulty: difficulty,
+        intervalDays: intervalDays,
+        dueDate: dueDate,
+        passCount: passCount,
+        failCount: failCount,
+      );
     });
+  }
+
+  /// Bulk counterpart of [updateLineReviewHeaders]: rewrites the review
+  /// headers of every line in [entriesByLineId] with a single read and one
+  /// atomic write. A per-line loop over [updateLineReviewHeaders] would
+  /// reread and rewrite the whole file once per line.
+  Future<bool> updateManyLineReviewHeaders(
+    String filePath,
+    Map<String, RepertoireReviewEntry> entriesByLineId,
+  ) async {
+    if (entriesByLineId.isEmpty) return true;
+    final file = io.File(filePath);
+    if (!await file.exists()) return false;
+
+    final content = await readTextFile(file);
+    final document = _splitPgnDocumentPreservingPreamble(content);
+    final games = List<String>.from(document.games);
+
+    bool anyMatched = false;
+    for (final entry in entriesByLineId.entries) {
+      final matchIndex = _findGameIndexByLineId(games, entry.key);
+      if (matchIndex == null) continue;
+      final e = entry.value;
+      games[matchIndex] = _gameWithReviewHeaders(
+        games[matchIndex],
+        lastReview: e.lastReviewedUtc,
+        difficulty: e.difficulty,
+        intervalDays: e.intervalDays,
+        dueDate: e.dueDateUtc,
+        passCount: e.passCount,
+        failCount: e.failCount,
+      );
+      anyMatched = true;
+    }
+    if (!anyMatched) return false;
+
+    await writeTextFileAtomically(
+      file,
+      _reassembleDocument(document.preamble, games),
+    );
+    return true;
+  }
+
+  /// Returns [gameText] with its review headers replaced (other headers and
+  /// the movetext preserved, standard headers first).
+  String _gameWithReviewHeaders(
+    String gameText, {
+    required DateTime? lastReview,
+    required double difficulty,
+    required double intervalDays,
+    required DateTime? dueDate,
+    required int passCount,
+    required int failCount,
+  }) {
+    final headerPattern = RegExp(r'^\[(\w+)\s+"([^"]*)"\]', multiLine: true);
+    final headers = <String, String>{};
+    String moveText = '';
+
+    final lines = gameText.split('\n');
+    bool pastHeaders = false;
+    final moveLines = <String>[];
+
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (!pastHeaders && headerPattern.hasMatch(trimmed)) {
+        final match = headerPattern.firstMatch(trimmed)!;
+        headers[match.group(1)!] = match.group(2)!;
+      } else {
+        pastHeaders = true;
+        moveLines.add(line);
+      }
+    }
+    moveText = moveLines.join('\n').trim();
+
+    String fmtDate(DateTime? d) => d == null ? '' : d.toUtc().toIso8601String();
+    headers['LastReview'] = fmtDate(lastReview);
+    headers['Difficulty'] = difficulty.toStringAsFixed(2);
+    headers['Interval'] = intervalDays.toStringAsFixed(2);
+    headers['DueDate'] = fmtDate(dueDate);
+    headers['PassCount'] = passCount.toString();
+    headers['FailCount'] = failCount.toString();
+
+    final buffer = StringBuffer();
+    const standardOrder = [
+      'Event',
+      'Site',
+      'Date',
+      'Round',
+      'White',
+      'Black',
+      'Result',
+      'FEN',
+      'SetUp',
+      'ECO',
+      'Opening',
+      'LineID',
+      'LineId',
+      'Id',
+      'Line',
+      'Guid',
+    ];
+    final written = <String>{};
+    for (final key in standardOrder) {
+      if (headers.containsKey(key)) {
+        buffer.writeln('[$key "${headers[key]}"]');
+        written.add(key);
+      }
+    }
+    for (final entry in headers.entries) {
+      if (!written.contains(entry.key)) {
+        buffer.writeln('[${entry.key} "${entry.value}"]');
+      }
+    }
+    buffer.writeln();
+    buffer.write(moveText);
+
+    return buffer.toString().trimRight();
   }
 
   /// Appends [san] after [pathFromRoot] in the best-matching game, or adds a

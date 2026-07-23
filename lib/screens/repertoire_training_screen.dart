@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
+import '../models/repertoire_line.dart';
 import '../models/repertoire_metadata.dart';
 import '../models/training_settings.dart';
 import '../services/training/training_phase.dart';
@@ -20,6 +21,7 @@ import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/pgn_viewer_widget.dart';
 import '../widgets/trainer_keyboard_scope.dart';
+import '../widgets/training/line_preview_dialog.dart';
 import '../widgets/training/move_input_widget.dart';
 import '../widgets/repertoire_list_body.dart';
 import '../widgets/training/repertoire_selector_panel.dart';
@@ -640,6 +642,64 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       onStartNextNew: _training.startNextNew,
       onStartNextDue: _training.startNextDue,
       onScoreInBuilder: _scoreInBuilder,
+      onPreviewLine: _previewLine,
+      onApplyLearnedSelection: _applyLearnedSelection,
+      chapters: _training.chapters,
+      activeChapter: _training.activeChapter,
+      onChapterSelected: _training.setActiveChapter,
+      chapterOf: _training.chapterOf,
+    );
+  }
+
+  /// Read-only book view of a line: board + annotated movetext, with
+  /// train/edit handoffs. Never touches training or review state.
+  void _previewLine(RepertoireLine line) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => LinePreviewDialog(
+        line: line,
+        editLabel: _training.sourceIsStudy
+            ? 'Edit in Study'
+            : 'Edit in Builder',
+        onEdit: () {
+          Navigator.of(dialogContext).pop();
+          if (_training.sourceIsStudy) {
+            _openInStudy();
+          } else if (_training.repertoire != null) {
+            context.read<AppState>().switchToBuilder(
+              repertoirePath: _training.repertoire!.filePath,
+              lineId: line.id,
+            );
+          }
+        },
+        onTrain: () {
+          Navigator.of(dialogContext).pop();
+          _training.startLine(line);
+        },
+      ),
+    );
+  }
+
+  Future<void> _applyLearnedSelection(
+    Set<String> checkedLineIds,
+    Set<String> scope,
+  ) async {
+    final changed = await _training.applyLearnedSelection(
+      checkedLineIds,
+      within: scope,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          changed == 0
+              ? 'Learned lines unchanged.'
+              : changed == 1
+              ? '1 line updated.'
+              : '$changed lines updated.',
+        ),
+        duration: const Duration(seconds: 2),
+      ),
     );
   }
 
@@ -758,6 +818,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       reviewService: _training.reviewService,
       onDueQueueUpdated: _training.updateDueQueue,
       onSettingsChanged: () => setState(() {}),
+      onChapterSettingsChanged: _training.onChapterSettingsChanged,
     );
   }
 }
