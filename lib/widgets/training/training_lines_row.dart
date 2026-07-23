@@ -138,6 +138,17 @@ class _LineRow extends StatelessWidget {
   final double? playability;
   final ({int ply, double quality, bool isOurMove})? bottleneck;
   final bool introEnabled;
+
+  /// Chapter shown as a muted prefix before the name (all-chapters view
+  /// only; redundant when the list is filtered to one chapter).
+  final String? chapterLabel;
+
+  /// Learned-selection pass: rows show a checkbox and taps toggle it.
+  final bool selecting;
+  final bool checked;
+
+  /// Opens the read-only line preview; hidden while [selecting].
+  final VoidCallback? onPreview;
   final VoidCallback onTap;
 
   const _LineRow({
@@ -147,6 +158,10 @@ class _LineRow extends StatelessWidget {
     this.playability,
     this.bottleneck,
     this.introEnabled = false,
+    this.chapterLabel,
+    this.selecting = false,
+    this.checked = false,
+    this.onPreview,
     required this.onTap,
   });
 
@@ -203,14 +218,32 @@ class _LineRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         margin: const EdgeInsets.symmetric(vertical: 2),
         decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerLow.withValues(alpha: 0.5),
+          color: selecting && checked
+              ? AppColors.srsLearned.withValues(alpha: 0.08)
+              : theme.colorScheme.surfaceContainerLow.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(8),
+          // Transparent when unchecked so toggling never shifts layout.
+          border: Border.all(
+            color: selecting && checked
+                ? AppColors.srsLearned.withValues(alpha: 0.4)
+                : Colors.transparent,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
+                if (selecting) ...[
+                  Icon(
+                    checked ? Icons.check_box : Icons.check_box_outline_blank,
+                    size: 18,
+                    color: checked
+                        ? AppColors.srsLearned
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 5,
@@ -235,8 +268,21 @@ class _LineRow extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    line.name,
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        if (chapterLabel != null)
+                          TextSpan(
+                            text: '$chapterLabel · ',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.5,
+                              ),
+                            ),
+                          ),
+                        TextSpan(text: line.name),
+                      ],
+                    ),
                     style: theme.textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w500,
                     ),
@@ -253,6 +299,20 @@ class _LineRow extends StatelessWidget {
                     color: statusColor,
                   ),
                 ),
+                if (onPreview != null) ...[
+                  const SizedBox(width: 4),
+                  IconButton(
+                    icon: const Icon(Icons.auto_stories_outlined, size: 15),
+                    tooltip: 'Read line — moves and comments,\nno training',
+                    onPressed: onPreview,
+                    padding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints(
+                      minWidth: 26,
+                      minHeight: 26,
+                    ),
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 4),

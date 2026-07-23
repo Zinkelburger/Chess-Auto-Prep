@@ -115,6 +115,92 @@ void main() {
       expect(service.parseRepertoirePgn(whitePgn).single.color, 'white');
       expect(service.parseRepertoirePgn(blackPgn).single.color, 'black');
     });
+
+    test('Chessable-style exports yield chapters from White headers and '
+        'variation names from Black headers', () {
+      // Chessable puts the chapter in [White], the variation title in
+      // [Black], and Result "*" on every game.
+      final pgn = '''
+[Event "?"]
+[White "1) Benoni With 6.e4"]
+[Black "6.e4 & 7.f4 #1"]
+[Result "*"]
+
+1. d4 Nf6 2. c4 c5 *
+
+[Event "?"]
+[White "1) Benoni With 6.e4"]
+[Black "6.e4 & 7.f4 #2"]
+[Result "*"]
+
+1. d4 Nf6 2. c4 e6 *
+
+[Event "?"]
+[White "2) Fianchetto System"]
+[Black "10.a4 #1"]
+[Result "*"]
+
+1. d4 d5 2. c4 e6 *
+''';
+
+      final lines = RepertoireService().parseRepertoirePgn(
+        pgn,
+        trainingColor: 'black',
+      );
+
+      expect(lines, hasLength(3));
+      expect(lines[0].chapter, '1) Benoni With 6.e4');
+      expect(lines[1].chapter, '1) Benoni With 6.e4');
+      expect(lines[2].chapter, '2) Fianchetto System');
+      expect(lines[0].name, '6.e4 & 7.f4 #1');
+      expect(lines[1].name, '6.e4 & 7.f4 #2');
+      expect(lines[2].name, '10.a4 #1');
+    });
+
+    test('game collections and own exports get no chapters', () {
+      // Real games: player names in White but decisive results.
+      final gamesPgn = '''
+[Event "London"]
+[White "Kennedy, Hugh"]
+[Black "Wyvill, Marmaduke"]
+[Result "0-1"]
+
+1. e4 c5 0-1
+
+[Event "London"]
+[White "Kennedy, Hugh"]
+[Black "Anderssen, Adolf"]
+[Result "1-0"]
+
+1. e4 e5 1-0
+''';
+      // Own exports: White is the placeholder "Me".
+      final ownPgn = '''
+[Event "Repertoire Line"]
+[White "Me"]
+[Black "Opponent"]
+[Result "*"]
+
+1. e4 c5 *
+
+[Event "Repertoire Line"]
+[White "Me"]
+[Black "Opponent"]
+[Result "*"]
+
+1. e4 e6 *
+''';
+
+      final service = RepertoireService();
+      expect(
+        service.parseRepertoirePgn(gamesPgn).map((l) => l.chapter),
+        everyElement(isNull),
+      );
+      expect(
+        service.parseRepertoirePgn(ownPgn).map((l) => l.chapter),
+        everyElement(isNull),
+      );
+    });
   });
 
   group('appendMoveAtPath', () {

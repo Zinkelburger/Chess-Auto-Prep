@@ -83,6 +83,27 @@ class TrainingLinesPanel extends StatefulWidget {
   final VoidCallback onStartNextDue;
   final VoidCallback? onScoreInBuilder;
 
+  /// Opens the read-only preview (board + annotated movetext) for a line.
+  final void Function(RepertoireLine line)? onPreviewLine;
+
+  /// Applies the "Select learned lines" checkbox pass over the visible
+  /// lines (scope): checked lines become learned, unchecked ones return to
+  /// new. Lines outside the scope are untouched.
+  final Future<void> Function(Set<String> checkedLineIds, Set<String> scope)?
+  onApplyLearnedSelection;
+
+  /// Distinct chapters of the loaded source, file order. Empty = no chapter
+  /// UI at all (files without chapters keep the plain list).
+  final List<String> chapters;
+
+  /// Currently selected chapter filter (null = all chapters).
+  final String? activeChapter;
+  final void Function(String? chapter)? onChapterSelected;
+
+  /// Resolves a line's chapter under the current grouping setting; used for
+  /// filtering and for the chapter label on rows in the all-chapters view.
+  final String? Function(RepertoireLine line)? chapterOf;
+
   const TrainingLinesPanel({
     super.key,
     required this.lines,
@@ -96,6 +117,12 @@ class TrainingLinesPanel extends StatefulWidget {
     required this.onStartNextNew,
     required this.onStartNextDue,
     this.onScoreInBuilder,
+    this.onPreviewLine,
+    this.onApplyLearnedSelection,
+    this.chapters = const [],
+    this.activeChapter,
+    this.onChapterSelected,
+    this.chapterOf,
   });
 
   @override
@@ -104,6 +131,59 @@ class TrainingLinesPanel extends StatefulWidget {
 
 class _TrainingLinesPanelState extends State<TrainingLinesPanel> {
   LineSortMode _sortMode = LineSortMode.smart;
+
+  /// True while the deliberate "Select learned lines" pass is active. The
+  /// checkboxes exist only in this mode — there is no always-on toggle to
+  /// flip a line's learned state by accident.
+  bool _selecting = false;
+  bool _savingSelection = false;
+  final Set<String> _checked = {};
+
+  /// Lines under the active chapter filter — what every section, count and
+  /// selection pass operates on.
+  List<RepertoireLine> get _visibleLines {
+    final chapter = widget.activeChapter;
+    final resolve = widget.chapterOf;
+    if (chapter == null || resolve == null) return widget.lines;
+    return [
+      for (final line in widget.lines)
+        if (resolve(line) == chapter) line,
+    ];
+  }
+
+  void _enterSelection() {
+    setState(() {
+      _selecting = true;
+      _savingSelection = false;
+      _checked
+        ..clear()
+        ..addAll([
+          for (final line in _visibleLines)
+            if (widget.reviewMap[line.id] != null &&
+                !widget.reviewMap[line.id]!.isNew)
+              line.id,
+        ]);
+    });
+  }
+
+  void _toggleChecked(String lineId) {
+    setState(() {
+      if (!_checked.remove(lineId)) _checked.add(lineId);
+    });
+  }
+
+  Future<void> _saveSelection() async {
+    final apply = widget.onApplyLearnedSelection;
+    if (apply == null) return;
+    setState(() => _savingSelection = true);
+    await apply(Set.of(_checked), {for (final line in _visibleLines) line.id});
+    if (mounted) {
+      setState(() {
+        _selecting = false;
+        _savingSelection = false;
+      });
+    }
+  }
 
   /// Highest cumulative probability first; lines without a value sort last.
   int _byProbability(RepertoireLine a, RepertoireLine b) {
@@ -132,7 +212,7 @@ class _TrainingLinesPanelState extends State<TrainingLinesPanel> {
     final dueLines = <RepertoireLine>[];
     final learnedLines = <RepertoireLine>[];
 
-    for (final line in widget.lines) {
+    for (final line in _visibleLines) {
       final entry = reviewMap[line.id];
       if (entry == null || entry.isNew) {
         newLines.add(line);
@@ -179,15 +259,60 @@ class _TrainingLinesPanelState extends State<TrainingLinesPanel> {
 
     return Column(
       children: [
-        _ActionBar(
-          newCount: newLines.length,
-          dueCount: dueLines.length,
-          onLearn: newLines.isNotEmpty ? widget.onStartNextNew : null,
-          onReview: dueLines.isNotEmpty ? widget.onStartNextDue : null,
-        ),
-        _SortControl(
-          value: _sortMode,
-          onChanged: (mode) => setState(() => _sortMode = mode),
+        if (widget.chapters.isNotEmpty)
+          _ChapterControl(
+            chapters: widget.chapters,
+            value: widget.activeChapter,
+            // Locked during a learned-lines pass: switching chapters would
+            // re-scope the list after the checkboxes were initialized, and
+            // saving could unlearn lines that were never on screen.
+            onChanged: _selecting ? null : widget.onChapterSelected,
+          ),
+        if (_selecting)
+          _SelectionBar(
+            checkedCount: _checked.length,
+            saving: _savingSelection,
+            onSave: _saveSelection,
+            onCancel: _savingSelection
+                ? null
+                : () => setState(() => _selecting = false),
+          )
+        else
+          _ActionBar(
+            newCount: newLines.length,
+            dueCount: dueLines.length,
+            onLearn: newLines.isNotEmpty ? widget.onStartNextNew : null,
+            onReview: dueLines.isNotEmpty ? widget.onStartNextDue : null,
+          ),
+        Row(
+          children: [
+            Expanded(
+              child: _SortControl(
+                value: _sortMode,
+                onChanged: (mode) => setState(() => _sortMode = mode),
+              ),
+            ),
+            if (!_selecting && widget.onApplyLearnedSelection != null)
+              Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: Tooltip(
+                  message:
+                      'Check off lines you already know (e.g. learned in '
+                      'another tool) so they start on the review schedule '
+                      'instead of as new.',
+                  waitDuration: const Duration(milliseconds: 400),
+                  child: TextButton.icon(
+                    onPressed: _enterSelection,
+                    icon: const Icon(Icons.checklist, size: 16),
+                    label: const Text('Select learned lines'),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      textStyle: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
         if (widget.needsScoring)
           _NeedsScoringBanner(onScoreInBuilder: widget.onScoreInBuilder),
@@ -209,7 +334,17 @@ class _TrainingLinesPanelState extends State<TrainingLinesPanel> {
                     playability: widget.playabilityMap[line.id],
                     bottleneck: widget.bottleneckMap[line.id],
                     introEnabled: widget.introEnabled,
-                    onTap: () => widget.onLineSelected(line),
+                    chapterLabel: widget.activeChapter == null
+                        ? widget.chapterOf?.call(line)
+                        : null,
+                    selecting: _selecting,
+                    checked: _checked.contains(line.id),
+                    onPreview: !_selecting && widget.onPreviewLine != null
+                        ? () => widget.onPreviewLine!(line)
+                        : null,
+                    onTap: _selecting
+                        ? () => _toggleChecked(line.id)
+                        : () => widget.onLineSelected(line),
                   ),
                 const SizedBox(height: 8),
               ],
@@ -227,7 +362,17 @@ class _TrainingLinesPanelState extends State<TrainingLinesPanel> {
                     playability: widget.playabilityMap[line.id],
                     bottleneck: widget.bottleneckMap[line.id],
                     introEnabled: widget.introEnabled,
-                    onTap: () => widget.onLineSelected(line),
+                    chapterLabel: widget.activeChapter == null
+                        ? widget.chapterOf?.call(line)
+                        : null,
+                    selecting: _selecting,
+                    checked: _checked.contains(line.id),
+                    onPreview: !_selecting && widget.onPreviewLine != null
+                        ? () => widget.onPreviewLine!(line)
+                        : null,
+                    onTap: _selecting
+                        ? () => _toggleChecked(line.id)
+                        : () => widget.onLineSelected(line),
                   ),
                 const SizedBox(height: 8),
               ],
@@ -245,7 +390,17 @@ class _TrainingLinesPanelState extends State<TrainingLinesPanel> {
                         playability: widget.playabilityMap[line.id],
                         bottleneck: widget.bottleneckMap[line.id],
                         introEnabled: widget.introEnabled,
-                        onTap: () => widget.onLineSelected(line),
+                        chapterLabel: widget.activeChapter == null
+                            ? widget.chapterOf?.call(line)
+                            : null,
+                        selecting: _selecting,
+                        checked: _checked.contains(line.id),
+                        onPreview: !_selecting && widget.onPreviewLine != null
+                            ? () => widget.onPreviewLine!(line)
+                            : null,
+                        onTap: _selecting
+                            ? () => _toggleChecked(line.id)
+                            : () => widget.onLineSelected(line),
                       ),
                   ],
                 ),

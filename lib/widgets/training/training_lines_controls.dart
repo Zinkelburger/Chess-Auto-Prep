@@ -69,6 +69,73 @@ class _SortControl extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
+// CHAPTER CONTROL — scope training to one chapter
+// ---------------------------------------------------------------------------
+
+class _ChapterControl extends StatelessWidget {
+  final List<String> chapters;
+  final String? value;
+  final void Function(String? chapter)? onChanged;
+
+  const _ChapterControl({
+    required this.chapters,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Row(
+        children: [
+          Icon(
+            Icons.menu_book_outlined,
+            size: 16,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            'Chapter',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: DropdownButton<String?>(
+              value: value,
+              isDense: true,
+              isExpanded: true,
+              underline: const SizedBox.shrink(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface,
+              ),
+              items: [
+                DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('All chapters (${chapters.length})'),
+                ),
+                for (final chapter in chapters)
+                  DropdownMenuItem<String?>(
+                    value: chapter,
+                    child: Text(chapter, overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+              onChanged: onChanged == null
+                  ? null
+                  : (chapter) => onChanged!(chapter),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // ACTION BAR — Learn / Review buttons
 // ---------------------------------------------------------------------------
 
@@ -184,6 +251,76 @@ class _ActionButton extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SELECTION BAR — deliberate "mark lines as learned" pass
+// ---------------------------------------------------------------------------
+
+class _SelectionBar extends StatelessWidget {
+  final int checkedCount;
+  final bool saving;
+  final VoidCallback onSave;
+  final VoidCallback? onCancel;
+
+  const _SelectionBar({
+    required this.checkedCount,
+    required this.saving,
+    required this.onSave,
+    required this.onCancel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.srsLearned.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.srsLearned.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Check every line you already know. Saving marks checked lines '
+            'as learned; unchecked lines go back to New.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                '$checkedCount checked',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.srsLearned,
+                ),
+              ),
+              const Spacer(),
+              TextButton(onPressed: onCancel, child: const Text('Cancel')),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: saving ? null : onSave,
+                icon: saving
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.check, size: 16),
+                label: const Text('Save learned lines'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

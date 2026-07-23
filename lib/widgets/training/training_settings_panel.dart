@@ -19,6 +19,10 @@ class TrainingSettingsPanel extends StatelessWidget {
   final void Function(List<RepertoireLine> dueQueue) onDueQueueUpdated;
   final VoidCallback onSettingsChanged;
 
+  /// Called when the chapter grouping source or delimiter changes, so the
+  /// active chapter filter can reset and the queue rebuild.
+  final VoidCallback? onChapterSettingsChanged;
+
   const TrainingSettingsPanel({
     super.key,
     required this.settings,
@@ -31,6 +35,7 @@ class TrainingSettingsPanel extends StatelessWidget {
     required this.reviewService,
     required this.onDueQueueUpdated,
     required this.onSettingsChanged,
+    this.onChapterSettingsChanged,
   });
 
   @override
@@ -140,6 +145,82 @@ class TrainingSettingsPanel extends StatelessWidget {
               settings.save();
               onSettingsChanged();
             },
+          ),
+          const SizedBox(height: 24),
+          Text('Chapters', style: theme.textTheme.titleSmall),
+          const SizedBox(height: 4),
+          Text(
+            'How lines are grouped into chapters in the line list.',
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<ChapterGroupingMode>(
+            initialValue: settings.chapterGrouping,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            items: ChapterGroupingMode.values
+                .map(
+                  (mode) => DropdownMenuItem(
+                    value: mode,
+                    child: Tooltip(
+                      message: mode.description,
+                      waitDuration: const Duration(milliseconds: 400),
+                      child: Text(mode.label),
+                    ),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) {
+              if (value == null) return;
+              settings.chapterGrouping = value;
+              settings.save();
+              onChapterSettingsChanged?.call();
+              onSettingsChanged();
+            },
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              SizedBox(
+                width: 80,
+                child: TextFormField(
+                  initialValue: settings.chapterDelimiter,
+                  enabled:
+                      settings.chapterGrouping ==
+                      ChapterGroupingMode.namePrefix,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    labelText: 'Delimiter',
+                  ),
+                  maxLength: 3,
+                  buildCounter:
+                      (
+                        context, {
+                        required currentLength,
+                        required isFocused,
+                        maxLength,
+                      }) => null,
+                  onChanged: (value) {
+                    if (value.isEmpty) return;
+                    settings.chapterDelimiter = value;
+                    settings.save();
+                    onChapterSettingsChanged?.call();
+                    onSettingsChanged();
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'For line-name prefix grouping: the chapter is everything '
+                  'before this character (e.g. "#" for "Benoni #3").',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 24),
           SwitchListTile(
