@@ -22,6 +22,9 @@ abstract class _GenerationConfigFormStateBase
   final TextEditingController _maiaEloCtrl = TextEditingController(
     text: '2200',
   );
+  final TextEditingController _oppPolicyTempCtrl = TextEditingController(
+    text: '1.0',
+  );
 
   final TextEditingController _multipvCtrl = TextEditingController(text: '4');
   final TextEditingController _oppMaxChildrenCtrl = TextEditingController(
@@ -52,6 +55,8 @@ abstract class _GenerationConfigFormStateBase
   final TextEditingController _setupToleranceCtrl = TextEditingController(
     text: '30',
   );
+  final TextEditingController _memorabilityToleranceCtrl =
+      TextEditingController(text: '0');
   SearchAlgorithm _searchAlgorithm = SearchAlgorithm.fast;
   bool _wideOpening = true;
   bool _verifyFinal = true;

@@ -162,7 +162,8 @@ class AnalysisGamesService {
       'perfType': 'blitz,rapid,classical,correspondence',
       'moves': 'true',
       'tags': 'true',
-      'clocks': 'false',
+      // Clocks feed the tempo flaw tags when these PGNs are re-mined.
+      'clocks': 'true',
       'evals': 'false',
       'opening': 'true',
       'sort': 'dateDesc',

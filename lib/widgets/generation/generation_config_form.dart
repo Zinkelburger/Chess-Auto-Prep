@@ -82,6 +82,7 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
     _minEvalCtrl.dispose();
     _maxEvalCtrl.dispose();
     _maiaEloCtrl.dispose();
+    _oppPolicyTempCtrl.dispose();
     _lichessMinGamesCtrl.dispose();
     _dbMinGamesCtrl.dispose();
     _dbMinProbCtrl.dispose();
@@ -97,6 +98,7 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
     _verifyDepthCtrl.dispose();
     _setupMovesCtrl.dispose();
     _setupToleranceCtrl.dispose();
+    _memorabilityToleranceCtrl.dispose();
     _targetLinesCtrl.dispose();
     super.dispose();
   }
@@ -308,12 +310,29 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
                 style: const TextStyle(fontSize: 13),
               ),
               const SizedBox(height: 12),
-              _numField(
-                _setupToleranceCtrl,
-                'Setup Tolerance (cp)',
-                tooltip:
-                    'Max centipawns a preferred-setup move may lose vs the\n'
-                    'best candidate and still be chosen for consistency.',
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _numField(
+                    _setupToleranceCtrl,
+                    'Setup Tolerance (cp)',
+                    tooltip:
+                        'Max centipawns a preferred-setup move may lose vs '
+                        'the\nbest candidate and still be chosen for '
+                        'consistency.',
+                  ),
+                  _numField(
+                    _memorabilityToleranceCtrl,
+                    'Memorability Tolerance (cp)',
+                    tooltip:
+                        'Within this many centipawns of the best candidate,\n'
+                        'pick the move you would most naturally play anyway\n'
+                        '(highest own-side Maia probability) — natural moves\n'
+                        'are easier to memorize. Opposes Prefer novelties.\n'
+                        '0 disables. Ignored in Trappy mode.',
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               Row(
@@ -470,6 +489,22 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                   ],
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _numField(
+                    _oppPolicyTempCtrl,
+                    'Opponent Temperature',
+                    tooltip:
+                        'Reshapes the opponent Maia move distribution.\n'
+                        '1.0 = Maia as-is. Above 1.0 flattens it (a sloppier,\n'
+                        'more varied opponent pool); below 1.0 sharpens it\n'
+                        'toward the most common reply.',
+                  ),
                 ],
               ),
               const SizedBox(height: 8),

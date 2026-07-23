@@ -18,6 +18,7 @@ import '../models/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/fen_map.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
 import 'package:chess_auto_prep/services/generation/trap_extractor.dart';
+import '../utils/findability.dart';
 
 class GeneratedRepertoire {
   /// The cooked tree (ease, expectimax, trap scores, repertoire selection all
@@ -68,7 +69,10 @@ class GeneratedRepertoire {
       playAsWhite: playAsWhite,
     );
     final metricsCache = EvalTreeLineMetricsCache.fromSnapshot(snapshot);
-    final extracted = TrapExtractor(playAsWhite: playAsWhite).extract(tree);
+    final extracted = TrapExtractor(
+      playAsWhite: playAsWhite,
+      findabilityPRef: config != null ? pRefForElo(config.maiaElo) : null,
+    ).extract(tree);
     final traps = TrapIndexService(extracted);
 
     return GeneratedRepertoire(

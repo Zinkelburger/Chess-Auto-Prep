@@ -17,6 +17,34 @@
 /// tail-term convention.
 library;
 
+import 'dart:math' as math;
+
+/// Reshape a full Maia policy with a temperature exponent: p → p^(1/T),
+/// renormalized over the map.  T > 1 flattens (models a sloppier, more
+/// diverse opponent pool), T < 1 sharpens toward the most common reply.
+///
+/// Renormalizing here does NOT violate the raw-probability convention above:
+/// the input is Maia's full softmax over legal moves (already a normalized
+/// distribution), and reshaping it must return a distribution.  Truncation
+/// to the emitted subset — whose Σ p ≤ 1 feeds the expectimax tail term —
+/// happens downstream and is untouched.
+Map<String, double> applyPolicyTemperature(
+  Map<String, double> policy,
+  double temperature,
+) {
+  if (policy.isEmpty || temperature <= 0 || temperature == 1.0) return policy;
+  final exponent = 1.0 / temperature;
+  final raised = <String, double>{};
+  var total = 0.0;
+  for (final e in policy.entries) {
+    final p = e.value <= 0 ? 0.0 : math.pow(e.value, exponent).toDouble();
+    raised[e.key] = p;
+    total += p;
+  }
+  if (total <= 0 || !total.isFinite) return policy;
+  return raised.map((uci, p) => MapEntry(uci, p / total));
+}
+
 /// One opponent candidate with a smoothed probability estimate.
 class SmoothedMove {
   final String uci;

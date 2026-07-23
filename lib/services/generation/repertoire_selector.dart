@@ -101,7 +101,54 @@ class RepertoireSelector {
       SelectionMode.playable => _pickByPlayability(node),
       SelectionMode.trappy => _pickByOpponentCpl(node),
     };
-    return _applySetupBias(node, winner);
+    // Setup bias last: an explicit preferred system outranks the soft
+    // memorability preference.
+    return _applySetupBias(node, _applyMemorabilityBias(node, winner));
+  }
+
+  /// Memorability tie-break: within
+  /// [TreeBuildConfig.memorabilityToleranceCp] of the best child eval,
+  /// prefer the move the user would most naturally play anyway (highest
+  /// own-side Maia probability, populated on every our-move child during
+  /// the build).  Natural moves are cheaper to memorize and survive
+  /// forgetting.  Like the setup bias this only constrains the argmax —
+  /// expectimax values are untouched, and the tolerance is capped at
+  /// [TreeBuildConfig.maxEvalLossCp] so the override can never pick a move
+  /// the eval-loss guard would reject.  0 disables.
+  ///
+  /// Skipped in trappy mode: a trappy pick deliberately trades eval for
+  /// trickiness, and a naturalness override within the same tolerance
+  /// would silently cancel exactly those picks.
+  ScoredChild? _applyMemorabilityBias(BuildTreeNode node, ScoredChild? winner) {
+    if (winner == null || config.memorabilityToleranceCp <= 0) return winner;
+    if (config.selectionMode == SelectionMode.trappy) return winner;
+
+    final bestCp = bestSiblingEvalCp(
+      node.children,
+      playAsWhite: config.playAsWhite,
+    );
+    if (bestCp == kWorstEvalCp) return winner;
+
+    final tolerance = config.memorabilityToleranceCp < config.maxEvalLossCp
+        ? config.memorabilityToleranceCp
+        : config.maxEvalLossCp;
+
+    BuildTreeNode? pick;
+    var bestFreq = -1.0;
+    for (final child in node.children) {
+      if (!child.hasEngineEval) continue;
+      // maiaFrequency < 0 means no Maia data — such a child can never win
+      // the tie-break, and when NO child has data the winner stands.
+      if (child.maiaFrequency < 0) continue;
+      if (child.evalForUs(config.playAsWhite) < bestCp - tolerance) continue;
+      if (child.maiaFrequency > bestFreq) {
+        bestFreq = child.maiaFrequency;
+        pick = child;
+      }
+    }
+
+    if (pick == null || identical(pick, winner.child)) return winner;
+    return ScoredChild(child: pick, expectimaxValue: pick.expectimaxValue);
   }
 
   /// Preferred-setup tie-break: within [TreeBuildConfig.setupToleranceCp]

@@ -293,6 +293,102 @@ void main() {
       expect(_markedOurMoves(off).map((n) => n.moveSan), ['e4']);
     });
 
+    test('memorability: natural move wins within tolerance only', () {
+      // Root (our turn, White): e4 has the better eval and expectimax, d4
+      // is the move the user plays far more naturally (Maia 40% vs 5%).
+      BuildTree makeTree({required int d4Cp, double d4Freq = 0.40}) {
+        final root = _node(
+          fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+          san: '',
+          uci: '',
+          ply: 0,
+          isWhiteToMove: true,
+        );
+        final e4 = _node(
+          fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+          san: 'e4',
+          uci: 'e2e4',
+          ply: 1,
+          isWhiteToMove: false,
+          expectimax: 0.72,
+          evalCp: -35, // +35 for White (STM-relative)
+        )..maiaFrequency = 0.05;
+        final d4 = _node(
+          fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+          san: 'd4',
+          uci: 'd2d4',
+          ply: 1,
+          isWhiteToMove: false,
+          expectimax: 0.60,
+          evalCp: -d4Cp, // d4Cp for White
+        )..maiaFrequency = d4Freq;
+        root.children.addAll([e4, d4]);
+        e4.parent = root;
+        d4.parent = root;
+        return BuildTree(root: root);
+      }
+
+      const config = TreeBuildConfig(
+        startFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        playAsWhite: true,
+        memorabilityToleranceCp: 30,
+      );
+
+      // d4 loses 15cp vs e4 (within 30cp) → the natural move is chosen.
+      final within = makeTree(d4Cp: 20);
+      RepertoireSelector(
+        config: config,
+        ecaCalc: ExpectimaxCalculator(config: config),
+      ).select(within);
+      expect(_markedOurMoves(within).map((n) => n.moveSan), ['d4']);
+
+      // d4 loses 75cp (beyond tolerance) → the objective winner stands.
+      final beyond = makeTree(d4Cp: -40);
+      RepertoireSelector(
+        config: config,
+        ecaCalc: ExpectimaxCalculator(config: config),
+      ).select(beyond);
+      expect(_markedOurMoves(beyond).map((n) => n.moveSan), ['e4']);
+
+      // Tolerance 0 (default) disables the bias entirely.
+      final off = makeTree(d4Cp: 20);
+      final disabled = config.copyWith(memorabilityToleranceCp: 0);
+      RepertoireSelector(
+        config: disabled,
+        ecaCalc: ExpectimaxCalculator(config: disabled),
+      ).select(off);
+      expect(_markedOurMoves(off).map((n) => n.moveSan), ['e4']);
+
+      // No Maia data on any child → the winner stands.
+      final noMaia = makeTree(d4Cp: 20, d4Freq: -1.0);
+      noMaia.root.children.first.maiaFrequency = -1.0;
+      RepertoireSelector(
+        config: config,
+        ecaCalc: ExpectimaxCalculator(config: config),
+      ).select(noMaia);
+      expect(_markedOurMoves(noMaia).map((n) => n.moveSan), ['e4']);
+
+      // Trappy mode ignores memorability (a trappy pick deliberately
+      // trades eval for trickiness).
+      final trappyTree = makeTree(d4Cp: 20);
+      trappyTree.root.children.first.cplValue = 5.0; // e4 is the trap line
+      final trappy = config.copyWith(selectionMode: SelectionMode.trappy);
+      RepertoireSelector(
+        config: trappy,
+        ecaCalc: ExpectimaxCalculator(config: trappy),
+      ).select(trappyTree);
+      expect(_markedOurMoves(trappyTree).map((n) => n.moveSan), ['e4']);
+
+      // An explicit preferred setup outranks memorability.
+      final setupTree = makeTree(d4Cp: 20);
+      final setup = config.copyWith(setupMoves: 'e4', setupToleranceCp: 30);
+      RepertoireSelector(
+        config: setup,
+        ecaCalc: ExpectimaxCalculator(config: setup),
+      ).select(setupTree);
+      expect(_markedOurMoves(setupTree).map((n) => n.moveSan), ['e4']);
+    });
+
     test('select is idempotent — running twice produces same markings', () {
       final tree = _twoBranchTree();
       final config = const TreeBuildConfig(

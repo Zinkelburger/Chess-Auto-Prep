@@ -155,6 +155,13 @@ class TreeBuildConfig {
   /// still be preferred by selection.
   final int setupToleranceCp;
 
+  /// Memorability tie-break: within this many centipawns of the best child
+  /// eval, selection prefers the our-move with the highest own-side Maia
+  /// probability — the move the user would naturally play anyway, which is
+  /// cheaper to memorize.  Capped at [maxEvalLossCp]; ignored in trappy
+  /// mode; 0 disables.
+  final int memorabilityToleranceCp;
+
   // ── Build algorithm ──
   final BuildMode buildMode;
 
@@ -189,6 +196,14 @@ class TreeBuildConfig {
   final int maiaElo;
   final double maiaMinProb;
   final bool maiaOnly;
+
+  /// Temperature reshaping the opponent Maia policy before truncation:
+  /// p → p^(1/T), renormalized over the full policy.  T > 1 flattens the
+  /// distribution (a sloppier, more diverse opponent pool), T < 1 sharpens
+  /// it toward the most common reply.  1.0 is a no-op.  Only the full
+  /// legal-move policy is renormalized — the truncated subset feeding the
+  /// expectimax tail term stays raw as always.
+  final double oppPolicyTemperature;
 
   // ── PGN export ──
   /// Cap on exported lines after similarity pruning: extracted lines are
@@ -248,6 +263,7 @@ class TreeBuildConfig {
     this.verifyDepth = 0,
     this.setupMoves = '',
     this.setupToleranceCp = 30,
+    this.memorabilityToleranceCp = 0,
     this.buildMode = BuildMode.stockfishExpectimax,
     this.evalDepth = kDefaultGenerationEvalDepth,
     this.engineThreads = 0,
@@ -266,6 +282,7 @@ class TreeBuildConfig {
     this.maiaElo = 2200,
     this.maiaMinProb = 0.05,
     this.maiaOnly = true,
+    this.oppPolicyTemperature = 1.0,
     this.targetLineCount = 100,
     this.rankLinesByImportance = true,
     this.annotateMoveProbabilities = true,
@@ -313,6 +330,8 @@ class TreeBuildConfig {
       verifyDepth: (json['verify_depth'] as num?)?.toInt() ?? 0,
       setupMoves: json['setup_moves'] as String? ?? '',
       setupToleranceCp: (json['setup_tolerance_cp'] as num?)?.toInt() ?? 30,
+      memorabilityToleranceCp:
+          (json['memorability_tolerance_cp'] as num?)?.toInt() ?? 0,
       buildMode: _parseBuildMode(json['build_mode'] as String?),
       evalDepth:
           (json['eval_depth'] as num?)?.toInt() ?? kDefaultGenerationEvalDepth,
@@ -332,6 +351,8 @@ class TreeBuildConfig {
       maiaElo: (json['maia_elo'] as num?)?.toInt() ?? 2200,
       maiaMinProb: (json['maia_min_prob'] as num?)?.toDouble() ?? 0.05,
       maiaOnly: json['maia_only'] as bool? ?? true,
+      oppPolicyTemperature:
+          (json['opp_policy_temperature'] as num?)?.toDouble() ?? 1.0,
       targetLineCount: (json['target_line_count'] as num?)?.toInt() ?? 100,
       rankLinesByImportance: json['rank_lines_by_importance'] as bool? ?? true,
       annotateMoveProbabilities:
@@ -532,6 +553,7 @@ class TreeBuildConfig {
     'verify_depth': verifyDepth,
     'setup_moves': setupMoves,
     'setup_tolerance_cp': setupToleranceCp,
+    'memorability_tolerance_cp': memorabilityToleranceCp,
     'build_mode': buildMode.name,
     'eval_depth': evalDepth,
     'engine_threads': resolvedEngineThreads,
@@ -550,6 +572,7 @@ class TreeBuildConfig {
     'maia_elo': maiaElo,
     'maia_min_prob': maiaMinProb,
     'maia_only': maiaOnly,
+    'opp_policy_temperature': oppPolicyTemperature,
     'target_line_count': targetLineCount,
     'rank_lines_by_importance': rankLinesByImportance,
     'annotate_move_probabilities': annotateMoveProbabilities,
@@ -590,6 +613,7 @@ class TreeBuildConfig {
     int? verifyDepth,
     String? setupMoves,
     int? setupToleranceCp,
+    int? memorabilityToleranceCp,
     BuildMode? buildMode,
     int? evalDepth,
     int? engineThreads,
@@ -608,6 +632,7 @@ class TreeBuildConfig {
     int? maiaElo,
     double? maiaMinProb,
     bool? maiaOnly,
+    double? oppPolicyTemperature,
     int? targetLineCount,
     bool? rankLinesByImportance,
     bool? annotateMoveProbabilities,
@@ -647,6 +672,8 @@ class TreeBuildConfig {
       verifyDepth: verifyDepth ?? this.verifyDepth,
       setupMoves: setupMoves ?? this.setupMoves,
       setupToleranceCp: setupToleranceCp ?? this.setupToleranceCp,
+      memorabilityToleranceCp:
+          memorabilityToleranceCp ?? this.memorabilityToleranceCp,
       buildMode: buildMode ?? this.buildMode,
       evalDepth: evalDepth ?? this.evalDepth,
       engineThreads: engineThreads ?? this.engineThreads,
@@ -665,6 +692,7 @@ class TreeBuildConfig {
       maiaElo: maiaElo ?? this.maiaElo,
       maiaMinProb: maiaMinProb ?? this.maiaMinProb,
       maiaOnly: maiaOnly ?? this.maiaOnly,
+      oppPolicyTemperature: oppPolicyTemperature ?? this.oppPolicyTemperature,
       targetLineCount: targetLineCount ?? this.targetLineCount,
       rankLinesByImportance:
           rankLinesByImportance ?? this.rankLinesByImportance,

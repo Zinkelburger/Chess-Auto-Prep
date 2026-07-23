@@ -39,6 +39,7 @@ import '../services/jobs/repertoire_job.dart';
 import '../services/storage/storage_factory.dart';
 import '../services/tree_build_service.dart';
 import '../utils/fen_utils.dart';
+import '../utils/findability.dart';
 import 'generated_repertoire.dart';
 import '../utils/safe_change_notifier.dart';
 import 'generation_session_types.dart';
@@ -426,7 +427,10 @@ class GenerationSessionController extends ChangeNotifier
       try {
         final trapLines =
             _current?.traps.allTraps ??
-            TrapExtractor(playAsWhite: config.playAsWhite).extract(tree);
+            TrapExtractor(
+              playAsWhite: config.playAsWhite,
+              findabilityPRef: pRefForElo(config.maiaElo),
+            ).extract(tree);
         await TrapExtractor.saveToFile(trapLines, filePath);
       } catch (_) {
         // Trap extraction is best-effort

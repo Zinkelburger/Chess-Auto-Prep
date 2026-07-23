@@ -8,6 +8,8 @@ class _BrowseFilterBar extends StatelessWidget {
     required this.statusFilter,
     required this.sort,
     required this.minRating,
+    required this.tagFilter,
+    required this.onToggleTag,
     required this.showBoards,
     required this.onShowBoardsChanged,
     required this.selectMode,
@@ -28,6 +30,8 @@ class _BrowseFilterBar extends StatelessWidget {
   final TacticsStatusFilter statusFilter;
   final TacticsBrowseSort sort;
   final int minRating;
+  final Set<String> tagFilter;
+  final ValueChanged<String> onToggleTag;
   final bool showBoards;
   final ValueChanged<bool> onShowBoardsChanged;
   final bool selectMode;
@@ -184,6 +188,8 @@ class _BrowseFilterBar extends StatelessWidget {
                 minRating: minRating,
                 onChanged: onMinRatingChanged,
               ),
+              const SizedBox(width: 8),
+              _FlawTagChip(selected: tagFilter, onToggle: onToggleTag),
             ],
           ),
           const SizedBox(height: 4),
@@ -249,6 +255,69 @@ class _MistakeTypeChip extends StatelessWidget {
       onSelected: (_) => onToggle(),
       visualDensity: VisualDensity.compact,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+  }
+}
+
+class _FlawTagChip extends StatelessWidget {
+  const _FlawTagChip({required this.selected, required this.onToggle});
+
+  /// Every tag the flaw tagger can emit, grouped by family (impact,
+  /// opportunity, phase, tempo).  Selecting several narrows with AND —
+  /// "my low-clock endgame blunders".
+  static const List<String> knownTags = [
+    'reversed',
+    'squandered',
+    'miss',
+    'lucky',
+    'opening',
+    'middlegame',
+    'endgame',
+    'low-clock',
+    'hasty',
+    'unrushed',
+  ];
+
+  final Set<String> selected;
+
+  /// Called with a tag to toggle it, or '' for "Any tags" (clear all).
+  final ValueChanged<String> onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      tooltip: 'Filter by flaw tags (all selected tags must match)',
+      onSelected: onToggle,
+      itemBuilder: (_) => [
+        const PopupMenuItem(value: '', child: Text('Any tags')),
+        for (final tag in knownTags)
+          CheckedPopupMenuItem(
+            value: tag,
+            checked: selected.contains(tag),
+            child: Text(tag),
+          ),
+      ],
+      child: Chip(
+        label: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.label_outline,
+              size: 13,
+              color: selected.isNotEmpty
+                  ? AppColors.starAccent
+                  : AppColors.onSurfaceMuted,
+            ),
+            const SizedBox(width: 2),
+            Text(
+              selected.isEmpty ? 'Tags' : selected.join(' + '),
+              style: const TextStyle(fontSize: 11),
+            ),
+          ],
+        ),
+        visualDensity: VisualDensity.compact,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
     );
   }
 }

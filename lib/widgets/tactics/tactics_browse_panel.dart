@@ -75,6 +75,9 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
   TacticsBrowseSort _sort = TacticsBrowseSort.newest;
   int _minRating = 0; // 0 = show all ratings
 
+  /// Flaw-tag filter: a tactic must carry EVERY selected tag (empty = all).
+  final Set<String> _tagFilter = {};
+
   /// Show a small board preview next to each tactic.
   bool _showBoards = true;
 
@@ -108,6 +111,9 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
       final pos = positions[i];
       if (!_enabledTypes.contains(pos.mistakeType)) continue;
       if (_minRating > 0 && pos.rating < _minRating) continue;
+      if (_tagFilter.isNotEmpty && !_tagFilter.every(pos.flawTags.contains)) {
+        continue;
+      }
       switch (_statusFilter) {
         case TacticsStatusFilter.all:
           break;
@@ -184,6 +190,7 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
           statusFilter: _statusFilter,
           sort: _sort,
           minRating: _minRating,
+          tagFilter: _tagFilter,
           showBoards: _showBoards,
           onShowBoardsChanged: _setShowBoards,
           selectMode: _selectMode,
@@ -196,6 +203,13 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
           onStatusChanged: (f) => setState(() => _statusFilter = f),
           onSortChanged: (s) => setState(() => _sort = s),
           onMinRatingChanged: (r) => setState(() => _minRating = r),
+          onToggleTag: (tag) => setState(() {
+            if (tag.isEmpty) {
+              _tagFilter.clear();
+            } else if (!_tagFilter.remove(tag)) {
+              _tagFilter.add(tag);
+            }
+          }),
           onToggleSelectMode: () {
             if (_selectMode) {
               _exitSelectMode();

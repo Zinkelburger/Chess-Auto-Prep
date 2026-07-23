@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/core/puzzle_creator_controller.dart';
+import 'package:chess_auto_prep/models/tactics_position.dart';
 import 'package:chess_auto_prep/services/tactics_engine.dart';
 import 'package:chess_auto_prep/services/tactics_database.dart';
 import 'package:dartchess/dartchess.dart';
@@ -126,7 +127,7 @@ void main() {
       final puzzle = c.buildPuzzle(note: 'note with, comma');
 
       final row = puzzle.toCsvRow();
-      expect(row.length, 21);
+      expect(row.length, TacticsPosition.csvColumnCount);
       final decoded = // simulate CSV write/read of the row values
       puzzle
           .toJson();

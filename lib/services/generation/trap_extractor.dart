@@ -26,10 +26,15 @@ class TrapExtractor {
   /// Minimum trick surplus to include (matches C default 0.005).
   final double minTrickSurplus;
 
+  /// Findability bar (`pRefForElo(maiaElo)`) discounting traps whose
+  /// punishing reply is a move a human rarely finds; null disables.
+  final double? findabilityPRef;
+
   TrapExtractor({
     required this.playAsWhite,
     this.minTrapScore = 0.05,
     this.minTrickSurplus = 0.005,
+    this.findabilityPRef,
   });
 
   /// Walk the tree and return trap lines sorted by trick surplus descending.
@@ -87,7 +92,7 @@ class TrapExtractor {
         : node.isWhiteToMove;
     if (!isOpponentMove) return;
 
-    final analysis = analyzeTrapScore(node);
+    final analysis = analyzeTrapScore(node, findabilityPRef: findabilityPRef);
     if (analysis == null || analysis.popularIsBest) return;
 
     final mostPopular = analysis.mostPopular;

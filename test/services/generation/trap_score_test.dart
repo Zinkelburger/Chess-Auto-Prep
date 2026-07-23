@@ -129,6 +129,137 @@ void main() {
       expect(analysis.trapScore, closeTo(0.3, 1e-12));
     });
 
+    test('findability discounts a trap with an inhuman refutation', () {
+      final node = _opponentNode();
+      final popular = makeNode(
+        fen: kFenAfterE4E5,
+        san: 'e5',
+        ply: 2,
+        isWhiteToMove: true,
+        evalCp: 100,
+        moveProbability: 0.6,
+        parent: node,
+      );
+      makeNode(
+        fen: kFenAfterE4C5,
+        san: 'c5',
+        ply: 2,
+        isWhiteToMove: true,
+        evalCp: 0,
+        moveProbability: 0.4,
+        parent: node,
+      );
+      // Our punishing reply under the popular blunder: strong but rarely
+      // found (Maia 1% against a 5% bar → factor 0.2).
+      final refutation = makeNode(
+        fen: kFenAfterE4E5Nf3,
+        san: 'Nf3',
+        ply: 3,
+        isWhiteToMove: false,
+        evalCp: -120, // our eval +120
+        parent: popular,
+      );
+      refutation.maiaFrequency = 0.01;
+
+      final analysis = analyzeTrapScore(node, findabilityPRef: 0.05)!;
+      expect(analysis.refutation, same(refutation));
+      expect(analysis.refutationFindability, closeTo(0.2, 1e-12));
+      // Raw trap 0.3 (see test above) × 0.2.
+      expect(analysis.trapScore, closeTo(0.06, 1e-12));
+
+      // Without a pRef the raw formula is untouched.
+      final raw = analyzeTrapScore(node)!;
+      expect(raw.refutationFindability, 1.0);
+      expect(raw.trapScore, closeTo(0.3, 1e-12));
+    });
+
+    test('findable refutations and missing Maia data are never demoted', () {
+      final node = _opponentNode();
+      final popular = makeNode(
+        fen: kFenAfterE4E5,
+        san: 'e5',
+        ply: 2,
+        isWhiteToMove: true,
+        evalCp: 100,
+        moveProbability: 0.6,
+        parent: node,
+      );
+      makeNode(
+        fen: kFenAfterE4C5,
+        san: 'c5',
+        ply: 2,
+        isWhiteToMove: true,
+        evalCp: 0,
+        moveProbability: 0.4,
+        parent: node,
+      );
+      final refutation = makeNode(
+        fen: kFenAfterE4E5Nf3,
+        san: 'Nf3',
+        ply: 3,
+        isWhiteToMove: false,
+        evalCp: -120,
+        parent: popular,
+      );
+
+      // maiaFrequency defaults to -1 (no Maia data) → factor 1.0.
+      var analysis = analyzeTrapScore(node, findabilityPRef: 0.05)!;
+      expect(analysis.refutationFindability, 1.0);
+      expect(analysis.trapScore, closeTo(0.3, 1e-12));
+
+      // Well above the bar → capped at 1.0, never boosted.
+      refutation.maiaFrequency = 0.5;
+      analysis = analyzeTrapScore(node, findabilityPRef: 0.05)!;
+      expect(analysis.refutationFindability, 1.0);
+      expect(analysis.trapScore, closeTo(0.3, 1e-12));
+    });
+
+    test('refutation prefers the selected repertoire move', () {
+      final node = _opponentNode();
+      final popular = makeNode(
+        fen: kFenAfterE4E5,
+        san: 'e5',
+        ply: 2,
+        isWhiteToMove: true,
+        evalCp: 100,
+        moveProbability: 0.6,
+        parent: node,
+      );
+      makeNode(
+        fen: kFenAfterE4C5,
+        san: 'c5',
+        ply: 2,
+        isWhiteToMove: true,
+        evalCp: 0,
+        moveProbability: 0.4,
+        parent: node,
+      );
+      final strongReply = makeNode(
+        fen: kFenAfterE4E5Nf3,
+        san: 'Nf3',
+        ply: 3,
+        isWhiteToMove: false,
+        evalCp: -120,
+        parent: popular,
+      );
+      strongReply.maiaFrequency = 0.01;
+      final repertoireReply = makeNode(
+        fen: kFenAfterE4C5Nf3,
+        san: 'Bc4',
+        ply: 3,
+        isWhiteToMove: false,
+        evalCp: -80, // weaker eval, but it is the selected move
+        parent: popular,
+      );
+      repertoireReply
+        ..isRepertoireMove = true
+        ..maiaFrequency = 0.10;
+
+      final analysis = analyzeTrapScore(node, findabilityPRef: 0.05)!;
+      expect(analysis.refutation, same(repertoireReply));
+      expect(analysis.refutationFindability, 1.0);
+    });
+
     test('trap factor clamps at 1.0 for evalDiff > 200', () {
       final node = _opponentNode();
       makeNode(

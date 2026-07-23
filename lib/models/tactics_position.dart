@@ -28,6 +28,13 @@ class TacticsPosition {
   opponentBestResponse; // Opponent's best reply after user's bad move
   final int rating; // 0 = unrated, 1–5 star quality rating
 
+  /// Flaw attribution tags computed at mine time (see FlawTagger): at most
+  /// one each of impact (reversed/squandered), opportunity (miss/lucky),
+  /// phase (opening/middlegame/endgame) and tempo (low-clock/hasty/
+  /// unrushed).  Tempo is absent — not `unrushed` — when the source game
+  /// carried no clock data.  Empty for legacy and custom puzzles.
+  final List<String> flawTags;
+
   const TacticsPosition({
     required this.fen,
     required this.userMove,
@@ -50,6 +57,7 @@ class TacticsPosition {
     this.hintsUsed = 0,
     this.opponentBestResponse = '',
     this.rating = 0,
+    this.flawTags = const [],
   });
 
   /// Create a copy with selected fields overridden.
@@ -76,6 +84,7 @@ class TacticsPosition {
     int? hintsUsed,
     String? opponentBestResponse,
     int? rating,
+    List<String>? flawTags,
   }) {
     return TacticsPosition(
       fen: fen ?? this.fen,
@@ -101,6 +110,7 @@ class TacticsPosition {
       hintsUsed: hintsUsed ?? this.hintsUsed,
       opponentBestResponse: opponentBestResponse ?? this.opponentBestResponse,
       rating: rating ?? this.rating,
+      flawTags: flawTags ?? this.flawTags,
     );
   }
 
@@ -141,8 +151,8 @@ class TacticsPosition {
     return match != null ? int.tryParse(match.group(1)!) ?? 1 : 1;
   }
 
-  /// CSV column count.  Old files may have 17–20; current format has 21.
-  static const int csvColumnCount = 21;
+  /// CSV column count.  Old files may have 17–21; current format has 22.
+  static const int csvColumnCount = 22;
 
   /// Create from CSV row (18 columns; tolerates legacy 17-column rows).
   factory TacticsPosition.fromCsv(List<dynamic> row) {
@@ -186,6 +196,10 @@ class TacticsPosition {
           : const [],
       // Column 20 — source-game movetext; tolerate pre-source-game files.
       sourceMovetext: row.length > 20 ? row[20].toString() : '',
+      // Column 21 — flaw attribution tags; tolerate pre-tag files.
+      flawTags: row.length > 21
+          ? row[21].toString().split('|').where((s) => s.isNotEmpty).toList()
+          : const [],
     );
   }
 
@@ -237,6 +251,11 @@ class TacticsPosition {
       hintsUsed: json['hints_used'] as int? ?? 0,
       opponentBestResponse: json['opponent_best_response'] as String? ?? '',
       rating: json['rating'] as int? ?? 0,
+      flawTags:
+          (json['flaw_tags'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          const [],
     );
   }
 
@@ -264,6 +283,7 @@ class TacticsPosition {
       'hints_used': hintsUsed,
       'opponent_best_response': opponentBestResponse,
       'rating': rating,
+      'flaw_tags': flawTags,
     };
   }
 
@@ -291,6 +311,7 @@ class TacticsPosition {
       rating,
       solutionPv.join('|'),
       sourceMovetext,
+      flawTags.join('|'),
     ];
   }
 }

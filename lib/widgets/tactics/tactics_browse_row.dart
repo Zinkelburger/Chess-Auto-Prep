@@ -192,7 +192,9 @@ class TacticsBrowseRow extends StatelessWidget {
               Expanded(
                 flex: 2,
                 child: Text(
-                  pos.positionContext,
+                  pos.flawTags.isEmpty
+                      ? pos.positionContext
+                      : '${pos.positionContext} · ${pos.flawTags.join(' · ')}',
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 13),
                 ),

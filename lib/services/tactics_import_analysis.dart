@@ -55,12 +55,38 @@ Future<List<TacticsPosition>> _analyzeGameWithWorker({
   if (userColor == null) return [];
 
   final moves = <String>[];
+  final clocks = <double?>[];
   var node = game.moves;
   while (node.children.isNotEmpty) {
     final child = node.children.first;
     moves.add(child.data.san);
+    clocks.add(clockSecondsFromComments(child.data.comments));
     node = child;
   }
+
+  // Flaw-tag context: base time / increment for tempo tags, final result
+  // for the end-of-game lucky rule.
+  final (baseTime, increment) = parseTimeControl(game.headers['TimeControl']);
+  final gameResult = game.headers['Result'] ?? '*';
+  final userLost =
+      (gameResult == '1-0' && userColor == Side.black) ||
+      (gameResult == '0-1' && userColor == Side.white);
+
+  // Winning chances around every evaluated user move (wcAfter null when the
+  // game ended on the move), plus one pending record per mined tactic so
+  // tags can be assigned after the walk — `lucky` needs the NEXT user
+  // move's pre-move eval, which doesn't exist yet while mining.
+  final userWc = <({double wcBefore, double? wcAfter})>[];
+  final pendingTags =
+      <
+        ({
+          int posIndex,
+          int userMoveIndex,
+          bool isBlunder,
+          String fenBefore,
+          int plyIndex,
+        })
+      >[];
 
   final positions = <TacticsPosition>[];
   final setupFlag = game.headers['SetUp'] ?? game.headers['Setup'] ?? '';
@@ -82,7 +108,8 @@ Future<List<TacticsPosition>> _analyzeGameWithWorker({
       : '';
   int moveNumber = 1;
 
-  for (final san in moves) {
+  for (var plyIndex = 0; plyIndex < moves.length; plyIndex++) {
+    final san = moves[plyIndex];
     if (shouldAbort?.call() ?? false) break;
     final isUserTurn = pos.turn == userColor;
 
@@ -94,7 +121,11 @@ Future<List<TacticsPosition>> _analyzeGameWithWorker({
       if (move == null) break;
       pos = pos.play(move);
 
+      // evalA is the user's turn → already the user's perspective.
+      final wcBefore = _winningChances(evalA.effectiveCp);
+
       if (pos.isGameOver) {
+        userWc.add((wcBefore: wcBefore, wcAfter: null));
         if (pos.turn == Side.white) moveNumber++;
         continue;
       }
@@ -103,15 +134,12 @@ Future<List<TacticsPosition>> _analyzeGameWithWorker({
       final evalB = await worker.evaluateFen(pos.fen, depth);
       final fenAfter = pos.fen;
 
-      // EvalWorker returns side-to-move perspective:
-      //   evalA: user's turn  → already user's perspective
-      //   evalB: opponent's turn → negate for user's perspective
-      final cpA = evalA.effectiveCp;
+      // evalB is the opponent's turn → negate for the user's perspective.
       final cpB = -evalB.effectiveCp;
 
-      final wcBefore = _winningChances(cpA);
       final wcAfter = _winningChances(cpB);
       final delta = wcBefore - wcAfter;
+      userWc.add((wcBefore: wcBefore, wcAfter: wcAfter));
 
       final isBlunder = delta >= 0.3;
       final isMistake = delta >= 0.2 && delta < 0.3;
@@ -185,12 +213,19 @@ Future<List<TacticsPosition>> _analyzeGameWithWorker({
                 '${userColor == Side.white ? 'White' : 'Black'} to play',
             gameWhite: game.headers['White'] ?? '',
             gameBlack: game.headers['Black'] ?? '',
-            gameResult: game.headers['Result'] ?? '*',
+            gameResult: gameResult,
             gameDate: game.headers['Date'] ?? '',
             gameId: gameId,
             sourceMovetext: sourceMovetext,
           ),
         );
+        pendingTags.add((
+          posIndex: positions.length - 1,
+          userMoveIndex: userWc.length - 1,
+          isBlunder: isBlunder,
+          fenBefore: fenBefore,
+          plyIndex: plyIndex,
+        ));
       }
     } else {
       final move = pos.parseSan(san);
@@ -198,6 +233,33 @@ Future<List<TacticsPosition>> _analyzeGameWithWorker({
     }
 
     if (pos.turn == Side.white) moveNumber++;
+  }
+
+  // Tag pass: needs the full user-move eval series (miss looks back one
+  // user move, lucky looks ahead one), so it runs after the walk.
+  for (final entry in pendingTags) {
+    final k = entry.userMoveIndex;
+    final wcAfter = userWc[k].wcAfter;
+    if (wcAfter == null) continue; // mined moves always have a post-eval
+    final tags = buildFlawTags(
+      isBlunder: entry.isBlunder,
+      wcBefore: userWc[k].wcBefore,
+      wcAfter: wcAfter,
+      wcAfterPrevUserMove: k > 0 ? userWc[k - 1].wcAfter : null,
+      wcBeforeNextUserMove: k + 1 < userWc.length
+          ? userWc[k + 1].wcBefore
+          : null,
+      userLost: userLost,
+      fenBefore: entry.fenBefore,
+      clockAfterSeconds: entry.plyIndex < clocks.length
+          ? clocks[entry.plyIndex]
+          : null,
+      moveTimeSeconds: moveTimeSeconds(clocks, entry.plyIndex, increment ?? 0),
+      baseTimeSeconds: baseTime,
+    );
+    positions[entry.posIndex] = positions[entry.posIndex].copyWith(
+      flawTags: tags,
+    );
   }
 
   return positions;

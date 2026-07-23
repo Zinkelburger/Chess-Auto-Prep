@@ -144,7 +144,8 @@ class GamesLibraryService {
     final params = <String, String>{
       'max': '$maxGames',
       'perfType': 'bullet,blitz,rapid,classical',
-      'clocks': 'false',
+      // Clocks feed the tempo flaw tags when these PGNs are re-mined.
+      'clocks': 'true',
       'evals': 'false',
     };
     if (since != null) {

@@ -13,6 +13,7 @@ mixin _GenerationConfigIo
     _minEvalCtrl.text = config.minEvalCp.toString();
     _maxEvalCtrl.text = config.maxEvalCp.toString();
     _maiaEloCtrl.text = config.maiaElo.toString();
+    _oppPolicyTempCtrl.text = config.oppPolicyTemperature.toString();
     _multipvCtrl.text = config.ourMultipv.toString();
     _oppMaxChildrenCtrl.text = config.oppMaxChildren.toString();
     _oppMassTargetCtrl.text = config.oppMassTarget.toString();
@@ -24,6 +25,7 @@ mixin _GenerationConfigIo
     _verifyDepthCtrl.text = config.verifyDepth.toString();
     _setupMovesCtrl.text = config.setupMoves;
     _setupToleranceCtrl.text = config.setupToleranceCp.toString();
+    _memorabilityToleranceCtrl.text = config.memorabilityToleranceCp.toString();
     _searchAlgorithm = config.searchAlgorithm;
     _wideOpening = config.openingWidthPlies > 0;
     _verifyFinal = config.verifyFinal;
@@ -186,6 +188,11 @@ mixin _GenerationConfigIo
           int.tryParse(_maxEvalCtrl.text.trim()) ?? (playAsWhite ? 200 : 100),
       maiaElo: int.tryParse(_maiaEloCtrl.text.trim()) ?? 2200,
       maiaOnly: _lichessDbOverride == null,
+      oppPolicyTemperature:
+          (double.tryParse(_oppPolicyTempCtrl.text.trim()) ?? 1.0).clamp(
+            0.1,
+            10.0,
+          ),
       targetLineCount: (int.tryParse(_targetLinesCtrl.text.trim()) ?? 100)
           .clamp(0, 100000),
       rankLinesByImportance: _rankLinesByImportance,
@@ -215,6 +222,11 @@ mixin _GenerationConfigIo
       setupMoves: _setupMovesCtrl.text.trim(),
       setupToleranceCp: (int.tryParse(_setupToleranceCtrl.text.trim()) ?? 30)
           .clamp(0, 500),
+      memorabilityToleranceCp:
+          (int.tryParse(_memorabilityToleranceCtrl.text.trim()) ?? 0).clamp(
+            0,
+            500,
+          ),
       useLichessDb: _lichessDbOverride != null,
       useMasters: _lichessDbOverride == LichessDatabase.masters,
       speeds: _lichessSpeeds.join(','),

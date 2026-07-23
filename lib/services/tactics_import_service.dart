@@ -16,8 +16,10 @@ import 'tactics_database.dart';
 import 'pgn_parsing_service.dart';
 import 'storage/storage_factory.dart';
 import '../utils/chesscom_lichess_elo.dart';
+import '../utils/clock_utils.dart';
 import '../utils/log.dart';
 import '../utils/movetext_builder.dart';
+import 'tactics/flaw_tagger.dart';
 import 'tactics_parallel_analyzer_stub.dart'
     if (dart.library.io) 'tactics_parallel_analyzer.dart'
     as parallel;
@@ -247,7 +249,8 @@ class TacticsImportService {
     _cancelled = false;
     final params = <String, String>{
       'evals': 'false',
-      'clocks': 'false',
+      // Clocks feed the tempo flaw tags (low-clock/hasty/unrushed).
+      'clocks': 'true',
       'opening': 'false',
       'moves': 'true',
     };

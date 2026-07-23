@@ -87,4 +87,50 @@ void main() {
       expect(smoothingWorthwhile(30 * kSmoothingSkipFactor + 1, 30), isFalse);
     });
   });
+
+  group('applyPolicyTemperature', () {
+    const policy = {'e7e5': 0.6, 'c7c5': 0.3, 'g8f6': 0.1};
+
+    test('T = 1 is the identity', () {
+      expect(applyPolicyTemperature(policy, 1.0), same(policy));
+    });
+
+    test('T ≤ 0 and empty policies pass through unchanged', () {
+      expect(applyPolicyTemperature(policy, 0.0), same(policy));
+      expect(applyPolicyTemperature(policy, -2.0), same(policy));
+      expect(applyPolicyTemperature(const {}, 2.0), isEmpty);
+    });
+
+    test('T > 1 flattens toward uniform and renormalizes', () {
+      final out = applyPolicyTemperature(policy, 2.0);
+      final total = out.values.fold(0.0, (s, p) => s + p);
+      expect(total, closeTo(1.0, 1e-12));
+      expect(out['e7e5']!, lessThan(0.6));
+      expect(out['g8f6']!, greaterThan(0.1));
+      // Order is preserved: flattening never reorders moves.
+      expect(out['e7e5']!, greaterThan(out['c7c5']!));
+      expect(out['c7c5']!, greaterThan(out['g8f6']!));
+    });
+
+    test('T < 1 sharpens onto the most common reply', () {
+      final out = applyPolicyTemperature(policy, 0.5);
+      final total = out.values.fold(0.0, (s, p) => s + p);
+      expect(total, closeTo(1.0, 1e-12));
+      expect(out['e7e5']!, greaterThan(0.6));
+      expect(out['g8f6']!, lessThan(0.1));
+    });
+
+    test('exact values for T = 2 (square root then renormalize)', () {
+      final out = applyPolicyTemperature({'a': 0.64, 'b': 0.36}, 2.0);
+      // sqrt: 0.8 and 0.6, total 1.4.
+      expect(out['a']!, closeTo(0.8 / 1.4, 1e-12));
+      expect(out['b']!, closeTo(0.6 / 1.4, 1e-12));
+    });
+
+    test('zero-probability moves stay at zero', () {
+      final out = applyPolicyTemperature({'a': 1.0, 'b': 0.0}, 2.0);
+      expect(out['b'], 0.0);
+      expect(out['a'], closeTo(1.0, 1e-12));
+    });
+  });
 }

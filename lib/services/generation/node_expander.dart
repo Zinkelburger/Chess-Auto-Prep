@@ -166,7 +166,7 @@ Future<Map<String, double>> maiaPolicyForSmoothing(
     final result = await MaiaFactory.instance!.evaluate(fen, config.maiaElo);
     run.stats.maiaEvals++;
     run.stats.maiaTotalMs += sw.elapsedMilliseconds;
-    return result.policy;
+    return applyPolicyTemperature(result.policy, config.oppPolicyTemperature);
   } catch (e) {
     run.log('Maia prior lookup failed @ $fen: $e');
     return const {};
@@ -309,7 +309,11 @@ abstract class NodeExpander {
       return;
     }
 
-    final sortedMoves = maiaResult.policy.entries.toList()
+    final policy = applyPolicyTemperature(
+      maiaResult.policy,
+      config.oppPolicyTemperature,
+    );
+    final sortedMoves = policy.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
     addOpponentChildren(
@@ -328,7 +332,7 @@ abstract class NodeExpander {
     );
 
     if (maiaForInject) {
-      await _maybeInjectPvContinuation(node, maiaPolicy: maiaResult.policy);
+      await _maybeInjectPvContinuation(node, maiaPolicy: policy);
     }
   }
 

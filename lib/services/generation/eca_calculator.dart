@@ -8,6 +8,7 @@ library;
 import '../../models/build_tree_node.dart';
 import '../../utils/ease_utils.dart' show winProbability;
 import '../../utils/eval_constants.dart';
+import '../../utils/findability.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
 import 'node_selection.dart';
@@ -265,7 +266,10 @@ class ExpectimaxCalculator {
     final isOurMove = node.isWhiteToMove == config.playAsWhite;
     if (isOurMove) return;
 
-    final analysis = analyzeTrapScore(node);
+    final analysis = analyzeTrapScore(
+      node,
+      findabilityPRef: pRefForElo(config.maiaElo),
+    );
     if (analysis == null) return;
     node.trapScore = analysis.trapScore;
   }

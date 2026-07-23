@@ -136,6 +136,7 @@ String encodePuzzlePgn(
   if (puzzle.timeToSolve > 0) header('TimeToSolve', '${puzzle.timeToSolve}');
   if (puzzle.hintsUsed > 0) header('HintsUsed', '${puzzle.hintsUsed}');
   if (puzzle.rating > 0) header('StarRating', '${puzzle.rating}');
+  if (puzzle.flawTags.isNotEmpty) header('FlawTags', puzzle.flawTags.join(' '));
 
   // Longer display PV (the mainline is only the trainable line).
   if (solutionPvSan.isNotEmpty && !_sameLine(solutionPvSan, solutionSan)) {
@@ -313,6 +314,10 @@ bool _sameLine(List<String> a, List<String> b) {
           timeToSolve: double.tryParse(headers['TimeToSolve'] ?? '') ?? 0.0,
           hintsUsed: int.tryParse(headers['HintsUsed'] ?? '') ?? 0,
           rating: int.tryParse(headers['StarRating'] ?? '') ?? 0,
+          flawTags: (headers['FlawTags'] ?? '')
+              .split(RegExp(r'\s+'))
+              .where((s) => s.isNotEmpty)
+              .toList(),
         ),
       );
       seenFens.add(fen);
