@@ -289,14 +289,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                   ),
                 ),
               ],
-              const SizedBox(height: 8),
-              Text(
-                _configFormKey.currentState?.selectionModeDescription() ?? '',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceMuted,
-                ),
-              ),
             ],
           ),
         );

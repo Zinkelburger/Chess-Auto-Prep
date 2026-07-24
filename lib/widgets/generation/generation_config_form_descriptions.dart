@@ -33,6 +33,14 @@ mixin _GenerationConfigDescriptions on _GenerationConfigFormStateBase {
     }
   }
 
+  String _selectionModeLabel(SelectionMode mode) => switch (mode) {
+    SelectionMode.expectimax => 'Practical expectimax (recommended)',
+    SelectionMode.engineOnly => 'Engine best move',
+    SelectionMode.dbWinRateOnly => 'Database win rate',
+    SelectionMode.playable => 'Balanced strength + ease',
+    SelectionMode.trappy => 'Trappy (maximize opponent mistakes)',
+  };
+
   String _selectionModeDescription() {
     switch (_selectionMode) {
       case SelectionMode.expectimax:

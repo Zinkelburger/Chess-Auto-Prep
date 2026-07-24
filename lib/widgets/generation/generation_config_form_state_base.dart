@@ -89,5 +89,15 @@ abstract class _GenerationConfigFormStateBase
 
   SelectionMode _selectionMode = SelectionMode.expectimax;
   BuildMode _buildMode = BuildMode.stockfishExpectimax;
-  bool _showAdvanced = false;
+
+  /// Evaluation databases expander.  The section stays MOUNTED while
+  /// collapsed (Offstage, not conditional build): `toConfig`,
+  /// `validateBeforeStart` and mid-build quota updates all reach it through
+  /// [_evalSourcesKey], which must never be null.
+  bool _showEvalSources = false;
+
+  /// Named saved profiles (name → config JSON), cached from
+  /// [GenerationPresetStore] for the presets menu.
+  final GenerationPresetStore _presetStore = GenerationPresetStore();
+  Map<String, Map<String, dynamic>> _savedPresets = {};
 }
