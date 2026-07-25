@@ -412,6 +412,45 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
     _inlineAnchorFen = null;
   }
 
+  /// From/to squares of the last two half-moves leading to the current
+  /// position — mainline, variation, or inline comment-line preview. Hosts
+  /// pass this to [ChessBoardWidget.recentMoveSquares] for the subtle
+  /// Chessable-style recent-move trail.
+  Set<String> _recentMoveSquares() {
+    List<String> mainlineSans(int upTo) => [
+      for (int i = 0; i < upTo && i < _moveHistory.length; i++)
+        _moveHistory[i].san,
+    ];
+
+    try {
+      if (_inlineActive) {
+        final anchorFen = _inlineAnchorFen;
+        if (anchorFen != null) {
+          return recentMoveTrailSquares(
+            Chess.fromSetup(Setup.parseFen(anchorFen)),
+            _inlineSans.sublist(0, _inlineCursor),
+          );
+        }
+        return recentMoveTrailSquares(_startPosition, [
+          ...mainlineSans(_inlineBaseIndex),
+          ..._inlineSans.sublist(0, _inlineCursor),
+        ]);
+      }
+      if (_analysisPath.isNotEmpty) {
+        return recentMoveTrailSquares(_startPosition, [
+          ...mainlineSans(_activeBranchPly),
+          for (final node in _analysisPath) node.san,
+        ]);
+      }
+      return recentMoveTrailSquares(
+        _startPosition,
+        mainlineSans(_mainLineIndex),
+      );
+    } catch (_) {
+      return const {};
+    }
+  }
+
   bool get _canGoBack {
     return _inlineActive || _analysisPath.isNotEmpty || _mainLineIndex > 0;
   }

@@ -90,18 +90,11 @@ mixin _TacticsKeyboardActions
     // 'A' is the mnemonic but it's the a-file, so it's swallowed as a typed
     // move character while the move box has focus (its default state). 'V' is
     // never part of SAN/UCI, so it stays [KeyBinding.safeWhileTypingMoves] and
-    // triggers Analyze even mid-type — the reliable key to reach for.
+    // opens the PGN tab even mid-type — the reliable key to reach for. Both
+    // always open the PGN tab; 'A' used to mean Reset when mid-tactic, which
+    // made "open PGN" need two presses. Reset stays a button-only action.
     for (final key in [LogicalKeyboardKey.keyA, LogicalKeyboardKey.keyV])
-      KeyBinding.run(key, 'Analyze / reset analysis', () {
-        final appState = context.read<AppState>();
-        final isAtStartingPosition =
-            appState.currentPosition.fen == _session.currentPosition!.fen;
-        if (isAtStartingPosition) {
-          _onAnalyze();
-        } else {
-          _resetAnalysis();
-        }
-      }),
+      KeyBinding.run(key, 'Analyze (open PGN)', _onAnalyze),
     KeyBinding.run(
       LogicalKeyboardKey.keyE,
       'Toggle engine',

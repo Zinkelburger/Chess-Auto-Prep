@@ -9,7 +9,9 @@ import 'package:provider/provider.dart';
 import 'package:dartchess/dartchess.dart';
 
 import '../core/app_state.dart';
+import '../core/study_controller.dart';
 import '../models/engine_settings.dart';
+import '../models/tactics_position.dart';
 import '../models/tactics_session_settings.dart';
 import '../services/engine/stockfish_pool.dart';
 import '../services/maia_factory.dart';
@@ -19,12 +21,14 @@ import '../services/tactics/tactics_session_controller.dart';
 import '../services/tactics/tactics_solution_pgn.dart';
 import '../services/tactics_database.dart';
 import '../services/storage/storage_factory.dart';
+import '../services/stored_game_lookup.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import 'engine/engine_gate.dart';
 import 'engine/inline_engine_bar.dart';
+import 'pgn/add_to_study_dialog.dart';
 import 'trainer_keyboard_scope.dart';
 import 'pgn_viewer_widget.dart';
 import 'pgn_with_engine.dart';
@@ -130,6 +134,7 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
     _session.onAnalysisMove = _addMoveToAnalysis;
     _session.onUserMoveAccepted = _pgnViewerController.goForward;
     _session.onSessionCompleted = _onQueueExhausted;
+    _session.onBackRequested = _onBackRequested;
     // Bridge navigation keys pressed while the move-input field owns focus back
     // to the panel shortcuts (the field is a focus-tree sibling — see
     // _handleTrainerNavigationKey).
@@ -263,6 +268,7 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
     _session.onAnalysisMove = null;
     _session.onUserMoveAccepted = null;
     _session.onSessionCompleted = null;
+    _session.onBackRequested = null;
     _session.onTrainerNavigationKey = null;
     _focusNode.dispose();
     _tabController.dispose();
@@ -286,13 +292,20 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
       child: Column(
         children: [
           if (_database.isExternalSet) _buildReviewBanner(),
-          TabBar(
-            controller: _tabController,
-            tabs: [
-              const Tab(text: 'Tactic'),
-              // Second slot: Browse when nothing is loaded, PGN analysis
-              // while a puzzle is on the board — never both.
-              Tab(text: _session.hasActivePosition ? 'PGN' : 'Browse'),
+          Row(
+            children: [
+              Expanded(
+                child: TabBar(
+                  controller: _tabController,
+                  tabs: [
+                    const Tab(text: 'Tactic'),
+                    // Second slot: Browse when nothing is loaded, PGN analysis
+                    // while a puzzle is on the board — never both.
+                    Tab(text: _session.hasActivePosition ? 'PGN' : 'Browse'),
+                  ],
+                ),
+              ),
+              if (_session.hasActivePosition) _buildGameMenu(),
             ],
           ),
           Expanded(
@@ -309,6 +322,29 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
           ),
         ],
       ),
+    );
+  }
+
+  // ── Game menu ──────────────────────────────────────────────────────────
+
+  /// Kebab menu next to the tabs while a puzzle is loaded: actions on the
+  /// tactic's source game (add to a study, copy the PGN).
+  Widget _buildGameMenu() {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert, size: 18),
+      tooltip: 'Game actions',
+      onSelected: (action) {
+        switch (action) {
+          case 'add_to_study':
+            unawaited(_addGameToStudy());
+          case 'copy_pgn':
+            unawaited(_copyGamePgn());
+        }
+      },
+      itemBuilder: (_) => const [
+        PopupMenuItem(value: 'add_to_study', child: Text('Add game to study…')),
+        PopupMenuItem(value: 'copy_pgn', child: Text('Copy game PGN')),
+      ],
     );
   }
 
@@ -396,12 +432,6 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
                   isLastSessionPuzzle: _session.isAtLastSessionPuzzle,
                   onAutoAdvanceChanged: _session.setAutoAdvance,
                   onCopyFen: _copyFen,
-                  onBack: _session.playSource == TacticsPlaySource.browse
-                      ? _returnToBrowse
-                      : _leaveSession,
-                  backTooltip: _session.playSource == TacticsPlaySource.browse
-                      ? 'Back to browse'
-                      : 'End session',
                   // Editing is gated by the controller (locked at the unsolved
                   // head of a session) and off entirely for external sets.
                   onEdit: !_database.isExternalSet && _session.canEditCurrent
@@ -417,6 +447,7 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
                   onSolutionMoveTapped: solutionSan.isNotEmpty
                       ? _onSolutionLineMoveTapped
                       : null,
+                  previewFlipped: appState.boardFlipped,
                 )
               else if (_showRecap)
                 TacticsSessionRecap(
@@ -516,6 +547,14 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
       // game is reachable in one click, not just move-by-move stepping.
       showStartEndButtons: true,
       controller: _pgnViewerController,
+      previewFlipped: context.read<AppState>().boardFlipped,
+      // Clicking an engine-line move plays the line up to it as an analysis
+      // variation (same behaviour as the study screen's engine bar).
+      onLineMoveTapped: (sanMoves, clickedIndex) {
+        for (var i = 0; i <= clickedIndex && i < sanMoves.length; i++) {
+          _pgnViewerController.addEphemeralMove(sanMoves[i]);
+        }
+      },
       onPositionChanged: (position) {
         if (_tabController.index != 1) return;
         WidgetsBinding.instance.addPostFrameCallback((_) {

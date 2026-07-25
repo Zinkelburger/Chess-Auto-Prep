@@ -57,6 +57,10 @@ class ChessBoardWidget extends StatefulWidget {
   final bool enableUserMoves;
   final bool flipped;
   final Set<String> highlightedSquares;
+
+  /// From/to squares of the most recent half-moves, kept subtly tinted
+  /// (Chessable-style trail). Quieter than [highlightedSquares].
+  final Set<String> recentMoveSquares;
   final Function(String)? onSquareClicked;
   final Function(String)? onPieceSelected;
   final List<BoardAnnotation> annotations;
@@ -73,6 +77,7 @@ class ChessBoardWidget extends StatefulWidget {
     this.enableUserMoves = true,
     this.flipped = false,
     this.highlightedSquares = const {},
+    this.recentMoveSquares = const {},
     this.onSquareClicked,
     this.onPieceSelected,
     this.annotations = const [],
@@ -106,6 +111,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
   static const Color darkSquareColor = AppColors.boardDarkSquare;
   static const Color selectedSquareColor = AppColors.boardSelected;
   static const Color highlightColor = AppColors.boardHighlight;
+  static const Color recentMoveColor = AppColors.boardRecentMove;
 
   @override
   Widget build(BuildContext context) {
@@ -167,11 +173,13 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
                         ...widget.highlightedSquares,
                         ..._internalHighlights,
                       },
+                      recentMoveSquares: widget.recentMoveSquares,
                       flipped: widget.flipped,
                       lightColor: lightSquareColor,
                       darkColor: darkSquareColor,
                       selectColor: selectedSquareColor,
                       highlightColor: highlightColor,
+                      recentMoveColor: recentMoveColor,
                     ),
                     size: Size(boardSize, boardSize),
                   ),
@@ -525,20 +533,24 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
 class _BoardPainter extends CustomPainter {
   final String? selectedSquare;
   final Set<String> highlightedSquares;
+  final Set<String> recentMoveSquares;
   final bool flipped;
   final Color lightColor;
   final Color darkColor;
   final Color selectColor;
   final Color highlightColor;
+  final Color recentMoveColor;
 
   _BoardPainter({
     required this.selectedSquare,
     required this.highlightedSquares,
+    required this.recentMoveSquares,
     required this.flipped,
     required this.lightColor,
     required this.darkColor,
     required this.selectColor,
     required this.highlightColor,
+    required this.recentMoveColor,
   });
 
   @override
@@ -566,6 +578,10 @@ class _BoardPainter extends CustomPainter {
 
         final rect = Rect.fromLTWH(x, y, squareSize, squareSize);
         canvas.drawRect(rect, Paint()..color = color);
+
+        if (recentMoveSquares.contains(square) && square != selectedSquare) {
+          canvas.drawRect(rect, Paint()..color = recentMoveColor);
+        }
 
         if (highlightedSquares.contains(square) && square != selectedSquare) {
           canvas.drawRect(
@@ -602,10 +618,12 @@ class _BoardPainter extends CustomPainter {
       selectedSquare != old.selectedSquare ||
       flipped != old.flipped ||
       !_setEquals(highlightedSquares, old.highlightedSquares) ||
+      !_setEquals(recentMoveSquares, old.recentMoveSquares) ||
       lightColor != old.lightColor ||
       darkColor != old.darkColor ||
       selectColor != old.selectColor ||
-      highlightColor != old.highlightColor;
+      highlightColor != old.highlightColor ||
+      recentMoveColor != old.recentMoveColor;
 
   static bool _setEquals(Set<String> a, Set<String> b) =>
       a.length == b.length && a.containsAll(b);

@@ -106,9 +106,32 @@ class TacticsImportService {
     return (total: games.length, pending: pending);
   }
 
+  /// GameIds referenced by a saved tactic in any tactics set on disk. The
+  /// stored-PGN archive doubles as the source-game store for the tactics
+  /// PGN tab (full game fast-forwarded to the tactic), so these games must
+  /// survive pruning even after analysis.
+  Future<Set<String>> _tacticReferencedGameIds() async {
+    final ids = <String>{};
+    final storage = StorageFactory.instance;
+    final gameIdRe = RegExp(r'\[GameId "([^"]+)"\]');
+    try {
+      for (final set in await storage.listTacticsSets()) {
+        final content = await storage.readFile(set.filePath);
+        if (content == null) continue;
+        for (final match in gameIdRe.allMatches(content)) {
+          ids.add(match.group(1)!);
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) log.w('Reading tactic gameIds for prune failed: $e');
+    }
+    return ids;
+  }
+
   /// Remove stored PGNs that no longer serve the resume queue: games
-  /// already analyzed, and games played before [since] (expired). Returns
-  /// how many games were removed.
+  /// already analyzed, and games played before [since] (expired). Games a
+  /// saved tactic references are always kept — the tactics PGN tab shows
+  /// them as the full source game. Returns how many games were removed.
   ///
   /// The analyzed-IDs list is intentionally kept — it's a few bytes per
   /// game and is what prevents re-analysis when an overlapping date range
@@ -117,10 +140,15 @@ class TacticsImportService {
     final content = await StorageFactory.instance.readImportedPgns();
     if (content == null || content.isEmpty) return 0;
 
+    final referenced = await _tacticReferencedGameIds();
     final games = splitPgnIntoGames(content);
     final kept = <String>[];
     for (final game in games) {
       final gameId = _extractGameId(game);
+      if (gameId.isNotEmpty && referenced.contains(gameId)) {
+        kept.add(game);
+        continue;
+      }
       if (gameId.isNotEmpty && _isGameAnalyzed(gameId)) continue;
       if (since != null && _isGameBefore(game, since)) continue;
       kept.add(game);

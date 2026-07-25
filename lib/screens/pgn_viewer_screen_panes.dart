@@ -24,6 +24,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
     return FullscreenGameView(
       position: _controller.currentPosition,
       boardFlipped: _controller.boardFlipped,
+      recentMoveSquares: _pgnWidgetController.recentMoveSquares,
       gameLabel: _controller.filteredGames.isNotEmpty
           ? _controller.filteredGames[_controller.currentGameIndex].label
           : '',
@@ -68,6 +69,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
               ChessBoardWidget(
                 position: _controller.currentPosition,
                 flipped: _controller.boardFlipped,
+                recentMoveSquares: _pgnWidgetController.recentMoveSquares,
                 onMove: (move) => _controller.onBoardMove(move.san),
                 // In solitaire, moves are allowed while guessing and again
                 // once the game completes (free exploration of the annotated

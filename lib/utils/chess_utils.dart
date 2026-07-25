@@ -314,3 +314,34 @@ Set<String> uciHighlightSquares(String uci) {
   if (uci.length < 4) return const {};
   return {uci.substring(0, 2), uci.substring(2, 4)};
 }
+
+/// From/to squares of the last [lastN] half-moves of [sans] played from
+/// [start] — the Chessable-style trail that keeps each side's most recent
+/// move subtly marked on the board.
+///
+/// Castling is reported on the king's visual destination (e1→g1), not
+/// dartchess's king→rook encoding. `--` null-move placeholders are skipped;
+/// replay stops at the first unparsable SAN.
+Set<String> recentMoveTrailSquares(
+  Position start,
+  List<String> sans, {
+  int lastN = 2,
+}) {
+  var pos = start;
+  // Flat from,to pairs, trimmed so only the newest [lastN] moves remain.
+  final trail = <String>[];
+  for (final san in sans) {
+    if (san == '--') continue;
+    final move = pos.parseSan(san);
+    if (move == null) break;
+    if (move is NormalMove) {
+      trail.add(move.from.name);
+      trail.add(castlingKingDestination(pos, move.from, move.to).name);
+      while (trail.length > lastN * 2) {
+        trail.removeAt(0);
+      }
+    }
+    pos = pos.play(move);
+  }
+  return trail.toSet();
+}

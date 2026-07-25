@@ -90,6 +90,17 @@ mixin _TacticsPlayback on _TacticsControlPanelStateBase {
     }
   }
 
+  /// The app-bar back arrow (next to the "Tactics" title): leaves the
+  /// current puzzle — back to the browse list for browse-launched play,
+  /// otherwise ends the session (no recap) and lands on the home panel.
+  void _onBackRequested() {
+    if (_session.playSource == TacticsPlaySource.browse) {
+      _returnToBrowse();
+    } else {
+      _leaveSession();
+    }
+  }
+
   /// Leave a browse-launched puzzle and land back on the browse list
   /// (the back button, or walking off either end of the browse queue).
   void _returnToBrowse() {
@@ -101,7 +112,7 @@ mixin _TacticsPlayback on _TacticsControlPanelStateBase {
     _tabController.animateTo(1);
   }
 
-  /// The header back arrow during a session: abandon the queue (no recap)
+  /// The app-bar back arrow during a session: abandon the queue (no recap)
   /// and land back on the home/import panel.
   void _leaveSession() {
     _session.endSession();
@@ -126,6 +137,73 @@ mixin _TacticsPlayback on _TacticsControlPanelStateBase {
   void _onAnalyze() {
     _tabController.animateTo(1);
     _focusNode.requestFocus();
+  }
+
+  /// The tactic's full source game PGN (looked up by id in the stored-PGN
+  /// archive), falling back to the solution-only PGN when it isn't stored.
+  Future<String> _currentGamePgn(TacticsPosition tactic) async {
+    if (tactic.gameId.isNotEmpty) {
+      final stored = await findStoredGamePgn(tactic.gameId);
+      if (stored.isNotEmpty) return stored;
+    }
+    return buildSolutionPgn(tactic, _session.engine.correctLineToSan(tactic));
+  }
+
+  /// "Add game to study…" from the game menu: append the tactic's source
+  /// game as a chapter of a study (same picker as every other add-to-study).
+  Future<void> _addGameToStudy() async {
+    final tactic = _session.currentPosition;
+    if (tactic == null) return;
+    final suggested = tactic.gameWhite.isEmpty && tactic.gameBlack.isEmpty
+        ? 'Tactic game'
+        : '${tactic.gameWhite} vs ${tactic.gameBlack}';
+    final result = await showDialog<AddToStudyResult>(
+      context: context,
+      builder: (_) => AddToStudyDialog(
+        initialChapterName: suggested,
+        title: 'Add game to study',
+      ),
+    );
+    if (result == null || !mounted) return;
+    try {
+      final pgn = await _currentGamePgn(tactic);
+      if (!mounted) return;
+      final study = context.read<StudyController>();
+      final path =
+          result.existingPath ??
+          await StorageFactory.instance.studyFilePath(result.newStudyName!);
+      await study.addChapterToStudyFile(path, result.chapterName, pgn);
+      if (!mounted) return;
+      showAppSnackBar(
+        context,
+        'Added "${result.chapterName}" to ${result.studyName}',
+      );
+    } catch (e) {
+      debugPrint('Add game to study failed: $e');
+      if (mounted) {
+        showAppSnackBar(context, 'Failed to add game to study.', isError: true);
+      }
+    }
+  }
+
+  /// "Copy game PGN" from the game menu.
+  Future<void> _copyGamePgn() async {
+    final tactic = _session.currentPosition;
+    if (tactic == null) return;
+    try {
+      final pgn = await _currentGamePgn(tactic);
+      await Clipboard.setData(ClipboardData(text: pgn));
+      if (mounted) showAppSnackBar(context, 'Game PGN copied.');
+    } catch (e) {
+      debugPrint('Copy game PGN failed: $e');
+      if (mounted) {
+        showAppSnackBar(
+          context,
+          AppMessages.clipboardWriteFailed,
+          isError: true,
+        );
+      }
+    }
   }
 
   Future<void> _copyFen() async {

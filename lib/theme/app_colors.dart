@@ -445,6 +445,11 @@ abstract final class AppColors {
   static const boardSelected = Color(0xFFFFFF00);
   static const boardHighlight = Color(0x806496FF);
 
+  /// Subtle tint kept on the from/to squares of the most recent half-moves
+  /// (Chessable-style trail). Quieter than [boardHighlight] so it reads as
+  /// context, not as an active selection.
+  static const boardRecentMove = Color(0x559BC700);
+
   /// Canvas stroke for board frames / painted-piece outlines.
   static const boardOutline = Color(0xFF000000);
 

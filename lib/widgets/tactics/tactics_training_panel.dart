@@ -2,12 +2,15 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../models/tactics_position.dart';
 import '../../services/tactics_engine.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
+import '../../utils/chess_utils.dart' show fenAfterMoves, sanToUci;
 import '../../utils/pgn_comment_utils.dart' show filterDisplayComment;
 import '../clickable_move_line.dart';
+import '../engine/floating_board_preview.dart';
 import '../labeled_toggle.dart';
 import '../shortcut_tooltip.dart';
 
@@ -66,7 +69,7 @@ String displayTacticsNote(String raw) {
 }
 
 /// Puzzle-solving controls shown during an active tactics session.
-class TacticsTrainingPanel extends StatelessWidget {
+class TacticsTrainingPanel extends StatefulWidget {
   const TacticsTrainingPanel({
     super.key,
     required this.position,
@@ -85,14 +88,13 @@ class TacticsTrainingPanel extends StatelessWidget {
     this.isLastSessionPuzzle = false,
     required this.onAutoAdvanceChanged,
     required this.onCopyFen,
-    this.onBack,
-    this.backTooltip = 'Back',
     this.onEdit,
     required this.onSetRating,
     this.solutionSanMoves = const [],
     this.solutionStartPly = 0,
     this.activeSolutionMoveIndex,
     this.onSolutionMoveTapped,
+    this.previewFlipped = false,
   });
 
   final TacticsPosition position;
@@ -121,14 +123,6 @@ class TacticsTrainingPanel extends StatelessWidget {
   final ValueChanged<bool> onAutoAdvanceChanged;
   final VoidCallback onCopyFen;
 
-  /// Leaves the current puzzle: back to the browse list for browse-launched
-  /// play, or ends the session and returns to the home panel. Hidden when
-  /// null.
-  final VoidCallback? onBack;
-
-  /// Tooltip for the header back arrow (varies with where back leads).
-  final String backTooltip;
-
   /// Opens the edit dialog for this tactic. Hidden when null (external sets,
   /// or the unsolved head of a session where editing would reveal the answer).
   final VoidCallback? onEdit;
@@ -139,29 +133,49 @@ class TacticsTrainingPanel extends StatelessWidget {
   final void Function(List<String> sanMoves, int clickedIndex)?
   onSolutionMoveTapped;
 
-  bool get _showRating => !autoAdvance && (positionSolved || showSolution);
+  /// Orientation of the floating hover-preview board (matches the main board).
+  final bool previewFlipped;
 
-  bool get _useNextLabel => positionSolved || showSolution;
+  @override
+  State<TacticsTrainingPanel> createState() => _TacticsTrainingPanelState();
+}
+
+class _TacticsTrainingPanelState extends State<TacticsTrainingPanel> {
+  /// Drives the floating mini-board shown when hovering solution-line moves —
+  /// the same preview mechanism as the engine bar's PV hover.
+  final BoardPreviewController _boardPreview = BoardPreviewController();
+  final GlobalKey _previewKey = GlobalKey();
+
+  @override
+  void dispose() {
+    _boardPreview.dispose();
+    super.dispose();
+  }
+
+  bool get _showRating =>
+      !widget.autoAdvance && (widget.positionSolved || widget.showSolution);
+
+  bool get _useNextLabel => widget.positionSolved || widget.showSolution;
 
   String get _nextLabel {
-    if (isLastSessionPuzzle) return 'Finish';
+    if (widget.isLastSessionPuzzle) return 'Finish';
     return _useNextLabel ? 'Next' : 'Skip';
   }
 
   String get _nextDescription {
-    if (onSkipPosition == null) return 'Already at the last position';
-    if (isLastSessionPuzzle) return 'Finish the session';
+    if (widget.onSkipPosition == null) return 'Already at the last position';
+    if (widget.isLastSessionPuzzle) return 'Finish the session';
     return _useNextLabel ? 'Next position' : 'Skip position';
   }
 
   /// The puzzle's note (annotation / mistake analysis) is the flashcard
   /// "back": revealed once the puzzle is solved or the solution shown.
   bool get _showNote =>
-      (positionSolved || showSolution) &&
-      displayTacticsNote(position.mistakeAnalysis).isNotEmpty;
+      (widget.positionSolved || widget.showSolution) &&
+      displayTacticsNote(widget.position.mistakeAnalysis).isNotEmpty;
 
   Color _feedbackColor() {
-    if (feedback.contains('Correct')) return AppColors.success;
+    if (widget.feedback.contains('Correct')) return AppColors.success;
     return AppColors.danger;
   }
 
@@ -171,25 +185,25 @@ class TacticsTrainingPanel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         TacticsPositionInfo(
-          position: position,
-          engine: engine,
-          onBack: onBack,
-          backTooltip: backTooltip,
-          onEdit: onEdit,
+          position: widget.position,
+          engine: widget.engine,
+          onEdit: widget.onEdit,
         ),
         const SizedBox(height: 16),
         Row(
           children: [
             Expanded(
               child: shortcutTooltip(
-                description: showSolution ? 'Hide solution' : 'Show solution',
+                description: widget.showSolution
+                    ? 'Hide solution'
+                    : 'Show solution',
                 shortcut: 'Space',
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: onToggleSolution,
+                    onPressed: widget.onToggleSolution,
                     child: Text(
-                      showSolution ? 'Hide Solution' : 'Show Solution',
+                      widget.showSolution ? 'Hide Solution' : 'Show Solution',
                     ),
                   ),
                 ),
@@ -197,25 +211,24 @@ class TacticsTrainingPanel extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: isAtStartingPosition
+              child: widget.isAtStartingPosition
                   ? shortcutTooltip(
                       description: 'Analyze',
                       shortcut: 'A or V',
                       child: SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: onAnalyze,
+                          onPressed: widget.onAnalyze,
                           child: const Text('Analyze'),
                         ),
                       ),
                     )
-                  : shortcutTooltip(
-                      description: 'Reset analysis',
-                      shortcut: 'A or V',
+                  : Tooltip(
+                      message: 'Reset analysis',
                       child: SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
-                          onPressed: onResetAnalysis,
+                          onPressed: widget.onResetAnalysis,
                           icon: const Icon(Icons.refresh, size: 16),
                           label: const Text('Reset'),
                         ),
@@ -229,14 +242,14 @@ class TacticsTrainingPanel extends StatelessWidget {
           children: [
             Expanded(
               child: shortcutTooltip(
-                description: onPreviousPosition != null
+                description: widget.onPreviousPosition != null
                     ? 'Previous position'
                     : 'Already at the first position',
                 shortcut: 'P or ↑',
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: onPreviousPosition,
+                    onPressed: widget.onPreviousPosition,
                     child: const Text('Previous'),
                   ),
                 ),
@@ -250,7 +263,7 @@ class TacticsTrainingPanel extends StatelessWidget {
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: onSkipPosition,
+                    onPressed: widget.onSkipPosition,
                     child: Text(_nextLabel),
                   ),
                 ),
@@ -264,8 +277,8 @@ class TacticsTrainingPanel extends StatelessWidget {
           shortcut: 'J',
           child: AppSwitch(
             label: 'Auto-advance to next position',
-            value: autoAdvance,
-            onChanged: onAutoAdvanceChanged,
+            value: widget.autoAdvance,
+            onChanged: widget.onAutoAdvanceChanged,
           ),
         ),
         // Everything below is the flashcard "back": it reveals downward as the
@@ -273,7 +286,7 @@ class TacticsTrainingPanel extends StatelessWidget {
         // never move, so revealing this content can't bounce the buttons. Each
         // block leads with its own gap for uniform spacing regardless of which
         // ones are visible.
-        if (feedback.isNotEmpty) ...[
+        if (widget.feedback.isNotEmpty) ...[
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.all(12),
@@ -283,7 +296,7 @@ class TacticsTrainingPanel extends StatelessWidget {
               border: Border.all(color: _feedbackColor()),
             ),
             child: Text(
-              feedback,
+              widget.feedback,
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: _feedbackColor(),
@@ -294,10 +307,10 @@ class TacticsTrainingPanel extends StatelessWidget {
         ],
         if (_showNote) ...[
           const SizedBox(height: 8),
-          _NoteCard(note: position.mistakeAnalysis),
+          _NoteCard(note: widget.position.mistakeAnalysis),
         ],
         _buildPlayedMoves(),
-        if (showSolution) ...[
+        if (widget.showSolution) ...[
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.all(12),
@@ -314,13 +327,13 @@ class TacticsTrainingPanel extends StatelessWidget {
                     Expanded(child: _buildSolutionLine(context)),
                     const SizedBox(width: 8),
                     ElevatedButton(
-                      onPressed: onCopyFen,
+                      onPressed: widget.onCopyFen,
                       child: const Text('Copy FEN'),
                     ),
                   ],
                 ),
-                if (solutionSanMoves.isEmpty &&
-                    position.correctLine.isEmpty) ...[
+                if (widget.solutionSanMoves.isEmpty &&
+                    widget.position.correctLine.isEmpty) ...[
                   const SizedBox(height: 4),
                   const Text(
                     'No solution available',
@@ -333,26 +346,36 @@ class TacticsTrainingPanel extends StatelessWidget {
         ],
         if (_showRating) ...[
           const SizedBox(height: 12),
-          _TacticsStarRating(rating: position.rating, onSetRating: onSetRating),
+          _TacticsStarRating(
+            rating: widget.position.rating,
+            onSetRating: widget.onSetRating,
+          ),
         ],
+        // Renders nothing inline; drives the hover mini-board via Overlay.
+        FloatingBoardPreview(
+          stackKey: _previewKey,
+          controller: _boardPreview,
+          flipped: widget.previewFlipped,
+          ownerTag: _previewKey,
+        ),
       ],
     );
   }
 
   Widget _buildPlayedMoves() {
-    if (currentMoveIndex == 0) return const SizedBox.shrink();
-    final totalUserMoves = engine.userMoveCount(position);
+    if (widget.currentMoveIndex == 0) return const SizedBox.shrink();
+    final totalUserMoves = widget.engine.userMoveCount(widget.position);
     if (totalUserMoves <= 1) return const SizedBox.shrink();
 
-    final played = position.correctLine.sublist(
+    final played = widget.position.correctLine.sublist(
       0,
-      currentMoveIndex.clamp(0, position.correctLine.length),
+      widget.currentMoveIndex.clamp(0, widget.position.correctLine.length),
     );
     if (played.isEmpty) return const SizedBox.shrink();
 
     final buf = StringBuffer();
-    var moveNum = (solutionStartPly ~/ 2) + 1;
-    var isWhite = solutionStartPly % 2 == 0;
+    var moveNum = (widget.solutionStartPly ~/ 2) + 1;
+    var isWhite = widget.solutionStartPly % 2 == 0;
 
     for (int i = 0; i < played.length; i++) {
       if (isWhite) {
@@ -377,33 +400,55 @@ class TacticsTrainingPanel extends StatelessWidget {
     );
   }
 
+  /// Show the floating board after [sanMoves] up to and including [idx],
+  /// replayed from the tactic's starting position.
+  void _showPreview(List<String> sanMoves, int idx, Offset anchor) {
+    if (sanMoves.isEmpty) return;
+    final startFen = widget.position.fen;
+    final beforeFen = idx == 0
+        ? startFen
+        : fenAfterMoves(startFen, sanMoves, idx - 1);
+    _boardPreview.setPreview(
+      fenAfterMoves(startFen, sanMoves, idx),
+      moves: sanMoves.sublist(0, idx + 1),
+      target: BoardPreviewTarget.floating,
+      lastMoveUci: sanToUci(beforeFen, sanMoves[idx]),
+      anchorGlobal: anchor,
+      ownerTag: _previewKey,
+    );
+  }
+
   Widget _buildSolutionLine(BuildContext context) {
-    final san = solutionSanMoves;
+    final san = widget.solutionSanMoves;
     if (san.isEmpty) {
-      final fallback = engine.getSolution(position, fromIndex: 0);
+      final fallback = widget.engine.getSolution(widget.position, fromIndex: 0);
       if (fallback == 'No solution available') {
         return Text(fallback, style: AppTextStyles.muted);
       }
       return Text(fallback, style: AppTextStyles.mono);
     }
 
-    final trainablePlies = position.correctLine.length;
+    final trainablePlies = widget.position.correctLine.length;
     final highlightIndex =
-        activeSolutionMoveIndex ??
-        (currentMoveIndex < trainablePlies ? currentMoveIndex : null);
+        widget.activeSolutionMoveIndex ??
+        (widget.currentMoveIndex < trainablePlies
+            ? widget.currentMoveIndex
+            : null);
 
     return ClickableMoveLineWidget(
       key: const Key('tactic-solution-line'),
       sanMoves: san,
-      startPly: solutionStartPly,
+      startPly: widget.solutionStartPly,
       maxMoves: san.length,
       singleLine: false,
       fontSize: 14,
       movePadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       activeMoveIndex: highlightIndex,
-      onMoveTapped: onSolutionMoveTapped != null
-          ? (idx) => onSolutionMoveTapped!(san, idx)
+      onMoveTapped: widget.onSolutionMoveTapped != null
+          ? (idx) => widget.onSolutionMoveTapped!(san, idx)
           : null,
+      onMoveHovered: (idx, anchor) => _showPreview(san, idx, anchor),
+      onHoverExit: _boardPreview.clearPreview,
     );
   }
 }
@@ -504,19 +549,11 @@ class TacticsPositionInfo extends StatelessWidget {
     super.key,
     required this.position,
     required this.engine,
-    this.onBack,
-    this.backTooltip = 'Back',
     this.onEdit,
   });
 
   final TacticsPosition position;
   final TacticsEngine engine;
-
-  /// Leaves the current puzzle (browse list or home panel). Hidden when null.
-  final VoidCallback? onBack;
-
-  /// Tooltip for the back arrow.
-  final String backTooltip;
 
   /// Opens the edit dialog for this tactic. Hidden when null.
   final VoidCallback? onEdit;
@@ -531,15 +568,6 @@ class TacticsPositionInfo extends StatelessWidget {
       children: [
         Row(
           children: [
-            if (onBack != null)
-              IconButton(
-                onPressed: onBack,
-                icon: const Icon(Icons.arrow_back, size: 18),
-                tooltip: backTooltip,
-                visualDensity: VisualDensity.compact,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                padding: EdgeInsets.zero,
-              ),
             Expanded(
               child: Text(
                 pos.positionContext,

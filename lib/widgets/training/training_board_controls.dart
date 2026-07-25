@@ -48,6 +48,7 @@ class TrainingBoardPane extends StatelessWidget {
                   position: session.position,
                   flipped: boardFlipped,
                   enableUserMoves: waitingForUser,
+                  recentMoveSquares: session.recentMoveSquares,
                   onMove: onMove,
                 ),
               ),

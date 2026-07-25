@@ -206,7 +206,15 @@ class _TacticsModeScaffold extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 16,
-        title: const Text('Tactics'),
+        // The back arrow sits in the title row (not the `leading` slot) so
+        // the title doesn't shift right when the arrow appears/disappears.
+        title: const Row(
+          children: [
+            Text('Tactics'),
+            SizedBox(width: 8),
+            _TacticsAppBarBackButton(),
+          ],
+        ),
         actions: const [AppModeMenuButton()],
       ),
       body: LayoutBuilder(
@@ -242,6 +250,32 @@ class _TacticsModeScaffold extends StatelessWidget {
                 );
         },
       ),
+    );
+  }
+}
+
+/// Back arrow in the app bar next to the "Tactics" title: shown only while a
+/// puzzle is loaded, it leaves the puzzle (end session / back to browse). The
+/// action itself lives in the control panel — a focus-tree sibling — so it is
+/// routed through [TacticsSessionController.onBackRequested]. Watching the
+/// session here keeps rebuilds scoped to this tiny widget, preserving the
+/// scaffold's no-watch design.
+class _TacticsAppBarBackButton extends StatelessWidget {
+  const _TacticsAppBarBackButton();
+
+  @override
+  Widget build(BuildContext context) {
+    final session = context.watch<TacticsSessionController>();
+    if (!session.hasActivePosition) return const SizedBox.shrink();
+    return IconButton(
+      onPressed: () => session.onBackRequested?.call(),
+      icon: const Icon(Icons.arrow_back, size: 18),
+      tooltip: session.playSource == TacticsPlaySource.browse
+          ? 'Back to browse'
+          : 'End session',
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      padding: EdgeInsets.zero,
     );
   }
 }

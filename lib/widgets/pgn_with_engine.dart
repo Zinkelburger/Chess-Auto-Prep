@@ -22,6 +22,11 @@ class PgnWithEngine extends StatefulWidget {
   final String? initialFen;
   final bool showStartEndButtons;
 
+  // InlineEngineBar props (passthrough)
+  final void Function(List<String> sanMoves, int clickedIndex)?
+  onLineMoveTapped;
+  final bool previewFlipped;
+
   const PgnWithEngine({
     super.key,
     this.gameId,
@@ -32,6 +37,8 @@ class PgnWithEngine extends StatefulWidget {
     this.controller,
     this.initialFen,
     this.showStartEndButtons = true,
+    this.onLineMoveTapped,
+    this.previewFlipped = false,
   });
 
   @override
@@ -51,7 +58,11 @@ class _PgnWithEngineState extends State<PgnWithEngine> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        InlineEngineBar(fen: _currentFen),
+        InlineEngineBar(
+          fen: _currentFen,
+          onLineMoveTapped: widget.onLineMoveTapped,
+          previewFlipped: widget.previewFlipped,
+        ),
         const Divider(height: 1),
         Expanded(
           child: PgnViewerWidget(

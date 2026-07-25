@@ -16,6 +16,9 @@ import 'game_nav_bar.dart' show kAutoPlaySpeeds;
 class FullscreenGameView extends StatelessWidget {
   final Position position;
   final bool boardFlipped;
+
+  /// Subtle recent-move trail forwarded to the board.
+  final Set<String> recentMoveSquares;
   final String gameLabel;
   final int currentIndex;
   final int totalGames;
@@ -37,6 +40,7 @@ class FullscreenGameView extends StatelessWidget {
     super.key,
     required this.position,
     required this.boardFlipped,
+    this.recentMoveSquares = const {},
     required this.gameLabel,
     required this.currentIndex,
     required this.totalGames,
@@ -66,6 +70,7 @@ class FullscreenGameView extends StatelessWidget {
               child: ChessBoardWidget(
                 position: position,
                 flipped: boardFlipped,
+                recentMoveSquares: recentMoveSquares,
                 onMove: onBoardMove != null
                     ? (move) => onBoardMove!(move.san)
                     : null,

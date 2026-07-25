@@ -21,6 +21,7 @@ import '../services/games_repertoire/draft_repertoire_writer.dart';
 import '../services/opening_tree_builder.dart';
 import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';
+import '../utils/chess_utils.dart' show recentMoveTrailSquares;
 import '../utils/fen_utils.dart';
 import '../utils/movetext_builder.dart';
 import '../utils/san_token_utils.dart';
@@ -115,6 +116,26 @@ class RepertoireController
       return Chess.fromSetup(Setup.parseFen(fen));
     } catch (_) {
       return Chess.initial;
+    }
+  }
+
+  /// From/to squares of the last two half-moves at the cursor — the subtle
+  /// Chessable-style recent-move trail for [ChessBoardWidget]. Empty at the
+  /// starting position.
+  Set<String> get recentMoveSquares {
+    final len = _path.length;
+    if (len == 0) return const {};
+    final baseIdx = len >= 2 ? len - 2 : 0;
+    try {
+      final base = Chess.fromSetup(
+        Setup.parseFen(_tree.fenAt(_path.take(baseIdx))),
+      );
+      return recentMoveTrailSquares(
+        base,
+        _tree.sanSequenceAt(_path).sublist(baseIdx),
+      );
+    } catch (_) {
+      return const {};
     }
   }
 

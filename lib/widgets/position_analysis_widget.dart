@@ -1,8 +1,9 @@
 /// Position analysis widget – three-panel layout for the Player Analysis screen.
 ///
-/// Left: FEN list (or loading spinner). Centre: chess board with an action
-/// bar (study / puzzle / PGN-viewer handoffs). Right: engine bar + tabbed pane
-/// (Move Tree · Games · PGN · Analysis · Holes).
+/// Left: FEN list (or loading spinner). Centre: chess board. Right: engine
+/// bar + tabbed pane (Move Tree · Games · PGN · Analysis · Holes). The
+/// study / puzzle / PGN-viewer handoffs are exposed to the host screen's
+/// app bar through [PositionAnalysisActions].
 ///
 /// All position changes from *any* source (board drag, tree click, FEN list,
 /// PGN navigation, scratch-tree click, engine line click) funnel through
@@ -57,6 +58,30 @@ const int _kHolesTabIndex = 4;
 /// Starting-position board, shown when no FEN has been selected yet.
 const Position _startingPosition = Chess.initial;
 
+/// Exposes the board handoff actions (add line to study, make puzzle, open
+/// games in the PGN viewer) to the host screen, which surfaces them in its
+/// app bar instead of buttons under the board. Both save paths land in the
+/// same place — a study chapter — so a puzzle *is* a line here.
+class PositionAnalysisActions {
+  _PositionAnalysisWidgetState? _state;
+
+  void _attach(_PositionAnalysisWidgetState state) => _state = state;
+
+  void _detach(_PositionAnalysisWidgetState state) {
+    if (_state == state) _state = null;
+  }
+
+  bool get hasPosition => _state?._currentFen != null;
+  bool get canOpenGames => _state?.widget.analysisPgnPath != null;
+
+  Future<void> addCurrentLineToStudy() async =>
+      _state?._addCurrentLineToStudy();
+
+  void makePuzzleFromPosition() => _state?._makePuzzleFromPosition();
+
+  void openGamesInPgnViewer() => _state?._openGamesInPgnViewer();
+}
+
 class PositionAnalysisWidget extends StatefulWidget {
   final PositionAnalysis? analysis;
   final OpeningTree? openingTree;
@@ -101,6 +126,10 @@ class PositionAnalysisWidget extends StatefulWidget {
   /// Open the hunt config to start (or re-run) a hunt.
   final VoidCallback? onStartHoleHunt;
 
+  /// Handle for the host screen's app-bar menu to trigger the handoff
+  /// actions (study / puzzle / PGN viewer).
+  final PositionAnalysisActions? actions;
+
   const PositionAnalysisWidget({
     super.key,
     this.analysis,
@@ -120,6 +149,7 @@ class PositionAnalysisWidget extends StatefulWidget {
     this.holesTrapPassSkipped = false,
     this.onHolesResultChanged,
     this.onStartHoleHunt,
+    this.actions,
   });
 
   @override
@@ -176,6 +206,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
   @override
   void initState() {
     super.initState();
+    widget.actions?._attach(this);
     _tabController = TabController(length: 5, vsync: this);
     _tabController.addListener(_onTabChanged);
   }
@@ -183,6 +214,10 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
   @override
   void didUpdateWidget(PositionAnalysisWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(widget.actions, oldWidget.actions)) {
+      oldWidget.actions?._detach(this);
+      widget.actions?._attach(this);
+    }
     // Tree swapped (colour switch or new player): each tree remembers its own
     // cursor, so sync the board/games to wherever the incoming tree left off.
     if (!identical(widget.openingTree, oldWidget.openingTree)) {
@@ -209,6 +244,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
 
   @override
   void dispose() {
+    widget.actions?._detach(this);
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     super.dispose();
@@ -284,73 +320,24 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
     );
   }
 
+  // The study / puzzle / PGN-viewer handoffs live in the host screen's
+  // app-bar kebab menu (see [PositionAnalysisActions]) — the board keeps
+  // the full pane to itself.
   Widget _buildBoardPane() {
-    return Column(
-      children: [
-        Expanded(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: AspectRatio(
-                aspectRatio: 1.0,
-                child: ChessBoardWidget(
-                  position: _currentBoard ?? _startingPosition,
-                  flipped: widget.playerIsWhite != null
-                      ? !widget.playerIsWhite!
-                      : false,
-                  onMove: _onBoardMove,
-                  annotations: _holesBoardAnnotations(),
-                ),
-              ),
-            ),
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: AspectRatio(
+          aspectRatio: 1.0,
+          child: ChessBoardWidget(
+            position: _currentBoard ?? _startingPosition,
+            flipped: widget.playerIsWhite != null
+                ? !widget.playerIsWhite!
+                : false,
+            onMove: _onBoardMove,
+            annotations: _holesBoardAnnotations(),
           ),
         ),
-        if (widget.analysis != null) _buildActionBar(),
-      ],
-    );
-  }
-
-  /// Handoff actions for the current position, pinned under the board.
-  Widget _buildActionBar() {
-    final hasFen = _currentFen != null;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Wrap(
-        alignment: WrapAlignment.center,
-        spacing: 4,
-        children: [
-          TextButton.icon(
-            icon: const Icon(Icons.menu_book_outlined, size: 16),
-            label: const Text(
-              'Add Line to Study',
-              style: TextStyle(fontSize: 12),
-            ),
-            onPressed: hasFen ? _addCurrentLineToStudy : null,
-          ),
-          Tooltip(
-            message:
-                'Save this position as a puzzle: play the solution, add a '
-                'note, and it becomes a study chapter you can train.',
-            child: TextButton.icon(
-              icon: const Icon(Icons.extension_outlined, size: 16),
-              label: const Text(
-                'Save as Puzzle',
-                style: TextStyle(fontSize: 12),
-              ),
-              onPressed: hasFen ? _makePuzzleFromPosition : null,
-            ),
-          ),
-          TextButton.icon(
-            icon: const Icon(Icons.open_in_new, size: 16),
-            label: const Text(
-              'Open Games in PGN Viewer',
-              style: TextStyle(fontSize: 12),
-            ),
-            onPressed: widget.analysisPgnPath != null
-                ? _openGamesInPgnViewer
-                : null,
-          ),
-        ],
       ),
     );
   }

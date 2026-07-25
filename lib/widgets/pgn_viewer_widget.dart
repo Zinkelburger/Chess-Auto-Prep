@@ -6,11 +6,12 @@ import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/core/study_controller.dart';
 import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
+import 'package:chess_auto_prep/services/stored_game_lookup.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
 import 'package:chess_auto_prep/utils/fen_utils.dart';
 import 'package:chess_auto_prep/utils/pgn_date_utils.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart'
-    show coordsAtPly, plyBeforeMove;
+    show coordsAtPly, plyBeforeMove, recentMoveTrailSquares;
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/theme/app_colors.dart';
 import 'package:chess_auto_prep/theme/app_text_styles.dart';
@@ -113,6 +114,11 @@ class PgnViewerWidgetController implements PgnViewerHandle {
   @override
   List<String> get mainLineMoves =>
       _state?._moveHistory.map((m) => m.san).toList() ?? const [];
+
+  /// From/to squares of the last two half-moves at the current position
+  /// (mainline, variation, or inline preview) — for the subtle Chessable-style
+  /// trail via [ChessBoardWidget.recentMoveSquares]. Empty at game start.
+  Set<String> get recentMoveSquares => _state?._recentMoveSquares() ?? const {};
 
   /// Number of moves deep into the current variation (0 if on mainline).
   int get variationDepth => _state?._analysisPath.length ?? 0;
@@ -424,19 +430,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
 
   // ── Game search ──
 
-  Future<String> _findGamePgn(String gameId) async {
-    try {
-      final content = await StorageFactory.instance.readImportedPgns();
-      if (content == null || content.isEmpty) return '';
-      final games = splitPgnIntoGames(content);
-      for (final gameText in games) {
-        if (gameText.contains('[GameId "$gameId"]')) return gameText;
-      }
-    } catch (e) {
-      debugPrint('Error finding game PGN: $e');
-    }
-    return '';
-  }
+  Future<String> _findGamePgn(String gameId) => findStoredGamePgn(gameId);
 
   String _buildGameInfo(PgnGame game) {
     final white = (game.headers['White'] ?? '?').trim();

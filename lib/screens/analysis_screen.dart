@@ -8,6 +8,7 @@ library;
 ///
 /// Layout: toolbar row  ➜  three-panel [PositionAnalysisWidget].
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -51,6 +52,10 @@ class AnalysisScreen extends StatefulWidget {
 /// supplies [initState]/[build]/[dispose] and the analysis pipeline.
 abstract class _AnalysisScreenStateBase extends State<AnalysisScreen> {
   final AnalysisGamesService _gamesService = AnalysisGamesService();
+
+  /// Bridge to the board handoff actions (study / puzzle / PGN viewer),
+  /// surfaced in the toolbar kebab next to the colour toggle.
+  final PositionAnalysisActions _boardActions = PositionAnalysisActions();
 
   AnalysisPlayerInfo? _currentPlayer;
 
@@ -235,7 +240,46 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
           ),
         ),
       ),
+      _buildPositionActionsMenu(),
     ];
+  }
+
+  /// Kebab with the position handoffs (formerly buttons under the board).
+  /// "Add line" and "Save as puzzle" both save a study chapter — a puzzle is
+  /// just a line with a recorded solution.
+  Widget _buildPositionActionsMenu() {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert, size: 18),
+      tooltip: 'Position actions',
+      onSelected: (action) {
+        switch (action) {
+          case 'add_line':
+            unawaited(_boardActions.addCurrentLineToStudy());
+          case 'make_puzzle':
+            _boardActions.makePuzzleFromPosition();
+          case 'open_games':
+            _boardActions.openGamesInPgnViewer();
+        }
+      },
+      itemBuilder: (_) => [
+        PopupMenuItem(
+          value: 'add_line',
+          enabled: _boardActions.hasPosition,
+          child: const Text('Add line to study…'),
+        ),
+        PopupMenuItem(
+          value: 'make_puzzle',
+          enabled: _boardActions.hasPosition,
+          child: const Text('Save position as puzzle…'),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'open_games',
+          enabled: _boardActions.canOpenGames,
+          child: const Text('Open games in PGN viewer'),
+        ),
+      ],
+    );
   }
 
   // ── Job progress strip (under the AppBar) ───────────────────────
@@ -368,6 +412,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
       holesTrapPassSkipped: _trapPassSkipped && _huntIsWhite == _playerIsWhite,
       onHolesResultChanged: _onHolesResultChanged,
       onStartHoleHunt: _isHunting || _isAnalyzing ? null : _showHoleHuntConfig,
+      actions: _boardActions,
     );
   }
 

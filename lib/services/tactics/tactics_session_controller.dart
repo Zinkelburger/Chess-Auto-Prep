@@ -80,6 +80,13 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// `null` instead.)
   VoidCallback? onSessionCompleted;
 
+  /// Set by the control panel: the app-bar back arrow (next to the "Tactics"
+  /// title) routes through this to leave the current puzzle — back to the
+  /// browse list for browse-launched play, otherwise end the session. Lives
+  /// here because the app bar and the panel are siblings under the shared
+  /// providers, so they can't call each other directly.
+  VoidCallback? onBackRequested;
+
   /// Set by the control panel: routes a navigation key pressed while the
   /// move-input field owns focus (Space, S/P, the arrow keys, J) to the panel's
   /// trainer shortcuts, so those keys drive puzzle/solution navigation instead
