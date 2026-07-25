@@ -82,6 +82,10 @@ lichess_output.txt
 *.tmp
 output.txt
 
+# Scratch working data — kept on disk, not committed.
+# TWIC issue dumps: python/twic-position-finder/downloader.py fetches its own.
+twic*.pgn
+
 # tree_builder cdbdirect native build output (bundled via packages/cdbdirect_flutter_libs)
 packages/cdbdirect_flutter_libs/native/
 packages/cdbdirect_flutter_libs/.build/

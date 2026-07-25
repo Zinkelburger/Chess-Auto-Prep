@@ -88,6 +88,21 @@ Then restart the app (`flutter run -d linux`).
 - `lib/services/` - Business logic
 - `lib/models/` - Data models
 
+## Repository layout
+
+The Flutter app is `lib/` + `assets/` + the platform runner dirs. Everything
+else in this repo is a **separate program that the app does not build, ship, or
+call at runtime**:
+
+| Path | What it is | Needed to run the app? |
+|------|-----------|------------------------|
+| `lib/`, `assets/`, `linux/`, `macos/`, `windows/` | The Flutter app itself | **Yes** |
+| `packages/cdbdirect_flutter_libs/` | Native ChessDB FFI bindings, consumed via `pubspec.yaml` | Yes (built with the app) |
+| `tree_builder/` | **Standalone C program.** The original prototype and reference implementation of the expectimax algorithm — since ported to Dart in `lib/services/generation/`. Also hosts the cdbdirect (local ChessDB) native build. | No — *except* its `make setup-cdbdirect` step, if you want the local 1 TB ChessDB dump. See [tree_builder/README.md](tree_builder/README.md). |
+| `python/twic-position-finder/` | **Separate web service.** TWIC Position Finder — the live site + API behind `api.chessautoprep.com` (FastAPI backend, Astro frontend, weekly ingest cron, lesson booking). Deployed on its own. | No |
+| `scripts/` | One-off data/analysis scripts (chess.com titled-player stats, USCF mapping, epub/pdf game extraction) | No |
+| `tools/` | Small API/perf benchmarking harnesses | No |
+
 ## Configuration
 
 Set your Lichess username in the app settings to load tactics from your games.
