@@ -94,7 +94,7 @@ class CandidateService {
     required bool isOurTurn,
     required bool playAsWhite,
     List<String> pathFromRoot = const [],
-    int maxCandidates = 8,
+    int? maxCandidates,
   }) async {
     final treeCandidates = getTreeCandidates(
       fen: fen,
@@ -192,7 +192,7 @@ class CandidateService {
     required OpeningTree? openingTree,
     required CoverageResult? coverage,
     required List<String> pathFromRoot,
-    int maxCandidates = 8,
+    int? maxCandidates,
   }) {
     if (explorer == null || explorer.moves.isEmpty) {
       return _limitCandidates(
@@ -260,11 +260,16 @@ class CandidateService {
     return sorted;
   }
 
+  /// Truncates to [maxCandidates]; `null` means "no limit" — the browser
+  /// splits common vs. rare moves itself, so a hidden top-N cut here would
+  /// drop legal replies before the user could ever see them.
   static List<CandidateMove> _limitCandidates(
     List<CandidateMove> candidates,
-    int maxCandidates,
+    int? maxCandidates,
   ) {
-    if (candidates.length <= maxCandidates) return candidates;
+    if (maxCandidates == null || candidates.length <= maxCandidates) {
+      return candidates;
+    }
     return candidates.sublist(0, maxCandidates);
   }
 

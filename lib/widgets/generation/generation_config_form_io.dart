@@ -27,13 +27,19 @@ mixin _GenerationConfigIo
     _setupToleranceCtrl.text = config.setupToleranceCp.toString();
     _memorabilityToleranceCtrl.text = config.memorabilityToleranceCp.toString();
     _searchAlgorithm = config.searchAlgorithm;
+    _timeBudgetCtrl.text = config.timeBudgetMinutes.toString();
     _wideOpening = config.openingWidthPlies > 0;
     _verifyFinal = config.verifyFinal;
+    _trapsOnly = config.trapsOnly;
     _dbMinGamesCtrl.text = config.dbMinGames.toString();
     _dbMinProbCtrl.text = config.dbMinProb.toString();
     _minEloCtrl.text = config.minElo.toString();
     _lichessMinGamesCtrl.text = config.minGames.toString();
-    _buildMode = config.buildMode;
+    // Old snapshots may carry trapFinder, which the Build-from dropdown no
+    // longer offers; an unlisted value would crash the dropdown assert.
+    _buildMode = config.buildMode == BuildMode.trapFinder
+        ? BuildMode.stockfishExpectimax
+        : config.buildMode;
     _selectionMode = config.selectionMode;
     _relativeEval = config.relativeEval;
     _preferNovelties = config.noveltyWeight > 0;
@@ -131,8 +137,10 @@ mixin _GenerationConfigIo
         !(evalSources?.enableLocalChessDb ?? false) &&
         !(evalSources?.enableChessDbApi ?? false) &&
         !EvalDatabaseSettings.instance.enableCdbDirect) {
-      return 'DB Win Rate mode needs at least one eval source enabled '
-          '(local ChessDB, cdbdirect, or ChessDB API).';
+      setState(() => _showEvalSources = true);
+      return '"Database win rates" needs at least one evaluation database. '
+          'Expand "Evaluation databases" at the bottom of the form and '
+          'enable a local ChessDB file or the ChessDB API.';
     }
     return null;
   }
@@ -170,7 +178,11 @@ mixin _GenerationConfigIo
       ),
       maxPly: int.tryParse(_maxPlyCtrl.text.trim()) ?? 20,
       buildMode: _buildMode,
-      pgnFilePaths: _effectivePgnPaths(),
+      // The sources panel stays mounted in every mode; only db-explorer
+      // builds may consume its files.
+      pgnFilePaths: _buildMode == BuildMode.dbExplorer
+          ? _effectivePgnPaths()
+          : const [],
       dbMinGames: int.tryParse(_dbMinGamesCtrl.text.trim()) ?? 5,
       dbMinProb: double.tryParse(_dbMinProbCtrl.text.trim()) ?? 0.05,
       minElo: int.tryParse(_minEloCtrl.text.trim()) ?? 0,
@@ -195,6 +207,7 @@ mixin _GenerationConfigIo
           ),
       targetLineCount: (int.tryParse(_targetLinesCtrl.text.trim()) ?? 100)
           .clamp(0, 100000),
+      trapsOnly: _trapsOnly,
       rankLinesByImportance: _rankLinesByImportance,
       annotateMoveProbabilities: _annotateMoveProbabilities,
       annotateMaiaOnly: _annotateMaiaOnly,
@@ -202,6 +215,10 @@ mixin _GenerationConfigIo
       oppMaxChildren: int.tryParse(_oppMaxChildrenCtrl.text.trim()) ?? 4,
       oppMassTarget: double.tryParse(_oppMassTargetCtrl.text.trim()) ?? 0.80,
       searchAlgorithm: _searchAlgorithm,
+      timeBudgetMinutes: (int.tryParse(_timeBudgetCtrl.text.trim()) ?? 0).clamp(
+        0,
+        24 * 60,
+      ),
       ourAltDiscount: (double.tryParse(_ourAltDiscountCtrl.text.trim()) ?? 0.25)
           .clamp(0.0, 1.0),
       fastAltGapCp: (int.tryParse(_fastAltGapCtrl.text.trim()) ?? 30).clamp(
@@ -222,11 +239,14 @@ mixin _GenerationConfigIo
       setupMoves: _setupMovesCtrl.text.trim(),
       setupToleranceCp: (int.tryParse(_setupToleranceCtrl.text.trim()) ?? 30)
           .clamp(0, 500),
-      memorabilityToleranceCp:
-          (int.tryParse(_memorabilityToleranceCtrl.text.trim()) ?? 0).clamp(
-            0,
-            500,
-          ),
+      // Novelties and the natural-move bias pull in opposite directions;
+      // the field keeps its value but is ignored while novelties are on.
+      memorabilityToleranceCp: _preferNovelties
+          ? 0
+          : (int.tryParse(_memorabilityToleranceCtrl.text.trim()) ?? 0).clamp(
+              0,
+              500,
+            ),
       useLichessDb: _lichessDbOverride != null,
       useMasters: _lichessDbOverride == LichessDatabase.masters,
       speeds: _lichessSpeeds.join(','),

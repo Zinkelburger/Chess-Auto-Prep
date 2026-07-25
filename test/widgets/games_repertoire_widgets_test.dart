@@ -1,9 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/core/repertoire_controller.dart';
-import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/models/opening_tree.dart';
+import 'package:chess_auto_prep/services/games_repertoire/draft_merge_planner.dart';
 import 'package:chess_auto_prep/services/games_repertoire/games_draft.dart';
 import 'package:chess_auto_prep/widgets/games_repertoire/draft_tree_view.dart';
 import 'package:chess_auto_prep/widgets/games_repertoire/merge_conflict_sheet.dart';
@@ -85,44 +86,68 @@ void main() {
   });
 
   group('MergeConflictSheet', () {
-    testWidgets('shows candidates and resolves by promoting to mainline', (
-      tester,
-    ) async {
-      final controller = RepertoireController();
-      controller.loadMoveSequence(['e4', 'e5', 'Nf3']);
-      // Merge a draft where I played Bc4 instead of Nf3 → one conflict.
-      final result = controller.mergeDraft(
-        MoveTree.fromMoves(['e4', 'e5', 'Bc4']),
-        isWhite: true,
-      );
-      expect(result.hasConflicts, isTrue);
+    const conflict = DraftConflict(
+      prefixSans: ['e4', 'e5'],
+      draftSan: 'Bc4',
+      repertoireSans: ['Nf3'],
+    );
 
+    // Opens the sheet via a launcher button and exposes the popped value.
+    Future<Future<Set<int>?>> pumpSheet(WidgetTester tester) async {
+      final completer = Completer<Set<int>?>();
       await tester.pumpWidget(
         _wrap(
-          MergeConflictSheet(
-            controller: controller,
-            conflicts: result.conflicts,
+          Builder(
+            builder: (context) => TextButton(
+              onPressed: () async {
+                completer.complete(
+                  await showModalBottomSheet<Set<int>>(
+                    context: context,
+                    builder: (_) =>
+                        const MergeConflictSheet(conflicts: [conflict]),
+                  ),
+                );
+              },
+              child: const Text('open'),
+            ),
           ),
         ),
       );
+      await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
+      return completer.future;
+    }
 
-      // Both candidate moves are offered.
+    testWidgets('defaults to keeping prep; picking mine flips the choice', (
+      tester,
+    ) async {
+      final result = await pumpSheet(tester);
+
+      // Both candidate moves are offered with the position shown.
+      expect(find.text('1.e4 e5'), findsOneWidget);
       expect(find.widgetWithText(ActionChip, 'Nf3'), findsOneWidget);
       expect(find.widgetWithText(ActionChip, 'Bc4'), findsOneWidget);
+      // Default: prep is kept, the draft branch is skipped.
+      expect(find.textContaining('Keeping your prep'), findsOneWidget);
 
-      // Before resolving, Nf3 is the mainline (index 0).
-      final before = controller.tree.nodeAt(const TreePath([0, 0]))!;
-      expect(before.children.first.san, 'Nf3');
-
-      // Pick Bc4 as my main line.
+      // Pick my games' move, then continue.
       await tester.tap(find.widgetWithText(ActionChip, 'Bc4'));
       await tester.pumpAndSettle();
+      expect(find.textContaining('added as an extra line'), findsOneWidget);
 
-      final after = controller.tree.nodeAt(const TreePath([0, 0]))!;
-      expect(after.children.first.san, 'Bc4');
-      // The resolved conflict is marked done.
-      expect(find.byIcon(Icons.check_circle), findsOneWidget);
+      await tester.tap(find.text('Continue merge'));
+      await tester.pumpAndSettle();
+      expect(await result, {0});
+    });
+
+    testWidgets('cancel pops null so the caller aborts the merge', (
+      tester,
+    ) async {
+      final result = await pumpSheet(tester);
+
+      await tester.tap(find.text('Cancel merge'));
+      await tester.pumpAndSettle();
+      expect(await result, isNull);
     });
   });
 }

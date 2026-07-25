@@ -1,5 +1,29 @@
 # Chess Opening Tree Builder
 
+> **This is a standalone C program, not part of the Flutter app.**
+>
+> It is the original prototype and the reference implementation of the
+> expectimax tree-building algorithm. The Flutter app has since **ported this
+> algorithm to Dart** (`lib/services/tree_build_service.dart`,
+> `lib/services/generation/`) — that Dart code is what actually runs when you
+> click Generate in the app. Nothing here is compiled into or invoked by the
+> app at runtime.
+>
+> It is kept for two reasons:
+>
+> 1. **Reference/prototyping.** New algorithm ideas are cheaper to try in C
+>    first, and `ALGORITHM.md` here is the canonical write-up of the method the
+>    Dart port follows. When the two disagree about intent, this is the spec.
+> 2. **It still hosts the local ChessDB (cdbdirect) build.** This part *is*
+>    live: `make setup-cdbdirect` builds the TerarkDB reader into
+>    `tree_builder/deps/install/`, which `run_with_cdbdirect.sh` puts on the
+>    library path for the Flutter app, and which
+>    `packages/cdbdirect_flutter_libs` compiles against. See
+>    [CDBDIRECT_SETUP.md](CDBDIRECT_SETUP.md).
+>
+> So: **the C tree builder itself is optional**; the cdbdirect setup in this
+> directory is not, if you want the local 1 TB ChessDB dump to work.
+
 A C CLI tool that builds chess opening repertoires by interleaving a
 human-move source (pure Maia by default, or pure Lichess with `--lichess`)
 with Stockfish evaluation. Branches are pruned inline by the eval window,

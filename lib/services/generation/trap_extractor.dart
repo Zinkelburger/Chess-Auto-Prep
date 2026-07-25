@@ -274,3 +274,40 @@ class _TrapCandidate {
     this.refutationEvalCp,
   });
 }
+
+/// Keeps only the lines that run through one of [traps].
+///
+/// A trap is recorded at the position *before* the opponent's tempting
+/// mistake, so a line "contains" the trap when the trap's move sequence is a
+/// prefix of the line.  Used by `trapsOnly` export: the tree is built and
+/// selected exactly as usual, then everything that teaches no trap is
+/// dropped, turning the PGN into a trap collection instead of a repertoire.
+///
+/// Returns an empty list when [traps] is empty — no traps found means
+/// nothing to export, which the caller reports rather than silently
+/// falling back to the full repertoire.
+List<T> keepLinesThroughTraps<T>(
+  List<T> lines,
+  List<TrapLineInfo> traps,
+  List<String> Function(T line) movesOf,
+) {
+  if (traps.isEmpty) return const [];
+  final prefixes = <String>{
+    for (final t in traps)
+      if (t.movesSan.isNotEmpty) t.movesSan.join(' '),
+  };
+  if (prefixes.isEmpty) return const [];
+
+  return lines.where((line) {
+    final moves = movesOf(line);
+    // Walk the line's own prefixes: cheaper than substring-matching every
+    // trap against every line, and exact on move boundaries.
+    final buffer = StringBuffer();
+    for (var i = 0; i < moves.length; i++) {
+      if (i > 0) buffer.write(' ');
+      buffer.write(moves[i]);
+      if (prefixes.contains(buffer.toString())) return true;
+    }
+    return false;
+  }).toList();
+}

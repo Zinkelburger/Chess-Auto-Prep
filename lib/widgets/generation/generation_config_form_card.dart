@@ -1,9 +1,11 @@
 part of 'generation_config_form.dart';
 
-/// Layer-1 "state your intent" card: opponent, style, effort, source —
-/// plus the presets menu and the live plain-language summary.  Every
-/// control here is a projection over the same underlying knobs the
-/// advanced dialog edits, so the two can never disagree.
+/// The always-visible generation form: opponent rating, the two search
+/// algorithms with their three numbers, the two output switches, and the
+/// build source.  Everything here is a real knob with a real name — no
+/// bundled "style" or "effort" modifiers that quietly rewrite several
+/// settings at once.  Rarely-touched knobs live in the Advanced dialog and
+/// edit the same controllers, so the two can never disagree.
 mixin _GenerationConfigCard
     on
         _GenerationConfigFormStateBase,
@@ -21,299 +23,270 @@ mixin _GenerationConfigCard
     2500,
   ];
 
-  // ── Derived intent state ────────────────────────────────────────────────
+  // ── Section chrome ──────────────────────────────────────────────────────
 
-  int get _opponentElo =>
-      ((int.tryParse(_maiaEloCtrl.text.trim()) ?? 2200).clamp(1100, 2500) / 50)
-          .round() *
-      50;
-
-  RepertoireStyle? get _currentStyle => detectStyle(
-    selectionMode: _selectionMode,
-    setupMoves: _setupMovesCtrl.text,
-  );
-
-  EffortPreset? get _currentEffort => EffortPreset.detect(
-    maxPly: int.tryParse(_maxPlyCtrl.text.trim()) ?? -1,
-    evalDepth: int.tryParse(_engineDepthCtrl.text.trim()) ?? -1,
-    ourMultipv: int.tryParse(_multipvCtrl.text.trim()) ?? -1,
-    verifyFinal: _verifyFinal,
-    wideOpening: _wideOpening,
-  );
-
-  void _applyStyle(RepertoireStyle style) {
-    _selectionMode = style.selectionMode;
-    // A hidden setup list steering a "Solid" repertoire is exactly the
-    // silent coupling this card exists to kill — clear it on style change.
-    if (style != RepertoireStyle.system) _setupMovesCtrl.clear();
+  /// Titled block with a rule above it, so the form reads as four short
+  /// lists instead of one wall of controls.
+  Widget _cardSection(
+    String title,
+    List<Widget> children, {
+    bool leadingRule = true,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (leadingRule) const Divider(height: 24),
+        Text(
+          title.toUpperCase(),
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
+            color: AppColors.onSurfaceSoft,
+          ),
+        ),
+        const SizedBox(height: 10),
+        ...children,
+      ],
+    );
   }
 
-  void _applyEffort(EffortPreset preset) {
-    _maxPlyCtrl.text = preset.maxPly.toString();
-    _engineDepthCtrl.text = preset.evalDepth.toString();
-    _multipvCtrl.text = preset.ourMultipv.toString();
-    _verifyFinal = preset.verifyFinal;
-    _wideOpening = preset.wideOpening;
+  // ── Opponent ────────────────────────────────────────────────────────────
+
+  /// Keeps the Lichess rating bucket in step with the typed rating; the
+  /// fine-grained multi-bucket selection stays in the advanced dialog.
+  void _syncLichessBucketToElo() {
+    if (_lichessDbOverride == null) return;
+    // A deliberate multi-bucket selection (Advanced) survives rating edits.
+    if (_lichessRatings.length > 1) return;
+    final elo = int.tryParse(_maiaEloCtrl.text.trim());
+    if (elo == null) return;
+    final nearest = _lichessRatingBuckets.reduce(
+      (a, b) => (a - elo).abs() <= (b - elo).abs() ? a : b,
+    );
+    _lichessRatings
+      ..clear()
+      ..add(nearest.toString());
   }
 
-  void _setOpponentElo(int elo) {
-    _maiaEloCtrl.text = elo.toString();
-    if (_lichessDbOverride != null) {
-      // Keep the DB rating bucket in step with the slider; fine-grained
-      // multi-bucket selection stays available in the advanced dialog.
-      final nearest = _lichessRatingBuckets.reduce(
-        (a, b) => (a - elo).abs() <= (b - elo).abs() ? a : b,
-      );
-      _lichessRatings
-        ..clear()
-        ..add(nearest.toString());
-    }
-  }
-
-  // ── Card rows ───────────────────────────────────────────────────────────
-
-  Widget _opponentRow() {
-    final elo = _opponentElo;
+  Widget _opponentSection() {
+    final speeds = _lichessDbOverride != null && _lichessSpeeds.isNotEmpty
+        ? ' (${_lichessSpeeds.join(', ')})'
+        : '';
     final source = _lichessDbOverride == null
         ? 'Maia neural opponent (human-like)'
         : (_lichessDbOverride == LichessDatabase.masters
               ? 'Lichess Masters database'
               : 'Lichess players database');
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Text('Opponent strength', style: TextStyle(fontSize: 13)),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Slider(
-                value: elo.toDouble(),
-                min: 1100,
-                max: 2500,
-                divisions: 28,
-                label: '~$elo',
-                onChanged: widget.isGenerating
-                    ? null
-                    : (v) => setState(() => _setOpponentElo(v.round())),
-              ),
-            ),
-            SizedBox(
-              width: 52,
-              child: Text(
-                '~$elo',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
-        _caption('Modelled as: $source — change under Advanced.'),
-        if (_lichessDbOverride != null) ...[
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 6,
-            children: [
-              for (final speed in const [
-                'bullet',
-                'blitz',
-                'rapid',
-                'classical',
-              ])
-                FilterChip(
-                  label: Text(speed, style: const TextStyle(fontSize: 11)),
-                  selected: _lichessSpeeds.contains(speed),
-                  onSelected: widget.isGenerating
-                      ? null
-                      : (on) => setState(() {
-                          if (on) {
-                            _lichessSpeeds.add(speed);
-                          } else if (_lichessSpeeds.length > 1) {
-                            _lichessSpeeds.remove(speed);
-                          }
-                        }),
-                  visualDensity: VisualDensity.compact,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-            ],
+    return _cardSection('Opponent', leadingRule: false, [
+      _numField(
+        _maiaEloCtrl,
+        'Opponent rating (Elo)',
+        defaultText: '2200',
+        onEdited: () => setState(_syncLichessBucketToElo),
+        tooltip:
+            'The rating the opponent model plays at. Everything about how '
+            'likely a reply is comes from this number. Set it to the '
+            'rating of opponents you usually face.',
+      ),
+      _caption(
+        _buildMode == BuildMode.dbExplorer
+            ? 'Opponent replies come from move frequencies in your PGN '
+                  'files; this rating still drives annotations and trap '
+                  'findability.'
+            : 'Replies modeled from: $source$speeds — change under Advanced.',
+      ),
+    ]);
+  }
+
+  // ── Search ──────────────────────────────────────────────────────────────
+
+  /// Coverage-floor phrase for the Quick caption, live from the Advanced
+  /// field; 0 or unparsable falls back to the generic wording.
+  String _coverageFloorPhrase() {
+    final floor = double.tryParse(_coverMinProbCtrl.text.trim()) ?? 0;
+    if (floor <= 0 || floor > 1) {
+      return 'every covered reply still gets an answer';
+    }
+    final pct = (floor * 1000).roundToDouble() / 10;
+    final pctText = pct == pct.roundToDouble()
+        ? pct.round().toString()
+        : pct.toStringAsFixed(1);
+    return 'every reply seen more than $pctText% of the time still gets '
+        'an answer';
+  }
+
+  String _searchAlgorithmCaption() {
+    final budget = int.tryParse(_timeBudgetCtrl.text.trim()) ?? 0;
+    return switch (_searchAlgorithm) {
+      SearchAlgorithm.fast =>
+        budget > 0
+            ? 'Expands the most likely positions first and stops after '
+                  '$budget minute${budget == 1 ? '' : 's'}. Rare side lines '
+                  'get a narrower search; ${_coverageFloorPhrase()}.'
+            : 'Expands the most likely positions first and searches rare '
+                  'side lines more narrowly. Set a time limit below to make '
+                  'it stop early instead of finishing the whole tree.',
+      SearchAlgorithm.pure =>
+        budget > 0
+            ? 'Searches every position level by level at the full candidate '
+                  'width — but with a time limit it stops mid-breadth and '
+                  'leaves every line equally shallow. Quick makes far '
+                  'better use of a time limit.'
+            : 'Level by level, every position at the full candidate width '
+                  'and the eval window set under Advanced — no extra '
+                  'narrowing for rare lines. Much slower.',
+    };
+  }
+
+  Widget _searchSection() {
+    return _cardSection('Search', [
+      SegmentedButton<SearchAlgorithm>(
+        segments: const [
+          ButtonSegment(
+            value: SearchAlgorithm.fast,
+            label: Text('Quick (recommended)', style: TextStyle(fontSize: 12)),
+            icon: Icon(Icons.bolt, size: 16),
+          ),
+          ButtonSegment(
+            value: SearchAlgorithm.pure,
+            label: Text('Full', style: TextStyle(fontSize: 12)),
+            icon: Icon(Icons.all_inclusive, size: 16),
           ),
         ],
-      ],
-    );
-  }
-
-  Widget _styleRow() {
-    final style = _currentStyle;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Text('Style', style: TextStyle(fontSize: 13)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: SegmentedButton<RepertoireStyle>(
-                segments: [
-                  for (final s in RepertoireStyle.values)
-                    ButtonSegment(
-                      value: s,
-                      label: Text(
-                        s.label,
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                      tooltip: s.description,
-                    ),
-                ],
-                selected: style != null ? {style} : {},
-                emptySelectionAllowed: true,
-                showSelectedIcon: false,
-                onSelectionChanged: widget.isGenerating
-                    ? null
-                    : (sel) {
-                        if (sel.isEmpty) return;
-                        setState(() => _applyStyle(sel.first));
-                      },
-              ),
-            ),
-          ],
-        ),
-        _caption(
-          style?.description ??
-              'Custom line selection '
-                  '(${_selectionModeLabel(_selectionMode)}) — set under '
-                  'Advanced.',
-        ),
-        if (style == RepertoireStyle.system) ...[
-          const SizedBox(height: 8),
-          _setupMovesField(),
-        ],
-      ],
-    );
-  }
-
-  Widget _setupMovesField() {
-    return TextField(
-      controller: _setupMovesCtrl,
-      enabled: !widget.isGenerating,
-      onChanged: (_) => setState(() {}),
-      decoration: const InputDecoration(
-        labelText: 'Your system\'s moves (SAN, any order)',
-        hintText: 'e.g. Be3 Qd2 f3 O-O-O h4 Nh3',
-        helperText:
-            'Played whenever they stay sound; the repertoire deviates '
-            'automatically when the opponent makes them too costly.',
-        helperMaxLines: 2,
-        isDense: true,
-        border: OutlineInputBorder(),
+        selected: {_searchAlgorithm},
+        showSelectedIcon: false,
+        onSelectionChanged: widget.isGenerating
+            ? null
+            : (sel) => setState(() => _searchAlgorithm = sel.first),
       ),
-      style: const TextStyle(fontSize: 13),
-    );
+      _caption(_searchAlgorithmCaption()),
+      const SizedBox(height: 10),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          _numField(
+            _engineDepthCtrl,
+            'Engine depth',
+            defaultText: '$kDefaultGenerationEvalDepth',
+            onEdited: () => setState(() {}),
+            enabled: _buildMode != BuildMode.maiaDbExplore,
+            disabledReason: 'Evals come from databases in this build source',
+            tooltip:
+                'Stockfish search depth at every evaluated position — '
+                'during the build, or in the eval pass run after a '
+                'PGN-file tree is built.',
+          ),
+          _numField(
+            _maxPlyCtrl,
+            'Max line length (half-moves)',
+            defaultText: '20',
+            onEdited: () => setState(() {}),
+            tooltip: 'How deep lines are allowed to grow.',
+          ),
+          _numField(
+            _multipvCtrl,
+            'Your candidate moves per position',
+            defaultText: '4',
+            onEdited: () => setState(() {}),
+            enabled: _buildMode != BuildMode.dbExplorer,
+            disabledReason:
+                'Your PGN files decide the candidate moves in this mode',
+            tooltip:
+                'How many of your candidate moves are considered at each '
+                'position — engine MultiPV lines, or top Maia moves in '
+                'database mode.',
+          ),
+          _numField(
+            _timeBudgetCtrl,
+            'Stop after (minutes, 0 = no limit)',
+            defaultText: '0',
+            onEdited: () => setState(() {}),
+            tooltip:
+                '0 = no limit. With a limit the build stops expanding when '
+                'time runs out, still answers every covered reply, and can '
+                'be resumed later. Eval enrichment and verification run '
+                'afterwards and are not counted against the limit.',
+          ),
+        ],
+      ),
+    ]);
   }
 
-  Widget _effortRow() {
-    final effort = _currentEffort;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Text('Effort', style: TextStyle(fontSize: 13)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: SegmentedButton<EffortLevel>(
-                segments: [
-                  for (final p in EffortPreset.all)
-                    ButtonSegment(
-                      value: p.level,
-                      label: Text(
-                        p.label,
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                      tooltip:
-                          '${p.maxPly} half-moves deep · engine depth '
-                          '${p.evalDepth} · '
-                          '${p.verifyFinal ? 'verified' : 'unverified'} · '
-                          'usually ${p.timeHint}',
-                    ),
-                ],
-                selected: effort != null ? {effort.level} : {},
-                emptySelectionAllowed: true,
-                showSelectedIcon: false,
-                onSelectionChanged: widget.isGenerating
-                    ? null
-                    : (sel) {
-                        if (sel.isEmpty) return;
-                        setState(
-                          () => _applyEffort(
-                            EffortPreset.all.firstWhere(
-                              (p) => p.level == sel.first,
-                            ),
-                          ),
-                        );
-                      },
-              ),
-            ),
-          ],
-        ),
-        _caption(
-          effort != null
-              ? 'Usually ${effort.timeHint} on a desktop machine.'
-              : 'Custom search settings (set under Advanced).',
-        ),
-      ],
-    );
-  }
+  // ── Output ──────────────────────────────────────────────────────────────
 
-  Widget _sourceRow() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Text('Build from', style: TextStyle(fontSize: 13)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: DropdownButtonFormField<BuildMode>(
-                initialValue: _buildMode,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                items: const [
-                  DropdownMenuItem(
-                    value: BuildMode.stockfishExpectimax,
-                    child: Text(
-                      'Engine + human model (recommended)',
-                      style: TextStyle(fontSize: 13),
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: BuildMode.maiaDbExplore,
-                    child: Text(
-                      'Database win rates (no engine)',
-                      style: TextStyle(fontSize: 13),
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: BuildMode.dbExplorer,
-                    child: Text('My PGN files', style: TextStyle(fontSize: 13)),
-                  ),
-                ],
-                onChanged: widget.isGenerating
-                    ? null
-                    : (v) {
-                        if (v != null) setState(() => _buildMode = v);
-                      },
-              ),
-            ),
-          ],
+  Widget _outputSection() {
+    final isDb = _buildMode == BuildMode.dbExplorer;
+    return _cardSection('What to build', [
+      DropdownButtonFormField<BuildMode>(
+        initialValue: _buildMode,
+        decoration: const InputDecoration(
+          labelText: 'Build from',
+          border: OutlineInputBorder(),
+          isDense: true,
         ),
-        _caption(_buildModeDescription()),
-        if (_buildMode == BuildMode.dbExplorer) ...[
-          const SizedBox(height: 8),
-          PgnSourcesPanel(
+        items: const [
+          DropdownMenuItem(
+            value: BuildMode.stockfishExpectimax,
+            child: Text(
+              'Engine + human model (recommended)',
+              style: TextStyle(fontSize: 13),
+            ),
+          ),
+          DropdownMenuItem(
+            value: BuildMode.maiaDbExplore,
+            child: Text(
+              'Database win rates (no engine)',
+              style: TextStyle(fontSize: 13),
+            ),
+          ),
+          DropdownMenuItem(
+            value: BuildMode.dbExplorer,
+            child: Text('My PGN files', style: TextStyle(fontSize: 13)),
+          ),
+        ],
+        onChanged: widget.isGenerating
+            ? null
+            : (v) {
+                if (v != null) setState(() => _buildMode = v);
+              },
+      ),
+      _caption(_buildModeDescription()),
+      const SizedBox(height: 8),
+      _labeledCheckbox(
+        'Prefer novelties',
+        _preferNovelties,
+        (v) => setState(() => _preferNovelties = v),
+        tooltip:
+            'Boost sound-but-rare moves so opponents leave their '
+            'preparation sooner. While on, the Natural-move tolerance '
+            '(Advanced → Move choice) is ignored.',
+      ),
+      _labeledCheckbox(
+        'Only traps',
+        _trapsOnly,
+        (v) => setState(() => _trapsOnly = v),
+        tooltip:
+            'Export only the lines that run through a trap — a position '
+            'where the opponent has a tempting move that loses. The search '
+            'is unchanged; everything that teaches no trap is dropped from '
+            'the PGN, so you get a trap collection, not a repertoire.',
+      ),
+      const SizedBox(height: 8),
+      _caption(
+        isDb
+            ? 'PGN files used for this build:'
+            : 'Used only when "Build from" is My PGN files.',
+      ),
+      const SizedBox(height: 4),
+      // Always mounted so the sources list survives mode switches; toConfig
+      // only consumes it in db-explorer mode.
+      IgnorePointer(
+        ignoring: !isDb,
+        child: Opacity(
+          opacity: isDb ? 1 : 0.45,
+          child: PgnSourcesPanel(
             key: _pgnSourcesKey,
             initialSources: null,
             onSourcesChanged: (sources) {
@@ -326,9 +299,9 @@ mixin _GenerationConfigCard
                 );
             },
           ),
-        ],
-      ],
-    );
+        ),
+      ),
+    ]);
   }
 
   // ── Presets menu ────────────────────────────────────────────────────────
@@ -353,9 +326,12 @@ mixin _GenerationConfigCard
           playAsWhite: widget.playAsWhite,
           minEvalCp: widget.playAsWhite ? 0 : -100,
           maxEvalCp: widget.playAsWhite ? 200 : 100,
+          // The form's declared default; TreeBuildConfig's own is 50.
+          maxEvalLossCp: 30,
         ),
       );
     });
+    showAppSnackBar(context, 'Settings reset to defaults');
   }
 
   Future<void> _saveCurrentAsPreset() async {
@@ -411,7 +387,10 @@ mixin _GenerationConfigCard
             await _saveCurrentAsPreset();
           default:
             final json = _savedPresets[value];
-            if (json != null) _applyPresetJson(json);
+            if (json != null) {
+              _applyPresetJson(json);
+              showAppSnackBar(context, 'Applied preset "$value"');
+            }
         }
       },
       itemBuilder: (ctx) => [
@@ -430,50 +409,86 @@ mixin _GenerationConfigCard
                 IconButton(
                   icon: const Icon(Icons.delete_outline, size: 16),
                   tooltip: 'Delete preset',
-                  onPressed: () async {
-                    Navigator.of(ctx).pop();
-                    await _presetStore.delete(name);
-                    await _reloadPresets();
-                  },
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.all(4),
+                  onPressed: () => _confirmDeletePreset(ctx, name),
                 ),
               ],
             ),
           ),
       ],
-      child: Chip(
-        avatar: const Icon(Icons.bookmark_outline, size: 16),
-        label: Text(
-          _savedPresets.isEmpty
-              ? 'Presets'
-              : 'Presets (${_savedPresets.length})',
-          style: const TextStyle(fontSize: 12),
+      // IgnorePointer keeps the tap on the PopupMenuButton while the
+      // TextButton only paints the enabled/disabled button visuals.
+      child: IgnorePointer(
+        child: TextButton.icon(
+          onPressed: widget.isGenerating ? null : () {},
+          icon: const Icon(Icons.bookmark_outline, size: 16),
+          label: Text(
+            _savedPresets.isEmpty
+                ? 'Presets…'
+                : 'Presets (${_savedPresets.length})…',
+            style: const TextStyle(fontSize: 13),
+          ),
         ),
-        visualDensity: VisualDensity.compact,
       ),
     );
+  }
+
+  Future<void> _confirmDeletePreset(
+    BuildContext menuContext,
+    String name,
+  ) async {
+    Navigator.of(menuContext).pop();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        content: Text('Delete preset "$name"? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _presetStore.delete(name);
+    await _reloadPresets();
   }
 
   // ── Summary ─────────────────────────────────────────────────────────────
 
   String _summaryText() {
-    final style = _currentStyle;
-    final effort = _currentEffort;
-    final styleTxt = style != null
-        ? style.label
-        : 'Custom (${_selectionModeLabel(_selectionMode)})';
+    final elo = int.tryParse(_maiaEloCtrl.text.trim()) ?? 2200;
+    final ply = int.tryParse(_maxPlyCtrl.text.trim()) ?? 20;
+    final depth =
+        int.tryParse(_engineDepthCtrl.text.trim()) ??
+        kDefaultGenerationEvalDepth;
+    final budget = int.tryParse(_timeBudgetCtrl.text.trim()) ?? 0;
     final source = switch (_buildMode) {
       BuildMode.stockfishExpectimax => 'engine + human model',
       BuildMode.maiaDbExplore => 'database win rates',
       BuildMode.dbExplorer => 'your PGN files',
       BuildMode.trapFinder => 'trap finder',
     };
-    final ply = int.tryParse(_maxPlyCtrl.text.trim()) ?? 20;
     final parts = [
-      '$styleTxt repertoire vs ~$_opponentElo',
+      _searchAlgorithm == SearchAlgorithm.fast ? 'Quick search' : 'Full search',
+      'vs ~$elo',
       source,
       '$ply half-moves deep',
-      if (_verifyFinal) 'verified',
-      if (effort != null) 'usually ${effort.timeHint}',
+      if (_buildMode == BuildMode.stockfishExpectimax) 'engine depth $depth',
+      _selectionModeLabel(
+        _selectionMode,
+      ).replaceAll(' (recommended)', '').toLowerCase(),
+      if (_preferNovelties) 'novelties',
+      if (_trapsOnly) 'traps only',
+      if (_verifyFinal && _buildMode != BuildMode.maiaDbExplore) 'verified',
+      if (budget > 0) 'stops after ${budget}m',
     ];
     return parts.join(' · ');
   }
@@ -483,8 +498,8 @@ mixin _GenerationConfigCard
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.rowStripe,
-        borderRadius: BorderRadius.circular(6),
+        color: AppColors.surfaceInset,
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Text(_summaryText(), style: const TextStyle(fontSize: 12)),
     );

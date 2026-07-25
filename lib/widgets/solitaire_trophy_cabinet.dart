@@ -106,8 +106,10 @@ class _SolitaireTrophyCabinetState extends State<SolitaireTrophyCabinet> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Play solitaire mode, then analyze the game.\n'
-                      'If your guess beats the GM\'s move, you earn a trophy!',
+                      'Play a game in solitaire mode, leave solitaire, then '
+                      'run the Analysis tab.\n'
+                      'Every move you guessed that the engine likes better '
+                      'than the one actually played earns a trophy.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: AppColors.onSurfaceMuted,

@@ -111,11 +111,16 @@ class CoverageSuggestionService {
     this.coherence,
   });
 
+  /// Ranked lines to add, chosen greedily until [targetCoverage] is reached.
+  ///
+  /// [maxSuggestions] is `null` by default: the coverage target the user set
+  /// is the stopping condition, so a count limit on top of it would silently
+  /// stop short of the target they asked for.
   List<SuggestedLine> generateSuggestions({
     required double targetCoverage,
     required bool playAsWhite,
     SuggestionWeights weights = const SuggestionWeights(),
-    int maxSuggestions = 10,
+    int? maxSuggestions,
   }) {
     final gaps = _collectGaps();
     final candidates = _resolveLines(gaps, playAsWhite);
@@ -301,13 +306,14 @@ class CoverageSuggestionService {
   List<SuggestedLine> _greedySelect(
     List<SuggestedLine> candidates,
     double targetCoverage,
-    int maxCount,
+    int? maxCount,
   ) {
     final selected = <SuggestedLine>[];
     var currentCoverage = coverage.coveragePercent;
     final used = <int>{};
 
-    while (currentCoverage < targetCoverage && selected.length < maxCount) {
+    while (currentCoverage < targetCoverage &&
+        (maxCount == null || selected.length < maxCount)) {
       double bestScore = 0;
       int bestIdx = -1;
 

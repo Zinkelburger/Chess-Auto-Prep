@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import '../../core/repertoire_controller.dart';
 import '../../models/build_tree_node.dart' show BuildTreeNode;
+import '../../models/line_status.dart';
 import '../../models/repertoire_line.dart';
 import '../../models/repertoire_metadata.dart';
 import '../../models/repertoire_move_progress.dart';
@@ -17,12 +18,14 @@ import '../../models/completed_move.dart';
 import '../../models/training_settings.dart';
 import '../../utils/pgn_comment_utils.dart' show filterDisplayComment;
 import '../../utils/safe_change_notifier.dart';
+import '../asked_questions_store.dart';
 import '../generation/tree_my_ease.dart' show computeLinePlayability;
 import '../generation/tree_serialization.dart' show deserializeTree;
 import '../line_metrics_helpers.dart' show walkTreeForLine;
 import '../repertoire_review_service.dart';
 import '../repertoire_service.dart';
 import '../storage/storage_factory.dart';
+import 'chapter_layout.dart';
 import 'training_phase.dart';
 
 part 'training_session_display.dart';
@@ -42,11 +45,17 @@ class TrainingSessionController extends ChangeNotifier
   final RepertoireService repertoireService;
   final RepertoireReviewService reviewService;
 
+  /// Remembers the ask-once prompts (currently "sort into chapters?") so a
+  /// file is never asked twice.
+  final AskedQuestionsStore askedQuestions;
+
   TrainingSessionController({
     RepertoireService? repertoireService,
     RepertoireReviewService? reviewService,
+    AskedQuestionsStore? askedQuestions,
   }) : repertoireService = repertoireService ?? RepertoireService(),
-       reviewService = reviewService ?? RepertoireReviewService() {
+       reviewService = reviewService ?? RepertoireReviewService(),
+       askedQuestions = askedQuestions ?? AskedQuestionsStore() {
     session.addListener(_onSessionChanged);
   }
 
@@ -75,20 +84,21 @@ class TrainingSessionController extends ChangeNotifier
   /// line once, in order, no scheduling).
   RepetitionMode repetitionMode = RepetitionMode.spaced;
 
+  /// What the current run is working through. Learn walks untrained lines,
+  /// Review walks due ones; auto-next stays inside the intent so a Learn
+  /// session is never interrupted by a due line (and vice versa).
+  TrainingIntent sessionIntent = TrainingIntent.learn;
+
+  /// True once a run has nothing left to show. The trainer displays the
+  /// session summary instead of asking the user to rate the last line again.
+  bool runComplete = false;
+
   /// Lines completed during this linear session (line ids).
   final Set<String> _linearDone = {};
 
   /// Per-line playability scores from the generated tree (0 = hardest, 1 = easiest).
   /// Empty when no tree.json exists for the repertoire.
   Map<String, double> playabilityMap = {};
-
-  /// Per-line bottleneck info: (ply, quality, isOurMove).
-  Map<String, ({int ply, double quality, bool isOurMove})> bottleneckMap = {};
-
-  /// True when no tree.json was found for the current repertoire.
-  /// Studies have no generated tree — never prompt to score them.
-  bool get needsScoring =>
-      !sourceIsStudy && _treeRoot == null && lines.isNotEmpty;
 
   BuildTreeNode? _treeRoot;
   bool? _treeIsWhite;
@@ -284,7 +294,6 @@ class TrainingSessionController extends ChangeNotifier
         _treeRoot = null;
         _treeIsWhite = null;
         playabilityMap = {};
-        bottleneckMap = {};
       } else {
         await _loadTreeAndComputePlayability(filePath, parsedLines);
         if (generation != _loadGeneration) return;
@@ -292,6 +301,8 @@ class TrainingSessionController extends ChangeNotifier
 
       _linearDone.clear();
       activeChapter = null;
+      await _resolveChapterLayout(filePath, loadIsStudy);
+      if (generation != _loadGeneration) return;
       dueQueue = _buildQueue();
       notifyListeners();
 
@@ -321,7 +332,6 @@ class TrainingSessionController extends ChangeNotifier
     _treeRoot = null;
     _treeIsWhite = null;
     playabilityMap = {};
-    bottleneckMap = {};
 
     final base = p.withoutExtension(filePath);
     final treePath = '${base}_tree.json';
@@ -346,11 +356,6 @@ class TrainingSessionController extends ChangeNotifier
 
         final lp = computeLinePlayability(linePath, _treeIsWhite!);
         playabilityMap[line.id] = lp.playability;
-        bottleneckMap[line.id] = (
-          ply: lp.bottleneckPly,
-          quality: lp.bottleneckQuality,
-          isOurMove: lp.bottleneckIsOurMove,
-        );
       }
     } catch (e) {
       debugPrint('[TrainingController] Failed to load tree: $e');
@@ -361,12 +366,31 @@ class TrainingSessionController extends ChangeNotifier
   // LINE MANAGEMENT
   // ---------------------------------------------------------------------------
 
+  /// Sentinel [activeChapter] for "the lines this file's chapter scheme
+  /// doesn't cover" — a real chapter name can never be a NUL byte.
+  static const ungroupedChapter = '__trainer_ungrouped__';
+
   /// Chapter the trainer is currently scoped to, or null for all lines.
   /// Filters the line list, the due queue, and Learn/Review advancement.
   String? activeChapter;
 
+  /// Chapter layout this file appears to use, waiting on the user's answer
+  /// ("Looks like a course export — sort into chapters?"). Null when the file
+  /// has no detectable layout or the question was already answered.
+  ChapterLayoutProposal? pendingChapterPrompt;
+
+  /// The user said "keep one flat list" for this file.
+  bool chaptersDeclined = false;
+
+  /// Chapter layout detected in the loaded file, whether or not it is in use.
+  /// Kept so the header's "Chapters…" entry point only appears when there is
+  /// actually something to propose.
+  ChapterLayoutProposal? _detectedLayout;
+  bool get canOfferChapters => _detectedLayout != null;
+
   /// The chapter a line belongs to under the current grouping setting.
   String? chapterOf(RepertoireLine line) {
+    if (chaptersDeclined) return null;
     switch (settings.chapterGrouping) {
       case ChapterGroupingMode.off:
         return null;
@@ -382,6 +406,14 @@ class TrainingSessionController extends ChangeNotifier
     }
   }
 
+  /// Whether [line] belongs to [chapter]; null means "all chapters" and
+  /// [ungroupedChapter] means "the lines with no chapter of their own".
+  bool lineInChapter(RepertoireLine line, String? chapter) {
+    if (chapter == null) return true;
+    final own = chapterOf(line);
+    return chapter == ungroupedChapter ? own == null : own == chapter;
+  }
+
   /// Distinct chapters in file order. Empty when the source has none.
   List<String> get chapters {
     final seen = <String>{};
@@ -392,6 +424,10 @@ class TrainingSessionController extends ChangeNotifier
     }
     return ordered;
   }
+
+  /// Lines the chapter scheme leaves out (an intro game with no title, say).
+  bool get hasUngroupedLines =>
+      chapters.isNotEmpty && lines.any((line) => chapterOf(line) == null);
 
   /// Scope training to [chapter] (null = all chapters) and rebuild the queue.
   void setActiveChapter(String? chapter) {
@@ -405,7 +441,86 @@ class TrainingSessionController extends ChangeNotifier
   /// under the new scheme, so drop it and rebuild.
   void onChapterSettingsChanged() {
     activeChapter = null;
+    // The delimiter feeds name-prefix detection, so what the file *could* be
+    // grouped by can change with the setting.
+    _detectedLayout = sourceIsStudy
+        ? null
+        : detectChapterLayout(lines, delimiter: settings.chapterDelimiter);
     dueQueue = _buildQueue();
+    notifyListeners();
+  }
+
+  /// Work out whether this file looks chapter-organised, and whether the user
+  /// has already answered for it. Sets [pendingChapterPrompt] when the
+  /// question is still open.
+  Future<void> _resolveChapterLayout(String filePath, bool isStudy) async {
+    chaptersDeclined = false;
+    pendingChapterPrompt = null;
+    _detectedLayout = null;
+    // A study's chapters are its puzzles — nothing to re-group.
+    if (isStudy) return;
+
+    final proposal = detectChapterLayout(
+      lines,
+      delimiter: settings.chapterDelimiter,
+    );
+    _detectedLayout = proposal;
+    if (proposal == null) return;
+
+    final stored = await askedQuestions.boolAnswerFor(
+      AskedQuestion.chapterLayout,
+      subject: filePath,
+    );
+    if (stored == false) {
+      chaptersDeclined = true;
+      return;
+    }
+    if (stored == true) {
+      await _applyChapterMode(proposal.mode);
+      return;
+    }
+    pendingChapterPrompt = proposal;
+  }
+
+  Future<void> _applyChapterMode(ChapterGroupingMode mode) async {
+    if (settings.chapterGrouping == mode) return;
+    settings.chapterGrouping = mode;
+    await settings.save();
+  }
+
+  /// Answer the "sort into chapters?" prompt. The choice is remembered per
+  /// file, so the question is asked once and stays changeable from the
+  /// trainer header.
+  Future<void> answerChapterPrompt(bool useChapters) async {
+    final proposal = pendingChapterPrompt;
+    pendingChapterPrompt = null;
+    chaptersDeclined = !useChapters;
+    activeChapter = null;
+    if (useChapters && proposal != null) {
+      await _applyChapterMode(proposal.mode);
+    }
+    dueQueue = _buildQueue();
+    notifyListeners();
+    final filePath = repertoire?.filePath;
+    if (filePath == null) return;
+    await askedQuestions.record(
+      AskedQuestion.chapterLayout,
+      subject: filePath,
+      answer: useChapters,
+      // What was on screen when they answered, so the stored file explains
+      // itself months later.
+      note: proposal == null
+          ? null
+          : '${proposal.formatLabel} · ${proposal.chapterCount} chapters',
+    );
+  }
+
+  /// Re-open the chapter prompt from the header ("Chapters…"), so a "no"
+  /// answer is never final.
+  void reopenChapterPrompt() {
+    final proposal = _detectedLayout;
+    if (proposal == null) return;
+    pendingChapterPrompt = proposal;
     notifyListeners();
   }
 
@@ -422,7 +537,7 @@ class TrainingSessionController extends ChangeNotifier
         ? lines
         : [
             for (final line in lines)
-              if (chapterOf(line) == activeChapter) line,
+              if (lineInChapter(line, activeChapter)) line,
           ];
     final ordered = reviewService.orderLinesForReview(
       scoped,
@@ -461,8 +576,90 @@ class TrainingSessionController extends ChangeNotifier
     return entry == null || entry.isNew;
   }
 
-  void startLine(RepertoireLine? line) {
+  // ---------------------------------------------------------------------------
+  // LEARN / REVIEW RUNS
+  // ---------------------------------------------------------------------------
+
+  /// Lines in the current scope with each status — what the Learn and Review
+  /// buttons are enabled from.
+  LineCounts countsFor({String? chapter}) => countLines([
+    for (final line in lines)
+      if (lineInChapter(line, chapter)) line,
+  ], reviewMap);
+
+  /// Start working through untrained lines in the active chapter.
+  void startLearnSession() => _startSession(TrainingIntent.learn);
+
+  /// Start working through the lines that are due in the active chapter.
+  void startReviewSession() => _startSession(TrainingIntent.review);
+
+  void _startSession(TrainingIntent intent) {
+    dueQueue = _buildQueue();
+    final line = _nextForIntent(intent);
+    if (line == null) {
+      // Nothing to do in this scope: say so instead of dropping the user into
+      // an unrelated line (the old buttons fell back to dueQueue.first, which
+      // threw on an empty queue).
+      feedback = _sessionCompleteMessage(intent);
+      notifyListeners();
+      return;
+    }
+    startLine(line, intent: intent);
+  }
+
+  /// The next line matching [intent], starting after [afterLineId] in queue
+  /// order and wrapping around. Null when the scope holds no such line.
+  RepertoireLine? _nextForIntent(TrainingIntent intent, {String? afterLineId}) {
+    if (dueQueue.isEmpty) return null;
+    // Linear mode runs every queued line once, in order — there is no
+    // untrained/due split to honour.
+    bool matches(RepertoireLine line) =>
+        repetitionMode == RepetitionMode.linear || _matchesIntent(line, intent);
+
+    final startIndex = afterLineId == null
+        ? -1
+        : dueQueue.indexWhere((l) => l.id == afterLineId);
+    if (startIndex < 0) {
+      for (final line in dueQueue) {
+        if (matches(line)) return line;
+      }
+      return null;
+    }
+    for (int step = 1; step <= dueQueue.length; step++) {
+      final line = dueQueue[(startIndex + step) % dueQueue.length];
+      if (matches(line)) return line;
+    }
+    return null;
+  }
+
+  bool _matchesIntent(RepertoireLine line, TrainingIntent intent) {
+    final status = lineStatusOf(reviewMap[line.id]);
+    return intent == TrainingIntent.learn
+        ? status == LineStatus.untrained
+        : status == LineStatus.due;
+  }
+
+  /// Lines still ahead in this run — what the Train tab counts down.
+  int get remainingInRun => repetitionMode == RepetitionMode.linear
+      ? dueQueue.length
+      : dueQueue.where((line) => _matchesIntent(line, sessionIntent)).length;
+
+  String _sessionCompleteMessage(TrainingIntent intent) {
+    if (repetitionMode == RepetitionMode.linear) return 'Set complete!';
+    return intent == TrainingIntent.learn
+        ? 'Nothing left to learn here.'
+        : 'All caught up!';
+  }
+
+  /// Start [line] now. [intent] is what the rest of the run should work
+  /// through; by default it follows the line's own status, so clicking an
+  /// untrained line starts a Learn run and clicking a due one a Review run.
+  void startLine(RepertoireLine? line, {TrainingIntent? intent}) {
     if (line == null) return;
+    sessionIntent =
+        intent ??
+        (_isLineNew(line) ? TrainingIntent.learn : TrainingIntent.review);
+    runComplete = false;
     _learnTimer?.cancel();
 
     if (line.startPosition.fen != Chess.initial.fen) {
@@ -599,6 +796,7 @@ class TrainingSessionController extends ChangeNotifier
   void stopSession() {
     _learnTimer?.cancel();
     _lineGeneration++;
+    runComplete = false;
     currentLine = null;
     phase = TrainingPhase.drilling;
     waitingForUser = false;
@@ -635,7 +833,7 @@ class TrainingSessionController extends ChangeNotifier
 
     while (currentMoveIndex < limit) {
       if (_isUserMove(currentMoveIndex)) {
-        _prepareDrillMove(currentMoveIndex);
+        _prepareDrillMove();
         return;
       } else {
         _playOpponentMove(currentMoveIndex);
@@ -675,7 +873,7 @@ class TrainingSessionController extends ChangeNotifier
     notifyListeners();
   }
 
-  void _prepareDrillMove(int moveIndex) {
+  void _prepareDrillMove() {
     waitingForUser = true;
     currentAnnotation = null;
     feedback = null;
@@ -909,51 +1107,24 @@ class TrainingSessionController extends ChangeNotifier
     }
   }
 
+  /// Advance to the next line of the current run (Learn or Review), or finish
+  /// the session when the scope is exhausted.
   void rebuildQueueAndAdvance() {
     dueQueue = _buildQueue();
 
-    if (dueQueue.isEmpty) {
+    final next = _nextForIntent(sessionIntent, afterLineId: currentLine?.id);
+    if (next == null) {
       phase = TrainingPhase.finished;
-      feedback = repetitionMode == RepetitionMode.linear
-          ? 'Set complete!'
-          : 'All caught up!';
+      runComplete = true;
+      feedback = _sessionCompleteMessage(sessionIntent);
       notifyListeners();
       return;
     }
-
-    int nextIndex = 0;
-    if (currentLine != null) {
-      final currentQueueIndex = dueQueue.indexWhere(
-        (l) => l.id == currentLine!.id,
-      );
-      if (currentQueueIndex >= 0) {
-        nextIndex = (currentQueueIndex + 1) % dueQueue.length;
-      }
-    }
-    startLine(dueQueue[nextIndex]);
+    startLine(next, intent: sessionIntent);
   }
 
-  /// Start the next unseen/new line from the queue.
-  void startNextNew() {
-    final line = dueQueue.firstWhere((l) {
-      final entry = reviewMap[l.id];
-      return entry == null || entry.isNew;
-    }, orElse: () => dueQueue.first);
-    startLine(line);
-  }
-
-  /// Start the next due-for-review (not new) line from the queue.
-  void startNextDue() {
-    final line = dueQueue.firstWhere((l) {
-      final entry = reviewMap[l.id];
-      return entry != null && !entry.isNew && entry.isDue;
-    }, orElse: () => dueQueue.first);
-    startLine(line);
-  }
-
-  void updateDueQueue(List<RepertoireLine> queue) {
-    // Rebuilt internally (rather than trusting the caller's list) so chapter
-    // scoping and the linear-mode completed filter stay applied.
+  /// Rebuild the due queue after a settings change (review order, depth…).
+  void updateDueQueue() {
     dueQueue = _buildQueue();
     notifyListeners();
   }

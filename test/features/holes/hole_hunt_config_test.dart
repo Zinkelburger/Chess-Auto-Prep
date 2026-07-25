@@ -19,7 +19,6 @@ void main() {
       practicalGapThresholdCp: 80,
       maiaElo: 1600,
       useLichessInTraps: false,
-      maxReportSize: 15,
     );
 
     final restored = HoleHuntConfig.fromMap(config.toMap());
@@ -35,7 +34,6 @@ void main() {
     expect(config.refutationThresholdCp, 80);
     expect(config.trapLeafCount, 12);
     expect(config.practicalGapThresholdCp, 60);
-    expect(config.maxReportSize, 10);
   });
 
   test('copyWith changes only the requested fields', () {

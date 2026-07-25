@@ -93,6 +93,21 @@ class BuildRun {
 
   bool get isCancelled => cancel.isCancelled;
 
+  /// True once [TreeBuildConfig.timeBudgetMinutes] of active build time has
+  /// elapsed (0 = no budget).  The stopwatch is paused with the pause gate,
+  /// so a paused build does not burn its budget.
+  bool get budgetExhausted {
+    final minutes = config.timeBudgetMinutes;
+    if (minutes <= 0) return false;
+    return stopwatch.elapsed.inSeconds >= minutes * 60;
+  }
+
+  /// The one "stop expanding, but still finish the run cleanly" check:
+  /// either the owner pressed Finish now, or the time budget ran out.
+  /// Unlike [isCancelled] this still runs the coverage sweep, selection and
+  /// export, and leaves the tree resumable.
+  bool shouldFinish() => finishNow() || budgetExhausted;
+
   void log(String msg) => runLog.add('[TreeBuild] $msg');
 
   /// Create, register, and index a child of [parent], or return null when a

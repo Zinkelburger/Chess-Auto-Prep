@@ -23,9 +23,18 @@ mixin _SolitaireOps on ChangeNotifier {
 
   static const _revealDelayKey = 'solitaire_reveal_delay_sec';
 
-  /// All-time trophy count (cached from service; earned in older sessions —
-  /// solitaire no longer detects new ones, but the cabinet stays viewable).
+  /// All-time trophy count, cached from the service so the app-bar counter
+  /// doesn't hit storage on every rebuild. New trophies are detected after
+  /// full-game analysis (see `detectSolitaireTrophies`) and folded in through
+  /// [noteTrophiesEarned].
   int totalTrophyCount = 0;
+
+  /// Fold newly awarded trophies into the cached count.
+  void noteTrophiesEarned(int count) {
+    if (count <= 0) return;
+    totalTrophyCount += count;
+    notifyListeners();
+  }
 
   // ---------------------------------------------------------------------------
   // SOLITAIRE MODE

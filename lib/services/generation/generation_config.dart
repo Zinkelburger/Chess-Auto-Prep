@@ -32,17 +32,24 @@ enum BuildMode {
 /// pruned.  Expectimax valuation (Phase 2) is identical in both — the
 /// algorithm only shapes which nodes exist in the tree.
 enum SearchAlgorithm {
-  /// Exhaustive level-order BFS: every candidate above the probability
-  /// floor is explored at full MultiPV / full eval window.  Slowest but
-  /// leaves nothing on the table.
+  /// "Full": level-order BFS, every candidate at full MultiPV and the full
+  /// eval window.  NOT literally exhaustive — the configured floors
+  /// ([TreeBuildConfig.minProbability], [TreeBuildConfig.maxPly], the eval
+  /// window, opponent fan-out caps) still apply; what it drops is the
+  /// *extra* narrowing Fast applies to rarely-reached positions.
   pure,
 
-  /// Best-first (highest reach-priority node expands next) plus pruning
-  /// that spends less effort on rarely-reached positions: our-move
+  /// "Quick": best-first (highest reach-priority node expands next) plus
+  /// pruning that spends less effort on rarely-reached positions: our-move
   /// alternatives below the priority floor are skipped, MultiPV and the
   /// eval-loss window shrink in cold subtrees, and opponent fan-out is
   /// capped harder.  The coverage floor ([TreeBuildConfig.coverMinProb])
   /// is always honored, so Fast never creates silent holes.
+  ///
+  /// The pruning is what makes it faster; the best-first *order* only pays
+  /// off when the run stops early — which is what
+  /// [TreeBuildConfig.timeBudgetMinutes] is for.  With no budget and no
+  /// manual Stop, Fast and Pure expand the same node set minus the pruning.
   fast,
 }
 
@@ -72,6 +79,14 @@ class TreeBuildConfig {
   final double minProbability;
   final int maxPly;
   final int maxNodes;
+
+  /// Wall-clock budget for the expansion phase, in minutes.  0 = no limit.
+  /// When the budget runs out the frontier stops expanding, the coverage
+  /// sweep still runs (so no line ends on an unanswered opponent move) and
+  /// the tree stays resumable.  This is what makes Quick search *quick*:
+  /// best-first order means the positions it did reach are the ones you are
+  /// most likely to face.
+  final int timeBudgetMinutes;
 
   // ── Frontier discipline + pruning preset ──
   /// Pure = exhaustive FIFO BFS; Fast = best-first expansion with
@@ -213,6 +228,13 @@ class TreeBuildConfig {
   /// sharp our-moves.  0 keeps every extracted line (no pruning).
   final int targetLineCount;
 
+  /// Export only the lines that run through a trap — a position where the
+  /// opponent has a tempting move that loses material or the evaluation.
+  /// The tree is built exactly as usual; this drops every extracted line
+  /// that no detected trap is a prefix of, so the PGN is a trap collection
+  /// rather than a repertoire.  Nothing is exported when no traps are found.
+  final bool trapsOnly;
+
   /// Sort extracted lines by cumulative probability (most likely first).
   final bool rankLinesByImportance;
 
@@ -253,6 +275,7 @@ class TreeBuildConfig {
     this.minProbability = 0.0001,
     this.maxPly = 20,
     this.maxNodes = 0,
+    this.timeBudgetMinutes = 0,
     this.searchAlgorithm = SearchAlgorithm.fast,
     this.ourAltDiscount = 0.25,
     this.fastAltGapCp = 30,
@@ -284,6 +307,7 @@ class TreeBuildConfig {
     this.maiaOnly = true,
     this.oppPolicyTemperature = 1.0,
     this.targetLineCount = 100,
+    this.trapsOnly = false,
     this.rankLinesByImportance = true,
     this.annotateMoveProbabilities = true,
     this.annotateMaiaOnly = true,
@@ -317,6 +341,7 @@ class TreeBuildConfig {
       minProbability: (json['min_probability'] as num?)?.toDouble() ?? 0.0001,
       maxPly: (json['max_depth'] as num?)?.toInt() ?? 20,
       maxNodes: (json['max_nodes'] as num?)?.toInt() ?? 0,
+      timeBudgetMinutes: (json['time_budget_minutes'] as num?)?.toInt() ?? 0,
       searchAlgorithm: _parseSearchAlgorithm(
         json['search_algorithm'] as String?,
         legacyBestFirst: json['best_first'] as bool?,
@@ -354,6 +379,7 @@ class TreeBuildConfig {
       oppPolicyTemperature:
           (json['opp_policy_temperature'] as num?)?.toDouble() ?? 1.0,
       targetLineCount: (json['target_line_count'] as num?)?.toInt() ?? 100,
+      trapsOnly: json['traps_only'] as bool? ?? false,
       rankLinesByImportance: json['rank_lines_by_importance'] as bool? ?? true,
       annotateMoveProbabilities:
           json['annotate_move_probabilities'] as bool? ?? true,
@@ -411,7 +437,7 @@ class TreeBuildConfig {
   String get summaryLabel {
     final parts = <String>[
       buildModeLabel,
-      searchAlgorithm == SearchAlgorithm.pure ? 'Pure' : 'Fast',
+      searchAlgorithm == SearchAlgorithm.pure ? 'Full' : 'Quick',
       '${maxPly}ply',
     ];
     if (usesStockfish) {
@@ -528,8 +554,8 @@ class TreeBuildConfig {
 
   /// Short label for the frontier/pruning algorithm.
   String get searchAlgorithmLabel => switch (searchAlgorithm) {
-    SearchAlgorithm.pure => 'Pure Expectimax',
-    SearchAlgorithm.fast => 'Fast Expectimax',
+    SearchAlgorithm.pure => 'Full search',
+    SearchAlgorithm.fast => 'Quick search',
   };
 
   /// Convert a white-perspective centipawn score to "our" perspective.
@@ -541,6 +567,7 @@ class TreeBuildConfig {
     'min_probability': minProbability,
     'max_depth': maxPly,
     'max_nodes': maxNodes,
+    'time_budget_minutes': timeBudgetMinutes,
     'search_algorithm': searchAlgorithm.name,
     // Legacy key so older builds of the app can still read tree metadata.
     'best_first': bestFirst,
@@ -574,6 +601,7 @@ class TreeBuildConfig {
     'maia_only': maiaOnly,
     'opp_policy_temperature': oppPolicyTemperature,
     'target_line_count': targetLineCount,
+    'traps_only': trapsOnly,
     'rank_lines_by_importance': rankLinesByImportance,
     'annotate_move_probabilities': annotateMoveProbabilities,
     'annotate_maia_only': annotateMaiaOnly,
@@ -603,6 +631,7 @@ class TreeBuildConfig {
     double? minProbability,
     int? maxPly,
     int? maxNodes,
+    int? timeBudgetMinutes,
     SearchAlgorithm? searchAlgorithm,
     double? ourAltDiscount,
     int? fastAltGapCp,
@@ -634,6 +663,7 @@ class TreeBuildConfig {
     bool? maiaOnly,
     double? oppPolicyTemperature,
     int? targetLineCount,
+    bool? trapsOnly,
     bool? rankLinesByImportance,
     bool? annotateMoveProbabilities,
     bool? annotateMaiaOnly,
@@ -662,6 +692,7 @@ class TreeBuildConfig {
       minProbability: minProbability ?? this.minProbability,
       maxPly: maxPly ?? this.maxPly,
       maxNodes: maxNodes ?? this.maxNodes,
+      timeBudgetMinutes: timeBudgetMinutes ?? this.timeBudgetMinutes,
       searchAlgorithm: searchAlgorithm ?? this.searchAlgorithm,
       ourAltDiscount: ourAltDiscount ?? this.ourAltDiscount,
       fastAltGapCp: fastAltGapCp ?? this.fastAltGapCp,
@@ -694,6 +725,7 @@ class TreeBuildConfig {
       maiaOnly: maiaOnly ?? this.maiaOnly,
       oppPolicyTemperature: oppPolicyTemperature ?? this.oppPolicyTemperature,
       targetLineCount: targetLineCount ?? this.targetLineCount,
+      trapsOnly: trapsOnly ?? this.trapsOnly,
       rankLinesByImportance:
           rankLinesByImportance ?? this.rankLinesByImportance,
       annotateMoveProbabilities:

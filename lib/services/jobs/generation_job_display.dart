@@ -83,9 +83,9 @@ List<String> buildGenerationStatParts({
           '$nodes nodes',
           'deepest ply $currentDepth/$maxPlyConfig',
         ];
-        if (frontierSize > 0) parts.add('frontier $frontierSize');
+        if (frontierSize > 0) parts.add('$frontierSize positions queued');
         if (nodesPerMinute != null && nodesPerMinute > 0) {
-          parts.add('${nodesPerMinute.toStringAsFixed(0)} n/min');
+          parts.add('${nodesPerMinute.toStringAsFixed(0)} positions/min');
         }
         final eta = formatEtaSeconds(etaRunSec);
         if (eta.isNotEmpty) parts.add('ETA $eta');
@@ -103,7 +103,7 @@ List<String> buildGenerationStatParts({
         }
       }
       if (nodesPerMinute != null && nodesPerMinute > 0) {
-        parts.add('${nodesPerMinute.toStringAsFixed(0)} n/min');
+        parts.add('${nodesPerMinute.toStringAsFixed(0)} positions/min');
       }
       final eta = formatEtaSeconds(etaDepthSec);
       if (eta.isNotEmpty) parts.add('depth ETA $eta');

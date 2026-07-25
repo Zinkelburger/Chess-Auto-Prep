@@ -6,13 +6,15 @@ import re
 import sys
 from pathlib import Path
 
+_DATA = Path(__file__).resolve().parents[1] / "data"
 PGN_PATHS = [
-    Path(__file__).resolve().parents[2] / "pgn_databases/sicilian_kan/SicilianKan5Bd3.pgn",
-    Path(__file__).resolve().parents[2] / "pgn_databases/sicilian_kan/SicilianKan5c4.pgn",
-    Path(__file__).resolve().parents[2] / "pgn_databases/sicilian_kan/SicilianKan5Nc3.pgn",
-    Path(__file__).resolve().parents[2] / "pgn_databases/sicilian_kan/SicilianKanOther5.pgn",
+    _DATA / "SicilianKan5Bd3.pgn",
+    _DATA / "SicilianKan5c4.pgn",
+    _DATA / "SicilianKan5Nc3.pgn",
+    _DATA / "SicilianKanOther5.pgn",
 ]
-LICHESS_PGNS = Path(__file__).resolve().parents[2] / "lichess-opening-builder/pgns"
+# Optional extra corpus: any PGNs dropped in assets/pgn_collections/.
+EXTRA_PGNS = Path(__file__).resolve().parents[2] / "assets/pgn_collections"
 
 DISAMBIG_RE = re.compile(r"^[RNBQ][a-h1-8][a-h1-8]?[x]?[a-h][1-8]")
 CASTLE_RE = re.compile(r"^O-O(-O)?$")
@@ -109,8 +111,8 @@ def main():
     }
 
     paths = list(PGN_PATHS)
-    if LICHESS_PGNS.exists():
-        paths.extend(sorted(LICHESS_PGNS.glob("*.pgn"))[:5])
+    if EXTRA_PGNS.exists():
+        paths.extend(sorted(EXTRA_PGNS.glob("*.pgn"))[:5])
 
     MAX_GAMES = 2500
     games_seen = 0

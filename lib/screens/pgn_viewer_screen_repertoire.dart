@@ -21,6 +21,7 @@ mixin _RepertoireGenerationMixin on State<PgnViewerScreen> {
       final result = await showGenerateRepertoireDialog(
         context,
         suggestedName: suggestedName,
+        gameCount: _controller.filteredGames.length,
       );
       if (result == null || !mounted) {
         _reclaimFocus();

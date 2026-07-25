@@ -330,6 +330,33 @@ class GenerationSessionController extends ChangeNotifier
       );
       final extractor = LineExtractor(config: config, fenMap: fenMap);
       var extractedLines = extractor.extract(tree);
+
+      // "Only traps": the tree and the move selection are untouched — we
+      // just throw away every line that teaches no trap, so the PGN is a
+      // trap collection instead of a repertoire.
+      var trapsOnlyNote = '';
+      if (config.trapsOnly) {
+        final beforeTraps = extractedLines.length;
+        final traps = TrapExtractor(
+          playAsWhite: config.playAsWhite,
+          findabilityPRef: pRefForElo(config.maiaElo),
+        ).extract(tree);
+        extractedLines = keepLinesThroughTraps(
+          extractedLines,
+          traps,
+          (line) => line.movesSan,
+        );
+        trapsOnlyNote = extractedLines.isEmpty
+            ? ' No traps found — nothing exported.'
+            : ' Traps only: ${extractedLines.length} of $beforeTraps lines '
+                  'run through a trap.';
+        _setStatus(
+          'Phase 3: keeping trap lines only '
+          '(${extractedLines.length} of $beforeTraps)...',
+          GenerationPhase.extractingLines,
+        );
+      }
+
       final rawLineCount = extractedLines.length;
       if (config.targetLineCount > 0) {
         extractedLines = LinePruner.prune(
@@ -436,16 +463,26 @@ class GenerationSessionController extends ChangeNotifier
         // Trap extraction is best-effort
       }
 
-      await _deletePartialTree(filePath);
+      // A budget/finish-now stop leaves the tree resumable: keep the partial
+      // file so the Generate tab offers to continue it.  savePartialTree
+      // reads buildService.currentTree, which the skip-build resume path
+      // never set — there the on-disk partial already holds this tree.
+      if (tree.buildComplete) {
+        await _deletePartialTree(filePath);
+      } else if (identical(buildService.currentTree, tree)) {
+        await savePartialTree();
+      }
 
       final pruneNote = extractedLines.length < rawLineCount
           ? ' (pruned from $rawLineCount)'
           : '';
+      final elapsedLabel = formatJobDuration(
+        Duration(milliseconds: _pipelineSw.elapsedMilliseconds),
+      );
       lastRunSummary =
-          'Complete: ${tree.totalNodes} nodes, '
+          'Complete in $elapsedLabel: ${tree.totalNodes} nodes, '
           '$selectedCount repertoire moves, '
-          '${extractedLines.length} lines$pruneNote. '
-          '(ease=$easeCount, expectimax=$ecaCount)';
+          '${extractedLines.length} lines$pruneNote.$trapsOnlyNote';
       if (finishedEarly && config.verifyFinal && config.needsStockfish) {
         lastRunSummary =
             '$lastRunSummary '
@@ -481,6 +518,20 @@ class GenerationSessionController extends ChangeNotifier
       _finishNowRequested = false;
       final job = currentJob;
       if (job != null) {
+        // The completed tile keeps showing progress.message, so replace the
+        // last live-stats line with the human outcome sentence.
+        if (lastRunSummary.isNotEmpty) {
+          job.updateProgress(
+            JobProgress(
+              fraction: lastError != null || _cancelRequested
+                  ? job.progress.fraction
+                  : 1,
+              message: lastRunSummary,
+              nodesProcessed: job.progress.nodesProcessed,
+              totalNodes: job.progress.totalNodes,
+            ),
+          );
+        }
         if (job.status != JobStatus.failed) {
           job.updateStatus(
             _cancelRequested ? JobStatus.cancelled : JobStatus.completed,

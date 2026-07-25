@@ -207,16 +207,39 @@ abstract final class AppColors {
   /// movetext ink on it hits maximum contrast.
   static const pgnSurface = Color(0xFF000000);
 
-  // PGN text policy: pure white on pure black, no tinted or dimmed tones.
-  // Hierarchy comes from weight/italics/pills/rows, never from graying text.
+  // PGN text policy: one ink (white), varied only in *value*. Nesting depth is
+  // encoded by indentation + gutter rule + weight + value + size — never by
+  // hue. Hue in the movetext means exactly one thing: "you are here".
 
-  /// Movetext ink: pure white (21:1 on [pgnSurface]). Sidelines use structure
-  /// (parens + line breaks), not a separate hue — see `PgnTextStyles`.
+  /// Mainline (depth 0) movetext ink: pure white, 21:1 on [pgnSurface].
   static const pgnMove = Color(0xFFFFFFFF);
 
-  /// Move numbers (`1.` / `2...`) — same white as moves; dimming them ever
-  /// read as "disabled gray".
-  static const pgnMoveNumber = pgnMove;
+  /// Depth-1 sideline ink (~87% white, ~16:1). One step down in value so a
+  /// sideline reads as subordinate even where the indent is clipped.
+  static const pgnVariation = Color(0xDDFFFFFF);
+
+  /// Depth-2 sideline ink (~73% white, ~11:1).
+  static const pgnVariationDeep = Color(0xBBFFFFFF);
+
+  /// Depth-3+ sideline ink (~65% white, ~8:1) — the floor; deeper levels reuse
+  /// it and separate by indentation alone.
+  static const pgnVariationDeepest = Color(0xA6FFFFFF);
+
+  /// Move numbers (`1.` / `2...`) at depths 0..3+. A move number is a
+  /// coordinate label, not content: it sits a full step below its move's ink
+  /// so `Nf3` wins the eye. All stay >= 4.5:1 on [pgnSurface].
+  static const pgnMoveNumber = Color(0xA0FFFFFF);
+  static const pgnMoveNumberDepth1 = Color(0x96FFFFFF);
+  static const pgnMoveNumberDepth2 = Color(0x8CFFFFFF);
+  static const pgnMoveNumberDepth3 = Color(0x88FFFFFF);
+
+  /// Hairline in a sideline row's left gutter — one rule per nesting level.
+  /// Carries the depth signal when text wraps past the indent.
+  static const pgnVariationRule = Color(0x2EFFFFFF);
+
+  /// Hover fill behind a movetext move. Replaces the former always-on dotted
+  /// underline: clickability is shown on demand, not painted on every move.
+  static const pgnMoveHoverBg = Color(0x1FFFFFFF);
 
   /// Current navigation position — the sole "you are here" hue accent.
   static const pgnMoveCurrent = info;
@@ -227,19 +250,15 @@ abstract final class AppColors {
   /// Text on the current-move / active pill.
   static const pgnMoveCurrentFg = Color(0xFFFFFFFF);
 
-  /// Sideline / variation SAN and brackets — same ink as mainline; distinguish
-  /// with `( )` and own-row layout, not mint/teal.
-  static const pgnVariation = pgnMove;
-
-  /// Solitaire / scratch analysis moves — same white; the ephemeral pill fill
-  /// and row placement distinguish unsaved analysis from repertoire moves.
+  /// Solitaire / scratch analysis moves — same ink as their depth; italics
+  /// (see `PgnTextStyles`) plus the ephemeral pill fill mark unsaved analysis.
   static const pgnEphemeralMove = pgnMove;
 
   /// Fill of the current ephemeral node pill.
   static const pgnEphemeralBg = Color(0xFF42607D);
 
-  /// Move comments — same ink as moves (italic via `PgnTextStyles.comment`).
-  static const pgnComment = pgnMove;
+  /// Move comments — a shade under mainline ink; italic + own row do the rest.
+  static const pgnComment = Color(0xDDFFFFFF);
 
   /// Near-black fill for bordered comment blocks on [surface].
   static const pgnCommentBlockBg = Color(0xFF181818);

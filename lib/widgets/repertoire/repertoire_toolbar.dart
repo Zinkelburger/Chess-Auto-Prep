@@ -38,7 +38,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     this.onImportPgnFile,
     this.onImportPgnPaste,
     this.isWhiteRepertoire,
-    this.onSwitchColor,
+    this.onOpenRepertoireOptions,
   });
 
   final Widget title;
@@ -60,7 +60,11 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onImportPgnFile;
   final VoidCallback? onImportPgnPaste;
   final bool? isWhiteRepertoire;
-  final VoidCallback? onSwitchColor;
+
+  /// Opens the settings dialog for the open repertoire (side played, board
+  /// size). Deliberately two clicks away — flipping the side rewrites which
+  /// moves count as ours.
+  final VoidCallback? onOpenRepertoireOptions;
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
@@ -109,51 +113,46 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
           tooltip: 'More actions',
           onSelected: (value) {
             switch (value) {
-              case 'switch_color':
-                onSwitchColor?.call();
+              case 'repertoire_options':
+                onOpenRepertoireOptions?.call();
               case 'settings':
                 onOpenSettings();
             }
           },
           itemBuilder: (_) => [
-            if (isWhiteRepertoire != null && onSwitchColor != null)
+            if (onOpenRepertoireOptions != null)
               PopupMenuItem(
-                value: 'switch_color',
-                child: Tooltip(
-                  message:
-                      'This repertoire prepares the '
-                      '${isWhiteRepertoire! ? 'White' : 'Black'} side. '
-                      'Switching flips the board and treats the '
-                      '${isWhiteRepertoire! ? 'Black' : 'White'} side as '
-                      'your moves.',
-                  waitDuration: const Duration(milliseconds: 400),
-                  child: ListTile(
-                    // Bordered swatch, not a bare Icon: the sideBlack disc is
-                    // near-invisible on the popup surface without an outline.
-                    leading: Container(
-                      width: 20,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isWhiteRepertoire!
-                            ? AppColors.sideBlack
-                            : AppColors.sideWhite,
-                        border: Border.all(color: AppColors.outline),
-                      ),
+                value: 'repertoire_options',
+                child: ListTile(
+                  // Bordered swatch, not a bare Icon: the sideBlack disc is
+                  // near-invisible on the popup surface without an outline.
+                  leading: Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: (isWhiteRepertoire ?? true)
+                          ? AppColors.sideWhite
+                          : AppColors.sideBlack,
+                      border: Border.all(color: AppColors.outline),
                     ),
-                    title: Text(
-                      'Switch to ${isWhiteRepertoire! ? 'Black' : 'White'}',
-                    ),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
                   ),
+                  title: const Text('Repertoire settings…'),
+                  subtitle: isWhiteRepertoire == null
+                      ? null
+                      : Text(
+                          'Playing ${isWhiteRepertoire! ? 'White' : 'Black'}',
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
                 ),
               ),
             const PopupMenuItem(
               value: 'settings',
               child: ListTile(
                 leading: Icon(Icons.settings, size: 20),
-                title: Text('Settings'),
+                title: Text('App settings…'),
                 dense: true,
                 contentPadding: EdgeInsets.zero,
               ),
@@ -247,7 +246,7 @@ class RepertoireToolbarTitle extends StatelessWidget {
 ///
 /// The repertoire segment switches repertoires; the chapter segment opens a
 /// dropdown of sibling chapters (current one checked, with line counts) plus
-/// "Add chapter" and "Manage chapters" actions. This makes the folder →
+/// "Add chapter" and "View all chapters" actions. This makes the folder →
 /// chapter hierarchy visible at all times and turns chapter switching into a
 /// single click instead of a full-screen detour.
 class RepertoireBreadcrumbTitle extends StatelessWidget {
@@ -260,7 +259,7 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
     this.onSwitchRepertoire,
     required this.onSelectChapter,
     this.onAddChapter,
-    this.onManageChapters,
+    this.onViewChapters,
     this.enabled = true,
   });
 
@@ -271,11 +270,11 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
   final VoidCallback? onSwitchRepertoire;
   final ValueChanged<RepertoireMetadata> onSelectChapter;
   final VoidCallback? onAddChapter;
-  final VoidCallback? onManageChapters;
+  final VoidCallback? onViewChapters;
   final bool enabled;
 
   static const _addValue = '__add_chapter__';
-  static const _manageValue = '__manage_chapters__';
+  static const _viewAllValue = '__view_chapters__';
 
   @override
   Widget build(BuildContext context) {
@@ -360,8 +359,8 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
         onSelected: (value) {
           if (value == _addValue) {
             onAddChapter?.call();
-          } else if (value == _manageValue) {
-            onManageChapters?.call();
+          } else if (value == _viewAllValue) {
+            onViewChapters?.call();
           } else {
             for (final c in chapters) {
               if (c.filePath == value) {
@@ -385,10 +384,10 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
             ),
           ),
           const PopupMenuItem<String>(
-            value: _manageValue,
+            value: _viewAllValue,
             child: ListTile(
-              leading: Icon(Icons.settings, size: 20),
-              title: Text('Manage chapters'),
+              leading: Icon(Icons.list_alt, size: 20),
+              title: Text('View all chapters'),
               dense: true,
               contentPadding: EdgeInsets.zero,
             ),

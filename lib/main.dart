@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
-import 'constants/engine_defaults.dart';
 import 'core/app_state.dart';
 import 'core/study_controller.dart';
 import 'models/engine_settings.dart';
@@ -13,7 +12,6 @@ import 'screens/main_screen.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_text_styles.dart';
 
-import 'services/browser_extension_server/browser_extension_server_factory.dart';
 import 'services/default_pgn_service.dart';
 import 'services/engine/engine_lifecycle.dart';
 import 'services/eval_cache.dart';
@@ -62,23 +60,7 @@ Future<void> _initializeApp() async {
   // DB instead of sticking in the L1 memory map only.
   unawaited(EvalCache.instance.init());
 
-  _startBrowserExtensionServer();
   DefaultPgnService.ensureExtracted();
-}
-
-void _startBrowserExtensionServer() async {
-  if (BrowserExtensionServerFactory.isSupported) {
-    final started = await BrowserExtensionServerFactory.start(
-      port: kBrowserExtensionPort,
-    );
-    if (started) {
-      debugPrint('Browser extension server started successfully');
-    } else {
-      debugPrint('Failed to start browser extension server');
-    }
-  } else {
-    debugPrint('Browser extension server not supported on this platform');
-  }
 }
 
 /// Shown when startup initialization fails before [ChessAutoPrepApp] can run.

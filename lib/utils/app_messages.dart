@@ -35,7 +35,7 @@ class AppMessages {
 
   // ── Validation (inline on form fields, not SnackBars) ──────────
   static const enterUsername = 'Please enter a username';
-  static const invalidGameCount = 'Enter a number between 1 and 500';
+  static const invalidGameCount = 'Enter a number of games (1 or more)';
   static const invalidMonths = 'Enter 1 or more';
   static const selectRepertoire = 'Select a repertoire first.';
   static String repertoireExists(String name) =>

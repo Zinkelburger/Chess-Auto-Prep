@@ -78,11 +78,16 @@ class SettingsGroup extends StatelessWidget {
   final IconData icon;
   final List<Widget> children;
 
+  /// One line under the heading saying what the group is for, so the user
+  /// can skip whole sections instead of reading every row.
+  final String? subtitle;
+
   const SettingsGroup({
     super.key,
     required this.title,
     required this.icon,
     required this.children,
+    this.subtitle,
   });
 
   @override
@@ -106,6 +111,18 @@ class SettingsGroup extends StatelessWidget {
             ],
           ),
         ),
+        if (subtitle != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              subtitle!,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.onSurfaceMuted,
+                height: 1.3,
+              ),
+            ),
+          ),
         Card(
           elevation: 0,
           shape: RoundedRectangleBorder(
@@ -221,32 +238,45 @@ class SettingsSliderTile extends StatelessWidget {
     // when prefs were written) can fall outside [min, max], and Slider asserts
     // on out-of-range values and on divisions == 0.
     final clamped = value.clamp(min, max);
+    // Label and value sit on one line with the track below and capped at a
+    // readable width: a full-window track puts the number so far from its
+    // name that the pair has to be read twice.
     final content = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 180,
-            child: Text(label, style: const TextStyle(fontSize: 13)),
+          Row(
+            children: [
+              Expanded(
+                child: Text(label, style: const TextStyle(fontSize: 13)),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                suffix != null ? '$value $suffix' : '$value',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.onSurfaceSoft,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ],
           ),
-          Expanded(
-            child: Slider(
-              value: clamped.toDouble(),
-              min: min.toDouble(),
-              max: max.toDouble(),
-              divisions: divisions ?? (max > min ? max - min : 1),
-              label: '$clamped',
-              onChanged: (v) => onChanged(v.round()),
-            ),
-          ),
-          SizedBox(
-            width: 60,
-            child: Text(
-              suffix != null ? '$value $suffix' : '$value',
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurfaceSoft,
-                fontFamily: 'monospace',
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 340),
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 3,
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+              ),
+              child: Slider(
+                value: clamped.toDouble(),
+                min: min.toDouble(),
+                max: max.toDouble(),
+                divisions: divisions ?? (max > min ? max - min : 1),
+                label: '$clamped',
+                onChanged: (v) => onChanged(v.round()),
               ),
             ),
           ),

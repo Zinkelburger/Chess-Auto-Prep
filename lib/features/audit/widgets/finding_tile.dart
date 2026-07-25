@@ -17,6 +17,10 @@ class FindingTile extends StatelessWidget {
   /// Show the dismiss context menu at the given global position.
   final void Function(Offset globalPosition) onContextMenu;
 
+  /// Preformatted pawns gain figure (e.g. '+1.2') for panels that rank by
+  /// reach × gain. Absent (default) = no gain column.
+  final String? gainLabel;
+
   const FindingTile({
     super.key,
     required this.finding,
@@ -26,6 +30,7 @@ class FindingTile extends StatelessWidget {
     required this.onSelect,
     required this.onToggleDismiss,
     required this.onContextMenu,
+    this.gainLabel,
   });
 
   @override
@@ -63,6 +68,23 @@ class FindingTile extends StatelessWidget {
                         color: finding.dismissed
                             ? AppColors.onSurfaceDim
                             : AppColors.engineLine,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                ],
+                if (gainLabel != null) ...[
+                  SizedBox(
+                    width: 44,
+                    child: Text(
+                      gainLabel!,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                        color: finding.dismissed
+                            ? AppColors.onSurfaceDim
+                            : AppColors.evalPositive,
                       ),
                     ),
                   ),

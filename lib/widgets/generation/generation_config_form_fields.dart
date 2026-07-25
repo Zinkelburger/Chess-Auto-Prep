@@ -1,11 +1,6 @@
 part of 'generation_config_form.dart';
 
 mixin _GenerationConfigFields on _GenerationConfigFormStateBase {
-  Widget _sectionHeader(String title) => Padding(
-    padding: const EdgeInsets.only(top: 20, bottom: 8),
-    child: Text(title, style: Theme.of(context).textTheme.titleSmall),
-  );
-
   /// Numeric text field.  When [defaultText] is given, the label gains a
   /// "•" marker while the current value differs from it and the helper line
   /// shows the default, so modified knobs are visible at a glance.  When
@@ -21,8 +16,17 @@ mixin _GenerationConfigFields on _GenerationConfigFormStateBase {
     VoidCallback? onEdited,
   }) {
     final isEnabled = enabled && !widget.isGenerating;
+    // Numeric comparison keeps '0.8' vs '0.80' from reading as modified.
+    final current = controller.text.trim();
+    final currentNum = double.tryParse(current);
+    final defaultNum = defaultText == null
+        ? null
+        : double.tryParse(defaultText);
     final modified =
-        defaultText != null && controller.text.trim() != defaultText;
+        defaultText != null &&
+        (currentNum != null && defaultNum != null
+            ? currentNum != defaultNum
+            : current != defaultText);
     final String? helper = !enabled && disabledReason != null
         ? disabledReason
         : (defaultText != null ? 'default $defaultText' : null);

@@ -208,6 +208,11 @@ class JobsPanel extends StatelessWidget {
     final accent = Theme.of(context).colorScheme.primary;
 
     final cancelling = gc.isCancelling;
+    // Every control renders in every phase — disabled in place rather than
+    // appearing/disappearing — so the row keeps a constant width.
+    final extrasEnabled = !cancelling && phase == GenerationPhase.buildingTree;
+    const extrasDisabledMessage =
+        'Only available while the tree is being explored';
     return _ActiveJobCard(
       icon: Icons.auto_awesome,
       accent: accent,
@@ -221,44 +226,47 @@ class JobsPanel extends StatelessWidget {
       resourceLabel: resourceLabel,
       progress: fraction,
       isPaused: gc.isPaused,
+      isCancelling: cancelling,
+      alwaysShowControls: true,
       // Pause only where the pipeline honors it; the remaining phases are
       // short synchronous passes that would ignore the request.
       onPause: cancelling || !phase.isPausable ? null : onPauseGeneration,
       onResume: onResumeGeneration,
-      onCancel: cancelling ? null : onCancelGeneration,
-      extraActions: !cancelling && phase == GenerationPhase.buildingTree
-          ? [
-              if (onExportLinesGeneration != null)
-                Tooltip(
-                  message: gc.isSnapshotExporting
-                      ? (gc.snapshotStatus ?? 'Exporting snapshot…')
-                      : 'Save the lines found so far to a new repertoire — '
-                            'the run keeps going',
-                  child: TextButton(
-                    onPressed: gc.isSnapshotExporting
-                        ? null
-                        : onExportLinesGeneration,
-                    child: const Text(
-                      'Export Lines',
-                      style: TextStyle(fontSize: 11, color: AppColors.info),
-                    ),
-                  ),
-                ),
-              if (onFinishNowGeneration != null)
-                Tooltip(
-                  message:
-                      'Stop exploring and build lines from '
-                      'what\'s been found so far',
-                  child: TextButton(
-                    onPressed: onFinishNowGeneration,
-                    child: const Text(
-                      'Finish Now',
-                      style: TextStyle(fontSize: 11, color: AppColors.warning),
-                    ),
-                  ),
-                ),
-            ]
-          : null,
+      onCancel: onCancelGeneration,
+      extraActions: [
+        if (onExportLinesGeneration != null)
+          Tooltip(
+            message: !extrasEnabled
+                ? extrasDisabledMessage
+                : gc.isSnapshotExporting
+                ? (gc.snapshotStatus ?? 'Exporting snapshot…')
+                : 'Save the lines found so far to a new repertoire — '
+                      'the run keeps going',
+            child: TextButton(
+              onPressed: extrasEnabled && !gc.isSnapshotExporting
+                  ? onExportLinesGeneration
+                  : null,
+              child: const Text(
+                'Export Lines',
+                style: TextStyle(fontSize: 11, color: AppColors.info),
+              ),
+            ),
+          ),
+        if (onFinishNowGeneration != null)
+          Tooltip(
+            message: extrasEnabled
+                ? 'Stop exploring and build lines from '
+                      'what\'s been found so far'
+                : extrasDisabledMessage,
+            child: TextButton(
+              onPressed: extrasEnabled ? onFinishNowGeneration : null,
+              child: const Text(
+                'Finish Now',
+                style: TextStyle(fontSize: 11, color: AppColors.warning),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -365,7 +373,10 @@ class JobsPanel extends StatelessWidget {
     };
 
     final subtitleParts = <String>[statusLabel];
-    if (job.progress.message.isNotEmpty) {
+    final error = job.error;
+    if (job.status == JobStatus.failed && error != null) {
+      subtitleParts.add(error);
+    } else if (job.progress.message.isNotEmpty) {
       subtitleParts.add(job.progress.message);
     } else if (job.type == JobType.audit && job.configSnapshot != null) {
       final cfg = _auditConfigFromJob(job);
@@ -417,6 +428,8 @@ class _ActiveJobCard extends StatelessWidget {
     required this.onPause,
     required this.onResume,
     required this.onCancel,
+    this.isCancelling = false,
+    this.alwaysShowControls = false,
     this.extraActions,
     this.detail,
   });
@@ -435,11 +448,38 @@ class _ActiveJobCard extends StatelessWidget {
   final VoidCallback? onPause;
   final VoidCallback? onResume;
   final VoidCallback? onCancel;
+
+  /// While true the cancel button renders disabled as 'Cancelling…'.
+  final bool isCancelling;
+
+  /// Render every control in every phase, disabled in place, so the control
+  /// row never changes width. Off for job types that hide unavailable
+  /// controls instead (audit, coverage).
+  final bool alwaysShowControls;
+
   final List<Widget>? extraActions;
 
   /// Optional widget rendered between the stat chips and the progress bar
   /// (e.g. per-depth mini-bars during a tree build).
   final Widget? detail;
+
+  /// One button that flips between Pause and Resume with [isPaused], so the
+  /// slot stays occupied even in phases that cannot pause.
+  Widget _buildPauseResumeButton() {
+    final onPressed = isPaused ? onResume : onPause;
+    final button = TextButton(
+      onPressed: onPressed,
+      child: Text(
+        isPaused ? 'Resume' : 'Pause',
+        style: const TextStyle(fontSize: 11),
+      ),
+    );
+    if (onPressed != null) return button;
+    return Tooltip(
+      message: 'This phase finishes on its own and cannot pause',
+      child: button,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -515,25 +555,40 @@ class _ActiveJobCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (isPaused && onResume != null)
+              if (alwaysShowControls) ...[
+                _buildPauseResumeButton(),
+                ...?extraActions,
                 TextButton(
-                  onPressed: onResume,
-                  child: const Text('Resume', style: TextStyle(fontSize: 11)),
-                )
-              else if (!isPaused && onPause != null)
-                TextButton(
-                  onPressed: onPause,
-                  child: const Text('Pause', style: TextStyle(fontSize: 11)),
-                ),
-              ...?extraActions,
-              if (onCancel != null)
-                TextButton(
-                  onPressed: onCancel,
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(fontSize: 11, color: AppColors.danger),
+                  onPressed: isCancelling ? null : onCancel,
+                  child: Text(
+                    isCancelling ? 'Cancelling…' : 'Cancel',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.danger,
+                    ),
                   ),
                 ),
+              ] else ...[
+                if (isPaused && onResume != null)
+                  TextButton(
+                    onPressed: onResume,
+                    child: const Text('Resume', style: TextStyle(fontSize: 11)),
+                  )
+                else if (!isPaused && onPause != null)
+                  TextButton(
+                    onPressed: onPause,
+                    child: const Text('Pause', style: TextStyle(fontSize: 11)),
+                  ),
+                ...?extraActions,
+                if (onCancel != null)
+                  TextButton(
+                    onPressed: onCancel,
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(fontSize: 11, color: AppColors.danger),
+                    ),
+                  ),
+              ],
             ],
           ),
           const SizedBox(height: 8),

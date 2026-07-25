@@ -57,9 +57,13 @@ abstract class _GenerationConfigFormStateBase
   );
   final TextEditingController _memorabilityToleranceCtrl =
       TextEditingController(text: '0');
+  final TextEditingController _timeBudgetCtrl = TextEditingController(
+    text: '0',
+  );
   SearchAlgorithm _searchAlgorithm = SearchAlgorithm.fast;
   bool _wideOpening = true;
   bool _verifyFinal = true;
+  bool _trapsOnly = false;
 
   final List<String> _pgnFilePaths = [];
   final TextEditingController _dbMinGamesCtrl = TextEditingController(

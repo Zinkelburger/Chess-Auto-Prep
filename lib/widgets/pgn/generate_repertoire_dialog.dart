@@ -5,21 +5,31 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../theme/app_colors.dart';
+
 /// Show the dialog; resolves to the chosen repertoire name and color, or
 /// null if cancelled.
 Future<({String name, String color})?> showGenerateRepertoireDialog(
   BuildContext context, {
   required String suggestedName,
+  int gameCount = 0,
 }) {
   return showDialog<({String name, String color})>(
     context: context,
-    builder: (ctx) => _GenerateRepertoireDialog(suggestedName: suggestedName),
+    builder: (ctx) => _GenerateRepertoireDialog(
+      suggestedName: suggestedName,
+      gameCount: gameCount,
+    ),
   );
 }
 
 class _GenerateRepertoireDialog extends StatefulWidget {
   final String suggestedName;
-  const _GenerateRepertoireDialog({required this.suggestedName});
+  final int gameCount;
+  const _GenerateRepertoireDialog({
+    required this.suggestedName,
+    required this.gameCount,
+  });
 
   @override
   State<_GenerateRepertoireDialog> createState() =>
@@ -44,14 +54,32 @@ class _GenerateRepertoireDialogState extends State<_GenerateRepertoireDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final n = widget.gameCount;
     return AlertDialog(
-      title: const Text('Generate Repertoire from Games'),
+      title: const Text('Seed a Repertoire from These Games'),
       content: SizedBox(
         width: 360,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // What actually happens next, in one line — the old dialog jumped
+            // straight to a name field and left "then what?" unanswered.
+            Text(
+              n > 0
+                  ? 'The $n game${n == 1 ? '' : 's'} currently in view become '
+                        'the seed. The Repertoire Builder opens next and '
+                        'generates lines from them.'
+                  : 'The games currently in view become the seed. The '
+                        'Repertoire Builder opens next and generates lines '
+                        'from them.',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.onSurfaceMuted,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 16),
             TextField(
               controller: _nameCtrl,
               decoration: const InputDecoration(
@@ -82,7 +110,7 @@ class _GenerateRepertoireDialogState extends State<_GenerateRepertoireDialog> {
         ),
         FilledButton(
           onPressed: _submit,
-          child: const Text('Create & Generate'),
+          child: const Text('Create & Open Builder'),
         ),
       ],
     );

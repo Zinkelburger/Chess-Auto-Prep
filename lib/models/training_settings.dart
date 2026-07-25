@@ -27,6 +27,20 @@ extension RepetitionModeLabel on RepetitionMode {
   };
 }
 
+/// What a training run is working through.
+///
+/// Chessable keeps "learn new material" and "review what's due" as separate
+/// sessions; auto-next stays inside the intent instead of hopping between
+/// untrained and due lines mid-run.
+enum TrainingIntent { learn, review }
+
+extension TrainingIntentLabel on TrainingIntent {
+  String get label => switch (this) {
+    TrainingIntent.learn => 'Learn',
+    TrainingIntent.review => 'Review',
+  };
+}
+
 /// How the repertoire trainer orders lines for review.
 enum ReviewOrder {
   byImportance,

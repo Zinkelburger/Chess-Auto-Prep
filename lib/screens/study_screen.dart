@@ -17,6 +17,7 @@ import '../models/move_tree.dart' show TreePath;
 import '../services/repertoire_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
+import '../utils/board_shape_comments.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/board_editor/board_editor_dialog.dart';
@@ -24,6 +25,7 @@ import '../widgets/chess_board_widget.dart';
 import '../widgets/engine/inline_engine_bar.dart';
 import '../widgets/pgn/pgn_annotation_panel.dart';
 import '../widgets/interactive_pgn_editor.dart';
+import '../widgets/study/chapter_manager_dialog.dart';
 import '../widgets/trainer_keyboard_scope.dart';
 import '../widgets/training/move_input_widget.dart';
 import 'puzzle_creator_screen.dart';
@@ -406,6 +408,15 @@ class _StudyScreenState extends State<StudyScreen> {
     context.read<AppState>().switchToStudyTraining(path: path, lineId: lineId);
   }
 
+  Future<void> _manageChapters() async {
+    await showChapterManagerDialog(
+      context,
+      study: _study,
+      promptName: _promptName,
+    );
+    if (mounted) setState(() {});
+  }
+
   Future<void> _renameChapter() async {
     final name = await _promptName(
       'Rename chapter',
@@ -462,11 +473,9 @@ class _StudyScreenState extends State<StudyScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.edit_outlined, size: 20),
-            tooltip: 'Board editor — set chapter starting position',
-            onPressed: _editChapterPosition,
-          ),
+          // Chapter-scoped actions (starting position, rename, delete, order)
+          // all live on the chapter bar in the side pane; the app bar keeps
+          // only what applies to the study or the board as a whole.
           PopupMenuButton<String>(
             icon: const Icon(Icons.school_outlined, size: 20),
             tooltip: 'Train in Repertoire Trainer',
@@ -486,7 +495,9 @@ class _StudyScreenState extends State<StudyScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.extension, size: 20),
-            tooltip: 'Make puzzle from this position',
+            tooltip:
+                'Save position as a puzzle — play the solution, then it is '
+                'stored as a study chapter you can train',
             onPressed: () {
               PuzzleCreatorScreen.push(
                 context,
@@ -643,6 +654,37 @@ class _StudyScreenState extends State<StudyScreen> {
     );
   }
 
+  /// Right-drag on the board: draw an arrow (or a circle, when the drag starts
+  /// and ends on one square) into the current move's comment.
+  ///
+  /// Modifiers pick the colour the way Lichess does, and re-drawing the same
+  /// shape erases it. Shapes are stored as `[%cal]`/`[%csl]` tokens, so they
+  /// export with the PGN instead of living only in this app.
+  void _onShapeDrawn(String orig, String? dest) {
+    if (!_study.cursorHasNode) {
+      showAppSnackBar(
+        context,
+        'Play a move first — arrows attach to a move, not the start position.',
+      );
+      return;
+    }
+    final keys = HardwareKeyboard.instance;
+    final brush = keys.isShiftPressed
+        ? AnnotationBrush.red
+        : keys.isAltPressed
+        ? AnnotationBrush.blue
+        : keys.isControlPressed
+        ? AnnotationBrush.yellow
+        : AnnotationBrush.green;
+
+    final comment = _study.cursorComment;
+    final next = toggleBoardShape(
+      parseBoardShapes(comment),
+      BoardAnnotation(orig: orig, dest: dest, brush: brush),
+    );
+    _study.setComment(_study.cursor, writeBoardShapes(comment, next));
+  }
+
   Widget _buildBoardPane() {
     return Padding(
       padding: const EdgeInsets.all(12),
@@ -656,6 +698,8 @@ class _StudyScreenState extends State<StudyScreen> {
                   position: _study.currentPosition,
                   flipped: _study.flipped,
                   onMove: (move) => _study.playSan(move.san),
+                  annotations: parseBoardShapes(_study.cursorComment),
+                  onShapeDrawn: _onShapeDrawn,
                 ),
               ),
             ),
@@ -730,11 +774,11 @@ class _StudyScreenState extends State<StudyScreen> {
               ),
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert, size: 18),
-                tooltip: 'Manage chapters',
+                tooltip: 'Chapter actions',
                 onSelected: (action) {
                   switch (action) {
-                    case 'train':
-                      _train(wholeStudy: false);
+                    case 'manage':
+                      _manageChapters();
                     case 'add_from_position':
                       _addChapter(fromPosition: true);
                     case 'set_position':
@@ -745,10 +789,12 @@ class _StudyScreenState extends State<StudyScreen> {
                       _deleteChapter();
                   }
                 },
+                // "Train this chapter" used to sit here as well as in the app
+                // bar's train menu; one home each is enough.
                 itemBuilder: (_) => const [
                   PopupMenuItem(
-                    value: 'train',
-                    child: Text('Train this chapter'),
+                    value: 'manage',
+                    child: Text('Manage & reorder chapters…'),
                   ),
                   PopupMenuDivider(),
                   PopupMenuItem(

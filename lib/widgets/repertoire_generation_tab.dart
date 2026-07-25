@@ -55,6 +55,7 @@ class RepertoireGenerationTab extends StatefulWidget {
 class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   final GlobalKey<GenerationConfigFormState> _configFormKey =
       GlobalKey<GenerationConfigFormState>();
+  final ScrollController _scrollCtrl = ScrollController();
 
   BuildTree? _savedPartialTree;
 
@@ -62,6 +63,12 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   void initState() {
     super.initState();
     _checkForPartialTree();
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -179,7 +186,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
   // ── Build start ──────────────────────────────────────────────────────
 
-  Future<void> _startTreeBuild({BuildTree? existingTree}) async {
+  Future<void> _startTreeBuild({
+    BuildTree? existingTree,
+    int? maxPlyOverride,
+  }) async {
     final ctrl = widget.generationController;
     if (ctrl.isGenerating) return;
     final form = _configFormKey.currentState;
@@ -208,7 +218,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         startFen: widget.fen,
         playAsWhite: widget.isWhiteRepertoire,
       );
-      config = saved.copyWith(maxPly: ui.maxPly);
+      config = saved.copyWith(maxPly: maxPlyOverride ?? ui.maxPly);
       existingTree.configSnapshot = Map<String, dynamic>.from(config.toJson());
     } else {
       config = form.toConfig(
@@ -250,47 +260,71 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         final statusText = ctrl.isGenerating
             ? ctrl.progressStatus
             : ctrl.lastRunSummary;
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(8.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Generate Repertoire',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              _buildStartingPositionBanner(context),
-              const SizedBox(height: 8),
-              GenerationConfigForm(
-                key: _configFormKey,
-                initialConfig: ctrl.lastConfig,
-                isGenerating: ctrl.isGenerating,
-                playAsWhite: widget.isWhiteRepertoire,
-              ),
-              const SizedBox(height: 8),
-              if (_savedPartialTree != null && !ctrl.isGenerating) ...[
-                _buildPartialTreeCard(_savedPartialTree!),
-                const SizedBox(height: 8),
-              ],
-              FilledButton.icon(
-                onPressed: ctrl.isGenerating ? null : _startTreeBuild,
-                icon: const Icon(Icons.play_arrow),
-                label: const Text('Build Repertoire Tree'),
-              ),
-              if (statusText.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  statusText,
-                  style: TextStyle(
-                    color: ctrl.lastError != null
-                        ? AppColors.danger
-                        : AppColors.onSurfaceMuted,
+        return Column(
+          children: [
+            Expanded(
+              // Width-cap outside the scroll view so the scrollbar thumb sits
+              // beside the form instead of at the far window edge.
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 900),
+                  child: Scrollbar(
+                    thumbVisibility: true,
+                    controller: _scrollCtrl,
+                    child: SingleChildScrollView(
+                      controller: _scrollCtrl,
+                      padding: const EdgeInsets.all(8.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildStartingPositionBanner(context),
+                          const SizedBox(height: 8),
+                          GenerationConfigForm(
+                            key: _configFormKey,
+                            initialConfig: ctrl.lastConfig,
+                            isGenerating: ctrl.isGenerating,
+                            playAsWhite: widget.isWhiteRepertoire,
+                          ),
+                          if (_savedPartialTree != null &&
+                              !ctrl.isGenerating) ...[
+                            const SizedBox(height: 8),
+                            _buildPartialTreeCard(_savedPartialTree!),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-              ],
-            ],
-          ),
+              ),
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      statusText,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: ctrl.lastError != null
+                            ? AppColors.danger
+                            : AppColors.onSurfaceMuted,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton.icon(
+                    onPressed: ctrl.isGenerating ? null : _startTreeBuild,
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('Generate Repertoire'),
+                  ),
+                ],
+              ),
+            ),
+          ],
         );
       },
     );
@@ -307,10 +341,11 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
   Widget _buildPartialTreeCard(BuildTree tree) {
     final canResume = _canResumeSavedTree(tree);
+    final targetDepth = tree.configSnapshot['max_depth'];
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.warningSurface.withValues(alpha: 0.35),
+        color: AppColors.warningTint,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppColors.warning, width: 1),
       ),
@@ -322,7 +357,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
               Icon(Icons.pause_circle, size: 18, color: AppColors.warning),
               SizedBox(width: 8),
               Text(
-                'Unfinished Build Available',
+                'Unfinished build available',
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
                   color: AppColors.warning,
@@ -333,11 +368,18 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           const SizedBox(height: 4),
           Text(
             '${tree.totalNodes} nodes, depth ${tree.maxPlyReached}'
+            '${targetDepth is num ? '\nTarget depth: ${targetDepth.toInt()}' : ''}'
             '${tree.startMoves.isNotEmpty ? '\nFrom: ${tree.startMoves}' : ''}',
             style: const TextStyle(
               fontSize: 12,
               color: AppColors.onSurfaceSoft,
             ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Resume continues toward the target depth; Finish Now builds '
+            'lines from what is already explored.',
+            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
           ),
           if (!canResume) ...[
             const SizedBox(height: 4),
@@ -353,32 +395,44 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              FilledButton.icon(
-                onPressed: canResume
-                    ? () {
-                        _configFormKey.currentState?.setMaxPly(
-                          tree.maxPlyReached,
-                        );
-                        _startTreeBuild(existingTree: tree);
-                      }
-                    : null,
-                icon: const Icon(Icons.check),
-                label: const Text('Build Lines Now'),
+              Tooltip(
+                message:
+                    'Continues the search toward the Max line length set '
+                    'above, then builds lines.',
+                child: OutlinedButton.icon(
+                  onPressed: canResume
+                      ? () => _startTreeBuild(existingTree: tree)
+                      : null,
+                  icon: const Icon(Icons.play_arrow),
+                  label: const Text('Resume Exploring'),
+                ),
               ),
-              OutlinedButton.icon(
-                onPressed: canResume
-                    ? () => _startTreeBuild(existingTree: tree)
-                    : null,
-                icon: const Icon(Icons.play_arrow),
-                label: const Text('Resume Build'),
+              Tooltip(
+                message:
+                    'Stops at depth ${tree.maxPlyReached} already reached '
+                    'and builds lines from the tree as it is.',
+                child: OutlinedButton.icon(
+                  onPressed: canResume
+                      ? () => _startTreeBuild(
+                          existingTree: tree,
+                          maxPlyOverride: tree.maxPlyReached,
+                        )
+                      : null,
+                  icon: const Icon(Icons.outlined_flag),
+                  label: const Text('Finish Now'),
+                ),
               ),
               OutlinedButton.icon(
                 onPressed: () {
                   _deletePartialTree();
                   setState(() => _savedPartialTree = null);
                 },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.danger,
+                  side: const BorderSide(color: AppColors.danger),
+                ),
                 icon: const Icon(Icons.delete_outline),
-                label: const Text('Delete'),
+                label: const Text('Discard'),
               ),
             ],
           ),

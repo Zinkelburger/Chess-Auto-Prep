@@ -17,6 +17,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/pgn_text_styles.dart';
 import 'comment_editor.dart';
 import 'comment_prose_spans.dart';
+import 'movetext_primitives.dart' show MoveChip;
 import '../../utils/chess_utils.dart' show coordsAtPly;
 import '../../utils/pgn_comment_utils.dart'
     show
@@ -37,7 +38,23 @@ part 'pgn_movetext_prose_scan.dart';
 part 'pgn_movetext_comments.dart';
 part 'pgn_movetext_variations.dart';
 
-class PgnMovetextView extends StatelessWidget {
+/// Border reserved on every non-highlighted move chip so that highlighting or
+/// hovering one never changes its size — which would reflow the whole wrap.
+final _kReservedBorder = BoxDecoration(
+  borderRadius: BorderRadius.circular(3),
+  border: Border.all(color: Colors.transparent, width: 1),
+);
+
+/// Hover affordance for a move chip. This replaces the former always-on dotted
+/// underline: in movetext *every* token is a move, so a permanent per-move
+/// decoration is hundreds of marks carrying zero information.
+final _kHoverDecoration = BoxDecoration(
+  color: AppColors.pgnMoveHoverBg,
+  borderRadius: BorderRadius.circular(3),
+  border: Border.all(color: Colors.transparent, width: 1),
+);
+
+class PgnMovetextView extends StatefulWidget {
   /// The parsed game (for game-level comments before any move).
   final PgnGame? game;
 
@@ -145,24 +162,41 @@ class PgnMovetextView extends StatelessWidget {
   });
 
   @override
+  State<PgnMovetextView> createState() => _PgnMovetextViewState();
+}
+
+class _PgnMovetextViewState extends State<PgnMovetextView> {
+  /// Ids of branch nodes whose folded deep sidelines the reader has opened.
+  /// Keyed by [MoveNode.id], which is stable for the session.
+  final Set<int> _expandedBranches = <int>{};
+
+  void _toggleBranch(int id) {
+    setState(() {
+      if (!_expandedBranches.remove(id)) _expandedBranches.add(id);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (moveHistory.isEmpty &&
-        variationsByPly.isEmpty &&
-        (game == null || game!.comments.isEmpty)) {
+    final view = widget;
+    if (view.moveHistory.isEmpty &&
+        view.variationsByPly.isEmpty &&
+        (view.game == null || view.game!.comments.isEmpty)) {
       return const SizedBox();
     }
 
     final children = <Widget>[];
     final spans = <InlineSpan>[];
-    var moveNumber = startingMoveNumber;
-    var isWhiteTurn = startingWhiteTurn;
+    var moveNumber = view.startingMoveNumber;
+    var isWhiteTurn = view.startingWhiteTurn;
     // After a comment/variation/editor breaks the mainline Wrap run, the next
     // Black move must show `N...` (same as the start-of-game Black case).
     var forceBlackEllipsis = false;
 
     // Root style for RichText runs of mainline moves; comments/variations
-    // use their own styles via [PgnTextStyles].
-    const baseStyle = PgnTextStyles.move;
+    // use their own styles via [PgnTextStyles]. Weight-free so prose spans
+    // don't inherit the mainline's semibold.
+    final baseStyle = PgnTextStyles.rowRootAt(0);
 
     void flushSpans() {
       if (spans.isNotEmpty) {
@@ -191,7 +225,7 @@ class PgnMovetextView extends StatelessWidget {
 
     void emitComment(String raw, {Position? anchorPos, int anchorPly = 0}) {
       final rendered = _renderComment(
-        this,
+        view,
         raw,
         anchorPos: anchorPos,
         anchorPly: anchorPly,
@@ -203,7 +237,7 @@ class PgnMovetextView extends StatelessWidget {
         emitFullWidthRow(
           RichText(
             text: TextSpan(
-              style: PgnTextStyles.comment,
+              style: PgnTextStyles.commentAt(0),
               children: List.of(rendered.spans),
             ),
           ),
@@ -211,42 +245,50 @@ class PgnMovetextView extends StatelessWidget {
       }
     }
 
+    /// Emit every sideline at [ply] as one cohesive block. The breathing room
+    /// goes *around* the group, not between its rows — uniform per-row padding
+    /// is what turns a page of sidelines into an even gray mass with no
+    /// entry points.
     void emitVariationsAtPly(int ply, {bool ephemeralOnly = false}) {
       final rows = _buildVariationRowsAtPly(
-        this,
+        view,
         ply,
         ephemeralOnly: ephemeralOnly,
+        expandedBranches: _expandedBranches,
+        onToggleBranch: _toggleBranch,
       );
-      for (final row in rows) {
-        emitFullWidthRow(row, vertical: 2);
-      }
+      if (rows.isEmpty) return;
+      emitFullWidthRow(
+        Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rows),
+        vertical: 6,
+      );
     }
 
     // Board after each mainline half-move (prefix[k] = position after k moves),
     // used to legality-check moves mentioned inside prose comments.
-    final prefix = _buildPrefixPositions(this);
+    final prefix = _buildPrefixPositions(view);
 
     // Game-level comments (before any moves) — common in book PGNs
-    if (game != null && game!.comments.isNotEmpty) {
-      for (final comment in game!.comments) {
+    if (view.game != null && view.game!.comments.isNotEmpty) {
+      for (final comment in view.game!.comments) {
         emitComment(comment, anchorPos: _posAt(prefix, 0), anchorPly: 0);
       }
     }
 
     // Variations at ply 0 (before any move)
-    final varsAtZero = variationsByPly[0];
+    final varsAtZero = view.variationsByPly[0];
     if (varsAtZero != null && varsAtZero.isNotEmpty) {
       emitVariationsAtPly(
         0,
-        ephemeralOnly: revealedPly != null && revealedPly! <= 0,
+        ephemeralOnly: view.revealedPly != null && view.revealedPly! <= 0,
       );
     }
 
-    for (int i = 0; i < moveHistory.length; i++) {
+    for (int i = 0; i < view.moveHistory.length; i++) {
       // Solitaire mode: stop rendering at the revealed boundary
-      if (revealedPly != null && i >= revealedPly!) break;
+      if (view.revealedPly != null && i >= view.revealedPly!) break;
 
-      final moveData = moveHistory[i];
+      final moveData = view.moveHistory[i];
       final san = moveData.san;
 
       // Render startingComments (comments before the move)
@@ -269,78 +311,63 @@ class PgnMovetextView extends StatelessWidget {
 
       if (isWhiteTurn) {
         spans.add(
-          TextSpan(text: '$moveNumber. ', style: PgnTextStyles.moveNumber),
+          TextSpan(text: '$moveNumber. ', style: PgnTextStyles.moveNumberAt(0)),
         );
         forceBlackEllipsis = false;
-      } else if (forceBlackEllipsis || (i == 0 && !startingWhiteTurn)) {
+      } else if (forceBlackEllipsis || (i == 0 && !view.startingWhiteTurn)) {
         // Black after a line break (comment/variation/editor) or game start.
         spans.add(
-          TextSpan(text: '$moveNumber... ', style: PgnTextStyles.moveNumber),
+          TextSpan(
+            text: '$moveNumber... ',
+            style: PgnTextStyles.moveNumberAt(0),
+          ),
         );
         forceBlackEllipsis = false;
       }
 
-      final isCurrentMove = i == mainLineIndex - 1 && analysisPath.isEmpty;
+      final isCurrentMove =
+          i == view.mainLineIndex - 1 && view.analysisPath.isEmpty;
 
-      // SAN color is independent of NAGs and of whether a sideline exists —
-      // structure (own-row variations) marks branches, not a separate hue.
+      // SAN styling is independent of NAGs and of whether a sideline exists —
+      // structure (own-row, indented variations) marks branches, not a hue.
+      // The current move keeps the mainline's weight and size; only the pill
+      // changes, so navigating never reflows the wrapped movetext.
       final moveStyle = isCurrentMove
-          ? PgnTextStyles.currentMove
-          : PgnTextStyles.move;
+          ? PgnTextStyles.moveAt(0).copyWith(color: AppColors.pgnMoveCurrentFg)
+          : PgnTextStyles.moveAt(0);
 
       // Build SAN + NAG text (always shown — annotations survive view mode)
       final nagSuffix = (moveData.nags != null && moveData.nags!.isNotEmpty)
           ? moveData.nags!.where((n) => n >= 1 && n <= 6).map(nagSymbol).join()
           : '';
 
+      final currentDecoration = BoxDecoration(
+        color: AppColors.pgnMoveCurrentBg,
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: AppColors.pgnMoveCurrent, width: 1),
+      );
+
       spans.add(
         WidgetSpan(
           alignment: PlaceholderAlignment.baseline,
           baseline: TextBaseline.alphabetic,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => onMainLineMoveClicked(i),
-            onSecondaryTapDown: (details) =>
-                onShowMoveContextMenu(i, details.globalPosition),
-            child: Container(
-              key: isCurrentMove ? currentMoveKey : null,
-              padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-              decoration: BoxDecoration(
-                color: isCurrentMove ? AppColors.pgnMoveCurrentBg : null,
-                borderRadius: BorderRadius.circular(3),
-                // Always reserve the 1px border so highlighting a move never
-                // resizes it (which would reflow wrapped variation lines).
-                border: isCurrentMove
-                    ? Border.all(color: AppColors.pgnMoveCurrent, width: 1)
-                    : Border.all(color: Colors.transparent, width: 1),
-              ),
-              child: Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(
-                      text: san,
-                      style: moveStyle.copyWith(
-                        decoration: isCurrentMove
-                            ? null
-                            : TextDecoration.underline,
-                        decorationColor: AppColors.onSurfaceMuted.withValues(
-                          alpha: 0.5,
-                        ),
-                        decorationStyle: TextDecorationStyle.dotted,
-                      ),
-                    ),
-                    if (nagSuffix.isNotEmpty)
-                      TextSpan(
-                        text: nagSuffix,
-                        style: moveStyle.copyWith(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
+          child: MoveChip(
+            san: san,
+            nagSuffix: nagSuffix,
+            sanStyle: moveStyle,
+            nagStyle: moveStyle.copyWith(
+              fontSize: PgnTextStyles.sizeAt(0) - 1,
+              fontWeight: FontWeight.bold,
             ),
+            decoration: isCurrentMove ? currentDecoration : _kReservedBorder,
+            hoverDecoration: isCurrentMove
+                ? currentDecoration
+                : _kHoverDecoration,
+            containerKey: isCurrentMove ? view.currentMoveKey : null,
+            behavior: HitTestBehavior.opaque,
+            onTap: () => view.onMainLineMoveClicked(i),
+            onSecondaryTapDown: (details) =>
+                view.onShowMoveContextMenu(i, details.globalPosition),
           ),
         ),
       );
@@ -348,14 +375,14 @@ class PgnMovetextView extends StatelessWidget {
       spans.add(const TextSpan(text: ' '));
 
       // Inline comment editor
-      if (editingCommentIndex == i) {
+      if (view.editingCommentIndex == i) {
         flushSpans();
         forceBlackEllipsis = true;
         children.add(
           PgnCommentEditor(
             initialText: _rawComment(moveData),
-            onSave: (text) => onSaveComment(i, text),
-            onCancel: onCancelEditingComment,
+            onSave: (text) => view.onSaveComment(i, text),
+            onCancel: view.onCancelEditingComment,
           ),
         );
       } else if (moveData.comments != null && moveData.comments!.isNotEmpty) {
@@ -369,11 +396,11 @@ class PgnMovetextView extends StatelessWidget {
       // Variations branch *after* the move at index i (ply = i + 1). In
       // solitaire, only ephemeral attempts show at the un-guessed frontier.
       final ply = i + 1;
-      final varsHere = variationsByPly[ply];
+      final varsHere = view.variationsByPly[ply];
       if (varsHere != null && varsHere.isNotEmpty) {
         emitVariationsAtPly(
           ply,
-          ephemeralOnly: revealedPly != null && ply >= revealedPly!,
+          ephemeralOnly: view.revealedPly != null && ply >= view.revealedPly!,
         );
       }
 

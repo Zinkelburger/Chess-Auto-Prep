@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import '../models/repertoire_metadata.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/storage/storage_factory.dart';
+import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
 import 'layout/empty_state_placeholder.dart';
 
@@ -187,37 +188,17 @@ class _ChapterListBodyState extends State<ChapterListBody> {
                   ],
                 ),
               ),
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert),
-                onSelected: (value) {
-                  if (value == 'delete') {
-                    _deleteChapter(chapter);
-                  } else if (value == 'rename') {
-                    _renameChapter(chapter);
-                  }
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: 'rename',
-                    child: Row(
-                      children: [
-                        Icon(Icons.edit, size: 20),
-                        SizedBox(width: 12),
-                        Text('Rename'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'delete',
-                    child: Row(
-                      children: [
-                        Icon(Icons.delete, size: 20, color: Colors.red),
-                        SizedBox(width: 12),
-                        Text('Delete', style: TextStyle(color: Colors.red)),
-                      ],
-                    ),
-                  ),
-                ],
+              // Same one-click rename / delete as the repertoire list.
+              IconButton(
+                icon: const Icon(Icons.edit_outlined),
+                tooltip: 'Rename chapter',
+                onPressed: () => _renameChapter(chapter),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                color: AppColors.danger,
+                tooltip: 'Delete chapter',
+                onPressed: () => _deleteChapter(chapter),
               ),
             ],
           ),

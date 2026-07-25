@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart' show kSecondaryButton;
 import 'package:flutter/material.dart';
 import 'package:dartchess/dartchess.dart';
 
@@ -60,6 +61,11 @@ class ChessBoardWidget extends StatefulWidget {
   final Function(String)? onPieceSelected;
   final List<BoardAnnotation> annotations;
 
+  /// Right-drag finished: [orig] is where the drag started, [dest] where it
+  /// ended, or null when it began and ended on the same square (a circle).
+  /// Setting this is what enables shape drawing at all.
+  final void Function(String orig, String? dest)? onShapeDrawn;
+
   const ChessBoardWidget({
     super.key,
     required this.position,
@@ -70,6 +76,7 @@ class ChessBoardWidget extends StatefulWidget {
     this.onSquareClicked,
     this.onPieceSelected,
     this.annotations = const [],
+    this.onShapeDrawn,
   });
 
   @override
@@ -81,6 +88,10 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
   final Set<String> _internalHighlights = {};
 
   String? _dragStartSquare;
+
+  /// Square a right-button drag started on, while it is in progress.
+  String? _shapeStartSquare;
+
   bool _isDragging = false;
   Offset? _dragStartPosition;
   Piece? _draggedPiece;
@@ -108,73 +119,100 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
         return SizedBox(
           width: boardSize,
           height: boardSize,
-          child: GestureDetector(
-            onPanStart: (details) {
-              if (!widget.enableUserMoves) return;
-              _onPanStart(details, squareSize);
+          // Right-drag draws arrows and circles. It rides on a Listener rather
+          // than the GestureDetector below because the pan recognizer only
+          // accepts the primary button, so the two never contend.
+          child: Listener(
+            onPointerDown: (event) {
+              if (widget.onShapeDrawn == null) return;
+              if (event.buttons != kSecondaryButton) return;
+              _shapeStartSquare = _squareAt(event.localPosition, squareSize);
             },
-            onPanUpdate: (details) {
-              if (!widget.enableUserMoves) return;
-              _onPanUpdate(details);
+            onPointerUp: (event) {
+              final start = _shapeStartSquare;
+              if (start == null) return;
+              _shapeStartSquare = null;
+              final end = _squareAt(event.localPosition, squareSize);
+              widget.onShapeDrawn?.call(start, end == start ? null : end);
             },
-            onPanEnd: (details) {
-              if (!widget.enableUserMoves) return;
-              _onPanEnd(details, squareSize);
-            },
-            onTapUp: (details) {
-              if (!widget.enableUserMoves) return;
-              if (!_isDragging) {
-                final col = (details.localPosition.dx / squareSize).floor();
-                final row = (details.localPosition.dy / squareSize).floor();
-                final square = _coordsToSquare(col, row);
-                _onSquareTap(square);
-              }
-            },
-            child: Stack(
-              children: [
-                CustomPaint(
-                  painter: _BoardPainter(
-                    selectedSquare: selectedSquare,
-                    highlightedSquares: {
-                      ...widget.highlightedSquares,
-                      ..._internalHighlights,
-                    },
-                    flipped: widget.flipped,
-                    lightColor: lightSquareColor,
-                    darkColor: darkSquareColor,
-                    selectColor: selectedSquareColor,
-                    highlightColor: highlightColor,
-                  ),
-                  size: Size(boardSize, boardSize),
-                ),
-                ..._buildPieceWidgets(squareSize),
-                if (widget.annotations.isNotEmpty)
+            onPointerCancel: (_) => _shapeStartSquare = null,
+            child: GestureDetector(
+              onPanStart: (details) {
+                if (!widget.enableUserMoves) return;
+                _onPanStart(details, squareSize);
+              },
+              onPanUpdate: (details) {
+                if (!widget.enableUserMoves) return;
+                _onPanUpdate(details);
+              },
+              onPanEnd: (details) {
+                if (!widget.enableUserMoves) return;
+                _onPanEnd(details, squareSize);
+              },
+              onTapUp: (details) {
+                if (!widget.enableUserMoves) return;
+                if (!_isDragging) {
+                  final col = (details.localPosition.dx / squareSize).floor();
+                  final row = (details.localPosition.dy / squareSize).floor();
+                  final square = _coordsToSquare(col, row);
+                  _onSquareTap(square);
+                }
+              },
+              child: Stack(
+                children: [
                   CustomPaint(
-                    painter: _AnnotationPainter(
-                      annotations: widget.annotations,
+                    painter: _BoardPainter(
+                      selectedSquare: selectedSquare,
+                      highlightedSquares: {
+                        ...widget.highlightedSquares,
+                        ..._internalHighlights,
+                      },
                       flipped: widget.flipped,
+                      lightColor: lightSquareColor,
+                      darkColor: darkSquareColor,
+                      selectColor: selectedSquareColor,
+                      highlightColor: highlightColor,
                     ),
                     size: Size(boardSize, boardSize),
                   ),
-                // Only this layer repaints as the pointer moves during a drag;
-                // the board painter and static pieces above stay put.
-                ValueListenableBuilder<Offset?>(
-                  valueListenable: _currentDragPosition,
-                  builder: (context, dragPos, _) {
-                    if (!_isDragging ||
-                        _draggedPiece == null ||
-                        dragPos == null) {
-                      return const SizedBox.shrink();
-                    }
-                    return _buildDraggedPiece(squareSize, dragPos);
-                  },
-                ),
-              ],
+                  ..._buildPieceWidgets(squareSize),
+                  if (widget.annotations.isNotEmpty)
+                    CustomPaint(
+                      painter: _AnnotationPainter(
+                        annotations: widget.annotations,
+                        flipped: widget.flipped,
+                      ),
+                      size: Size(boardSize, boardSize),
+                    ),
+                  // Only this layer repaints as the pointer moves during a drag;
+                  // the board painter and static pieces above stay put.
+                  ValueListenableBuilder<Offset?>(
+                    valueListenable: _currentDragPosition,
+                    builder: (context, dragPos, _) {
+                      if (!_isDragging ||
+                          _draggedPiece == null ||
+                          dragPos == null) {
+                        return const SizedBox.shrink();
+                      }
+                      return _buildDraggedPiece(squareSize, dragPos);
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
         );
       },
     );
+  }
+
+  /// Square under [localPosition], or null when the point falls outside the
+  /// board (a right-drag can be released past the edge).
+  String? _squareAt(Offset localPosition, double squareSize) {
+    final col = (localPosition.dx / squareSize).floor();
+    final row = (localPosition.dy / squareSize).floor();
+    if (col < 0 || col > 7 || row < 0 || row > 7) return null;
+    return _coordsToSquare(col, row);
   }
 
   List<Widget> _buildPieceWidgets(double squareSize) {

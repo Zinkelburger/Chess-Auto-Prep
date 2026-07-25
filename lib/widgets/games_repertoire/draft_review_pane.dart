@@ -2,14 +2,19 @@
 /// (which relabels to "Draft" while a session is active).
 ///
 /// Shows the coverage-coloured games tree with prune, a summary header, a
-/// min-games noise filter, and a Merge action. Merging folds the surviving
-/// lines into the live repertoire and, if that creates a choice at one of your
-/// decision points, pops the conflict sheet right away.
+/// min-games noise filter, and two exits:
+///   • Merge into repertoire — plans against the FULL repertoire, resolves
+///     any prep conflicts up front (see [MergeConflictSheet]), then appends
+///     the new lines to the repertoire file and reloads. Nothing existing is
+///     rewritten or removed.
+///   • Save as new file — writes the surviving lines as a fresh, re-openable
+///     repertoire (collision-proof name).
 library;
 
 import 'package:flutter/material.dart';
 
 import '../../core/repertoire_controller.dart';
+import '../../services/games_repertoire/draft_merge_planner.dart';
 import '../../services/games_repertoire/games_draft.dart';
 import '../../services/games_repertoire/draft_repertoire_writer.dart';
 import '../../services/storage/storage_factory.dart';
@@ -49,36 +54,90 @@ class _DraftReviewPaneState extends State<DraftReviewPane> {
   int _minGames = 2;
   bool _merging = false;
 
+  /// Why merging is impossible right now, or null when it's allowed.
+  /// (Saving as a new file works in every one of these cases.)
+  String? get _mergeBlockedReason {
+    final c = widget.controller;
+    if (c.currentRepertoire == null) {
+      return 'No repertoire file is loaded — use "Save as new file" instead.';
+    }
+    if (c.startingFen != null) {
+      return 'This repertoire starts from a custom position, but game lines '
+          'start from move 1. Use "Save as new file" instead.';
+    }
+    if (c.isRepertoireWhite != widget.isWhite) {
+      final draftSide = widget.isWhite ? 'White' : 'Black';
+      final repSide = c.isRepertoireWhite ? 'White' : 'Black';
+      return 'This draft is for $draftSide but the repertoire is for '
+          '$repSide. Use "Save as new file" instead.';
+    }
+    return null;
+  }
+
   Future<void> _merge() async {
     setState(() => _merging = true);
-    final draftTree = widget.draft.materialize(
-      filters: DraftFilters(minGames: _minGames),
-    );
-    if (draftTree.isEmpty) {
-      setState(() => _merging = false);
-      _toast('Nothing to merge — every line was filtered out.');
-      return;
-    }
-    final result = widget.controller.mergeDraft(
-      draftTree,
-      isWhite: widget.isWhite,
-    );
-    if (!mounted) return;
-
-    if (result.hasConflicts) {
-      await showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: AppColors.surface,
-        builder: (_) => MergeConflictSheet(
-          controller: widget.controller,
-          conflicts: result.conflicts,
-        ),
+    try {
+      final draftTree = widget.draft.materialize(
+        filters: DraftFilters(minGames: _minGames),
       );
-    } else {
-      _toast('Merged ${result.addedMoves} new moves into your repertoire.');
+      if (draftTree.isEmpty) {
+        _toast('Nothing to merge — every line was filtered out.');
+        return;
+      }
+
+      final plan = planDraftMerge(
+        repertoire: widget.controller.buildRepertoireMoveTree(),
+        draft: draftTree,
+        isWhite: widget.isWhite,
+      );
+      if (plan.isEmpty) {
+        _toast('Your repertoire already covers every line in this draft.');
+        return;
+      }
+
+      var importAlternatives = <int>{};
+      if (plan.hasConflicts) {
+        final decision = await showModalBottomSheet<Set<int>>(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: AppColors.surface,
+          builder: (_) => MergeConflictSheet(conflicts: plan.conflicts),
+        );
+        if (decision == null) return; // Cancelled — back to review.
+        importAlternatives = decision;
+      }
+
+      final lines = applyConflictDecisions(
+        plan,
+        importAlternatives: importAlternatives,
+      );
+      if (lines.isEmpty) {
+        _toast('Nothing left to add after keeping your prep.');
+        return;
+      }
+
+      final result = await widget.controller.appendDraftLines(
+        lines,
+        sourceLabel: widget.sourceLabel,
+      );
+      if (!mounted) return;
+      if (result.added == 0) {
+        _toast('Could not write to the repertoire file.');
+        return;
+      }
+      final name = widget.controller.currentRepertoire?.name ?? 'repertoire';
+      final gaps = result.needAnswer;
+      final gapNote = gaps > 0
+          ? ' — $gaps need${gaps == 1 ? 's' : ''} an answer'
+          : '';
+      _toast(
+        'Added ${result.added} line${result.added == 1 ? '' : 's'} '
+        'to "$name"$gapNote.',
+      );
+      widget.onClose();
+    } finally {
+      if (mounted) setState(() => _merging = false);
     }
-    if (mounted) widget.onClose();
   }
 
   Future<void> _saveAsDraft() async {
@@ -92,16 +151,21 @@ class _DraftReviewPaneState extends State<DraftReviewPane> {
     final label = widget.sourceLabel.isEmpty ? 'games' : widget.sourceLabel;
     final side = widget.isWhite ? 'White' : 'Black';
     final stamp = DateTime.now().toIso8601String().split('T').first;
-    final name = 'Draft $label $side $stamp';
-    final content = draftToRepertoireFile(
-      draftTree,
-      name: name,
-      isWhite: widget.isWhite,
-    );
+    final base = 'Draft $label $side $stamp';
 
     try {
       final storage = StorageFactory.instance;
-      final path = await storage.repertoireFilePath(name);
+      var name = base;
+      var path = await storage.repertoireFilePath(name);
+      for (var n = 2; await storage.fileExists(path); n++) {
+        name = '$base ($n)';
+        path = await storage.repertoireFilePath(name);
+      }
+      final content = draftToRepertoireFile(
+        draftTree,
+        name: name,
+        isWhite: widget.isWhite,
+      );
       await storage.writeFile(path, content);
       if (!mounted) return;
       _toast('Saved "$name" — open it from the repertoire list.');
@@ -119,6 +183,7 @@ class _DraftReviewPaneState extends State<DraftReviewPane> {
   @override
   Widget build(BuildContext context) {
     final diff = widget.draft.diff;
+    final blocked = _mergeBlockedReason;
     return Column(
       children: [
         // Header: title + close.
@@ -202,30 +267,40 @@ class _DraftReviewPaneState extends State<DraftReviewPane> {
         const Divider(height: 1),
         Padding(
           padding: const EdgeInsets.all(8),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
+              Padding(
+                padding: const EdgeInsets.only(left: 4, bottom: 6),
                 child: Text(
                   _merging
                       ? 'Merging…'
-                      : 'Discard lines you don\'t want, then merge the rest in.',
+                      : blocked ??
+                            'Discard lines you don\'t want, then merge the '
+                                'rest in. Merging only adds new lines — '
+                                'nothing is removed.',
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.onSurfaceMuted,
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                onPressed: _merging ? null : _saveAsDraft,
-                icon: const Icon(Icons.save_outlined, size: 18),
-                label: const Text('Save'),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: _merging ? null : _merge,
-                icon: const Icon(Icons.merge_type, size: 18),
-                label: const Text('Merge'),
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _merging ? null : _saveAsDraft,
+                    icon: const Icon(Icons.save_outlined, size: 18),
+                    label: const Text('Save as new file'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: (_merging || blocked != null) ? null : _merge,
+                    icon: const Icon(Icons.merge_type, size: 18),
+                    label: const Text('Merge into repertoire'),
+                  ),
+                ],
               ),
             ],
           ),

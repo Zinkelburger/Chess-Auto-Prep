@@ -271,18 +271,25 @@ class _CoverageChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isSelected = selected == filter;
+    // Outline, not fill: selection reads as a coloured ring plus a faint
+    // wash of the same hue. A saturated block of colour on a filter chip
+    // pulls the eye away from the line table it is filtering.
+    final accent = color ?? AppColors.onSurfaceSoft;
     return GestureDetector(
       onTap: () => onChanged(filter),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: isSelected
-              ? (color ?? AppColors.info)
-              : AppColors.chipInactiveBg,
+              ? accent.withValues(alpha: 0.14)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
-          border: color != null && !isSelected
-              ? Border.all(color: color!.withValues(alpha: 0.4), width: 1)
-              : null,
+          border: Border.all(
+            color: isSelected
+                ? accent
+                : (color?.withValues(alpha: 0.35) ?? AppColors.outline),
+            width: isSelected ? 1.5 : 1,
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -291,10 +298,8 @@ class _CoverageChip extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 11,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected
-                    ? AppColors.onWarning
-                    : AppColors.onSurfaceSoft,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
+                color: isSelected ? AppColors.ink : AppColors.onSurfaceSoft,
               ),
             ),
             if (count != null) ...[
@@ -303,16 +308,16 @@ class _CoverageChip extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? AppColors.ink.withValues(alpha: 0.25)
-                      : AppColors.outline,
+                      ? accent.withValues(alpha: 0.22)
+                      : AppColors.outline.withValues(alpha: 0.5),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   '$count',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 9,
                     fontWeight: FontWeight.bold,
-                    color: isSelected ? AppColors.onWarning : AppColors.ink,
+                    color: AppColors.ink,
                   ),
                 ),
               ),

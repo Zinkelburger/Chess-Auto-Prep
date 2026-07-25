@@ -20,6 +20,12 @@ const int kDefaultMaxAnalysisMoves = 8;
 const int kMinMaxAnalysisMoves = 3;
 const int kMaxMaxAnalysisMoves = 20;
 
+/// How many text rows each engine row gives its principal variation before
+/// the continuation is ellipsised. 1 restores the old single-line behavior.
+const int kDefaultPvRows = 2;
+const int kMinPvRows = 1;
+const int kMaxPvRows = 4;
+
 // ── Maia / candidates ────────────────────────────────────────────────────────
 
 const int kDefaultMaiaElo = 2200;
@@ -73,11 +79,6 @@ const bool kDefaultShowMaia = true;
 const bool kDefaultShowProbability = true;
 const bool kDefaultShowEngineDock = true;
 const bool kDefaultShowExpectimaxDock = true;
-
-// ── Infrastructure ───────────────────────────────────────────────────────────
-
-/// Port for the browser-extension localhost HTTP/WebSocket server.
-const int kBrowserExtensionPort = 9812;
 
 // ── Trap classification thresholds (centipawn loss vs best move) ─────────────
 

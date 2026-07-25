@@ -23,7 +23,8 @@ mixin _GenerationConfigDescriptions on _GenerationConfigFormStateBase {
             'moves. Thorough but slower.';
       case BuildMode.maiaDbExplore:
         return 'Uses Maia neural-net moves + database win rates only — '
-            'fast, no engine needed.';
+            'fast, no engine needed. Requires an evaluation database (see '
+            'the section at the bottom of this form).';
       case BuildMode.dbExplorer:
         return 'Builds from PGN files you add below—not from lines already '
             'in your repertoire. Uses move frequencies from those games; '
@@ -34,11 +35,11 @@ mixin _GenerationConfigDescriptions on _GenerationConfigFormStateBase {
   }
 
   String _selectionModeLabel(SelectionMode mode) => switch (mode) {
-    SelectionMode.expectimax => 'Practical expectimax (recommended)',
+    SelectionMode.expectimax => 'Best expected score (recommended)',
     SelectionMode.engineOnly => 'Engine best move',
     SelectionMode.dbWinRateOnly => 'Database win rate',
     SelectionMode.playable => 'Balanced strength + ease',
-    SelectionMode.trappy => 'Trappy (maximize opponent mistakes)',
+    SelectionMode.trappy => 'Maximize opponent mistakes',
   };
 
   String _selectionModeDescription() {
@@ -56,10 +57,10 @@ mixin _GenerationConfigDescriptions on _GenerationConfigFormStateBase {
         return 'Balances strength (60%) with ease of play (40%) — prefers '
             'moves that are both sound and natural to find over the board.';
       case SelectionMode.trappy:
-        return 'Picks lines where opponents are most likely to blunder. '
-            'Uses expected centipawn loss instead of win probability. '
-            'Build tolerances are automatically widened to explore '
-            'trickier positions.';
+        return 'Picks the lines where opponents are most likely to go '
+            'wrong, using their expected centipawn loss instead of win '
+            'probability. Eval tolerances widen automatically so trickier '
+            'positions stay reachable.';
     }
   }
 }

@@ -16,7 +16,7 @@ List<InlineSpan> _plainCommentSpans(
 }) {
   final filtered = filterDisplayComment(raw);
   if (filtered.isEmpty) return const [];
-  const proseStyle = PgnTextStyles.comment;
+  final proseStyle = PgnTextStyles.commentAt(0);
   if (anchorPos != null && view.onPlayInlineLine != null) {
     return _buildProseSpans(view, filtered, anchorPos, anchorPly, proseStyle);
   }
@@ -181,7 +181,7 @@ List<InlineSpan> _buildCommentTokenSpans(
     if (t is CommentMove) (runMoves[t.runId] ??= []).add(t);
   }
 
-  const proseStyle = PgnTextStyles.comment;
+  final proseStyle = PgnTextStyles.commentAt(0);
 
   final spans = <InlineSpan>[];
   for (final t in tokens) {
@@ -202,14 +202,19 @@ List<InlineSpan> _buildCommentTokenSpans(
   return spans;
 }
 
-/// Split a variation-node comment into flowing spans: prose in the
-/// proportional font, embedded moves in monospace. Unlike mainline comments
-/// these are non-interactive — we don't track a board position to anchor
-/// their moves to — so the moves are rendered as plain monospace text.
+/// Split a variation-node comment into flowing spans, inheriting the sideline's
+/// depth ink and size so an annotation recedes with the line it annotates.
+/// Unlike mainline comments these are non-interactive — we don't track a board
+/// position to anchor their moves to — so embedded moves render as plain text.
 List<InlineSpan> _variationCommentSpans(
   PgnMovetextView view,
   String rawComment,
-) => commentProseSpans(rawComment, bookFormatting: view.bookFormatting);
+  int depth,
+) => commentProseSpans(
+  rawComment,
+  bookFormatting: view.bookFormatting,
+  style: PgnTextStyles.commentAt(depth),
+);
 
 /// Split a prose string into flowing text + clickable chips for any word that
 /// parses as a *legal* SAN move from [anchorPos]. The legality check filters

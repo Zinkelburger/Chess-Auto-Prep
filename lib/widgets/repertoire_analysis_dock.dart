@@ -226,7 +226,12 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
             ),
           if (_settings.showExpectimaxDock)
             Text(
-              'Expectimax PV (on-the-fly)',
+              // Same vocabulary as ExpectimaxLinesPane's header: the pane
+              // below reads from the built tree when it covers this
+              // position, and computes live otherwise.
+              _hasPrecomputedExpectimax(widget.controller.fen)
+                  ? 'Expectimax lines · from built tree'
+                  : 'Expectimax lines · live',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,

@@ -61,11 +61,6 @@ class HoleHuntConfig {
   /// opponent model.
   final bool useLichessInTraps;
 
-  // ── Report ───────────────────────────────────────────────────────────
-
-  /// Default cap on findings shown in the report panel.
-  final int maxReportSize;
-
   const HoleHuntConfig({
     this.attackerIsUser = true,
     this.discoveryDepth = 14,
@@ -82,7 +77,6 @@ class HoleHuntConfig {
     this.practicalGapThresholdCp = 60,
     this.maiaElo = 2000,
     this.useLichessInTraps = true,
-    this.maxReportSize = 10,
   });
 
   Map<String, dynamic> toMap() => {
@@ -101,7 +95,6 @@ class HoleHuntConfig {
     'practicalGapThresholdCp': practicalGapThresholdCp,
     'maiaElo': maiaElo,
     'useLichessInTraps': useLichessInTraps,
-    'maxReportSize': maxReportSize,
   };
 
   factory HoleHuntConfig.fromMap(Map<String, dynamic> m) => HoleHuntConfig(
@@ -120,7 +113,6 @@ class HoleHuntConfig {
     practicalGapThresholdCp: m['practicalGapThresholdCp'] as int? ?? 60,
     maiaElo: m['maiaElo'] as int? ?? 2000,
     useLichessInTraps: m['useLichessInTraps'] as bool? ?? true,
-    maxReportSize: m['maxReportSize'] as int? ?? 10,
   );
 
   /// Compact one-line summary for display in the Jobs tab.
@@ -146,7 +138,6 @@ class HoleHuntConfig {
     int? practicalGapThresholdCp,
     int? maiaElo,
     bool? useLichessInTraps,
-    int? maxReportSize,
   }) {
     return HoleHuntConfig(
       attackerIsUser: attackerIsUser ?? this.attackerIsUser,
@@ -167,7 +158,6 @@ class HoleHuntConfig {
           practicalGapThresholdCp ?? this.practicalGapThresholdCp,
       maiaElo: maiaElo ?? this.maiaElo,
       useLichessInTraps: useLichessInTraps ?? this.useLichessInTraps,
-      maxReportSize: maxReportSize ?? this.maxReportSize,
     );
   }
 }

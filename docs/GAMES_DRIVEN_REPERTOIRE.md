@@ -113,20 +113,24 @@ widgets:
   missing/weak moves in the lines you kept.
 - **Coverage** → existing `CoverageController` annotation.
 
-### 5. Merge with conflict-flagging
+### 5. Merge with conflict-flagging (revised 2026-07-24)
 
-Merge = **union the draft tree into the target tree**:
+The repertoire's source of truth is the **multi-game PGN file** (one game per
+line); the controller's working `MoveTree` is only the currently loaded line.
+Merge therefore works in file terms (`draft_merge_planner.dart`):
 
-- Walk the draft, `addChild` each move onto the target
-  (`MoveTree.addChild` returns whether it landed as mainline). Identical prefixes
-  dedup automatically; a divergent move lands as a new **sibling**.
-- **Conflict** = any node that gained a second child during the merge → tag it.
-- **Resolve** = the user picks which move is mainline vs sideline using the existing
-  `MoveTree.promoteVariation` / `RepertoireController.promoteVariation` gesture
-  (audit + coverage help judge which is better). First child = mainline by
-  convention; both moves live in one line until resolved.
-
-No new tree surgery required.
+- **Plan** against the union of every repertoire line
+  (`RepertoireController.buildRepertoireMoveTree`): which draft root-to-leaf
+  lines are genuinely new, and where the draft plays a different *my* move
+  than existing prep (a **conflict**, SAN-sequence based). Planning is pure —
+  the conflict walk reuses `RepertoireMerge` on a throwaway copy.
+- **Resolve first, write after**: conflicts surface in `MergeConflictSheet`
+  *before* anything is persisted. Default keeps the prep (that draft branch is
+  skipped); choosing the games' move imports it as extra lines. Cancel aborts.
+- **Apply** = append each surviving new line to the repertoire file as its own
+  titled entry (`From my games (user) — line N`) via
+  `RepertoireController.appendDraftLines` → `importPgnContent` → reload.
+  Existing lines are never rewritten or removed.
 
 ### 6. Extend (later) — a second faucet, same pipeline
 
@@ -179,10 +183,14 @@ adds no new UI surface.
     export API).
 - **UI** `lib/widgets/games_repertoire/`:
   - `draft_tree_view.dart` — coverage-coloured prunable tree + legend.
-  - `merge_conflict_sheet.dart` — pick mainline/sideline at each conflict.
-  - `build_from_games_dialog.dart` — full flow, launched from a new toolbar
-    button (`_buildFromGames`) in `repertoire_screen.dart`.
-  - `RepertoireController.mergeDraft` is the merge entry point.
+  - `merge_conflict_sheet.dart` — pre-merge keep-prep / import-mine decision
+    per conflict (pops the import set; nothing written until confirmed).
+  - `games_source_form.dart` + `draft_review_pane.dart` — source modal + the
+    inline review surface, launched from the toolbar (`_buildFromGames`).
+  - Merge entry points: `planDraftMerge`/`applyConflictDecisions`
+    (`draft_merge_planner.dart`) + `RepertoireController.appendDraftLines`.
+    (The old in-memory `mergeDraft` was removed 2026-07-24: it merged into the
+    working line and never persisted.)
 - Full app builds (`flutter build linux --debug`); full suite 492 tests pass;
   `dart analyze` clean on all new/changed files.
 

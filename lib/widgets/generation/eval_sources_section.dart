@@ -132,7 +132,7 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
     bool enabled = true,
   }) {
     final field = SizedBox(
-      width: 170,
+      width: 210,
       child: TextField(
         controller: controller,
         enabled: enabled && !widget.isGenerating,
@@ -188,29 +188,11 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
       );
     }
 
+    // No header of its own: the expander row in the form carries the title
+    // and the lookup-chain info tooltip.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text('Eval Sources', style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(width: 4),
-            Tooltip(
-              message: widget.cdbDirectAvailable
-                  ? 'Optional eval lookup chain before Stockfish:\n'
-                        'project cache → cdbdirect full dump → local SQLite → API → engine.\n'
-                        'On HDD, enable read-ahead and batch lookups for cdbdirect.'
-                  : 'Optional eval lookup chain before Stockfish:\n'
-                        'project cache → local SQLite → API → engine.',
-              child: Icon(
-                Icons.info_outline,
-                size: 16,
-                color: AppColors.onSurfaceMuted,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
         if (widget.cdbDirectAvailable)
           Builder(
             builder: (context) {

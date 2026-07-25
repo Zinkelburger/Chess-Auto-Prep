@@ -10,6 +10,7 @@ import '../../services/generation/generation_config.dart';
 import '../../services/generation/generation_presets.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
+import '../../utils/app_messages.dart';
 import '../lichess_db_info_icon.dart';
 import '../lichess_db_selector.dart';
 import '../pgn_sources_panel.dart';
@@ -25,10 +26,10 @@ part 'generation_config_form_advanced.dart';
 
 /// Settings form for repertoire tree generation.
 ///
-/// Layer 1 (always visible) is a goal-first card: opponent strength, style,
-/// effort, source — plus saved presets and a live plain-language summary.
-/// Every other knob lives in the Advanced dialog; both layers edit the same
-/// underlying controllers, so they cannot disagree.
+/// Layer 1 (always visible) is a three-section card — Opponent, What to
+/// build, Search (Quick/Full plus four budgets) — plus saved presets and a
+/// live plain-language summary. Every other knob lives in the Advanced
+/// dialog; both layers edit the same controllers, so they cannot disagree.
 class GenerationConfigForm extends StatefulWidget {
   final TreeBuildConfig? initialConfig;
   final bool isGenerating;
@@ -109,6 +110,7 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
     _verifyDepthCtrl.dispose();
     _setupMovesCtrl.dispose();
     _setupToleranceCtrl.dispose();
+    _timeBudgetCtrl.dispose();
     _memorabilityToleranceCtrl.dispose();
     _targetLinesCtrl.dispose();
     super.dispose();
@@ -119,14 +121,12 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _opponentRow(),
-        const SizedBox(height: 12),
-        _styleRow(),
-        const SizedBox(height: 12),
-        _effortRow(),
-        const SizedBox(height: 12),
-        _sourceRow(),
-        const SizedBox(height: 12),
+        // Source (What to build) sits above the search fields it gates;
+        // _opponentSection draws no leading rule so the top stays clean.
+        _opponentSection(),
+        _outputSection(),
+        _searchSection(),
+        const Divider(height: 24),
         Row(
           children: [
             _presetsMenu(),
@@ -157,6 +157,22 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
               const Text(
                 'Evaluation databases (optional)',
                 style: TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
+              ),
+              const SizedBox(width: 4),
+              Tooltip(
+                message: _cdbDirectAvailable
+                    ? 'Optional eval lookup chain before Stockfish:\n'
+                          'project cache → cdbdirect full dump → local SQLite '
+                          '→ API → engine.\n'
+                          'On HDD, enable read-ahead and batch lookups for '
+                          'cdbdirect.'
+                    : 'Optional eval lookup chain before Stockfish:\n'
+                          'project cache → local SQLite → API → engine.',
+                child: const Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: AppColors.onSurfaceMuted,
+                ),
               ),
             ],
           ),

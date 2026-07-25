@@ -82,7 +82,6 @@ main.dart
   ├─ EvalDatabaseSettings.instance.load()
   ├─ EvalCache.instance.init()  // SQLite eval + Maia cache ready for interactive writes
   ├─ EngineLifecycle.loadPersistedState()  // marks engine idle (no process spawn); workers created lazily on first eval
-  ├─ BrowserExtensionServerFactory.start()  (desktop IO only)
   ├─ DefaultPgnService.ensureExtracted()
   └─ ChessAutoPrepApp → MainScreen  (startup wrapped in `runZonedGuarded`; failures show [StartupErrorApp])
 ```
@@ -484,7 +483,7 @@ Used by:
 | File | Purpose | Dependencies |
 |------|---------|--------------|
 | `chess_constants.dart` | Shared chess literals (starting FEN helpers, ply limits) | — |
-| `engine_defaults.dart` | Defaults: interactive analysis depth (`kDefaultDepth` 15), **tree generation eval depth** (`kDefaultGenerationEvalDepth` 14), on-the-fly expectimax eval depth (`kDefaultExpEvalDepth` 12), MultiPV, browser extension port | — |
+| `engine_defaults.dart` | Defaults: interactive analysis depth (`kDefaultDepth` 15), **tree generation eval depth** (`kDefaultGenerationEvalDepth` 14), on-the-fly expectimax eval depth (`kDefaultExpEvalDepth` 12), MultiPV | — |
 | `ui_breakpoints.dart` | Responsive layout width constants | — |
 
 ### `lib/core/`
@@ -768,7 +767,6 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `storage/io_storage_service.dart` | Desktop/mobile IO; `_resolveFile` maps relative paths to app documents; `readFile` / PGN reads use UTF-8 with Latin-1 fallback via `utils/file_text_reader.dart`; `listRepertoireFiles` filters out `*_raw_games.pgn` companion files; `fileStat` returns file size + modification time for index staleness checks |
 | `storage/storage_factory.dart` | Platform factory |
 | `storage/app_paths.dart` | App data directories |
-| `browser_extension_server/*` | Local HTTP server for browser extension (IO/stub) |
 
 ### `lib/widgets/` (grouped)
 
@@ -989,9 +987,9 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | Path | Role |
 |------|------|
 | `tree_builder/` | C expectimax tree builder (`--eval-depth` default 14), CdbDirect reader; MultiPV line-0 PV reply stash + opponent injection (`engine_injected`, PGN `{engine-injected}`). **Build modes** (`--build-mode` in `tree.h`): `stockfish-expectimax` (default interleaved BFS), `maia-db-explore`, `db-explorer`, `trap-finder` (unimplemented). **SQLite cache** (`database.c`): explorer/eval/Maia/repertoire tables plus `build_metadata`. **`cli_args` persistence:** each run calls `save_config_to_db()` → `rdb_save_cli_config()` with the effective CLI as JSON (color, depth, build mode, PGN paths, eval sources, presets, etc.). **`--resume`:** `load_config_from_db()` in `main.c` restores from `cli_args`; `CliExplicit` records flags passed on the command line — saved values apply only for options *not* explicitly set (e.g. `--resume --threads 8` overrides stored thread count). Restores `-c` when omitted; DBs without `cli_args` fail with a clear error. **`--resume` skips** the legacy `check_build_metadata` color/ratings/speeds gate; without `--resume`, reopening an existing `.db` still **refuses** on mismatch (prints stored vs current settings and example `--resume` / fresh / `--input-db` commands). Legacy DBs with data but no metadata get a one-time note and recorded settings. **`--input-db` / `-I`:** copy eval/explorer cache tables (`evaluations`, `explorer_positions`/`explorer_moves`, `multipv_cache`, `maia_cache`) from another DB into a new/empty target via `rdb_import_cache_from` (ATTACH + INSERT OR IGNORE); not `repertoire_moves`. **Threads:** `-t` / `--threads` default is `default_thread_count()` — half of `_SC_NPROCESSORS_ONLN`, minimum 1 (not a fixed 4). **Build progress (TTY):** live line via `progress_line.c` — `[Depth N] X new + Y transpositions | total | rate/min | ~ETA`; depth-complete line uses unique node count at that ply (`g_nodes_created_at_depth`). **Tree resume** (stockfish-expectimax / maia-db-explore): if `<name>.tree.json` exists and `build_complete` is false, stage 1 continues BFS from unexplored frontier leaves (`resume_prepare_frontier` in `tree.c`); only `build_complete: true` skips building. SIGINT saves partial trees; nodes interrupted mid-expansion stay `explored: false` and are retried. **Engine pool:** Stockfish children call `setsid()` (Ctrl+C does not kill engines); `engine_pool_request_stop` from the signal handler sets `shutting_down` and wakes waiters so batch/single eval exits without spamming "all Stockfish engines are dead". `--build-now` / `--skip-build` still export without expanding. **DB explorer:** `--build-mode db-explorer --pgn <file>` (repeatable) → `pgn_freq.c` replays each game from the standard start position; when `--fen` or `--moves` defines a target, counting starts only after the canonical 4-field FEN matches (not SAN-prefix string matching). `--min-elo` (default 2100) skips games where both `[WhiteElo]` and `[BlackElo]` are present and below threshold; missing or partial Elo tags are kept. Games that never reach the target are skipped (aggregate log). Parallel per-file parse when multiple PGNs; binary cache `<name>.freq.bin` with manifest incl. `min_elo`, `--no-freq-cache` to force reparse; OOM aborts parse → `tree_build_from_freqmap` → deferred Stockfish pool start → `tree_enrich_evals` (project DB → external chain → Stockfish; abort if >50% nodes still unevaluated, else warn) → expectimax + PGN export. `fen_map_put` / PGN hash tables propagate resize OOM. Opponent `move_probability` = count/reach; our-move children = 1.0; `tree_recalculate_probabilities` chains cumulative probability. See `tree_builder/ALGORITHM.md`. |
-| `browser-to-server-repertoire/` | Browser extension companion |
-| `python/` | Offline scripts (Lichess builder, Maia experiments, TWIC) |
+| `python/twic-position-finder/` | TWIC Position Finder — the live site/API at `api.chessautoprep.com` (FastAPI + Astro frontend, weekly ingest cron, lesson booking). Independent of the Flutter app. |
 | `packages/cdbdirect_flutter_libs/` | Native ChessDB bindings |
+| `scripts/` | One-off data/analysis scripts (chess.com titled-player stats, USCF mapping, epub/pdf game extraction) |
 
 ---
 
@@ -999,10 +997,9 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 
 Areas where behavior could not be fully determined without runtime testing:
 
-1. **Browser extension server** — exact API surface and sync semantics with repertoire.
-2. **Maia native availability** — platform matrix for real vs stub inference.
-3. **Generation cancel/pause** — `GenerationSessionController` now survives dialog disposal (fixes broken GlobalKey); edge cases when pool threads are mid-eval remain untested.
-4. **Cross-platform Stockfish** — bundled vs system binary resolution per OS.
+1. **Maia native availability** — platform matrix for real vs stub inference.
+2. **Generation cancel/pause** — `GenerationSessionController` now survives dialog disposal (fixes broken GlobalKey); edge cases when pool threads are mid-eval remain untested.
+3. **Cross-platform Stockfish** — bundled vs system binary resolution per OS.
 5. **Lichess OAuth** — full flow on all desktop platforms (callback server binding).
 6. **Compact vs wide layout** — all breakpoint transitions and state preservation paths in `RepertoireScreen` (complex conditional tree).
 7. **Training FSRS parameters** — exact scheduling algorithm vs documented FSRS.

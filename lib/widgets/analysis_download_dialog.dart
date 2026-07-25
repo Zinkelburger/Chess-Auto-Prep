@@ -50,6 +50,11 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
   int _maxGames = 100;
   late final TextEditingController _maxGamesController;
 
+  /// Slider range for the game count. 500 covers the drag range; a larger
+  /// typed count extends it rather than being rejected, so the number the
+  /// user typed is always the number that gets downloaded.
+  int get _sliderMax => _maxGames > 500 ? _maxGames : 500;
+
   String? _usernameError;
   String? _rangeError;
 
@@ -98,7 +103,7 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
         _monthsController.text = '$months';
       }
       final maxGames = prefs.getInt(_keyMaxGames);
-      if (maxGames != null && maxGames >= 1 && maxGames <= 500) {
+      if (maxGames != null && maxGames >= 1) {
         _maxGames = maxGames;
         _maxGamesController.text = '$maxGames';
       }
@@ -148,7 +153,7 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
       _usernameError = null;
     }
 
-    if (_mode == _DownloadMode.games && (_maxGames < 1 || _maxGames > 500)) {
+    if (_mode == _DownloadMode.games && _maxGames < 1) {
       _rangeError = AppMessages.invalidGameCount;
       hasError = true;
     } else if (_mode == _DownloadMode.months && _months < 1) {
@@ -370,10 +375,13 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
               child: Column(
                 children: [
                   Slider(
-                    value: _maxGames.toDouble().clamp(1, 500),
+                    value: _maxGames.toDouble().clamp(
+                      1.0,
+                      _sliderMax.toDouble(),
+                    ),
                     min: 1,
-                    max: 500,
-                    divisions: 499,
+                    max: _sliderMax.toDouble(),
+                    divisions: _sliderMax - 1,
                     label: '$_maxGames game${_maxGames == 1 ? '' : 's'}',
                     onChanged: (value) {
                       setState(() {
@@ -409,7 +417,7 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
                 ),
                 onChanged: (value) {
                   final parsed = int.tryParse(value);
-                  if (parsed != null && parsed >= 1 && parsed <= 500) {
+                  if (parsed != null && parsed >= 1) {
                     setState(() {
                       _maxGames = parsed;
                       _rangeError = null;
@@ -421,8 +429,10 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
           ],
         ),
         const SizedBox(height: 4),
-        const Text(
-          'Download the last 1–500 games (excluding bullet)',
+        Text(
+          'Download the last $_maxGames game'
+          '${_maxGames == 1 ? '' : 's'} (excluding bullet). '
+          'Drag the slider, or type any number.',
           style: AppTextStyles.caption,
         ),
       ],

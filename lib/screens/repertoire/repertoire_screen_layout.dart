@@ -27,11 +27,13 @@ mixin _RepertoireLayout
         // (build-session, ephemeral finding) hold Rows with Expanded
         // children, which cannot lay out under the Row's unbounded width.
         // maxHeight matches the width the square board resolves to anyway
-        // (board side + padding), so the no-bar geometry is unchanged.
-        final boardZoneWidth = constraints.maxHeight.clamp(
+        // (board side + padding), so BoardSize.large is the classic geometry.
+        final naturalBoardWidth = constraints.maxHeight.clamp(
           0.0,
           constraints.maxWidth * 0.5,
         );
+        final boardZoneWidth = (naturalBoardWidth * _boardSize.widthFactor)
+            .clamp(0.0, naturalBoardWidth);
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -270,6 +272,10 @@ mixin _RepertoireLayout
       onGoForward: _sessionAwareGoForward,
       onGenerateFromHere: _generateFromHere,
       onFlipBoard: () => setState(() => _boardFlipped = !_boardFlipped),
+      // Compact stacks the board above the tools, so there is no width to
+      // trade and the control would do nothing.
+      boardSize: _isCompactLayout ? null : _boardSize,
+      onBoardSizeChanged: _isCompactLayout ? null : _setBoardSize,
     );
   }
 

@@ -46,33 +46,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onPressed: () => Navigator.pop(context),
             ),
           ),
-          body: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              // ── Engine ───────────────────────────────────
-              _buildEngineSection(cores),
-              const SizedBox(height: 8),
+          // Capped column, not full width: settings rows read as
+          // label-then-control pairs, and a 2000px-wide row separates the
+          // two ends of that pair by the whole screen.
+          body: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 760),
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  Text(
+                    'Machine-level settings only. Search depth, number of '
+                    'lines, expectimax tuning and panel visibility live on '
+                    'the gear (⚙) next to each analysis panel, where their '
+                    'effect is visible.',
+                    style: AppTextStyles.caption,
+                  ),
+                  const SizedBox(height: 8),
+                  const Divider(height: 24),
 
-              // ── Database ─────────────────────────────────
-              Builder(
-                builder: (context) {
-                  context.watch<EvalDatabaseSettings>();
-                  return _buildDatabaseSection();
-                },
-              ),
-              const SizedBox(height: 24),
+                  // ── Engine ───────────────────────────────────
+                  _buildEngineSection(cores),
+                  const SizedBox(height: 8),
+                  const Divider(height: 24),
 
-              // ── Reset ────────────────────────────────────
-              _buildResetButton(),
-              const SizedBox(height: 16),
-              Center(
-                child: Text(
-                  'Chess Auto Prep',
-                  style: AppTextStyles.caption.copyWith(fontSize: 11),
-                ),
+                  // ── Database ─────────────────────────────────
+                  Builder(
+                    builder: (context) {
+                      context.watch<EvalDatabaseSettings>();
+                      return _buildDatabaseSection();
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  const Divider(height: 24),
+
+                  // ── Reset ────────────────────────────────────
+                  _buildResetButton(),
+                  const SizedBox(height: 16),
+                  Center(
+                    child: Text(
+                      'Chess Auto Prep',
+                      style: AppTextStyles.caption.copyWith(fontSize: 11),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                ],
               ),
-              const SizedBox(height: 24),
-            ],
+            ),
           ),
         );
       },
@@ -83,8 +104,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildEngineSection(int cores) {
     return SettingsGroup(
-      title: 'Stockfish Engine',
+      title: 'Stockfish engine',
       icon: Icons.bolt,
+      subtitle:
+          'How much of this machine the engine may use, and which Maia '
+          'opponent model predicts human replies.',
       children: [
         Builder(
           builder: (context) {
@@ -126,7 +150,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onChanged: (v) => _engine.inlineThreads = v,
         ),
         SettingsSliderTile(
-          label: 'Maia ELO',
+          label: 'Maia opponent rating',
           tooltip:
               'Skill level of the simulated opponent for Maia predictions.',
           value: _engine.maiaElo,
@@ -134,14 +158,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           max: 2400,
           divisions: 18,
           onChanged: (v) => _engine.maiaElo = v,
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-          child: Text(
-            'Search depth, number of lines, expectimax tuning, and panel '
-            'visibility live on the gear (⚙) next to each analysis panel.',
-            style: AppTextStyles.caption,
-          ),
         ),
       ],
     );
@@ -151,8 +167,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildDatabaseSection() {
     return const SettingsGroup(
-      title: 'Database',
+      title: 'Evaluation database',
       icon: Icons.storage,
+      subtitle:
+          'Offline evaluation sources consulted before the engine runs, so '
+          'known positions cost nothing to evaluate.',
       children: [
         Padding(
           padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),

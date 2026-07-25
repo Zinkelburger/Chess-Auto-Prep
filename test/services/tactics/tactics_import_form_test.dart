@@ -33,7 +33,7 @@ void main() {
     form.dispose();
   });
 
-  test('paramsFor in since-days mode passes the cutoff and caps games', () {
+  test('paramsFor in since-days mode passes the cutoff and no game cap', () {
     final form = TacticsImportForm();
     form.chessComUser.text = 'player';
     form.setSinceDays(7);
@@ -47,7 +47,9 @@ void main() {
       params.since,
       DateTime(now.year, now.month, now.day).subtract(const Duration(days: 6)),
     );
-    expect(params.maxGames, 200);
+    // The day window is the only limit the user chose — no hidden game cap
+    // on top of it.
+    expect(params.maxGames, isNull);
     form.dispose();
   });
 

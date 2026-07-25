@@ -163,30 +163,25 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
         titleSpacing: 16,
         title: titleBlock,
         actions: [
-          if (_evalRunning) _buildEvalProgress(theme),
-          if (_isHunting) _buildHuntProgress(theme),
           if (_currentPlayer != null) ..._buildColorControls(),
-          if (_openingTree != null &&
-              !_isAnalyzing &&
-              !_evalRunning &&
-              !_isHunting) ...[
-            TextButton.icon(
-              icon: const Icon(Icons.psychology, size: 18),
-              label: Text(_hasEvals ? 'Re-analyze' : 'Analyze with Engine'),
-              onPressed: _showWeaknessConfig,
+          // Both engine actions stay rendered at all times and disable in
+          // place, so nothing in the AppBar moves when a job starts or stops.
+          TextButton.icon(
+            icon: const Icon(Icons.psychology, size: 18),
+            label: Text(_hasEvals ? 'Re-analyze' : 'Analyze with Engine'),
+            onPressed: _canStartEngineJob ? _showWeaknessConfig : null,
+          ),
+          Tooltip(
+            message:
+                'Hunt exploitable holes from the opposite side '
+                '(coverage gaps, refutations, expectimax traps) — '
+                'not just bad raw evals',
+            child: TextButton.icon(
+              icon: const Icon(Icons.gps_fixed, size: 18),
+              label: const Text('Find Holes'),
+              onPressed: _canStartEngineJob ? _showHoleHuntConfig : null,
             ),
-            Tooltip(
-              message:
-                  'Hunt exploitable holes from the opposite side '
-                  '(coverage gaps, refutations, expectimax traps) — '
-                  'not just bad raw evals',
-              child: TextButton.icon(
-                icon: const Icon(Icons.gps_fixed, size: 18),
-                label: const Text('Find Holes'),
-                onPressed: _showHoleHuntConfig,
-              ),
-            ),
-          ],
+          ),
           IconButton(
             icon: const Icon(Icons.person_search),
             tooltip: 'Select Player',
@@ -197,18 +192,17 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
       ),
       body: Column(
         children: [
-          if (_isAnalyzing)
-            LinearProgressIndicator(
-              minHeight: 2,
-              value: _analysisTotal > 0
-                  ? _analysisCurrent / _analysisTotal
-                  : null,
-            ),
+          ..._buildJobProgressStrip(theme),
           Expanded(child: _buildBody(context)),
         ],
       ),
     );
   }
+
+  /// Engine actions are disabled (never hidden) while any job runs or before
+  /// a tree exists to analyze.
+  bool get _canStartEngineJob =>
+      _openingTree != null && !_isAnalyzing && !_evalRunning && !_isHunting;
 
   List<Widget> _buildColorControls() {
     return [
@@ -244,69 +238,89 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     ];
   }
 
-  Widget _buildHuntProgress(ThemeData theme) {
-    final progress = _holesProgress;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(
-          width: 16,
-          height: 16,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            value: progress?.fraction,
-          ),
+  // ── Job progress strip (under the AppBar) ───────────────────────
+  //
+  // Every long-running job reports progress in this transient banner
+  // instead of inside the AppBar, so the toolbar controls never move.
+
+  List<Widget> _buildJobProgressStrip(ThemeData theme) {
+    if (_isAnalyzing) {
+      // Build detail (phase, game counts) already lives in the subtitle.
+      return [
+        LinearProgressIndicator(
+          minHeight: 2,
+          value: _analysisTotal > 0 ? _analysisCurrent / _analysisTotal : null,
         ),
-        const SizedBox(width: 8),
-        Text(
-          _huntCancelled
-              ? 'Cancelling hunt…'
-              : 'Holes: ${progress?.message ?? 'starting…'}',
-          style: theme.textTheme.bodySmall,
+      ];
+    }
+    if (_evalRunning) {
+      final pct = _evalTotal > 0
+          ? (_evalCompleted / _evalTotal * 100).toStringAsFixed(0)
+          : '0';
+      return [
+        LinearProgressIndicator(
+          minHeight: 2,
+          value: _evalTotal > 0 ? _evalCompleted / _evalTotal : null,
         ),
-        const SizedBox(width: 4),
-        IconButton(
-          icon: const Icon(Icons.close, size: 16),
-          tooltip: 'Cancel',
-          onPressed: _huntCancelled ? null : _cancelHoleHunt,
-          visualDensity: VisualDensity.compact,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+        _buildJobStatusRow(
+          theme,
+          message:
+              'Engine evaluation: $_evalCompleted / $_evalTotal positions '
+              '($pct%)',
+          cancelTooltip: 'Cancel engine evaluation',
+          onCancel: _cancelEvalAnalysis,
         ),
-      ],
-    );
+      ];
+    }
+    if (_isHunting) {
+      return [
+        LinearProgressIndicator(minHeight: 2, value: _holesProgress?.fraction),
+        _buildJobStatusRow(
+          theme,
+          message: _huntCancelled
+              ? 'Cancelling hole hunt…'
+              : 'Hole hunt: ${_holesProgress?.message ?? 'starting…'}',
+          cancelTooltip: 'Cancel hole hunt',
+          onCancel: _huntCancelled ? null : _cancelHoleHunt,
+        ),
+      ];
+    }
+    return const [];
   }
 
-  Widget _buildEvalProgress(ThemeData theme) {
-    final pct = _evalTotal > 0
-        ? (_evalCompleted / _evalTotal * 100).toStringAsFixed(0)
-        : '0';
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(
-          width: 16,
-          height: 16,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            value: _evalTotal > 0 ? _evalCompleted / _evalTotal : null,
+  Widget _buildJobStatusRow(
+    ThemeData theme, {
+    required String message,
+    required String cancelTooltip,
+    required VoidCallback? onCancel,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(strokeWidth: 1.5),
           ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          'Eval $_evalCompleted/$_evalTotal ($pct%)',
-          style: theme.textTheme.bodySmall,
-        ),
-        const SizedBox(width: 4),
-        IconButton(
-          icon: const Icon(Icons.close, size: 16),
-          tooltip: 'Cancel',
-          onPressed: _cancelEvalAnalysis,
-          visualDensity: VisualDensity.compact,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-        ),
-      ],
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: theme.textTheme.bodySmall,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 16),
+            tooltip: cancelTooltip,
+            onPressed: onCancel,
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+          ),
+        ],
+      ),
     );
   }
 

@@ -1,27 +1,30 @@
 import 'package:flutter/material.dart';
 
-import '../../models/repertoire_line.dart';
-import '../../models/repertoire_review_entry.dart';
 import '../../models/training_settings.dart';
-import '../../services/repertoire_review_service.dart';
 import '../shortcut_tooltip.dart';
 
-/// Settings tab for repertoire training (depth, review order, learn mode).
+/// Settings tab for repertoire training (what is trained, scheduling, depth,
+/// learn mode).
 class TrainingSettingsPanel extends StatelessWidget {
   final TrainingSettings settings;
   final TextEditingController repetitionsController;
   final TextEditingController depthController;
   final TextEditingController delayController;
-  final List<RepertoireLine> lines;
-  final Map<String, RepertoireReviewEntry> reviewMap;
-  final Map<String, double> playabilityMap;
-  final RepertoireReviewService reviewService;
-  final void Function(List<RepertoireLine> dueQueue) onDueQueueUpdated;
+
+  /// Rebuilds the due queue after a change that reorders or refilters it.
+  final VoidCallback onQueueSettingsChanged;
   final VoidCallback onSettingsChanged;
 
   /// Called when the chapter grouping source or delimiter changes, so the
   /// active chapter filter can reset and the queue rebuild.
   final VoidCallback? onChapterSettingsChanged;
+
+  /// What is trained (repertoire lines vs cold tactics) and how completions
+  /// schedule (spaced repetition vs one pass through every line).
+  final TrainingMode trainingMode;
+  final RepetitionMode repetitionMode;
+  final ValueChanged<TrainingMode> onTrainingModeChanged;
+  final ValueChanged<RepetitionMode> onRepetitionModeChanged;
 
   const TrainingSettingsPanel({
     super.key,
@@ -29,13 +32,13 @@ class TrainingSettingsPanel extends StatelessWidget {
     required this.repetitionsController,
     required this.depthController,
     required this.delayController,
-    required this.lines,
-    required this.reviewMap,
-    this.playabilityMap = const {},
-    required this.reviewService,
-    required this.onDueQueueUpdated,
+    required this.onQueueSettingsChanged,
     required this.onSettingsChanged,
     this.onChapterSettingsChanged,
+    required this.trainingMode,
+    required this.repetitionMode,
+    required this.onTrainingModeChanged,
+    required this.onRepetitionModeChanged,
   });
 
   @override
@@ -47,8 +50,46 @@ class TrainingSettingsPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Settings', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 20),
+          Text('What to train', style: theme.textTheme.titleSmall),
+          const SizedBox(height: 4),
+          Text(
+            'Repertoire lines are walked through first, then quizzed. '
+            'Tactics are always quizzed cold — showing the solution first '
+            'would spoil the puzzle.',
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          SegmentedButton<TrainingMode>(
+            segments: [
+              for (final mode in TrainingMode.values)
+                ButtonSegment(value: mode, label: Text(mode.label)),
+            ],
+            selected: {trainingMode},
+            showSelectedIcon: false,
+            onSelectionChanged: (selection) =>
+                onTrainingModeChanged(selection.first),
+          ),
+          const SizedBox(height: 24),
+          Text('How to schedule', style: theme.textTheme.titleSmall),
+          const SizedBox(height: 4),
+          Text(
+            'Spaced repetition brings each line back when it is due. '
+            'Linear runs through every line once, in order, without '
+            'scheduling anything.',
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          SegmentedButton<RepetitionMode>(
+            segments: [
+              for (final mode in RepetitionMode.values)
+                ButtonSegment(value: mode, label: Text(mode.label)),
+            ],
+            selected: {repetitionMode},
+            showSelectedIcon: false,
+            onSelectionChanged: (selection) =>
+                onRepetitionModeChanged(selection.first),
+          ),
+          const Divider(height: 32),
           Text('Repetitions to memorize', style: theme.textTheme.titleSmall),
           const SizedBox(height: 4),
           Text(
@@ -135,14 +176,8 @@ class TrainingSettingsPanel extends StatelessWidget {
             onChanged: (value) {
               if (value == null) return;
               settings.reviewOrder = value;
-              final dueQueue = reviewService.orderLinesForReview(
-                lines,
-                reviewMap,
-                settings.reviewOrder,
-                playabilityMap: playabilityMap,
-              );
-              onDueQueueUpdated(dueQueue);
               settings.save();
+              onQueueSettingsChanged();
               onSettingsChanged();
             },
           ),

@@ -74,6 +74,18 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
     }
   }
 
+  /// Text rows each engine row gives its principal variation. Above 1 the
+  /// continuation wraps instead of being cut off at the pane edge.
+  int _pvRows = kDefaultPvRows;
+  int get pvRows => _pvRows;
+  set pvRows(int value) {
+    if (value != _pvRows && value >= kMinPvRows && value <= kMaxPvRows) {
+      _pvRows = value;
+      _persist();
+      notifyListeners();
+    }
+  }
+
   // ── Panel visibility toggles ──────────────────────────────────────────
 
   bool _showStockfish = kDefaultShowStockfish;
@@ -440,6 +452,7 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
         kMinMaxAnalysisMoves,
         kMaxMaxAnalysisMoves,
       );
+      _pvRows = loadInt('pv_rows', kDefaultPvRows, kMinPvRows, kMaxPvRows);
       _showStockfish =
           prefs.getBool('${_prefix}show_stockfish') ?? kDefaultShowStockfish;
       _showMaia = prefs.getBool('${_prefix}show_maia') ?? kDefaultShowMaia;
@@ -538,6 +551,7 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
       await prefs.setInt('${_prefix}multi_pv', _multiPv);
       await prefs.setInt('${_prefix}inline_threads', _inlineThreads);
       await prefs.setInt('${_prefix}max_analysis_moves', _maxAnalysisMoves);
+      await prefs.setInt('${_prefix}pv_rows', _pvRows);
       await prefs.setBool('${_prefix}show_stockfish', _showStockfish);
       await prefs.setBool('${_prefix}show_maia', _showMaia);
       await prefs.setBool('${_prefix}show_probability', _showProbability);
@@ -593,6 +607,7 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
     _multiPv = kDefaultMultiPv;
     _inlineThreads = kDefaultInlineThreads;
     _maxAnalysisMoves = kDefaultMaxAnalysisMoves;
+    _pvRows = kDefaultPvRows;
     _showStockfish = kDefaultShowStockfish;
     _showMaia = kDefaultShowMaia;
     _showProbability = kDefaultShowProbability;

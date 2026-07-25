@@ -942,6 +942,229 @@ void main() {
     });
   });
 
+  group('learn / review runs', () {
+    /// A is learned but due; B and C have never been trained.
+    Future<TrainingSessionController> loadedController() async {
+      repService.lines = [
+        _line('A', ['e4', 'e5']),
+        _line('B', ['d4', 'd5']),
+        _line('C', ['c4', 'c5']),
+      ];
+      reviewService.entries = [
+        _entry(
+          repPath(),
+          'A',
+          due: DateTime.now().toUtc().subtract(const Duration(days: 1)),
+        ),
+      ];
+      final controller = buildController()..setRepertoire(meta());
+      await controller.loadRepertoire();
+      return controller;
+    }
+
+    test('Learn starts the first untrained line, Review the first due '
+        'one', () async {
+      final controller = await loadedController();
+
+      controller.startReviewSession();
+      expect(controller.currentLine!.id, 'A');
+      expect(controller.sessionIntent, TrainingIntent.review);
+
+      controller.startLearnSession();
+      expect(controller.currentLine!.id, 'B');
+      expect(controller.sessionIntent, TrainingIntent.learn);
+      controller.dispose();
+    });
+
+    test('a Learn run only advances through untrained lines', () async {
+      final controller = await loadedController();
+      controller.startLearnSession();
+      expect(controller.currentLine!.id, 'B');
+
+      // B is now known; the run must skip the due line A and go to C.
+      controller.reviewMap['B'] = _entry(
+        repPath(),
+        'B',
+        due: DateTime.now().toUtc().add(const Duration(days: 1)),
+      );
+      controller.rebuildQueueAndAdvance();
+      expect(controller.currentLine!.id, 'C');
+      expect(controller.sessionIntent, TrainingIntent.learn);
+      controller.dispose();
+    });
+
+    test('a finished Learn run says so instead of jumping into a due '
+        'line', () async {
+      final controller = await loadedController();
+      controller.startLearnSession();
+      final later = DateTime.now().toUtc().add(const Duration(days: 1));
+      controller.reviewMap['B'] = _entry(repPath(), 'B', due: later);
+      controller.reviewMap['C'] = _entry(repPath(), 'C', due: later);
+
+      controller.rebuildQueueAndAdvance();
+
+      expect(controller.phase, TrainingPhase.finished);
+      expect(controller.feedback, 'Nothing left to learn here.');
+      expect(controller.currentLine!.id, 'B', reason: 'no unrelated jump');
+      controller.dispose();
+    });
+
+    test(
+      'Review on an empty due list reports it instead of throwing',
+      () async {
+        repService.lines = [
+          _line('A', ['e4']),
+        ];
+        final controller = buildController()..setRepertoire(meta());
+        await controller.loadRepertoire();
+
+        // Only untrained lines exist — the old code fell through to
+        // dueQueue.first and started an unrelated line.
+        controller.startReviewSession();
+
+        expect(controller.currentLine, isNull);
+        expect(controller.feedback, 'All caught up!');
+        controller.dispose();
+      },
+    );
+
+    test(
+      'starting a single line adopts the intent its status implies',
+      () async {
+        final controller = await loadedController();
+
+        controller.startLine(controller.lines.firstWhere((l) => l.id == 'A'));
+        expect(controller.sessionIntent, TrainingIntent.review);
+
+        controller.startLine(controller.lines.firstWhere((l) => l.id == 'C'));
+        expect(controller.sessionIntent, TrainingIntent.learn);
+        controller.dispose();
+      },
+    );
+
+    test('runs stay inside the active chapter', () async {
+      repService.lines = [
+        _line('A', ['e4'], chapter: 'One'),
+        _line('B', ['d4'], chapter: 'One'),
+        _line('C', ['c4'], chapter: 'Two'),
+        _line('D', ['b3'], chapter: 'Two'),
+      ];
+      final controller = buildController()..setRepertoire(meta());
+      await controller.loadRepertoire();
+      controller.setActiveChapter('Two');
+
+      controller.startLearnSession();
+      expect(controller.currentLine!.id, 'C');
+
+      controller.reviewMap['C'] = _entry(
+        repPath(),
+        'C',
+        due: DateTime.now().toUtc().add(const Duration(days: 1)),
+      );
+      controller.rebuildQueueAndAdvance();
+      expect(controller.currentLine!.id, 'D');
+
+      controller.reviewMap['D'] = _entry(
+        repPath(),
+        'D',
+        due: DateTime.now().toUtc().add(const Duration(days: 1)),
+      );
+      controller.rebuildQueueAndAdvance();
+      expect(
+        controller.phase,
+        TrainingPhase.finished,
+        reason: 'chapter One is untouched by a chapter Two run',
+      );
+      controller.dispose();
+    });
+  });
+
+  group('chapter layout prompt', () {
+    Future<TrainingSessionController> loadedController() async {
+      repService.lines = [
+        _line('A', ['e4'], chapter: 'One'),
+        _line('B', ['d4'], chapter: 'One'),
+        _line('C', ['c4'], chapter: 'Two'),
+        _line('D', ['b3'], chapter: 'Two'),
+      ];
+      final controller = buildController()..setRepertoire(meta());
+      await controller.loadRepertoire();
+      return controller;
+    }
+
+    test('a chapter-titled file asks once, then remembers "yes"', () async {
+      final controller = await loadedController();
+      expect(controller.pendingChapterPrompt, isNotNull);
+      expect(controller.pendingChapterPrompt!.chapterCount, 2);
+
+      await controller.answerChapterPrompt(true);
+      expect(controller.pendingChapterPrompt, isNull);
+      expect(controller.chapters, ['One', 'Two']);
+
+      await controller.loadRepertoire();
+      expect(
+        controller.pendingChapterPrompt,
+        isNull,
+        reason: 'the answer is stored per file',
+      );
+      expect(controller.chapters, ['One', 'Two']);
+      controller.dispose();
+    });
+
+    test('"keep one flat list" hides chapters for this file only', () async {
+      final controller = await loadedController();
+      await controller.answerChapterPrompt(false);
+
+      expect(controller.chaptersDeclined, isTrue);
+      expect(controller.chapters, isEmpty);
+      expect(controller.chapterOf(controller.lines.first), isNull);
+      expect(
+        controller.settings.chapterGrouping,
+        ChapterGroupingMode.auto,
+        reason: 'the global grouping setting is not touched',
+      );
+
+      await controller.loadRepertoire();
+      expect(controller.pendingChapterPrompt, isNull);
+      expect(controller.chapters, isEmpty);
+
+      // …and it can be reconsidered from the header.
+      controller.reopenChapterPrompt();
+      expect(controller.pendingChapterPrompt, isNotNull);
+      await controller.answerChapterPrompt(true);
+      expect(controller.chapters, ['One', 'Two']);
+      controller.dispose();
+    });
+
+    test('a flat file never asks', () async {
+      repService.lines = [
+        _line('A', ['e4']),
+        _line('B', ['d4']),
+        _line('C', ['c4']),
+        _line('D', ['b3']),
+      ];
+      final controller = buildController()..setRepertoire(meta());
+      await controller.loadRepertoire();
+
+      expect(controller.pendingChapterPrompt, isNull);
+      controller.dispose();
+    });
+
+    test('studies are never re-chaptered', () async {
+      repService.lines = [
+        _line('A', ['e4'], chapter: 'One'),
+        _line('B', ['d4'], chapter: 'One'),
+        _line('C', ['c4'], chapter: 'Two'),
+        _line('D', ['b3'], chapter: 'Two'),
+      ];
+      final controller = buildController()..setStudySource(meta());
+      await controller.loadRepertoire();
+
+      expect(controller.pendingChapterPrompt, isNull);
+      controller.dispose();
+    });
+  });
+
   group('dispose safety', () {
     test(
       'dispose during an in-flight load completes without throwing',

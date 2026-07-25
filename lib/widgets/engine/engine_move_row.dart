@@ -54,11 +54,18 @@ class EngineMoveRow extends StatelessWidget {
         final evalWidth = narrow ? 44.0 : 58.0;
         final hPad = narrow ? 4.0 : 12.0;
 
+        final pvRows = settings.pvRows;
+
         return InkWell(
           onTap: () => onMoveSelected?.call(move.uci),
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 6),
             child: Row(
+              // With a wrapping PV the move and eval sit beside its first
+              // row rather than floating in the middle of the block.
+              crossAxisAlignment: pvRows > 1
+                  ? CrossAxisAlignment.start
+                  : CrossAxisAlignment.center,
               children: [
                 Builder(
                   builder: (anchorContext) {
@@ -121,7 +128,13 @@ class EngineMoveRow extends StatelessWidget {
                   ),
                 ),
                 if (!narrow) const SizedBox(width: 8),
-                Expanded(child: _buildContinuation(move, muted: lineMuted)),
+                Expanded(
+                  child: _buildContinuation(
+                    move,
+                    muted: lineMuted,
+                    rows: pvRows,
+                  ),
+                ),
                 if (showMaia)
                   SizedBox(
                     width: narrow ? 40 : 46,
@@ -148,7 +161,11 @@ class EngineMoveRow extends StatelessWidget {
     );
   }
 
-  Widget _buildContinuation(MergedMove move, {bool muted = false}) {
+  Widget _buildContinuation(
+    MergedMove move, {
+    bool muted = false,
+    int rows = 1,
+  }) {
     final lineColor = muted ? AppColors.onSurfaceDim : AppColors.onSurfaceMuted;
     if (move.fullPv.length <= 1 || boardPreview == null) {
       final continuation = formatContinuation(fen, move.fullPv);
@@ -159,7 +176,7 @@ class EngineMoveRow extends StatelessWidget {
           color: lineColor,
           fontFamily: 'monospace',
         ),
-        maxLines: 1,
+        maxLines: rows,
         overflow: TextOverflow.ellipsis,
       );
     }
@@ -182,7 +199,10 @@ class EngineMoveRow extends StatelessWidget {
     return ClickableMoveLineWidget(
       sanMoves: sanMoves,
       startPly: startPly,
-      maxMoves: 8,
+      // Each extra row earns roughly another row's worth of moves; the
+      // widget still ellipsises whatever does not fit.
+      maxMoves: 8 * rows,
+      maxLines: rows,
       fontSize: 13,
       onMoveTapped: (idx) {
         if (onLineMoveTapped != null) {

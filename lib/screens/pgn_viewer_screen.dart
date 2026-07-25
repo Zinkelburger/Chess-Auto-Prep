@@ -26,6 +26,9 @@ import '../core/pgn/solitaire_controller.dart';
 import '../core/study_controller.dart';
 import '../services/storage/storage_factory.dart';
 import '../services/game_analysis_controller.dart';
+import '../models/solitaire_trophy.dart';
+import '../services/solitaire_trophy_detector.dart';
+import '../services/solitaire_trophy_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
@@ -39,6 +42,7 @@ import '../widgets/fullscreen_game_view.dart';
 import '../widgets/game_analysis_tab.dart';
 import '../widgets/game_nav_bar.dart';
 import '../widgets/game_search_dialog.dart';
+import '../widgets/info_hint.dart';
 import '../widgets/pgn/add_to_study_dialog.dart';
 import '../widgets/pgn/generate_repertoire_dialog.dart';
 import '../widgets/pgn/pgn_annotation_panel.dart';
@@ -114,7 +118,14 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   void _onControllerUpdate() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    // Trophies belong to one game's analysis; the banner and the per-move
+    // markers key off its positions, so they must not survive a game switch.
+    if (_detectedTrophies.isNotEmpty &&
+        _controller.currentGameIndex != _trophyGameIndex) {
+      _detectedTrophies = const [];
+    }
+    setState(() {});
   }
 
   void _onAppStateChanged() {
@@ -270,6 +281,60 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         },
       ),
     ).then((_) => _reclaimFocus());
+  }
+
+  /// Trophies found in the game currently loaded, shown as a banner and
+  /// per-move markers in the analysis tab. Cleared whenever the game changes.
+  @override
+  List<SolitaireTrophy> _detectedTrophies = const [];
+
+  /// Game index [_detectedTrophies] were found in.
+  int _trophyGameIndex = -1;
+
+  /// Runs after full-game analysis: every solitaire guess the user tried and
+  /// had rejected is evaluated and compared to the move actually played.
+  ///
+  /// Solitaire itself can't do this — it only knows *whether* a guess matched,
+  /// not whether it was better — and full-game analysis only evaluates moves
+  /// that were played, so the comparison needs both halves together.
+  @override
+  Future<void> _detectTrophies() async {
+    final guesses = _controller.solitaire.guessLog;
+    if (guesses.isEmpty || _controller.filteredGames.isEmpty) return;
+
+    final game = _controller.filteredGames[_controller.currentGameIndex];
+    try {
+      final found = await detectSolitaireTrophies(
+        guesses: guesses,
+        evals: _analysisController.evals,
+        userIsWhite: _controller.solitaire.userIsWhite,
+        depth: _analysisController.depth,
+        gameLabel: game.label,
+        headers: game.headers,
+        pgn: game.pgnText,
+        existing: await SolitaireTrophyService.instance.loadAll(),
+      );
+      if (found.isEmpty || !mounted) return;
+
+      await SolitaireTrophyService.instance.addTrophies(found);
+      if (!mounted) return;
+      setState(() {
+        _detectedTrophies = found;
+        _trophyGameIndex = _controller.currentGameIndex;
+      });
+      _controller.noteTrophiesEarned(found.length);
+      showAppSnackBar(
+        context,
+        found.length == 1
+            ? 'Trophy earned — your ${found.first.userMove} beat '
+                  '${found.first.gmMove}.'
+            : '${found.length} trophies earned.',
+        actionLabel: 'Cabinet',
+        onAction: _showTrophyCabinet,
+      );
+    } catch (e) {
+      debugPrint('Trophy detection failed: $e');
+    }
   }
 
   @override

@@ -20,7 +20,7 @@ class TacticsImportParams {
   const TacticsImportParams({
     required this.username,
     this.mode = TacticsImportMode.recent,
-    this.maxGames = 20,
+    this.maxGames,
     this.since,
     this.depth = 15,
     this.cores = 1,
@@ -28,7 +28,10 @@ class TacticsImportParams {
 
   final String username;
   final TacticsImportMode mode;
-  final int maxGames;
+
+  /// Hard game-count limit, or `null` for "no limit" — used by sinceDate
+  /// mode, where the day window is the only limit the user asked for.
+  final int? maxGames;
   final DateTime? since;
   final int depth;
   final int cores;

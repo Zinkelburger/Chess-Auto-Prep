@@ -21,6 +21,21 @@ void main() {
       expect(c.solverSide, Side.white);
     });
 
+    test('a supplied position skips setup and starts recording', () {
+      // Arriving from a live board ("Save position as a puzzle"), the user has
+      // already chosen the position — the board editor would be a dead step.
+      const fen =
+          'rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2';
+      final c = PuzzleCreatorController(initialFen: fen);
+      expect(c.step, CreatorStep.recordSolution);
+      expect(c.startPosition!.fen, fen);
+      expect(c.solverSide, Side.black);
+
+      // "Edit position" still goes back to the editor.
+      c.backToSetup();
+      expect(c.step, CreatorStep.setup);
+    });
+
     test('finishRecording requires at least one move', () {
       final c = PuzzleCreatorController()..startRecording();
       expect(c.finishRecording(), isFalse);

@@ -1,16 +1,22 @@
 part of 'generation_config_form.dart';
 
-/// Card-level projection of the novelty/memorability pair: two opposing
-/// preferences presented as one three-way choice so they can never both be
-/// on.
-enum _MovePreference { novel, neutral, natural }
+/// One entry in the advanced dialog: a title, the anchor used by the table
+/// of contents, and the builder for its controls.
+class _AdvancedSection {
+  _AdvancedSection(this.title, this.icon, this.build);
 
-/// The advanced gear dialog: every knob, grouped by concept, with
-/// spelled-out labels, visible defaults, and disabled-with-reason for
-/// controls the current configuration makes inert.
+  final String title;
+  final IconData icon;
+  final List<Widget> Function(VoidCallback refresh) build;
+  final GlobalKey anchor = GlobalKey();
+}
+
+/// The advanced gear dialog: every remaining knob, grouped by concept into
+/// titled cards with a table of contents down the left so nothing has to be
+/// hunted for.  Knobs shown on the main form are NOT repeated here.
 ///
 /// All values live in the form state (controllers and fields), so closing
-/// the dialog loses nothing and the Layer-1 card stays in sync.  Only
+/// the dialog loses nothing and the main form stays in sync.  Only
 /// [EvalSourcesSection] is NOT here — its widget state is read through a
 /// GlobalKey at build time, so it must stay mounted in the main tree.
 mixin _GenerationConfigAdvanced
@@ -18,52 +24,65 @@ mixin _GenerationConfigAdvanced
         _GenerationConfigFormStateBase,
         _GenerationConfigDescriptions,
         _GenerationConfigFields {
-  _MovePreference get _movePreference {
-    if (_preferNovelties) return _MovePreference.novel;
-    final memTol = int.tryParse(_memorabilityToleranceCtrl.text.trim()) ?? 0;
-    return memTol > 0 ? _MovePreference.natural : _MovePreference.neutral;
-  }
-
-  void _applyMovePreference(_MovePreference pref) {
-    switch (pref) {
-      case _MovePreference.novel:
-        _preferNovelties = true;
-        _memorabilityToleranceCtrl.text = '0';
-      case _MovePreference.neutral:
-        _preferNovelties = false;
-        _memorabilityToleranceCtrl.text = '0';
-      case _MovePreference.natural:
-        _preferNovelties = false;
-        final memTol =
-            int.tryParse(_memorabilityToleranceCtrl.text.trim()) ?? 0;
-        if (memTol <= 0) _memorabilityToleranceCtrl.text = '25';
-    }
-  }
-
   Future<void> _openAdvancedDialog() async {
+    final scrollController = ScrollController();
+    final sections = <_AdvancedSection>[
+      _AdvancedSection(
+        'Opponent model',
+        Icons.person_outline,
+        (r) => _opponentModelSection(r),
+      ),
+      _AdvancedSection('Move choice', Icons.alt_route, _moveChoiceSection),
+      _AdvancedSection('Search tuning', Icons.tune, _searchBudgetSection),
+      _AdvancedSection(
+        'Verification',
+        Icons.verified_outlined,
+        (r) => _verificationSection(r),
+      ),
+      _AdvancedSection(
+        'PGN export',
+        Icons.description_outlined,
+        (r) => _exportSection(r),
+      ),
+      _AdvancedSection(
+        'PGN source filters',
+        Icons.filter_alt_outlined,
+        (r) => _pgnFilterSection(r),
+      ),
+    ];
+
     await showDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialog) {
           void refresh() => setDialog(() {});
+          final wide = MediaQuery.sizeOf(ctx).width >= 860;
           return Dialog(
             child: ConstrainedBox(
               constraints: BoxConstraints(
-                maxWidth: 660,
+                maxWidth: wide ? 880 : 660,
                 maxHeight: MediaQuery.of(ctx).size.height * 0.85,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 8, 0),
+                    padding: const EdgeInsets.fromLTRB(20, 12, 8, 8),
                     child: Row(
                       children: [
                         Text(
                           'Advanced generation settings',
                           style: Theme.of(ctx).textTheme.titleMedium,
                         ),
-                        const Spacer(),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Everything on the main form stays in sync with '
+                            'these.',
+                            style: AppTextStyles.caption.copyWith(fontSize: 11),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                         IconButton(
                           icon: const Icon(Icons.close),
                           tooltip: 'Close',
@@ -72,21 +91,32 @@ mixin _GenerationConfigAdvanced
                       ],
                     ),
                   ),
+                  const Divider(height: 1),
                   Flexible(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          ..._opponentModelSection(refresh),
-                          ..._moveChoiceSection(refresh),
-                          ..._searchBudgetSection(refresh),
-                          ..._verificationSection(refresh),
-                          ..._exportSection(refresh),
-                          if (_buildMode == BuildMode.dbExplorer)
-                            ..._pgnFilterSection(refresh),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (wide) ...[
+                          _advancedToc(sections, scrollController),
+                          const VerticalDivider(width: 1),
                         ],
-                      ),
+                        Expanded(
+                          // Not a ListView: every card must stay mounted so
+                          // the TOC's Scrollable.ensureVisible can reach any
+                          // anchor, on or off screen.
+                          child: SingleChildScrollView(
+                            controller: scrollController,
+                            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                for (final section in sections)
+                                  _advancedCard(section, refresh),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -96,18 +126,116 @@ mixin _GenerationConfigAdvanced
         },
       ),
     );
-    // The card's segments/summary project these values — repaint them.
+    scrollController.dispose();
+    // The main form's summary projects these values — repaint it.
     if (mounted) setState(() {});
+  }
+
+  /// Jump links down the left edge of the dialog.
+  Widget _advancedToc(
+    List<_AdvancedSection> sections,
+    ScrollController controller,
+  ) {
+    return SizedBox(
+      width: 190,
+      child: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Text(
+              'SECTIONS',
+              style: AppTextStyles.caption.copyWith(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+          for (final section in sections)
+            ListTile(
+              dense: true,
+              visualDensity: VisualDensity.compact,
+              leading: Icon(section.icon, size: 18),
+              title: Text(
+                section.title,
+                style: const TextStyle(fontSize: 12),
+                overflow: TextOverflow.ellipsis,
+              ),
+              onTap: () {
+                final target = section.anchor.currentContext;
+                if (target == null) return;
+                Scrollable.ensureVisible(
+                  target,
+                  duration: const Duration(milliseconds: 220),
+                  alignment: 0.02,
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// One bordered, titled block. The rule + heading is what makes the
+  /// dialog scannable instead of one long column of fields.
+  Widget _advancedCard(_AdvancedSection section, VoidCallback refresh) {
+    return Container(
+      key: section.anchor,
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.outline),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainer,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(9),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(section.icon, size: 16, color: AppColors.onSurfaceSoft),
+                const SizedBox(width: 8),
+                Text(
+                  section.title,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: section.build(refresh),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   List<Widget> _opponentModelSection(VoidCallback refresh) {
     final dbActive = _lichessDbOverride != null;
     return [
-      _sectionHeader('Opponent model'),
-      Row(
+      Wrap(
+        spacing: 4,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           const Text('Move frequencies from', style: TextStyle(fontSize: 13)),
-          const SizedBox(width: 8),
+          const SizedBox(width: 4),
           ChoiceChip(
             label: const Text('Maia (neural)'),
             selected: !dbActive,
@@ -118,7 +246,6 @@ mixin _GenerationConfigAdvanced
                     refresh();
                   },
           ),
-          const SizedBox(width: 4),
           ChoiceChip(
             label: const Text('Lichess database'),
             selected: dbActive,
@@ -137,55 +264,44 @@ mixin _GenerationConfigAdvanced
         'database uses real game frequencies, with Maia as fallback for '
         'uncovered positions.',
       ),
-      if (dbActive) ...[
-        const SizedBox(height: 8),
-        Padding(
-          padding: const EdgeInsets.only(left: 16),
-          child: LichessDbSelector(
-            database: _lichessDbOverride!,
-            onDatabaseChanged: (db) {
-              final wasMasters = _lichessDbOverride == LichessDatabase.masters;
-              final isMasters = db == LichessDatabase.masters;
-              _lichessDbOverride = db;
-              if (wasMasters != isMasters) {
-                _lichessMinGamesCtrl.text = isMasters ? '4' : '10';
-              }
-              refresh();
-            },
-            selectedSpeeds: _lichessSpeeds,
-            onSpeedsChanged: (s) {
-              _lichessSpeeds
-                ..clear()
-                ..addAll(s);
-              refresh();
-            },
-            selectedRatings: _lichessRatings,
-            onRatingsChanged: (r) {
-              _lichessRatings
-                ..clear()
-                ..addAll(r);
-              refresh();
-            },
-            minGamesController: _lichessMinGamesCtrl,
-            enabled: !widget.isGenerating,
-            compact: true,
-          ),
+      const SizedBox(height: 8),
+      Padding(
+        padding: const EdgeInsets.only(left: 16),
+        child: LichessDbSelector(
+          database: _lichessDbOverride ?? LichessDatabase.lichess,
+          onDatabaseChanged: (db) {
+            final wasMasters = _lichessDbOverride == LichessDatabase.masters;
+            final isMasters = db == LichessDatabase.masters;
+            _lichessDbOverride = db;
+            if (wasMasters != isMasters) {
+              _lichessMinGamesCtrl.text = isMasters ? '4' : '10';
+            }
+            refresh();
+          },
+          selectedSpeeds: _lichessSpeeds,
+          onSpeedsChanged: (s) {
+            _lichessSpeeds
+              ..clear()
+              ..addAll(s);
+            refresh();
+          },
+          selectedRatings: _lichessRatings,
+          onRatingsChanged: (r) {
+            _lichessRatings
+              ..clear()
+              ..addAll(r);
+            refresh();
+          },
+          minGamesController: _lichessMinGamesCtrl,
+          enabled: dbActive && !widget.isGenerating,
+          compact: true,
         ),
-      ],
+      ),
       const SizedBox(height: 12),
       Wrap(
         spacing: 8,
         runSpacing: 8,
         children: [
-          _numField(
-            _maiaEloCtrl,
-            'Opponent rating (Elo)',
-            defaultText: '2200',
-            onEdited: refresh,
-            tooltip:
-                'Rating Maia models the opponent at. The card\'s '
-                'Opponent-strength slider edits this same value.',
-          ),
           _numField(
             _oppPolicyTempCtrl,
             'Opponent temperature',
@@ -251,14 +367,12 @@ mixin _GenerationConfigAdvanced
 
   List<Widget> _moveChoiceSection(VoidCallback refresh) {
     final isTrappy = _selectionMode == SelectionMode.trappy;
-    final pref = _movePreference;
     final hasSetup = _setupMovesCtrl.text.trim().isNotEmpty;
     return [
-      _sectionHeader('Move choice'),
       DropdownButtonFormField<SelectionMode>(
         initialValue: _selectionMode,
         decoration: const InputDecoration(
-          labelText: 'Line selection',
+          labelText: 'How the repertoire move is picked',
           border: OutlineInputBorder(),
           isDense: true,
         ),
@@ -280,44 +394,24 @@ mixin _GenerationConfigAdvanced
       ),
       _caption(_selectionModeDescription()),
       const SizedBox(height: 12),
-      Row(
-        children: [
-          const Text('Prefer', style: TextStyle(fontSize: 13)),
-          const SizedBox(width: 12),
-          SegmentedButton<_MovePreference>(
-            segments: const [
-              ButtonSegment(
-                value: _MovePreference.novel,
-                label: Text('Novel moves', style: TextStyle(fontSize: 12)),
-                tooltip:
-                    'Boost sound-but-rare moves so opponents leave their '
-                    'preparation.',
-              ),
-              ButtonSegment(
-                value: _MovePreference.neutral,
-                label: Text('Neutral', style: TextStyle(fontSize: 12)),
-                tooltip: 'No popularity preference.',
-              ),
-              ButtonSegment(
-                value: _MovePreference.natural,
-                label: Text('Natural moves', style: TextStyle(fontSize: 12)),
-                tooltip:
-                    'Within a small eval tolerance, pick the move you\'d '
-                    'play anyway — easier to memorize.',
-              ),
-            ],
-            selected: {pref},
-            showSelectedIcon: false,
-            onSelectionChanged: widget.isGenerating
-                ? null
-                : (sel) {
-                    _applyMovePreference(sel.first);
-                    refresh();
-                  },
-          ),
-        ],
+      TextField(
+        controller: _setupMovesCtrl,
+        enabled: !widget.isGenerating,
+        onChanged: (_) => refresh(),
+        decoration: const InputDecoration(
+          labelText: 'Preferred setup moves (SAN, any order)',
+          hintText: 'e.g. Be3 Qd2 f3 O-O-O h4 Nh3',
+          helperText:
+              'Played whenever they stay sound; the repertoire deviates '
+              'automatically when the opponent makes them too costly. '
+              'Leave empty for no preference.',
+          helperMaxLines: 3,
+          isDense: true,
+          border: OutlineInputBorder(),
+        ),
+        style: const TextStyle(fontSize: 13),
       ),
-      const SizedBox(height: 8),
+      const SizedBox(height: 12),
       Wrap(
         spacing: 8,
         runSpacing: 8,
@@ -327,13 +421,16 @@ mixin _GenerationConfigAdvanced
             'Natural-move tolerance (cp)',
             defaultText: '0',
             onEdited: refresh,
-            enabled: pref == _MovePreference.natural && !isTrappy,
-            disabledReason: isTrappy
-                ? 'Ignored in Trappy selection'
-                : 'Only with Prefer: Natural moves',
+            enabled: !isTrappy && !_preferNovelties,
+            disabledReason: _preferNovelties
+                ? 'Ignored while "Prefer novelties" is on — they pull '
+                      'opposite ways'
+                : 'Ignored when maximizing opponent mistakes',
             tooltip:
-                'A natural move may lose up to this many centipawns vs the '
-                'best candidate and still be picked.',
+                'Above 0, a move you would play anyway may lose up to this '
+                'many centipawns against the best candidate and still be '
+                'picked, because it is easier to remember. Pulls against '
+                '"Prefer novelties".',
           ),
           _numField(
             _setupToleranceCtrl,
@@ -341,7 +438,7 @@ mixin _GenerationConfigAdvanced
             defaultText: '30',
             onEdited: refresh,
             enabled: hasSetup,
-            disabledReason: 'Set system moves in the Style row first',
+            disabledReason: 'Enter preferred setup moves first',
             tooltip:
                 'A preferred-setup move may lose up to this many '
                 'centipawns vs the best candidate and still be chosen.',
@@ -353,8 +450,8 @@ mixin _GenerationConfigAdvanced
             onEdited: refresh,
             tooltip:
                 'Hard guard: no repertoire move may lose more than this '
-                'against the best sibling. Trappy mode widens it to at '
-                'least 100.',
+                'against the best sibling. Maximize-mistakes widens it to '
+                'at least 100.',
           ),
           _numField(
             _minEvalCtrl,
@@ -401,42 +498,30 @@ mixin _GenerationConfigAdvanced
   }
 
   List<Widget> _searchBudgetSection(VoidCallback refresh) {
-    final isEngine = _buildMode == BuildMode.stockfishExpectimax;
     final isPure = _searchAlgorithm == SearchAlgorithm.pure;
     final isTrappy = _selectionMode == SelectionMode.trappy;
+    final isDb = _buildMode == BuildMode.dbExplorer;
     return [
-      _sectionHeader('Search budget'),
-      Wrap(
-        spacing: 16,
-        runSpacing: 4,
-        children: [
-          _labeledCheckbox(
-            'Exhaustive search (much slower)',
-            isPure,
-            (v) {
-              _searchAlgorithm = v
-                  ? SearchAlgorithm.pure
-                  : SearchAlgorithm.fast;
-              refresh();
-            },
-            tooltip:
-                'Off (recommended): best-first search that spends less '
-                'effort on rare lines, with the coverage floor still '
-                'guaranteed. On: full-width search everywhere.',
-          ),
-          _labeledCheckbox(
-            'Wide opening search',
-            _wideOpening,
-            (v) {
-              _wideOpening = v;
-              refresh();
-            },
-            tooltip:
-                'Explore extra candidates for the first few of our moves, '
-                'then narrow. Catches alternatives and novelties at the '
-                'cost of some build time.',
-          ),
-        ],
+      Text(
+        isPure
+            ? 'Full search is selected on the main form — these Quick-only '
+                  'narrowing knobs are ignored.'
+            : 'Quick search is selected on the main form. These control how '
+                  'much it narrows rarely-reached lines.',
+        style: AppTextStyles.caption.copyWith(fontSize: 11),
+      ),
+      const SizedBox(height: 10),
+      _labeledCheckbox(
+        'Wide opening search',
+        _wideOpening,
+        (v) {
+          _wideOpening = v;
+          refresh();
+        },
+        tooltip:
+            'Explore extra candidates for the first few of your moves, '
+            'then narrow. Catches alternatives and novelties at the cost '
+            'of some build time.',
       ),
       const SizedBox(height: 8),
       Wrap(
@@ -444,43 +529,16 @@ mixin _GenerationConfigAdvanced
         runSpacing: 8,
         children: [
           _numField(
-            _maxPlyCtrl,
-            'Max depth (half-moves)',
-            defaultText: '20',
-            onEdited: refresh,
-            tooltip: 'How deep lines may grow. The Effort presets set this.',
-          ),
-          _numField(
-            _engineDepthCtrl,
-            'Engine depth per position',
-            defaultText: '$kDefaultGenerationEvalDepth',
-            onEdited: refresh,
-            enabled: isEngine,
-            disabledReason: 'Engine is not used by this build source',
-            tooltip:
-                'Stockfish search depth for every evaluated position. '
-                'The Effort presets set this.',
-          ),
-          _numField(
-            _multipvCtrl,
-            'Candidate moves per position',
-            defaultText: '4',
-            onEdited: refresh,
-            enabled: isEngine,
-            disabledReason: 'Engine is not used by this build source',
-            tooltip:
-                'How many of our candidate moves Stockfish evaluates at '
-                'each position (MultiPV).',
-          ),
-          _numField(
             _ourAltDiscountCtrl,
             'Alternative budget share (0–1)',
             defaultText: '0.25',
             onEdited: refresh,
-            enabled: !isPure,
-            disabledReason: 'Best-first search only',
+            enabled: !isPure && !isDb,
+            disabledReason: isDb
+                ? 'Your PGN files decide which lines grow in this mode'
+                : 'Quick search only',
             tooltip:
-                'Search-priority multiplier for our non-best candidates. '
+                'Search-priority multiplier for your non-best candidates. '
                 'Lower = more budget on the main line.',
           ),
           _numField(
@@ -488,12 +546,14 @@ mixin _GenerationConfigAdvanced
             'Skip alternatives behind by (cp)',
             defaultText: '30',
             onEdited: refresh,
-            enabled: !isPure && !isTrappy,
-            disabledReason: isPure
-                ? 'Best-first search only'
-                : 'Ignored in Trappy selection',
+            enabled: !isPure && !isTrappy && !isDb,
+            disabledReason: isDb
+                ? 'Your PGN files decide which lines grow in this mode'
+                : isPure
+                ? 'Quick search only'
+                : 'Ignored when maximizing opponent mistakes',
             tooltip:
-                'Our alternatives more than this far behind the best '
+                'Your alternatives more than this far behind the best '
                 'candidate stay evaluated leaves instead of growing '
                 'subtrees. 0 disables.',
           ),
@@ -503,55 +563,57 @@ mixin _GenerationConfigAdvanced
       EngineResourcesSection(
         threadsController: _engineThreadsCtrl,
         isGenerating: widget.isGenerating,
-        isDbExplorer: _buildMode == BuildMode.dbExplorer,
+        isDbExplorer: isDb,
+        enabled:
+            _buildMode == BuildMode.stockfishExpectimax ||
+            _buildMode == BuildMode.dbExplorer,
       ),
     ];
   }
 
   List<Widget> _verificationSection(VoidCallback refresh) {
+    final noVerify = _buildMode == BuildMode.maiaDbExplore;
     return [
-      _sectionHeader('Verification'),
-      Row(
-        children: [
-          _toggleSwitch(
-            'Verify final repertoire',
-            _verifyFinal,
-            (v) {
-              _verifyFinal = v;
-              refresh();
-            },
-            tooltip:
-                'Re-check every selected move at a deeper engine depth '
-                'after selection and replace the ones that fail. Slower, '
-                'but the export carries a depth guarantee.',
-          ),
-          const SizedBox(width: 16),
-          _numField(
-            _verifyDepthCtrl,
-            'Verification depth (0 = auto)',
-            defaultText: '0',
-            onEdited: refresh,
-            enabled: _verifyFinal,
-            disabledReason: 'Verification is off',
-            tooltip:
-                'Engine depth for the verification pass. 0 = automatic '
-                '(engine depth + 6, at least 20).',
-          ),
-        ],
+      _toggleSwitch(
+        'Verify final repertoire',
+        _verifyFinal,
+        (v) {
+          _verifyFinal = v;
+          refresh();
+        },
+        enabled: !noVerify,
+        disabledReason: 'Verification never runs in this build source',
+        tooltip:
+            'Re-check every selected move at a deeper engine depth '
+            'after selection and replace the ones that fail. Slower, '
+            'but the export carries a depth guarantee.',
+      ),
+      const SizedBox(height: 8),
+      _numField(
+        _verifyDepthCtrl,
+        'Verification depth (0 = auto)',
+        defaultText: '0',
+        onEdited: refresh,
+        enabled: _verifyFinal && !noVerify,
+        disabledReason: noVerify
+            ? 'Verification never runs in this build source'
+            : 'Verification is off',
+        tooltip:
+            'Engine depth for the verification pass. 0 = automatic '
+            '(engine depth + 6, at least 20).',
       ),
     ];
   }
 
   List<Widget> _exportSection(VoidCallback refresh) {
     return [
-      _sectionHeader('PGN export'),
       _numField(
         _targetLinesCtrl,
         'Max unique lines (0 = keep all)',
         defaultText: '100',
         onEdited: refresh,
         tooltip:
-            'Similar lines (same moves by us, different opponent moves) '
+            'Similar lines (same moves by you, different opponent moves) '
             'collapse to one representative; the survivors teach the most '
             'new, likely, sharp moves — up to this many.',
       ),
@@ -586,39 +648,38 @@ mixin _GenerationConfigAdvanced
                 refresh();
               },
       ),
-      if (_annotateMoveProbabilities)
-        Padding(
-          padding: const EdgeInsets.only(left: 8, bottom: 8),
-          child: DropdownButtonFormField<bool>(
-            initialValue: _annotateMaiaOnly,
-            decoration: const InputDecoration(
-              labelText: 'Probability source',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            items: const [
-              DropdownMenuItem(value: true, child: Text('Maia only')),
-              DropdownMenuItem(
-                value: false,
-                child: Text('Lichess database + Maia fallback'),
-              ),
-            ],
-            onChanged: widget.isGenerating
-                ? null
-                : (v) {
-                    if (v != null) {
-                      _annotateMaiaOnly = v;
-                      refresh();
-                    }
-                  },
+      Padding(
+        padding: const EdgeInsets.only(left: 8, bottom: 8),
+        child: DropdownButtonFormField<bool>(
+          initialValue: _annotateMaiaOnly,
+          decoration: const InputDecoration(
+            labelText: 'Probability source',
+            border: OutlineInputBorder(),
+            isDense: true,
           ),
+          items: const [
+            DropdownMenuItem(value: true, child: Text('Maia only')),
+            DropdownMenuItem(
+              value: false,
+              child: Text('Lichess database + Maia fallback'),
+            ),
+          ],
+          onChanged: (_annotateMoveProbabilities && !widget.isGenerating)
+              ? (v) {
+                  if (v != null) {
+                    _annotateMaiaOnly = v;
+                    refresh();
+                  }
+                }
+              : null,
         ),
+      ),
     ];
   }
 
   List<Widget> _pgnFilterSection(VoidCallback refresh) {
+    final isDb = _buildMode == BuildMode.dbExplorer;
     return [
-      _sectionHeader('PGN source filters'),
       Wrap(
         spacing: 8,
         runSpacing: 8,
@@ -628,6 +689,8 @@ mixin _GenerationConfigAdvanced
             'Min games per move',
             defaultText: '5',
             onEdited: refresh,
+            enabled: isDb,
+            disabledReason: 'Only used when Build from = My PGN files',
             tooltip:
                 'Opponent moves need at least this many games in your PGN '
                 'files to be explored.',
@@ -637,6 +700,8 @@ mixin _GenerationConfigAdvanced
             'Min move probability (0–1)',
             defaultText: '0.05',
             onEdited: refresh,
+            enabled: isDb,
+            disabledReason: 'Only used when Build from = My PGN files',
             tooltip: 'Minimum move frequency to include an opponent reply.',
           ),
           _numField(
@@ -644,6 +709,8 @@ mixin _GenerationConfigAdvanced
             'Min player Elo (0 = off)',
             defaultText: '0',
             onEdited: refresh,
+            enabled: isDb,
+            disabledReason: 'Only used when Build from = My PGN files',
             tooltip: 'Skip games where both players are below this rating.',
           ),
         ],

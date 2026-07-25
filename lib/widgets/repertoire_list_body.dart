@@ -291,40 +291,18 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
                   ],
                 ),
               ),
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert),
-                onSelected: (value) {
-                  if (value == 'delete') {
-                    _deleteRepertoire(repertoire);
-                  } else if (value == 'rename') {
-                    _renameRepertoire(repertoire);
-                  }
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: 'rename',
-                    child: Row(
-                      children: [
-                        Icon(Icons.edit, size: 20),
-                        SizedBox(width: 12),
-                        Text('Rename'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'delete',
-                    child: Row(
-                      children: [
-                        Icon(Icons.delete, size: 20, color: AppColors.danger),
-                        SizedBox(width: 12),
-                        Text(
-                          'Delete',
-                          style: TextStyle(color: AppColors.danger),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              // Rename / delete sit right on the card: two one-click targets
+              // beat a menu that hides both behind an extra tap.
+              IconButton(
+                icon: const Icon(Icons.edit_outlined),
+                tooltip: 'Rename repertoire',
+                onPressed: () => _renameRepertoire(repertoire),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                color: AppColors.danger,
+                tooltip: 'Delete repertoire',
+                onPressed: () => _deleteRepertoire(repertoire),
               ),
             ],
           ),

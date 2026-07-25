@@ -29,13 +29,32 @@ import '../widgets/pgn/add_to_study_dialog.dart';
 class PuzzleCreatorScreen extends StatefulWidget {
   final String? initialFen;
 
-  const PuzzleCreatorScreen({super.key, this.initialFen});
+  /// Player names of the game the position came from, when the caller knows
+  /// them — prefilled rather than retyped.
+  final String? gameWhite;
+  final String? gameBlack;
+
+  const PuzzleCreatorScreen({
+    super.key,
+    this.initialFen,
+    this.gameWhite,
+    this.gameBlack,
+  });
 
   /// Push the creator as a full-screen route.
-  static Future<void> push(BuildContext context, {String? initialFen}) {
+  static Future<void> push(
+    BuildContext context, {
+    String? initialFen,
+    String? gameWhite,
+    String? gameBlack,
+  }) {
     return Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => PuzzleCreatorScreen(initialFen: initialFen),
+        builder: (_) => PuzzleCreatorScreen(
+          initialFen: initialFen,
+          gameWhite: gameWhite,
+          gameBlack: gameBlack,
+        ),
       ),
     );
   }
@@ -58,6 +77,8 @@ class _PuzzleCreatorScreenState extends State<PuzzleCreatorScreen> {
     super.initState();
     _creator = PuzzleCreatorController(initialFen: widget.initialFen);
     _creator.addListener(_onChanged);
+    _whiteCtrl.text = widget.gameWhite ?? '';
+    _blackCtrl.text = widget.gameBlack ?? '';
   }
 
   @override
@@ -274,7 +295,7 @@ class _PuzzleCreatorScreenState extends State<PuzzleCreatorScreen> {
             const SizedBox(width: 8),
             OutlinedButton(
               onPressed: _creator.backToSetup,
-              child: const Text('Back to setup'),
+              child: const Text('Edit position'),
             ),
             const Spacer(),
             FilledButton(

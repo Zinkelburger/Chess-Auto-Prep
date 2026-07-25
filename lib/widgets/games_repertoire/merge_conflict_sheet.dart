@@ -1,49 +1,35 @@
-/// Surfaces merge conflicts after folding a games-draft into the repertoire.
+/// Pre-merge decision sheet for draft → repertoire conflicts.
 ///
-/// A conflict is a position where *I* now have more than one candidate move
-/// (e.g. the draft says I played Bc4 but my repertoire already had Nf3). Both
-/// live in the tree as siblings; here the user picks which is the mainline and
-/// which becomes the sideline, via the existing `makeMainLine` gesture.
+/// Shown BEFORE anything is written. Each conflict is a position where the
+/// user's games play a different move than their existing prep. The default
+/// keeps the prep (that draft branch is skipped); choosing the games' move
+/// imports the branch as extra lines. Nothing is removed either way.
+///
+/// Pops with the set of conflict indices to import, or null when cancelled
+/// (the caller aborts the merge and returns to review).
 library;
 
 import 'package:flutter/material.dart';
 
-import '../../core/repertoire_controller.dart';
-import '../../models/move_tree.dart';
-import '../../services/games_repertoire/repertoire_merge.dart';
+import '../../services/games_repertoire/draft_merge_planner.dart';
 import '../../theme/app_colors.dart';
 
 class MergeConflictSheet extends StatefulWidget {
-  const MergeConflictSheet({
-    super.key,
-    required this.controller,
-    required this.conflicts,
-  });
+  const MergeConflictSheet({super.key, required this.conflicts});
 
-  final RepertoireController controller;
-  final List<MergeConflict> conflicts;
+  final List<DraftConflict> conflicts;
 
   @override
   State<MergeConflictSheet> createState() => _MergeConflictSheetState();
 }
 
 class _MergeConflictSheetState extends State<MergeConflictSheet> {
-  final Set<int> _resolved = {};
-
-  List<MoveNode> _childrenAt(TreePath path) {
-    final tree = widget.controller.tree;
-    return path.isEmpty ? tree.roots : (tree.nodeAt(path)?.children ?? []);
-  }
-
-  void _makeMainline(TreePath parentPath, int childIndex, int conflictIndex) {
-    widget.controller.makeMainLine(parentPath.child(childIndex));
-    setState(() => _resolved.add(conflictIndex));
-  }
+  /// Conflict indices where the user picked their games' move.
+  final Set<int> _importAlternatives = {};
 
   @override
   Widget build(BuildContext context) {
     final total = widget.conflicts.length;
-    final done = _resolved.length;
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -61,17 +47,12 @@ class _MergeConflictSheetState extends State<MergeConflictSheet> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '$total decision${total == 1 ? '' : 's'} to make'
-                      '  ·  $done resolved',
+                      '$total conflict${total == 1 ? '' : 's'} with your prep',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: Text(done >= total ? 'Done' : 'Later'),
                   ),
                 ],
               ),
@@ -79,8 +60,9 @@ class _MergeConflictSheetState extends State<MergeConflictSheet> {
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
               child: Text(
-                'Your games introduced a different move where you already had '
-                'prep. Pick which one is your main line.',
+                'Your games play a different move where your repertoire '
+                'already has an answer. Keep your prep, or also import your '
+                'move as extra lines — nothing is removed either way.',
                 style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
               ),
             ),
@@ -92,6 +74,25 @@ class _MergeConflictSheetState extends State<MergeConflictSheet> {
                 itemBuilder: (context, i) => _conflictTile(i),
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel merge'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: () =>
+                        Navigator.of(context).pop(_importAlternatives),
+                    icon: const Icon(Icons.merge_type, size: 18),
+                    label: const Text('Continue merge'),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -100,53 +101,53 @@ class _MergeConflictSheetState extends State<MergeConflictSheet> {
 
   Widget _conflictTile(int i) {
     final conflict = widget.conflicts[i];
-    final children = _childrenAt(conflict.parentPath);
-    final resolved = _resolved.contains(i);
-    final lineLabel = _lineLabel(conflict.parentPath);
+    final importMine = _importAlternatives.contains(i);
+    final lineLabel = _lineLabel(conflict.prefixSans);
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      color: resolved ? AppColors.surfaceContainer : AppColors.surfaceElevated,
+      color: AppColors.surfaceElevated,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                if (resolved)
-                  const Padding(
-                    padding: EdgeInsets.only(right: 6),
-                    child: Icon(
-                      Icons.check_circle,
-                      size: 16,
-                      color: AppColors.success,
-                    ),
-                  ),
-                Expanded(
-                  child: Text(
-                    lineLabel.isEmpty ? 'Starting position' : lineLabel,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceMuted,
-                    ),
-                  ),
-                ),
-              ],
+            Text(
+              lineLabel.isEmpty ? 'Starting position' : lineLabel,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.onSurfaceMuted,
+              ),
             ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (var idx = 0; idx < children.length; idx++)
+                for (final san in conflict.repertoireSans)
                   _candidateChip(
-                    san: children[idx].san,
-                    isMainline: idx == 0,
-                    isFromGames: children[idx].san == conflict.draftSan,
-                    onTap: () => _makeMainline(conflict.parentPath, idx, i),
+                    san: san,
+                    tag: 'prep',
+                    selected: !importMine,
+                    onTap: () => setState(() => _importAlternatives.remove(i)),
                   ),
+                _candidateChip(
+                  san: conflict.draftSan,
+                  tag: 'yours',
+                  selected: importMine,
+                  onTap: () => setState(() => _importAlternatives.add(i)),
+                ),
               ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              importMine
+                  ? 'Your ${conflict.draftSan} will be added as an extra line.'
+                  : 'Keeping your prep — this branch of the draft is skipped.',
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppColors.onSurfaceDim,
+              ),
             ),
           ],
         ),
@@ -156,39 +157,40 @@ class _MergeConflictSheetState extends State<MergeConflictSheet> {
 
   Widget _candidateChip({
     required String san,
-    required bool isMainline,
-    required bool isFromGames,
+    required String tag,
+    required bool selected,
     required VoidCallback onTap,
   }) {
     return ActionChip(
       onPressed: onTap,
-      backgroundColor: isMainline
+      backgroundColor: selected
           ? AppColors.success.withValues(alpha: 0.18)
           : null,
       avatar: Icon(
-        isMainline ? Icons.star : Icons.star_border,
+        selected ? Icons.check_circle : Icons.circle_outlined,
         size: 16,
-        color: isMainline ? AppColors.success : AppColors.onSurfaceDim,
+        color: selected ? AppColors.success : AppColors.onSurfaceDim,
       ),
       label: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(san, style: const TextStyle(fontWeight: FontWeight.w600)),
-          if (isFromGames)
-            const Padding(
-              padding: EdgeInsets.only(left: 4),
-              child: Text(
-                '· yours',
-                style: TextStyle(fontSize: 10, color: AppColors.onSurfaceDim),
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: Text(
+              '· $tag',
+              style: const TextStyle(
+                fontSize: 10,
+                color: AppColors.onSurfaceDim,
               ),
             ),
+          ),
         ],
       ),
     );
   }
 
-  String _lineLabel(TreePath parentPath) {
-    final sans = widget.controller.tree.sanSequenceAt(parentPath);
+  String _lineLabel(List<String> sans) {
     final buf = StringBuffer();
     for (var i = 0; i < sans.length; i++) {
       if (i.isEven) buf.write('${(i ~/ 2) + 1}.');

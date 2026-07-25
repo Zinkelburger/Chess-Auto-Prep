@@ -243,29 +243,35 @@ class _EditContextZoneState extends State<EditContextZone> {
 
   Widget _chip(BuildContext context, EditContextTabSpec spec) {
     final isSelected = _selectedViews.contains(spec.view);
-    return GestureDetector(
-      onLongPress: widget.tabsLocked
-          ? null
-          : () => _showPlaceMenu(context, spec),
-      child: FilterChip(
-        key: ValueKey('edit_context_chip_${spec.view.name}'),
-        label: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              spec.icon,
-              size: 14,
-              color: isSelected ? AppColors.accent : AppColors.onSurfaceMuted,
-            ),
-            const SizedBox(width: 4),
-            Text(spec.label, style: const TextStyle(fontSize: 11)),
-          ],
+    return Tooltip(
+      message: '${spec.tooltip}\nLong-press to move it to another column.',
+      waitDuration: const Duration(milliseconds: 500),
+      child: GestureDetector(
+        onLongPress: widget.tabsLocked
+            ? null
+            : () => _showPlaceMenu(context, spec),
+        child: FilterChip(
+          key: ValueKey('edit_context_chip_${spec.view.name}'),
+          label: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                spec.icon,
+                size: 14,
+                color: isSelected ? AppColors.accent : AppColors.onSurfaceMuted,
+              ),
+              const SizedBox(width: 4),
+              Text(spec.label, style: const TextStyle(fontSize: 11)),
+            ],
+          ),
+          selected: isSelected,
+          onSelected: widget.tabsLocked
+              ? null
+              : (v) => _toggleView(spec.view, v),
+          visualDensity: VisualDensity.compact,
+          showCheckmark: false,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
         ),
-        selected: isSelected,
-        onSelected: widget.tabsLocked ? null : (v) => _toggleView(spec.view, v),
-        visualDensity: VisualDensity.compact,
-        showCheckmark: false,
-        padding: const EdgeInsets.symmetric(horizontal: 4),
       ),
     );
   }

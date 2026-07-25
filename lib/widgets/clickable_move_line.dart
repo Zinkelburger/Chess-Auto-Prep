@@ -68,8 +68,12 @@ class ClickableMoveLineWidget extends StatelessWidget {
   /// Padding around each clickable move (larger = easier to tap).
   final EdgeInsets movePadding;
 
-  /// Whether to constrain to a single line with ellipsis overflow.
+  /// Whether to constrain the line height with ellipsis overflow.
   final bool singleLine;
+
+  /// Rows the line may occupy while [singleLine] is set. 2+ lets a long
+  /// principal variation wrap instead of being cut off at the pane edge.
+  final int maxLines;
 
   const ClickableMoveLineWidget({
     super.key,
@@ -86,6 +90,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
     this.fontSize = 11,
     this.movePadding = const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
     this.singleLine = true,
+    this.maxLines = 1,
   });
 
   @override
@@ -288,7 +293,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       child: RichText(
         text: TextSpan(children: spans),
-        maxLines: singleLine ? 1 : null,
+        maxLines: singleLine ? (maxLines < 1 ? 1 : maxLines) : null,
         overflow: singleLine ? TextOverflow.ellipsis : TextOverflow.clip,
       ),
     );

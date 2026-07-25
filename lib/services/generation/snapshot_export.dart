@@ -13,6 +13,7 @@ library;
 
 import '../../models/build_tree_node.dart';
 import '../../utils/fen_utils.dart';
+import '../../utils/findability.dart';
 import 'eca_calculator.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
@@ -20,6 +21,7 @@ import 'line_extractor.dart';
 import 'line_pruner.dart';
 import 'pgn_export.dart';
 import 'repertoire_selector.dart';
+import 'trap_extractor.dart';
 import 'tree_ease.dart';
 import 'tree_my_ease.dart';
 import 'tree_serialization.dart';
@@ -132,6 +134,16 @@ List<String> extractSnapshotLines({
 
   final extractor = LineExtractor(config: config, fenMap: fenMap);
   var extractedLines = extractor.extract(tree);
+  if (config.trapsOnly) {
+    extractedLines = keepLinesThroughTraps(
+      extractedLines,
+      TrapExtractor(
+        playAsWhite: config.playAsWhite,
+        findabilityPRef: pRefForElo(config.maiaElo),
+      ).extract(tree),
+      (line) => line.movesSan,
+    );
+  }
   if (config.targetLineCount > 0) {
     extractedLines = LinePruner.prune(
       extractedLines,

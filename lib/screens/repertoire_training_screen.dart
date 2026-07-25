@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
+import '../models/line_status.dart';
 import '../models/repertoire_line.dart';
 import '../models/repertoire_metadata.dart';
 import '../models/training_settings.dart';
@@ -21,12 +22,13 @@ import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/pgn_viewer_widget.dart';
 import '../widgets/trainer_keyboard_scope.dart';
+import '../widgets/training/chapter_setup_dialog.dart';
 import '../widgets/training/line_preview_dialog.dart';
 import '../widgets/training/move_input_widget.dart';
 import '../widgets/repertoire_list_body.dart';
 import '../widgets/training/repertoire_selector_panel.dart';
+import '../widgets/training/trainer_browser.dart';
 import '../widgets/training/training_board_controls.dart';
-import '../widgets/training/training_lines_panel.dart';
 import '../widgets/training/training_progress_panel.dart';
 import '../widgets/training/training_results_panel.dart';
 import '../widgets/training/training_settings_panel.dart';
@@ -67,6 +69,10 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   /// new line so spoilers never leak across lines.
   String? _pgnRevealedLineId;
 
+  /// True while the "sort into chapters?" dialog is on screen, so a stream of
+  /// controller notifications can't stack a second copy behind it.
+  bool _chapterPromptOpen = false;
+
   @override
   void initState() {
     super.initState();
@@ -98,7 +104,40 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   }
 
   void _onTrainingChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    _maybeShowChapterPrompt();
+  }
+
+  /// The file looks chapter-organised and the user hasn't answered for it —
+  /// ask once, after the current frame (the notification can land mid-build).
+  void _maybeShowChapterPrompt() {
+    if (_training.pendingChapterPrompt == null || _chapterPromptOpen) return;
+    _chapterPromptOpen = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showChapterPrompt());
+  }
+
+  Future<void> _showChapterPrompt() async {
+    final proposal = _training.pendingChapterPrompt;
+    if (!mounted || proposal == null) {
+      _chapterPromptOpen = false;
+      return;
+    }
+    final answer = await showChapterSetupDialog(
+      context,
+      proposal: proposal,
+      chaptersCurrentlyOn:
+          !_training.chaptersDeclined && _training.chapters.isNotEmpty,
+    );
+    _chapterPromptOpen = false;
+    if (!mounted) return;
+    if (answer == null) {
+      // Dismissed without choosing: drop the prompt for this session but
+      // don't record an answer, so the next load asks again.
+      setState(() => _training.pendingChapterPrompt = null);
+      return;
+    }
+    await _training.answerChapterPrompt(answer);
   }
 
   Future<void> _initialize() async {
@@ -197,13 +236,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
         content: Text('FEN copied to clipboard'),
         duration: Duration(seconds: 2),
       ),
-    );
-  }
-
-  void _scoreInBuilder() {
-    if (_training.repertoire == null) return;
-    context.read<AppState>().switchToBuilder(
-      repertoirePath: _training.repertoire!.filePath,
     );
   }
 
@@ -382,43 +414,110 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     );
   }
 
-  /// Full-width landing view for a loaded repertoire: overall progress plus
-  /// the browsable line list. Tapping a line (or Learn/Review) starts it.
+  /// Landing view for a loaded repertoire: Learn / Review on top, then the
+  /// chapters (or the lines of the open chapter).
   Widget _buildHomeView() {
-    final theme = Theme.of(context);
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 820),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _training.repertoire?.name ?? 'Repertoire',
-                    style: theme.textTheme.titleMedium,
+        constraints: const BoxConstraints(maxWidth: 1000),
+        child: _buildBrowser(dense: false),
+      ),
+    );
+  }
+
+  /// One browser used twice: full width on the landing page, dense in the
+  /// side pane while a line is being trained.
+  Widget _buildBrowser({required bool dense}) {
+    return TrainerBrowser(
+      title: _training.repertoire?.name ?? 'Repertoire',
+      subtitle: _browserSubtitle(),
+      lines: _training.lines,
+      reviewMap: _training.reviewMap,
+      chapterOf: _training.chapterOf,
+      activeChapter: _training.activeChapter,
+      onChapterSelected: _training.setActiveChapter,
+      ungroupedChapter: TrainingSessionController.ungroupedChapter,
+      onLearn: _training.startLearnSession,
+      onReview: _training.startReviewSession,
+      onTrainLine: (line) => _training.startLine(line),
+      onPreviewLine: _previewLine,
+      onApplyLearnedSelection: _applyLearnedSelection,
+      // Only offered when the file actually has a layout to propose, and
+      // never in the cramped side panel.
+      onOpenChapterSetup: dense || !_training.canOfferChapters
+          ? null
+          : _training.reopenChapterPrompt,
+      onOpenSettings: dense ? null : _openSettingsDialog,
+      introEnabled: _training.settings.skipToFirstComment,
+      dense: dense,
+    );
+  }
+
+  /// "White · spaced repetition" — what the two buttons will actually do.
+  String _browserSubtitle() {
+    final parts = <String>[
+      if (_training.sourceIsStudy)
+        'Study'
+      else
+        _training.lines.isNotEmpty &&
+                _training.lines.first.color.toLowerCase() == 'black'
+            ? 'Black'
+            : 'White',
+      _training.repetitionMode == RepetitionMode.linear
+          ? 'every line once'
+          : 'spaced repetition',
+    ];
+    return parts.join(' · ');
+  }
+
+  /// Trainer settings as a dialog — the landing page has no tab bar, and
+  /// knobs belong behind one labelled entry point either way.
+  Future<void> _openSettingsDialog() async {
+    await showDialog<void>(
+      context: context,
+      // StatefulBuilder: the panel's switches and segmented buttons have to
+      // repaint inside the dialog, which the screen's setState can't reach.
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => Dialog(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 620, maxHeight: 700),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 8, 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Training settings',
+                          style: Theme.of(dialogContext).textTheme.titleMedium,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Close',
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Pick a line to train it — Learn starts the next new '
-                    'line, Review drills what’s due.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: _buildSettingsTab(
+                    onChanged: () {
+                      setDialogState(() {});
+                      if (mounted) setState(() {});
+                    },
                   ),
-                  const SizedBox(height: 12),
-                  RepertoireProgressBar(reviewMap: _training.reviewMap),
-                ],
-              ),
+                ),
+              ],
             ),
-            Expanded(child: _buildLinesTab()),
-          ],
+          ),
         ),
       ),
     );
+    if (mounted) setState(() {});
   }
 
   Widget _buildBoardPane() {
@@ -464,64 +563,29 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     );
   }
 
-  /// Mode selectors: what is trained (repertoire lines vs tactics puzzles)
-  /// and how completions schedule (spaced repetition vs linear).
-  Widget _buildModeSelectors() {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        SegmentedButton<TrainingMode>(
-          segments: [
-            for (final mode in TrainingMode.values)
-              ButtonSegment(value: mode, label: Text(mode.label)),
-          ],
-          selected: {_training.trainingMode},
-          onSelectionChanged: (selection) =>
-              _training.setTrainingMode(selection.first),
-          showSelectedIcon: false,
-          style: const ButtonStyle(
-            visualDensity: VisualDensity.compact,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-        ),
-        SegmentedButton<RepetitionMode>(
-          segments: [
-            for (final mode in RepetitionMode.values)
-              ButtonSegment(value: mode, label: Text(mode.label)),
-          ],
-          selected: {_training.repetitionMode},
-          onSelectionChanged: (selection) =>
-              _training.setRepetitionMode(selection.first),
-          showSelectedIcon: false,
-          style: const ButtonStyle(
-            visualDensity: VisualDensity.compact,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildTrainTab() {
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildModeSelectors(),
-          const SizedBox(height: 8),
           if (_training.currentLine != null) ...[
             Row(
               children: [
-                Expanded(
-                  child: Text(
-                    _training.currentLine!.name,
-                    style: Theme.of(context).textTheme.titleSmall,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                TextButton.icon(
+                  onPressed: _training.stopSession,
+                  icon: const Icon(Icons.arrow_back, size: 16),
+                  label: Text(
+                    _training.activeChapter == null
+                        ? 'All chapters'
+                        : 'Chapter',
+                  ),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    foregroundColor: AppColors.onSurfaceSoft,
                   ),
                 ),
+                const Spacer(),
                 _trainTabIconButton(
                   icon: Icons.travel_explore,
                   tooltip:
@@ -544,17 +608,34 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
                   tooltip: 'Skip to next line',
                   onPressed: _training.skipLine,
                 ),
-                _trainTabIconButton(
-                  icon: Icons.format_list_bulleted,
-                  tooltip: 'Back to all lines',
-                  onPressed: _training.stopSession,
+              ],
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _training.currentLine!.name,
+                    style: Theme.of(context).textTheme.titleSmall,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Text(
+                  _training.sessionIntent == TrainingIntent.learn
+                      ? 'Learning'
+                      : 'Reviewing',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.onSurfaceMuted,
+                  ),
                 ),
               ],
             ),
             const Divider(height: 16),
           ],
           Expanded(
-            child: _training.phase == TrainingPhase.finished
+            child: _training.runComplete
+                ? _buildRunCompletePanel()
+                : _training.phase == TrainingPhase.finished
                 ? TrainingResultsPanel(
                     phase: _training.phase,
                     currentLine: _training.currentLine,
@@ -599,10 +680,8 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
           const Divider(height: 16),
           TrainingBottomControls(
             settings: _training.settings,
-            dueQueueLength: _training.dueQueue.length,
-            queueLabel: _training.repetitionMode == RepetitionMode.linear
-                ? 'left'
-                : 'due',
+            dueQueueLength: _training.remainingInRun,
+            queueLabel: 'left in this run',
             onAutoNextChanged: (v) {
               setState(() => _training.settings.autoNext = v);
               _training.settings.save();
@@ -610,6 +689,27 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
           ),
         ],
       ),
+    );
+  }
+
+  /// Shown when a Learn or Review run has nothing left: the summary plus the
+  /// obvious next moves, never another rating prompt for the last line.
+  Widget _buildRunCompletePanel() {
+    final counts = countLines([
+      for (final line in _training.lines)
+        if (_training.lineInChapter(line, _training.activeChapter)) line,
+    ], _training.reviewMap);
+
+    return TrainingRunCompletePanel(
+      title: _training.feedback ?? 'Session complete',
+      sessionCorrect: _training.sessionCorrect,
+      sessionIncorrect: _training.sessionIncorrect,
+      sessionStreak: _training.sessionStreak,
+      untrainedCount: counts.untrained,
+      dueCount: counts.due,
+      onBackToList: _training.stopSession,
+      onLearn: _training.startLearnSession,
+      onReview: _training.startReviewSession,
     );
   }
 
@@ -629,27 +729,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     );
   }
 
-  Widget _buildLinesTab() {
-    return TrainingLinesPanel(
-      lines: _training.lines,
-      reviewMap: _training.reviewMap,
-      moveProgressMap: _training.moveProgressMap,
-      playabilityMap: _training.playabilityMap,
-      bottleneckMap: _training.bottleneckMap,
-      needsScoring: _training.needsScoring,
-      introEnabled: _training.settings.skipToFirstComment,
-      onLineSelected: _training.startLine,
-      onStartNextNew: _training.startNextNew,
-      onStartNextDue: _training.startNextDue,
-      onScoreInBuilder: _scoreInBuilder,
-      onPreviewLine: _previewLine,
-      onApplyLearnedSelection: _applyLearnedSelection,
-      chapters: _training.chapters,
-      activeChapter: _training.activeChapter,
-      onChapterSelected: _training.setActiveChapter,
-      chapterOf: _training.chapterOf,
-    );
-  }
+  Widget _buildLinesTab() => _buildBrowser(dense: true);
 
   /// Read-only book view of a line: board + annotated movetext, with
   /// train/edit handoffs. Never touches training or review state.
@@ -805,20 +885,29 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     _delayController.text = _training.settings.learnDelaySec.toString();
   }
 
-  Widget _buildSettingsTab() {
+  /// [onChanged] lets the settings dialog repaint itself; the tab version
+  /// just rebuilds the screen.
+  Widget _buildSettingsTab({VoidCallback? onChanged}) {
     _ensureSettingsControllers();
+    final refresh = onChanged ?? () => setState(() {});
     return TrainingSettingsPanel(
       settings: _training.settings,
       repetitionsController: _repetitionsController,
       depthController: _depthController,
       delayController: _delayController,
-      lines: _training.lines,
-      reviewMap: _training.reviewMap,
-      playabilityMap: _training.playabilityMap,
-      reviewService: _training.reviewService,
-      onDueQueueUpdated: _training.updateDueQueue,
-      onSettingsChanged: () => setState(() {}),
+      onQueueSettingsChanged: _training.updateDueQueue,
+      onSettingsChanged: refresh,
       onChapterSettingsChanged: _training.onChapterSettingsChanged,
+      trainingMode: _training.trainingMode,
+      repetitionMode: _training.repetitionMode,
+      onTrainingModeChanged: (mode) {
+        _training.setTrainingMode(mode);
+        refresh();
+      },
+      onRepetitionModeChanged: (mode) {
+        _training.setRepetitionMode(mode);
+        refresh();
+      },
     );
   }
 }

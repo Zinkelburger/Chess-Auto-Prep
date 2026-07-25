@@ -123,7 +123,7 @@ extension TreeBuildServiceDbExplorer on TreeBuildService {
       final queue = FrontierQueue(bestFirst: config.bestFirst);
       queue.add(root);
 
-      while (!run.isCancelled && !run.finishNow() && queue.isNotEmpty) {
+      while (!run.isCancelled && !run.shouldFinish() && queue.isNotEmpty) {
         await waitIfPaused();
         if (run.isCancelled) break;
 
@@ -143,7 +143,7 @@ extension TreeBuildServiceDbExplorer on TreeBuildService {
         );
       }
 
-      tree.buildComplete = !run.isCancelled && !run.finishNow();
+      tree.buildComplete = !run.isCancelled && !run.shouldFinish();
 
       _log(
         'DB Explorer tree: ${tree.totalNodes} nodes, '

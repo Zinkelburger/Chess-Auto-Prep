@@ -277,9 +277,26 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _numField(_evalDepthCtrl, 'Eval Depth'),
-              _numField(_maxPlyCtrl, 'Max Ply'),
-              _numField(_maiaEloCtrl, 'Maia Elo'),
+              _numField(
+                _evalDepthCtrl,
+                'Engine depth',
+                tooltip:
+                    'Stockfish search depth used to evaluate each position.',
+              ),
+              _numField(
+                _maxPlyCtrl,
+                'Max depth (half-moves)',
+                tooltip:
+                    'How far into each line the audit walks, counted in '
+                    'half-moves from the start position.',
+              ),
+              _numField(
+                _maiaEloCtrl,
+                'Maia rating',
+                tooltip:
+                    'Playing strength of the Maia human model predicting '
+                    'opponent replies.',
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -311,9 +328,27 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                _numField(_mistakeCtrl, 'Mistake (cp)'),
-                _numField(_inaccuracyCtrl, 'Inaccuracy (cp)'),
-                _numField(_minMaiaProbCtrl, 'Min Maia Prob'),
+                _numField(
+                  _mistakeCtrl,
+                  'Mistake threshold (centipawns)',
+                  tooltip:
+                      'Eval loss versus the engine best move for a '
+                      'repertoire move to count as a mistake.',
+                ),
+                _numField(
+                  _inaccuracyCtrl,
+                  'Inaccuracy threshold (centipawns)',
+                  tooltip:
+                      'Eval loss versus the engine best move for a '
+                      'repertoire move to count as an inaccuracy.',
+                ),
+                _numField(
+                  _minMaiaProbCtrl,
+                  'Minimum Maia probability',
+                  tooltip:
+                      'Opponent replies predicted below this probability '
+                      '(0 to 1) are not checked.',
+                ),
               ],
             ),
           ],
@@ -440,9 +475,13 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
     );
   }
 
-  Widget _numField(TextEditingController ctrl, String label) {
-    return SizedBox(
-      width: 170,
+  Widget _numField(
+    TextEditingController ctrl,
+    String label, {
+    String? tooltip,
+  }) {
+    final field = SizedBox(
+      width: 220,
       child: TextField(
         controller: ctrl,
         enabled: !_isAuditing,
@@ -454,6 +493,8 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
       ),
     );
+    if (tooltip == null) return field;
+    return Tooltip(message: tooltip, child: field);
   }
 
   String _moveSequenceLabel(List<String> moves) {

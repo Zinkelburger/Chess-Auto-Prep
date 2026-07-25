@@ -24,29 +24,33 @@ import '../../utils/pgn_comment_utils.dart'
 /// are messy, so no structure is inferred). With it, embedded moves render in
 /// monospace while surrounding prose stays proportional. Returns an empty
 /// list when nothing displayable remains after filtering.
+/// [style] overrides the resolved prose style wholesale — the movetext view
+/// passes the depth-scaled comment style so a sideline's annotation carries the
+/// same ink and size as the sideline itself.
 List<InlineSpan> commentProseSpans(
   String rawComment, {
   double fontSize = 13.5,
   double height = 1.4,
   bool bookFormatting = false,
+  TextStyle? style,
 }) {
   final filtered = filterDisplayComment(
     rawComment.replaceAll('{', '').replaceAll('}', ''),
   );
   if (filtered.isEmpty) return const [];
 
-  final proseStyle = PgnTextStyles.comment.copyWith(
-    fontSize: fontSize,
-    height: height,
-  );
+  final proseStyle =
+      style ??
+      PgnTextStyles.comment.copyWith(fontSize: fontSize, height: height);
   if (!bookFormatting) {
     return [TextSpan(text: '$filtered ', style: proseStyle)];
   }
 
   final moveStyle = PgnTextStyles.move.copyWith(
-    fontSize: fontSize,
-    height: height,
+    fontSize: proseStyle.fontSize,
+    height: proseStyle.height,
     color: proseStyle.color,
+    fontStyle: FontStyle.normal,
   );
   final spans = <InlineSpan>[];
   for (final t in parseCommentTokens(stripEngineTokens(filtered))) {

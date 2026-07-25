@@ -256,7 +256,9 @@ class TacticsImportService {
     };
     if (since != null) {
       params['since'] = '${since.millisecondsSinceEpoch}';
-      params['max'] = '${maxGames ?? 200}';
+      // No 'max' when the caller gave none: the since window is the limit,
+      // and capping it would silently drop games the user asked for.
+      if (maxGames != null) params['max'] = '$maxGames';
     } else {
       params['max'] = '${maxGames ?? 20}';
     }
@@ -311,7 +313,9 @@ class TacticsImportService {
     OnPositionFoundCallback? onPositionFound,
   }) async {
     _cancelled = false;
-    int targetGames = maxGames ?? (since != null ? 200 : 10);
+    // null = no game-count limit: the since window is the only limit. Only
+    // the countless "latest N games" mode falls back to a default.
+    final int? targetGames = maxGames ?? (since != null ? null : 10);
     List<String> allGames = [];
 
     progressCallback?.call('Fetching Chess.com game archives for $username…');
@@ -350,11 +354,15 @@ class TacticsImportService {
     // Walk backwards from the most recent archive.
     for (
       int i = archives.length - 1;
-      i >= startArchiveIndex && allGames.length < targetGames && !_cancelled;
+      i >= startArchiveIndex &&
+          (targetGames == null || allGames.length < targetGames) &&
+          !_cancelled;
       i--
     ) {
       progressCallback?.call(
-        'Downloading Chess.com games (${allGames.length}/$targetGames)…',
+        targetGames == null
+            ? 'Downloading Chess.com games (${allGames.length})…'
+            : 'Downloading Chess.com games (${allGames.length}/$targetGames)…',
       );
 
       try {
@@ -384,8 +392,11 @@ class TacticsImportService {
       allGames = allGames.where((g) => !_isGameBefore(g, since)).toList();
     }
 
-    // Limit to target games
-    final gamesToProcess = allGames.take(targetGames).join('\n\n');
+    // Limit to target games (no limit when the since window governs).
+    final gamesToProcess =
+        (targetGames == null ? allGames : allGames.take(targetGames)).join(
+          '\n\n',
+        );
 
     // Save the raw PGNs first
     await _savePgns(gamesToProcess);

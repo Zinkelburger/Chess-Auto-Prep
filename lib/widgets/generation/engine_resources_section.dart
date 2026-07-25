@@ -16,6 +16,7 @@ class EngineResourcesSection extends StatelessWidget {
     required this.threadsController,
     required this.isGenerating,
     required this.isDbExplorer,
+    this.enabled = true,
   });
 
   /// Controller for the Stockfish UCI-threads field (owned by the form).
@@ -26,6 +27,10 @@ class EngineResourcesSection extends StatelessWidget {
 
   /// When true, appends the db-explorer eval-enrichment note.
   final bool isDbExplorer;
+
+  /// When false, the build source uses no engine at all: the threads field
+  /// is disabled in place and a note says why.
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -76,15 +81,15 @@ class EngineResourcesSection extends StatelessWidget {
                     'Stockfish UCI threads during tree build (1–$cores). '
                     'MultiPV searches benefit strongly from multiple threads.',
                 child: SizedBox(
-                  width: 170,
+                  width: 210,
                   child: TextField(
                     controller: threadsController,
-                    enabled: !isGenerating,
+                    enabled: enabled && !isGenerating,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: false,
                     ),
                     decoration: const InputDecoration(
-                      labelText: 'Engine Threads',
+                      labelText: 'Engine threads',
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
@@ -101,7 +106,13 @@ class EngineResourcesSection extends StatelessWidget {
               ),
             ],
           ),
-          if (isDbExplorer) ...[
+          if (!enabled) ...[
+            const SizedBox(height: 6),
+            const Text(
+              'No engine in this build source.',
+              style: TextStyle(fontSize: 10, color: AppColors.onSurfaceMuted),
+            ),
+          ] else if (isDbExplorer) ...[
             const SizedBox(height: 6),
             const Text(
               'Engine runs during eval enrichment after the PGN tree is built.',

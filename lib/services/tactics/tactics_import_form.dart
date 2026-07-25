@@ -73,11 +73,15 @@ class TacticsImportForm extends ChangeNotifier {
   }
 
   /// Import params for [source] from the current form values.
+  ///
+  /// In sinceDate mode the day window *is* the limit the user chose, so no
+  /// game count is imposed on top of it — `null` means "every game in the
+  /// window".
   TacticsImportParams paramsFor(TacticsImportSource source) =>
       TacticsImportParams(
         username: usernameFor(source),
         mode: fetchMode,
-        maxGames: fetchMode == TacticsImportMode.recent ? count : 200,
+        maxGames: fetchMode == TacticsImportMode.recent ? count : null,
         since: fetchMode == TacticsImportMode.sinceDate ? sinceCutoff : null,
         depth: depth,
         cores: cores,

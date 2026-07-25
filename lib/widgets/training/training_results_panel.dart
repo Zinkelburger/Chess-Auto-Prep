@@ -227,6 +227,90 @@ class _TrainingResultsPanelState extends State<TrainingResultsPanel> {
   }
 }
 
+/// End of a Learn or Review run: what was done, and the two things worth
+/// doing next. Replaces re-asking for a rating on the last line.
+class TrainingRunCompletePanel extends StatelessWidget {
+  final String title;
+  final int sessionCorrect;
+  final int sessionIncorrect;
+  final int sessionStreak;
+
+  /// Lines still untrained / due in the current scope, for the follow-on
+  /// buttons.
+  final int untrainedCount;
+  final int dueCount;
+  final VoidCallback onBackToList;
+  final VoidCallback onLearn;
+  final VoidCallback onReview;
+
+  const TrainingRunCompletePanel({
+    super.key,
+    required this.title,
+    required this.sessionCorrect,
+    required this.sessionIncorrect,
+    required this.sessionStreak,
+    required this.untrainedCount,
+    required this.dueCount,
+    required this.onBackToList,
+    required this.onLearn,
+    required this.onReview,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 8),
+          const Icon(
+            Icons.check_circle_outline,
+            size: 48,
+            color: AppColors.success,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: theme.textTheme.titleMedium,
+            textAlign: TextAlign.center,
+          ),
+          if (sessionCorrect + sessionIncorrect > 0) ...[
+            const SizedBox(height: 16),
+            SessionStatsBar(
+              sessionCorrect: sessionCorrect,
+              sessionIncorrect: sessionIncorrect,
+              sessionStreak: sessionStreak,
+            ),
+          ],
+          const SizedBox(height: 20),
+          FilledButton.icon(
+            onPressed: onBackToList,
+            icon: const Icon(Icons.list_alt, size: 18),
+            label: const Text('Back to the line list'),
+          ),
+          if (dueCount > 0) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: onReview,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: Text('Review $dueCount due'),
+            ),
+          ],
+          if (untrainedCount > 0) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: onLearn,
+              icon: const Icon(Icons.play_arrow_rounded, size: 18),
+              label: Text('Learn $untrainedCount untrained'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class AllCaughtUpPanel extends StatelessWidget {
   final String title;
   final Map<String, RepertoireReviewEntry> reviewMap;

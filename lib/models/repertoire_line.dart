@@ -106,6 +106,29 @@ class RepertoireLine {
   String toString() => 'RepertoireLine($name: ${moves.join(" ")})';
 }
 
+/// "1.e4 e6 2.d4 d5" movetext for [line] from ply [start] (inclusive) to
+/// [end] (exclusive; defaults to the whole line).
+String formatLineMovesText(RepertoireLine line, {int start = 0, int? end}) {
+  final stop = (end ?? line.moves.length).clamp(0, line.moves.length);
+  final startFullmoves = line.startPosition.fullmoves;
+  final startIsWhite = line.startPosition.turn == Side.white;
+  final parts = <String>[];
+  for (int i = start; i < stop; i++) {
+    final isWhite = startIsWhite ? i.isEven : i.isOdd;
+    final number = startIsWhite
+        ? startFullmoves + i ~/ 2
+        : startFullmoves + (i + 1) ~/ 2;
+    if (isWhite) {
+      parts.add('$number.${line.moves[i]}');
+    } else if (parts.isEmpty) {
+      parts.add('$number...${line.moves[i]}');
+    } else {
+      parts.add(line.moves[i]);
+    }
+  }
+  return parts.join(' ');
+}
+
 class TrainingQuestion {
   final String lineId;
   final String lineName;

@@ -17,6 +17,8 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
   Future<void> _copyCurrentGamePgn();
   Future<void> _addCurrentGameToStudy();
   void _reclaimFocus();
+  List<SolitaireTrophy> get _detectedTrophies;
+  Future<void> _detectTrophies();
 
   Widget _buildFullScreenView(ThemeData theme) {
     return FullscreenGameView(
@@ -171,6 +173,8 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
                         _controller.stopAutoPlay();
                         _reclaimFocus();
                       },
+                      onAnalysisComplete: _detectTrophies,
+                      detectedTrophies: _detectedTrophies,
                     ),
                   ],
                 )

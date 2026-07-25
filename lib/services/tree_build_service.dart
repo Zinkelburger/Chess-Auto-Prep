@@ -313,7 +313,7 @@ class TreeBuildService {
       }
 
       // Complete = frontier exhausted (neither cancelled nor finished early).
-      tree.buildComplete = !run.isCancelled && !run.finishNow();
+      tree.buildComplete = !run.isCancelled && !run.shouldFinish();
 
       _log(
         'Build complete: ${tree.totalNodes} nodes, '
@@ -395,7 +395,7 @@ class TreeBuildService {
       queue.add(tree.root);
     }
 
-    while (!run.isCancelled && !run.finishNow() && queue.isNotEmpty) {
+    while (!run.isCancelled && !run.shouldFinish() && queue.isNotEmpty) {
       await waitIfPaused();
       if (run.isCancelled) return;
       final node = queue.removeFirst();

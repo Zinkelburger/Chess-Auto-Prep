@@ -161,6 +161,8 @@ mixin _RepertoireSessionHandlers
 
     if (justFinished && ctrl.lastError != null) {
       showAppSnackBar(context, ctrl.lastError!, isError: true);
+    } else if (justFinished && ctrl.lastRunSummary.isNotEmpty) {
+      showAppSnackBar(context, ctrl.lastRunSummary);
     }
 
     if (!ctrl.isGenerating) {
@@ -236,9 +238,11 @@ mixin _RepertoireSessionHandlers
 
     // Bring the Lines/Draft surface into view and show progress inline.
     _showLinesSurface();
+    // Diff against the union of every repertoire line — the working tree is
+    // only the currently loaded line and would misclassify everything else.
     final error = await _draftController.build(
       config: config,
-      repertoire: _controller.tree,
+      repertoire: _controller.buildRepertoireMoveTree(),
     );
     if (error != null && mounted) {
       ScaffoldMessenger.of(

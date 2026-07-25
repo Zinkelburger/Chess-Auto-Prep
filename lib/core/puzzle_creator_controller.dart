@@ -24,7 +24,13 @@ enum CreatorStep { setup, recordSolution, details }
 
 class PuzzleCreatorController extends ChangeNotifier {
   PuzzleCreatorController({String? initialFen})
-    : editor = BoardEditorController(initialFen: initialFen);
+    : editor = BoardEditorController(initialFen: initialFen) {
+    // Arriving from a live board ("Save position as a puzzle"), the position
+    // is already the one the user meant. Dropping them in the board editor
+    // makes them re-approve a board they just came from, so skip straight to
+    // recording; "Edit position" in the recording panel goes back.
+    if (initialFen != null) startRecording();
+  }
 
   final BoardEditorController editor;
 

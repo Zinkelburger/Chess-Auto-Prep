@@ -603,7 +603,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
     if (siblings.length > 1) {
       for (int i = 1; i < siblings.length; i++) {
-        widgets.add(const Text(' ( ', style: PgnTextStyles.variation));
+        widgets.add(Text(' ( ', style: PgnTextStyles.variation));
 
         final variant = siblings[i];
         final variantPath = parentPath.child(i);
@@ -633,7 +633,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           ),
         );
 
-        widgets.add(const Text(' ) ', style: PgnTextStyles.variation));
+        widgets.add(Text(' ) ', style: PgnTextStyles.variation));
       }
     }
 

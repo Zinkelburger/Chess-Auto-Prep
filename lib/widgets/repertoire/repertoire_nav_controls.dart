@@ -5,6 +5,8 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../models/board_size.dart';
+
 class RepertoireNavControls extends StatelessWidget {
   const RepertoireNavControls({
     super.key,
@@ -13,6 +15,8 @@ class RepertoireNavControls extends StatelessWidget {
     required this.onGoForward,
     required this.onGenerateFromHere,
     required this.onFlipBoard,
+    this.boardSize,
+    this.onBoardSizeChanged,
   });
 
   final VoidCallback onGoToStart;
@@ -20,6 +24,11 @@ class RepertoireNavControls extends StatelessWidget {
   final VoidCallback onGoForward;
   final VoidCallback onGenerateFromHere;
   final VoidCallback onFlipBoard;
+
+  /// Current board column size; null hides the board-size button (compact
+  /// layout stacks the board above the tools, so there is nothing to trade).
+  final BoardSize? boardSize;
+  final ValueChanged<BoardSize>? onBoardSizeChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -68,6 +77,26 @@ class RepertoireNavControls extends StatelessWidget {
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           ),
+          if (boardSize != null && onBoardSizeChanged != null)
+            PopupMenuButton<BoardSize>(
+              tooltip: 'Board size: ${boardSize!.label}',
+              position: PopupMenuPosition.over,
+              padding: EdgeInsets.zero,
+              onSelected: onBoardSizeChanged,
+              itemBuilder: (_) => [
+                for (final size in BoardSize.values)
+                  CheckedPopupMenuItem<BoardSize>(
+                    value: size,
+                    checked: size == boardSize,
+                    child: Text(size.label),
+                  ),
+              ],
+              child: const SizedBox(
+                width: 28,
+                height: 28,
+                child: Icon(Icons.aspect_ratio, size: 15),
+              ),
+            ),
         ],
       ),
     );

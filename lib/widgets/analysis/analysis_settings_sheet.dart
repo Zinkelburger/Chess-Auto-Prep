@@ -173,6 +173,17 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
               max: kMaxMultiPv,
               onChanged: (v) => _settings.multiPv = v,
             ),
+            SettingsIntSpec(
+              label: 'PV rows per line',
+              tooltip:
+                  'Text rows each engine line gives its continuation. 2 or '
+                  'more lets a long variation wrap instead of being cut off '
+                  'at the edge of the panel.',
+              value: _settings.pvRows,
+              min: kMinPvRows,
+              max: kMaxPvRows,
+              onChanged: (v) => _settings.pvRows = v,
+            ),
             if (_isFull)
               SettingsIntSpec(
                 label: 'Max table moves',

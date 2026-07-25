@@ -26,6 +26,7 @@ import '../core/app_state.dart';
 import '../core/study_controller.dart';
 import '../features/audit/models/audit_finding.dart';
 import '../features/audit/models/audit_result.dart';
+import '../features/audit/services/audit_board_annotations.dart';
 import '../features/holes/services/hole_hunt_service.dart';
 import '../features/holes/widgets/holes_report_panel.dart';
 import '../models/move_tree.dart';
@@ -51,6 +52,7 @@ part 'position_analysis_widget.handoffs.dart';
 part 'position_analysis_widget.navigation.dart';
 
 const int _kAnalysisTabIndex = 3;
+const int _kHolesTabIndex = 4;
 
 /// Starting-position board, shown when no FEN has been selected yet.
 const Position _startingPosition = Chess.initial;
@@ -214,15 +216,15 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
 
   /// Entering the Analysis tab: seed the scratch tree with the line to the
   /// current position so the analysis starts with its opening context.
+  /// Every settled tab change rebuilds, so the board's hole-finding arrows
+  /// (gated on the Holes tab) appear and clear with the tab.
   void _onTabChanged() {
     if (_tabController.indexIsChanging) return;
-    if (_tabController.index != _kAnalysisTabIndex || _currentFen == null) {
-      return;
+    if (_tabController.index == _kAnalysisTabIndex && _currentFen != null) {
+      final path = _ensureScratchPathForFen(_currentFen!);
+      if (path != null) _scratchCursor = path;
     }
-    final path = _ensureScratchPathForFen(_currentFen!);
-    if (path != null) {
-      setState(() => _scratchCursor = path);
-    }
+    setState(() {});
   }
 
   // =====================================================================
@@ -297,6 +299,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
                       ? !widget.playerIsWhite!
                       : false,
                   onMove: _onBoardMove,
+                  annotations: _holesBoardAnnotations(),
                 ),
               ),
             ),
@@ -324,10 +327,18 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
             ),
             onPressed: hasFen ? _addCurrentLineToStudy : null,
           ),
-          TextButton.icon(
-            icon: const Icon(Icons.extension_outlined, size: 16),
-            label: const Text('Make Puzzle', style: TextStyle(fontSize: 12)),
-            onPressed: hasFen ? _makePuzzleFromPosition : null,
+          Tooltip(
+            message:
+                'Save this position as a puzzle: play the solution, add a '
+                'note, and it becomes a study chapter you can train.',
+            child: TextButton.icon(
+              icon: const Icon(Icons.extension_outlined, size: 16),
+              label: const Text(
+                'Save as Puzzle',
+                style: TextStyle(fontSize: 12),
+              ),
+              onPressed: hasFen ? _makePuzzleFromPosition : null,
+            ),
           ),
           TextButton.icon(
             icon: const Icon(Icons.open_in_new, size: 16),
@@ -606,6 +617,18 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
   void _onHoleFindingSelected(AuditFinding finding) {
     widget.openingTree?.navigateToFen(finding.fen);
     _navigateTo(finding.fen);
+  }
+
+  /// Arrows for hole findings at the displayed position — built only while
+  /// the Holes tab is active so they never bleed into normal browsing.
+  List<BoardAnnotation> _holesBoardAnnotations() {
+    if (_tabController.index != _kHolesTabIndex || _currentFen == null) {
+      return const [];
+    }
+    return buildAuditBoardAnnotations(
+      result: widget.holesResult,
+      currentFen: expandFen(_currentFen!),
+    );
   }
 }
 

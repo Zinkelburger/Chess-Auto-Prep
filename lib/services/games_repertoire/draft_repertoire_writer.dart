@@ -32,6 +32,63 @@ List<List<String>> enumerateLines(MoveTree tree) {
   return out;
 }
 
+/// Whether the final move of [line] was played by the repertoire owner's
+/// side. A line that ends on an *opponent* move is a gap — the user's games
+/// ran out before they ever answered it.
+bool lineEndsWithMyMove(List<String> line, {required bool isWhite}) {
+  if (line.isEmpty) return false;
+  final whiteMovedLast = line.length.isOdd;
+  return isWhite ? whiteMovedLast : !whiteMovedLast;
+}
+
+/// Numbered label for the final move of [line], e.g. "6...Bg4" or "7.Nf3"
+/// (standard-start numbering — merge is blocked for custom-start repertoires).
+String lastMoveLabel(List<String> line) {
+  final depth = line.length;
+  final number = (depth + 1) ~/ 2;
+  return '$number${depth.isOdd ? '.' : '...'}${line.last}';
+}
+
+/// Comment stamped on the final move of a gap line so the PGN pane explains
+/// why the line ends mid-conversation.
+const String kGapLineComment =
+    'Your games ended here with no reply — pick an answer.';
+
+/// One PGN game per draft [lines] entry, titled for the Lines browser:
+/// finished lines get "[titlePrefix] — line N" (numbering continues from
+/// [startIndex]); gap lines (ending on an opponent move) get
+/// "[titlePrefix] — no answer to 6...Bg4 yet" plus [kGapLineComment] on the
+/// final move, so unfinished prep is unmistakable in the list and on the
+/// board.
+String draftLinesToPgnGames(
+  List<List<String>> lines, {
+  required bool isWhite,
+  required String titlePrefix,
+  int startIndex = 0,
+}) {
+  final buffer = StringBuffer();
+  for (var i = 0; i < lines.length; i++) {
+    final line = lines[i];
+    final moveText = MoveTree.fromMoves(line).toPgnMoveText();
+    if (moveText.isEmpty) continue;
+
+    final isGap = !lineEndsWithMyMove(line, isWhite: isWhite);
+    final title = isGap
+        ? '$titlePrefix — no answer to ${lastMoveLabel(line)} yet'
+        : '$titlePrefix — line ${startIndex + i + 1}';
+    final movetext = isGap ? '$moveText { $kGapLineComment } *' : '$moveText *';
+    buffer
+      ..writeln('[Event "$title"]')
+      ..writeln('[White "${isWhite ? 'Me' : 'Opponent'}"]')
+      ..writeln('[Black "${isWhite ? 'Opponent' : 'Me'}"]')
+      ..writeln('[Result "*"]')
+      ..writeln()
+      ..writeln(movetext)
+      ..writeln();
+  }
+  return buffer.toString();
+}
+
 /// Build repertoire-file content (header + one game per line) for [tree].
 String draftToRepertoireFile(
   MoveTree tree, {
@@ -45,21 +102,14 @@ String draftToRepertoireFile(
     ..writeln('// Color: $color')
     ..writeln('// Created on $created')
     ..writeln('// Source: built from games')
-    ..writeln();
-
-  final lines = enumerateLines(tree);
-  for (var i = 0; i < lines.length; i++) {
-    final moveText = MoveTree.fromMoves(lines[i]).toPgnMoveText();
-    if (moveText.isEmpty) continue;
-    buffer
-      ..writeln('[Event "$name – line ${i + 1}"]')
-      ..writeln('[White "${isWhite ? 'Me' : 'Opponent'}"]')
-      ..writeln('[Black "${isWhite ? 'Opponent' : 'Me'}"]')
-      ..writeln('[Result "*"]')
-      ..writeln()
-      ..writeln('$moveText *')
-      ..writeln();
-  }
+    ..writeln()
+    ..write(
+      draftLinesToPgnGames(
+        enumerateLines(tree),
+        isWhite: isWhite,
+        titlePrefix: name,
+      ),
+    );
 
   return buffer.toString();
 }

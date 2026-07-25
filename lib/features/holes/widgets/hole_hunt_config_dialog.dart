@@ -186,10 +186,35 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _numField(_discoveryDepthCtrl, 'Search Depth'),
-                  _numField(_maxPlyCtrl, 'Max Ply'),
-                  _numField(_maiaEloCtrl, 'Maia Elo'),
-                  _numField(_trapLeavesCtrl, 'Trap Leaves'),
+                  _numField(
+                    _discoveryDepthCtrl,
+                    'Engine depth',
+                    tooltip:
+                        'Stockfish search depth when discovering candidate '
+                        'moves at each position.',
+                  ),
+                  _numField(
+                    _maxPlyCtrl,
+                    'Max depth (half-moves)',
+                    tooltip:
+                        'How far into each line the hunt walks, counted in '
+                        'half-moves from the start position.',
+                  ),
+                  _numField(
+                    _maiaEloCtrl,
+                    'Maia rating',
+                    tooltip:
+                        'Playing strength of the Maia human model used in '
+                        'the trap search.',
+                  ),
+                  _numField(
+                    _trapLeavesCtrl,
+                    'Positions to trap-check',
+                    tooltip:
+                        'How many end-of-line positions (highest reach '
+                        'probability first) get the Maia expectimax trap '
+                        'search.',
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -221,11 +246,41 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    _numField(_strongWindowCtrl, 'Strong Move Window (cp)'),
-                    _numField(_refutationCtrl, 'Refutation Threshold (cp)'),
-                    _numField(_verifyDepthCtrl, 'Verification Depth'),
-                    _numField(_trapPlyCtrl, 'Trap Search Ply'),
-                    _numField(_trapGapCtrl, 'Practical Gap (cp)'),
+                    _numField(
+                      _strongWindowCtrl,
+                      'Strong-move window (centipawns)',
+                      tooltip:
+                          'An uncovered attacker move must be within this '
+                          'many centipawns of the engine best to be flagged.',
+                    ),
+                    _numField(
+                      _refutationCtrl,
+                      'Refutation threshold (centipawns)',
+                      tooltip:
+                          'Eval loss versus the engine best move needed to '
+                          'flag a repertoire move as refuted.',
+                    ),
+                    _numField(
+                      _verifyDepthCtrl,
+                      'Verification depth',
+                      tooltip:
+                          'Deeper single-line Stockfish check that confirms '
+                          'a refutation before it is reported.',
+                    ),
+                    _numField(
+                      _trapPlyCtrl,
+                      'Trap search depth (half-moves)',
+                      tooltip:
+                          'How far past each end-of-line position the '
+                          'expectimax trap search looks, in half-moves.',
+                    ),
+                    _numField(
+                      _trapGapCtrl,
+                      'Practical gap (centipawns)',
+                      tooltip:
+                          'Minimum gap between the practical (expectimax) '
+                          'eval and the raw engine eval to flag a trap.',
+                    ),
                   ],
                 ),
               ],
@@ -254,9 +309,13 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
     );
   }
 
-  Widget _numField(TextEditingController ctrl, String label) {
-    return SizedBox(
-      width: 200,
+  Widget _numField(
+    TextEditingController ctrl,
+    String label, {
+    String? tooltip,
+  }) {
+    final field = SizedBox(
+      width: 220,
       child: TextField(
         controller: ctrl,
         decoration: InputDecoration(
@@ -267,5 +326,7 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
         keyboardType: TextInputType.number,
       ),
     );
+    if (tooltip == null) return field;
+    return Tooltip(message: tooltip, child: field);
   }
 }

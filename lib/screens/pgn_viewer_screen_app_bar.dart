@@ -125,9 +125,14 @@ mixin _AppBarBuildersMixin
                 } else if (value == 'trophies') {
                   _showTrophyCabinet();
                 } else if (value == 'make_puzzle') {
+                  final game = _controller.filteredGames.isNotEmpty
+                      ? _controller.filteredGames[_controller.currentGameIndex]
+                      : null;
                   PuzzleCreatorScreen.push(
                     context,
                     initialFen: _controller.currentPosition.fen,
+                    gameWhite: game?.headers['White'],
+                    gameBlack: game?.headers['Black'],
                   );
                 }
               },
@@ -136,16 +141,31 @@ mixin _AppBarBuildersMixin
                   value: 'make_puzzle',
                   child: ListTile(
                     leading: Icon(Icons.extension, size: 20),
-                    title: Text('Make puzzle from this position'),
+                    title: Text('Save position as a puzzle…'),
+                    trailing: InfoHint(
+                      'Opens the puzzle creator on this exact position.\n'
+                      'You play the solution, add a note and a rating, and '
+                      'it is saved as a chapter of a study —\n'
+                      'trainable afterwards in the Repertoire Trainer.',
+                    ),
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                   ),
                 ),
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'generate_repertoire',
                   child: ListTile(
-                    leading: Icon(Icons.auto_fix_high, size: 20),
-                    title: Text('Generate repertoire from games'),
+                    leading: const Icon(Icons.auto_fix_high, size: 20),
+                    title: const Text('Seed a repertoire from these games…'),
+                    trailing: InfoHint(
+                      'Creates a repertoire and hands the '
+                      '${_controller.filteredGames.length} currently filtered '
+                      'game${_controller.filteredGames.length == 1 ? '' : 's'} '
+                      'to the Repertoire Builder\n'
+                      'as the seed for generation. The games become the '
+                      'starting move data; the builder then explores and '
+                      'scores lines from there.',
+                    ),
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                   ),

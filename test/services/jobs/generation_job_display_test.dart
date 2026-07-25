@@ -18,7 +18,7 @@ void main() {
       expect(parts, contains('Depth 9/20'));
       expect(parts, contains('340/500 explored'));
       expect(parts, contains('depth ETA ~2m'));
-      expect(parts.join(), isNot(contains('frontier')));
+      expect(parts.join(), isNot(contains('queued')));
     });
 
     test('best-first shows deepest ply, frontier, and whole-run ETA', () {
@@ -37,7 +37,7 @@ void main() {
         etaRunSec: 600,
       );
       expect(parts, contains('deepest ply 14/20'));
-      expect(parts, contains('frontier 85'));
+      expect(parts, contains('85 positions queued'));
       expect(parts, contains('ETA ~10m'));
       // Depth-layer stats are meaningless in best-first order.
       expect(parts.join(), isNot(contains('explored')));

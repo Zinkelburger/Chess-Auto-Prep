@@ -17,6 +17,7 @@ import '../core/generation_session_controller.dart';
 import '../core/audit_session_controller.dart';
 import '../core/coverage_controller.dart';
 import '../models/engine_settings.dart';
+import '../models/board_size.dart';
 import '../models/repertoire_line.dart';
 import '../models/repertoire_metadata.dart';
 import '../services/repertoire_service.dart';
@@ -39,6 +40,7 @@ import '../widgets/repertoire_list_body.dart';
 import '../widgets/repertoire_lines_browser.dart';
 import '../constants/chess_constants.dart';
 import '../constants/ui_breakpoints.dart';
+import '../widgets/repertoire/repertoire_options_dialog.dart';
 import '../widgets/repertoire/repertoire_toolbar.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/repertoire/repertoire_shortcuts.dart';
@@ -96,6 +98,9 @@ class RepertoireScreen extends StatefulWidget {
 const _kLinesPanelCollapsed = 'repertoire.lines_panel_collapsed';
 const _kLinesPanelWidth = 'repertoire.lines_panel_width';
 const double _kLinesPanelMinWidth = 220.0;
+
+/// Board column size preset, persisted so the layout survives restarts.
+const _kBoardSizePref = 'repertoire.board_size';
 
 /// Fields and small shared helpers for [_RepertoireScreenState].
 ///
@@ -162,6 +167,10 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   /// user drags the divider; falls back to the proportional default.
   double? _linesPanelWidth;
 
+  /// Board column size. Shrinking the board is how the user hands width to
+  /// the engine lines and PGN beside it.
+  BoardSize _boardSize = BoardSize.large;
+
   // ── Build-from-games draft session (inline in the Lines/Draft tab) ──
   final GamesDraftController _draftController = GamesDraftController();
 
@@ -207,6 +216,7 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
       setState(() {
         _linesPanelCollapsed = prefs.getBool(_kLinesPanelCollapsed) ?? false;
         _linesPanelWidth = prefs.getDouble(_kLinesPanelWidth);
+        _boardSize = BoardSize.fromName(prefs.getString(_kBoardSizePref));
       });
     } catch (e) {
       log.w(
@@ -234,6 +244,17 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
     if (_linesPanelCollapsed == collapsed) return;
     setState(() => _linesPanelCollapsed = collapsed);
     _saveLinesPanelPref();
+  }
+
+  Future<void> _setBoardSize(BoardSize size) async {
+    if (_boardSize == size) return;
+    setState(() => _boardSize = size);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kBoardSizePref, size.name);
+    } catch (e) {
+      log.w('Failed to save board size', name: 'RepertoireScreen', error: e);
+    }
   }
 
   Future<void> _saveLinesPanelWidth() async {
@@ -648,7 +669,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
           onSwitchRepertoire: _showRepertoireSelection,
           onSelectChapter: _onChapterSelected,
           onAddChapter: _addChapterInline,
-          onManageChapters: _showChapterList,
+          onViewChapters: _showChapterList,
         ),
         isGenerating: _generationController.isGenerating,
         isGenerationPaused: _generationController.isPaused,
@@ -669,9 +690,14 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         onImportPgnPaste: _importPgnFromPaste,
         trapNavigation: _buildTrapNavigation(),
         isWhiteRepertoire: _controller.isRepertoireWhite,
-        onSwitchColor: () async {
-          await _controller.setRepertoireColor(!_controller.isRepertoireWhite);
-        },
+        onOpenRepertoireOptions: () => showRepertoireOptionsDialog(
+          context: context,
+          isWhiteRepertoire: _controller.isRepertoireWhite,
+          sideChangeEnabled: !_generationController.isGenerating,
+          onSideChanged: (isWhite) => _controller.setRepertoireColor(isWhite),
+          boardSize: _boardSize,
+          onBoardSizeChanged: _setBoardSize,
+        ),
       ),
       body: GestureDetector(
         behavior: HitTestBehavior.translucent,

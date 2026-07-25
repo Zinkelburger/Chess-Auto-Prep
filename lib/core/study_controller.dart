@@ -219,6 +219,22 @@ class StudyController extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
+  /// Move the chapter at [oldIndex] to [newIndex].
+  ///
+  /// Indices are final positions in the reordered list (a
+  /// [ReorderableListView] callback must subtract one when dragging down).
+  /// The chapter being *viewed* stays selected, whether or not it moved.
+  void reorderChapter(int oldIndex, int newIndex) {
+    final chapters = _doc.chapters;
+    if (oldIndex < 0 || oldIndex >= chapters.length) return;
+    final target = newIndex.clamp(0, chapters.length - 1);
+    if (oldIndex == target) return;
+    final active = chapters[_chapterIndex];
+    chapters.insert(target, chapters.removeAt(oldIndex));
+    _chapterIndex = chapters.indexOf(active);
+    _markDirty();
+  }
+
   void addChapter(String name, {String? startingFen}) {
     _doc.chapters.add(StudyChapter(name: name, startingFen: startingFen));
     _chapterIndex = _doc.chapters.length - 1;
@@ -348,6 +364,16 @@ class StudyController extends ChangeNotifier with SafeChangeNotifier {
     tree.setComment(path, comment);
     _markDirty();
   }
+
+  /// Comment stored on the node at the cursor, annotation tokens and all.
+  ///
+  /// Board shapes (`[%cal]`/`[%csl]` arrows and circles) live in here, so the
+  /// study screen reads and rewrites this rather than keeping shapes in a
+  /// parallel structure that a PGN round-trip would drop.
+  String? get cursorComment => tree.nodeAt(_cursor)?.comment;
+
+  /// Whether the cursor is on a move (the root has no node to annotate).
+  bool get cursorHasNode => _cursor.isNotEmpty && tree.nodeAt(_cursor) != null;
 
   void toggleNag(TreePath path, int nagId) {
     tree.toggleNag(path, nagId);

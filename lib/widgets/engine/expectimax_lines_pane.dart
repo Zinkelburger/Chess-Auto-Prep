@@ -439,21 +439,27 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
     final isComputing = prog?.isComputing ?? false;
     final depthDone = prog?.bestCompletedDepth ?? 0;
     final depthTarget = prog?.targetMaxDepth ?? 0;
+    final live = _useProgressive;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(
         children: [
-          const Tooltip(
-            message:
-                'Best practical continuations considering how humans actually play.\n'
-                'Uses Maia probabilities and Stockfish evals to find the most\n'
-                'likely game continuations via expectimax search.\n\n'
-                'Depth/eval settings are in Settings → On-the-fly Expectimax '
-                '(separate from Generation tab Engine Depth).',
+          Tooltip(
+            message: live
+                ? 'Best practical continuations considering how humans actually play.\n'
+                      'Computed live for this position: Maia probabilities and\n'
+                      'Stockfish evals combined via expectimax search.\n\n'
+                      'Depth/eval settings are in Settings → On-the-fly Expectimax '
+                      '(separate from Generation tab Engine Depth).'
+                : 'Best practical continuations considering how humans actually play.\n'
+                      'Read from the built repertoire tree: Maia probabilities and\n'
+                      'Stockfish evals stored at build time, combined via expectimax.',
             child: Text(
-              'Expectimax PV (on-the-fly)',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              live
+                  ? 'Expectimax lines · live'
+                  : 'Expectimax lines · from built tree',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             ),
           ),
           if (isComputing) ...[
@@ -537,9 +543,14 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
       );
     }
 
+    final pvRows = EngineSettings.instance.pvRows;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
       child: Row(
+        crossAxisAlignment: pvRows > 1
+            ? CrossAxisAlignment.start
+            : CrossAxisAlignment.center,
         children: [
           SizedBox(
             width: 20,
@@ -586,7 +597,8 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
             child: ClickableMoveLineWidget(
               sanMoves: line.movesSan,
               startPly: _startPly,
-              maxMoves: 10,
+              maxMoves: 10 * pvRows,
+              maxLines: pvRows,
               annotations: annotations,
               onMoveTapped: (idx) => _onLineMoveTapped(line, idx),
               onMoveHovered: (idx, pos) => _onMoveHovered(line, idx, pos),
@@ -616,36 +628,50 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
       child: Row(
         children: [
           const Spacer(),
-          DropdownButton<int>(
-            value: _settings.expectimaxOurMultipv,
-            items: [1, 2, 3, 4, 5]
-                .map((v) => DropdownMenuItem(value: v, child: Text('Top $v')))
-                .toList(),
-            onChanged: (v) {
-              if (v != null) {
-                _settings.expectimaxOurMultipv = v;
-                _recompute();
-              }
-            },
-            isDense: true,
-            underline: const SizedBox.shrink(),
+          Tooltip(
+            message: 'How many expectimax lines to show',
+            child: DropdownButton<int>(
+              value: _settings.expectimaxOurMultipv,
+              items: [1, 2, 3, 4, 5]
+                  .map(
+                    (v) =>
+                        DropdownMenuItem(value: v, child: Text('Top $v lines')),
+                  )
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) {
+                  _settings.expectimaxOurMultipv = v;
+                  _recompute();
+                }
+              },
+              isDense: true,
+              underline: const SizedBox.shrink(),
+            ),
           ),
           const SizedBox(width: 8),
-          DropdownButton<int>(
-            value: _maxPlies,
-            items: [4, 8, 12, 16, 20]
-                .map((v) => DropdownMenuItem(value: v, child: Text('+$v')))
-                .toList(),
-            onChanged: (v) {
-              if (v != null) {
-                setState(() {
-                  _maxPlies = v;
-                  _recompute();
-                });
-              }
-            },
-            isDense: true,
-            underline: const SizedBox.shrink(),
+          Tooltip(
+            message: 'How far each line continues past the current position',
+            child: DropdownButton<int>(
+              value: _maxPlies,
+              items: [4, 8, 12, 16, 20]
+                  .map(
+                    (v) => DropdownMenuItem(
+                      value: v,
+                      child: Text('+$v half-moves'),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) {
+                  setState(() {
+                    _maxPlies = v;
+                    _recompute();
+                  });
+                }
+              },
+              isDense: true,
+              underline: const SizedBox.shrink(),
+            ),
           ),
         ],
       ),

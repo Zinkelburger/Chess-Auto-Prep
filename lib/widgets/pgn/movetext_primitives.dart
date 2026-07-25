@@ -23,7 +23,11 @@ import 'package:flutter/material.dart';
 /// suffix (only used when [nagSuffix] is non-empty), and [decoration] for the
 /// container (selection highlight / reserved border). This keeps one assembly
 /// site for the SAN+suffix contract without flattening each surface's look.
-class MoveChip extends StatelessWidget {
+///
+/// Pass [hoverDecoration] to signal clickability on hover instead of painting
+/// a permanent underline on every move. Both decorations must reserve the same
+/// border width, or hovering reflows the wrapped movetext.
+class MoveChip extends StatefulWidget {
   final String san;
 
   /// Concatenated quality-glyph symbols, or `''` for none (see
@@ -35,6 +39,10 @@ class MoveChip extends StatelessWidget {
 
   /// Container decoration (background + border). Null renders no box.
   final BoxDecoration? decoration;
+
+  /// Decoration swapped in while the pointer is over the chip. Null keeps
+  /// [decoration] and leaves the cursor alone (no hover affordance).
+  final BoxDecoration? hoverDecoration;
 
   final EdgeInsetsGeometry padding;
 
@@ -56,6 +64,7 @@ class MoveChip extends StatelessWidget {
     required this.sanStyle,
     required this.nagStyle,
     this.decoration,
+    this.hoverDecoration,
     this.padding = const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
     this.containerKey,
     this.behavior,
@@ -64,25 +73,42 @@ class MoveChip extends StatelessWidget {
   });
 
   @override
+  State<MoveChip> createState() => _MoveChipState();
+}
+
+class _MoveChipState extends State<MoveChip> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: behavior,
-      onTap: onTap,
-      onSecondaryTapDown: onSecondaryTapDown,
+    final interactive = widget.hoverDecoration != null && widget.onTap != null;
+    final chip = GestureDetector(
+      behavior: widget.behavior,
+      onTap: widget.onTap,
+      onSecondaryTapDown: widget.onSecondaryTapDown,
       child: Container(
-        key: containerKey,
-        padding: padding,
-        decoration: decoration,
+        key: widget.containerKey,
+        padding: widget.padding,
+        decoration: _hovered && interactive
+            ? widget.hoverDecoration
+            : widget.decoration,
         child: Text.rich(
           TextSpan(
             children: [
-              TextSpan(text: san, style: sanStyle),
-              if (nagSuffix.isNotEmpty)
-                TextSpan(text: nagSuffix, style: nagStyle),
+              TextSpan(text: widget.san, style: widget.sanStyle),
+              if (widget.nagSuffix.isNotEmpty)
+                TextSpan(text: widget.nagSuffix, style: widget.nagStyle),
             ],
           ),
         ),
       ),
+    );
+    if (!interactive) return chip;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: chip,
     );
   }
 }
