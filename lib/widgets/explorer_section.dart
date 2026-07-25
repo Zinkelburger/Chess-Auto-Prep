@@ -21,6 +21,7 @@ import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
+import 'labeled_toggle.dart';
 import 'opening_tree_widget.dart';
 
 class ExplorerSection extends StatefulWidget {
@@ -227,21 +228,13 @@ class _ExplorerSectionState extends State<ExplorerSection> {
             ),
             const Spacer(),
             if (_expanded)
-              SizedBox(
-                height: 20,
-                child: FilterChip(
-                  label: const Text('Tree', style: TextStyle(fontSize: 10)),
-                  selected: _showTree,
-                  onSelected: (_) {
-                    setState(() => _showTree = !_showTree);
-                    _savePrefs();
-                  },
-                  visualDensity: VisualDensity.compact,
-                  showCheckmark: false,
-                  padding: EdgeInsets.zero,
-                  labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
+              AppSwitch(
+                label: 'Tree',
+                value: _showTree,
+                onChanged: (v) {
+                  setState(() => _showTree = v);
+                  _savePrefs();
+                },
               ),
           ],
         ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/training_settings.dart';
 import '../../theme/app_colors.dart';
+import '../labeled_toggle.dart';
 
 /// Footer of the Train tab: auto-next plus how much is left in this run.
 class TrainingBottomControls extends StatelessWidget {
@@ -24,11 +25,10 @@ class TrainingBottomControls extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text('Auto-next', style: Theme.of(context).textTheme.bodySmall),
-        const SizedBox(width: 8),
-        SizedBox(
-          height: 24,
-          child: Switch(value: settings.autoNext, onChanged: onAutoNextChanged),
+        AppSwitch(
+          label: 'Auto-next',
+          value: settings.autoNext,
+          onChanged: onAutoNextChanged,
         ),
         const Spacer(),
         Text(

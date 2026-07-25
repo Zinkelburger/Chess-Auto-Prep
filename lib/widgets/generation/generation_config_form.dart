@@ -11,6 +11,7 @@ import '../../services/generation/generation_presets.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/app_messages.dart';
+import '../labeled_toggle.dart';
 import '../lichess_db_info_icon.dart';
 import '../lichess_db_selector.dart';
 import '../pgn_sources_panel.dart';

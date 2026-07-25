@@ -6,6 +6,7 @@ import '../../models/eval_database_settings.dart';
 import '../../services/eval/chessdb_api_provider.dart';
 import '../../services/eval/sqlite_eval_provider.dart';
 import '../../theme/app_colors.dart';
+import '../labeled_toggle.dart';
 
 /// Advanced eval-source controls for repertoire tree generation.
 class EvalSourcesSection extends StatefulWidget {
@@ -148,22 +149,21 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
     return Tooltip(message: tooltip, child: field);
   }
 
-  Widget _toggleSwitch(
+  /// [AppCheckbox] with the isGenerating lock folded in — these are all
+  /// options applied when a build starts, hence checkboxes.
+  Widget _check(
     String label,
     bool value,
     ValueChanged<bool> onChanged, {
     String? tooltip,
   }) {
-    final row = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(label, style: const TextStyle(fontSize: 13)),
-        const SizedBox(width: 4),
-        Switch(value: value, onChanged: widget.isGenerating ? null : onChanged),
-      ],
+    return AppCheckbox(
+      label: label,
+      value: value,
+      onChanged: onChanged,
+      tooltip: tooltip,
+      enabled: !widget.isGenerating,
     );
-    if (tooltip == null) return row;
-    return Tooltip(message: tooltip, child: row);
   }
 
   @override
@@ -225,20 +225,13 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
             },
           ),
         if (widget.cdbDirectAvailable)
-          Wrap(
-            spacing: 16,
-            children: [
-              FilterChip(
-                label: const Text('Batch eval lookups'),
-                selected: _batchEvalLookups,
-                onSelected: widget.isGenerating
-                    ? null
-                    : (v) => _update(() => _batchEvalLookups = v),
-              ),
-            ],
+          _check(
+            'Batch eval lookups',
+            _batchEvalLookups,
+            (v) => _update(() => _batchEvalLookups = v),
           ),
         if (widget.cdbDirectAvailable) const SizedBox(height: 12),
-        _toggleSwitch(
+        _check(
           'Local ChessDB file',
           _enableLocalChessDb,
           (v) => _update(() => _enableLocalChessDb = v),
@@ -288,7 +281,7 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
           ],
         ),
         const SizedBox(height: 12),
-        _toggleSwitch(
+        _check(
           'ChessDB API',
           _enableChessDbApi,
           (v) => _update(() => _enableChessDbApi = v),
@@ -324,7 +317,7 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
           ],
         ),
         const SizedBox(height: 12),
-        _toggleSwitch(
+        _check(
           'Skip external eval for off-book subtrees',
           _enableExtEvalSubtreeSkip,
           (v) => _update(() => _enableExtEvalSubtreeSkip = v),

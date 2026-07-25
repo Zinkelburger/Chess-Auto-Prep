@@ -483,7 +483,7 @@ mixin _GenerationConfigAdvanced
         ],
       ),
       const SizedBox(height: 4),
-      _toggleSwitch(
+      _labeledCheckbox(
         'Eval limits relative to starting position',
         _relativeEval,
         (v) {
@@ -574,7 +574,7 @@ mixin _GenerationConfigAdvanced
   List<Widget> _verificationSection(VoidCallback refresh) {
     final noVerify = _buildMode == BuildMode.maiaDbExplore;
     return [
-      _toggleSwitch(
+      _labeledCheckbox(
         'Verify final repertoire',
         _verifyFinal,
         (v) {
@@ -618,35 +618,21 @@ mixin _GenerationConfigAdvanced
             'new, likely, sharp moves — up to this many.',
       ),
       const SizedBox(height: 4),
-      SwitchListTile(
-        contentPadding: EdgeInsets.zero,
-        dense: true,
-        title: const Text(
-          'Order lines by how likely you are to face them',
-          style: TextStyle(fontSize: 13),
-        ),
-        value: _rankLinesByImportance,
-        onChanged: widget.isGenerating
-            ? null
-            : (v) {
-                _rankLinesByImportance = v;
-                refresh();
-              },
+      _labeledCheckbox(
+        'Order lines by how likely you are to face them',
+        _rankLinesByImportance,
+        (v) {
+          _rankLinesByImportance = v;
+          refresh();
+        },
       ),
-      SwitchListTile(
-        contentPadding: EdgeInsets.zero,
-        dense: true,
-        title: const Text(
-          'Annotate opponent-move probabilities',
-          style: TextStyle(fontSize: 13),
-        ),
-        value: _annotateMoveProbabilities,
-        onChanged: widget.isGenerating
-            ? null
-            : (v) {
-                _annotateMoveProbabilities = v;
-                refresh();
-              },
+      _labeledCheckbox(
+        'Annotate opponent-move probabilities',
+        _annotateMoveProbabilities,
+        (v) {
+          _annotateMoveProbabilities = v;
+          refresh();
+        },
       ),
       Padding(
         padding: const EdgeInsets.only(left: 8, bottom: 8),

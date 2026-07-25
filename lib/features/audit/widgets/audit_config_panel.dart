@@ -17,6 +17,7 @@ import '../models/audit_finding.dart';
 import '../models/audit_result.dart';
 import '../services/audit_config.dart';
 import '../services/repertoire_audit_service.dart';
+import '../../../widgets/labeled_toggle.dart';
 
 class AuditConfigPanel extends StatefulWidget {
   final OpeningTree? openingTree;
@@ -235,21 +236,11 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
                 ),
               ),
               const Spacer(),
-              SizedBox(
-                height: 28,
-                child: FilterChip(
-                  label: const Text(
-                    'Subtree only',
-                    style: TextStyle(fontSize: 11),
-                  ),
-                  selected: _auditSubtreeOnly,
-                  onSelected: _isAuditing
-                      ? null
-                      : (v) => setState(() => _auditSubtreeOnly = v),
-                  visualDensity: VisualDensity.compact,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                ),
+              AppCheckbox(
+                label: 'Subtree only',
+                value: _auditSubtreeOnly,
+                onChanged: (v) => setState(() => _auditSubtreeOnly = v),
+                enabled: !_isAuditing,
               ),
             ],
           ),

@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/board_editor_controller.dart';
 import '../../utils/app_messages.dart';
+import '../labeled_toggle.dart';
 
 class PositionSetupPanel extends StatefulWidget {
   final BoardEditorController controller;
@@ -262,13 +263,11 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
     ValueChanged<bool> onChanged,
   ) {
     return Expanded(
-      child: CheckboxListTile(
-        title: Text(label, style: const TextStyle(fontSize: 13)),
+      child: AppCheckbox(
+        label: label,
         value: value,
-        dense: true,
-        contentPadding: EdgeInsets.zero,
-        controlAffinity: ListTileControlAffinity.leading,
-        onChanged: allowed ? (v) => onChanged(v ?? false) : null,
+        onChanged: onChanged,
+        enabled: allowed,
       ),
     );
   }

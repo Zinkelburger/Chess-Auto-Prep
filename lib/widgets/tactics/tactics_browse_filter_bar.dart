@@ -63,28 +63,10 @@ class _BrowseFilterBar extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              InkWell(
-                onTap: () => onShowBoardsChanged(!showBoards),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: Checkbox(
-                        value: showBoards,
-                        onChanged: (v) => onShowBoardsChanged(v ?? false),
-                        visualDensity: VisualDensity.compact,
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    const Text(
-                      'Show board previews',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ],
-                ),
+              AppSwitch(
+                label: 'Show board previews',
+                value: showBoards,
+                onChanged: onShowBoardsChanged,
               ),
               const Spacer(),
               if (selectMode) ...[

@@ -22,6 +22,7 @@ import '../services/generation/generation_config.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
 import '../theme/app_text_styles.dart';
+import 'labeled_toggle.dart';
 import 'opening_tree_widget.dart';
 
 class AnalysisTab extends StatefulWidget {
@@ -281,19 +282,10 @@ class _AnalysisTabState extends State<AnalysisTab> {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Row(
             children: [
-              FilterChip(
-                label: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.account_tree, size: 14),
-                    SizedBox(width: 4),
-                    Text('Opening tree', style: TextStyle(fontSize: 11)),
-                  ],
-                ),
-                selected: _showTree,
-                onSelected: (_) => _toggleTree(),
-                visualDensity: VisualDensity.compact,
-                showCheckmark: false,
+              AppSwitch(
+                label: 'Opening tree',
+                value: _showTree,
+                onChanged: (_) => _toggleTree(),
               ),
             ],
           ),

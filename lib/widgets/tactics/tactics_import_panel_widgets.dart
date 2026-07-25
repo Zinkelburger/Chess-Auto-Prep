@@ -137,9 +137,9 @@ class _SessionSettingsForm extends StatelessWidget {
             ),
           ],
         ),
-        _MistakeTypeCheckbox(
+        AppCheckbox(
           label: 'Group by game',
-          selected: settings.groupByGame,
+          value: settings.groupByGame,
           onChanged: (v) => onChanged(settings.copyWith(groupByGame: v)),
         ),
         const SizedBox(height: 12),
@@ -147,25 +147,25 @@ class _SessionSettingsForm extends StatelessWidget {
           'Mistake types to include:',
           style: const TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
         ),
-        _MistakeTypeCheckbox(
+        AppCheckbox(
           label: 'Blunders (??)',
-          selected: settings.mistakeTypes.contains('??'),
+          value: settings.mistakeTypes.contains('??'),
           onChanged: (v) => _toggleMistakeType('??', v),
         ),
-        _MistakeTypeCheckbox(
+        AppCheckbox(
           label: 'Mistakes (?)',
-          selected: settings.mistakeTypes.contains('?'),
+          value: settings.mistakeTypes.contains('?'),
           onChanged: (v) => _toggleMistakeType('?', v),
         ),
-        _MistakeTypeCheckbox(
+        AppCheckbox(
           label: 'Inaccuracies (?!)',
-          selected: settings.mistakeTypes.contains('?!'),
+          value: settings.mistakeTypes.contains('?!'),
           onChanged: (v) => _toggleMistakeType('?!', v),
         ),
         if (showCustomType)
-          _MistakeTypeCheckbox(
+          AppCheckbox(
             label: 'Custom puzzles',
-            selected: settings.mistakeTypes.contains(
+            value: settings.mistakeTypes.contains(
               TacticsSessionSettings.customMistakeType,
             ),
             onChanged: (v) =>
@@ -176,14 +176,14 @@ class _SessionSettingsForm extends StatelessWidget {
           'Options:',
           style: const TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
         ),
-        _MistakeTypeCheckbox(
+        AppCheckbox(
           label: 'Unreviewed only',
-          selected: settings.skipReviewed,
+          value: settings.skipReviewed,
           onChanged: (v) => onChanged(settings.copyWith(skipReviewed: v)),
         ),
-        _MistakeTypeCheckbox(
+        AppCheckbox(
           label: 'Exclude 1-star rated',
-          selected: !settings.includeOneStar,
+          value: !settings.includeOneStar,
           onChanged: (v) => onChanged(settings.copyWith(includeOneStar: !v)),
         ),
       ],
@@ -198,48 +198,6 @@ class _SessionSettingsForm extends StatelessWidget {
       types.remove(type);
     }
     onChanged(settings.copyWith(mistakeTypes: types));
-  }
-}
-
-class _MistakeTypeCheckbox extends StatelessWidget {
-  const _MistakeTypeCheckbox({
-    required this.label,
-    required this.selected,
-    required this.onChanged,
-  });
-
-  final String label;
-  final bool selected;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 32,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(4),
-        onTap: () => onChanged(!selected),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 24,
-              height: 24,
-              child: Checkbox(
-                value: selected,
-                onChanged: (v) => onChanged(v ?? false),
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Text(label, style: const TextStyle(fontSize: 13)),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 

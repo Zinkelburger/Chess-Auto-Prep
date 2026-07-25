@@ -12,6 +12,7 @@ import '../models/engine_settings.dart';
 import '../models/opening_tree.dart';
 import '../services/engine/stockfish_pool.dart';
 import '../theme/app_colors.dart';
+import 'labeled_toggle.dart';
 
 /// Settings returned by the config dialog.
 class EngineWeaknessConfig {
@@ -167,24 +168,12 @@ class _EngineWeaknessConfigDialogState
                 const Divider(height: 24),
                 Row(
                   children: [
-                    InkWell(
-                      onTap: () => setState(() => _redownload = !_redownload),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Checkbox(
-                            value: _redownload,
-                            onChanged: (v) => setState(() => _redownload = v!),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Re-download from '
-                            '${widget.playerInfo!.platformDisplayName}',
-                            style: const TextStyle(fontSize: 13),
-                          ),
-                        ],
-                      ),
+                    AppCheckbox(
+                      label:
+                          'Re-download from '
+                          '${widget.playerInfo!.platformDisplayName}',
+                      value: _redownload,
+                      onChanged: (v) => setState(() => _redownload = v),
                     ),
                     const SizedBox(width: 12),
                     if (_redownload) _field('Months', _monthsCtrl, 64),

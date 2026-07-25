@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/tactics_position.dart';
 import '../../theme/app_colors.dart';
 import '../common/static_board_thumbnail.dart';
+import '../labeled_toggle.dart';
 import 'puzzle_stats_display.dart';
 
 part 'tactics_browse_row.dart';

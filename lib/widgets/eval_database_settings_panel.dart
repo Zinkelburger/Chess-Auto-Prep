@@ -15,6 +15,7 @@ import '../models/eval_database_settings.dart';
 import '../theme/app_colors.dart';
 import '../services/eval/cdbdirect_eval_provider.dart';
 import '../services/eval/cdbdirect_parse.dart';
+import 'labeled_toggle.dart';
 
 /// ChessDB full-dump download command (rsync from chessdb.cn FTP mirror).
 const kChessDbRsyncCommand =
@@ -300,12 +301,12 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
           ),
         ],
         const SizedBox(height: 8),
-        FilterChip(
-          label: const Text('HDD read-ahead hint'),
-          selected: _settings.cdbDirectReadAhead,
-          onSelected: _libraryAvailable && _settings.enableCdbDirect
-              ? (v) => _settings.setCdbDirectReadAhead(v)
-              : null,
+        AppSwitch(
+          label: 'HDD read-ahead hint',
+          value: _settings.cdbDirectReadAhead,
+          onChanged: (v) => _settings.setCdbDirectReadAhead(v),
+          enabled: _libraryAvailable && _settings.enableCdbDirect,
+          disabledReason: 'Requires Local ChessDB (full dump) to be enabled.',
         ),
       ],
     );

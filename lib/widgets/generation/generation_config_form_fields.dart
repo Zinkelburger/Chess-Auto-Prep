@@ -50,41 +50,9 @@ mixin _GenerationConfigFields on _GenerationConfigFormStateBase {
     return Tooltip(message: tooltip, child: field);
   }
 
-  Widget _toggleSwitch(
-    String label,
-    bool value,
-    ValueChanged<bool> onChanged, {
-    String? tooltip,
-    bool enabled = true,
-    String? disabledReason,
-  }) {
-    final row = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            color: enabled ? null : AppColors.onSurfaceMuted,
-          ),
-        ),
-        const SizedBox(width: 4),
-        Switch(
-          value: value,
-          onChanged: enabled && !widget.isGenerating ? onChanged : null,
-        ),
-      ],
-    );
-    final message = !enabled && disabledReason != null
-        ? disabledReason
-        : tooltip;
-    if (message == null) return row;
-    return Tooltip(message: message, child: row);
-  }
-
-  /// Labelled checkbox with an optional info tooltip, used across the
-  /// advanced dialog (replaces the hand-rolled checkbox+GestureDetector
-  /// rows).
+  /// [AppCheckbox] with the form-wide isGenerating lock folded in. Every
+  /// boolean in this form is a deferred option applied at Start, so per the
+  /// labeled_toggle rule they are all checkboxes — no switches here.
   Widget _labeledCheckbox(
     String label,
     bool value,
@@ -93,38 +61,13 @@ mixin _GenerationConfigFields on _GenerationConfigFormStateBase {
     bool enabled = true,
     String? disabledReason,
   }) {
-    final isEnabled = enabled && !widget.isGenerating;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Checkbox(
-          value: value,
-          onChanged: isEnabled ? (v) => onChanged(v ?? false) : null,
-        ),
-        GestureDetector(
-          onTap: isEnabled ? () => onChanged(!value) : null,
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              color: enabled ? null : AppColors.onSurfaceMuted,
-            ),
-          ),
-        ),
-        if (tooltip != null || (!enabled && disabledReason != null)) ...[
-          const SizedBox(width: 4),
-          Tooltip(
-            message: !enabled && disabledReason != null
-                ? disabledReason
-                : tooltip!,
-            child: Icon(
-              Icons.info_outline,
-              size: 16,
-              color: AppColors.onSurfaceMuted,
-            ),
-          ),
-        ],
-      ],
+    return AppCheckbox(
+      label: label,
+      value: value,
+      onChanged: onChanged,
+      tooltip: tooltip,
+      enabled: enabled && !widget.isGenerating,
+      disabledReason: !enabled ? disabledReason : null,
     );
   }
 

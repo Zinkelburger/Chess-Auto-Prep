@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../models/pgn_filter_models.dart';
 import '../theme/app_colors.dart';
+import 'labeled_toggle.dart';
 import 'shortcut_tooltip.dart';
 import 'game_nav_item.dart';
 import 'game_search_dialog.dart';
@@ -451,11 +452,11 @@ class GameNavBar extends StatelessWidget {
         ShortcutTooltip(
           description: 'Auto next game',
           shortcut: 'W',
-          child: FilterChip(
-            label: const Text('Auto', style: TextStyle(fontSize: 11)),
-            selected: autoNextGame,
-            onSelected: onSetAutoNext,
-            visualDensity: VisualDensity.compact,
+          child: AppSwitch(
+            label: 'Auto',
+            value: autoNextGame,
+            onChanged: (v) => onSetAutoNext?.call(v),
+            enabled: onSetAutoNext != null,
           ),
         ),
       ],

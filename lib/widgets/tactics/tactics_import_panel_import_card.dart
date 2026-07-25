@@ -227,35 +227,10 @@ mixin _TacticsImportPanelImportCard on _TacticsImportPanelStateBase {
         Row(
           children: [
             Expanded(
-              child: InkWell(
-                borderRadius: BorderRadius.circular(4),
-                onTap: () =>
-                    appState.setTacticsAutoFetch(!appState.tacticsAutoFetch),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: Checkbox(
-                          value: appState.tacticsAutoFetch,
-                          onChanged: (v) =>
-                              appState.setTacticsAutoFetch(v ?? false),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      const Flexible(
-                        child: Text(
-                          'Auto-fetch on startup',
-                          style: TextStyle(fontSize: 13),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              child: AppCheckbox(
+                label: 'Auto-fetch on startup',
+                value: appState.tacticsAutoFetch,
+                onChanged: (v) => appState.setTacticsAutoFetch(v),
               ),
             ),
             _conditionalTooltip(

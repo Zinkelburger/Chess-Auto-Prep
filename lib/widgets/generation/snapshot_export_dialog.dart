@@ -8,6 +8,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../services/storage/storage_factory.dart';
+import '../labeled_toggle.dart';
 
 class SnapshotExportChoice {
   final String name;
@@ -79,22 +80,16 @@ Future<SnapshotExportChoice?> showSnapshotExportDialog(
                 onSubmitted: (_) => submit(),
               ),
               const SizedBox(height: 8),
-              CheckboxListTile(
+              AppCheckbox(
+                label: 'Verify with engine before export',
                 value: verify,
-                onChanged: canVerify
-                    ? (v) => setState(() => verify = v ?? false)
-                    : null,
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                title: const Text('Verify with engine before export'),
-                subtitle: Text(
-                  canVerify
-                      ? 'Re-checks the chosen moves'
-                            '${verifyDepth != null ? ' at depth $verifyDepth' : ''}. '
-                            'Exploration pauses while verifying, then resumes.'
-                      : 'Not available for this build mode.',
-                  style: const TextStyle(fontSize: 12),
-                ),
+                onChanged: (v) => setState(() => verify = v),
+                enabled: canVerify,
+                subtitle: canVerify
+                    ? 'Re-checks the chosen moves'
+                          '${verifyDepth != null ? ' at depth $verifyDepth' : ''}. '
+                          'Exploration pauses while verifying, then resumes.'
+                    : 'Not available for this build mode.',
               ),
             ],
           ),
