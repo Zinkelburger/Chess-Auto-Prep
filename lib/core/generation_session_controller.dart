@@ -50,6 +50,51 @@ export 'generation_session_types.dart'
 part 'generation_session_progress.dart';
 part 'generation_session_snapshot.dart';
 
+/// What Phase 2 produces: the scored tree's derived structures plus the
+/// counts the run summary and debug dump report.
+///
+/// Exists so the phase methods hand each other a named result instead of
+/// sharing a dozen locals inside one long pipeline method.
+class _TreeAnalysis {
+  final FenMap fenMap;
+  final ExpectimaxCalculator ecaCalc;
+  final int easeCount;
+  final int ecaCount;
+
+  /// Repertoire moves marked by the selector.  Mutable because Phase 2.5
+  /// verification may demote moves and revise the count.
+  int selectedCount;
+
+  _TreeAnalysis({
+    required this.fenMap,
+    required this.ecaCalc,
+    required this.easeCount,
+    required this.ecaCount,
+    required this.selectedCount,
+  });
+}
+
+/// What Phase 3 produces: the lines to export, plus what was dropped getting
+/// there so the summary can explain the shortfall.
+class _ExtractedLines {
+  /// Lines surviving the trap filter, similarity pruning, and ranking.
+  final List<ExtractedLine> lines;
+
+  /// How many lines existed before similarity pruning.
+  final int rawCount;
+
+  /// Sentence fragment appended to the run summary when "only traps" ran.
+  final String trapsOnlyNote;
+
+  const _ExtractedLines({
+    required this.lines,
+    required this.rawCount,
+    required this.trapsOnlyNote,
+  });
+
+  bool get wasPruned => lines.length < rawCount;
+}
+
 class GenerationSessionController extends ChangeNotifier
     with SafeChangeNotifier, _GenerationProgress, _SnapshotExport {
   final TreeBuildService buildService = TreeBuildService();
@@ -128,12 +173,13 @@ class GenerationSessionController extends ChangeNotifier
   /// [lastError] and fail the job; cancellation lands in [lastRunSummary].
   /// Returns after the run has fully unwound — [isGenerating] is false and
   /// a new build may start.
+  ///
+  /// This method is the running order and nothing else.  Each phase below
+  /// owns its own work and hands the next one a typed result, so a phase can
+  /// be read (or changed) without holding the whole pipeline in your head.
+  /// Cancellation is checked between phases rather than inside them.
   Future<void> startBuild(GenerationRequest request) async {
     if (_isGenerating) return;
-
-    final config = request.config;
-    final filePath = request.repertoireFilePath;
-    final existingTree = request.existingTree;
 
     // Resolve how exported lines relate to the repertoire root before any
     // state changes, so a resume-position mismatch is a clean refusal.
@@ -146,6 +192,64 @@ class GenerationSessionController extends ChangeNotifier
       notifyListeners();
       return;
     }
+
+    final config = request.config;
+    final filePath = request.repertoireFilePath;
+    _beginRun(request, prefix);
+
+    var engineEntered = false;
+    try {
+      engineEntered = await _enterEngineIfNeeded(config);
+
+      final built = await _buildTreePhase(request, prefix);
+      // Null means the run was cancelled mid-build; the summary is already set.
+      if (built == null) return;
+      final (:tree, :finishedEarly) = built;
+
+      final analysis = _analyzeTreePhase(tree, config);
+      await _verifyPhase(tree, analysis, config, finishedEarly: finishedEarly);
+      if (_cancelRequested) {
+        lastRunSummary =
+            'Cancelled during verification '
+            '(${tree.totalNodes} nodes, nothing exported).';
+        return;
+      }
+
+      // Re-sort children and rebuild metadata now that repertoire flags are
+      // set.
+      tree.sortAllChildren();
+      tree.computeMetadata();
+
+      final extracted = _extractLinesPhase(tree, analysis, config);
+
+      // Publish the bundle (tree + fen map + snapshot + trap index).
+      onTreeBuilt(tree);
+
+      await _exportLinesPhase(tree, extracted, request, prefix);
+      await _persistArtifactsPhase(tree, analysis, extracted, config, filePath);
+      _publishSummary(
+        tree,
+        analysis,
+        extracted,
+        config,
+        finishedEarly: finishedEarly,
+      );
+    } on BuildCancelledException catch (e) {
+      _cancelRequested = true;
+      lastRunSummary = e.message;
+    } catch (e) {
+      await _recordFailure(config, filePath, e);
+    } finally {
+      await _endRun(engineEntered: engineEntered, filePath: filePath);
+    }
+  }
+
+  // ── Run lifecycle ────────────────────────────────────────────────────
+
+  /// Reset every per-run field and announce the run to listeners/the job tile.
+  void _beginRun(GenerationRequest request, List<String> prefix) {
+    final config = request.config;
+    final existingTree = request.existingTree;
 
     _isGenerating = true;
     _isPaused = false;
@@ -163,7 +267,7 @@ class GenerationSessionController extends ChangeNotifier
     _pipelineSw = Stopwatch()..start();
     _startElapsedTicker();
 
-    _repertoireFilePath = filePath;
+    _repertoireFilePath = request.repertoireFilePath;
     _startMoveSequence = List.unmodifiable(prefix);
     _startFen = existingTree?.root.fen ?? request.buildRootFen;
     _activeRequest = request;
@@ -183,370 +287,446 @@ class GenerationSessionController extends ChangeNotifier
           : 'Phase 1: Building tree...',
       GenerationPhase.buildingTree,
     );
+  }
 
-    var engineEntered = false;
-    try {
-      if (config.needsStockfish) {
-        await EngineLifecycle.instance.enterGeneration(
-          config.resolvedEngineThreads,
+  /// Unwind the run: release the engine, settle the job tile, clear state.
+  /// Runs on every exit path, including failure and cancellation.
+  Future<void> _endRun({
+    required bool engineEntered,
+    required String filePath,
+  }) async {
+    if (engineEntered) {
+      await EngineLifecycle.instance.exitGeneration();
+    }
+    // A discarded build leaves nothing to resume: drop the partial tree
+    // that cancelBuild would otherwise have saved.
+    if (_discardRequested) {
+      await _deletePartialTree(filePath);
+    }
+    // Release any dangling pause gate so nothing awaits it forever.
+    buildService.resumeBuild();
+    _stopElapsedTicker();
+    _pipelineSw.stop();
+    _finishNowRequested = false;
+    final job = currentJob;
+    if (job != null) {
+      // The completed tile keeps showing progress.message, so replace the
+      // last live-stats line with the human outcome sentence.
+      if (lastRunSummary.isNotEmpty) {
+        job.updateProgress(
+          JobProgress(
+            fraction: lastError != null || _cancelRequested
+                ? job.progress.fraction
+                : 1,
+            message: lastRunSummary,
+            nodesProcessed: job.progress.nodesProcessed,
+            totalNodes: job.progress.totalNodes,
+          ),
         );
-        engineEntered = true;
       }
+      if (job.status != JobStatus.failed) {
+        job.updateStatus(
+          _cancelRequested ? JobStatus.cancelled : JobStatus.completed,
+        );
+      }
+      currentJob = null;
+    }
+    _isGenerating = false;
+    _isPaused = false;
+    _cancelRequested = false;
+    _discardRequested = false;
+    _activeRequest = null;
+    _resetProgress();
+    _flushProgressNotify();
+  }
 
-      final BuildTree tree;
-      if (config.buildMode == BuildMode.dbExplorer) {
-        tree = await buildService.buildFromPgnFreqMap(
-          config: config,
-          startMoves: prefix.isEmpty ? null : prefix.join(' '),
-          isCancelled: () => _cancelRequested,
-          finishNow: () => _finishNowRequested,
-          onStatusChanged: _setStatus,
-          onProgress: _handleBuildProgress,
+  /// Flush whatever was queued, dump diagnostics, and fail the job tile.
+  Future<void> _recordFailure(
+    TreeBuildConfig config,
+    String filePath,
+    Object error,
+  ) async {
+    try {
+      await _pgnWriter.flush(filePath);
+    } catch (_) {
+      // Keep the original error; a failed flush must not mask it.
+    }
+    await _writeFailureDump(config, error);
+    lastError = 'Generation failed: $error';
+    lastRunSummary = lastError!;
+    currentJob?.fail(lastError!);
+  }
+
+  /// Claim engine threads when the config needs Stockfish.  Returns whether
+  /// they were claimed, so [_endRun] knows whether to release them.
+  Future<bool> _enterEngineIfNeeded(TreeBuildConfig config) async {
+    if (!config.needsStockfish) return false;
+    await EngineLifecycle.instance.enterGeneration(
+      config.resolvedEngineThreads,
+    );
+    return true;
+  }
+
+  // ── Phase 1: build the tree ──────────────────────────────────────────
+
+  /// Build (or resume, or skip) the tree.
+  ///
+  /// Returns null when the run was cancelled during the build — [lastRunSummary]
+  /// is set to the cancel/discard wording before returning.  `finishedEarly`
+  /// reports whether the user asked to stop and export what exists so far.
+  Future<({BuildTree tree, bool finishedEarly})?> _buildTreePhase(
+    GenerationRequest request,
+    List<String> prefix,
+  ) async {
+    final config = request.config;
+    final existingTree = request.existingTree;
+
+    final BuildTree tree;
+    if (config.buildMode == BuildMode.dbExplorer) {
+      tree = await buildService.buildFromPgnFreqMap(
+        config: config,
+        startMoves: prefix.isEmpty ? null : prefix.join(' '),
+        isCancelled: () => _cancelRequested,
+        finishNow: () => _finishNowRequested,
+        onStatusChanged: _setStatus,
+        onProgress: _handleBuildProgress,
+      );
+    } else {
+      final skipBuild =
+          existingTree != null && existingTree.maxPlyReached >= config.maxPly;
+      if (skipBuild) {
+        tree = existingTree;
+        _setStatus(
+          'Tree already at depth ${existingTree.maxPlyReached}, '
+          'skipping build...',
+          GenerationPhase.buildingTree,
         );
       } else {
-        final skipBuild =
-            existingTree != null && existingTree.maxPlyReached >= config.maxPly;
-        if (skipBuild) {
-          tree = existingTree;
-          _setStatus(
-            'Tree already at depth ${existingTree.maxPlyReached}, '
-            'skipping build...',
-            GenerationPhase.buildingTree,
-          );
-        } else {
-          tree = await buildService.build(
-            config: config,
-            isCancelled: () => _cancelRequested,
-            finishNow: () => _finishNowRequested,
-            existingTree: existingTree,
-            onProgress: _handleBuildProgress,
-          );
-        }
-      }
-
-      if (_cancelRequested) {
-        lastRunSummary = _discardRequested
-            ? 'Build discarded (${tree.totalNodes} nodes).'
-            : 'Build cancelled (${tree.totalNodes} nodes) — '
-                  'resume it anytime from the Generate tab.';
-        return;
-      }
-      final finishedEarly = _finishNowRequested;
-      if (finishedEarly) {
-        _finishNowRequested = false;
-        _setStatus(
-          'Finishing early with ${tree.totalNodes} nodes...',
-          GenerationPhase.computingEase,
+        tree = await buildService.build(
+          config: config,
+          isCancelled: () => _cancelRequested,
+          finishNow: () => _finishNowRequested,
+          existingTree: existingTree,
+          onProgress: _handleBuildProgress,
         );
       }
+    }
 
-      // Record how this tree relates to the repertoire root so partial
-      // saves and future resumes can reconstruct the line prefix.
-      if (tree.startMoves.isEmpty && prefix.isNotEmpty) {
-        tree.startMoves = prefix.join(' ');
-      }
+    if (_cancelRequested) {
+      lastRunSummary = _discardRequested
+          ? 'Build discarded (${tree.totalNodes} nodes).'
+          : 'Build cancelled (${tree.totalNodes} nodes) — '
+                'resume it anytime from the Generate tab.';
+      return null;
+    }
 
-      _setStatus('Phase 2: Computing ease...', GenerationPhase.computingEase);
-      final easeCount = calculateTreeEase(tree);
-
+    final finishedEarly = _finishNowRequested;
+    if (finishedEarly) {
+      _finishNowRequested = false;
       _setStatus(
-        'Phase 2: Computing expectimax...',
-        GenerationPhase.computingExpectimax,
+        'Finishing early with ${tree.totalNodes} nodes...',
+        GenerationPhase.computingEase,
       );
-      final fenMap = FenMap()..populate(tree.root);
-      final ecaCalc = ExpectimaxCalculator(config: config, fenMap: fenMap);
-      final ecaCount = ecaCalc.calculate(tree);
-      ecaCalc.computeTrapScores(tree.root);
-      ecaCalc.calculateCplValues(tree.root);
-      calculateMyEase(tree, playAsWhite: config.playAsWhite);
+    }
 
-      _setStatus(
-        'Phase 2: Selecting repertoire...',
-        GenerationPhase.selectingRepertoire,
-      );
-      final selector = RepertoireSelector(
-        config: config,
-        ecaCalc: ecaCalc,
-        fenMap: fenMap,
-      );
-      var selectedCount = selector.select(tree);
+    // Record how this tree relates to the repertoire root so partial
+    // saves and future resumes can reconstruct the line prefix.
+    if (tree.startMoves.isEmpty && prefix.isNotEmpty) {
+      tree.startMoves = prefix.join(' ');
+    }
 
-      // Phase 2.5: deep verification of the selected repertoire (opt-out).
-      // Finish-now skips it: the user asked for lines from what's already
-      // built, not another engine pass.
-      if (config.verifyFinal &&
-          config.needsStockfish &&
-          !finishedEarly &&
-          !_cancelRequested) {
-        _setStatus(
-          'Phase 2.5: Verifying repertoire '
-          '(depth ${config.resolvedVerifyDepth})...',
-          GenerationPhase.verifying,
+    return (tree: tree, finishedEarly: finishedEarly);
+  }
+
+  // ── Phase 2: ease, expectimax, selection ─────────────────────────────
+
+  /// Score the tree and mark the repertoire moves.  Purely synchronous — no
+  /// pause gate applies here (see [canPause]).
+  _TreeAnalysis _analyzeTreePhase(BuildTree tree, TreeBuildConfig config) {
+    _setStatus('Phase 2: Computing ease...', GenerationPhase.computingEase);
+    final easeCount = calculateTreeEase(tree);
+
+    _setStatus(
+      'Phase 2: Computing expectimax...',
+      GenerationPhase.computingExpectimax,
+    );
+    final fenMap = FenMap()..populate(tree.root);
+    final ecaCalc = ExpectimaxCalculator(config: config, fenMap: fenMap);
+    final ecaCount = ecaCalc.calculate(tree);
+    ecaCalc.computeTrapScores(tree.root);
+    ecaCalc.calculateCplValues(tree.root);
+    calculateMyEase(tree, playAsWhite: config.playAsWhite);
+
+    _setStatus(
+      'Phase 2: Selecting repertoire...',
+      GenerationPhase.selectingRepertoire,
+    );
+    final selector = RepertoireSelector(
+      config: config,
+      ecaCalc: ecaCalc,
+      fenMap: fenMap,
+    );
+
+    return _TreeAnalysis(
+      fenMap: fenMap,
+      ecaCalc: ecaCalc,
+      easeCount: easeCount,
+      ecaCount: ecaCount,
+      selectedCount: selector.select(tree),
+    );
+  }
+
+  // ── Phase 2.5: deep verification (opt-out) ───────────────────────────
+
+  /// Re-check the selected moves at a deeper search depth, revising
+  /// [_TreeAnalysis.selectedCount] in place when the verifier demotes moves.
+  ///
+  /// Skipped when the user finished early: they asked for lines from what is
+  /// already built, not another engine pass.  Engine failures here are
+  /// non-fatal — the build-time evals still stand.
+  Future<void> _verifyPhase(
+    BuildTree tree,
+    _TreeAnalysis analysis,
+    TreeBuildConfig config, {
+    required bool finishedEarly,
+  }) async {
+    if (!config.verifyFinal ||
+        !config.needsStockfish ||
+        finishedEarly ||
+        _cancelRequested) {
+      return;
+    }
+
+    _setStatus(
+      'Phase 2.5: Verifying repertoire '
+      '(depth ${config.resolvedVerifyDepth})...',
+      GenerationPhase.verifying,
+    );
+    try {
+      if (StockfishPool.instance.workerCount == 0) {
+        await StockfishPool.instance.prepareForTreeBuild(
+          config.resolvedEngineThreads,
         );
-        try {
-          if (StockfishPool.instance.workerCount == 0) {
-            await StockfishPool.instance.prepareForTreeBuild(
-              config.resolvedEngineThreads,
-            );
-          }
-          final verifier = RepertoireVerifier(config: config);
-          final report = await verifier.verify(
-            tree,
-            fenMap: fenMap,
-            ecaCalc: ecaCalc,
-            isCancelled: () => _cancelRequested,
-            pauseGate: buildService.waitIfPaused,
-            onStatus: (s) => _setStatus(s, GenerationPhase.verifying),
-          );
-          if (report.selectedCount >= 0) {
-            selectedCount = report.selectedCount;
-          }
-          for (final d in report.demotions) {
-            debugPrint('Verification demotion @ ${d.fen}: $d');
-          }
-          _setStatus(report.summary, GenerationPhase.verifying);
-        } catch (e) {
-          // Verification is best-effort on engine failures; the build-time
-          // evals still stand.
-          debugPrint('Verification pass failed: $e');
-        }
       }
-
-      if (_cancelRequested) {
-        lastRunSummary =
-            'Cancelled during verification '
-            '(${tree.totalNodes} nodes, nothing exported).';
-        return;
+      final verifier = RepertoireVerifier(config: config);
+      final report = await verifier.verify(
+        tree,
+        fenMap: analysis.fenMap,
+        ecaCalc: analysis.ecaCalc,
+        isCancelled: () => _cancelRequested,
+        pauseGate: buildService.waitIfPaused,
+        onStatus: (s) => _setStatus(s, GenerationPhase.verifying),
+      );
+      if (report.selectedCount >= 0) {
+        analysis.selectedCount = report.selectedCount;
       }
+      for (final d in report.demotions) {
+        debugPrint('Verification demotion @ ${d.fen}: $d');
+      }
+      _setStatus(report.summary, GenerationPhase.verifying);
+    } catch (e) {
+      // Verification is best-effort on engine failures; the build-time
+      // evals still stand.
+      debugPrint('Verification pass failed: $e');
+    }
+  }
 
-      // Re-sort children and rebuild metadata now that repertoire flags are
-      // set.
-      tree.sortAllChildren();
-      tree.computeMetadata();
+  // ── Phase 3: extract, filter, and order the lines ────────────────────
 
+  /// Walk the selected tree into concrete lines, then apply the "only traps"
+  /// filter, similarity pruning, and importance ranking in that order.
+  _ExtractedLines _extractLinesPhase(
+    BuildTree tree,
+    _TreeAnalysis analysis,
+    TreeBuildConfig config,
+  ) {
+    _setStatus('Phase 3: Extracting lines...', GenerationPhase.extractingLines);
+    final extractor = LineExtractor(config: config, fenMap: analysis.fenMap);
+    var lines = extractor.extract(tree);
+
+    // "Only traps": the tree and the move selection are untouched — we
+    // just throw away every line that teaches no trap, so the PGN is a
+    // trap collection instead of a repertoire.
+    var trapsOnlyNote = '';
+    if (config.trapsOnly) {
+      final beforeTraps = lines.length;
+      final traps = TrapExtractor(
+        playAsWhite: config.playAsWhite,
+        findabilityPRef: pRefForElo(config.maiaElo),
+      ).extract(tree);
+      lines = keepLinesThroughTraps(lines, traps, (line) => line.movesSan);
+      trapsOnlyNote = lines.isEmpty
+          ? ' No traps found — nothing exported.'
+          : ' Traps only: ${lines.length} of $beforeTraps lines '
+                'run through a trap.';
       _setStatus(
-        'Phase 3: Extracting lines...',
+        'Phase 3: keeping trap lines only '
+        '(${lines.length} of $beforeTraps)...',
         GenerationPhase.extractingLines,
       );
-      final extractor = LineExtractor(config: config, fenMap: fenMap);
-      var extractedLines = extractor.extract(tree);
+    }
 
-      // "Only traps": the tree and the move selection are untouched — we
-      // just throw away every line that teaches no trap, so the PGN is a
-      // trap collection instead of a repertoire.
-      var trapsOnlyNote = '';
-      if (config.trapsOnly) {
-        final beforeTraps = extractedLines.length;
-        final traps = TrapExtractor(
-          playAsWhite: config.playAsWhite,
-          findabilityPRef: pRefForElo(config.maiaElo),
-        ).extract(tree);
-        extractedLines = keepLinesThroughTraps(
-          extractedLines,
-          traps,
-          (line) => line.movesSan,
-        );
-        trapsOnlyNote = extractedLines.isEmpty
-            ? ' No traps found — nothing exported.'
-            : ' Traps only: ${extractedLines.length} of $beforeTraps lines '
-                  'run through a trap.';
+    final rawCount = lines.length;
+    if (config.targetLineCount > 0) {
+      lines = LinePruner.prune(lines, targetCount: config.targetLineCount);
+      if (lines.length < rawCount) {
         _setStatus(
-          'Phase 3: keeping trap lines only '
-          '(${extractedLines.length} of $beforeTraps)...',
+          'Phase 3: kept ${lines.length} of $rawCount lines '
+          '(similarity pruning)...',
           GenerationPhase.extractingLines,
         );
       }
-
-      final rawLineCount = extractedLines.length;
-      if (config.targetLineCount > 0) {
-        extractedLines = LinePruner.prune(
-          extractedLines,
-          targetCount: config.targetLineCount,
-        );
-        if (extractedLines.length < rawLineCount) {
-          _setStatus(
-            'Phase 3: kept ${extractedLines.length} of $rawLineCount lines '
-            '(similarity pruning)...',
-            GenerationPhase.extractingLines,
-          );
-        }
-      }
-      if (config.rankLinesByImportance) {
-        extractedLines.sort((a, b) => b.probability.compareTo(a.probability));
-      }
-      updateProgress(lines: extractedLines.length);
-
-      // Publish the bundle (tree + fen map + snapshot + trap index).
-      onTreeBuilt(tree);
-
-      final rootFen = prefix.isEmpty
-          ? tree.root.fen
-          : request.repertoireStartFen;
-      final rootWhiteToMove = isWhiteToMove(rootFen);
-      final saved = <GeneratedLineExport>[];
-      for (int i = 0; i < extractedLines.length; i++) {
-        final line = extractedLines[i];
-        final title = 'Generated Line ${i + 1}';
-        final fullMoves = [...prefix, ...line.movesSan];
-        final pgn = buildRepertoirePgnEntry(
-          moves: fullMoves,
-          title: title,
-          cumulativeProb: line.probability,
-          finalEvalCp: line.leafEvalCp ?? 0,
-          isWhiteRepertoire: config.playAsWhite,
-          rootFen: rootFen,
-          rootWhiteToMove: rootWhiteToMove,
-          pruneReason: line.leafPruneReason,
-          pruneEvalCp: line.leafPruneEvalCp,
-          lineAnnotations: line.moveAnnotations,
-          prefixMoveCount: prefix.length,
-          rankByImportance: config.rankLinesByImportance,
-          annotateMoveProbabilities: config.annotateMoveProbabilities,
-          annotateMaiaOnly: config.annotateMaiaOnly,
-        );
-        _pgnWriter.queue(pgn);
-        if (_pgnWriter.lineCount >= _pgnFlushEveryLines) {
-          await _pgnWriter.flush(filePath);
-        }
-        saved.add(
-          GeneratedLineExport(moves: fullMoves, title: title, pgn: pgn),
-        );
-      }
-      await _pgnWriter.flush(filePath);
-      if (saved.isNotEmpty) {
-        request.onLinesSaved(saved);
-      }
-
-      String? treeJson;
-      try {
-        // The build is finished here (no concurrent mutator), so the indented
-        // JSON encode of the whole tree can safely run off the UI isolate.
-        final json = await Isolate.run(() => serializeTree(tree));
-        treeJson = json;
-        final base = p.withoutExtension(filePath);
-        await StorageFactory.instance.writeFile('${base}_tree.json', json);
-      } catch (e) {
-        // Tree JSON save is best-effort — log so isolate/send failures aren't silent.
-        debugPrint('[GenerationController] Failed to save tree JSON: $e');
-      }
-
-      await writeRunDebugDump(
-        log: buildService.runLog,
-        config: tree.configSnapshot,
-        stats: buildService.buildStats.toJson(),
-        prunedTooLow: buildService.lastPrunedTooLow,
-        treeJson: treeJson,
-        summaryExtras: {
-          'total_nodes': tree.totalNodes,
-          'max_ply': tree.maxPlyReached,
-          'build_complete': tree.buildComplete,
-          'build_elapsed_ms': buildService.buildElapsedMs,
-          'ease_nodes': easeCount,
-          'expectimax_nodes': ecaCount,
-          'selected_moves': selectedCount,
-          'extracted_lines': extractedLines.length,
-          'raw_extracted_lines': rawLineCount,
-        },
-      );
-
-      // Save trap lines from the bundle's index (always write the file so
-      // the UI can distinguish "never generated" from "no traps found").
-      try {
-        final trapLines =
-            _current?.traps.allTraps ??
-            TrapExtractor(
-              playAsWhite: config.playAsWhite,
-              findabilityPRef: pRefForElo(config.maiaElo),
-            ).extract(tree);
-        await TrapExtractor.saveToFile(trapLines, filePath);
-      } catch (_) {
-        // Trap extraction is best-effort
-      }
-
-      // A budget/finish-now stop leaves the tree resumable: keep the partial
-      // file so the Generate tab offers to continue it.  savePartialTree
-      // reads buildService.currentTree, which the skip-build resume path
-      // never set — there the on-disk partial already holds this tree.
-      if (tree.buildComplete) {
-        await _deletePartialTree(filePath);
-      } else if (identical(buildService.currentTree, tree)) {
-        await savePartialTree();
-      }
-
-      final pruneNote = extractedLines.length < rawLineCount
-          ? ' (pruned from $rawLineCount)'
-          : '';
-      final elapsedLabel = formatJobDuration(
-        Duration(milliseconds: _pipelineSw.elapsedMilliseconds),
-      );
-      lastRunSummary =
-          'Complete in $elapsedLabel: ${tree.totalNodes} nodes, '
-          '$selectedCount repertoire moves, '
-          '${extractedLines.length} lines$pruneNote.$trapsOnlyNote';
-      if (finishedEarly && config.verifyFinal && config.needsStockfish) {
-        lastRunSummary =
-            '$lastRunSummary '
-            'Verification skipped (finished early).';
-      }
-      _setStatus(lastRunSummary, GenerationPhase.extractingLines);
-    } on BuildCancelledException catch (e) {
-      _cancelRequested = true;
-      lastRunSummary = e.message;
-    } catch (e) {
-      try {
-        await _pgnWriter.flush(filePath);
-      } catch (_) {
-        // Keep the original error; a failed flush must not mask it.
-      }
-      await _writeFailureDump(config, e);
-      lastError = 'Generation failed: $e';
-      lastRunSummary = lastError!;
-      currentJob?.fail(lastError!);
-    } finally {
-      if (engineEntered) {
-        await EngineLifecycle.instance.exitGeneration();
-      }
-      // A discarded build leaves nothing to resume: drop the partial tree
-      // that cancelBuild would otherwise have saved.
-      if (_discardRequested) {
-        await _deletePartialTree(filePath);
-      }
-      // Release any dangling pause gate so nothing awaits it forever.
-      buildService.resumeBuild();
-      _stopElapsedTicker();
-      _pipelineSw.stop();
-      _finishNowRequested = false;
-      final job = currentJob;
-      if (job != null) {
-        // The completed tile keeps showing progress.message, so replace the
-        // last live-stats line with the human outcome sentence.
-        if (lastRunSummary.isNotEmpty) {
-          job.updateProgress(
-            JobProgress(
-              fraction: lastError != null || _cancelRequested
-                  ? job.progress.fraction
-                  : 1,
-              message: lastRunSummary,
-              nodesProcessed: job.progress.nodesProcessed,
-              totalNodes: job.progress.totalNodes,
-            ),
-          );
-        }
-        if (job.status != JobStatus.failed) {
-          job.updateStatus(
-            _cancelRequested ? JobStatus.cancelled : JobStatus.completed,
-          );
-        }
-        currentJob = null;
-      }
-      _isGenerating = false;
-      _isPaused = false;
-      _cancelRequested = false;
-      _discardRequested = false;
-      _activeRequest = null;
-      _resetProgress();
-      _flushProgressNotify();
     }
+    if (config.rankLinesByImportance) {
+      lines.sort((a, b) => b.probability.compareTo(a.probability));
+    }
+    updateProgress(lines: lines.length);
+
+    return _ExtractedLines(
+      lines: lines,
+      rawCount: rawCount,
+      trapsOnlyNote: trapsOnlyNote,
+    );
+  }
+
+  /// Write each line out as a PGN entry, flushing in batches so a long export
+  /// does not hold everything in memory, then hand the batch to the caller.
+  Future<void> _exportLinesPhase(
+    BuildTree tree,
+    _ExtractedLines extracted,
+    GenerationRequest request,
+    List<String> prefix,
+  ) async {
+    final config = request.config;
+    final filePath = request.repertoireFilePath;
+    final rootFen = prefix.isEmpty ? tree.root.fen : request.repertoireStartFen;
+    final rootWhiteToMove = isWhiteToMove(rootFen);
+
+    final saved = <GeneratedLineExport>[];
+    for (int i = 0; i < extracted.lines.length; i++) {
+      final line = extracted.lines[i];
+      final title = 'Generated Line ${i + 1}';
+      final fullMoves = [...prefix, ...line.movesSan];
+      final pgn = buildRepertoirePgnEntry(
+        moves: fullMoves,
+        title: title,
+        cumulativeProb: line.probability,
+        finalEvalCp: line.leafEvalCp ?? 0,
+        isWhiteRepertoire: config.playAsWhite,
+        rootFen: rootFen,
+        rootWhiteToMove: rootWhiteToMove,
+        pruneReason: line.leafPruneReason,
+        pruneEvalCp: line.leafPruneEvalCp,
+        lineAnnotations: line.moveAnnotations,
+        prefixMoveCount: prefix.length,
+        rankByImportance: config.rankLinesByImportance,
+        annotateMoveProbabilities: config.annotateMoveProbabilities,
+        annotateMaiaOnly: config.annotateMaiaOnly,
+      );
+      _pgnWriter.queue(pgn);
+      if (_pgnWriter.lineCount >= _pgnFlushEveryLines) {
+        await _pgnWriter.flush(filePath);
+      }
+      saved.add(GeneratedLineExport(moves: fullMoves, title: title, pgn: pgn));
+    }
+    await _pgnWriter.flush(filePath);
+    if (saved.isNotEmpty) {
+      request.onLinesSaved(saved);
+    }
+  }
+
+  /// Write the side artifacts: serialized tree, run debug dump, trap index,
+  /// and the partial-tree file that makes an unfinished build resumable.
+  /// Every step here is best-effort — a completed export must not be undone
+  /// by a failure to write diagnostics.
+  Future<void> _persistArtifactsPhase(
+    BuildTree tree,
+    _TreeAnalysis analysis,
+    _ExtractedLines extracted,
+    TreeBuildConfig config,
+    String filePath,
+  ) async {
+    String? treeJson;
+    try {
+      // The build is finished here (no concurrent mutator), so the indented
+      // JSON encode of the whole tree can safely run off the UI isolate.
+      final json = await Isolate.run(() => serializeTree(tree));
+      treeJson = json;
+      final base = p.withoutExtension(filePath);
+      await StorageFactory.instance.writeFile('${base}_tree.json', json);
+    } catch (e) {
+      // Tree JSON save is best-effort — log so isolate/send failures aren't silent.
+      debugPrint('[GenerationController] Failed to save tree JSON: $e');
+    }
+
+    await writeRunDebugDump(
+      log: buildService.runLog,
+      config: tree.configSnapshot,
+      stats: buildService.buildStats.toJson(),
+      prunedTooLow: buildService.lastPrunedTooLow,
+      treeJson: treeJson,
+      summaryExtras: {
+        'total_nodes': tree.totalNodes,
+        'max_ply': tree.maxPlyReached,
+        'build_complete': tree.buildComplete,
+        'build_elapsed_ms': buildService.buildElapsedMs,
+        'ease_nodes': analysis.easeCount,
+        'expectimax_nodes': analysis.ecaCount,
+        'selected_moves': analysis.selectedCount,
+        'extracted_lines': extracted.lines.length,
+        'raw_extracted_lines': extracted.rawCount,
+      },
+    );
+
+    // Save trap lines from the bundle's index (always write the file so
+    // the UI can distinguish "never generated" from "no traps found").
+    try {
+      final trapLines =
+          _current?.traps.allTraps ??
+          TrapExtractor(
+            playAsWhite: config.playAsWhite,
+            findabilityPRef: pRefForElo(config.maiaElo),
+          ).extract(tree);
+      await TrapExtractor.saveToFile(trapLines, filePath);
+    } catch (_) {
+      // Trap extraction is best-effort
+    }
+
+    // A budget/finish-now stop leaves the tree resumable: keep the partial
+    // file so the Generate tab offers to continue it.  savePartialTree
+    // reads buildService.currentTree, which the skip-build resume path
+    // never set — there the on-disk partial already holds this tree.
+    if (tree.buildComplete) {
+      await _deletePartialTree(filePath);
+    } else if (identical(buildService.currentTree, tree)) {
+      await savePartialTree();
+    }
+  }
+
+  /// Compose the one-sentence outcome shown on the job tile and status line.
+  void _publishSummary(
+    BuildTree tree,
+    _TreeAnalysis analysis,
+    _ExtractedLines extracted,
+    TreeBuildConfig config, {
+    required bool finishedEarly,
+  }) {
+    final pruneNote = extracted.wasPruned
+        ? ' (pruned from ${extracted.rawCount})'
+        : '';
+    final elapsedLabel = formatJobDuration(
+      Duration(milliseconds: _pipelineSw.elapsedMilliseconds),
+    );
+    lastRunSummary =
+        'Complete in $elapsedLabel: ${tree.totalNodes} nodes, '
+        '${analysis.selectedCount} repertoire moves, '
+        '${extracted.lines.length} lines$pruneNote.${extracted.trapsOnlyNote}';
+    if (finishedEarly && config.verifyFinal && config.needsStockfish) {
+      lastRunSummary =
+          '$lastRunSummary '
+          'Verification skipped (finished early).';
+    }
+    _setStatus(lastRunSummary, GenerationPhase.extractingLines);
   }
 
   /// SAN prefix (from the repertoire root) that exported lines must carry.
