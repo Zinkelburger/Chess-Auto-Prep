@@ -13,7 +13,6 @@ import '../../models/repertoire_metadata.dart';
 import '../../models/repertoire_move_progress.dart';
 import '../../models/repertoire_review_entry.dart'
     show RepertoireReviewEntry, ReviewRating;
-import '../../models/repertoire_review_history_entry.dart';
 import '../../models/completed_move.dart';
 import '../../models/training_settings.dart';
 import '../../utils/pgn_comment_utils.dart' show filterDisplayComment;
@@ -27,6 +26,7 @@ import '../repertoire_service.dart';
 import '../storage/storage_factory.dart';
 import 'chapter_layout.dart';
 import 'chapter_scope.dart';
+import 'review_progress_store.dart';
 import 'training_phase.dart';
 
 part 'training_session_display.dart';
@@ -65,9 +65,20 @@ class TrainingSessionController extends ChangeNotifier
   // -- Data --
   RepertoireMetadata? repertoire;
   List<RepertoireLine> lines = [];
-  List<RepertoireReviewEntry> _otherRepertoireEntries = [];
-  Map<String, RepertoireReviewEntry> reviewMap = {};
-  Map<String, RepertoireMoveProgress> moveProgressMap = {};
+
+  /// Persisted review state: schedules, per-move streaks, history writes.
+  /// Owns everything that outlives the session; this controller owns what the
+  /// user is looking at right now.
+  late final ReviewProgressStore progress = ReviewProgressStore(
+    reviewService: reviewService,
+    repertoireService: repertoireService,
+    settings: () => settings,
+    repertoireId: () => repertoireId,
+  );
+
+  Map<String, RepertoireReviewEntry> get reviewMap => progress.byLine;
+  Map<String, RepertoireMoveProgress> get moveProgressMap =>
+      progress.moveProgress;
   TrainingSettings settings = TrainingSettings();
 
   // -- Source & modes --
@@ -268,9 +279,9 @@ class TrainingSessionController extends ChangeNotifier
       }
 
       final allEntries = await reviewService.loadAll();
-      final moveProgress = await reviewService.loadMoveProgress();
+      final loadedMoveProgress = await reviewService.loadMoveProgress();
       if (generation != _loadGeneration) return;
-      _otherRepertoireEntries = allEntries
+      final otherRepertoires = allEntries
           .where((e) => e.repertoireId != filePath)
           .toList();
       final currentEntries = allEntries
@@ -281,13 +292,18 @@ class TrainingSessionController extends ChangeNotifier
         lines: parsedLines,
         existing: currentEntries,
       );
-      await reviewService.saveAll([..._otherRepertoireEntries, ...merged]);
+      await reviewService.saveAll([...otherRepertoires, ...merged]);
       if (generation != _loadGeneration) return;
 
       lines = parsedLines;
-      reviewMap = {for (final e in merged) e.lineId: e};
-      moveProgressMap = reviewService.indexMoveProgress(
-        moveProgress.where((mp) => mp.repertoireId == filePath).toList(),
+      progress.adopt(
+        byLine: {for (final e in merged) e.lineId: e},
+        moveProgress: reviewService.indexMoveProgress(
+          loadedMoveProgress
+              .where((mp) => mp.repertoireId == filePath)
+              .toList(),
+        ),
+        otherRepertoires: otherRepertoires,
       );
 
       if (loadIsStudy) {
@@ -904,47 +920,8 @@ class TrainingSessionController extends ChangeNotifier
     dueQueue = _buildQueue();
 
     final hadMistake = lineHadMistake;
-    if (hadMistake) {
-      sessionIncorrect++;
-      sessionStreak = 0;
-    } else {
-      sessionCorrect++;
-      sessionStreak++;
-      if (sessionStreak > sessionBestStreak) {
-        sessionBestStreak = sessionStreak;
-      }
-    }
-
-    final existing =
-        reviewMap[line.id] ??
-        RepertoireReviewEntry(
-          repertoireId: repertoireId,
-          lineId: line.id,
-          lineName: line.name,
-        );
-    reviewMap[line.id] = existing.copyWith(
-      passCount: hadMistake ? existing.passCount : existing.passCount + 1,
-      failCount: hadMistake ? existing.failCount + 1 : existing.failCount,
-    );
-
-    await reviewService.saveAll([
-      ..._otherRepertoireEntries,
-      ...reviewMap.values,
-    ]);
-    await reviewService.saveMoveProgress(
-      moveProgressMap.values.toList(),
-      repertoireId: repertoireId,
-    );
-    await reviewService.appendHistory([
-      RepertoireReviewHistoryEntry(
-        repertoireId: repertoireId,
-        lineId: line.id,
-        timestampUtc: DateTime.now().toUtc(),
-        rating: '',
-        hadMistake: hadMistake,
-        sessionType: 'linear',
-      ),
-    ]);
+    _tallySessionResult(hadMistake: hadMistake);
+    await progress.recordCompletion(line, hadMistake: hadMistake);
     notifyListeners();
   }
 
@@ -952,8 +929,23 @@ class TrainingSessionController extends ChangeNotifier
   // RATING & PROGRESS
   // ---------------------------------------------------------------------------
 
+  /// Fold one finished line into the running session counters.
+  void _tallySessionResult({required bool hadMistake}) {
+    if (hadMistake) {
+      sessionIncorrect++;
+      sessionStreak = 0;
+      return;
+    }
+    sessionCorrect++;
+    sessionStreak++;
+    if (sessionStreak > sessionBestStreak) {
+      sessionBestStreak = sessionStreak;
+    }
+  }
+
   Future<void> rateLine(ReviewRating rating) async {
-    if (currentLine == null) return;
+    final line = currentLine;
+    if (line == null) return;
     // Linear mode has no ratings — completion was recorded in _finishLine;
     // a stray rating call (keyboard shortcut) just advances.
     if (repetitionMode == RepetitionMode.linear) {
@@ -961,63 +953,9 @@ class TrainingSessionController extends ChangeNotifier
       return;
     }
 
-    final existing =
-        reviewMap[currentLine!.id] ??
-        RepertoireReviewEntry(
-          repertoireId: repertoireId,
-          lineId: currentLine!.id,
-          lineName: currentLine!.name,
-        );
-
     final hadMistake = lineHadMistake;
-    final updated = reviewService
-        .applyRating(existing, rating)
-        .copyWith(
-          passCount: hadMistake ? existing.passCount : existing.passCount + 1,
-          failCount: hadMistake ? existing.failCount + 1 : existing.failCount,
-        );
-    reviewMap[currentLine!.id] = updated;
-
-    await reviewService.saveAll([
-      ..._otherRepertoireEntries,
-      ...reviewMap.values,
-    ]);
-    await reviewService.saveMoveProgress(
-      moveProgressMap.values.toList(),
-      repertoireId: repertoireId,
-    );
-    await reviewService.appendHistory([
-      RepertoireReviewHistoryEntry(
-        repertoireId: repertoireId,
-        lineId: currentLine!.id,
-        timestampUtc: DateTime.now().toUtc(),
-        rating: rating.name,
-        hadMistake: hadMistake,
-        sessionType: 'trainer',
-      ),
-    ]);
-
-    repertoireService.updateLineReviewHeaders(
-      repertoireId,
-      currentLine!.id,
-      lastReview: updated.lastReviewedUtc,
-      difficulty: updated.difficulty,
-      intervalDays: updated.intervalDays,
-      dueDate: updated.dueDateUtc,
-      passCount: updated.passCount,
-      failCount: updated.failCount,
-    );
-
-    if (hadMistake) {
-      sessionIncorrect++;
-      sessionStreak = 0;
-    } else {
-      sessionCorrect++;
-      sessionStreak++;
-      if (sessionStreak > sessionBestStreak) {
-        sessionBestStreak = sessionStreak;
-      }
-    }
+    await progress.recordRating(line, rating, hadMistake: hadMistake);
+    _tallySessionResult(hadMistake: hadMistake);
     notifyListeners();
 
     if (settings.autoNext) {
@@ -1062,116 +1000,26 @@ class TrainingSessionController extends ChangeNotifier
   Future<int> applyLearnedSelection(
     Set<String> checkedLineIds, {
     Set<String>? within,
-  }) async {
-    final now = DateTime.now().toUtc();
-    final history = <RepertoireReviewHistoryEntry>[];
-    final headerUpdates = <String, RepertoireReviewEntry>{};
-    int seeded = 0;
-
-    for (final line in lines) {
-      if (within != null && !within.contains(line.id)) continue;
-      final entry = reviewMap[line.id];
-      final isLearned = entry != null && !entry.isNew;
-      final wantLearned = checkedLineIds.contains(line.id);
-      if (wantLearned == isLearned) continue;
-
-      final RepertoireReviewEntry updated;
-      if (wantLearned) {
-        final existing =
-            entry ??
-            RepertoireReviewEntry(
-              repertoireId: repertoireId,
-              lineId: line.id,
-              lineName: line.name,
-            );
-        // Stagger seeded intervals (1–3 days) so a big bulk import doesn't
-        // dump every line into the same future review day.
-        final interval = 1.0 + (seeded++ % 5) * 0.5;
-        updated = existing.copyWith(
-          intervalDays: interval,
-          dueDateUtc: now.add(Duration(hours: (interval * 24).round())),
-          lastRating: ReviewRating.good.name,
-          lastReviewedUtc: now,
-        );
-      } else {
-        // Back to new: scheduling cleared, pass/fail history kept. A fresh
-        // entry rather than copyWith because copyWith can't null the dates.
-        updated = RepertoireReviewEntry(
-          repertoireId: repertoireId,
-          lineId: line.id,
-          lineName: line.name,
-          difficulty: entry!.difficulty,
-          passCount: entry.passCount,
-          failCount: entry.failCount,
-        );
-      }
-      reviewMap[line.id] = updated;
-      headerUpdates[line.id] = updated;
-      history.add(
-        RepertoireReviewHistoryEntry(
-          repertoireId: repertoireId,
-          lineId: line.id,
-          timestampUtc: now,
-          rating: wantLearned ? ReviewRating.good.name : '',
-          hadMistake: false,
-          sessionType: 'marked',
-        ),
-      );
-    }
-
-    if (headerUpdates.isEmpty) return 0;
-
-    dueQueue = _buildQueue();
-    notifyListeners();
-
-    await reviewService.saveAll([
-      ..._otherRepertoireEntries,
-      ...reviewMap.values,
-    ]);
-    await reviewService.appendHistory(history);
-    await repertoireService.updateManyLineReviewHeaders(
-      repertoireId,
-      headerUpdates,
-    );
-    return headerUpdates.length;
-  }
+  }) => progress.applyLearnedSelection(
+    lines,
+    checkedLineIds,
+    within: within,
+    // Repaint as soon as the in-memory state is right, before the writes —
+    // marking a whole course learned should not feel like it hangs.
+    onApplied: () {
+      dueQueue = _buildQueue();
+      notifyListeners();
+    },
+  );
 
   void updateMoveProgress(
     RepertoireLine line,
     int moveIndex, {
     required bool wasCorrect,
-  }) {
-    final key = '${line.id}:$moveIndex';
-    final existing = moveProgressMap[key];
-    final threshold = settings.correctStreakThreshold;
+  }) => progress.recordMove(line, moveIndex, wasCorrect: wasCorrect);
 
-    if (wasCorrect) {
-      final newStreak = (existing?.correctStreak ?? 0) + 1;
-      final learned = newStreak >= threshold;
-      moveProgressMap[key] = RepertoireMoveProgress(
-        repertoireId: repertoireId,
-        lineId: line.id,
-        moveIndex: moveIndex,
-        correctStreak: learned ? threshold : newStreak,
-        learned: learned,
-      );
-    } else {
-      moveProgressMap[key] = RepertoireMoveProgress(
-        repertoireId: repertoireId,
-        lineId: line.id,
-        moveIndex: moveIndex,
-        correctStreak: 0,
-        learned: false,
-      );
-    }
-  }
-
-  double moveDifficulty(RepertoireLine line, int moveIndex) {
-    final key = '${line.id}:$moveIndex';
-    final prog = moveProgressMap[key];
-    if (prog == null) return 0;
-    return prog.correctStreak / settings.correctStreakThreshold;
-  }
+  double moveDifficulty(RepertoireLine line, int moveIndex) =>
+      progress.moveDifficulty(line, moveIndex);
 
   // ---------------------------------------------------------------------------
   // MOVE DISPLAY HELPERS
