@@ -134,7 +134,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     if (answer == null) {
       // Dismissed without choosing: drop the prompt for this session but
       // don't record an answer, so the next load asks again.
-      setState(() => _training.pendingChapterPrompt = null);
+      _training.dismissChapterPrompt();
       return;
     }
     await _training.answerChapterPrompt(answer);

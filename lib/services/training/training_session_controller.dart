@@ -26,6 +26,7 @@ import '../repertoire_review_service.dart';
 import '../repertoire_service.dart';
 import '../storage/storage_factory.dart';
 import 'chapter_layout.dart';
+import 'chapter_scope.dart';
 import 'training_phase.dart';
 
 part 'training_session_display.dart';
@@ -300,8 +301,7 @@ class TrainingSessionController extends ChangeNotifier
       }
 
       _linearDone.clear();
-      activeChapter = null;
-      await _resolveChapterLayout(filePath, loadIsStudy);
+      await chapterScope.resolveLayout(filePath, isStudy: loadIsStudy);
       if (generation != _loadGeneration) return;
       dueQueue = _buildQueue();
       notifyListeners();
@@ -366,73 +366,52 @@ class TrainingSessionController extends ChangeNotifier
   // LINE MANAGEMENT
   // ---------------------------------------------------------------------------
 
+  /// Chapter grouping, detection, and scoping.  Owns everything about *which
+  /// chapter a line is in*; this controller keeps ownership of the queue and
+  /// of notifying listeners, so each mutator below is "ask the scope, then
+  /// rebuild and repaint if it says something changed".
+  late final ChapterScope chapterScope = ChapterScope(
+    askedQuestions: askedQuestions,
+    settings: () => settings,
+    lines: () => lines,
+    sourceIsStudy: () => sourceIsStudy,
+  );
+
   /// Sentinel [activeChapter] for "the lines this file's chapter scheme
   /// doesn't cover" — a real chapter name can never be a NUL byte.
-  static const ungroupedChapter = '__trainer_ungrouped__';
+  static const ungroupedChapter = ChapterScope.ungrouped;
 
   /// Chapter the trainer is currently scoped to, or null for all lines.
   /// Filters the line list, the due queue, and Learn/Review advancement.
-  String? activeChapter;
+  String? get activeChapter => chapterScope.activeChapter;
 
   /// Chapter layout this file appears to use, waiting on the user's answer
   /// ("Looks like a course export — sort into chapters?"). Null when the file
   /// has no detectable layout or the question was already answered.
-  ChapterLayoutProposal? pendingChapterPrompt;
+  ChapterLayoutProposal? get pendingChapterPrompt => chapterScope.pendingPrompt;
 
   /// The user said "keep one flat list" for this file.
-  bool chaptersDeclined = false;
+  bool get chaptersDeclined => chapterScope.declined;
 
-  /// Chapter layout detected in the loaded file, whether or not it is in use.
-  /// Kept so the header's "Chapters…" entry point only appears when there is
-  /// actually something to propose.
-  ChapterLayoutProposal? _detectedLayout;
-  bool get canOfferChapters => _detectedLayout != null;
+  bool get canOfferChapters => chapterScope.canOffer;
 
   /// The chapter a line belongs to under the current grouping setting.
-  String? chapterOf(RepertoireLine line) {
-    if (chaptersDeclined) return null;
-    switch (settings.chapterGrouping) {
-      case ChapterGroupingMode.off:
-        return null;
-      case ChapterGroupingMode.auto:
-        return line.chapter;
-      case ChapterGroupingMode.namePrefix:
-        final delimiter = settings.chapterDelimiter;
-        if (delimiter.isEmpty) return null;
-        final cut = line.name.indexOf(delimiter);
-        if (cut <= 0) return null;
-        final prefix = line.name.substring(0, cut).trim();
-        return prefix.isEmpty ? null : prefix;
-    }
-  }
+  String? chapterOf(RepertoireLine line) => chapterScope.chapterOf(line);
 
   /// Whether [line] belongs to [chapter]; null means "all chapters" and
   /// [ungroupedChapter] means "the lines with no chapter of their own".
-  bool lineInChapter(RepertoireLine line, String? chapter) {
-    if (chapter == null) return true;
-    final own = chapterOf(line);
-    return chapter == ungroupedChapter ? own == null : own == chapter;
-  }
+  bool lineInChapter(RepertoireLine line, String? chapter) =>
+      chapterScope.contains(line, chapter);
 
   /// Distinct chapters in file order. Empty when the source has none.
-  List<String> get chapters {
-    final seen = <String>{};
-    final ordered = <String>[];
-    for (final line in lines) {
-      final chapter = chapterOf(line);
-      if (chapter != null && seen.add(chapter)) ordered.add(chapter);
-    }
-    return ordered;
-  }
+  List<String> get chapters => chapterScope.names;
 
   /// Lines the chapter scheme leaves out (an intro game with no title, say).
-  bool get hasUngroupedLines =>
-      chapters.isNotEmpty && lines.any((line) => chapterOf(line) == null);
+  bool get hasUngroupedLines => chapterScope.hasUngroupedLines;
 
   /// Scope training to [chapter] (null = all chapters) and rebuild the queue.
   void setActiveChapter(String? chapter) {
-    if (activeChapter == chapter) return;
-    activeChapter = chapter;
+    if (!chapterScope.setActive(chapter)) return;
     dueQueue = _buildQueue();
     notifyListeners();
   }
@@ -440,88 +419,36 @@ class TrainingSessionController extends ChangeNotifier
   /// The chapter grouping source changed — the old filter may not exist
   /// under the new scheme, so drop it and rebuild.
   void onChapterSettingsChanged() {
-    activeChapter = null;
-    // The delimiter feeds name-prefix detection, so what the file *could* be
-    // grouped by can change with the setting.
-    _detectedLayout = sourceIsStudy
-        ? null
-        : detectChapterLayout(lines, delimiter: settings.chapterDelimiter);
+    chapterScope.onSettingsChanged();
     dueQueue = _buildQueue();
     notifyListeners();
-  }
-
-  /// Work out whether this file looks chapter-organised, and whether the user
-  /// has already answered for it. Sets [pendingChapterPrompt] when the
-  /// question is still open.
-  Future<void> _resolveChapterLayout(String filePath, bool isStudy) async {
-    chaptersDeclined = false;
-    pendingChapterPrompt = null;
-    _detectedLayout = null;
-    // A study's chapters are its puzzles — nothing to re-group.
-    if (isStudy) return;
-
-    final proposal = detectChapterLayout(
-      lines,
-      delimiter: settings.chapterDelimiter,
-    );
-    _detectedLayout = proposal;
-    if (proposal == null) return;
-
-    final stored = await askedQuestions.boolAnswerFor(
-      AskedQuestion.chapterLayout,
-      subject: filePath,
-    );
-    if (stored == false) {
-      chaptersDeclined = true;
-      return;
-    }
-    if (stored == true) {
-      await _applyChapterMode(proposal.mode);
-      return;
-    }
-    pendingChapterPrompt = proposal;
-  }
-
-  Future<void> _applyChapterMode(ChapterGroupingMode mode) async {
-    if (settings.chapterGrouping == mode) return;
-    settings.chapterGrouping = mode;
-    await settings.save();
   }
 
   /// Answer the "sort into chapters?" prompt. The choice is remembered per
   /// file, so the question is asked once and stays changeable from the
   /// trainer header.
-  Future<void> answerChapterPrompt(bool useChapters) async {
-    final proposal = pendingChapterPrompt;
-    pendingChapterPrompt = null;
-    chaptersDeclined = !useChapters;
-    activeChapter = null;
-    if (useChapters && proposal != null) {
-      await _applyChapterMode(proposal.mode);
-    }
-    dueQueue = _buildQueue();
-    notifyListeners();
-    final filePath = repertoire?.filePath;
-    if (filePath == null) return;
-    await askedQuestions.record(
-      AskedQuestion.chapterLayout,
-      subject: filePath,
-      answer: useChapters,
-      // What was on screen when they answered, so the stored file explains
-      // itself months later.
-      note: proposal == null
-          ? null
-          : '${proposal.formatLabel} · ${proposal.chapterCount} chapters',
-    );
+  Future<void> answerChapterPrompt(bool useChapters) =>
+      chapterScope.answerPrompt(
+        useChapters,
+        filePath: repertoire?.filePath,
+        // Repaint as soon as the grouping is live, before the answer reaches
+        // disk — the user should not wait on a file write to see the change.
+        onApplied: () {
+          dueQueue = _buildQueue();
+          notifyListeners();
+        },
+      );
+
+  /// Drop the chapter prompt without recording an answer (the dialog was
+  /// dismissed rather than answered), so the next load asks again.
+  void dismissChapterPrompt() {
+    if (chapterScope.dismissPrompt()) notifyListeners();
   }
 
   /// Re-open the chapter prompt from the header ("Chapters…"), so a "no"
   /// answer is never final.
   void reopenChapterPrompt() {
-    final proposal = _detectedLayout;
-    if (proposal == null) return;
-    pendingChapterPrompt = proposal;
-    notifyListeners();
+    if (chapterScope.reopenPrompt()) notifyListeners();
   }
 
   /// The review queue under the active repetition mode: spaced = due/new
@@ -533,14 +460,8 @@ class TrainingSessionController extends ChangeNotifier
     if (sourceIsStudy && order == ReviewOrder.byImportance) {
       order = ReviewOrder.sequential;
     }
-    final scoped = activeChapter == null
-        ? lines
-        : [
-            for (final line in lines)
-              if (lineInChapter(line, activeChapter)) line,
-          ];
     final ordered = reviewService.orderLinesForReview(
-      scoped,
+      chapterScope.scopedLines,
       reviewMap,
       order,
       playabilityMap: playabilityMap,
