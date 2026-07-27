@@ -562,6 +562,27 @@ class TreeBuildConfig {
   int toOurPerspective(int whiteCp) => playAsWhite ? whiteCp : -whiteCp;
 
   /// Serialise to a JSON-compatible map for tree file metadata.
+  ///
+  /// **This map is a persisted format, not an internal detail.** It is written
+  /// to three places that outlive the process and are read back later:
+  ///
+  ///  * `<repertoire>_tree.json` (see `tree_serialization.dart`)
+  ///  * the partial-tree file a paused build resumes from — [fromJson] on
+  ///    `tree.configSnapshot` is what restores the settings of a build started
+  ///    days ago
+  ///  * user-saved generation presets (`generation_presets.dart`)
+  ///
+  /// So the shape must stay **flat and snake_case**, and keys must keep their
+  /// meaning. Grouping these ~70 fields into nested sub-config objects is
+  /// tempting for readability — the fields are already grouped by the section
+  /// comments above — but doing so naively changes this map and silently
+  /// breaks every existing preset and every resumable build on disk. If it is
+  /// ever worth doing, nest the Dart API only and keep this method emitting
+  /// the flat keys, or add a version field and migrate.
+  ///
+  /// Adding a key is safe: [fromJson] defaults every field, so older files
+  /// still load. Renaming or removing one is not — see `best_first` below,
+  /// kept purely so older builds can still read newer trees.
   Map<String, dynamic> toJson() => {
     'play_as_white': playAsWhite,
     'min_probability': minProbability,
