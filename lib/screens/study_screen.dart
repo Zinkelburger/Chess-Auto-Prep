@@ -682,7 +682,7 @@ class _StudyScreenState extends State<StudyScreen> {
       parseBoardShapes(comment),
       BoardAnnotation(orig: orig, dest: dest, brush: brush),
     );
-    _study.setComment(_study.cursor, writeBoardShapes(comment, next));
+    _study.setComment(_study.path, writeBoardShapes(comment, next));
   }
 
   Widget _buildBoardPane() {
@@ -824,9 +824,9 @@ class _StudyScreenState extends State<StudyScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: InteractivePgnEditor(
               tree: _study.tree,
-              currentPath: _study.cursor,
+              currentPath: _study.path,
               currentRepertoireName: _study.chapter.name,
-              onJump: _study.jumpTo,
+              onJump: _study.jump,
               onCommentChanged: _study.setComment,
               onToggleNag: _study.toggleNag,
               onDelete: _study.deleteAt,

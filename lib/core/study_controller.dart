@@ -13,6 +13,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/move_tree.dart';
+import 'move_navigation.dart';
 import '../models/repertoire_metadata.dart';
 import '../models/study_document.dart';
 import '../services/pgn_parsing_service.dart'
@@ -22,7 +23,8 @@ import '../utils/chess_utils.dart' show tryParseFen;
 import 'package:chess_auto_prep/utils/log.dart';
 import 'package:chess_auto_prep/utils/safe_change_notifier.dart';
 
-class StudyController extends ChangeNotifier with SafeChangeNotifier {
+class StudyController extends ChangeNotifier
+    with SafeChangeNotifier, MoveNavigation {
   StudyDocument _doc = StudyDocument.fresh('Untitled study');
   StudyDocument get doc => _doc;
 
@@ -31,8 +33,10 @@ class StudyController extends ChangeNotifier with SafeChangeNotifier {
   StudyChapter get chapter => _doc.chapters[_chapterIndex];
   MoveTree get tree => chapter.tree;
 
-  TreePath _cursor = TreePath.empty;
-  TreePath get cursor => _cursor;
+  TreePath _path = TreePath.empty;
+
+  @override
+  TreePath get path => _path;
 
   bool _dirty = false;
   bool get dirty => _dirty;
@@ -53,7 +57,7 @@ class StudyController extends ChangeNotifier with SafeChangeNotifier {
 
   /// Board position at the cursor.
   Position get currentPosition =>
-      tryParseFen(tree.fenAt(_cursor)) ?? Chess.initial;
+      tryParseFen(tree.fenAt(_path)) ?? Chess.initial;
 
   // ── File management ──────────────────────────────────────────────────
 
@@ -74,7 +78,7 @@ class StudyController extends ChangeNotifier with SafeChangeNotifier {
     await flushSave();
     _doc = StudyDocument.fresh(name)..filePath = path;
     _chapterIndex = 0;
-    _cursor = TreePath.empty;
+    _path = TreePath.empty;
     _dirty = true; // persist the empty skeleton
     await flushSave();
     await refreshStudyList();
@@ -147,7 +151,7 @@ class StudyController extends ChangeNotifier with SafeChangeNotifier {
       ],
     );
     _chapterIndex = 0;
-    _cursor = TreePath.empty;
+    _path = TreePath.empty;
     _dirty = false;
     notifyListeners();
   }
@@ -179,7 +183,7 @@ class StudyController extends ChangeNotifier with SafeChangeNotifier {
       _docGeneration++; // supersede any in-flight openStudy of this file
       _doc = StudyDocument.fresh('Untitled study');
       _chapterIndex = 0;
-      _cursor = TreePath.empty;
+      _path = TreePath.empty;
       _dirty = false;
     }
     await refreshStudyList();
@@ -215,7 +219,7 @@ class StudyController extends ChangeNotifier with SafeChangeNotifier {
   void selectChapter(int index) {
     if (index < 0 || index >= _doc.chapters.length) return;
     _chapterIndex = index;
-    _cursor = TreePath.empty;
+    _path = TreePath.empty;
     notifyListeners();
   }
 
@@ -238,7 +242,7 @@ class StudyController extends ChangeNotifier with SafeChangeNotifier {
   void addChapter(String name, {String? startingFen}) {
     _doc.chapters.add(StudyChapter(name: name, startingFen: startingFen));
     _chapterIndex = _doc.chapters.length - 1;
-    _cursor = TreePath.empty;
+    _path = TreePath.empty;
     _markDirty();
   }
 
@@ -269,7 +273,7 @@ class StudyController extends ChangeNotifier with SafeChangeNotifier {
     }
     if (added > 0) {
       _chapterIndex = firstNewIndex;
-      _cursor = TreePath.empty;
+      _path = TreePath.empty;
       _markDirty();
       await flushSave();
     }
@@ -291,7 +295,7 @@ class StudyController extends ChangeNotifier with SafeChangeNotifier {
       headers: Map<String, String>.from(old.headers),
       startingFen: fen,
     );
-    _cursor = TreePath.empty;
+    _path = TreePath.empty;
     _markDirty();
   }
 
@@ -305,41 +309,18 @@ class StudyController extends ChangeNotifier with SafeChangeNotifier {
     if (_chapterIndex >= _doc.chapters.length) {
       _chapterIndex = _doc.chapters.length - 1;
     }
-    _cursor = TreePath.empty;
+    _path = TreePath.empty;
     _markDirty();
   }
 
   // ── Navigation ───────────────────────────────────────────────────────
 
-  void jumpTo(TreePath path) {
-    if (!tree.isValidPath(path)) return;
-    _cursor = path;
-    notifyListeners();
-  }
-
-  void goBack() {
-    if (_cursor.isEmpty) return;
-    _cursor = _cursor.parent;
-    notifyListeners();
-  }
-
-  /// Follow the mainline continuation from the cursor, if any.
-  void goForward() {
-    final children = _cursor.isEmpty
-        ? tree.roots
-        : (tree.nodeAt(_cursor)?.children ?? []);
-    if (children.isEmpty) return;
-    _cursor = _cursor.child(0);
-    notifyListeners();
-  }
-
-  void goToStart() {
-    _cursor = TreePath.empty;
-    notifyListeners();
-  }
-
-  void goToEnd() {
-    _cursor = tree.mainlineEndFrom(_cursor);
+  /// Jump the cursor to [target].  All navigation funnels here.
+  /// (goBack / goForward / goToStart / goToEnd come from [MoveNavigation].)
+  @override
+  void jump(TreePath target) {
+    if (!tree.isValidPath(target)) return;
+    _path = target;
     notifyListeners();
   }
 
@@ -353,9 +334,9 @@ class StudyController extends ChangeNotifier with SafeChangeNotifier {
   /// Play [san] at the cursor: follows an existing child or adds a new node
   /// (a variation when the move differs from the mainline continuation).
   bool playSan(String san) {
-    final path = tree.addMove(_cursor, san);
+    final path = tree.addMove(_path, san);
     if (path == null) return false;
-    _cursor = path;
+    _path = path;
     _markDirty();
     return true;
   }
@@ -370,10 +351,10 @@ class StudyController extends ChangeNotifier with SafeChangeNotifier {
   /// Board shapes (`[%cal]`/`[%csl]` arrows and circles) live in here, so the
   /// study screen reads and rewrites this rather than keeping shapes in a
   /// parallel structure that a PGN round-trip would drop.
-  String? get cursorComment => tree.nodeAt(_cursor)?.comment;
+  String? get cursorComment => tree.nodeAt(_path)?.comment;
 
   /// Whether the cursor is on a move (the root has no node to annotate).
-  bool get cursorHasNode => _cursor.isNotEmpty && tree.nodeAt(_cursor) != null;
+  bool get cursorHasNode => _path.isNotEmpty && tree.nodeAt(_path) != null;
 
   void toggleNag(TreePath path, int nagId) {
     tree.toggleNag(path, nagId);
@@ -383,15 +364,15 @@ class StudyController extends ChangeNotifier with SafeChangeNotifier {
   void deleteAt(TreePath path) {
     tree.deleteAt(path);
     // If the cursor was inside the deleted subtree, retreat to its parent.
-    if (path.isAncestorOf(_cursor) || !tree.isValidPath(_cursor)) {
-      _cursor = path.parent;
+    if (path.isAncestorOf(_path) || !tree.isValidPath(_path)) {
+      _path = path.parent;
     }
     _markDirty();
   }
 
   void promote(TreePath path) {
-    final onCursorLine = path.isAncestorOf(_cursor);
-    final sanLine = tree.sanSequenceAt(_cursor);
+    final onCursorLine = path.isAncestorOf(_path);
+    final sanLine = tree.sanSequenceAt(_path);
     tree.promoteVariation(path);
     if (onCursorLine) _reanchorCursor(sanLine);
     _markDirty();
@@ -401,7 +382,7 @@ class StudyController extends ChangeNotifier with SafeChangeNotifier {
   /// RepertoireController.makeMainLine).
   void makeMainLine(TreePath target) {
     if (target.isEmpty) return;
-    final sanLine = tree.sanSequenceAt(_cursor);
+    final sanLine = tree.sanSequenceAt(_path);
     final indices = target.toList();
     for (int depth = 0; depth < indices.length; depth++) {
       if (indices[depth] != 0) {
@@ -424,7 +405,7 @@ class StudyController extends ChangeNotifier with SafeChangeNotifier {
       path = path.child(idx);
       siblings = siblings[idx].children;
     }
-    _cursor = path;
+    _path = path;
   }
 
   @override
