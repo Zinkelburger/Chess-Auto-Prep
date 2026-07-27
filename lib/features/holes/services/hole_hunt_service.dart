@@ -28,7 +28,8 @@ import '../../../services/generation/fen_map.dart';
 import '../../../services/generation/generation_config.dart';
 import '../../../services/maia_factory.dart';
 import '../../../services/tree_build_service.dart';
-import '../../../utils/chess_move_utils.dart' as move_utils;
+import '../../../services/eval/eval_move_helpers.dart';
+import '../../../utils/chess_utils.dart' as chess_utils;
 import '../../audit/models/audit_finding.dart';
 import '../../audit/models/audit_result.dart';
 import 'hole_hunt_config.dart';
@@ -293,7 +294,7 @@ class HoleHuntService {
       _evalCache.putEvalCpWhite(node.fen, bestWhiteCp, config.discoveryDepth);
 
       for (final line in discovery.lines) {
-        final san = move_utils.uciToSan(node.fen, line.moveUci);
+        final san = chess_utils.uciToSanOrNull(node.fen, line.moveUci);
         if (san == null) continue;
         if (node.children.containsKey(san)) continue; // covered
 
@@ -316,11 +317,7 @@ class HoleHuntService {
             positionEvalCp: line.effectiveCp,
             bestMoveEvalCp: bestWhiteCp,
             cumulativeProbability: entry.cumProb,
-            transposesIntoRepertoire: move_utils.doesMoveTranspose(
-              node.fen,
-              san,
-              tree,
-            ),
+            transposesIntoRepertoire: tree.doesMoveTranspose(node.fen, san),
             exploitScore: exploitScoreOf(
               cumProb: entry.cumProb,
               gainCp: gainCp,
@@ -358,7 +355,7 @@ class HoleHuntService {
       if (discovery.lines.isEmpty) return (cacheHits, cacheMisses);
 
       final bestWhiteCp = discovery.lines.first.effectiveCp;
-      final bestSan = move_utils.uciToSan(
+      final bestSan = chess_utils.uciToSanOrNull(
         node.fen,
         discovery.lines.first.moveUci,
       );
@@ -369,7 +366,7 @@ class HoleHuntService {
 
       for (final repEntry in node.children.entries) {
         final repSan = repEntry.key;
-        final repUci = move_utils.sanToUci(node.fen, repSan);
+        final repUci = chess_utils.sanToUci(node.fen, repSan);
         if (repUci == null) continue;
 
         int? repWhiteCp;
@@ -380,7 +377,7 @@ class HoleHuntService {
           }
         }
         if (repWhiteCp == null) {
-          final (cp, hit, miss) = await move_utils.evalAfterMoveCached(
+          final (cp, hit, miss) = await evalAfterMoveCached(
             _pool,
             _evalCache,
             node.fen,
@@ -414,7 +411,7 @@ class HoleHuntService {
         // least half the claimed loss.
         if (verifiedLoss < config.refutationThresholdCp / 2) continue;
 
-        final pvSan = move_utils.uciPvToSan(childFen, verify.pv, maxPlies: 8);
+        final pvSan = chess_utils.uciPvToSan(childFen, verify.pv);
         emit(
           AuditFinding(
             type: AuditFindingType.refutation,

@@ -10,12 +10,13 @@ import 'package:flutter/foundation.dart';
 
 import '../../../models/opening_tree.dart';
 import '../../../services/engine/stockfish_pool.dart';
+import '../../../services/eval/eval_move_helpers.dart';
 import '../../../services/eval_cache.dart';
 import '../../../services/maia_factory.dart';
 import '../../../services/opening_tree_builder.dart';
 import '../../../services/pgn_parsing_service.dart' as pgn;
 import '../../../services/probability_service.dart';
-import '../../../utils/chess_move_utils.dart' as move_utils;
+import '../../../utils/chess_utils.dart' as chess_utils;
 import '../../../utils/fen_utils.dart';
 import '../models/audit_finding.dart';
 import '../models/audit_result.dart';
@@ -575,7 +576,7 @@ class RepertoireAuditService {
   /// Check if playing [san] from [fen] transposes into a position already
   /// covered in [tree] (the FEN after the move exists as a tree node).
   bool _doesMoveTranspose(String fen, String san, OpeningTree tree) =>
-      move_utils.doesMoveTranspose(fen, san, tree);
+      tree.doesMoveTranspose(fen, san);
 
   // ── Dead-end check ───────────────────────────────────────────────────────
 
@@ -673,16 +674,19 @@ class RepertoireAuditService {
     return node.fen.contains(' w ');
   }
 
-  String? _uciToSan(String fen, String uci) => move_utils.uciToSan(fen, uci);
+  /// Strict conversion: the result is compared against repertoire SAN, so a
+  /// failed conversion must be null rather than an echoed UCI string.
+  String? _uciToSan(String fen, String uci) =>
+      chess_utils.uciToSanOrNull(fen, uci);
 
-  String? _sanToUci(String fen, String san) => move_utils.sanToUci(fen, san);
+  String? _sanToUci(String fen, String san) => chess_utils.sanToUci(fen, san);
 
   /// Returns (whiteCp, cacheHits, cacheMisses).
   Future<(int?, int, int)> _evalAfterMove(
     String fen,
     String moveUci,
     int depth,
-  ) => move_utils.evalAfterMoveCached(_pool, _evalCache, fen, moveUci, depth);
+  ) => evalAfterMoveCached(_pool, _evalCache, fen, moveUci, depth);
 }
 
 class _AuditQueueEntry {

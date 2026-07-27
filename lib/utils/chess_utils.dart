@@ -8,18 +8,30 @@ import 'package:dartchess/dartchess.dart';
 
 /// Convert a UCI move string (e.g. `e2e4`) to SAN notation given [fen].
 ///
-/// Returns the original [uci] string if the move cannot be resolved.
-String uciToSan(String fen, String uci) {
+/// Returns `null` when [fen] is unparsable or [uci] is not a legal move in it.
+///
+/// Prefer this over [uciToSan] whenever the result is used as a *move
+/// identity* (a map key, a set membership test, a comparison against
+/// repertoire SAN). [uciToSan]'s echo-the-input fallback would silently feed
+/// a raw UCI string such as `e2e4` into those paths as though it were SAN.
+String? uciToSanOrNull(String fen, String uci) {
   try {
     final position = Chess.fromSetup(Setup.parseFen(fen));
     final move = Move.parse(uci);
-    if (move == null) return uci;
+    if (move == null) return null;
     final (_, san) = position.makeSan(move);
     return san;
   } catch (_) {
-    return uci;
+    return null;
   }
 }
+
+/// Convert a UCI move string (e.g. `e2e4`) to SAN notation given [fen].
+///
+/// Returns the original [uci] string if the move cannot be resolved, which
+/// makes this the right choice for *display* only. For anything that compares
+/// or keys on the result, use [uciToSanOrNull].
+String uciToSan(String fen, String uci) => uciToSanOrNull(fen, uci) ?? uci;
 
 /// Bounded memo over [uciToSan]. The unified move table re-derives SAN for
 /// every candidate move on every notifier tick during a live search (its
@@ -228,13 +240,16 @@ String formatEvalDisplay({int? scoreCp, int? scoreMate}) {
 
 /// Convert a UCI principal-variation list to SAN move strings.
 ///
-/// Walks the position forward from [fen], converting up to [maxMoves]
-/// UCI tokens to SAN. Returns an empty list on any parse error.
+/// Walks the position forward from [fen], converting up to [maxMoves] UCI
+/// tokens to SAN. Conversion stops at the first token that fails to parse or
+/// to apply, and the successfully converted prefix is returned — a truncated
+/// line is strictly more useful than none, and every SAN in it is correct.
+/// An unparsable [fen] yields an empty list.
 List<String> uciPvToSan(String fen, List<String> uciMoves, {int maxMoves = 8}) {
   if (uciMoves.isEmpty) return const [];
+  final san = <String>[];
   try {
     Position pos = Chess.fromSetup(Setup.parseFen(fen));
-    final san = <String>[];
     for (final uci in uciMoves.take(maxMoves)) {
       final move = Move.parse(uci);
       if (move == null) break;
@@ -242,10 +257,10 @@ List<String> uciPvToSan(String fen, List<String> uciMoves, {int maxMoves = 8}) {
       san.add(sanStr);
       pos = newPos;
     }
-    return san;
   } catch (_) {
-    return const [];
+    // Keep whatever converted cleanly.
   }
+  return san;
 }
 
 /// Bounded memo over [uciPvToSan] (whole PV, no `maxMoves` cap). During a live

@@ -403,6 +403,24 @@ class OpeningTree {
     return false;
   }
 
+  /// Whether playing [san] from [fen] lands on a position this tree already
+  /// covers — i.e. the move transposes into known territory rather than
+  /// leaving it.
+  ///
+  /// [fenToNodes] is keyed by [normalizeFen], so this is a single map lookup.
+  /// Returns `false` when [fen] is unparsable or [san] is illegal in it.
+  bool doesMoveTranspose(String fen, String san) {
+    try {
+      final position = Chess.fromSetup(Setup.parseFen(fen));
+      final move = position.parseSan(san);
+      if (move == null) return false;
+      return fenToNodes.containsKey(normalizeFen(position.play(move).fen));
+    } catch (_) {
+      // Best-effort; an unparsable position simply isn't a transposition.
+      return false;
+    }
+  }
+
   /// Whether [san] is a child along [pathFromRoot] (path-aware repertoire check).
   bool hasMoveOnPath(List<String> pathFromRoot, String san) {
     reset();
