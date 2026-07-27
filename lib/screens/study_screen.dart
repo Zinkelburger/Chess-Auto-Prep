@@ -76,10 +76,9 @@ class _StudyScreenState extends State<StudyScreen> {
   }
 
   void _consumePendingStudyPath(AppState appState) {
-    final path = appState.pendingStudyPath;
-    if (path == null) return;
-    appState.pendingStudyPath = null;
-    _study.openStudy(path);
+    final handoff = appState.takeHandoff<EditStudy>();
+    if (handoff == null) return;
+    _study.openStudy(handoff.studyPath);
   }
 
   @override

@@ -3,6 +3,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dartchess/dartchess.dart';
 import '../services/lichess_auth_service.dart';
 import '../utils/safe_change_notifier.dart';
+import 'pending_handoff.dart';
+
+export 'pending_handoff.dart';
 
 enum AppMode {
   tactics,
@@ -27,36 +30,36 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
   DateTime? _lichessLastFetch;
   DateTime? _chesscomLastFetch;
 
-  /// Pending repertoire path for builder<->trainer seamless switching.
-  /// Set before switching modes; consumed by the target screen on activation.
-  String? pendingRepertoirePath;
-  String? pendingLineId;
+  /// Work parked for whichever screen the app is switching to, or null when
+  /// there is nothing waiting.  See [PendingHandoff] for why this exists.
+  PendingHandoff? _pendingHandoff;
 
-  /// When non-null the builder should open the generation tab in DB Explorer
-  /// mode, pre-seeded with these PGN file paths.
-  List<String>? pendingGenerationPgnPaths;
+  /// Whether a handoff of type [T] is waiting.  Does not consume it — use
+  /// [takeHandoff] for that.
+  bool hasPending<T extends PendingHandoff>() => _pendingHandoff is T;
 
-  /// Study PGN to train in the Repertoire Trainer ("Train" in Study mode).
-  /// Set before switching to trainer mode; consumed by the trainer screen on
-  /// activation.  [pendingLineId] optionally focuses one chapter's line.
-  String? pendingTrainStudyPath;
+  /// Take the pending handoff if it is a [T], clearing it in the same step.
+  ///
+  /// Reading and clearing are deliberately inseparable: a handoff read but
+  /// left in place would re-fire on the next unrelated notification, and every
+  /// screen listens to this object.  Returns null when nothing is waiting or
+  /// the waiting handoff is for a different screen.
+  T? takeHandoff<T extends PendingHandoff>() {
+    final handoff = _pendingHandoff;
+    if (handoff is! T) return null;
+    _pendingHandoff = null;
+    return handoff;
+  }
 
-  /// SAN sequence the builder should navigate to after loading the pending
-  /// repertoire ("Explore this position" from the trainer). Consumed with
-  /// [pendingRepertoirePath].
-  List<String>? pendingMoveSequence;
-
-  /// PGN file to open for editing in Study mode ("Edit study" in the
-  /// Repertoire Trainer).  Consumed by the study screen on activation.
-  String? pendingStudyPath;
-
-  /// PGN file to open in the PGN Viewer ("Open Games in PGN Viewer" in
-  /// Player Analysis).  Consumed by the PGN viewer screen on activation.
-  String? pendingPgnViewerPath;
-
-  /// Optional position filter applied after opening [pendingPgnViewerPath]:
-  /// the viewer slices the collection to games containing this FEN.
-  String? pendingPgnViewerSliceFen;
+  /// Park [handoff] and switch to the screen that can deliver it.
+  ///
+  /// Replaces any handoff still waiting: the newest navigation wins, and a
+  /// stale one could otherwise fire on a screen the user has moved past.
+  void handOff(PendingHandoff handoff) {
+    _pendingHandoff = handoff;
+    _currentMode = handoff.targetMode;
+    notifyListeners();
+  }
 
   AppMode get currentMode => _currentMode;
   Position get currentPosition => _currentPosition;
@@ -85,38 +88,23 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
   /// Switch to the Repertoire Trainer with the study at [path] loaded as a
   /// tactics-mode training source ("Train" in Study mode).  [lineId]
   /// optionally starts on one chapter's line.
-  void switchToStudyTraining({required String path, String? lineId}) {
-    pendingTrainStudyPath = path;
-    pendingLineId = lineId;
-    _currentMode = AppMode.repertoireTrainer;
-    notifyListeners();
-  }
+  void switchToStudyTraining({required String path, String? lineId}) =>
+      handOff(TrainStudy(sourcePath: path, lineId: lineId));
 
   /// Switch to Study mode with the PGN file at [path] opened for editing
   /// ("Edit study" in the Repertoire Trainer).
-  void switchToStudyEdit({required String path}) {
-    pendingStudyPath = path;
-    _currentMode = AppMode.study;
-    notifyListeners();
-  }
+  void switchToStudyEdit({required String path}) =>
+      handOff(EditStudy(studyPath: path));
 
   /// Switch to the PGN Viewer with the file at [path] opened, optionally
   /// sliced to games containing [sliceFen] ("Open Games in PGN Viewer" in
   /// Player Analysis).
-  void switchToPgnViewer({required String path, String? sliceFen}) {
-    pendingPgnViewerPath = path;
-    pendingPgnViewerSliceFen = sliceFen;
-    _currentMode = AppMode.pgnViewer;
-    notifyListeners();
-  }
+  void switchToPgnViewer({required String path, String? sliceFen}) =>
+      handOff(OpenPgnViewer(pgnPath: path, sliceFen: sliceFen));
 
   /// Switch to trainer with a specific repertoire and optional line.
-  void switchToTrainer({required String repertoirePath, String? lineId}) {
-    pendingRepertoirePath = repertoirePath;
-    pendingLineId = lineId;
-    _currentMode = AppMode.repertoireTrainer;
-    notifyListeners();
-  }
+  void switchToTrainer({required String repertoirePath, String? lineId}) =>
+      handOff(TrainRepertoire(sourcePath: repertoirePath, lineId: lineId));
 
   /// Switch to builder with a specific repertoire and optional line to focus.
   /// [moveSequence] navigates the builder board to that position after load
@@ -125,26 +113,22 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
     required String repertoirePath,
     String? lineId,
     List<String>? moveSequence,
-  }) {
-    pendingRepertoirePath = repertoirePath;
-    pendingLineId = lineId;
-    pendingMoveSequence = moveSequence;
-    _currentMode = AppMode.repertoire;
-    notifyListeners();
-  }
+  }) => handOff(
+    OpenBuilder(
+      repertoirePath: repertoirePath,
+      lineId: lineId,
+      moveSequence: moveSequence,
+    ),
+  );
 
   /// Switch to builder and auto-open the generation tab in DB Explorer mode
   /// with the given PGN files pre-loaded.
   void switchToBuilderWithGeneration({
     required String repertoirePath,
     required List<String> pgnPaths,
-  }) {
-    pendingRepertoirePath = repertoirePath;
-    pendingGenerationPgnPaths = pgnPaths;
-    pendingLineId = null;
-    _currentMode = AppMode.repertoire;
-    notifyListeners();
-  }
+  }) => handOff(
+    OpenBuilder(repertoirePath: repertoirePath, generationPgnPaths: pgnPaths),
+  );
 
   void setLichessUsername(String? username) {
     _lichessUsername = username;

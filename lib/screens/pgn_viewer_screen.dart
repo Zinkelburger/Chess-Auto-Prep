@@ -139,12 +139,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// "Open Games in PGN Viewer" hook (Player Analysis): open the pending
   /// file and, when a FEN is given, slice to games containing that position.
   void _consumePendingViewerFile(AppState appState) {
-    final path = appState.pendingPgnViewerPath;
-    if (path == null) return;
-    final sliceFen = appState.pendingPgnViewerSliceFen;
-    appState.pendingPgnViewerPath = null;
-    appState.pendingPgnViewerSliceFen = null;
-    _openFileWithPositionSlice(path, sliceFen);
+    final handoff = appState.takeHandoff<OpenPgnViewer>();
+    if (handoff == null) return;
+    _openFileWithPositionSlice(handoff.pgnPath, handoff.sliceFen);
   }
 
   Future<void> _openFileWithPositionSlice(String path, String? sliceFen) async {

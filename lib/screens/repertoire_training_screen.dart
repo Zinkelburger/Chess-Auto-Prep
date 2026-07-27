@@ -169,27 +169,20 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   /// Consume a pending repertoire or study handoff.  Returns true when a
   /// source was consumed and its load started.
   bool _consumePendingSource(AppState appState) {
-    final studyPath = appState.pendingTrainStudyPath;
-    final repertoirePath = appState.pendingRepertoirePath;
-    if (studyPath == null && repertoirePath == null) return false;
+    final handoff = appState.takeHandoff<TrainerHandoff>();
+    if (handoff == null) return false;
 
-    final lineId = appState.pendingLineId;
-    appState.pendingTrainStudyPath = null;
-    appState.pendingRepertoirePath = null;
-    appState.pendingLineId = null;
-
-    final path = studyPath ?? repertoirePath!;
     final metadata = RepertoireMetadata(
-      filePath: path,
-      name: p.basenameWithoutExtension(path),
+      filePath: handoff.sourcePath,
+      name: p.basenameWithoutExtension(handoff.sourcePath),
       lastModified: DateTime.now(),
     );
-    if (studyPath != null) {
+    if (handoff.isStudy) {
       _training.setStudySource(metadata);
     } else {
       _training.setRepertoire(metadata);
     }
-    unawaited(_training.loadRepertoire(startLineId: lineId));
+    unawaited(_training.loadRepertoire(startLineId: handoff.lineId));
     return true;
   }
 

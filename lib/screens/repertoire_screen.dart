@@ -376,7 +376,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       final appState = context.read<AppState>();
       appState.addListener(_onAppStateChanged);
 
-      if (appState.pendingRepertoirePath != null) {
+      if (appState.hasPending<OpenBuilder>()) {
         _onAppStateChanged();
       }
     });
@@ -384,42 +384,31 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
 
   void _onAppStateChanged() {
     final appState = context.read<AppState>();
-    if (appState.currentMode == AppMode.repertoire) {
-      _reclaimFocus();
+    if (appState.currentMode != AppMode.repertoire) return;
+    _reclaimFocus();
+
+    final handoff = appState.takeHandoff<OpenBuilder>();
+    if (handoff == null) return;
+
+    // Load the requested repertoire if different from current
+    final currentPath = _controller.currentRepertoire?.filePath;
+    if (currentPath != handoff.repertoirePath) {
+      _controller.setRepertoire(
+        RepertoireMetadata(
+          filePath: handoff.repertoirePath,
+          name: p.basenameWithoutExtension(handoff.repertoirePath),
+          lastModified: DateTime.now(),
+        ),
+      );
     }
-    if (appState.currentMode == AppMode.repertoire &&
-        appState.pendingRepertoirePath != null) {
-      final path = appState.pendingRepertoirePath!;
-      final lineId = appState.pendingLineId;
-      appState.pendingRepertoirePath = null;
-      appState.pendingLineId = null;
-
-      // Load the requested repertoire if different from current
-      final currentPath = _controller.currentRepertoire?.filePath;
-      if (currentPath != path) {
-        _controller.setRepertoire(
-          RepertoireMetadata(
-            filePath: path,
-            name: p.basenameWithoutExtension(path),
-            lastModified: DateTime.now(),
-          ),
-        );
-      }
-      if (lineId != null) {
-        _openLineAfterLoad(lineId);
-      }
-
-      final pendingMoves = appState.pendingMoveSequence;
-      if (pendingMoves != null) {
-        appState.pendingMoveSequence = null;
-        _openMovesAfterLoad(pendingMoves);
-      }
-
-      final pendingPgnPaths = appState.pendingGenerationPgnPaths;
-      if (pendingPgnPaths != null) {
-        appState.pendingGenerationPgnPaths = null;
-        _seedGenerationAfterLoad(pendingPgnPaths);
-      }
+    if (handoff.lineId != null) {
+      _openLineAfterLoad(handoff.lineId!);
+    }
+    if (handoff.moveSequence != null) {
+      _openMovesAfterLoad(handoff.moveSequence!);
+    }
+    if (handoff.generationPgnPaths != null) {
+      _seedGenerationAfterLoad(handoff.generationPgnPaths!);
     }
   }
 
