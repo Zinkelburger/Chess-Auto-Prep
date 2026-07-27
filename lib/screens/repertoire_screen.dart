@@ -80,6 +80,7 @@ import '../services/live_explorer_service.dart';
 import '../models/explorer_response.dart';
 import 'repertoire_chapters_screen.dart';
 import 'repertoire_selection_screen.dart';
+import 'repertoire/generation_notification_router.dart';
 
 part 'repertoire/repertoire_screen_layout.dart';
 part 'repertoire/repertoire_screen_session.dart';
@@ -101,6 +102,9 @@ const double _kLinesPanelMinWidth = 220.0;
 
 /// Board column size preset, persisted so the layout survives restarts.
 const _kBoardSizePref = 'repertoire.board_size';
+
+/// How often the screen may repaint while a generation run reports progress.
+const _kGenRebuildInterval = Duration(milliseconds: 250);
 
 /// Fields and small shared helpers for [_RepertoireScreenState].
 ///
@@ -129,11 +133,12 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   final NavigationStack _navigationStack = NavigationStack();
 
   bool _boardFlipped = false;
-  bool _wasGenerating = false;
 
-  /// Generated tree the last coherence pass ran against, so progress notifies
-  /// don't re-run clustering over unchanged lines (see _onGenerationChanged).
-  Object? _lastCoherenceTree;
+  /// Decides what a generation notification means for this screen (run just
+  /// ended? re-cluster? coalesce the rebuild?). Stateful, so it lives outside
+  /// the listener where it can be tested.
+  final GenerationNotificationRouter _generationRouter =
+      GenerationNotificationRouter();
 
   /// Coalesces whole-screen rebuilds during generation progress ticks.
   Timer? _genRebuildThrottle;
@@ -338,6 +343,25 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   }
 
   String? get _repertoireFilePath => _controller.currentRepertoire?.filePath;
+
+  /// Run [action] on the findings panel, but only while the findings panel is
+  /// the thing on screen — the bottom pane open, showing the Findings tab.
+  ///
+  /// Returns whether the shortcut was handled, so an unhandled key falls
+  /// through to whatever else claims it rather than being swallowed by a
+  /// panel the user cannot see.
+  bool _whenFindingsPanelHasKeys(
+    bool Function(AuditFindingsPanelState) action,
+  ) {
+    final pane = _bottomPaneKey.currentState;
+    if (pane == null ||
+        pane.isCollapsed ||
+        pane.activeTab != BottomPaneTab.findings) {
+      return false;
+    }
+    final panel = _findingsPanelKey.currentState;
+    return panel != null && action(panel);
+  }
 
   void _reclaimFocus() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -751,36 +775,17 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
               _trapTourKey.currentState?.next();
               return true;
             }
-            final pane = _bottomPaneKey.currentState;
-            if (pane == null ||
-                pane.isCollapsed ||
-                pane.activeTab != BottomPaneTab.findings) {
-              return false;
-            }
-            return _findingsPanelKey.currentState?.selectNext() ?? false;
+            return _whenFindingsPanelHasKeys((panel) => panel.selectNext());
           },
           onPrevFinding: () {
             if (_trapTourVisible) {
               _trapTourKey.currentState?.previous();
               return true;
             }
-            final pane = _bottomPaneKey.currentState;
-            if (pane == null ||
-                pane.isCollapsed ||
-                pane.activeTab != BottomPaneTab.findings) {
-              return false;
-            }
-            return _findingsPanelKey.currentState?.selectPrevious() ?? false;
+            return _whenFindingsPanelHasKeys((panel) => panel.selectPrevious());
           },
-          onDismissFinding: () {
-            final pane = _bottomPaneKey.currentState;
-            if (pane == null ||
-                pane.isCollapsed ||
-                pane.activeTab != BottomPaneTab.findings) {
-              return false;
-            }
-            return _findingsPanelKey.currentState?.dismissSelected() ?? false;
-          },
+          onDismissFinding: () =>
+              _whenFindingsPanelHasKeys((panel) => panel.dismissSelected()),
           child: Column(
             children: [
               // Paused builds free the tab and the engine; a slim banner

@@ -147,45 +147,26 @@ mixin _RepertoireSessionHandlers
 
     context.read<AppState>().setRepertoireGenerating(ctrl.isGenerating);
 
-    final justFinished = !ctrl.isGenerating && _wasGenerating;
-    _wasGenerating = ctrl.isGenerating;
+    final actions = _generationRouter.onNotified(
+      isGenerating: ctrl.isGenerating,
+      generatedTree: ctrl.generatedTree,
+    );
 
-    // Re-cluster only when a new generated tree appears or the run completes.
-    // This used to fire on every progress notify, re-extracting itemsets over
-    // all repertoire lines several times per second for the whole build.
-    if (ctrl.generatedTree != null &&
-        (justFinished || !identical(ctrl.generatedTree, _lastCoherenceTree))) {
-      _lastCoherenceTree = ctrl.generatedTree;
-      _runCoherence();
-    }
+    if (actions.shouldRunCoherence) _runCoherence();
 
-    if (justFinished && ctrl.lastError != null) {
+    if (actions.justFinished && ctrl.lastError != null) {
       showAppSnackBar(context, ctrl.lastError!, isError: true);
-    } else if (justFinished && ctrl.lastRunSummary.isNotEmpty) {
+    } else if (actions.justFinished && ctrl.lastRunSummary.isNotEmpty) {
       showAppSnackBar(context, ctrl.lastRunSummary);
     }
 
     if (!ctrl.isGenerating) {
-      // Prefer the in-memory bundle's trap index (consistent with the tree we
-      // just built); fall back to disk for previously-saved repertoires.
-      final bundle = ctrl.current;
-      if (bundle != null) {
-        _traps = bundle.traps.allTraps;
-        _trapIndex = _traps.isEmpty ? null : bundle.traps;
-      } else {
-        final fp = _controller.currentRepertoire?.filePath;
-        if (fp != null) _loadTraps(fp);
-      }
-      if (justFinished) {
-        _showLinesSurface();
-      }
+      _adoptTrapIndex(ctrl);
+      if (actions.justFinished) _showLinesSurface();
     }
 
-    if (ctrl.isGenerating) {
-      // Progress ticks arrive many times per second; coalesce the
-      // whole-screen rebuild instead of repainting on every one — this also
-      // runs while the screen sits hidden in the IndexedStack.
-      _genRebuildThrottle ??= Timer(const Duration(milliseconds: 250), () {
+    if (actions.shouldCoalesceRebuild) {
+      _genRebuildThrottle ??= Timer(_kGenRebuildInterval, () {
         _genRebuildThrottle = null;
         if (mounted) setState(() {});
       });
@@ -194,6 +175,20 @@ mixin _RepertoireSessionHandlers
       _genRebuildThrottle = null;
       setState(() {});
     }
+  }
+
+  /// Take the trap index from the finished build's bundle when there is one —
+  /// it is consistent with the tree just built. Previously-saved repertoires
+  /// have no bundle in memory, so fall back to the file on disk.
+  void _adoptTrapIndex(GenerationSessionController ctrl) {
+    final bundle = ctrl.current;
+    if (bundle != null) {
+      _traps = bundle.traps.allTraps;
+      _trapIndex = _traps.isEmpty ? null : bundle.traps;
+      return;
+    }
+    final filePath = _controller.currentRepertoire?.filePath;
+    if (filePath != null) _loadTraps(filePath);
   }
 
   void _onAuditChanged() {
