@@ -8,7 +8,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../constants/chess_constants.dart';
-import '../../core/audit_session_controller.dart';
+import '../../features/audit/controllers/audit_session_controller.dart';
 import '../../core/generation_session_controller.dart';
 import '../../core/repertoire_controller.dart';
 import '../../features/audit/models/audit_finding.dart';

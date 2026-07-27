@@ -4,7 +4,7 @@ library;
 import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
-import '../models/trap_line_info.dart';
+import 'package:chess_auto_prep/models/trap_line_info.dart';
 import '../../../theme/app_colors.dart';
 
 /// Small orange dot shown beside a move when the position is a trap.

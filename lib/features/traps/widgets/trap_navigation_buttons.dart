@@ -5,7 +5,7 @@ import '../../../widgets/shortcut_tooltip.dart';
 import '../../../core/repertoire_controller.dart';
 import '../../../models/repertoire_line.dart';
 import '../../../theme/app_colors.dart';
-import '../models/trap_line_info.dart';
+import 'package:chess_auto_prep/models/trap_line_info.dart';
 import '../services/trap_index_service.dart';
 
 /// Prev/next trap controls for the repertoire board toolbar.

@@ -11,7 +11,7 @@ import 'package:flutter/material.dart';
 import '../../../theme/app_colors.dart';
 import '../../../utils/pgn_comment_utils.dart' show nagColor;
 import '../../../widgets/shortcut_tooltip.dart';
-import '../models/trap_line_info.dart';
+import 'package:chess_auto_prep/models/trap_line_info.dart';
 import '../services/trap_index_service.dart';
 
 class TrapTourBar extends StatefulWidget {

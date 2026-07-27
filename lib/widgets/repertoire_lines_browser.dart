@@ -11,7 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../models/build_tree_node.dart';
 import '../models/repertoire_line.dart';
-import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
+import 'package:chess_auto_prep/models/trap_line_info.dart';
 import '../services/coherence_service.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../services/generation/fen_map.dart';

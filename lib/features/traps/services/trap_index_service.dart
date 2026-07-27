@@ -5,7 +5,7 @@ library;
 
 import 'dart:math' show max;
 
-import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
+import 'package:chess_auto_prep/models/trap_line_info.dart';
 import 'package:chess_auto_prep/services/eval/eval_canonicalize.dart';
 
 class TrapIndexService {

@@ -36,6 +36,52 @@ same commit.
   If you rename or move boot-screen controls, update the test in the same
   commit.
 
+## Where code goes
+
+Two layouts coexist. Both are intentional; the rule for choosing is:
+
+- **`lib/features/<name>/`** — everything owned by one feature, in
+  `controllers/ models/ services/ widgets/`. Use this for new features and
+  when growing an existing one (`audit`, `browse`, `coverage`, `eval_tree`,
+  `holes`, `traps`).
+- **`lib/core/ models/ services/ widgets/`** — genuinely cross-cutting code
+  used by three or more features or screens. `TrapLineInfo` lives in
+  `lib/models/` for exactly this reason: 27 files across four layers use it,
+  so it is a shared domain model rather than a `traps` internal.
+
+A feature's *pipeline* code can stay in `lib/services/` when it belongs to
+that pipeline rather than to the feature UI — `services/generation/
+trap_extractor.dart` produces traps during a build; `features/traps/` consumes
+them. That boundary is deliberate.
+
+Never re-export a type from a second path to make both layouts work. Two
+`trap_line_info.dart` files (one a shim) meant half the codebase imported each
+one and neither was obviously canonical. Pick the home, move the file, fix the
+imports.
+
+**Layering, enforced by review:** `core/`, `models/`, `services/`, and `utils/`
+must not import from `widgets/` or `screens/`. This currently holds with one
+exception (`utils/board_shape_comments.dart`). Check with:
+
+```
+grep -rlE "import '.*(widgets/|screens/)" lib/core lib/models lib/services lib/utils
+```
+
+## Decomposition
+
+`part`/`part of` splits a file, not a class — every part still sees the host's
+private state, so a god class spread over parts is still a god class. Use parts
+to separate *types*, never to shrink one class. When a class is too big, extract
+a real collaborator with its own constructor and tests (see
+`services/training/chapter_scope.dart` and `review_progress_store.dart`, both
+carved out of `TrainingSessionController`).
+
+Collaborators that read owner state which the owner *reassigns* (a settings
+reload, a new file) should take supplier callbacks (`TrainingSettings Function()`)
+rather than cached references, so the two cannot desync. But pass a value
+explicitly when the caller deliberately snapshotted it across an `await` —
+`ChapterScope.resolveLayout` takes `isStudy` for that reason.
+
 ## Verifying changes
 
 - Verify with `flutter analyze` + tests + code reading. Do **not** launch the

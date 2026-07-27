@@ -3,8 +3,8 @@ library;
 
 import 'package:flutter/material.dart';
 
-import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
-import 'package:chess_auto_prep/features/traps/models/trap_reply.dart';
+import 'package:chess_auto_prep/models/trap_line_info.dart';
+import 'package:chess_auto_prep/models/trap_reply.dart';
 import '../../../constants/chess_constants.dart';
 import '../../../theme/app_colors.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';

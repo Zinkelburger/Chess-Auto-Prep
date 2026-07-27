@@ -6,7 +6,7 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../core/audit_session_controller.dart';
+import '../../features/audit/controllers/audit_session_controller.dart';
 import '../../core/generation_session_controller.dart';
 import '../../features/audit/services/audit_config.dart';
 import '../../services/generation/generation_config.dart';

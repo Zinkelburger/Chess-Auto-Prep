@@ -7,8 +7,8 @@
 library;
 
 import '../../../models/move_tree.dart';
-import '../models/trap_line_info.dart';
-import '../models/trap_reply.dart';
+import 'package:chess_auto_prep/models/trap_line_info.dart';
+import 'package:chess_auto_prep/models/trap_reply.dart';
 
 class TrapLineBuilder {
   const TrapLineBuilder._();

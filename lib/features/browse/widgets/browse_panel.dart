@@ -8,7 +8,7 @@ import '../../../widgets/shortcut_tooltip.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../../services/coherence_service.dart';
-import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
+import 'package:chess_auto_prep/models/trap_line_info.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
 import 'package:chess_auto_prep/features/browse/services/candidate_service.dart';
 import '../../../widgets/layout/empty_state_placeholder.dart';

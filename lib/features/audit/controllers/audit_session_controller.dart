@@ -7,16 +7,16 @@ library;
 
 import 'package:flutter/foundation.dart';
 
-import '../features/audit/models/audit_finding.dart';
-import '../features/audit/models/audit_result.dart';
-import '../features/audit/services/audit_config.dart';
-import '../features/audit/services/audit_persistence.dart';
-import '../features/audit/services/repertoire_audit_service.dart';
-import '../models/opening_tree.dart';
-import '../services/engine/engine_lifecycle.dart';
-import '../services/engine/stockfish_pool.dart';
-import '../services/jobs/repertoire_job.dart';
-import '../utils/safe_change_notifier.dart';
+import '../models/audit_finding.dart';
+import '../models/audit_result.dart';
+import '../services/audit_config.dart';
+import '../services/audit_persistence.dart';
+import '../services/repertoire_audit_service.dart';
+import '../../../models/opening_tree.dart';
+import '../../../services/engine/engine_lifecycle.dart';
+import '../../../services/engine/stockfish_pool.dart';
+import '../../../services/jobs/repertoire_job.dart';
+import '../../../utils/safe_change_notifier.dart';
 
 class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
   final RepertoireAuditService _service = RepertoireAuditService();

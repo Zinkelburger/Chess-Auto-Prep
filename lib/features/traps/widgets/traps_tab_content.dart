@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import '../../../core/board_preview_controller.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
-import '../models/trap_line_info.dart';
+import 'package:chess_auto_prep/models/trap_line_info.dart';
 import '../services/trap_index_service.dart';
 import 'traps_browser.dart';
 
