@@ -10,7 +10,7 @@ import 'package:flutter/foundation.dart';
 
 enum JobStatus { queued, running, paused, completed, cancelled, failed }
 
-enum JobType { generation, audit, coverage, studyImport }
+enum JobType { generation, audit, coverage, studyImport, tacticsImport }
 
 // ── Progress snapshot ───────────────────────────────────────────────
 
@@ -41,6 +41,12 @@ class RepertoireJob extends ChangeNotifier {
 
   /// Snapshot of the config used to start this job (e.g. AuditConfig.toMap()).
   Map<String, dynamic>? configSnapshot;
+
+  /// Asks the owning controller to cancel this job. Set by owners whose
+  /// cancel affordance lives outside the repertoire screen (e.g. the
+  /// tactics import coordinator), so any jobs UI can offer Cancel without
+  /// knowing the owner.
+  VoidCallback? onCancel;
 
   JobStatus _status = JobStatus.queued;
   JobProgress _progress = JobProgress.zero;
@@ -111,6 +117,10 @@ class JobManager extends ChangeNotifier {
       .where((j) => j.type == JobType.studyImport && j.isActive)
       .firstOrNull;
 
+  RepertoireJob? get currentTacticsImportJob => _jobs
+      .where((j) => j.type == JobType.tacticsImport && j.isActive)
+      .firstOrNull;
+
   /// Create and register a new job. Returns the job for further configuration.
   RepertoireJob createJob({
     required JobType type,
@@ -170,6 +180,13 @@ class JobManager extends ChangeNotifier {
       return p.totalNodes == 0
           ? 'Import: running'
           : 'Import: ${p.nodesProcessed}/${p.totalNodes}';
+    }
+    final tactics = currentTacticsImportJob;
+    if (tactics != null) {
+      final p = tactics.progress;
+      return p.totalNodes == 0
+          ? 'Tactics: running'
+          : 'Tactics: ${p.nodesProcessed}/${p.totalNodes} games';
     }
     return null;
   }

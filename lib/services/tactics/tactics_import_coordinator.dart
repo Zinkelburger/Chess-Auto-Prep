@@ -9,6 +9,8 @@ import '../../models/tactics_position.dart';
 import '../../utils/app_messages.dart';
 import '../../utils/log.dart';
 import '../../utils/safe_change_notifier.dart';
+import '../engine/engine_lifecycle.dart';
+import '../jobs/repertoire_job.dart';
 import '../tactics_database.dart';
 import '../tactics_import_service.dart' show ImportResult, TacticsImportService;
 
@@ -45,6 +47,37 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
 
   String? importStatus;
   bool isImporting = false;
+
+  /// The run's entry in the app-wide [JobManager], so every screen can see
+  /// the import and cancel it. Null when no run is active.
+  RepertoireJob? _job;
+
+  /// Last progress pushed to [_job]. Message and fraction arrive through
+  /// separate callbacks; compose onto this so one never resets the other.
+  JobProgress _jobProgress = JobProgress.zero;
+
+  void _updateJob({String? message, double? fraction, int? done, int? total}) {
+    final job = _job;
+    if (job == null) return;
+    _jobProgress = JobProgress(
+      fraction: fraction ?? _jobProgress.fraction,
+      message: message ?? _jobProgress.message,
+      nodesProcessed: done ?? _jobProgress.nodesProcessed,
+      totalNodes: total ?? _jobProgress.totalNodes,
+    );
+    job.updateProgress(_jobProgress);
+  }
+
+  void _onGameProgress(double fraction, int gamesDone, int gamesTotal) {
+    // Site-level reports arrive many times per second; only forward
+    // meaningful movement so the job listeners aren't rebuilt per search.
+    if (gamesDone == _jobProgress.nodesProcessed &&
+        gamesTotal == _jobProgress.totalNodes &&
+        (fraction - _jobProgress.fraction).abs() < 0.005) {
+      return;
+    }
+    _updateJob(fraction: fraction, done: gamesDone, total: gamesTotal);
+  }
 
   /// True from the pause click until the run has fully wound down. Keeps the
   /// pause button single-shot and stops progress messages from overwriting
@@ -165,6 +198,30 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
+  /// Register a starting run with the app-wide [JobManager] — so every
+  /// screen can see and cancel it — and lease the shared engine pool so a
+  /// mode switch can't dispose the workers mid-run.
+  void _beginJob(String label) {
+    EngineLifecycle.instance.retainPool();
+    _jobProgress = JobProgress.zero;
+    final job = _job = JobManager.instance.createJob(
+      type: JobType.tacticsImport,
+      label: label,
+    );
+    job.onCancel = cancelImport;
+    job.updateStatus(JobStatus.running);
+  }
+
+  /// Close out the job registered by [_beginJob]. A job already marked
+  /// failed keeps that status.
+  void _endJob({required bool cancelled}) {
+    EngineLifecycle.instance.releasePool();
+    final job = _job;
+    _job = null;
+    if (job == null || !job.isActive) return;
+    job.updateStatus(cancelled ? JobStatus.cancelled : JobStatus.completed);
+  }
+
   /// Resume analysis of stored PGN games that weren't analyzed yet.
   /// Games played before [since] are left alone (expired from the queue).
   Future<void> resumeAnalysis({
@@ -183,6 +240,7 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
     importStatus = 'Resuming analysis…';
     isImporting = true;
     newPositionsFound = 0;
+    _beginJob('Analyze stored games');
     notifyListeners();
 
     try {
@@ -195,13 +253,18 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
         maxCores: cores,
         progressCallback: _onProgress,
         onPositionFound: _onPositionFound,
+        onGameProgress: _onGameProgress,
       );
 
       await _flushFoundPositions();
       await database.loadPositions();
       // Cancelled: clear the "Pausing…" note instead of claiming success.
       importStatus = importService.wasCancelled ? null : _statusMessage(result);
+    } catch (e) {
+      _job?.fail('$e');
+      rethrow;
     } finally {
+      _endJob(cancelled: importService.wasCancelled);
       // On an abnormal exit the try block never flushed — persist what the
       // cancelled/failed run found so far.
       await _flushFoundPositions();
@@ -239,6 +302,7 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
     importStatus = 'Initializing...';
     isImporting = true;
     newPositionsFound = 0;
+    _beginJob('Tactics import — ${params.username}');
     notifyListeners();
 
     try {
@@ -258,6 +322,7 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
           maxCores: cores,
           progressCallback: _onProgress,
           onPositionFound: _onPositionFound,
+          onGameProgress: _onGameProgress,
         );
       } else {
         result = await importService.importGamesFromChessCom(
@@ -268,6 +333,7 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
           maxCores: cores,
           progressCallback: _onProgress,
           onPositionFound: _onPositionFound,
+          onGameProgress: _onGameProgress,
         );
       }
 
@@ -282,7 +348,11 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
       }
       importStatus = _statusMessage(result);
       return true;
+    } catch (e) {
+      _job?.fail('$e');
+      rethrow;
     } finally {
+      _endJob(cancelled: importService.wasCancelled);
       // On an abnormal exit the try block never flushed — persist what the
       // cancelled/failed run found so far.
       await _flushFoundPositions();
@@ -365,6 +435,7 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
     isCancelling = true;
     activeImport?.cancel();
     importStatus = 'Pausing…';
+    _updateJob(message: 'Pausing…');
     notifyListeners();
   }
 
@@ -378,6 +449,7 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
     // them overwrite the "Pausing…" status.
     if (isCancelling) return;
     importStatus = message;
+    _updateJob(message: message);
     _notifyThrottled();
   }
 

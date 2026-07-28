@@ -9,6 +9,7 @@ import '../services/tactics_database.dart';
 import '../theme/app_colors.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/app_mode_menu_button.dart';
+import '../widgets/jobs_status_button.dart';
 import '../widgets/tactics_control_panel.dart';
 import '../widgets/training/move_input_widget.dart';
 
@@ -215,7 +216,7 @@ class _TacticsModeScaffold extends StatelessWidget {
             _TacticsAppBarBackButton(),
           ],
         ),
-        actions: const [AppModeMenuButton()],
+        actions: const [JobsStatusButton(), AppModeMenuButton()],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {

@@ -24,6 +24,7 @@ import '../utils/app_messages.dart';
 import '../utils/board_shape_comments.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_mode_menu_button.dart';
+import '../widgets/jobs_status_button.dart';
 import '../widgets/board_editor/board_editor_dialog.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/engine/inline_engine_bar.dart';
@@ -625,6 +626,7 @@ class _StudyScreenState extends State<StudyScreen> {
               );
             },
           ),
+          const JobsStatusButton(),
           const AppModeMenuButton(),
         ],
       ),

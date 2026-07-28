@@ -39,6 +39,7 @@ import '../theme/app_colors.dart';
 import '../widgets/engine/engine_gate.dart';
 import '../widgets/engine_weakness_dialog.dart';
 import '../widgets/app_mode_menu_button.dart';
+import '../widgets/jobs_status_button.dart';
 import '../widgets/position_analysis_widget.dart';
 import 'player_selection_screen.dart';
 
@@ -224,6 +225,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
             tooltip: 'Select Player',
             onPressed: _showPlayerSelection,
           ),
+          const JobsStatusButton(),
           const AppModeMenuButton(),
         ],
       ),

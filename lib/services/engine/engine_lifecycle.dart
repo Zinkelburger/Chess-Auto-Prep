@@ -78,6 +78,23 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
   /// Free the engine without changing the user's persisted preference.
   Future<void> suspend() => _serialExec(_doShutdown);
 
+  /// Number of background jobs currently borrowing the shared pool (e.g. a
+  /// tactics import). While positive, [suspend]/[toggleOff] cancel
+  /// interactive analysis but leave the pool's workers alive — disposing
+  /// them mid-import killed every search the job had in flight (the classic
+  /// repro: start a tactics import, visit the Repertoire tab, leave it).
+  int _poolLeases = 0;
+
+  /// Mark the shared pool as in use by a background job. Pair every call
+  /// with [releasePool] in a `finally`.
+  void retainPool() => _poolLeases++;
+
+  /// Release a [retainPool] lease. The pool is not shut down here — the
+  /// next [suspend]/[toggleOff] disposes it once no leases remain.
+  void releasePool() {
+    if (_poolLeases > 0) _poolLeases--;
+  }
+
   /// Restart after [suspend] when the user preference allows it.
   Future<void> resume() => _serialExec(() async {
     if (_userWantsEngine) await _doToggleOn();
@@ -108,7 +125,12 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
     if (!testMode) {
       await Future.delayed(const Duration(milliseconds: 100));
     }
-    _pool.dispose();
+    // A leased pool belongs to a running background job — leave its workers
+    // alive. On app close the orphaned engines still exit on their own:
+    // stdin hits EOF when this process dies and UCI engines quit on EOF.
+    if (_poolLeases == 0) {
+      _pool.dispose();
+    }
     _state = EngineState.off;
     notifyListeners();
   }
@@ -190,6 +212,7 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
     _state = EngineState.off;
     _userWantsEngine = true;
     _toggleStateBeforeGeneration = false;
+    _poolLeases = 0;
     _queueTail = Future.value();
     testMode = false;
   }

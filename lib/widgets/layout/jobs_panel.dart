@@ -74,6 +74,8 @@ class JobsPanel extends StatelessWidget {
         activeCards.add(_buildAuditJobCard(context, job));
       } else if (job.type == JobType.coverage) {
         activeCards.add(_buildCoverageJobCard(context, job));
+      } else if (job.type == JobType.tacticsImport) {
+        activeCards.add(_buildTacticsImportJobCard(context, job));
       } else {
         activeCards.add(_buildJobTile(context, job));
       }
@@ -324,6 +326,30 @@ class JobsPanel extends StatelessWidget {
     );
   }
 
+  Widget _buildTacticsImportJobCard(BuildContext context, RepertoireJob job) {
+    final accent = Theme.of(context).colorScheme.primary;
+    return _ActiveJobCard(
+      icon: Icons.extension_outlined,
+      accent: accent,
+      title: job.label,
+      subtitle: null,
+      phaseIcon: Icons.search,
+      phaseLabel: 'Mining tactics',
+      statParts: [
+        job.progress.message.isNotEmpty
+            ? job.progress.message
+            : 'Starting import…',
+      ],
+      elapsed: null,
+      resourceLabel: null,
+      progress: job.progress.fraction > 0 ? job.progress.fraction : null,
+      isPaused: false,
+      onPause: null,
+      onResume: null,
+      onCancel: job.onCancel,
+    );
+  }
+
   TreeBuildConfig? _configFromJob(RepertoireJob job) {
     final snap = job.configSnapshot;
     if (snap == null) return null;
@@ -355,6 +381,7 @@ class JobsPanel extends StatelessWidget {
       JobType.audit => Icons.policy_outlined,
       JobType.coverage => Icons.analytics_outlined,
       JobType.studyImport => Icons.cloud_download_outlined,
+      JobType.tacticsImport => Icons.extension_outlined,
     };
     final statusColor = switch (job.status) {
       JobStatus.running => Theme.of(context).colorScheme.primary,

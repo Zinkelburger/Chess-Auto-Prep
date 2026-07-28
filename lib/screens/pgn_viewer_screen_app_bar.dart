@@ -189,6 +189,7 @@ mixin _AppBarBuildersMixin
             ),
           ],
         ],
+        const JobsStatusButton(),
         const AppModeMenuButton(),
       ],
     );

@@ -20,6 +20,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_mode_menu_button.dart';
+import '../widgets/jobs_status_button.dart';
 import '../widgets/pgn_viewer_widget.dart';
 import '../widgets/trainer_keyboard_scope.dart';
 import '../widgets/training/chapter_setup_dialog.dart';
@@ -343,6 +344,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
           icon: const Icon(Icons.library_books),
           onPressed: _selectRepertoire,
         ),
+        const JobsStatusButton(),
         const AppModeMenuButton(),
         const SizedBox(width: 8),
       ],

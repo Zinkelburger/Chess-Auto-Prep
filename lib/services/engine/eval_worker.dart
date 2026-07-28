@@ -47,6 +47,10 @@ class EvalWorker {
   final EngineConnection engine;
   late final StreamSubscription _sub;
 
+  /// Searches launched via [evaluateFen] across all workers, resettable.
+  /// Diagnostic only — read by benchmarks to compare mining strategies.
+  static int searchCount = 0;
+
   /// Pending `isready` handshakes, completed FIFO as each `readyok` arrives.
   /// A queue (not a single completer) so overlapping handshakes — e.g.
   /// [setThreads] from pool reconfiguration racing an [evaluateFen] — can
@@ -183,6 +187,7 @@ class EvalWorker {
     if (gen != _stopGen) throw StateError('Eval stopped');
 
     // Pipeline is clean — safe to set up the new eval.
+    searchCount++;
     _evalCompleter = Completer<EvalResult>();
     _scoreCp = null;
     _scoreMate = null;

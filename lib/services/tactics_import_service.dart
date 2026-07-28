@@ -35,6 +35,11 @@ typedef OnPositionFoundCallback =
 /// Callback for progress updates during import
 typedef ProgressCallback = void Function(String message);
 
+/// Structured progress for job displays. [fraction] spans the whole run:
+/// completed games plus the in-flight game's evaluated share.
+typedef GameProgressCallback =
+    void Function(double fraction, int gamesDone, int gamesTotal);
+
 /// Result of a tactics import or resume operation.
 typedef ImportResult = ({
   List<TacticsPosition> positions,
@@ -180,6 +185,7 @@ class TacticsImportService {
     int? maxCores,
     ProgressCallback? progressCallback,
     OnPositionFoundCallback? onPositionFound,
+    GameProgressCallback? onGameProgress,
   }) async {
     _cancelled = false;
     final content = await StorageFactory.instance.readImportedPgns();
@@ -226,6 +232,7 @@ class TacticsImportService {
         onPositionFound,
         maxCores: maxCores,
         mapChessComEloForMaia: false,
+        onGameProgress: onGameProgress,
       );
       allPositions.addAll(result.positions);
       totalAnalyzed += result.gamesAnalyzed;
@@ -244,6 +251,7 @@ class TacticsImportService {
         onPositionFound,
         maxCores: maxCores,
         mapChessComEloForMaia: true,
+        onGameProgress: onGameProgress,
       );
       allPositions.addAll(result.positions);
       totalAnalyzed += result.gamesAnalyzed;
@@ -273,6 +281,7 @@ class TacticsImportService {
     int? maxCores,
     Function(String)? progressCallback,
     OnPositionFoundCallback? onPositionFound,
+    GameProgressCallback? onGameProgress,
   }) async {
     _cancelled = false;
     final params = <String, String>{
@@ -316,6 +325,7 @@ class TacticsImportService {
       onPositionFound,
       maxCores: maxCores,
       mapChessComEloForMaia: false,
+      onGameProgress: onGameProgress,
     );
   }
 
@@ -339,6 +349,7 @@ class TacticsImportService {
     int? maxCores,
     Function(String)? progressCallback,
     OnPositionFoundCallback? onPositionFound,
+    GameProgressCallback? onGameProgress,
   }) async {
     _cancelled = false;
     // null = no game-count limit: the since window is the only limit. Only
@@ -437,6 +448,7 @@ class TacticsImportService {
       onPositionFound,
       maxCores: maxCores,
       mapChessComEloForMaia: true,
+      onGameProgress: onGameProgress,
     );
   }
 
@@ -514,6 +526,7 @@ class TacticsImportService {
     /// When true, PGN [WhiteElo]/[BlackElo] are Chess.com blitz and converted
     /// via [chessComBlitzToLichessBlitz] before Maia line extension.
     bool mapChessComEloForMaia = false,
+    GameProgressCallback? onGameProgress,
   }) async {
     // A cancel during the fetch/download phase must stick — resetting
     // `_cancelled` here used to silently un-cancel the run once analysis
@@ -613,56 +626,66 @@ class TacticsImportService {
     // multi-threaded ones and avoid CPU oversubscription.
     await pool.reconfigureAllWorkers(1);
 
-    final concurrency = math.min(pool.workerCount, gameTasks.length);
-
     progressCallback?.call(
       'Starting analysis: ${gameTasks.length} games '
-      'across $concurrency workers...',
+      'across ${pool.workerCount} workers...',
     );
 
-    // ── Build lookup for original game order ─────────────────
-    final gameOrder = <String, int>{};
-    for (int i = 0; i < gameTasks.length; i++) {
-      gameOrder[gameTasks[i]['gameId'] as String] = i;
-    }
-
-    // ── Process games in parallel (dynamic work-stealing) ────
-    final gamePositions = <String, List<TacticsPosition>>{};
+    // ── Process games one at a time, evaluations pool-wide ───
+    // Each game's positions fan out across every worker (see
+    // _analyzeGameParallel), so a single new game — the common incremental
+    // import — already saturates the pool; running games concurrently on
+    // top of that would only interleave their work. Sequential games also
+    // keep today's cancel/resume granularity: a game is marked analyzed
+    // only once its tactics are persisted, in original order.
+    final evalCache = _OpeningEvalCache(depth: depth);
+    final positions = <TacticsPosition>[];
     int completedGames = 0;
     int totalPositionsFound = 0;
 
-    await pool.forEachParallel<Map<String, dynamic>>(gameTasks, (
-      worker,
-      task,
-    ) async {
+    onGameProgress?.call(0, 0, gameTasks.length);
+    for (final task in gameTasks) {
+      if (_cancelled) break;
       final gameText = task['gameText'] as String;
       final gameId = task['gameId'] as String;
 
       try {
-        final positions = await _analyzeGameWithWorker(
-          worker: worker,
+        final gamePositions = await _analyzeGameParallel(
+          pool: pool,
           gameText: gameText,
           username: usernameLower,
           depth: depth,
           gameId: gameId,
           maia: maia,
           maiaElo: maiaElo,
+          evalCache: evalCache,
           shouldAbort: () => _cancelled,
+          onSiteProgress: (done, total) {
+            progressCallback?.call(
+              'Analyzing game ${completedGames + 1}/${gameTasks.length} '
+              '(move $done/$total, $totalPositionsFound tactics found)...',
+            );
+            onGameProgress?.call(
+              (completedGames + done / total) / gameTasks.length,
+              completedGames,
+              gameTasks.length,
+            );
+          },
         );
-        if (_cancelled) return;
-        gamePositions[gameId] = positions;
-        totalPositionsFound += positions.length;
+        if (_cancelled) break;
+        positions.addAll(gamePositions);
+        totalPositionsFound += gamePositions.length;
 
         // Persist positions BEFORE marking game analyzed so a
         // mid-analysis app close doesn't permanently skip this game.
-        if (positions.isNotEmpty && onPositionFound != null) {
-          for (final pos in positions) {
+        if (gamePositions.isNotEmpty && onPositionFound != null) {
+          for (final pos in gamePositions) {
             await onPositionFound(pos);
           }
         }
         await _database.markGameAnalyzed(gameId);
       } catch (e) {
-        if (_cancelled) return;
+        if (_cancelled) break;
         if (kDebugMode) log.e('Error analyzing game $gameId: $e');
       }
 
@@ -671,15 +694,11 @@ class TacticsImportService {
         'Analyzed $completedGames/${gameTasks.length} games '
         '($totalPositionsFound tactics found)...',
       );
-    }, stopWhen: () => _cancelled);
-
-    // ── Assemble results in original game order ──────────────
-    final sortedGameIds = gamePositions.keys.toList()
-      ..sort((a, b) => (gameOrder[a] ?? 999).compareTo(gameOrder[b] ?? 999));
-
-    final positions = <TacticsPosition>[];
-    for (final gameId in sortedGameIds) {
-      positions.addAll(gamePositions[gameId]!);
+      onGameProgress?.call(
+        completedGames / gameTasks.length,
+        completedGames,
+        gameTasks.length,
+      );
     }
 
     if (_cancelled) {
