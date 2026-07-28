@@ -422,6 +422,7 @@ abstract final class AppColors {
   static const findingWeakPosition = Color(0xFFFF5722);
   static const findingUncoveredStrongMove = Color(0xFF00BCD4);
   static const findingPracticalTrap = Color(0xFFE040FB);
+  static const findingTrickyMove = Color(0xFF7C4DFF);
   static const findingClash = Color(0xFF9C27B0);
 
   // ── Trap reply classification (blunder → good) ──────────────────────────

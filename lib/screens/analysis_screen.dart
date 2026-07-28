@@ -20,6 +20,10 @@ import '../features/holes/services/hole_hunt_config.dart';
 import '../features/holes/services/hole_hunt_persistence.dart';
 import '../features/holes/services/hole_hunt_service.dart';
 import '../features/holes/widgets/hole_hunt_config_dialog.dart';
+import '../features/tricks/services/trick_hunt_config.dart';
+import '../features/tricks/services/trick_hunt_persistence.dart';
+import '../features/tricks/services/trick_hunt_service.dart';
+import '../features/tricks/widgets/trick_hunt_config_dialog.dart';
 import '../models/analysis_player_info.dart';
 import '../models/engine_weakness_result.dart';
 import '../models/position_analysis.dart';
@@ -29,6 +33,7 @@ import '../services/analysis_games_service.dart';
 import '../services/engine/engine_lifecycle.dart';
 import '../services/engine/stockfish_pool.dart';
 import '../services/engine_weakness_service.dart';
+import '../services/maia_factory.dart';
 import '../services/unified_analysis_builder.dart';
 import '../theme/app_colors.dart';
 import '../widgets/engine/engine_gate.dart';
@@ -39,6 +44,7 @@ import 'player_selection_screen.dart';
 
 part 'analysis_screen_engine.dart';
 part 'analysis_screen_holes.dart';
+part 'analysis_screen_tricks.dart';
 
 class AnalysisScreen extends StatefulWidget {
   const AnalysisScreen({super.key});
@@ -102,6 +108,20 @@ abstract class _AnalysisScreenStateBase extends State<AnalysisScreen> {
   bool _huntCancelled = false;
   bool _trapPassSkipped = false;
 
+  // ── Trick hunt state ────────────────────────────────────────────────
+  //
+  // Same shape as the hole hunt: reports and configs per colour, live
+  // findings and progress for the run in flight.
+  final TrickHuntService _trickService = TrickHuntService();
+  final Map<bool, AuditResult?> _tricksResults = {true: null, false: null};
+  final Map<bool, TrickHuntConfig?> _tricksConfigs = {true: null, false: null};
+  List<AuditFinding> _tricksLive = [];
+  TrickHuntProgress? _tricksProgress;
+  bool _isTrickHunting = false;
+  bool _trickHuntIsWhite = true;
+  bool _trickHuntCancelled = false;
+  bool _trickProbesSkipped = false;
+
   // Implemented by the concrete state; called from the extracted mixins.
   Future<void> _analyzeBothColors();
   Future<bool> _redownloadGames(int monthsBack);
@@ -124,7 +144,7 @@ abstract class _AnalysisScreenStateBase extends State<AnalysisScreen> {
 }
 
 class _AnalysisScreenState extends _AnalysisScreenStateBase
-    with _EngineWeaknessMixin, _HoleHuntMixin {
+    with _EngineWeaknessMixin, _HoleHuntMixin, _TrickHuntMixin {
   @override
   void initState() {
     super.initState();
@@ -138,8 +158,9 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
   @override
   void dispose() {
     _evalService?.dispose();
-    // The pending hunt future notices the flag and releases the engine.
+    // The pending hunt futures notice the flag and release the engine.
     if (_isHunting) _holeService.cancel();
+    if (_isTrickHunting) _trickService.cancel();
     super.dispose();
   }
 
@@ -187,6 +208,17 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
               onPressed: _canStartEngineJob ? _showHoleHuntConfig : null,
             ),
           ),
+          Tooltip(
+            message:
+                'Hunt tricky near-best moves and novelties for the '
+                'opposite side — moves that score better in practice '
+                'than the engine-best move',
+            child: TextButton.icon(
+              icon: const Icon(Icons.auto_fix_high, size: 18),
+              label: const Text('Find Tricks'),
+              onPressed: _canStartEngineJob ? _showTrickHuntConfig : null,
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.person_search),
             tooltip: 'Select Player',
@@ -207,7 +239,11 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
   /// Engine actions are disabled (never hidden) while any job runs or before
   /// a tree exists to analyze.
   bool get _canStartEngineJob =>
-      _openingTree != null && !_isAnalyzing && !_evalRunning && !_isHunting;
+      _openingTree != null &&
+      !_isAnalyzing &&
+      !_evalRunning &&
+      !_isHunting &&
+      !_isTrickHunting;
 
   List<Widget> _buildColorControls() {
     return [
@@ -329,6 +365,19 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
         ),
       ];
     }
+    if (_isTrickHunting) {
+      return [
+        LinearProgressIndicator(minHeight: 2, value: _tricksProgress?.fraction),
+        _buildJobStatusRow(
+          theme,
+          message: _trickHuntCancelled
+              ? 'Cancelling trick hunt…'
+              : 'Trick hunt: ${_tricksProgress?.message ?? 'starting…'}',
+          cancelTooltip: 'Cancel trick hunt',
+          onCancel: _trickHuntCancelled ? null : _cancelTrickHunt,
+        ),
+      ];
+    }
     return const [];
   }
 
@@ -396,6 +445,8 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     }
 
     final huntOnDisplayedColor = _isHunting && _huntIsWhite == _playerIsWhite;
+    final trickHuntOnDisplayedColor =
+        _isTrickHunting && _trickHuntIsWhite == _playerIsWhite;
     return PositionAnalysisWidget(
       analysis: _positionAnalysis,
       openingTree: _openingTree,
@@ -411,7 +462,15 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
       holesProgress: huntOnDisplayedColor ? _holesProgress : null,
       holesTrapPassSkipped: _trapPassSkipped && _huntIsWhite == _playerIsWhite,
       onHolesResultChanged: _onHolesResultChanged,
-      onStartHoleHunt: _isHunting || _isAnalyzing ? null : _showHoleHuntConfig,
+      onStartHoleHunt: _canStartEngineJob ? _showHoleHuntConfig : null,
+      tricksResult: _tricksResults[_playerIsWhite],
+      tricksLiveFindings: trickHuntOnDisplayedColor ? _tricksLive : const [],
+      isTrickHunting: trickHuntOnDisplayedColor,
+      tricksProgress: trickHuntOnDisplayedColor ? _tricksProgress : null,
+      tricksProbesSkipped:
+          _trickProbesSkipped && _trickHuntIsWhite == _playerIsWhite,
+      onTricksResultChanged: _onTricksResultChanged,
+      onStartTrickHunt: _canStartEngineJob ? _showTrickHuntConfig : null,
       actions: _boardActions,
     );
   }
@@ -443,6 +502,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     if (result != null && mounted) {
       _cancelEvalAnalysis();
       if (_isHunting) _cancelHoleHunt();
+      if (_isTrickHunting) _cancelTrickHunt();
       setState(() {
         _currentPlayer = result;
         _resetAnalysisState();
@@ -469,6 +529,13 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     _holesLive = [];
     _holesProgress = null;
     _trapPassSkipped = false;
+    _tricksResults[true] = null;
+    _tricksResults[false] = null;
+    _tricksConfigs[true] = null;
+    _tricksConfigs[false] = null;
+    _tricksLive = [];
+    _tricksProgress = null;
+    _trickProbesSkipped = false;
   }
 
   // ── Re-download games ───────────────────────────────────────────
@@ -660,9 +727,10 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
       });
 
       // Merge previously computed engine evals into the displayed analysis,
-      // and restore any saved hole reports.
+      // and restore any saved hole/trick reports.
       await _loadEngineEvals();
       await _loadHolesReports();
+      await _loadTricksReports();
     } catch (e) {
       if (mounted) {
         _showError('Failed to analyze positions: $e');

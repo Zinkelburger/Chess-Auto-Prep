@@ -55,6 +55,7 @@ void main() {
       fen: someFen,
       expectedEvalCp: 95,
       practicalGapCp: 80,
+      oppEase: 0.35,
       exploitLine: const ['e4', 'dxe4', 'Ne5'],
       cumulativeProbability: 0.6,
       exploitScore: 0.6 * 80,
@@ -63,6 +64,7 @@ void main() {
     expect(restored.type, AuditFindingType.practicalTrap);
     expect(restored.expectedEvalCp, 95);
     expect(restored.practicalGapCp, 80);
+    expect(restored.oppEase, closeTo(0.35, 1e-9));
     expect(restored.exploitLine, ['e4', 'dxe4', 'Ne5']);
     expect(restored.summary, contains('Trap zone'));
     expect(restored.summary, contains('+80cp'));

@@ -29,6 +29,8 @@ class AnalysisGamesService {
     '_engine_evals.json',
     '_holes_white.json',
     '_holes_black.json',
+    '_tricks_white.json',
+    '_tricks_black.json',
     '.json',
   ];
 
@@ -40,6 +42,8 @@ class AnalysisGamesService {
     '_engine_evals.json',
     '_holes_white.json',
     '_holes_black.json',
+    '_tricks_white.json',
+    '_tricks_black.json',
   ];
 
   /// Resolve (and create if needed) the on-disk directory for analysis data.
@@ -284,6 +288,21 @@ class AnalysisGamesService {
     );
   }
 
+  /// Absolute path of the trick-hunt report for one colour's game tree,
+  /// written and read via [TrickHuntPersistence].
+  Future<String> tricksReportPath(
+    String platform,
+    String username,
+    bool isWhite,
+  ) async {
+    final directory = await _getAnalysisDirectory();
+    final colour = isWhite ? 'white' : 'black';
+    return p.join(
+      directory.path,
+      '${_playerKey(platform, username)}_tricks_$colour.json',
+    );
+  }
+
   /// Metadata of the already-stored player that [username] on [platform]
   /// would overwrite, or `null` if the slot is free. Matches by storage key,
   /// so names that merely sanitize to the same key also count.
@@ -426,6 +445,7 @@ class AnalysisGamesService {
       for (final path in [
         await cachedAnalysisPath(platform, username, isWhite),
         await holesReportPath(platform, username, isWhite),
+        await tricksReportPath(platform, username, isWhite),
       ]) {
         final file = File(path);
         if (await file.exists()) await file.delete();

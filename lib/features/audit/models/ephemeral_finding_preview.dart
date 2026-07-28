@@ -56,8 +56,11 @@ class EphemeralFindingPreview {
   }
 
   /// Finding kinds that name a move worth putting on the board.
+  /// TrickyMove findings set [AuditFinding.missingMove] only for novelties,
+  /// so in-tree tricks simply return null from [forFinding].
   static const Set<AuditFindingType> previewableTypes = {
     AuditFindingType.missingResponse,
     AuditFindingType.uncoveredStrongMove,
+    AuditFindingType.trickyMove,
   };
 }

@@ -13,6 +13,10 @@ enum AuditFindingType {
   uncoveredStrongMove,
   refutation,
   practicalTrap,
+
+  // Trick-hunt finding type — emitted by TrickHuntService: a near-best (or
+  // novelty) move that scores better in practice than the engine-best move.
+  trickyMove,
 }
 
 enum AuditSeverity { critical, warning, info }
@@ -82,6 +86,19 @@ class AuditFinding {
   /// harder the position plays than it "should".
   final int? practicalGapCp;
 
+  /// For TrickyMove: probe practical eval minus the engine-best move's raw
+  /// eval (cp, trickster perspective) — what playing the trick gains in
+  /// expectation over just playing the best move.
+  final int? netGainCp;
+
+  /// For PracticalTrap/TrickyMove: the opponent's ease in the probed
+  /// position (0..1, app-wide ease formula). Low = many plausible ways to
+  /// go wrong.
+  final double? oppEase;
+
+  /// For TrickyMove: true when the candidate move is not in the source tree.
+  final bool? isNovelty;
+
   /// Hole-hunt ranking score: cumulative reach probability × gain (cp).
   final double? exploitScore;
 
@@ -109,6 +126,9 @@ class AuditFinding {
     this.exploitLine,
     this.expectedEvalCp,
     this.practicalGapCp,
+    this.netGainCp,
+    this.oppEase,
+    this.isNovelty,
     this.exploitScore,
     this.dismissed = false,
   });
@@ -202,6 +222,12 @@ class AuditFinding {
             : '';
         return 'Trap zone: practically +${practicalGapCp}cp over the raw eval'
             '$lineTag';
+      case AuditFindingType.trickyMove:
+        final move = ourMove ?? '?';
+        final numbered = _sanWithMoveNumber(move, movePath.length);
+        final noveltyTag = isNovelty == true ? ' · novelty' : '';
+        return 'Trick: $numbered nets +${netGainCp}cp over best in practice'
+            '$noveltyTag';
     }
   }
 
@@ -252,6 +278,9 @@ class AuditFinding {
       'exploitLine': exploitLine,
     if (expectedEvalCp != null) 'expectedEvalCp': expectedEvalCp,
     if (practicalGapCp != null) 'practicalGapCp': practicalGapCp,
+    if (netGainCp != null) 'netGainCp': netGainCp,
+    if (oppEase != null) 'oppEase': oppEase,
+    if (isNovelty != null) 'isNovelty': isNovelty,
     if (exploitScore != null) 'exploitScore': exploitScore,
     if (dismissed) 'dismissed': true,
   };
@@ -279,6 +308,9 @@ class AuditFinding {
     exploitLine: (j['exploitLine'] as List?)?.cast<String>(),
     expectedEvalCp: j['expectedEvalCp'] as int?,
     practicalGapCp: j['practicalGapCp'] as int?,
+    netGainCp: j['netGainCp'] as int?,
+    oppEase: (j['oppEase'] as num?)?.toDouble(),
+    isNovelty: j['isNovelty'] as bool?,
     exploitScore: (j['exploitScore'] as num?)?.toDouble(),
     dismissed: j['dismissed'] as bool? ?? false,
   );

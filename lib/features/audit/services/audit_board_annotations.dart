@@ -52,6 +52,7 @@ List<BoardAnnotation> buildAuditBoardAnnotations({
         f.missingMove,
       ),
       AuditFindingType.refutation => (AnnotationBrush.red, f.ourMove),
+      AuditFindingType.trickyMove => (AnnotationBrush.purple, f.ourMove),
       _ => (AnnotationBrush.green, null as String?),
     };
 

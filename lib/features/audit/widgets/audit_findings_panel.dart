@@ -511,6 +511,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
       AuditFindingType.uncoveredStrongMove => 'uncovered strong moves',
       AuditFindingType.refutation => 'refutations',
       AuditFindingType.practicalTrap => 'practical traps',
+      AuditFindingType.trickyMove => 'tricky moves',
     };
   }
 }

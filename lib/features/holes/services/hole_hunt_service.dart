@@ -19,6 +19,7 @@ import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../models/build_tree_node.dart';
 import '../../../models/opening_tree.dart';
 import '../../../services/engine/stockfish_pool.dart';
 import '../../../services/eval_cache.dart';
@@ -26,6 +27,7 @@ import '../../../services/expectimax_line_service.dart';
 import '../../../services/generation/eca_calculator.dart';
 import '../../../services/generation/fen_map.dart';
 import '../../../services/generation/generation_config.dart';
+import '../../../services/generation/tree_ease.dart';
 import '../../../services/maia_factory.dart';
 import '../../../services/tree_build_service.dart';
 import '../../../services/eval/eval_move_helpers.dart';
@@ -526,6 +528,7 @@ class HoleHuntService {
         final fenMap = FenMap()..populate(tree.root);
         final eca = ExpectimaxCalculator(config: buildConfig, fenMap: fenMap);
         eca.calculate(tree);
+        calculateTreeEase(tree);
 
         final lines = generateExpectimaxLines(
           tree.root,
@@ -553,6 +556,7 @@ class HoleHuntService {
             positionEvalCp: rawCp,
             expectedEvalCp: top.expectedEvalCp,
             practicalGapCp: gap,
+            oppEase: _trapOppEase(tree, attackerIsWhite, top),
             exploitLine: top.movesSan,
             cumulativeProbability: leaf.cumProb,
             exploitScore: exploitScoreOf(cumProb: leaf.cumProb, gainCp: gap),
@@ -574,6 +578,24 @@ class HoleHuntService {
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────
+
+  /// Ease of the position where the repertoire OWNER is to move — ease is
+  /// the side-to-move's ease, so this is the "how likely are they to go
+  /// wrong" number. The trap-pass root when the owner moves there, else the
+  /// child after the attacker's first exploit move. Null when unset.
+  double? _trapOppEase(
+    BuildTree tree,
+    bool attackerIsWhite,
+    ExpectimaxLine top,
+  ) {
+    final root = tree.root;
+    if (root.isWhiteToMove != attackerIsWhite) return root.ease;
+    if (top.movesUci.isEmpty) return null;
+    for (final child in root.children) {
+      if (child.moveUci == top.movesUci.first) return child.ease;
+    }
+    return null;
+  }
 
   int _countNodes(OpeningTreeNode root, int maxPly) {
     int count = 0;

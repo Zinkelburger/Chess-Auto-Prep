@@ -1,7 +1,8 @@
 /// Position analysis widget – three-panel layout for the Player Analysis screen.
 ///
 /// Left: FEN list (or loading spinner). Centre: chess board. Right: engine
-/// bar + tabbed pane (Move Tree · Games · PGN · Analysis · Holes). The
+/// bar + tabbed pane (Move Tree · Games · PGN · Analysis · Holes · Tricks).
+/// The
 /// study / puzzle / PGN-viewer handoffs are exposed to the host screen's
 /// app bar through [PositionAnalysisActions].
 ///
@@ -30,6 +31,8 @@ import '../features/audit/models/audit_result.dart';
 import '../features/audit/services/audit_board_annotations.dart';
 import '../features/holes/services/hole_hunt_service.dart';
 import '../features/holes/widgets/holes_report_panel.dart';
+import '../features/tricks/services/trick_hunt_service.dart';
+import '../features/tricks/widgets/tricks_report_panel.dart';
 import '../models/move_tree.dart';
 import '../models/position_analysis.dart';
 import '../models/opening_tree.dart';
@@ -54,6 +57,7 @@ part 'position_analysis_widget.navigation.dart';
 
 const int _kAnalysisTabIndex = 3;
 const int _kHolesTabIndex = 4;
+const int _kTricksTabIndex = 5;
 
 /// Starting-position board, shown when no FEN has been selected yet.
 const Position _startingPosition = Chess.initial;
@@ -126,6 +130,27 @@ class PositionAnalysisWidget extends StatefulWidget {
   /// Open the hunt config to start (or re-run) a hunt.
   final VoidCallback? onStartHoleHunt;
 
+  // ── Trick hunt (Tricks tab) — state owned by the host screen ────────
+
+  /// Completed trick-hunt report for the displayed colour, if any.
+  final AuditResult? tricksResult;
+
+  /// Findings streamed from an in-flight trick hunt on the displayed colour.
+  final List<AuditFinding> tricksLiveFindings;
+
+  /// True while a trick hunt is running on the displayed colour's tree.
+  final bool isTrickHunting;
+  final TrickHuntProgress? tricksProgress;
+
+  /// Show the "probes skipped" note (Maia unavailable).
+  final bool tricksProbesSkipped;
+
+  /// Re-persist after dismissal edits in the report panel.
+  final void Function(AuditResult result)? onTricksResultChanged;
+
+  /// Open the trick-hunt config to start (or re-run) a hunt.
+  final VoidCallback? onStartTrickHunt;
+
   /// Handle for the host screen's app-bar menu to trigger the handoff
   /// actions (study / puzzle / PGN viewer).
   final PositionAnalysisActions? actions;
@@ -149,6 +174,13 @@ class PositionAnalysisWidget extends StatefulWidget {
     this.holesTrapPassSkipped = false,
     this.onHolesResultChanged,
     this.onStartHoleHunt,
+    this.tricksResult,
+    this.tricksLiveFindings = const [],
+    this.isTrickHunting = false,
+    this.tricksProgress,
+    this.tricksProbesSkipped = false,
+    this.onTricksResultChanged,
+    this.onStartTrickHunt,
     this.actions,
   });
 
@@ -207,7 +239,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
   void initState() {
     super.initState();
     widget.actions?._attach(this);
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     _tabController.addListener(_onTabChanged);
   }
 
@@ -335,7 +367,11 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
                 ? !widget.playerIsWhite!
                 : false,
             onMove: _onBoardMove,
-            annotations: _holesBoardAnnotations(),
+            // Each list is gated on its own tab, so at most one contributes.
+            annotations: [
+              ..._holesBoardAnnotations(),
+              ..._tricksBoardAnnotations(),
+            ],
           ),
         ),
       ),
@@ -488,6 +524,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
             const Tab(text: 'PGN'),
             const Tab(text: 'Analysis'),
             Tab(text: 'Holes${_holesCountLabel()}'),
+            Tab(text: 'Tricks${_tricksCountLabel()}'),
           ],
         ),
         Expanded(
@@ -503,6 +540,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
               _buildPgnTab(),
               _buildScratchTab(),
               _buildHolesTab(),
+              _buildTricksTab(),
             ],
           ),
         ),
@@ -614,6 +652,49 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
     }
     return buildAuditBoardAnnotations(
       result: widget.holesResult,
+      currentFen: expandFen(_currentFen!),
+    );
+  }
+
+  // =====================================================================
+  // Tricks tab (trick-hunt report)
+  // =====================================================================
+
+  /// " (n)" suffix for the Tricks tab label, or empty when nothing to count.
+  String _tricksCountLabel() {
+    final count =
+        (widget.tricksResult?.activeFindingCount ?? 0) +
+        widget.tricksLiveFindings.length;
+    return count > 0 ? ' ($count)' : '';
+  }
+
+  Widget _buildTricksTab() {
+    return TricksReportPanel(
+      result: widget.tricksResult,
+      liveFindings: widget.tricksLiveFindings,
+      isHunting: widget.isTrickHunting,
+      progress: widget.tricksProgress,
+      probesSkipped: widget.tricksProbesSkipped,
+      onFindingSelected: _onTrickFindingSelected,
+      onResultChanged: widget.onTricksResultChanged,
+      onStartHunt: widget.onStartTrickHunt,
+    );
+  }
+
+  /// Clicking a finding jumps the board (and tree cursor) to its position.
+  void _onTrickFindingSelected(AuditFinding finding) {
+    widget.openingTree?.navigateToFen(finding.fen);
+    _navigateTo(finding.fen);
+  }
+
+  /// Arrows for trick findings at the displayed position — built only while
+  /// the Tricks tab is active so they never bleed into normal browsing.
+  List<BoardAnnotation> _tricksBoardAnnotations() {
+    if (_tabController.index != _kTricksTabIndex || _currentFen == null) {
+      return const [];
+    }
+    return buildAuditBoardAnnotations(
+      result: widget.tricksResult,
       currentFen: expandFen(_currentFen!),
     );
   }

@@ -22,6 +22,7 @@ Color findingColor(AuditFinding finding) {
       AppColors.findingUncoveredStrongMove,
     AuditFindingType.refutation => AppColors.evalNegative,
     AuditFindingType.practicalTrap => AppColors.findingPracticalTrap,
+    AuditFindingType.trickyMove => AppColors.findingTrickyMove,
   };
 }
 
@@ -39,5 +40,6 @@ IconData findingIcon(AuditFinding finding) {
     AuditFindingType.uncoveredStrongMove => Icons.gps_fixed,
     AuditFindingType.refutation => Icons.bolt,
     AuditFindingType.practicalTrap => Icons.psychology_alt_outlined,
+    AuditFindingType.trickyMove => Icons.auto_fix_high,
   };
 }
