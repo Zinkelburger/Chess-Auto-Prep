@@ -37,11 +37,12 @@ class LichessAuthService extends ChangeNotifier {
 
   /// OAuth scopes requested.
   ///
-  /// We only need `preference:read` (for account info like username).
-  /// Game exports and the opening explorer work without scopes — auth
-  /// just gives us higher rate limits.
+  /// `preference:read` covers account info like the username. Game exports and
+  /// the opening explorer work without scopes — auth just gives us higher rate
+  /// limits.  `study:read` is what lets Study import pull down a *private* or
+  /// unlisted study; public studies need no scope at all.
   /// Note: there is no `game:read` scope in Lichess OAuth.
-  static const String _scopes = 'preference:read';
+  static const String _scopes = 'preference:read study:read';
 
   // ── SharedPreferences keys ─────────────────────────────────────────
 

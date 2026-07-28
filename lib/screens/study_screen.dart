@@ -6,6 +6,8 @@
 /// [InteractivePgnEditor] (move tree view) + [InlineEngineBar] (engine).
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -15,6 +17,8 @@ import '../core/app_state.dart';
 import '../core/study_controller.dart';
 import '../models/move_tree.dart' show TreePath;
 import '../services/repertoire_service.dart';
+import '../services/study_import/study_import_controller.dart';
+import '../services/study_import/study_import_exception.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
 import '../utils/board_shape_comments.dart';
@@ -26,6 +30,8 @@ import '../widgets/engine/inline_engine_bar.dart';
 import '../widgets/pgn/pgn_annotation_panel.dart';
 import '../widgets/interactive_pgn_editor.dart';
 import '../widgets/study/chapter_manager_dialog.dart';
+import '../widgets/study/import_from_url_dialog.dart';
+import '../widgets/study/study_import_status_chip.dart';
 import '../widgets/trainer_keyboard_scope.dart';
 import '../widgets/training/move_input_widget.dart';
 import 'puzzle_creator_screen.dart';
@@ -48,12 +54,20 @@ class _StudyScreenState extends State<StudyScreen> {
 
   AppState? _appStateRef;
 
+  /// Background collection downloads. App-wide, because a run outlives this
+  /// screen — [_seenImportGeneration] is seeded so a run that finished before
+  /// the screen existed is not re-announced.
+  final StudyImportController _import = StudyImportController.instance;
+  late int _seenImportGeneration;
+
   @override
   void initState() {
     super.initState();
     _study = context.read<StudyController>();
     _study.addListener(_onStudyChanged);
     _study.refreshStudyList();
+    _seenImportGeneration = _import.resultGeneration;
+    _import.addListener(_onImportResult);
 
     // "Edit study" hook (e.g. from the Repertoire Trainer): open the pending
     // file now and on later AppState notifications — the screen is cached in
@@ -84,6 +98,7 @@ class _StudyScreenState extends State<StudyScreen> {
   @override
   void dispose() {
     _appStateRef?.removeListener(_onAppStateChanged);
+    _import.removeListener(_onImportResult);
     _study.removeListener(_onStudyChanged);
     _focusNode.dispose();
     _nameEditController.dispose();
@@ -219,6 +234,110 @@ class _StudyScreenState extends State<StudyScreen> {
     } on ArgumentError catch (e) {
       if (mounted) showAppSnackBar(context, e.message as String, isError: true);
     }
+  }
+
+  // ── Import from URL ──────────────────────────────────────────────────
+
+  /// Download a Lichess study or a chessgames.com collection.
+  ///
+  /// The dialog resolves the source and hands back a plan: Lichess arrives
+  /// whole and is filed immediately, a collection is a paced multi-minute
+  /// download and is handed to [StudyImportController] to run in the
+  /// background (results arrive via [_onImportResult]).
+  Future<void> _importFromUrl() async {
+    final plan = await ImportFromUrlDialog.show(
+      context,
+      canAppend: _study.doc.filePath != null,
+    );
+    if (plan == null || !mounted) return;
+
+    switch (plan) {
+      case LichessStudyPlan():
+        await _applyLichessPlan(plan);
+      case CollectionPlan():
+        _startCollectionDownload(plan);
+    }
+  }
+
+  Future<void> _applyLichessPlan(LichessStudyPlan plan) async {
+    if (plan.appendToCurrent) {
+      final added = await _study.importChapters(plan.pgn);
+      if (!mounted) return;
+      showAppSnackBar(
+        context,
+        added == 0
+            ? 'Nothing to import from that study.'
+            : 'Added $added chapter${added == 1 ? '' : 's'} '
+                  'from "${plan.name}".',
+        isError: added == 0,
+      );
+      return;
+    }
+
+    await _study.createStudyFromPgn(plan.name, plan.pgn);
+    if (!mounted) return;
+    final chapters = _study.doc.chapters.length;
+    showAppSnackBar(
+      context,
+      'Imported "${_study.doc.name}" — $chapters '
+      'chapter${chapters == 1 ? '' : 's'}.',
+    );
+  }
+
+  void _startCollectionDownload(CollectionPlan plan) {
+    final minutes = (plan.gameIds.length * plan.delay.inSeconds / 60)
+        .ceil()
+        .clamp(1, 9999);
+    try {
+      // Deliberately not awaited: the run outlives this screen, and progress
+      // comes back through the status chip and [_onImportResult].
+      unawaited(
+        _import.startCollectionDownload(
+          gameIds: plan.gameIds,
+          studyName: plan.studyName,
+          delay: plan.delay,
+        ),
+      );
+    } on StudyImportException catch (e) {
+      showAppSnackBar(context, e.message, isError: true);
+      return;
+    }
+    showAppSnackBar(
+      context,
+      'Downloading ${plan.gameIds.length} games (~$minutes min). '
+      'chessgames.com is slow on purpose — keep working, it runs in the '
+      'background.',
+    );
+  }
+
+  /// One SnackBar per finished collection download, whenever Study mode is on
+  /// screen to show it. The job entry in the jobs panel is the durable record.
+  void _onImportResult() {
+    if (!mounted) return;
+    final result = _import.lastResult;
+    if (result == null || _import.resultGeneration == _seenImportGeneration) {
+      return;
+    }
+    _seenImportGeneration = _import.resultGeneration;
+
+    final error = result.error;
+    final message =
+        error ??
+        (result.cancelled
+            ? 'Stopped after ${result.chapters} of '
+                  '${result.chapters + result.failed} games — saved as '
+                  '"${result.studyName}".'
+            : 'Imported ${result.chapters} games into "${result.studyName}"'
+                  '${result.failed > 0 ? ' (${result.failed} unavailable)' : ''}.');
+
+    final path = result.studyPath;
+    showAppSnackBar(
+      context,
+      message,
+      isError: error != null,
+      actionLabel: result.wroteAnything ? 'Open' : null,
+      onAction: result.wroteAnything ? () => _study.openStudy(path!) : null,
+    );
   }
 
   /// Paste-in PGN import: every game becomes a chapter appended to the study.
@@ -472,6 +591,8 @@ class _StudyScreenState extends State<StudyScreen> {
           ],
         ),
         actions: [
+          // Only visible while a collection download is running.
+          const StudyImportStatusChip(),
           // Chapter-scoped actions (starting position, rename, delete, order)
           // all live on the chapter bar in the side pane; the app bar keeps
           // only what applies to the study or the board as a whole.
@@ -622,22 +743,30 @@ class _StudyScreenState extends State<StudyScreen> {
           tooltip: 'New study',
           onPressed: _newStudy,
         ),
-        if (current.filePath != null)
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, size: 18),
-            tooltip: 'Manage studies',
-            onSelected: (action) {
-              switch (action) {
-                case 'import':
-                  _importPgn();
-                case 'export':
-                  _exportPgn();
-                case 'delete':
-                  _deleteCurrentStudy();
-              }
-            },
-            itemBuilder: (_) => [
-              const PopupMenuItem(value: 'import', child: Text('Import PGN…')),
+        // Shown even with no study open — importing is how the first study
+        // gets created; only the actions that need a file are withheld.
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.more_vert, size: 18),
+          tooltip: 'Manage studies',
+          onSelected: (action) {
+            switch (action) {
+              case 'importUrl':
+                _importFromUrl();
+              case 'import':
+                _importPgn();
+              case 'export':
+                _exportPgn();
+              case 'delete':
+                _deleteCurrentStudy();
+            }
+          },
+          itemBuilder: (_) => [
+            const PopupMenuItem(
+              value: 'importUrl',
+              child: Text('Import from URL…'),
+            ),
+            const PopupMenuItem(value: 'import', child: Text('Import PGN…')),
+            if (current.filePath != null) ...[
               const PopupMenuItem(
                 value: 'export',
                 child: Text('Copy study PGN'),
@@ -648,7 +777,8 @@ class _StudyScreenState extends State<StudyScreen> {
                 child: Text('Delete study…'),
               ),
             ],
-          ),
+          ],
+        ),
       ],
     );
   }

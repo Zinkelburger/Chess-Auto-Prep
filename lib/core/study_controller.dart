@@ -19,6 +19,7 @@ import '../models/study_document.dart';
 import '../services/pgn_parsing_service.dart'
     show splitPgnIntoGames, extractHeaders, stripBom;
 import '../services/storage/storage_factory.dart';
+import '../services/storage/study_naming.dart';
 import '../utils/chess_utils.dart' show tryParseFen;
 import 'package:chess_auto_prep/utils/log.dart';
 import 'package:chess_auto_prep/utils/safe_change_notifier.dart';
@@ -82,6 +83,22 @@ class StudyController extends ChangeNotifier
     _dirty = true; // persist the empty skeleton
     await flushSave();
     await refreshStudyList();
+  }
+
+  /// Write [pgn] out as a brand-new study named [name] (one chapter per game)
+  /// and open it.  Returns the file path.
+  ///
+  /// The study file format *is* multi-game PGN, so the download goes straight
+  /// to disk — no parse/re-serialise round trip that could drop an annotation
+  /// on the way in.  [name] is sanitised and, if taken, suffixed.
+  Future<String> createStudyFromPgn(String name, String pgn) async {
+    _docGeneration++; // supersede any in-flight openStudy
+    await flushSave();
+    final reserved = await reserveStudyPath(name);
+    await StorageFactory.instance.writeFile(reserved.path, '${pgn.trim()}\n');
+    await refreshStudyList();
+    await openStudy(reserved.path);
+    return reserved.path;
   }
 
   /// Append a chapter (parsed from [pgn], including any `[FEN]` header) to

@@ -30,3 +30,52 @@ Uri chesscomArchivesUrl(String username) {
     '${Uri.encodeComponent(username.toLowerCase())}/games/archives',
   );
 }
+
+/// The Lichess study PGN export URL — the whole study, or one [chapterId].
+///
+/// Ids are validated as `[A-Za-z0-9]{8}` when the URL is parsed, so encoding
+/// here is belt-and-braces; it costs nothing and keeps every id a single path
+/// segment no matter where the caller got it.
+Uri lichessStudyPgnUrl(
+  String studyId,
+  Map<String, String> params, {
+  String? chapterId,
+}) {
+  final path = chapterId == null
+      ? '${Uri.encodeComponent(studyId)}.pgn'
+      : '${Uri.encodeComponent(studyId)}/${Uri.encodeComponent(chapterId)}.pgn';
+  return Uri.parse(
+    'https://lichess.org/api/study/$path',
+  ).replace(queryParameters: params.isEmpty ? null : params);
+}
+
+/// The "export every study by this user" PGN URL, [username] safely encoded.
+Uri lichessStudiesByUserUrl(String username, Map<String, String> params) {
+  return Uri.parse(
+    'https://lichess.org/api/study/by/'
+    '${Uri.encodeComponent(username)}/export.pgn',
+  ).replace(queryParameters: params.isEmpty ? null : params);
+}
+
+/// The chessgames.com collection page (the HTML we scrape game ids from).
+Uri chessgamesCollectionUrl(String cid) {
+  return Uri.parse(
+    'https://www.chessgames.com/perl/chesscollection',
+  ).replace(queryParameters: {'cid': cid});
+}
+
+/// The chessgames.com single-game PGN endpoint for [gid].
+Uri chessgamesPgnUrl(String gid) {
+  return Uri.parse(
+    'https://www.chessgames.com/njs/api/game/viewPGN/'
+    '${Uri.encodeComponent(gid)}',
+  );
+}
+
+/// The chessgames.com human-facing game page — sent as the `Referer` for
+/// [chessgamesPgnUrl], which the API expects.
+Uri chessgamesGameUrl(String gid) {
+  return Uri.parse(
+    'https://www.chessgames.com/perl/chessgame',
+  ).replace(queryParameters: {'gid': gid});
+}

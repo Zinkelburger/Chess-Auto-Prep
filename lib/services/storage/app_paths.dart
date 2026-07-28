@@ -11,6 +11,7 @@ class AppPaths {
   static const String gamesLibraryDirectoryName = 'games_library';
   static const String tacticsSetsDirectoryName = 'tactics_sets';
   static const String studiesDirectoryName = 'studies';
+  static const String chessgamesCacheDirectoryName = 'chessgames_pgn_cache';
 
   static Future<Directory> documentsDirectory() async {
     return getApplicationDocumentsDirectory();
@@ -68,6 +69,23 @@ class AppPaths {
   static Future<Directory> gamesLibraryDirectory({bool create = false}) async {
     final docs = await documentsDirectory();
     final dir = Directory(p.join(docs.path, gamesLibraryDirectoryName));
+    if (create && !await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    return dir;
+  }
+
+  /// Per-game PGN cache for chessgames.com collection downloads.
+  ///
+  /// Lives in the support directory because it is a cache, not user data: a
+  /// collection is paced at ~22 s per game, so caching every game is what
+  /// makes a cancelled or crashed download resumable instead of a restart
+  /// from zero.
+  static Future<Directory> chessgamesCacheDirectory({
+    bool create = false,
+  }) async {
+    final support = await supportDirectory();
+    final dir = Directory(p.join(support.path, chessgamesCacheDirectoryName));
     if (create && !await dir.exists()) {
       await dir.create(recursive: true);
     }
