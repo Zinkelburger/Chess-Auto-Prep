@@ -1,4 +1,4 @@
-import 'package:chess_auto_prep/screens/repertoire/generation_notification_router.dart';
+import 'package:chess_auto_prep/features/repertoire/controllers/generation_notification_router.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// These rules lived inline in RepertoireScreen's generation listener, where

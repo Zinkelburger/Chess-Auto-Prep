@@ -13,6 +13,7 @@ import '../../../utils/pgn_comment_utils.dart' show nagColor;
 import '../../../widgets/shortcut_tooltip.dart';
 import 'package:chess_auto_prep/models/trap_line_info.dart';
 import '../services/trap_index_service.dart';
+import '../services/trap_tour_order.dart';
 
 class TrapTourBar extends StatefulWidget {
   const TrapTourBar({
@@ -34,30 +35,6 @@ class TrapTourBar extends StatefulWidget {
   /// as an annotated explorable line).
   final void Function(TrapLineInfo trap) onShowTrap;
 
-  /// Sort traps by trick surplus (matches [TrapsBrowser] default).
-  static List<TrapLineInfo> sortedTraps(List<TrapLineInfo> traps) {
-    final sorted = List<TrapLineInfo>.from(traps);
-    sorted.sort((a, b) => b.trickSurplus.compareTo(a.trickSurplus));
-    return sorted;
-  }
-
-  static bool sameTrap(TrapLineInfo a, TrapLineInfo b) {
-    if (identical(a, b)) return true;
-    if (a.fen != null && b.fen != null && a.fen == b.fen) return true;
-    if (a.movesSan.length != b.movesSan.length) return false;
-    for (var i = 0; i < a.movesSan.length; i++) {
-      if (a.movesSan[i] != b.movesSan[i]) return false;
-    }
-    return true;
-  }
-
-  static int indexOfTrap(List<TrapLineInfo> sorted, TrapLineInfo trap) {
-    for (var i = 0; i < sorted.length; i++) {
-      if (sameTrap(sorted[i], trap)) return i;
-    }
-    return -1;
-  }
-
   @override
   TrapTourBarState createState() => TrapTourBarState();
 }
@@ -69,11 +46,9 @@ class TrapTourBarState extends State<TrapTourBar> {
   @override
   void initState() {
     super.initState();
-    _sortedTraps = TrapTourBar.sortedTraps(widget.trapIndex.allTraps);
+    _sortedTraps = sortTrapsForTour(widget.trapIndex.allTraps);
     final initial = widget.initialTrap;
-    _currentIndex = initial != null
-        ? TrapTourBar.indexOfTrap(_sortedTraps, initial)
-        : 0;
+    _currentIndex = initial != null ? indexOfTrap(_sortedTraps, initial) : 0;
     if (_currentIndex < 0) _currentIndex = 0;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _showCurrent();
@@ -89,10 +64,8 @@ class TrapTourBarState extends State<TrapTourBar> {
     final current = _sortedTraps.isNotEmpty
         ? _sortedTraps[_currentIndex]
         : null;
-    _sortedTraps = TrapTourBar.sortedTraps(widget.trapIndex.allTraps);
-    final idx = current != null
-        ? TrapTourBar.indexOfTrap(_sortedTraps, current)
-        : -1;
+    _sortedTraps = sortTrapsForTour(widget.trapIndex.allTraps);
+    final idx = current != null ? indexOfTrap(_sortedTraps, current) : -1;
     _currentIndex = idx >= 0
         ? idx
         : _currentIndex.clamp(

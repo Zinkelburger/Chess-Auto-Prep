@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../../constants/ui_breakpoints.dart';
-import '../../models/repertoire_metadata.dart';
-import '../../screens/settings_screen.dart';
-import '../../theme/app_colors.dart';
-import '../app_mode_menu_button.dart';
-import '../layout/board_zone.dart';
+import '../../../constants/ui_breakpoints.dart';
+import '../../../models/repertoire_metadata.dart';
+import '../../../screens/settings_screen.dart';
+import '../../../theme/app_colors.dart';
+import '../../../widgets/app_mode_menu_button.dart';
+import '../../../widgets/layout/board_zone.dart';
 
 /// App bar for the repertoire screen: title, generation status, and actions.
 ///

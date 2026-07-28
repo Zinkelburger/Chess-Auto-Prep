@@ -9,7 +9,6 @@ import 'package:flutter/services.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/app_state.dart';
 import '../core/repertoire_controller.dart';
@@ -17,7 +16,6 @@ import '../core/generation_session_controller.dart';
 import '../features/audit/controllers/audit_session_controller.dart';
 import '../features/coverage/controllers/coverage_controller.dart';
 import '../models/engine_settings.dart';
-import '../models/board_size.dart';
 import '../models/repertoire_line.dart';
 import '../models/repertoire_metadata.dart';
 import '../services/repertoire_service.dart';
@@ -25,7 +23,6 @@ import '../utils/app_messages.dart';
 import '../utils/log.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../widgets/chess_board_widget.dart';
-import '../widgets/opening_tree_widget.dart';
 import '../features/coverage/widgets/coverage_calculator_widget.dart';
 import '../widgets/pgn_with_analysis_pane.dart';
 import 'package:file_picker/file_picker.dart';
@@ -38,19 +35,19 @@ import '../widgets/layout/bottom_pane.dart';
 import '../widgets/layout/repertoire_status_bar.dart';
 import '../widgets/repertoire_list_body.dart';
 import '../widgets/repertoire_lines_browser.dart';
-import '../constants/chess_constants.dart';
 import '../constants/ui_breakpoints.dart';
-import '../widgets/repertoire/repertoire_options_dialog.dart';
-import '../widgets/repertoire/repertoire_toolbar.dart';
+import '../features/repertoire/widgets/repertoire_options_dialog.dart';
+import '../features/repertoire/widgets/repertoire_toolbar.dart';
 import '../utils/keyboard_shortcut_utils.dart';
-import '../widgets/repertoire/repertoire_shortcuts.dart';
-import '../widgets/repertoire/repertoire_nav_controls.dart';
-import '../widgets/repertoire/repertoire_tab_labels.dart';
+import '../features/repertoire/widgets/repertoire_shortcuts.dart';
+import '../features/repertoire/widgets/repertoire_nav_controls.dart';
+import '../features/repertoire/widgets/repertoire_tab_labels.dart';
 import '../widgets/engine/inline_engine_bar.dart';
 import '../widgets/engine/inline_expectimax_bar.dart';
 import '../widgets/pgn/pgn_annotation_panel.dart';
 import '../services/jobs/repertoire_job.dart';
 import '../features/audit/models/audit_finding.dart';
+import '../features/audit/models/ephemeral_finding_preview.dart';
 import '../features/audit/services/audit_board_annotations.dart';
 import '../features/audit/widgets/audit_findings_panel.dart';
 import '../features/audit/widgets/ephemeral_finding_bar.dart';
@@ -58,34 +55,33 @@ import '../features/traps/widgets/trap_navigation_buttons.dart';
 import '../features/traps/widgets/trap_tour_bar.dart';
 import '../features/traps/widgets/traps_tab_content.dart';
 import '../widgets/engine/floating_board_preview.dart';
-import '../features/traps/services/trap_index_service.dart';
+import '../features/repertoire/controllers/repertoire_layout_prefs.dart';
+import '../features/repertoire/services/chapter_store.dart';
+import '../features/repertoire/widgets/add_chapter_dialog.dart';
+import '../features/repertoire/widgets/repertoire_lines_side_panel.dart';
+import '../features/repertoire/widgets/repertoire_tree_pane.dart';
+import '../features/traps/controllers/trap_session_controller.dart';
 import '../features/traps/services/trap_line_builder.dart';
 import 'package:chess_auto_prep/models/trap_line_info.dart';
-import '../services/generation/trap_extractor.dart';
 import '../services/build_by_playing/build_by_playing_config.dart';
 import '../services/build_by_playing/build_by_playing_controller.dart';
-import '../services/games_library/games_library_service.dart';
 import '../services/games_repertoire/games_draft_controller.dart';
 import '../theme/app_colors.dart';
-import '../theme/app_text_styles.dart';
-import '../widgets/build_by_playing/build_by_playing_form.dart';
 import '../widgets/build_by_playing/build_session_board_bar.dart';
 import '../widgets/build_by_playing/build_session_pane.dart';
-import '../widgets/games_repertoire/games_source_form.dart';
 import '../widgets/games_repertoire/draft_review_pane.dart';
 import '../widgets/layout/jobs_tab_content.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
-import '../widgets/opening_explorer/opening_explorer_panel.dart';
-import '../services/live_explorer_service.dart';
 import '../models/explorer_response.dart';
 import 'repertoire_chapters_screen.dart';
 import 'repertoire_selection_screen.dart';
-import 'repertoire/generation_notification_router.dart';
+import '../features/repertoire/controllers/build_launcher.dart';
+import '../features/repertoire/controllers/generation_notification_router.dart';
+import '../features/repertoire/controllers/inline_config_router.dart';
 
 part 'repertoire/repertoire_screen_layout.dart';
 part 'repertoire/repertoire_screen_session.dart';
 part 'repertoire/repertoire_screen_tabs.dart';
-part 'repertoire/repertoire_screen_traps.dart';
 
 class RepertoireScreen extends StatefulWidget {
   const RepertoireScreen({super.key});
@@ -93,15 +89,6 @@ class RepertoireScreen extends StatefulWidget {
   @override
   State<RepertoireScreen> createState() => _RepertoireScreenState();
 }
-
-// Wide-layout Lines side panel: persistence keys and sizing. Top-level so
-// both the base state below and the layout part file can use them.
-const _kLinesPanelCollapsed = 'repertoire.lines_panel_collapsed';
-const _kLinesPanelWidth = 'repertoire.lines_panel_width';
-const double _kLinesPanelMinWidth = 220.0;
-
-/// Board column size preset, persisted so the layout survives restarts.
-const _kBoardSizePref = 'repertoire.board_size';
 
 /// How often the screen may repaint while a generation run reports progress.
 const _kGenRebuildInterval = Duration(milliseconds: 250);
@@ -124,8 +111,10 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   final GlobalKey<AuditFindingsPanelState> _findingsPanelKey =
       GlobalKey<AuditFindingsPanelState>();
   bool _isCompactLayout = false;
-  bool _showInlineGenConfig = false;
-  bool _showInlineAuditConfig = false;
+
+  /// Whether the Jobs tab is showing the inline generation or audit config,
+  /// and which tab each entry point should bring forward.
+  final InlineConfigRouter _inlineConfig = InlineConfigRouter();
 
   final JobManager _jobManager = JobManager.instance;
 
@@ -143,16 +132,12 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   /// Coalesces whole-screen rebuilds during generation progress ticks.
   Timer? _genRebuildThrottle;
 
-  /// Currently previewed missing-move finding (ephemeral board state).
-  AuditFinding? _ephemeralFinding;
+  /// Missing-move finding currently previewed on the board — the move played
+  /// for looking at only, never written to the tree.
+  EphemeralFindingPreview? _ephemeralPreview;
 
-  /// FEN with the missing move played (ephemeral, not saved to tree).
-  String? _ephemeralFen;
-
-  List<TrapLineInfo> _traps = [];
-  TrapIndexService? _trapIndex;
-  bool _trapTourVisible = false;
-  TrapLineInfo? _trapTourInitialTrap;
+  /// Loaded traps, their position index, and the tour's open/closed state.
+  final TrapSessionController _trapSession = TrapSessionController();
   final GlobalKey<TrapTourBarState> _trapTourKey =
       GlobalKey<TrapTourBarState>();
 
@@ -165,16 +150,10 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   late final TabController _sidePanelTabController;
   bool _showTrapsInLinesTab = false;
 
-  /// Wide layout only: whether the Lines side panel is collapsed to a strip.
-  bool _linesPanelCollapsed = false;
-
-  /// Wide layout only: user-dragged Lines side panel width. Null until the
-  /// user drags the divider; falls back to the proportional default.
-  double? _linesPanelWidth;
-
-  /// Board column size. Shrinking the board is how the user hands width to
-  /// the engine lines and PGN beside it.
-  BoardSize _boardSize = BoardSize.large;
+  /// Persisted wide-layout shape: side panel collapsed/width, board column
+  /// size. Shrinking the board is how the user hands width to the engine
+  /// lines and PGN beside it.
+  final RepertoireLayoutPrefs _layout = RepertoireLayoutPrefs();
 
   // ── Build-from-games draft session (inline in the Lines/Draft tab) ──
   final GamesDraftController _draftController = GamesDraftController();
@@ -187,15 +166,14 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
 
   bool get _isBuildSessionActive => _buildSession.isActive;
 
+  /// Owns the build-from-games and build-by-playing launch flows
+  /// (form → config → controller); the screen only lends it a context.
+  late final BuildLauncher _buildLauncher;
+
   String? _lastRepertoireId;
 
-  /// Live Lichess opening-explorer overlay inside the Tree tab (book toggle).
-  /// Lazily created so the API service only exists once the user opens it.
-  LiveExplorerService? _liveExplorer;
-  bool _showExplorer = false;
-
-  /// Fraction of the Tree tab given to the tree when the explorer is open.
-  double _treeSplitRatio = 0.6;
+  /// Reads and creates the chapters of the active repertoire folder.
+  final ChapterStore _chapterStore = ChapterStore();
 
   /// Sibling chapters of the current repertoire folder, for the toolbar
   /// breadcrumb's chapter dropdown. Reloaded whenever the active chapter
@@ -214,76 +192,13 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
     setState(() {});
   }
 
-  Future<void> _loadLinesPanelPref() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      if (!mounted) return;
-      setState(() {
-        _linesPanelCollapsed = prefs.getBool(_kLinesPanelCollapsed) ?? false;
-        _linesPanelWidth = prefs.getDouble(_kLinesPanelWidth);
-        _boardSize = BoardSize.fromName(prefs.getString(_kBoardSizePref));
-      });
-    } catch (e) {
-      log.w(
-        'Failed to load lines panel pref',
-        name: 'RepertoireScreen',
-        error: e,
-      );
-    }
-  }
-
-  Future<void> _saveLinesPanelPref() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_kLinesPanelCollapsed, _linesPanelCollapsed);
-    } catch (e) {
-      log.w(
-        'Failed to save lines panel pref',
-        name: 'RepertoireScreen',
-        error: e,
-      );
-    }
-  }
-
-  void _setLinesPanelCollapsed(bool collapsed) {
-    if (_linesPanelCollapsed == collapsed) return;
-    setState(() => _linesPanelCollapsed = collapsed);
-    _saveLinesPanelPref();
-  }
-
-  Future<void> _setBoardSize(BoardSize size) async {
-    if (_boardSize == size) return;
-    setState(() => _boardSize = size);
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_kBoardSizePref, size.name);
-    } catch (e) {
-      log.w('Failed to save board size', name: 'RepertoireScreen', error: e);
-    }
-  }
-
-  Future<void> _saveLinesPanelWidth() async {
-    final width = _linesPanelWidth;
-    if (width == null) return;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setDouble(_kLinesPanelWidth, width);
-    } catch (e) {
-      log.w(
-        'Failed to save lines panel width',
-        name: 'RepertoireScreen',
-        error: e,
-      );
-    }
-  }
-
   /// Bring the Lines/Draft surface into view: the second tab when compact,
   /// the side panel's Lines tab (expanding the panel if collapsed) when wide.
   void _showLinesSurface() {
     if (_isCompactLayout) {
       _toolsTabController.animateTo(1);
     } else {
-      _setLinesPanelCollapsed(false);
+      _layout.setLinesPanelCollapsed(false);
       _sidePanelTabController.animateTo(0);
     }
   }
@@ -302,21 +217,20 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   }
 
   void _clearInlineConfigFlags() {
-    if (_showInlineGenConfig || _showInlineAuditConfig) {
-      setState(() {
-        _showInlineGenConfig = false;
-        _showInlineAuditConfig = false;
-      });
-    }
+    if (_inlineConfig.clear()) setState(() {});
   }
 
   void _openGenerationDialog() {
-    setState(() {
-      _showInlineGenConfig = true;
-      _showInlineAuditConfig = false;
-    });
+    setState(_inlineConfig.openGeneration);
     _openBottomPane(BottomPaneTab.jobs);
   }
+
+  /// Bottom-pane tab for an [InlineConfigTarget].
+  static BottomPaneTab _paneTabFor(InlineConfigTarget target) =>
+      switch (target) {
+        InlineConfigTarget.jobs => BottomPaneTab.jobs,
+        InlineConfigTarget.findings => BottomPaneTab.findings,
+      };
 
   void _discoverTrapsFromRepertoire() {
     final path = _repertoireFilePath;
@@ -329,17 +243,13 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   }
 
   void _openAuditDialog({bool forceConfig = false}) {
-    if (!forceConfig) {
-      if (_auditController.isAuditing || _auditController.hasResults) {
-        _openBottomPane(BottomPaneTab.findings);
-        return;
-      }
-    }
-    setState(() {
-      _showInlineAuditConfig = true;
-      _showInlineGenConfig = false;
-    });
-    _openBottomPane(BottomPaneTab.jobs);
+    final target = _inlineConfig.openAudit(
+      forceConfig: forceConfig,
+      auditHasSomethingToShow:
+          _auditController.isAuditing || _auditController.hasResults,
+    );
+    setState(() {});
+    _openBottomPane(_paneTabFor(target));
   }
 
   String? get _repertoireFilePath => _controller.currentRepertoire?.filePath;
@@ -373,27 +283,33 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
 }
 
 class _RepertoireScreenState extends _RepertoireScreenStateBase
-    with
-        _RepertoireTrapHandlers,
-        _RepertoireSessionHandlers,
-        _RepertoireTabContent,
-        _RepertoireLayout {
+    with _RepertoireSessionHandlers, _RepertoireTabContent, _RepertoireLayout {
   @override
   void initState() {
     super.initState();
 
     _toolsTabController = TabController(length: 3, vsync: this);
     _sidePanelTabController = TabController(length: 2, vsync: this);
-    _loadLinesPanelPref();
+    _layout.addListener(_onLayoutChanged);
+    _layout.load();
     _controller = RepertoireController();
     _controller.addListener(_onRepertoireChanged);
     _buildSession = BuildByPlayingController(repertoire: _controller);
     _buildSession.addListener(_onBuildSessionChanged);
     BuildByPlayingSettings.instance.loadFromPrefs();
+    _buildLauncher = BuildLauncher(
+      repertoire: _controller,
+      draft: _draftController,
+      session: _buildSession,
+      generation: _generationController,
+      appState: () => context.read<AppState>(),
+      showLinesSurface: _showLinesSurface,
+    );
     _generationController.addListener(_onGenerationChanged);
     _auditController.addListener(_onAuditChanged);
     _coverageController.addListener(_onCoverageChanged);
     _draftController.addListener(_onDraftChanged);
+    _trapSession.addListener(_onTrapsChanged);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -468,16 +384,21 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     });
   }
 
+  void _onTrapsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _onLayoutChanged() {
+    if (mounted) setState(() {});
+  }
+
   void _onRepertoireChanged() {
     if (!mounted) return;
 
     String? newRepertoireId;
     setState(() {
       // Clear ephemeral state when the user navigates normally (not via finding).
-      if (!_navigatingToFinding && _ephemeralFinding != null) {
-        _ephemeralFinding = null;
-        _ephemeralFen = null;
-      }
+      if (!_navigatingToFinding) _ephemeralPreview = null;
 
       if (_controller.currentRepertoire != null && !_controller.isLoading) {
         final currentId = _controller.currentRepertoire!.filePath;
@@ -490,10 +411,9 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
           _generationController.clearTree();
           _coverageController.clear();
           // A tour from the previous repertoire's traps makes no sense here.
-          _trapTourVisible = false;
-          _trapTourInitialTrap = null;
+          _trapSession.endTourForRepertoireSwitch();
           EngineSettings.instance.probabilityStartMoves = _controller.rootMoves;
-          _loadTraps(currentId);
+          _trapSession.loadFromFile(currentId);
           newRepertoireId = currentId;
         }
 
@@ -555,8 +475,11 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       _auditController.saveProgress(_repertoireFilePath);
     }
     _genRebuildThrottle?.cancel();
+    _trapSession.removeListener(_onTrapsChanged);
+    _trapSession.dispose();
+    _layout.removeListener(_onLayoutChanged);
+    _layout.dispose();
     _toolsTabController.dispose();
-    _liveExplorer?.dispose();
     _sidePanelTabController.dispose();
     _focusNode.dispose();
     _boardPreview.dispose();
@@ -696,8 +619,8 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         onSelectRepertoire: _showRepertoireSelection,
         onTrainRepertoire: _trainRepertoire,
         onOpenGeneration: _openGenerationDialog,
-        onBuildByPlaying: _startBuildByPlaying,
-        onBuildFromGames: _buildFromGames,
+        onBuildByPlaying: () => _buildLauncher.startBuildByPlaying(context),
+        onBuildFromGames: () => _buildLauncher.buildFromGames(context),
         onOpenAudit: _openAuditDialog,
         onImportPgnFile: _importPgnFromFile,
         onImportPgnPaste: _importPgnFromPaste,
@@ -708,84 +631,14 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
           isWhiteRepertoire: _controller.isRepertoireWhite,
           sideChangeEnabled: !_generationController.isGenerating,
           onSideChanged: (isWhite) => _controller.setRepertoireColor(isWhite),
-          boardSize: _boardSize,
-          onBoardSizeChanged: _setBoardSize,
+          boardSize: _layout.boardSize,
+          onBoardSizeChanged: _layout.setBoardSize,
         ),
       ),
       body: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTap: _reclaimFocus,
-        child: RepertoireShortcuts(
-          focusNode: _focusNode,
-          onPasteFenFromClipboard: _pastePositionFromClipboard,
-          onUndo: _performUndo,
-          onToggleExpectimax: InlineExpectimaxBar.toggle,
-          onToggleLinesTab: () {
-            if (_isCompactLayout) {
-              _toolsTabController.animateTo(
-                _toolsTabController.index == 1 ? 0 : 1,
-              );
-            } else {
-              _setLinesPanelCollapsed(!_linesPanelCollapsed);
-            }
-          },
-          onCollapseBottomPane: () {
-            if (_buildSession.phase == BuildByPlayingPhase.exploring) {
-              _buildSession.backToDecisionPoint();
-              return true;
-            }
-            if (_trapTourVisible) {
-              _closeTrapTour();
-              return true;
-            }
-            final pane = _bottomPaneKey.currentState;
-            if (pane != null && !pane.isCollapsed) {
-              _closeBottomPane();
-              return true;
-            }
-            return false;
-          },
-          onFlip: () => setState(() => _boardFlipped = !_boardFlipped),
-          onToggleTrapTour: () {
-            final trapIndex = _trapIndex;
-            if (trapIndex == null || _traps.isEmpty) return false;
-            if (_trapTourVisible) {
-              _closeTrapTour();
-            } else {
-              // Start at the trap under the cursor when there is one.
-              _openTrapTour(startTrap: trapIndex.trapAtFen(_controller.fen));
-            }
-            return true;
-          },
-          onToggleEngine: InlineEngineBar.toggleEngine,
-          onFocusComment: PgnAnnotationPanel.focusActive,
-          onGoBack: _sessionAwareGoBack,
-          onGoForward: _sessionAwareGoForward,
-          onGoToPreviousTrap: () => TrapNavigationButtons.goToPreviousTrap(
-            trapIndex: _trapIndex,
-            controller: _controller,
-          ),
-          onGoToNextTrap: () => TrapNavigationButtons.goToNextTrap(
-            trapIndex: _trapIndex,
-            controller: _controller,
-          ),
-          onNextFinding: () {
-            // While the trap tour is open, N/P belong to the tour.
-            if (_trapTourVisible) {
-              _trapTourKey.currentState?.next();
-              return true;
-            }
-            return _whenFindingsPanelHasKeys((panel) => panel.selectNext());
-          },
-          onPrevFinding: () {
-            if (_trapTourVisible) {
-              _trapTourKey.currentState?.previous();
-              return true;
-            }
-            return _whenFindingsPanelHasKeys((panel) => panel.selectPrevious());
-          },
-          onDismissFinding: () =>
-              _whenFindingsPanelHasKeys((panel) => panel.dismissSelected()),
+        child: _buildShortcuts(
           child: Column(
             children: [
               // Paused builds free the tab and the engine; a slim banner
@@ -829,12 +682,12 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
                   ],
                 ),
               ),
-              if (_trapTourVisible && _trapIndex != null)
+              if (_trapSession.tourVisible && _trapSession.index != null)
                 TrapTourBar(
                   key: _trapTourKey,
-                  trapIndex: _trapIndex!,
-                  initialTrap: _trapTourInitialTrap,
-                  onClose: _closeTrapTour,
+                  trapIndex: _trapSession.index!,
+                  initialTrap: _trapSession.tourInitialTrap,
+                  onClose: _trapSession.closeTour,
                   // Each stop loads the annotated trap line into the PGN
                   // tab, where the moves are clickable.
                   onShowTrap: _showTrapLine,

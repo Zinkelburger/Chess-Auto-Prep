@@ -1,9 +1,8 @@
-// Layout builders for the repertoire screen: the wide/compact arrangements,
-// board zone, tools columns, Lines side panel with its drag handle, and the
-// tools tab bar. Split out of repertoire_screen.dart (pure code motion; the
-// tab labels and nav strip themselves now live in
-// lib/widgets/repertoire/repertoire_tab_labels.dart and
-// repertoire_nav_controls.dart).
+// How the repertoire screen arranges its zones: the wide and compact
+// layouts, the board zone, the tools columns, and the tab bars. Every piece
+// with behaviour of its own has been extracted to a widget under
+// lib/features/repertoire/widgets/; what is left here is the arrangement and
+// the wiring between those widgets and the screen's controllers.
 part of '../repertoire_screen.dart';
 
 mixin _RepertoireLayout
@@ -14,36 +13,32 @@ mixin _RepertoireLayout
   Widget _buildWideLayout() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final defaultWidth = (constraints.maxWidth * 0.24)
-            .clamp(260.0, 400.0)
-            .toDouble();
-        final maxWidth = (constraints.maxWidth * 0.45)
-            .clamp(_kLinesPanelMinWidth, constraints.maxWidth)
-            .toDouble();
-        final panelWidth = (_linesPanelWidth ?? defaultWidth)
-            .clamp(_kLinesPanelMinWidth, maxWidth)
-            .toDouble();
+        final panelWidth = _layout.resolveLinesPanelWidth(constraints.maxWidth);
         // The board zone needs a bounded width: the bars under the board
         // (build-session, ephemeral finding) hold Rows with Expanded
         // children, which cannot lay out under the Row's unbounded width.
-        // maxHeight matches the width the square board resolves to anyway
-        // (board side + padding), so BoardSize.large is the classic geometry.
-        final naturalBoardWidth = constraints.maxHeight.clamp(
-          0.0,
-          constraints.maxWidth * 0.5,
+        final boardZoneWidth = _layout.boardZoneWidth(
+          availableWidth: constraints.maxWidth,
+          availableHeight: constraints.maxHeight,
         );
-        final boardZoneWidth = (naturalBoardWidth * _boardSize.widthFactor)
-            .clamp(0.0, naturalBoardWidth);
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SizedBox(width: boardZoneWidth, child: _buildBoardZone()),
             _verticalZoneDivider(),
             Expanded(child: _buildWideToolsColumn()),
-            if (_linesPanelCollapsed)
+            if (_layout.linesPanelCollapsed)
               _verticalZoneDivider()
             else
-              _buildLinesPanelDragHandle(maxWidth),
+              RepertoireLinesPanelDragHandle(
+                currentWidth: panelWidth,
+                minWidth: RepertoireLayoutPrefs.minPanelWidth,
+                maxWidth: RepertoireLayoutPrefs.maxLinesPanelWidth(
+                  constraints.maxWidth,
+                ),
+                onWidthChanged: _layout.dragLinesPanelWidth,
+                onDragEnd: _layout.saveLinesPanelWidth,
+              ),
             _buildLinesSidePanel(panelWidth),
           ],
         );
@@ -51,29 +46,76 @@ mixin _RepertoireLayout
     );
   }
 
-  /// Divider between the PGN tools column and the Lines side panel; drag it
-  /// to resize the panel.
-  Widget _buildLinesPanelDragHandle(double maxWidth) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.resizeLeftRight,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onHorizontalDragUpdate: (details) {
-          final box = context.findRenderObject() as RenderBox?;
-          if (box == null) return;
-          // Panel spans from the handle to the right edge of the screen body.
-          final localX = box.globalToLocal(details.globalPosition).dx;
-          final newWidth = (box.size.width - localX)
-              .clamp(_kLinesPanelMinWidth, maxWidth)
-              .toDouble();
-          setState(() => _linesPanelWidth = newWidth);
-        },
-        onHorizontalDragEnd: (_) => _saveLinesPanelWidth(),
-        child: SizedBox(
-          width: 7,
-          child: Center(child: Container(width: 1, color: AppColors.outline)),
-        ),
+  /// Keyboard shortcuts for the whole screen.
+  ///
+  /// Handlers that can decline (returning false) are how a key reaches
+  /// the right owner: Esc unwinds the innermost thing that is open, and
+  /// N/P belong to the trap tour while it runs and to the findings panel
+  /// otherwise.
+  Widget _buildShortcuts({required Widget child}) {
+    return RepertoireShortcuts(
+      focusNode: _focusNode,
+      onPasteFenFromClipboard: _pastePositionFromClipboard,
+      onUndo: _performUndo,
+      onToggleExpectimax: InlineExpectimaxBar.toggle,
+      onToggleLinesTab: () {
+        if (_isCompactLayout) {
+          _toolsTabController.animateTo(_toolsTabController.index == 1 ? 0 : 1);
+        } else {
+          _layout.toggleLinesPanelCollapsed();
+        }
+      },
+      onCollapseBottomPane: () {
+        if (_buildSession.phase == BuildByPlayingPhase.exploring) {
+          _buildSession.backToDecisionPoint();
+          return true;
+        }
+        if (_trapSession.closeTour()) return true;
+        final pane = _bottomPaneKey.currentState;
+        if (pane != null && !pane.isCollapsed) {
+          _closeBottomPane();
+          return true;
+        }
+        return false;
+      },
+      onFlip: () => setState(() => _boardFlipped = !_boardFlipped),
+      onToggleTrapTour: () {
+        if (_trapSession.closeTour()) return true;
+        // Start at the trap under the cursor when there is one.
+        return _trapSession.openTour(
+          startTrap: _trapSession.trapAtFen(_controller.fen),
+        );
+      },
+      onToggleEngine: InlineEngineBar.toggleEngine,
+      onFocusComment: PgnAnnotationPanel.focusActive,
+      onGoBack: _sessionAwareGoBack,
+      onGoForward: _sessionAwareGoForward,
+      onGoToPreviousTrap: () => TrapNavigationButtons.goToPreviousTrap(
+        trapIndex: _trapSession.index,
+        controller: _controller,
       ),
+      onGoToNextTrap: () => TrapNavigationButtons.goToNextTrap(
+        trapIndex: _trapSession.index,
+        controller: _controller,
+      ),
+      onNextFinding: () {
+        // While the trap tour is open, N/P belong to the tour.
+        if (_trapSession.tourVisible) {
+          _trapTourKey.currentState?.next();
+          return true;
+        }
+        return _whenFindingsPanelHasKeys((panel) => panel.selectNext());
+      },
+      onPrevFinding: () {
+        if (_trapSession.tourVisible) {
+          _trapTourKey.currentState?.previous();
+          return true;
+        }
+        return _whenFindingsPanelHasKeys((panel) => panel.selectPrevious());
+      },
+      onDismissFinding: () =>
+          _whenFindingsPanelHasKeys((panel) => panel.dismissSelected()),
+      child: child,
     );
   }
 
@@ -95,7 +137,7 @@ mixin _RepertoireLayout
             boardPreview: _boardPreview,
             fen: _isBuildSessionActive
                 ? _buildSession.boardFen
-                : (_ephemeralFen ?? _controller.fen),
+                : (_ephemeralPreview?.fen ?? _controller.fen),
             positionFromFen: _positionFromFen,
             boardFlipped: _boardFlipped,
             onMove: _handleMove,
@@ -106,16 +148,11 @@ mixin _RepertoireLayout
           ),
         ),
         if (_isBuildSessionActive) BuildSessionBoardBar(session: _buildSession),
-        if (_ephemeralFinding != null)
+        if (_ephemeralPreview != null)
           EphemeralFindingBar(
-            finding: _ephemeralFinding!,
+            finding: _ephemeralPreview!.finding,
             onGoToPosition: _createNewLineFromEphemeral,
-            onDismiss: () {
-              setState(() {
-                _ephemeralFinding = null;
-                _ephemeralFen = null;
-              });
-            },
+            onDismiss: () => setState(() => _ephemeralPreview = null),
           ),
       ],
     );
@@ -158,88 +195,19 @@ mixin _RepertoireLayout
   /// stay clickable while the PGN editor is visible. Collapses to a thin
   /// strip.
   Widget _buildLinesSidePanel(double width) {
-    final theme = Theme.of(context);
-    if (_linesPanelCollapsed) {
-      return InkWell(
-        onTap: () => _setLinesPanelCollapsed(false),
-        child: SizedBox(
-          width: 28,
-          child: Column(
-            children: [
-              const SizedBox(height: 8),
-              Tooltip(
-                message: 'Show lines (L)',
-                child: const Icon(
-                  Icons.keyboard_double_arrow_left,
-                  size: 16,
-                  color: AppColors.onSurfaceMuted,
-                ),
-              ),
-              const SizedBox(height: 12),
-              RotatedBox(
-                quarterTurns: 1,
-                child: Text(
-                  _isBuildSessionActive
-                      ? 'Session'
-                      : _isDraftActive
-                      ? 'Draft'
-                      : 'Lines (${_controller.repertoireLines.length})',
-                  style: AppTextStyles.caption.copyWith(
-                    fontSize: 11,
-                    color: _isBuildSessionActive
-                        ? theme.colorScheme.primary
-                        : _isDraftActive
-                        ? AppColors.warning
-                        : AppColors.onSurfaceMuted,
-                    fontWeight: _isBuildSessionActive || _isDraftActive
-                        ? FontWeight.w600
-                        : null,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    return SizedBox(
+    return RepertoireLinesSidePanel(
+      collapsed: _layout.linesPanelCollapsed,
       width: width,
-      child: Column(
-        children: [
-          Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.keyboard_double_arrow_right, size: 16),
-                onPressed: () => _setLinesPanelCollapsed(true),
-                tooltip: 'Hide lines (L)',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-              ),
-              Expanded(
-                child: TabBar(
-                  controller: _sidePanelTabController,
-                  // Scrollable so narrow panel widths shrink the bar instead
-                  // of overflowing the tab labels.
-                  isScrollable: true,
-                  tabAlignment: TabAlignment.start,
-                  tabs: [_buildLinesTabLabel(), _buildTreeTabLabel()],
-                  labelPadding: const EdgeInsets.symmetric(horizontal: 12),
-                  indicatorSize: TabBarIndicatorSize.label,
-                  dividerHeight: 0,
-                ),
-              ),
-            ],
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: TabBarView(
-              controller: _sidePanelTabController,
-              physics: const NeverScrollableScrollPhysics(),
-              children: [_buildSecondTabContent(), _buildTreeTabContent()],
-            ),
-          ),
-        ],
-      ),
+      surface: _isBuildSessionActive
+          ? RepertoireLinesSurface.session
+          : _isDraftActive
+          ? RepertoireLinesSurface.draft
+          : RepertoireLinesSurface.lines,
+      lineCount: _controller.repertoireLines.length,
+      tabController: _sidePanelTabController,
+      tabs: [_buildLinesTabLabel(), _buildTreeTabLabel()],
+      children: [_buildSecondTabContent(), _buildTreeTabContent()],
+      onCollapsedChanged: _layout.setLinesPanelCollapsed,
     );
   }
 
@@ -259,7 +227,7 @@ mixin _RepertoireLayout
     return RepertoireLinesTabLabel(
       isBuildSessionActive: _isBuildSessionActive,
       isDraftActive: _isDraftActive,
-      hasTraps: _traps.isNotEmpty,
+      hasTraps: _trapSession.hasTraps,
     );
   }
 
@@ -270,12 +238,12 @@ mixin _RepertoireLayout
       onGoToStart: () => _controller.loadMoveSequence([]),
       onGoBack: _sessionAwareGoBack,
       onGoForward: _sessionAwareGoForward,
-      onGenerateFromHere: _generateFromHere,
+      onGenerateFromHere: _openGenerationDialog,
       onFlipBoard: () => setState(() => _boardFlipped = !_boardFlipped),
       // Compact stacks the board above the tools, so there is no width to
       // trade and the control would do nothing.
-      boardSize: _isCompactLayout ? null : _boardSize,
-      onBoardSizeChanged: _isCompactLayout ? null : _setBoardSize,
+      boardSize: _isCompactLayout ? null : _layout.boardSize,
+      onBoardSizeChanged: _isCompactLayout ? null : _layout.setBoardSize,
     );
   }
 

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../utils/keyboard_shortcut_utils.dart';
+import '../../../utils/keyboard_shortcut_utils.dart';
 
 /// Keyboard shortcuts for the repertoire screen, declared as [KeyBinding]s
 /// and dispatched through [handleKeyBindings] — so none of them can fire

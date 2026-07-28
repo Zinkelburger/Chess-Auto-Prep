@@ -4,8 +4,28 @@
 // repertoire_screen.dart (pure code motion).
 part of '../repertoire_screen.dart';
 
-mixin _RepertoireSessionHandlers
-    on _RepertoireScreenStateBase, _RepertoireTrapHandlers {
+mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
+  /// Load a trap as an annotated, explorable line: the path to the trap as
+  /// mainline, opponent replies (with play rates and our punish) as
+  /// continuations, cursor at the trap position — or at [ply] when given.
+  /// Always lands in the PGN tab so the line is clickable right away.
+  void _showTrapLine(TrapLineInfo trap, {int? ply}) {
+    final built = TrapLineBuilder.build(trap);
+    if (built == null) {
+      // Stale/corrupt trap file: fall back to the bare sequence.
+      _controller.loadMoveSequence(trap.movesSan);
+      _toolsTabController.animateTo(0);
+      return;
+    }
+    _controller.loadAnnotatedTree(
+      built.tree,
+      cursor: built.cursor,
+      label: _trapSession.titleFor(trap),
+    );
+    if (ply != null) _controller.jumpToMoveIndex(ply);
+    _toolsTabController.animateTo(0);
+  }
+
   /// While a build-by-playing session is active, ←/→ navigate the scratchpad
   /// (no-ops outside exploration) instead of the repertoire cursor — moving
   /// the cursor away from a decision point would pause the session.
@@ -86,48 +106,20 @@ mixin _RepertoireSessionHandlers
     _controller.navigateToLineMove(finding.movePath);
     _navigatingToFinding = false;
 
-    if ((finding.type == AuditFindingType.missingResponse ||
-            finding.type == AuditFindingType.uncoveredStrongMove) &&
-        finding.missingMove != null) {
-      try {
-        final parentFen = _controller.fen;
-        final pos = Chess.fromSetup(Setup.parseFen(parentFen));
-        final move = pos.parseSan(finding.missingMove!);
-        if (move != null) {
-          final after = pos.play(move);
-          setState(() {
-            _ephemeralFinding = finding;
-            _ephemeralFen = after.fen;
-          });
-          return;
-        }
-      } catch (e) {
-        log.d(
-          'Failed to preview missing move "${finding.missingMove}": $e',
-          name: 'RepertoireScreen',
-        );
-      }
-    }
-
-    if (_ephemeralFinding != null) {
-      setState(() {
-        _ephemeralFinding = null;
-        _ephemeralFen = null;
-      });
-    }
+    final preview = EphemeralFindingPreview.forFinding(
+      finding,
+      _controller.fen,
+    );
+    if (preview == null && _ephemeralPreview == null) return;
+    setState(() => _ephemeralPreview = preview);
   }
 
   void _createNewLineFromEphemeral() {
-    final finding = _ephemeralFinding;
-    if (finding == null || finding.missingMove == null) return;
+    final preview = _ephemeralPreview;
+    if (preview == null) return;
 
-    final lineMoves = [...finding.movePath, finding.missingMove!];
-
-    setState(() {
-      _ephemeralFinding = null;
-      _ephemeralFen = null;
-    });
-
+    final lineMoves = preview.lineMoves;
+    setState(() => _ephemeralPreview = null);
     _controller.navigateToLineMove(lineMoves);
   }
 
@@ -161,7 +153,13 @@ mixin _RepertoireSessionHandlers
     }
 
     if (!ctrl.isGenerating) {
-      _adoptTrapIndex(ctrl);
+      // A finished build's own trap index is consistent with the tree it just
+      // built, so it wins; a repertoire loaded from disk has no bundle in
+      // memory and falls back to the sidecar file.
+      _trapSession.adoptFromBuild(
+        ctrl.current?.traps,
+        fallbackFilePath: _controller.currentRepertoire?.filePath,
+      );
       if (actions.justFinished) _showLinesSurface();
     }
 
@@ -177,20 +175,6 @@ mixin _RepertoireSessionHandlers
     }
   }
 
-  /// Take the trap index from the finished build's bundle when there is one —
-  /// it is consistent with the tree just built. Previously-saved repertoires
-  /// have no bundle in memory, so fall back to the file on disk.
-  void _adoptTrapIndex(GenerationSessionController ctrl) {
-    final bundle = ctrl.current;
-    if (bundle != null) {
-      _traps = bundle.traps.allTraps;
-      _trapIndex = _traps.isEmpty ? null : bundle.traps;
-      return;
-    }
-    final filePath = _controller.currentRepertoire?.filePath;
-    if (filePath != null) _loadTraps(filePath);
-  }
-
   void _onAuditChanged() {
     if (!mounted) return;
     setState(() {});
@@ -201,51 +185,6 @@ mixin _RepertoireSessionHandlers
     setState(() {});
   }
 
-  void _generateFromHere() {
-    _openGenerationDialog();
-  }
-
-  Future<void> _buildFromGames() async {
-    final appState = context.read<AppState>();
-    // Real games always start from the initial position, so the from-current
-    // option only makes sense for standard-start repertoires.
-    final standardStart = _controller.startingFen == null;
-    final config = await showGamesSourceForm(
-      context,
-      initialIsWhite: _controller.isRepertoireWhite,
-      initialChesscomUsername: appState.chesscomUsername,
-      initialLichessUsername: appState.lichessUsername,
-      atRoot: !standardStart || _controller.currentMoveSequence.isEmpty,
-      rootFen: kStandardStartFen,
-      currentFen: standardStart ? _controller.fen : null,
-      currentMoveSans: standardStart
-          ? _controller.currentMoveSequence
-          : const [],
-    );
-    if (config == null || !mounted) return;
-
-    // Remember the username app-wide so tactics / weakness finder reuse it.
-    if (config.platform == GamesPlatform.chesscom) {
-      appState.setChesscomUsername(config.username);
-    } else {
-      appState.setLichessUsername(config.username);
-    }
-
-    // Bring the Lines/Draft surface into view and show progress inline.
-    _showLinesSurface();
-    // Diff against the union of every repertoire line — the working tree is
-    // only the currently loaded line and would misclassify everything else.
-    final error = await _draftController.build(
-      config: config,
-      repertoire: _controller.buildRepertoireMoveTree(),
-    );
-    if (error != null && mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error)));
-    }
-  }
-
   void _onBuildSessionChanged() {
     if (!mounted) return;
     setState(() {});
@@ -253,44 +192,6 @@ mixin _RepertoireSessionHandlers
       _showLinesSurface();
     }
     _wasBuildSessionActive = _buildSession.isActive;
-  }
-
-  Future<void> _startBuildByPlaying() async {
-    if (_controller.currentRepertoire == null) return;
-    if (_isBuildSessionActive) {
-      _showLinesSurface();
-      return;
-    }
-    final config = await showBuildByPlayingForm(
-      context,
-      initial: BuildByPlayingSettings.instance.config,
-      atRoot: _controller.isAtRootPosition,
-      rootFen: _controller.rootFen,
-      rootMoveSans: _controller.rootMoveSans,
-      currentFen: _controller.fen,
-      currentMoveSans: _controller.currentMoveSequence,
-      boardFlipped: !_controller.isRepertoireWhite,
-    );
-    if (config == null || !mounted) return;
-    BuildByPlayingSettings.instance.applyFrom(config);
-    _showLinesSurface();
-    await _buildSession.start(
-      config,
-      generatedTree: _generationController.generatedTree,
-      fenMap: _generationController.generatedTreeFenMap,
-    );
-  }
-
-  /// Mid-session knob changes from the session pane's gear icon.
-  Future<void> _openBuildSessionSettings() async {
-    final config = await showBuildByPlayingForm(
-      context,
-      initial: _buildSession.config,
-      atRoot: true, // start-from choice is meaningless mid-session
-    );
-    if (config == null || !mounted) return;
-    BuildByPlayingSettings.instance.applyFrom(config);
-    _buildSession.updateConfig(config);
   }
 
   void _onDraftChanged() {
@@ -421,50 +322,23 @@ mixin _RepertoireSessionHandlers
       return;
     }
 
-    // Coverage runs as a first-class job so the run is visible in the
-    // Jobs pane alongside generation and audit.
-    final job = _jobManager.createJob(
-      type: JobType.coverage,
-      label: '${_controller.currentRepertoire?.name ?? 'Repertoire'} coverage',
-    );
-    job.updateStatus(JobStatus.running);
     _openBottomPane(BottomPaneTab.jobs);
-
     try {
-      final result = await _coverageController.calculate(
+      final result = await _coverageController.runAsJob(
         config: config,
         tree: tree,
         isWhiteRepertoire: _controller.isRepertoireWhite,
-        onProgress: (message, progress) {
-          job.updateProgress(
-            JobProgress(fraction: progress ?? 0, message: message),
-          );
-        },
+        jobManager: _jobManager,
+        label:
+            '${_controller.currentRepertoire?.name ?? 'Repertoire'} coverage',
       );
-      if (result != null) {
-        job.updateProgress(
-          JobProgress(
-            fraction: 1,
-            message:
-                '${result.coveragePercent.toStringAsFixed(1)}% covered, '
-                '${result.tooShallowLeaves.length} shallow, '
-                '${result.tooDeepLeaves.length} deep, '
-                '${result.unaccountedMoves.length} unaccounted',
-          ),
-        );
-      }
-      job.updateStatus(JobStatus.completed);
       if (result != null && mounted) {
         showAppSnackBar(
           context,
-          'Coverage: ${result.coveragePercent.toStringAsFixed(1)}% covered, '
-          '${result.tooShallowLeaves.length} shallow, '
-          '${result.tooDeepLeaves.length} deep, '
-          '${result.unaccountedMoves.length} unaccounted moves',
+          'Coverage: ${CoverageController.summarize(result)}',
         );
       }
     } catch (e) {
-      job.fail('$e');
       if (mounted) {
         showAppSnackBar(context, 'Coverage analysis failed: $e');
       }
@@ -548,9 +422,8 @@ mixin _RepertoireSessionHandlers
   Future<void> _loadChapters() async {
     final current = _controller.currentRepertoire;
     if (current == null) return;
-    final folder = StorageFactory.instance.parentPath(current.filePath);
     try {
-      final chapters = await StorageFactory.instance.listChapters(folder);
+      final chapters = await _chapterStore.listSiblings(current.filePath);
       if (!mounted) return;
       setState(() => _chapters = chapters);
     } catch (e) {
@@ -595,12 +468,7 @@ mixin _RepertoireSessionHandlers
   Future<void> _showChapterList() async {
     final current = _controller.currentRepertoire;
     if (current == null) return;
-    final folderPath = StorageFactory.instance.parentPath(current.filePath);
-    final folder = RepertoireMetadata(
-      filePath: folderPath,
-      name: p.basename(folderPath),
-      lastModified: DateTime.now(),
-    );
+    final folder = _chapterStore.folderMetadata(current.filePath);
 
     final chapter = await Navigator.of(context).push<RepertoireMetadata>(
       MaterialPageRoute(
@@ -629,92 +497,26 @@ mixin _RepertoireSessionHandlers
   Future<void> _addChapterInline() async {
     final current = _controller.currentRepertoire;
     if (current == null) return;
-    final folder = StorageFactory.instance.parentPath(current.filePath);
-    final existingNames = _chapters.map((c) => c.name.toLowerCase()).toSet();
 
-    final controller = TextEditingController();
-    String? nameError;
-    final name = await showDialog<String>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setLocal) => AlertDialog(
-          title: const Text('Add Chapter'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Name this chapter (e.g. a variation or system):'),
-              const SizedBox(height: 16),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                decoration: InputDecoration(
-                  labelText: 'Chapter Name',
-                  hintText: "King's Gambit",
-                  errorText: nameError,
-                ),
-                onChanged: (_) {
-                  if (nameError != null) setLocal(() => nameError = null);
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final value = controller.text.trim();
-                if (value.isEmpty) {
-                  setLocal(() => nameError = 'Please enter a name');
-                  return;
-                }
-                if (existingNames.contains(value.toLowerCase())) {
-                  setLocal(() => nameError = 'A chapter named "$value" exists');
-                  return;
-                }
-                Navigator.of(context).pop(value);
-              },
-              child: const Text('Create'),
-            ),
-          ],
-        ),
-      ),
+    final name = await showAddChapterDialog(
+      context,
+      existingNames: _chapters.map((c) => c.name),
     );
-
-    controller.dispose();
     if (name == null || !mounted) return;
 
-    try {
-      final storage = StorageFactory.instance;
-      final color = _controller.isRepertoireWhite ? 'White' : 'Black';
-      final path = storage.chapterFilePath(folder, name);
-      if (await storage.fileExists(path)) {
-        if (mounted) showAppSnackBar(context, 'That chapter already exists.');
-        return;
-      }
-      final header =
-          '// $name\n'
-          '// Color: $color\n'
-          '// Created on ${DateTime.now().toString().split('.')[0]}\n\n';
-      await storage.writeFile(path, header);
-
-      await _controller.setRepertoire(
-        RepertoireMetadata(
-          filePath: path,
-          name: name,
-          gameCount: 0,
-          lastModified: DateTime.now(),
-        ),
-      );
-      await _loadChapters();
-      _reclaimFocus();
-    } catch (e) {
-      log.w('Create chapter failed', name: 'RepertoireScreen', error: e);
-      if (mounted) {
-        showAppSnackBar(context, 'Could not create chapter.', isError: true);
-      }
+    final result = await _chapterStore.create(
+      folderPath: _chapterStore.folderOf(current.filePath),
+      name: name,
+      isWhite: _controller.isRepertoireWhite,
+    );
+    if (!mounted) return;
+    if (!result.succeeded) {
+      showAppSnackBar(context, result.error!, isError: true);
+      return;
     }
+
+    await _controller.setRepertoire(result.chapter!);
+    await _loadChapters();
+    _reclaimFocus();
   }
 }

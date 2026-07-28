@@ -4,10 +4,19 @@
 part of '../repertoire_screen.dart';
 
 mixin _RepertoireTabContent
-    on
-        _RepertoireScreenStateBase,
-        _RepertoireTrapHandlers,
-        _RepertoireSessionHandlers {
+    on _RepertoireScreenStateBase, _RepertoireSessionHandlers {
+  Widget? _buildTrapNavigation() {
+    final trapIndex = _trapSession.index;
+    if (trapIndex == null) return null;
+    return TrapNavigationButtons(
+      trapIndex: trapIndex,
+      controller: _controller,
+      onStartTour: ({TrapLineInfo? startTrap}) =>
+          _trapSession.openTour(startTrap: startTrap),
+      tourActive: _trapSession.tourVisible,
+    );
+  }
+
   /// Second tools tab: normally the Lines list, but it becomes the Draft
   /// review surface while a build-from-games session is active.
   Widget _buildSecondTabContent() {
@@ -15,7 +24,7 @@ mixin _RepertoireTabContent
       return BuildSessionPane(
         session: _buildSession,
         boardPreview: _boardPreview,
-        onOpenSettings: _openBuildSessionSettings,
+        onOpenSettings: () => _buildLauncher.openSessionSettings(context),
       );
     }
     if (_draftController.isBuilding) {
@@ -51,32 +60,17 @@ mixin _RepertoireTabContent
   }
 
   Widget _buildTreeTabContent() {
-    final tree = _controller.openingTree;
-    final Widget treeArea = tree == null
-        ? const Center(
-            child: Text(
-              'No opening tree available.\nLoad a repertoire to build the tree.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey),
-            ),
-          )
-        : OpeningTreeWidget(
-            tree: tree,
-            repertoireLines: _controller.repertoireLines,
-            currentMoveSequence: _controller.currentMoveSequence,
-            onMoveSelected: _controller.userSelectedTreeMove,
-            onGoBack: _controller.goBack,
-            onGoForward: _controller.goForward,
-          );
-
-    return Column(
-      children: [
-        _buildTreeToolbar(),
-        const Divider(height: 1),
-        Expanded(
-          child: _showExplorer ? _buildTreeExplorerSplit(treeArea) : treeArea,
-        ),
-      ],
+    return RepertoireTreePane(
+      tree: _controller.openingTree,
+      repertoireLines: _controller.repertoireLines,
+      currentMoveSequence: _controller.currentMoveSequence,
+      fen: _controller.fen,
+      onMoveSelected: _controller.userSelectedTreeMove,
+      onGoBack: _controller.goBack,
+      onGoForward: _controller.goForward,
+      repertoireMovesAtPosition: _repertoireMovesAtCurrentPosition,
+      onPlayMove: _controller.playMove,
+      onAddMove: _onExplorerAddMove,
     );
   }
 
@@ -134,24 +128,27 @@ mixin _RepertoireTabContent
 
   Widget _buildJobsContent() {
     // The inline generation config auto-hides once a generation starts.
-    if (_generationController.isGenerating && _showInlineGenConfig) {
+    if (_generationController.isGenerating && _inlineConfig.showGeneration) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) setState(() => _showInlineGenConfig = false);
+        if (!mounted) return;
+        if (_inlineConfig.onGenerationStarted()) setState(() {});
       });
     }
 
     return JobsTabContent(
-      showInlineGenConfig: _showInlineGenConfig,
-      showInlineAuditConfig: _showInlineAuditConfig,
+      showInlineGenConfig: _inlineConfig.showGeneration,
+      showInlineAuditConfig: _inlineConfig.showAudit,
       controller: _controller,
       generationController: _generationController,
       auditController: _auditController,
       jobManager: _jobManager,
       generationTabKey: _generationTabKey,
-      onCloseInlineGenConfig: () =>
-          setState(() => _showInlineGenConfig = false),
-      onCloseInlineAuditConfig: () =>
-          setState(() => _showInlineAuditConfig = false),
+      onCloseInlineGenConfig: () {
+        if (_inlineConfig.onGenerationStarted()) setState(() {});
+      },
+      onCloseInlineAuditConfig: () {
+        if (_inlineConfig.onAuditStarted()) setState(() {});
+      },
       onOpenGenerationDialog: _openGenerationDialog,
       onOpenAuditConfig: () => _openAuditDialog(forceConfig: true),
       onOpenCoverageDialog: _showCoverageCalculator,
@@ -163,7 +160,8 @@ mixin _RepertoireTabContent
           _controller.currentRepertoire?.name ?? 'Audit',
         );
         if (auditing) {
-          setState(() => _showInlineAuditConfig = false);
+          _inlineConfig.onAuditStarted();
+          setState(() {});
           _openBottomPane(BottomPaneTab.findings);
         }
       },
@@ -219,7 +217,7 @@ mixin _RepertoireTabContent
       coverageProgressMessage: _coverageController.progressMessage,
       tree: _generationController.generatedTree,
       fenMap: _generationController.generatedTreeFenMap,
-      traps: _traps,
+      traps: _trapSession.traps,
       coherenceResult: _generationController.coherenceService.result,
       navigationStack: _navigationStack,
       boardPreview: _boardPreview,
@@ -289,7 +287,7 @@ mixin _RepertoireTabContent
       isGenerating: _generationController.isGenerating,
       isGenerationPaused: _generationController.isPaused,
       embedAnalysisDock: false,
-      trapIndex: _trapIndex,
+      trapIndex: _trapSession.index,
       ephemeralTitle: _controller.annotatedLineLabel,
     );
   }
@@ -300,7 +298,7 @@ mixin _RepertoireTabContent
       children: [
         Column(
           children: [
-            if (_traps.isNotEmpty)
+            if (_trapSession.hasTraps)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: Row(
@@ -319,7 +317,7 @@ mixin _RepertoireTabContent
                           ButtonSegment<bool>(
                             value: true,
                             label: Text(
-                              'Traps (${_traps.length})',
+                              'Traps (${_trapSession.traps.length})',
                               style: const TextStyle(fontSize: 11),
                             ),
                             icon: Icon(
@@ -345,7 +343,7 @@ mixin _RepertoireTabContent
                 ),
               ),
             Expanded(
-              child: _showTrapsInLinesTab && _traps.isNotEmpty
+              child: _showTrapsInLinesTab && _trapSession.hasTraps
                   ? _buildTrapsContent()
                   : _buildLinesContent(),
             ),
@@ -362,8 +360,8 @@ mixin _RepertoireTabContent
 
   Widget _buildTrapsContent() {
     return TrapsTabContent(
-      traps: _traps,
-      trapIndex: _trapIndex,
+      traps: _trapSession.traps,
+      trapIndex: _trapSession.index,
       currentMoveSequence: _controller.currentMoveSequence,
       repertoireLineMoves: _controller.repertoireLines
           .map((l) => l.moves)
@@ -372,115 +370,10 @@ mixin _RepertoireTabContent
       hasRepertoire: _repertoireFilePath != null,
       onTrapSelected: _showTrapLine,
       onTrapMoveSelected: (trap, ply) => _showTrapLine(trap, ply: ply),
-      onStartTour: _openTrapTour,
+      onStartTour: ({TrapLineInfo? startTrap}) =>
+          _trapSession.openTour(startTrap: startTrap),
       onDiscoverTraps: _discoverTrapsFromRepertoire,
       onOpenGeneration: _openGenerationDialog,
-    );
-  }
-
-  /// Header above the tree with the Lichess-style book toggle that reveals
-  /// the live opening explorer beneath the tree.
-  Widget _buildTreeToolbar() {
-    final theme = Theme.of(context);
-    return SizedBox(
-      height: 30,
-      child: Row(
-        children: [
-          const SizedBox(width: 8),
-          Text(
-            'Repertoire tree',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[400],
-            ),
-          ),
-          const Spacer(),
-          IconButton(
-            icon: Icon(
-              _showExplorer ? Icons.menu_book : Icons.menu_book_outlined,
-              size: 16,
-            ),
-            color: _showExplorer ? theme.colorScheme.primary : null,
-            padding: EdgeInsets.zero,
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
-            tooltip: _showExplorer
-                ? 'Hide opening explorer'
-                : 'Show Lichess opening explorer',
-            onPressed: _toggleExplorer,
-          ),
-          const SizedBox(width: 4),
-        ],
-      ),
-    );
-  }
-
-  void _toggleExplorer() {
-    setState(() {
-      _showExplorer = !_showExplorer;
-      if (_showExplorer) {
-        _liveExplorer ??= LiveExplorerService();
-      } else {
-        _liveExplorer?.reset();
-      }
-    });
-  }
-
-  Widget _buildTreeExplorerSplit(Widget treeArea) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const handleH = 10.0;
-        final avail = constraints.maxHeight - handleH;
-        // Keep both panes usable regardless of split ratio.
-        final topH = (avail * _treeSplitRatio).clamp(80.0, avail - 140.0);
-        return Column(
-          children: [
-            SizedBox(height: topH, child: treeArea),
-            _buildSplitHandle(avail),
-            Expanded(child: _buildExplorerPanel()),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildSplitHandle(double availHeight) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.resizeRow,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onVerticalDragUpdate: (d) {
-          if (availHeight <= 0) return;
-          setState(() {
-            _treeSplitRatio = (_treeSplitRatio + d.delta.dy / availHeight)
-                .clamp(0.15, 0.85);
-          });
-        },
-        child: Container(
-          height: 10,
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          alignment: Alignment.center,
-          child: Container(
-            width: 28,
-            height: 3,
-            decoration: BoxDecoration(
-              color: Colors.grey[600],
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildExplorerPanel() {
-    return OpeningExplorerPanel(
-      service: _liveExplorer!,
-      fen: _controller.fen,
-      repertoireMovesAtPosition: _repertoireMovesAtCurrentPosition(),
-      onPlayMove: _controller.playMove,
-      onAddMove: _onExplorerAddMove,
     );
   }
 

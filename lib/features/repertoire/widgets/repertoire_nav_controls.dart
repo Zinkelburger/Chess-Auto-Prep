@@ -5,7 +5,7 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../models/board_size.dart';
+import '../../../models/board_size.dart';
 
 class RepertoireNavControls extends StatelessWidget {
   const RepertoireNavControls({

@@ -4,7 +4,7 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../theme/app_colors.dart';
+import '../../../theme/app_colors.dart';
 
 /// "PGN" tab label.
 class RepertoirePgnTabLabel extends StatelessWidget {
