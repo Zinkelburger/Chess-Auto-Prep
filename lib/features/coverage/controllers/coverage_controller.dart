@@ -7,6 +7,7 @@ library;
 import 'package:flutter/foundation.dart';
 
 import '../../../models/opening_tree.dart';
+import '../../../services/jobs/repertoire_job.dart';
 import 'package:chess_auto_prep/features/coverage/models/coverage_config.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../../../utils/safe_change_notifier.dart';
@@ -25,6 +26,50 @@ class CoverageController extends ChangeNotifier with SafeChangeNotifier {
   void clear() {
     _result = null;
     notifyListeners();
+  }
+
+  /// One-line outcome shared by the jobs card and the completion snackbar.
+  static String summarize(CoverageResult result) =>
+      '${result.coveragePercent.toStringAsFixed(1)}% covered, '
+      '${result.tooShallowLeaves.length} shallow, '
+      '${result.tooDeepLeaves.length} deep, '
+      '${result.unaccountedMoves.length} unaccounted';
+
+  /// Run coverage as a first-class job in [jobManager], so the run is visible
+  /// in the Jobs pane alongside generation and audit. Progress and the final
+  /// summary land on the job card; a failure fails the job and rethrows so
+  /// the caller can surface it.
+  Future<CoverageResult?> runAsJob({
+    required CoverageConfig config,
+    required OpeningTree tree,
+    required bool isWhiteRepertoire,
+    required JobManager jobManager,
+    required String label,
+  }) async {
+    final job = jobManager.createJob(type: JobType.coverage, label: label);
+    job.updateStatus(JobStatus.running);
+    try {
+      final result = await calculate(
+        config: config,
+        tree: tree,
+        isWhiteRepertoire: isWhiteRepertoire,
+        onProgress: (message, progress) {
+          job.updateProgress(
+            JobProgress(fraction: progress ?? 0, message: message),
+          );
+        },
+      );
+      if (result != null) {
+        job.updateProgress(
+          JobProgress(fraction: 1, message: summarize(result)),
+        );
+      }
+      job.updateStatus(JobStatus.completed);
+      return result;
+    } catch (e) {
+      job.fail('$e');
+      rethrow;
+    }
   }
 
   /// Run coverage analysis. Returns the result, or null if the tree is null
