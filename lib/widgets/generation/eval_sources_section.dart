@@ -215,7 +215,8 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
                   dbSettings.enableCdbDirect &&
                           dbSettings.cdbDirectPath.isNotEmpty
                       ? dbSettings.cdbDirectPath
-                      : 'Configure in Settings → Database',
+                      : 'Not set up — enable it in App settings → '
+                            'Evaluation database',
                   style: const TextStyle(fontSize: 11),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,

@@ -124,34 +124,9 @@ mixin _AppBarBuildersMixin
                   _generateRepertoireFromGames();
                 } else if (value == 'trophies') {
                   _showTrophyCabinet();
-                } else if (value == 'make_puzzle') {
-                  final game = _controller.filteredGames.isNotEmpty
-                      ? _controller.filteredGames[_controller.currentGameIndex]
-                      : null;
-                  PuzzleCreatorScreen.push(
-                    context,
-                    initialFen: _controller.currentPosition.fen,
-                    gameWhite: game?.headers['White'],
-                    gameBlack: game?.headers['Black'],
-                  );
                 }
               },
               itemBuilder: (_) => [
-                const PopupMenuItem(
-                  value: 'make_puzzle',
-                  child: ListTile(
-                    leading: Icon(Icons.extension, size: 20),
-                    title: Text('Save position as a puzzle…'),
-                    trailing: InfoHint(
-                      'Opens the puzzle creator on this exact position.\n'
-                      'You play the solution, add a note and a rating, and '
-                      'it is saved as a chapter of a study —\n'
-                      'trainable afterwards in the Repertoire Trainer.',
-                    ),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
                 PopupMenuItem(
                   value: 'generate_repertoire',
                   child: ListTile(
@@ -190,6 +165,7 @@ mixin _AppBarBuildersMixin
           ],
         ],
         const JobsStatusButton(),
+        const AppSettingsButton(),
         const AppModeMenuButton(),
       ],
     );

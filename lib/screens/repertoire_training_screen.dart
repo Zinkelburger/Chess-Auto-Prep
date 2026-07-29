@@ -20,6 +20,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_mode_menu_button.dart';
+import '../widgets/app_settings_button.dart';
 import '../widgets/jobs_status_button.dart';
 import '../widgets/pgn_viewer_widget.dart';
 import '../widgets/trainer_keyboard_scope.dart';
@@ -345,6 +346,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
           onPressed: _selectRepertoire,
         ),
         const JobsStatusButton(),
+        const AppSettingsButton(),
         const AppModeMenuButton(),
         const SizedBox(width: 8),
       ],
@@ -361,7 +363,40 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     _training.loadRepertoire();
   }
 
+  /// Board on the left, panel on the right — the same frame in every state,
+  /// so picking a repertoire, browsing chapters and drilling a line all look
+  /// like the rest of the app instead of the board appearing out of nowhere
+  /// once training starts.
   Widget _buildBody() {
+    final training = _training.currentLine != null;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 1100;
+        final board = training ? _buildBoardPane() : _buildIdleBoardPane();
+        final panel = _buildPanel();
+        if (isCompact) {
+          return Column(
+            children: [
+              Expanded(flex: 4, child: board),
+              const Divider(height: 1, thickness: 1),
+              Expanded(flex: 6, child: panel),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(flex: 5, child: board),
+            const VerticalDivider(width: 1, thickness: 1),
+            Expanded(flex: 5, child: panel),
+          ],
+        );
+      },
+    );
+  }
+
+  /// What sits beside the board: the repertoire list, a load state, the
+  /// chapter/line browser, or the training tabs.
+  Widget _buildPanel() {
     if (_training.repertoire == null && !_training.isLoading) {
       return RepertoireListBody(
         onSelected: _onRepertoireSelected,
@@ -382,46 +417,13 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     }
 
     // Chessable-style chapter home: browse every line, pick what to train.
-    if (_training.currentLine == null) {
-      return _buildHomeView();
-    }
+    if (_training.currentLine == null) return _buildBrowser(dense: false);
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isCompact = constraints.maxWidth < 1100;
-        if (isCompact) {
-          return Column(
-            children: [
-              Expanded(flex: 4, child: _buildBoardPane()),
-              const Divider(height: 1, thickness: 1),
-              Expanded(flex: 6, child: _buildSidePane()),
-            ],
-          );
-        }
-        return Row(
-          children: [
-            Expanded(flex: 5, child: _buildBoardPane()),
-            const VerticalDivider(width: 1, thickness: 1),
-            Expanded(flex: 5, child: _buildSidePane()),
-          ],
-        );
-      },
-    );
+    return _buildSidePane();
   }
 
-  /// Landing view for a loaded repertoire: Learn / Review on top, then the
-  /// chapters (or the lines of the open chapter).
-  Widget _buildHomeView() {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 1000),
-        child: _buildBrowser(dense: false),
-      ),
-    );
-  }
-
-  /// One browser used twice: full width on the landing page, dense in the
-  /// side pane while a line is being trained.
+  /// One browser used twice: beside the idle board while nothing is being
+  /// trained, and dense inside the Lines tab once a line is running.
   Widget _buildBrowser({required bool dense}) {
     return TrainerBrowser(
       title: _training.repertoire?.name ?? 'Repertoire',
@@ -454,10 +456,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       if (_training.sourceIsStudy)
         'Study'
       else
-        _training.lines.isNotEmpty &&
-                _training.lines.first.color.toLowerCase() == 'black'
-            ? 'Black'
-            : 'White',
+        _training.sourceIsBlack ? 'Black' : 'White',
       _training.repetitionMode == RepetitionMode.linear
           ? 'every line once'
           : 'spaced repetition',
@@ -526,6 +525,18 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       // shortcuts while a move is being typed; R stays typeable ("Rd1").
       onNavigationKey: (event) =>
           handleMoveInputNavigationKey(_keyBindings, event),
+    );
+  }
+
+  /// The board while nothing is being trained: same size and place as the
+  /// training board, but nothing to play or type into. Oriented to the colour
+  /// the loaded source trains, so it already shows the side you'll be on.
+  Widget _buildIdleBoardPane() {
+    return TrainingBoardPane(
+      session: _training.session,
+      boardFlipped: _training.sourceIsBlack,
+      waitingForUser: false,
+      showMoveInput: false,
     );
   }
 

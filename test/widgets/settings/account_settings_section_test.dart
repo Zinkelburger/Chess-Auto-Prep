@@ -1,0 +1,89 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:chess_auto_prep/core/app_state.dart';
+import 'package:chess_auto_prep/widgets/settings/account_settings_section.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  Future<AppState> pumpSection(WidgetTester tester) async {
+    final appState = AppState();
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppState>.value(
+        value: appState,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(child: AccountSettingsSection()),
+          ),
+        ),
+      ),
+    );
+    return appState;
+  }
+
+  testWidgets('logged out: shows status and login button', (tester) async {
+    await pumpSection(tester);
+
+    expect(find.text('Lichess: not logged in'), findsOneWidget);
+    expect(find.text('Log into Lichess'), findsOneWidget);
+    expect(find.text('Log out'), findsNothing);
+  });
+
+  testWidgets('PAT field is hidden until requested', (tester) async {
+    await pumpSection(tester);
+
+    expect(find.text('Personal access token'), findsNothing);
+
+    await tester.tap(find.text('Use a personal access token instead'));
+    await tester.pump();
+
+    expect(find.text('Personal access token'), findsOneWidget);
+    expect(find.text('Save token'), findsOneWidget);
+  });
+
+  testWidgets('username fields commit to AppState on submit', (tester) async {
+    final appState = await pumpSection(tester);
+
+    // The two default-username fields are the only TextFields while the PAT
+    // field is collapsed: index 0 = Lichess, index 1 = Chess.com.
+    await tester.enterText(find.byType(TextField).at(0), '  MyLichessName ');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(appState.lichessUsername, 'MyLichessName');
+
+    await tester.enterText(find.byType(TextField).at(1), 'MyChesscomName');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(appState.chesscomUsername, 'MyChesscomName');
+
+    // Clearing a field clears the saved default rather than storing ''.
+    await tester.enterText(find.byType(TextField).at(0), '');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(appState.lichessUsername, isNull);
+  });
+
+  testWidgets('fields prefill from AppState', (tester) async {
+    SharedPreferences.setMockInitialValues({'lichess_username': 'prefilled'});
+    final appState = AppState();
+    await appState.loadUsernames();
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppState>.value(
+        value: appState,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(child: AccountSettingsSection()),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('prefilled'), findsOneWidget);
+  });
+}

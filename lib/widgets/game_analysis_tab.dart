@@ -71,6 +71,11 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
   /// every ply step when the same row stays nearest.
   int? _lastAlignedNearestIdx;
 
+  /// Set when navigation was triggered by a tap inside the move list itself.
+  /// The user is already pointing at that row, so the list must not scroll
+  /// under their cursor; the next alignment pass is skipped once.
+  bool _suppressNextAlign = false;
+
   @override
   void initState() {
     super.initState();
@@ -136,6 +141,11 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
     if (interesting.isEmpty) return;
 
     final nearestIdx = _nearestInterestingIndex(interesting, ply);
+    if (_suppressNextAlign) {
+      _suppressNextAlign = false;
+      _lastAlignedNearestIdx = nearestIdx;
+      return;
+    }
     if (nearestIdx == _lastAlignedNearestIdx) return;
     _lastAlignedNearestIdx = nearestIdx;
 
@@ -150,7 +160,24 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
       final renderObject = ctx.findRenderObject();
       final scrollable = Scrollable.maybeOf(ctx);
       if (renderObject == null || scrollable == null) return;
-      scrollable.position.ensureVisible(renderObject, alignment: 0.5);
+      // Minimal motion: scroll only when the row is outside the viewport,
+      // and only far enough to bring it just inside — never recenter, which
+      // teleports the list and makes rows jump around. Each policy call
+      // no-ops when the row is already visible on that side.
+      const duration = Duration(milliseconds: 180);
+      const curve = Curves.easeOutCubic;
+      scrollable.position.ensureVisible(
+        renderObject,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+        duration: duration,
+        curve: curve,
+      );
+      scrollable.position.ensureVisible(
+        renderObject,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+        duration: duration,
+        curve: curve,
+      );
     });
   }
 
@@ -175,15 +202,30 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
     );
   }
 
-  void _onPlySelected(int ply) {
+  /// Chart (or any outside-the-list) selection: the row it highlights may be
+  /// anywhere, so always scroll it into view — even when it was already the
+  /// nearest row (the user may have scrolled the list elsewhere by hand).
+  void _onChartPlySelected(int ply) {
     if (ply <= 0) return;
     widget.onUserNavigation?.call();
+    _suppressNextAlign = false;
+    _lastAlignedNearestIdx = null;
+    widget.pgnController.goToMainLineIndex(ply);
+  }
+
+  /// Tap on a move card: select without scrolling — the user is already
+  /// looking at this row.
+  void _onCardTapped(int ply) {
+    if (ply <= 0) return;
+    widget.onUserNavigation?.call();
+    _suppressNextAlign = true;
     widget.pgnController.goToMainLineIndex(ply);
   }
 
   void _onExpectedMoveClicked(MoveEval eval) {
     if (eval.maiaTopMove == null) return;
     widget.onUserNavigation?.call();
+    _suppressNextAlign = true;
 
     final branchPly = eval.ply - 1;
     if (branchPly < 0) return;
@@ -200,6 +242,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
   void _onBestLineMoveClicked(MoveEval eval, int moveIndex) {
     if (eval.bestLine.isEmpty || moveIndex < 0) return;
     widget.onUserNavigation?.call();
+    _suppressNextAlign = true;
 
     final branchPly = eval.ply - 1;
     if (branchPly < 0) return;
@@ -221,8 +264,10 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
     });
   }
 
-  String _formatEval(MoveEval e) =>
-      formatEvalDisplay(scoreCp: e.scoreCp, scoreMate: e.scoreMate);
+  String _formatEval(MoveEval e) {
+    if (e.deliversCheckmate) return '#';
+    return formatEvalDisplay(scoreCp: e.scoreCp, scoreMate: e.scoreMate);
+  }
 
   /// Compute which best-line move to highlight based on variation depth.
   int? _computeBestLineMoveIdx() {
@@ -249,17 +294,11 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
 
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              if (!isAnalyzing)
-                FilledButton.icon(
-                  onPressed: _startAnalysis,
-                  icon: const Icon(Icons.analytics, size: 18),
-                  label: Text(evals.isEmpty ? 'Analyze Game' : 'Re-analyze'),
-                )
-              else ...[
+        if (isAnalyzing)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
                 const SizedBox(
                   width: 18,
                   height: 18,
@@ -289,19 +328,14 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
                   visualDensity: VisualDensity.compact,
                 ),
               ],
-              if (!isAnalyzing && evals.isNotEmpty) ...[
-                const Spacer(),
-                _buildDepthSelector(),
-              ],
-            ],
+            ),
           ),
-        ),
         if (evals.isNotEmpty) ...[
           GameAnalysisChart(
             evals: evals,
             startWinChance: widget.analysisController.startWinChance,
             currentPly: widget.currentPly,
-            onPlySelected: _onPlySelected,
+            onPlySelected: _onChartPlySelected,
           ),
           const Divider(height: 1),
           GameAnalysisSummary(evals: evals),
@@ -319,48 +353,6 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
           const Spacer(),
         ] else
           const Spacer(),
-      ],
-    );
-  }
-
-  Widget _buildDepthSelector() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Text('Depth:', style: AppTextStyles.caption),
-        const SizedBox(width: 4),
-        PopupMenuButton<int>(
-          tooltip: 'Analysis depth',
-          onSelected: (d) =>
-              setState(() => widget.analysisController.depth = d),
-          itemBuilder: (ctx) => [
-            for (final d in [10, 12, 14, 16, 18, 20, 22, 24])
-              PopupMenuItem(
-                value: d,
-                child: Row(
-                  children: [
-                    if (d == widget.analysisController.depth)
-                      const Icon(Icons.check, size: 16)
-                    else
-                      const SizedBox(width: 16),
-                    const SizedBox(width: 8),
-                    Text('$d'),
-                  ],
-                ),
-              ),
-          ],
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: AppColors.outline),
-            ),
-            child: Text(
-              '${widget.analysisController.depth}',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-            ),
-          ),
-        ),
       ],
     );
   }
@@ -474,102 +466,108 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
 
     final evalStr = _formatEval(e);
 
-    return GestureDetector(
+    return Container(
       key: isNearest ? _nearestItemKey : null,
-      behavior: HitTestBehavior.translucent,
-      onTap: () => _onPlySelected(e.ply),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: isNearest
-            ? BoxDecoration(
-                color: AppColors.hoverOverlay,
-                border: Border(left: BorderSide(color: classColor, width: 3)),
-              )
-            : null,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                SizedBox(
-                  width: 48,
-                  child: Text('$moveNum$dots', style: AppTextStyles.caption),
-                ),
-                Text(
-                  e.san,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'monospace',
-                    fontSize: 14,
+      decoration: BoxDecoration(
+        color: isNearest ? AppColors.hoverOverlay : null,
+        // Always reserve the accent strip (transparent when idle): gaining
+        // the highlight must never shift the row's content sideways.
+        border: Border(
+          left: BorderSide(
+            color: isNearest ? classColor : Colors.transparent,
+            width: 3,
+          ),
+        ),
+      ),
+      child: InkWell(
+        onTap: () => _onCardTapped(e.ply),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  SizedBox(
+                    width: 48,
+                    child: Text('$moveNum$dots', style: AppTextStyles.caption),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: classColor.withAlpha(30),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: classColor.withAlpha(80)),
-                  ),
-                  child: Text(
-                    classLabel,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: classColor,
+                  Text(
+                    e.san,
+                    style: const TextStyle(
                       fontWeight: FontWeight.bold,
+                      fontFamily: 'monospace',
+                      fontSize: 14,
                     ),
                   ),
-                ),
-                if (hasTrophy) ...[
-                  const SizedBox(width: 6),
-                  const Tooltip(
-                    message: 'You found a better move here!',
-                    child: Icon(
-                      Icons.emoji_events,
-                      color: AppColors.starAccent,
-                      size: 16,
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: classColor.withAlpha(30),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: classColor.withAlpha(80)),
+                    ),
+                    child: Text(
+                      classLabel,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: classColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  if (hasTrophy) ...[
+                    const SizedBox(width: 6),
+                    const Tooltip(
+                      message: 'You found a better move here!',
+                      child: Icon(
+                        Icons.emoji_events,
+                        color: AppColors.starAccent,
+                        size: 16,
+                      ),
+                    ),
+                  ],
+                  const Spacer(),
+                  Text(
+                    evalStr,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      color: AppColors.pgnMove,
                     ),
                   ),
                 ],
-                const Spacer(),
-                Text(
-                  evalStr,
-                  style: const TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 12,
-                    color: AppColors.pgnMove,
+              ),
+              if (e.classification == MoveClassification.interesting &&
+                  e.maiaProb != null)
+                Padding(
+                  padding: const EdgeInsets.only(left: 48, top: 3),
+                  child: _buildInterestingMoveInfo(e, evalByPly),
+                ),
+              if (e.bestLine.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(left: 48, top: 3),
+                  child: ClickableMoveLineWidget(
+                    sanMoves: e.bestLine,
+                    startPly: e.ply - 1,
+                    activeMoveIndex: _activeBestLinePly == e.ply
+                        ? _computeBestLineMoveIdx()
+                        : null,
+                    onMoveTapped: (idx) => _onBestLineMoveClicked(e, idx),
+                    label: 'Best: ',
+                    fontSize: 14,
+                    movePadding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 4,
+                    ),
                   ),
                 ),
-              ],
-            ),
-            if (e.classification == MoveClassification.interesting &&
-                e.maiaProb != null)
-              Padding(
-                padding: const EdgeInsets.only(left: 48, top: 3),
-                child: _buildInterestingMoveInfo(e, evalByPly),
-              ),
-            if (e.bestLine.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(left: 48, top: 3),
-                child: ClickableMoveLineWidget(
-                  sanMoves: e.bestLine,
-                  startPly: e.ply - 1,
-                  activeMoveIndex: _activeBestLinePly == e.ply
-                      ? _computeBestLineMoveIdx()
-                      : null,
-                  onMoveTapped: (idx) => _onBestLineMoveClicked(e, idx),
-                  label: 'Best: ',
-                  fontSize: 14,
-                  movePadding: const EdgeInsets.symmetric(
-                    horizontal: 5,
-                    vertical: 4,
-                  ),
-                ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

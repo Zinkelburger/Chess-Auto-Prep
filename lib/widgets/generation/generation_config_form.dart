@@ -28,7 +28,7 @@ part 'generation_config_form_advanced.dart';
 /// Settings form for repertoire tree generation.
 ///
 /// Layer 1 (always visible) is a three-section card — Opponent, What to
-/// build, Search (Quick/Full plus four budgets) — plus saved presets and a
+/// build, Search (Fast/Pure plus four budgets) — plus saved presets and a
 /// live plain-language summary. Every other knob lives in the Advanced
 /// dialog; both layers edit the same controllers, so they cannot disagree.
 class GenerationConfigForm extends StatefulWidget {

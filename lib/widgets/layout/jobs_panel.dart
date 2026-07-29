@@ -382,6 +382,7 @@ class JobsPanel extends StatelessWidget {
       JobType.coverage => Icons.analytics_outlined,
       JobType.studyImport => Icons.cloud_download_outlined,
       JobType.tacticsImport => Icons.extension_outlined,
+      JobType.gameAnalysis => Icons.reviews_outlined,
     };
     final statusColor = switch (job.status) {
       JobStatus.running => Theme.of(context).colorScheme.primary,

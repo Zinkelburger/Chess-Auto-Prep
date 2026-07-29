@@ -12,6 +12,7 @@ import 'engine/stockfish_pool.dart';
 import 'chess_api_urls.dart';
 import 'lichess_api_client.dart';
 import 'maia_factory.dart';
+import 'eval_cache.dart';
 import 'tactics_database.dart';
 import 'pgn_parsing_service.dart';
 import 'storage/storage_factory.dart';

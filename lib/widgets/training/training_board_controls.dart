@@ -11,13 +11,21 @@ import '../../utils/pgn_comment_utils.dart' show filterDisplayComment;
 import '../../widgets/chess_board_widget.dart';
 import 'move_input_widget.dart';
 
-/// Chess board area for active training (learn / drill / replay).
+/// Chess board area for the trainer.
+///
+/// Used for active training (learn / drill / replay) and — with
+/// [showMoveInput] off — as the idle board that keeps the browse screens
+/// looking like the rest of the app instead of a bare list.
 class TrainingBoardPane extends StatelessWidget {
   final RepertoireController session;
   final bool boardFlipped;
   final bool waitingForUser;
-  final void Function(CompletedMove move) onMove;
+  final void Function(CompletedMove move)? onMove;
   final GlobalKey<MoveInputWidgetState>? moveInputKey;
+
+  /// False while nothing is being trained: a field that can only reject what
+  /// you type is worse than no field at all.
+  final bool showMoveInput;
 
   /// Forwarded to [MoveInputWidget.onNavigationKey] so non-move shortcut
   /// keys (S, J, …) keep working while a move is being typed.
@@ -28,8 +36,9 @@ class TrainingBoardPane extends StatelessWidget {
     required this.session,
     required this.boardFlipped,
     required this.waitingForUser,
-    required this.onMove,
+    this.onMove,
     this.moveInputKey,
+    this.showMoveInput = true,
     this.onNavigationKey,
   });
 
@@ -54,17 +63,19 @@ class TrainingBoardPane extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 8),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 320),
-            child: MoveInputWidget(
-              key: moveInputKey,
-              position: session.position,
-              enabled: waitingForUser,
-              onMove: onMove,
-              onNavigationKey: onNavigationKey,
+          if (showMoveInput) ...[
+            const SizedBox(height: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 320),
+              child: MoveInputWidget(
+                key: moveInputKey,
+                position: session.position,
+                enabled: waitingForUser,
+                onMove: onMove ?? (_) {},
+                onNavigationKey: onNavigationKey,
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );

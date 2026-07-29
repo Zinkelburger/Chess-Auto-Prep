@@ -272,7 +272,10 @@ class PgnViewerController extends ChangeNotifier
     return collectionsDir;
   }
 
-  Future<void> loadFile(String path) async {
+  /// [restoreSavedSlice] — reapply the slice persisted for this file. Off for
+  /// single-game handoffs (Games page "Review"): a leftover slice there only
+  /// hides the target game and confuses the count display.
+  Future<void> loadFile(String path, {bool restoreSavedSlice = true}) async {
     errorMessage = null;
     pendingSliceRestore = null;
     _sliceEpoch++;
@@ -355,7 +358,7 @@ class PgnViewerController extends ChangeNotifier
     await addToRecentFiles(path);
     _fenIndex.reset();
     await _fenIndex.tryLoadPersisted(path, entries.length);
-    await tryRestoreSavedSlice(path, entries);
+    if (restoreSavedSlice) await tryRestoreSavedSlice(path, entries);
     await loadCurrentGame();
     if (_fenIndex.value == null) {
       _buildFenIndex(); // classification runs via _onFenIndexReady

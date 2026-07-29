@@ -39,7 +39,9 @@ import '../theme/app_colors.dart';
 import '../widgets/engine/engine_gate.dart';
 import '../widgets/engine_weakness_dialog.dart';
 import '../widgets/app_mode_menu_button.dart';
+import '../widgets/app_settings_button.dart';
 import '../widgets/jobs_status_button.dart';
+import '../widgets/info_hint.dart';
 import '../widgets/position_analysis_widget.dart';
 import 'player_selection_screen.dart';
 
@@ -226,6 +228,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
             onPressed: _showPlayerSelection,
           ),
           const JobsStatusButton(),
+          const AppSettingsButton(),
           const AppModeMenuButton(),
         ],
       ),
@@ -283,8 +286,9 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
   }
 
   /// Kebab with the position handoffs (formerly buttons under the board).
-  /// "Add line" and "Save as puzzle" both save a study chapter — a puzzle is
-  /// just a line with a recorded solution.
+  /// Everything saves as a *line* in a study; puzzle-ness is a marker the
+  /// user sets on a move inside the study ("Puzzle starts here"), not a
+  /// separate authored artifact.
   Widget _buildPositionActionsMenu() {
     return PopupMenuButton<String>(
       icon: const Icon(Icons.more_vert, size: 18),
@@ -293,8 +297,6 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
         switch (action) {
           case 'add_line':
             unawaited(_boardActions.addCurrentLineToStudy());
-          case 'make_puzzle':
-            _boardActions.makePuzzleFromPosition();
           case 'open_games':
             _boardActions.openGamesInPgnViewer();
         }
@@ -303,18 +305,31 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
         PopupMenuItem(
           value: 'add_line',
           enabled: _boardActions.hasPosition,
-          child: const Text('Add line to study…'),
-        ),
-        PopupMenuItem(
-          value: 'make_puzzle',
-          enabled: _boardActions.hasPosition,
-          child: const Text('Save position as puzzle…'),
+          child: ListTile(
+            enabled: _boardActions.hasPosition,
+            leading: const Icon(Icons.menu_book_outlined, size: 20),
+            title: const Text('Add line to study…'),
+            trailing: const InfoHint(
+              'Saves the moves that led to this position as a chapter of a '
+              'study,\nwith your comments. Review or train it as-is, or flag '
+              'a move in the\nstudy with "Puzzle starts here" to train just '
+              'that part of the line.',
+            ),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
         ),
         const PopupMenuDivider(),
         PopupMenuItem(
           value: 'open_games',
           enabled: _boardActions.canOpenGames,
-          child: const Text('Open games in PGN viewer'),
+          child: ListTile(
+            enabled: _boardActions.canOpenGames,
+            leading: const Icon(Icons.open_in_new, size: 20),
+            title: const Text('Open games in PGN viewer'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
         ),
       ],
     );

@@ -188,6 +188,13 @@ class TrainingSessionController extends ChangeNotifier
 
   bool get isWhiteLine => currentLine?.color.toLowerCase() != 'black';
   bool get boardFlipped => !isWhiteLine;
+
+  /// Colour the loaded source trains, read from its first line. Answers the
+  /// question before a line is picked — board orientation on the browse
+  /// screens, and the browser subtitle — where [isWhiteLine] has no line to
+  /// look at and would always say White.
+  bool get sourceIsBlack =>
+      lines.isNotEmpty && lines.first.color.toLowerCase() == 'black';
   String get repertoireId => repertoire?.filePath ?? '';
   int get effectiveLineLength => currentLineLength;
 
@@ -296,6 +303,9 @@ class TrainingSessionController extends ChangeNotifier
       if (generation != _loadGeneration) return;
 
       lines = parsedLines;
+      // The browser sits beside an idle board, so park it on this source's own
+      // starting position rather than leaving the last line's board up.
+      session.setPositionFromFen(parsedLines.first.startPosition.fen);
       progress.adopt(
         byLine: {for (final e in merged) e.lineId: e},
         moveProgress: reviewService.indexMoveProgress(
@@ -605,9 +615,16 @@ class TrainingSessionController extends ChangeNotifier
       session.clearMoveHistory();
     }
 
-    final effectiveLength = settings.trainingDepth != null
+    var effectiveLength = settings.trainingDepth != null
         ? settings.trainingDepth!.clamp(1, line.moves.length)
         : line.moves.length;
+    // A `[%tend]` marker ends the quiz after the marked move; anything past
+    // it in the chapter is post-mortem context, not solution. Ignored when it
+    // would leave nothing to train (end marked before the start).
+    final markerEnd = line.puzzleEndIndex;
+    if (markerEnd != null && markerEnd >= (line.puzzleStartIndex ?? 0)) {
+      effectiveLength = (markerEnd + 1).clamp(1, effectiveLength);
+    }
 
     // Tactics mode always quizzes cold — the learn walkthrough would show
     // the puzzle's solution.
@@ -631,11 +648,18 @@ class TrainingSessionController extends ChangeNotifier
     currentPairUser = null;
     _lineGeneration++;
     playingIntro = false;
-    // Never auto-play intro moves in tactics mode — they are the solution.
-    trainingStartIndex =
-        trainingMode == TrainingMode.repertoire && settings.skipToFirstComment
-        ? _firstCommentIndex()
-        : 0;
+    // A `[%tstart]` marker pins where the quiz begins: moves before it are
+    // prelude that auto-plays in every mode (they are context, not solution).
+    // Without a marker, tactics mode never auto-plays intro moves — they ARE
+    // the solution — and repertoire mode optionally skips to the first
+    // annotated move.
+    final markerStart = line.puzzleStartIndex;
+    trainingStartIndex = markerStart != null && markerStart < effectiveLength
+        ? markerStart
+        : (trainingMode == TrainingMode.repertoire &&
+                  settings.skipToFirstComment
+              ? _firstCommentIndex()
+              : 0);
     notifyListeners();
     onLineStarted?.call();
 

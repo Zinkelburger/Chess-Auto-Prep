@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'core/app_history.dart';
 import 'core/app_state.dart';
 import 'core/study_controller.dart';
 import 'models/engine_settings.dart';
@@ -135,6 +136,12 @@ class ChessAutoPrepApp extends StatelessWidget {
             return appState;
           },
         ),
+        // Not lazy: the history must exist from the first frame or early
+        // handoffs would go unrecorded and the trail would lie.
+        ChangeNotifierProvider<AppHistory>(
+          lazy: false,
+          create: (ctx) => AppHistory(ctx.read<AppState>()),
+        ),
         // App-scoped singletons exposed through Provider so widgets/tests can
         // depend on them via context (instead of global `.instance` access) and
         // inject fakes in tests. `.value` because these are process singletons
@@ -207,6 +214,14 @@ class ChessAutoPrepApp extends StatelessWidget {
           ),
           useMaterial3: true,
         ),
+        // GNOME's accessibility bus can enable Flutter's semantics tree on a
+        // running app at any moment, and the semantics pipeline then asserts
+        // every frame on our recognizer-per-span movetext
+        // (flutter/flutter#169214): stuck dialog barriers, dead hover/click
+        // handling until restart. Keep the semantics tree empty — the app has
+        // no screen-reader support to lose. Remove once the upstream bug is
+        // fixed in the pinned Flutter.
+        builder: (context, child) => ExcludeSemantics(child: child!),
         home: const MainScreen(),
         debugShowCheckedModeBanner: false,
       ),

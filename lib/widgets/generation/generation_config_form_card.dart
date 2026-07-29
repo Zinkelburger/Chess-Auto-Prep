@@ -101,7 +101,7 @@ mixin _GenerationConfigCard
 
   // ── Search ──────────────────────────────────────────────────────────────
 
-  /// Coverage-floor phrase for the Quick caption, live from the Advanced
+  /// Coverage-floor phrase for the Fast caption, live from the Advanced
   /// field; 0 or unparsable falls back to the generic wording.
   String _coverageFloorPhrase() {
     final floor = double.tryParse(_coverMinProbCtrl.text.trim()) ?? 0;
@@ -131,7 +131,7 @@ mixin _GenerationConfigCard
         budget > 0
             ? 'Searches every position level by level at the full candidate '
                   'width — but with a time limit it stops mid-breadth and '
-                  'leaves every line equally shallow. Quick makes far '
+                  'leaves every line equally shallow. Fast makes far '
                   'better use of a time limit.'
             : 'Level by level, every position at the full candidate width '
                   'and the eval window set under Advanced — no extra '
@@ -145,12 +145,12 @@ mixin _GenerationConfigCard
         segments: const [
           ButtonSegment(
             value: SearchAlgorithm.fast,
-            label: Text('Quick (recommended)', style: TextStyle(fontSize: 12)),
+            label: Text('Fast (recommended)', style: TextStyle(fontSize: 12)),
             icon: Icon(Icons.bolt, size: 16),
           ),
           ButtonSegment(
             value: SearchAlgorithm.pure,
-            label: Text('Full', style: TextStyle(fontSize: 12)),
+            label: Text('Pure', style: TextStyle(fontSize: 12)),
             icon: Icon(Icons.all_inclusive, size: 16),
           ),
         ],
@@ -477,7 +477,7 @@ mixin _GenerationConfigCard
       BuildMode.trapFinder => 'trap finder',
     };
     final parts = [
-      _searchAlgorithm == SearchAlgorithm.fast ? 'Quick search' : 'Full search',
+      _searchAlgorithm == SearchAlgorithm.fast ? 'Fast search' : 'Pure search',
       'vs ~$elo',
       source,
       '$ply half-moves deep',

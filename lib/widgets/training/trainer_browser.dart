@@ -357,7 +357,11 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
           line: line,
           status: lineStatusOf(widget.reviewMap[line.id]),
           entry: widget.reviewMap[line.id],
-          introLength: widget.introEnabled ? line.uncommentedIntroLength : 0,
+          // A puzzle-start marker auto-plays its prelude in every mode; the
+          // comment-based intro only applies when the setting is on.
+          introLength:
+              line.puzzleStartIndex ??
+              (widget.introEnabled ? line.uncommentedIntroLength : 0),
           dense: widget.dense,
           selecting: _selecting,
           checked: _checked.contains(line.id),

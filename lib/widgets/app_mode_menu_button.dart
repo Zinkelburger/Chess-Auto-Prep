@@ -21,47 +21,27 @@ class AppModeMenuButton extends StatelessWidget {
           enabled: !appState.isRepertoireGenerating,
           onSelected: appState.setMode,
           itemBuilder: (context) => [
-            _buildMenuItem(
-              mode: AppMode.tactics,
-              icon: Icons.psychology,
-              label: 'Tactics',
-              isSelected: appState.currentMode == AppMode.tactics,
-            ),
-            _buildMenuItem(
-              mode: AppMode.positionAnalysis,
-              icon: Icons.analytics,
-              label: 'Player Analysis',
-              isSelected: appState.currentMode == AppMode.positionAnalysis,
-            ),
-            _buildMenuItem(
-              mode: AppMode.repertoire,
-              icon: Icons.library_books,
-              label: 'Repertoire Builder',
-              isSelected: appState.currentMode == AppMode.repertoire,
-            ),
-            _buildMenuItem(
-              mode: AppMode.repertoireTrainer,
-              icon: Icons.school,
-              label: 'Repertoire Trainer',
-              isSelected: appState.currentMode == AppMode.repertoireTrainer,
-            ),
-            _buildMenuItem(
-              mode: AppMode.pgnViewer,
-              icon: Icons.menu_book,
-              label: 'PGN Viewer',
-              isSelected: appState.currentMode == AppMode.pgnViewer,
-            ),
-            _buildMenuItem(
-              mode: AppMode.study,
-              icon: Icons.edit_note,
-              label: 'Study',
-              isSelected: appState.currentMode == AppMode.study,
-            ),
+            for (final mode in AppMode.values)
+              _buildMenuItem(
+                mode: mode,
+                icon: _iconFor(mode),
+                label: mode.label,
+                isSelected: appState.currentMode == mode,
+              ),
           ],
         );
       },
     );
   }
+
+  IconData _iconFor(AppMode mode) => switch (mode) {
+    AppMode.tactics => Icons.psychology,
+    AppMode.positionAnalysis => Icons.analytics,
+    AppMode.repertoire => Icons.library_books,
+    AppMode.repertoireTrainer => Icons.school,
+    AppMode.pgnViewer => Icons.menu_book,
+    AppMode.study => Icons.edit_note,
+  };
 
   PopupMenuItem<AppMode> _buildMenuItem({
     required AppMode mode,

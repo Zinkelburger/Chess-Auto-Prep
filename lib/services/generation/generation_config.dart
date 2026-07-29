@@ -39,7 +39,7 @@ enum SearchAlgorithm {
   /// *extra* narrowing Fast applies to rarely-reached positions.
   pure,
 
-  /// "Quick": best-first (highest reach-priority node expands next) plus
+  /// "Fast": best-first (highest reach-priority node expands next) plus
   /// pruning that spends less effort on rarely-reached positions: our-move
   /// alternatives below the priority floor are skipped, MultiPV and the
   /// eval-loss window shrink in cold subtrees, and opponent fan-out is
@@ -83,7 +83,7 @@ class TreeBuildConfig {
   /// Wall-clock budget for the expansion phase, in minutes.  0 = no limit.
   /// When the budget runs out the frontier stops expanding, the coverage
   /// sweep still runs (so no line ends on an unanswered opponent move) and
-  /// the tree stays resumable.  This is what makes Quick search *quick*:
+  /// the tree stays resumable.  This is what makes Fast search *fast*:
   /// best-first order means the positions it did reach are the ones you are
   /// most likely to face.
   final int timeBudgetMinutes;
@@ -437,7 +437,7 @@ class TreeBuildConfig {
   String get summaryLabel {
     final parts = <String>[
       buildModeLabel,
-      searchAlgorithm == SearchAlgorithm.pure ? 'Full' : 'Quick',
+      searchAlgorithm == SearchAlgorithm.pure ? 'Pure' : 'Fast',
       '${maxPly}ply',
     ];
     if (usesStockfish) {
@@ -554,8 +554,8 @@ class TreeBuildConfig {
 
   /// Short label for the frontier/pruning algorithm.
   String get searchAlgorithmLabel => switch (searchAlgorithm) {
-    SearchAlgorithm.pure => 'Full search',
-    SearchAlgorithm.fast => 'Quick search',
+    SearchAlgorithm.pure => 'Pure search',
+    SearchAlgorithm.fast => 'Fast search',
   };
 
   /// Convert a white-perspective centipawn score to "our" perspective.

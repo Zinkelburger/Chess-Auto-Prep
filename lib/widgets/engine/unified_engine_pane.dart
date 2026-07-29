@@ -18,7 +18,7 @@ import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/chess_utils.dart';
 import 'engine_pane_footer.dart';
-import '../analysis/analysis_settings_sheet.dart';
+import '../analysis/stockfish_settings_dialog.dart';
 import 'floating_board_preview.dart';
 import 'package:chess_auto_prep/utils/log.dart';
 
@@ -50,10 +50,8 @@ class UnifiedEnginePane extends StatefulWidget {
   final VoidCallback? onSetRoot;
   final BoardPreviewController? boardPreview;
 
-  /// Hides the inline settings bar; use [onOpenSettings] from parent instead.
+  /// Hides the inline settings bar (host shows its own chrome instead).
   final bool compact;
-
-  final VoidCallback? onOpenSettings;
 
   const UnifiedEnginePane({
     super.key,
@@ -67,7 +65,6 @@ class UnifiedEnginePane extends StatefulWidget {
     this.onSetRoot,
     this.boardPreview,
     this.compact = false,
-    this.onOpenSettings,
   });
 
   @override
@@ -265,14 +262,8 @@ class _UnifiedEnginePaneState extends _UnifiedEnginePaneStateBase
           ),
           IconButton(
             icon: const Icon(Icons.settings, size: 18),
-            tooltip: 'Engine Settings',
-            onPressed: () {
-              if (widget.onOpenSettings != null) {
-                widget.onOpenSettings!();
-              } else {
-                showAnalysisSettingsSheet(context);
-              }
-            },
+            tooltip: 'Stockfish settings',
+            onPressed: () => showStockfishSettingsDialog(context),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),

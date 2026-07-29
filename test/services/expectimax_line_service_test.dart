@@ -258,6 +258,47 @@ void main() {
     test('true when subtree is complete to target ply', () {
       expect(hasPrecomputedExpectimaxAtPly(tree, tree.root.fen, 3), isTrue);
     });
+
+    test('depth is measured relative to the node, not absolute ply', () {
+      // e4 sits at ply 1 with a subtree reaching ply 3 — two half-moves of
+      // continuation.  Asking for three past e4 must fail even though the
+      // absolute deepest ply (3) equals the target.
+      final e4Fen = tree.root.children[0].fen;
+      expect(hasPrecomputedExpectimaxAtPly(tree, e4Fen, 2), isTrue);
+      expect(hasPrecomputedExpectimaxAtPly(tree, e4Fen, 3), isFalse);
+    });
+  });
+
+  group('branchCompletePly', () {
+    test('fully explored branch completes to the cap', () {
+      expect(branchCompletePly(tree.root, 8), 8);
+      expect(branchCompletePly(tree.root.children[0], 8), 8);
+    });
+
+    test('an unexplored leaf bounds its branch at its own ply', () {
+      final nf3 = tree.root.children[0].children[0].children[0];
+      nf3.explored = false;
+      final e4 = tree.root.children[0];
+      expect(branchCompletePly(e4, 8), 3);
+      expect(isBranchCompleteToPly(e4, 3), isTrue);
+      expect(isBranchCompleteToPly(e4, 4), isFalse);
+      // The sibling branch (d4) is unaffected.
+      expect(branchCompletePly(tree.root.children[1], 8), 8);
+    });
+
+    test('agrees with isBranchCompleteToPly at every ply', () {
+      tree.root.children[0].children[0].children[0].explored = false;
+      for (final node in [tree.root, ...tree.root.children]) {
+        final complete = branchCompletePly(node, 6);
+        for (var p = node.ply; p <= 6; p++) {
+          expect(
+            isBranchCompleteToPly(node, p),
+            p <= complete,
+            reason: '${node.moveSan.isEmpty ? "root" : node.moveSan} at ply $p',
+          );
+        }
+      }
+    });
   });
 
   group('findNodeByFen', () {

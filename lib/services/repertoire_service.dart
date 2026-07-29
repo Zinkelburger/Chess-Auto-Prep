@@ -13,6 +13,7 @@ import '../models/repertoire_review_entry.dart' show RepertoireReviewEntry;
 import '../utils/atomic_file.dart';
 import '../utils/file_text_reader.dart';
 import '../utils/pgn_comment_utils.dart';
+import '../utils/training_markers.dart' show hasPuzzleStart;
 import 'pgn_parsing_service.dart' as pgn;
 import 'storage/storage_factory.dart';
 
@@ -107,9 +108,6 @@ class RepertoireService {
         if (mainlineMoves.isEmpty) continue;
 
         final startPosition = extractStartPosition(game);
-        final color = colorFromStartingSide
-            ? (startPosition.turn == Side.white ? 'white' : 'black')
-            : resolvedColor;
 
         final comments = <String, String>{};
         final moveNodes = game.moves.mainline().toList();
@@ -122,6 +120,25 @@ class RepertoireService {
             }
           }
         }
+
+        // A `[%tstart]` puzzle marker names the first move the solver must
+        // find, so in per-chapter colour mode the solver is whoever plays
+        // that move — not whoever moves first in the chapter. That lets a
+        // full game saved from the standard start train as a Black puzzle.
+        int? markerIndex;
+        for (int m = 0; m < moveNodes.length; m++) {
+          if (hasPuzzleStart(comments[m.toString()])) {
+            markerIndex = m;
+            break;
+          }
+        }
+        final startIsWhite = startPosition.turn == Side.white;
+        final markerMoverIsWhite = markerIndex == null
+            ? startIsWhite
+            : (markerIndex.isEven ? startIsWhite : !startIsWhite);
+        final color = colorFromStartingSide
+            ? (markerMoverIsWhite ? 'white' : 'black')
+            : resolvedColor;
 
         final variations = <String>[];
         _extractVariations(game.moves, variations);

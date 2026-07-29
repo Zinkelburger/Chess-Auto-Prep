@@ -166,9 +166,12 @@ mixin _TacticsImportPanelImportCard on _TacticsImportPanelStateBase {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  'days',
-                  style: TextStyle(fontSize: 13, color: dimmed(isSince)),
+                Flexible(
+                  child: Text(
+                    'days',
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 13, color: dimmed(isSince)),
+                  ),
                 ),
               ],
             ),
@@ -203,9 +206,12 @@ mixin _TacticsImportPanelImportCard on _TacticsImportPanelStateBase {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  'games',
-                  style: TextStyle(fontSize: 13, color: dimmed(isRecent)),
+                Flexible(
+                  child: Text(
+                    'games',
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 13, color: dimmed(isRecent)),
+                  ),
                 ),
               ],
             ),

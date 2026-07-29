@@ -1,7 +1,8 @@
 /// Shared building blocks for settings surfaces.
 ///
-/// Used by both [SettingsScreen] (global) and the analysis settings sheet
-/// (PGN-tab contextual dialog) to avoid duplicated private helpers.
+/// Used by [SettingsScreen] (global) and the per-surface settings dialogs
+/// (Stockfish, on-the-fly expectimax, analysis panels) to avoid duplicated
+/// private helpers.
 library;
 
 import 'package:flutter/material.dart';
@@ -505,5 +506,89 @@ class SettingsTextFieldRow extends StatelessWidget {
     );
     if (tooltip == null) return field;
     return Tooltip(message: tooltip!, child: field);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Dialog frame for the per-surface settings dialogs
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Chrome shared by the per-surface settings dialogs (Stockfish, on-the-fly
+/// expectimax, analysis panels): a fixed title bar with icon and close button
+/// above a scrolling body. Short content shrink-wraps instead of leaving a
+/// half-empty fixed-height dialog.
+Future<void> showSettingsDialog(
+  BuildContext context, {
+  required IconData icon,
+  required String title,
+  required WidgetBuilder bodyBuilder,
+}) async {
+  // Let whatever opened this (popup menu, overlay) finish closing first.
+  await Future<void>.delayed(Duration.zero);
+  if (!context.mounted) return;
+
+  final size = MediaQuery.sizeOf(context);
+  final width = (size.width - 32).clamp(320.0, 560.0);
+  final maxHeight = (size.height - 32).clamp(320.0, 520.0);
+
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => Dialog(
+      insetPadding: const EdgeInsets.all(16),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: SizedBox(
+          width: width,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _SettingsDialogTitleBar(icon: icon, title: title),
+              const Divider(height: 1, color: AppColors.divider),
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  child: Builder(builder: bodyBuilder),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _SettingsDialogTitleBar extends StatelessWidget {
+  final IconData icon;
+  final String title;
+
+  const _SettingsDialogTitleBar({required this.icon, required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 14, 8, 8),
+      child: Row(
+        children: [
+          Icon(icon, color: theme.colorScheme.primary, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              title,
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close),
+            tooltip: 'Close',
+            onPressed: () => Navigator.pop(context),
+          ),
+        ],
+      ),
+    );
   }
 }

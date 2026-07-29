@@ -14,6 +14,7 @@ import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
     show qualityNagSuffix, toggleQualityNag;
+import 'package:chess_auto_prep/utils/training_markers.dart';
 import 'package:chess_auto_prep/widgets/pgn/movetext_primitives.dart'
     show MoveChip;
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
@@ -203,6 +204,26 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     setState(() {});
   }
 
+  /// Toggle the puzzle start/end marker on the move at [path]. The marker is
+  /// a `[%tstart]`/`[%tend]` comment token, so it persists through the host's
+  /// normal comment channel and survives any PGN round-trip.
+  void _togglePuzzleMarker(TreePath path, {required bool start}) {
+    final onCommentChanged = widget.onCommentChanged;
+    if (onCommentChanged == null) return;
+    togglePuzzleMarker(
+      widget.tree,
+      path,
+      start: start,
+      setComment: (p, comment) {
+        onCommentChanged(p, comment);
+      },
+    );
+    widget.onDirty?.call();
+    _cachedMoveWidgets = null;
+    _scheduleAutoSave();
+    setState(() {});
+  }
+
   void _deleteFromHere() {
     if (_contextMenuPath == null) return;
     widget.onDelete?.call(_contextMenuPath!);
@@ -326,6 +347,26 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
             text: hasComment ? 'Edit Comment' : 'Add Comment',
           ),
         ),
+        if (widget.onCommentChanged != null) ...[
+          PopupMenuItem(
+            value: 'puzzle_start',
+            child: _PopupMenuRow(
+              icon: Icons.flag,
+              text: hasPuzzleStart(node?.comment)
+                  ? 'Clear Puzzle Start'
+                  : 'Puzzle Starts Here',
+            ),
+          ),
+          PopupMenuItem(
+            value: 'puzzle_end',
+            child: _PopupMenuRow(
+              icon: Icons.sports_score,
+              text: hasPuzzleEnd(node?.comment)
+                  ? 'Clear Puzzle End'
+                  : 'Puzzle Ends Here',
+            ),
+          ),
+        ],
         if (!isOnMainline)
           const PopupMenuItem(
             value: 'promote',
@@ -373,6 +414,12 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       switch (value) {
         case 'comment':
           _startEditingComment(path);
+          break;
+        case 'puzzle_start':
+          _togglePuzzleMarker(path, start: true);
+          break;
+        case 'puzzle_end':
+          _togglePuzzleMarker(path, start: false);
           break;
         case 'promote':
           _promoteVariation();
@@ -509,6 +556,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   Widget _buildAnnotationPanel() {
     final path = widget.currentPath;
     final node = path.isEmpty ? null : widget.tree.nodeAt(path);
+    final canMark = widget.onCommentChanged != null;
     return PgnAnnotationPanel(
       targetKey: node == null ? null : 'n${node.id}',
       moveLabel: node == null ? '' : _moveLabelFor(path, node),
@@ -516,6 +564,14 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       comment: node?.comment ?? '',
       onToggleNag: (nagId) => _togglePanelNag(path, nagId),
       onCommentChanged: (text) => _commitPanelComment(path, text),
+      puzzleStart: hasPuzzleStart(node?.comment),
+      puzzleEnd: hasPuzzleEnd(node?.comment),
+      onTogglePuzzleStart: canMark
+          ? () => _togglePuzzleMarker(path, start: true)
+          : null,
+      onTogglePuzzleEnd: canMark
+          ? () => _togglePuzzleMarker(path, start: false)
+          : null,
     );
   }
 
@@ -538,132 +594,203 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       widget.tree.startingFen,
     );
 
-    return Wrap(
-      spacing: 2,
-      runSpacing: 4,
-      children: _buildMoveWidgets(
-        widget.tree.roots,
-        startMoveNumber,
-        startIsWhite,
-        isFirstMove: true,
-        parentPath: TreePath.empty,
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: _buildMoveRows(startMoveNumber, startIsWhite),
     );
-  }
-
-  /// A monospace move-number label (e.g. "12. " or "12... ") for the move list.
-  Widget _moveNumberLabel(String text) {
-    return Text(text, style: PgnTextStyles.moveNumber);
   }
 
   // Note: this renders SAN straight from the tree — no dartchess replay. The
   // editor used to thread a Position through the whole recursion (a full
   // parseSan/play replay of every node on each rebuild) without ever using it.
-  List<Widget> _buildMoveWidgets(
-    List<MoveNode> siblings,
-    int moveNumber,
-    bool isWhite, {
-    bool isFirstMove = false,
-    required TreePath parentPath,
-  }) {
-    if (parentPath.isEmpty &&
-        isFirstMove &&
-        !_contextMenuOpen &&
-        _editingCommentPath == null) {
-      if (_cachedMoveWidgets != null &&
-          identical(widget.tree, _cachedTree) &&
-          widget.currentPath == _cachedPath) {
-        return _cachedMoveWidgets!;
+  //
+  // Everything inline lives in Text.rich paragraphs: move numbers, parens and
+  // comments are TextSpans; move chips are baseline-aligned WidgetSpans — the
+  // same construction as the PGN viewer's movetext. A plain Wrap of
+  // mixed-height widgets top-aligns each run, which floated every number a
+  // few pixels above its move. Only the block comment editor breaks a
+  // paragraph.
+  List<Widget> _buildMoveRows(int startMoveNumber, bool startIsWhite) {
+    // The context-path highlight and the inline editor are transient render
+    // state, so neither may be served from nor written to the cache.
+    final canCache = !_contextMenuOpen && _editingCommentPath == null;
+    if (canCache &&
+        _cachedMoveWidgets != null &&
+        identical(widget.tree, _cachedTree) &&
+        widget.currentPath == _cachedPath) {
+      return _cachedMoveWidgets!;
+    }
+
+    final rows = <Widget>[];
+    final spans = <InlineSpan>[];
+
+    void flushSpans() {
+      if (spans.isEmpty) return;
+      rows.add(
+        Text.rich(
+          TextSpan(style: PgnTextStyles.rowRootAt(0), children: List.of(spans)),
+        ),
+      );
+      spans.clear();
+    }
+
+    // Drops the separator space before a closing paren so variations read
+    // "(1... c5)" rather than "(1... c5 )".
+    void trimSeparator() {
+      final last = spans.isEmpty ? null : spans.last;
+      if (last is TextSpan && last.text == ' ') spans.removeLast();
+    }
+
+    void appendNumber(int moveNumber, bool white, int depth) {
+      // NBSP glues the number to its move so a line break can never strand
+      // "12." at the end of a line.
+      spans.add(
+        TextSpan(
+          text: white ? '$moveNumber.\u00A0' : '$moveNumber...\u00A0',
+          style: PgnTextStyles.moveNumberAt(depth),
+        ),
+      );
+    }
+
+    void appendMove(MoveNode node, TreePath path, int depth) {
+      if (hasPuzzleStart(node.comment)) spans.add(_markerSpan(start: true));
+      spans.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.baseline,
+          baseline: TextBaseline.alphabetic,
+          child: _buildSingleMoveWidget(node, path, depth),
+        ),
+      );
+      if (hasPuzzleEnd(node.comment)) spans.add(_markerSpan(start: false));
+      spans.add(const TextSpan(text: ' '));
+    }
+
+    // Appends the node's comment prose or its inline editor. Returns whether
+    // the flow was interrupted — a following Black move restates "N...".
+    bool appendAnnotations(MoveNode node, TreePath path, int depth) {
+      if (_editingCommentPath == path) {
+        flushSpans();
+        rows.add(_buildInlineCommentEditor(node, path));
+        return true;
       }
+      final comment = node.comment;
+      if (comment == null || comment.isEmpty) return false;
+      final prose = commentProseSpans(
+        comment,
+        style: PgnTextStyles.commentAt(depth),
+      );
+      if (prose.isEmpty) return false;
+      spans.addAll(prose);
+      return true;
     }
 
-    final widgets = <Widget>[];
-    if (siblings.isEmpty) return widgets;
+    void appendSiblings(
+      List<MoveNode> siblings,
+      int moveNumber,
+      bool isWhite,
+      int depth, {
+      bool isFirstMove = false,
+      bool renumber = false,
+      required TreePath parentPath,
+    }) {
+      if (siblings.isEmpty) return;
 
-    final main = siblings[0];
-    final mainPath = parentPath.child(0);
+      final main = siblings[0];
+      final mainPath = parentPath.child(0);
 
-    // Null moves ('--') anchor comments to a position; show the comment but
-    // never the SAN itself (matches the PGN viewer).
-    if (main.san != '--') {
-      if (isWhite) {
-        widgets.add(_moveNumberLabel('$moveNumber. '));
-      } else if (isFirstMove) {
-        widgets.add(_moveNumberLabel('$moveNumber... '));
+      // Null moves ('--') anchor comments to a position; show the comment but
+      // never the SAN itself (matches the PGN viewer).
+      if (main.san != '--') {
+        if (isWhite) {
+          appendNumber(moveNumber, true, depth);
+        } else if (isFirstMove || renumber) {
+          appendNumber(moveNumber, false, depth);
+        }
+        appendMove(main, mainPath, depth);
       }
 
-      widgets.add(_buildSingleMoveWidget(main, mainPath));
-    }
+      var interrupted = appendAnnotations(main, mainPath, depth);
 
-    if (_editingCommentPath == mainPath) {
-      widgets.add(_buildInlineCommentEditor(main, mainPath));
-    } else if (main.comment != null && main.comment!.isNotEmpty) {
-      widgets.add(_buildInlineComment(main.comment!));
-    }
+      if (siblings.length > 1) {
+        interrupted = true;
+        final parenStyle = PgnTextStyles.moveNumberAt(depth + 1);
+        for (int i = 1; i < siblings.length; i++) {
+          spans.add(TextSpan(text: '(', style: parenStyle));
 
-    if (siblings.length > 1) {
-      for (int i = 1; i < siblings.length; i++) {
-        widgets.add(Text(' ( ', style: PgnTextStyles.variation));
+          final variant = siblings[i];
+          final variantPath = parentPath.child(i);
 
-        final variant = siblings[i];
-        final variantPath = parentPath.child(i);
-
-        if (variant.san != '--') {
-          if (isWhite) {
-            widgets.add(_moveNumberLabel('$moveNumber. '));
-          } else {
-            widgets.add(_moveNumberLabel('$moveNumber... '));
+          if (variant.san != '--') {
+            appendNumber(moveNumber, isWhite, depth + 1);
+            appendMove(variant, variantPath, depth + 1);
           }
 
-          widgets.add(_buildSingleMoveWidget(variant, variantPath));
-        }
+          final variantInterrupted = appendAnnotations(
+            variant,
+            variantPath,
+            depth + 1,
+          );
 
-        if (_editingCommentPath == variantPath) {
-          widgets.add(_buildInlineCommentEditor(variant, variantPath));
-        } else if (variant.comment != null && variant.comment!.isNotEmpty) {
-          widgets.add(_buildInlineComment(variant.comment!));
-        }
-
-        widgets.addAll(
-          _buildMoveWidgets(
+          appendSiblings(
             variant.children,
             isWhite ? moveNumber : moveNumber + 1,
             !isWhite,
+            depth + 1,
+            renumber: variantInterrupted,
             parentPath: variantPath,
-          ),
-        );
+          );
 
-        widgets.add(Text(' ) ', style: PgnTextStyles.variation));
+          trimSeparator();
+          spans.add(TextSpan(text: ') ', style: parenStyle));
+        }
       }
-    }
 
-    widgets.addAll(
-      _buildMoveWidgets(
+      appendSiblings(
         main.children,
         isWhite ? moveNumber : moveNumber + 1,
         !isWhite,
+        depth,
+        renumber: interrupted,
         parentPath: mainPath,
-      ),
-    );
+      );
+    }
 
-    if (parentPath.isEmpty &&
-        isFirstMove &&
-        !_contextMenuOpen &&
-        _editingCommentPath == null) {
-      _cachedMoveWidgets = widgets;
+    appendSiblings(
+      widget.tree.roots,
+      startMoveNumber,
+      startIsWhite,
+      0,
+      isFirstMove: true,
+      parentPath: TreePath.empty,
+    );
+    flushSpans();
+
+    if (canCache) {
+      _cachedMoveWidgets = rows;
       _cachedTree = widget.tree;
       _cachedPath = widget.currentPath;
     }
 
-    return widgets;
+    return rows;
   }
 
-  Widget _buildInlineComment(String comment) {
-    final spans = commentProseSpans(comment);
-    if (spans.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, right: 2),
-      child: Text.rich(TextSpan(children: spans)),
+  /// Inline flag marking where the puzzle segment of the line starts/ends.
+  InlineSpan _markerSpan({required bool start}) {
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.middle,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 1, right: 1),
+        child: Tooltip(
+          message: start
+              ? 'Puzzle starts here — training quizzes from this move'
+              : 'Puzzle ends here — training stops after this move',
+          child: Icon(
+            start ? Icons.flag : Icons.sports_score,
+            size: 13,
+            color: AppColors.accent,
+          ),
+        ),
+      ),
     );
   }
 
@@ -690,31 +817,29 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     return true;
   }
 
-  Widget _buildSingleMoveWidget(MoveNode node, TreePath nodePath) {
+  Widget _buildSingleMoveWidget(MoveNode node, TreePath nodePath, int depth) {
     final isSelected = widget.currentPath == nodePath;
     final isOnCtxPath = _isOnContextPath(nodePath);
 
     final nagSuffix = qualityNagSuffix(node.nags);
 
-    late final Color textColor;
     Color? bgColor;
     Color borderColor = Colors.transparent;
 
     if (isSelected) {
-      textColor = AppColors.pgnMoveCurrentFg;
       bgColor = AppColors.pgnMoveCurrentBg;
       borderColor = AppColors.pgnMoveCurrent;
     } else if (isOnCtxPath) {
-      textColor = AppColors.pgnMove;
       bgColor = AppColors.pgnMoveCurrentBg.withValues(alpha: 0.35);
-    } else {
-      textColor = AppColors.pgnMove;
     }
 
-    final sanStyle = PgnTextStyles.move.copyWith(
-      color: textColor,
-      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-    );
+    // Depth carries the type treatment (semibold mainline, receding
+    // sidelines); selection changes ink only — the pill marks the current
+    // move, and a weight change here would reflow the wrapped movetext.
+    final base = PgnTextStyles.moveAt(depth);
+    final sanStyle = isSelected
+        ? base.copyWith(color: AppColors.pgnMoveCurrentFg)
+        : base;
     // No per-move underline: every move here is tappable, so a link underline
     // on each one is noise. The glyph suffix renders in exactly the same style
     // as the SAN ("Nf3!?" is one piece of text) — both match the PGN viewer.

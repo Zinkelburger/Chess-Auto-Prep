@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:chess_auto_prep/core/app_history.dart';
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/screens/main_screen.dart';
 
@@ -36,8 +37,14 @@ void main() {
       });
 
       await tester.pumpWidget(
-        ChangeNotifierProvider<AppState>.value(
-          value: appState,
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AppState>.value(value: appState),
+            ChangeNotifierProvider<AppHistory>(
+              lazy: false,
+              create: (_) => AppHistory(appState),
+            ),
+          ],
           child: const MaterialApp(home: MainScreen()),
         ),
       );

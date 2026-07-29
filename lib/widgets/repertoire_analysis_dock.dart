@@ -20,7 +20,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/chess_utils.dart' show formatEvalDisplay, uciToSan;
 import '../utils/eval_constants.dart';
-import 'analysis/analysis_settings_sheet.dart';
+import 'analysis/analysis_panels_dialog.dart';
 import 'engine/expectimax_panel_host.dart';
 import 'engine/unified_engine_pane.dart';
 
@@ -164,8 +164,8 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
     if (!showEngine && !showEx) {
       return Center(
         child: TextButton.icon(
-          onPressed: () => showAnalysisSettingsSheet(context),
-          icon: const Icon(Icons.settings),
+          onPressed: () => showAnalysisPanelsDialog(context),
+          icon: const Icon(Icons.view_column),
           label: const Text('Enable analysis panels'),
         ),
       );
@@ -240,11 +240,11 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
             ),
           const Spacer(),
           IconButton(
-            icon: const Icon(Icons.settings_outlined, size: 18),
-            tooltip: 'Analysis settings',
+            icon: const Icon(Icons.view_column_outlined, size: 18),
+            tooltip: 'Analysis panels',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            onPressed: () => showAnalysisSettingsSheet(context),
+            onPressed: () => showAnalysisPanelsDialog(context),
           ),
         ],
       ),
@@ -359,7 +359,6 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
                   widget.controller.rootMoves;
             }
           : null,
-      onOpenSettings: () => showAnalysisSettingsSheet(context),
     );
   }
 
@@ -384,7 +383,6 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
       isGenerationPaused: widget.isGenerationPaused,
       onTheFlyService: _onTheFly,
       compact: true,
-      onOpenSettings: () => showAnalysisSettingsSheet(context),
       autoComputeEnabled: false,
       onMoveSelected: (san) => widget.controller.playMove(san),
       onLineMoveClicked: (sanMoves, index) {

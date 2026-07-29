@@ -44,6 +44,16 @@ class PgnAnnotationPanel extends StatefulWidget {
   final ValueChanged<int> onToggleNag;
   final ValueChanged<String> onCommentChanged;
 
+  /// Whether the target move carries the puzzle start/end marker. Only
+  /// meaningful when the matching toggle callback is non-null.
+  final bool puzzleStart;
+  final bool puzzleEnd;
+
+  /// Toggle the puzzle start/end marker on the target move. Null hides the
+  /// marker buttons (the host's surface doesn't train lines).
+  final VoidCallback? onTogglePuzzleStart;
+  final VoidCallback? onTogglePuzzleEnd;
+
   const PgnAnnotationPanel({
     super.key,
     required this.targetKey,
@@ -52,6 +62,10 @@ class PgnAnnotationPanel extends StatefulWidget {
     required this.comment,
     required this.onToggleNag,
     required this.onCommentChanged,
+    this.puzzleStart = false,
+    this.puzzleEnd = false,
+    this.onTogglePuzzleStart,
+    this.onTogglePuzzleEnd,
   });
 
   @override
@@ -132,6 +146,26 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
     });
   }
 
+  Widget _markerButton({
+    required IconData icon,
+    required String tooltip,
+    required bool active,
+    required VoidCallback? onTap,
+  }) {
+    return IconButton(
+      icon: Icon(
+        icon,
+        size: 16,
+        color: active ? AppColors.accent : AppColors.onSurfaceMuted,
+      ),
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+      padding: EdgeInsets.zero,
+      onPressed: onTap,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -158,6 +192,23 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
                   color: nag.color,
                   isActive: widget.nags.contains(nag.id),
                   onTap: enabled ? () => widget.onToggleNag(nag.id) : null,
+                ),
+              const Spacer(),
+              if (widget.onTogglePuzzleStart != null)
+                _markerButton(
+                  icon: Icons.flag,
+                  tooltip:
+                      'Puzzle starts here — training auto-plays the earlier '
+                      'moves and quizzes from this one',
+                  active: widget.puzzleStart,
+                  onTap: enabled ? widget.onTogglePuzzleStart : null,
+                ),
+              if (widget.onTogglePuzzleEnd != null)
+                _markerButton(
+                  icon: Icons.sports_score,
+                  tooltip: 'Puzzle ends here — training stops after this move',
+                  active: widget.puzzleEnd,
+                  onTap: enabled ? widget.onTogglePuzzleEnd : null,
                 ),
             ],
           ),

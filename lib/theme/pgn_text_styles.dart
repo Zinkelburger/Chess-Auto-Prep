@@ -96,14 +96,10 @@ abstract final class PgnTextStyles {
     color: AppColors.pgnVariationDeepest,
   );
 
-  // ── Depth-0 aliases (kept for the repertoire editor + comment renderer) ──
+  // ── Depth-0 aliases (kept for the comment renderers) ─────────────────────
 
   static TextStyle get move => moveAt(0);
-  static TextStyle get moveNumber => moveNumberAt(0);
   static TextStyle get comment => commentAt(0);
-  static TextStyle get variation => moveAt(1);
-  static TextStyle get variationRoot => rowRootAt(1);
-  static TextStyle get ephemeral => moveAt(1, ephemeral: true);
 
   /// Text on the "you are here" pill. Same metrics as [move] so the pill can
   /// move without reflowing anything around it.

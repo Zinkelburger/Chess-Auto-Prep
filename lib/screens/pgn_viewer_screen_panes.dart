@@ -19,6 +19,8 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
   void _reclaimFocus();
   List<SolitaireTrophy> get _detectedTrophies;
   Future<void> _detectTrophies();
+  DeviationReport? get _deviationReport;
+  void _openDeviationInBuilder();
 
   Widget _buildFullScreenView(ThemeData theme) {
     return FullscreenGameView(
@@ -121,8 +123,11 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
     }
     // Solitaire is a pure guessing exercise: no Analysis tab (and no engine).
     final showTabs = !_controller.isSolitaireMode;
+    final deviation = _deviationReport;
     return Column(
       children: [
+        if (deviation != null && !deviation.inBook && showTabs)
+          _DeviationBanner(report: deviation, onOpen: _openDeviationInBuilder),
         if (showTabs)
           Row(
             children: [
@@ -444,6 +449,68 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One-line banner above the side-panel tabs: where this game first left the
+/// designated repertoire, with a jump into the builder at that position.
+class _DeviationBanner extends StatelessWidget {
+  const _DeviationBanner({required this.report, required this.onOpen});
+
+  final DeviationReport report;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final who = report.byMe == true ? 'you' : 'opponent';
+    final message = report.bookEnded
+        // The prep ran out — nobody "left" it; invite extending instead.
+        ? 'Book ends at move ${report.moveNumber}: ${report.playedSan} is '
+              'past your prepared lines'
+        : 'Left book at move ${report.moveNumber} ($who): played '
+              '${report.playedSan} — book: ${report.expectedSans.join(' / ')}';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        // A deviation warns; running out of book is neutral information.
+        color: report.bookEnded
+            ? AppColors.surfaceElevated
+            : AppColors.warningTint,
+        border: const Border(bottom: BorderSide(color: AppColors.divider)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.fork_right,
+            size: 16,
+            color: report.bookEnded
+                ? AppColors.onSurfaceMuted
+                : AppColors.warning,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.caption.copyWith(fontSize: 12),
+            ),
+          ),
+          TextButton(
+            onPressed: onOpen,
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              'Open in repertoire',
+              style: AppTextStyles.caption.copyWith(fontSize: 11),
             ),
           ),
         ],

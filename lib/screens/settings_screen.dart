@@ -1,9 +1,10 @@
 /// Centralized settings screen accessible from the app bar.
 ///
-/// Holds machine-level configuration only: engine resources and the offline
-/// eval database. Analysis behavior (depth, MultiPV, expectimax tuning, panel
-/// visibility) lives on the gear next to each analysis surface — see
-/// analysis_settings_sheet.dart — so every knob sits where its effect is
+/// Holds machine-level configuration only: accounts (Lichess login, default
+/// usernames), engine resources, and the offline eval database. Analysis
+/// behavior lives on the gear next to each analysis surface — see
+/// stockfish_settings_dialog.dart, expectimax_settings_dialog.dart, and
+/// analysis_panels_dialog.dart — so every knob sits where its effect is
 /// visible.
 ///
 /// Uses [ListenableBuilder] so it always reflects the latest singleton state,
@@ -13,12 +14,14 @@ library;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../features/games/widgets/my_repertoires_section.dart';
 import '../models/engine_settings.dart';
 import '../models/eval_database_settings.dart';
 import '../services/engine/engine_lifecycle.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/system_info.dart';
 import '../widgets/eval_database_settings_panel.dart';
+import '../widgets/settings/account_settings_section.dart';
 import '../widgets/settings/settings_widgets.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -63,6 +66,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     'effect is visible.',
                     style: AppTextStyles.caption,
                   ),
+                  const SizedBox(height: 8),
+                  const Divider(height: 24),
+
+                  // ── Accounts ─────────────────────────────────
+                  const AccountSettingsSection(),
+                  const SizedBox(height: 8),
+                  const Divider(height: 24),
+
+                  // ── My repertoires ───────────────────────────
+                  const MyRepertoiresSection(),
                   const SizedBox(height: 8),
                   const Divider(height: 24),
 

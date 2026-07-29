@@ -1,11 +1,11 @@
 part of 'position_analysis_widget.dart';
 
 // =====================================================================
-// Handoffs: study / puzzle / PGN viewer
+// Handoffs: study / PGN viewer
 // =====================================================================
 
-/// Save-to-study, make-puzzle and open-in-PGN-viewer handoffs, plus the
-/// line/tree builders and stats comments they rely on.
+/// Save-to-study and open-in-PGN-viewer handoffs, plus the line/tree
+/// builders and stats comments they rely on.
 mixin _StudyHandoffMixin on _PositionAnalysisWidgetStateBase {
   /// Player stats at [fen] as a human-readable PGN comment, or null.
   @override
@@ -128,7 +128,10 @@ mixin _StudyHandoffMixin on _PositionAnalysisWidgetStateBase {
         onAction: () async {
           await study.openStudy(path);
           study.selectChapter(study.doc.chapters.length - 1);
-          appState.setMode(AppMode.study);
+          appState.pushMode(
+            AppMode.study,
+            historyLabel: 'Study: ${result.studyName}',
+          );
         },
       );
     } catch (e) {
@@ -137,12 +140,6 @@ mixin _StudyHandoffMixin on _PositionAnalysisWidgetStateBase {
         showAppSnackBar(context, 'Failed to add line to study.', isError: true);
       }
     }
-  }
-
-  void _makePuzzleFromPosition() {
-    final fen = _currentFen;
-    if (fen == null) return;
-    PuzzleCreatorScreen.push(context, initialFen: expandFen(fen));
   }
 
   void _openGamesInPgnViewer() {

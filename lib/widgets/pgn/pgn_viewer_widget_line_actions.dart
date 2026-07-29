@@ -27,6 +27,7 @@ mixin _PgnViewerLineActions on _PgnViewerWidgetStateBase {
     String label, {
     bool enabled = true,
     Color? color,
+    String? hint,
   }) {
     final effectiveColor = enabled ? color : AppColors.onSurfaceDisabled;
     return PopupMenuItem(
@@ -45,10 +46,18 @@ mixin _PgnViewerLineActions on _PgnViewerWidgetStateBase {
                   : null,
             ),
           ),
+          if (hint != null) ...[const SizedBox(width: 8), InfoHint(hint)],
         ],
       ),
     );
   }
+
+  /// Shared hint for the two "Add line to study…" context-menu items, so the
+  /// wording cannot drift between the move and variation menus.
+  static const String _addLineToStudyHint =
+      'Saves this line — the moves up to here — as a chapter of a study.\n'
+      'Review or train it as-is, or flag a move in the study with\n'
+      '"Puzzle starts here" to train just that part of the line.';
 
   void _showMoveContextMenu(int moveIndex, Offset globalPosition) {
     final line = _moveHistory.sublist(0, moveIndex + 1);
@@ -59,7 +68,12 @@ mixin _PgnViewerLineActions on _PgnViewerWidgetStateBase {
       popUpAnimationStyle: AnimationStyle.noAnimation,
       items: [
         _menuItem('copy_line', Icons.copy_outlined, 'Copy line PGN'),
-        _menuItem('add_to_study', Icons.menu_book_outlined, 'Add to study…'),
+        _menuItem(
+          'add_to_study',
+          Icons.menu_book_outlined,
+          'Add line to study…',
+          hint: _addLineToStudyHint,
+        ),
         // In amend mode the bottom panel handles comments/glyphs; the inline
         // editor stays for quick comments outside amend mode.
         if (!widget.editMode && widget.onCommentsChanged != null) ...[
@@ -92,7 +106,12 @@ mixin _PgnViewerLineActions on _PgnViewerWidgetStateBase {
       popUpAnimationStyle: AnimationStyle.noAnimation,
       items: [
         _menuItem('copy_line', Icons.copy_outlined, 'Copy line PGN'),
-        _menuItem('add_to_study', Icons.menu_book_outlined, 'Add to study…'),
+        _menuItem(
+          'add_to_study',
+          Icons.menu_book_outlined,
+          'Add line to study…',
+          hint: _addLineToStudyHint,
+        ),
         if (node.isEphemeral) ...[
           const PopupMenuDivider(),
           _menuItem(
@@ -214,7 +233,10 @@ mixin _PgnViewerLineActions on _PgnViewerWidgetStateBase {
         onAction: () async {
           await study.openStudy(path);
           study.selectChapter(study.doc.chapters.length - 1);
-          appState.setMode(AppMode.study);
+          appState.pushMode(
+            AppMode.study,
+            historyLabel: 'Study: ${result.studyName}',
+          );
         },
       );
     } catch (e) {

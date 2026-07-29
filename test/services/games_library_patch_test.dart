@@ -1,0 +1,92 @@
+/// The auto-analysis write path: patch one game's movetext into a cache file
+/// by dedup key, leaving its headers and every other game byte-identical.
+library;
+
+import 'dart:io';
+
+import 'package:chess_auto_prep/services/games_library/game_filter.dart';
+import 'package:chess_auto_prep/services/games_library/games_library_service.dart';
+import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+const _gameA =
+    '[Event "Rated blitz game"]\n'
+    '[Site "https://lichess.org/abc123"]\n'
+    '[White "me"]\n'
+    '[Black "them"]\n'
+    '[Result "1-0"]\n'
+    '\n'
+    '1. e4 { [%clk 0:03:00] } e5 2. Nf3 1-0\n';
+
+const _gameB =
+    '[Event "Rated blitz game"]\n'
+    '[Site "https://lichess.org/def456"]\n'
+    '[White "them2"]\n'
+    '[Black "me"]\n'
+    '[Result "0-1"]\n'
+    '\n'
+    '1. d4 d5 2. c4 0-1\n';
+
+void main() {
+  late Directory dir;
+  late File cache;
+
+  setUp(() async {
+    dir = await Directory.systemTemp.createTemp('games_patch_test');
+    cache = File('${dir.path}/lichess_me.pgn');
+    await cache.writeAsString('$_gameA\n$_gameB');
+  });
+
+  tearDown(() async {
+    await dir.delete(recursive: true);
+  });
+
+  test('patches the matching game and preserves the other verbatim', () async {
+    const annotated =
+        '1. d4 { [%eval 0.2,18] } d5 { [%eval 0.1,18] } '
+        '2. c4 { [%eval 0.3,18] } 0-1';
+    final ok = await GamesLibraryService.patchGameMovetext(
+      cachePath: cache.path,
+      dedupKey: 'https://lichess.org/def456',
+      updatedMovetext: annotated,
+    );
+    expect(ok, isTrue);
+
+    final content = await cache.readAsString();
+    final games = splitPgnIntoGames(content);
+    expect(games, hasLength(2));
+    // Untouched game keeps its exact text (headers, clock comment, all).
+    expect(games[0].trim(), _gameA.trim());
+    // Patched game keeps its headers but carries the new movetext.
+    expect(games[1], contains('[Site "https://lichess.org/def456"]'));
+    expect(games[1], contains('[%eval 0.2,18]'));
+    expect(games[1], isNot(contains('1. d4 d5 2. c4 0-1')));
+    // The file still parses into records with the same identities.
+    final records = parseGameRecords(content);
+    expect(records.map((r) => r.dedupKey).toSet(), {
+      'https://lichess.org/abc123',
+      'https://lichess.org/def456',
+    });
+  });
+
+  test('returns false for an unknown game or missing file', () async {
+    expect(
+      await GamesLibraryService.patchGameMovetext(
+        cachePath: cache.path,
+        dedupKey: 'https://lichess.org/nope',
+        updatedMovetext: '1. e4',
+      ),
+      isFalse,
+    );
+    expect(
+      await GamesLibraryService.patchGameMovetext(
+        cachePath: '${dir.path}/missing.pgn',
+        dedupKey: 'https://lichess.org/abc123',
+        updatedMovetext: '1. e4',
+      ),
+      isFalse,
+    );
+    // And the file was not rewritten.
+    expect(await cache.readAsString(), '$_gameA\n$_gameB');
+  });
+}

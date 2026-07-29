@@ -55,6 +55,29 @@ void main() {
       expect(lines[1].moves, ['e4']);
     });
 
+    test('a [%tstart] puzzle marker sets the solver colour and start index '
+        'in per-chapter colour mode', () {
+      // Full game from the standard start: without a marker this chapter
+      // would train as White (White moves first). The marker on Black's
+      // second move says the puzzle is Black's from there.
+      final pgn = [
+        '[Event "Line with marker"]',
+        '',
+        '1. e4 e5 2. Nf3 Nc6 {Solve from here. [%tstart]} 3. Bb5 '
+            'a6 {[%tend]} *',
+      ].join('\n');
+
+      final lines = RepertoireService().parseRepertoirePgn(
+        pgn,
+        colorFromStartingSide: true,
+      );
+
+      expect(lines, hasLength(1));
+      expect(lines.single.color, 'black');
+      expect(lines.single.puzzleStartIndex, 3);
+      expect(lines.single.puzzleEndIndex, 5);
+    });
+
     test('parseRepertoirePgn handles multi-game file correctly', () {
       final pgn = '''
 // Color: White

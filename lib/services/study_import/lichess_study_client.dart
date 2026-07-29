@@ -63,8 +63,8 @@ Future<FetchedStudy> fetchLichessStudy(ImportSource source) async {
   }
   if (response.statusCode == 401 || response.statusCode == 403) {
     throw const StudyImportException(
-      'Lichess rejected the request. Log out and back in under Lichess '
-      'settings, then try again.',
+      'Lichess rejected the request. Log out and back in under Settings → '
+      'Accounts, then try again.',
     );
   }
   if (response.statusCode != 200) {
@@ -98,7 +98,7 @@ String _notFoundMessage(ImportSource source) {
   final auth = LichessAuthService.instance;
   if (!auth.isLoggedIn) {
     return 'Study not found. If it is private or unlisted, log into Lichess '
-        'first (Lichess settings → Log in), then try again.';
+        'first (Settings → Accounts), then try again.';
   }
   // Lichess answers "private study, insufficient scope" with a plain 404, so a
   // logged-in miss is most often a token minted before we asked for

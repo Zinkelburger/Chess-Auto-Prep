@@ -125,7 +125,13 @@ mixin _TacticsPlayback on _TacticsControlPanelStateBase {
     _solutionNav.reset();
     _applyPositionSetup(setup);
     _syncPgnToCurrentTactic();
-    TacticsControlPanel.moveInputKey.currentState?.focus();
+    // The move field only exists while a puzzle is loaded (the pre-training
+    // board has none), so on the first puzzle of a session it mounts in the
+    // frame this call schedules — focus it once that frame has built.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      TacticsControlPanel.moveInputKey.currentState?.focus();
+    });
   }
 
   /// Click handler for a move in the solution line: jump there and repaint.

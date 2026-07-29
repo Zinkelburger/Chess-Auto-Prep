@@ -107,6 +107,25 @@ class _SiteResult {
   final bool isBlunder;
 }
 
+/// Persist a side-to-move [EvalResult] into the shared White-normalized
+/// [EvalCache] (the same store tree generation and audit read). Mate scores
+/// are skipped — the cache is centipawns-only and its consumers assume cp
+/// semantics.
+Future<void> _putSharedEval(
+  String fen,
+  EvalResult result, {
+  required bool sideToMoveIsWhite,
+  required int depth,
+}) async {
+  final cp = result.scoreCp;
+  if (cp == null || result.scoreMate != null) return;
+  await EvalCache.instance.putEvalCpWhite(
+    fen,
+    sideToMoveIsWhite ? cp : -cp,
+    depth,
+  );
+}
+
 /// Position after playing [uci] from [fen], or null when it doesn't apply.
 ///
 /// FEN identity is how the user's played move is compared against the
@@ -242,6 +261,14 @@ Future<List<TacticsPosition>> _analyzeGameParallel({
 
     if (shouldAbort?.call() ?? false) return;
     final evalA = await evaluate(site.fenBefore);
+    unawaited(
+      _putSharedEval(
+        site.fenBefore,
+        evalA,
+        sideToMoveIsWhite: userColor == Side.white,
+        depth: depth,
+      ),
+    );
 
     // evalA is the user's turn → already the user's perspective.
     final wcBefore = _winningChances(evalA.effectiveCp);
@@ -263,8 +290,38 @@ Future<List<TacticsPosition>> _analyzeGameParallel({
       return;
     }
 
+    // Shared-cache screen-out: a full-game analysis pass (this game reviewed
+    // in the viewer, or the background auto-analysis job) has usually
+    // already scored this exact position at ≥ this depth. When that score
+    // says the move lost nothing, the confirming search is skipped — only
+    // suspected mistakes go to the engine, because a mined card needs the
+    // search's PV and exact eval, which the cp-only cache cannot provide.
+    final cachedCpWhite = await EvalCache.instance.getEvalCpWhite(
+      site.fenAfter,
+      minDepth: depth,
+    );
+    if (cachedCpWhite != null) {
+      final cachedCpUser = userColor == Side.white
+          ? cachedCpWhite
+          : -cachedCpWhite;
+      final wcAfterCached = _winningChances(cachedCpUser);
+      if (wcBefore - wcAfterCached < 0.1) {
+        results[i] = _SiteResult(wcBefore: wcBefore, wcAfter: wcAfterCached);
+        reportDone();
+        return;
+      }
+    }
+
     if (shouldAbort?.call() ?? false) return;
     final evalB = await evaluate(site.fenAfter);
+    unawaited(
+      _putSharedEval(
+        site.fenAfter,
+        evalB,
+        sideToMoveIsWhite: userColor != Side.white,
+        depth: depth,
+      ),
+    );
 
     // evalB is the opponent's turn → negate for the user's perspective.
     final cpB = -evalB.effectiveCp;

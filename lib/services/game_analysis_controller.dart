@@ -19,11 +19,13 @@ import 'dart:async';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
+import '../models/engine_settings.dart';
 import '../utils/chess_utils.dart' show uciPvToSan, uciToSan, toStandardUci;
 import '../utils/ease_utils.dart' show winningChanceFromCp;
 import '../utils/eval_constants.dart';
 import '../utils/pgn_comment_utils.dart';
 import 'engine/stockfish_pool.dart';
+import 'eval_cache.dart';
 import 'maia_factory.dart';
 import '../utils/safe_change_notifier.dart';
 
@@ -47,6 +49,11 @@ class MoveEval {
   final List<String> bestLine; // Engine's preferred continuation (SAN)
   final int? depth; // Analysis depth
 
+  /// This move checkmated the opponent. The eval is not an engine score
+  /// (there is no position left to search — mate-0 sign is ambiguous), so
+  /// [scoreCp]/[scoreMate] stay null and [winningChance] is exactly ±1.
+  final bool deliversCheckmate;
+
   const MoveEval({
     required this.ply,
     required this.san,
@@ -61,12 +68,17 @@ class MoveEval {
     this.maiaTopProb,
     this.bestLine = const [],
     this.depth,
+    this.deliversCheckmate = false,
   });
 
   bool get isWhiteMove => ply % 2 == 1;
 
-  int get effectiveCp =>
-      effectiveCpFromScores(scoreCp: scoreCp, scoreMate: scoreMate);
+  int get effectiveCp {
+    if (deliversCheckmate) {
+      return winningChance >= 0 ? kMateCpBase : -kMateCpBase;
+    }
+    return effectiveCpFromScores(scoreCp: scoreCp, scoreMate: scoreMate);
+  }
 
   /// Format as a Lichess-compatible `[%eval]` comment value, with optional
   /// depth suffix (e.g. `1.23,18` or `#3,20`).
@@ -112,8 +124,12 @@ MoveClassification classifyMove(double delta) {
 // Isolate-safe top-level parser for cached evals (used by compute())
 // ---------------------------------------------------------------------------
 
+/// Restore per-move evals from a game's stored `[%eval]` comments, or null
+/// when the game does not count as analyzed (more than 2 plies lack an eval).
+/// Public because the games list derives its review summaries from the same
+/// parse (see `features/games/services/game_review_summary.dart`).
 ({List<MoveEval> evals, double startWinChance, int totalMoves})?
-_parseCachedEvals(String pgnText) {
+parseCachedEvals(String pgnText) {
   final parsed = PgnGame.parsePgn(pgnText);
   final mainline = parsed.moves.mainline().toList();
   if (mainline.isEmpty) return null;
@@ -152,6 +168,28 @@ _parseCachedEvals(String pgnText) {
           if (pv.isNotEmpty) bestLine = pv;
         }
       }
+    }
+
+    if (pos.isCheckmate) {
+      // Mate delivered on the board: the result is a fact of the position,
+      // not an engine score. Any stored [%eval] here is ignored — a mate-0
+      // engine score has no sign, so trusting it misclassifies the winner's
+      // mating move as a blunder.
+      final whiteWon = pos.turn == Side.black;
+      results.add(
+        MoveEval(
+          ply: i + 1,
+          san: moveData.san,
+          fenBefore: fenBefore,
+          fenAfter: fenAfter,
+          winningChance: whiteWon ? 1.0 : -1.0,
+          deliversCheckmate: true,
+          maiaProb: maiaProb,
+          maiaTopMove: maiaTop?.move,
+          maiaTopProb: maiaTop?.prob,
+        ),
+      );
+      continue;
     }
 
     if (evalData == null) {
@@ -211,6 +249,7 @@ _parseCachedEvals(String pgnText) {
         maiaTopProb: e.maiaTopProb,
         bestLine: e.bestLine,
         depth: e.depth,
+        deliversCheckmate: e.deliversCheckmate,
         classification: classification,
       ),
     );
@@ -244,12 +283,11 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
   int _analyzedMoves = 0;
   int get analyzedMoves => _analyzedMoves;
 
-  int _depth = 18;
-  int get depth => _depth;
-  set depth(int value) {
-    _depth = value.clamp(8, 30);
-    notifyListeners();
-  }
+  /// Depth of the running (or most recent) pass. Falls back to the shared
+  /// Stockfish "Depth" setting — full-game analysis has no depth knob of its
+  /// own; it follows the one in the Stockfish settings dialog.
+  int? _activeDepth;
+  int get depth => _activeDepth ?? EngineSettings.instance.depth;
 
   bool _isCancelled = false;
 
@@ -259,7 +297,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
     _evals = [];
 
     try {
-      final result = await compute(_parseCachedEvals, pgnText);
+      final result = await compute(parseCachedEvals, pgnText);
       if (result == null) return false;
 
       _evals = result.evals;
@@ -300,7 +338,8 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
     _isCancelled = false;
     notifyListeners();
 
-    final useDepth = analysisDepth ?? _depth;
+    final useDepth = analysisDepth ?? EngineSettings.instance.depth;
+    _activeDepth = useDepth;
     final pool = StockfishPool.instance;
 
     try {
@@ -363,11 +402,24 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
         ));
       }
 
+      // A game ending in mate or stalemate has no position left to search
+      // after its final move — asking the engine yields a sign-ambiguous
+      // mate-0 score, so the result is read off the board instead.
+      final lastIsCheckmate = positions.isNotEmpty && pos.isCheckmate;
+      final lastIsStalemate =
+          positions.isNotEmpty && !lastIsCheckmate && pos.isStalemate;
+
       final startFen = (setupFlag == '1' && fenHeader.isNotEmpty)
           ? fenHeader
           : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
       final startResult = await pool.evaluateFen(startFen, useDepth);
       if (_isCancelled) return;
+      _shareEval(
+        startFen,
+        startResult,
+        sideToMoveIsWhite: startFen.split(' ')[1] == 'w',
+        depth: useDepth,
+      );
       _startWinChance = cpToWinningChance(
         startResult.scoreCp,
         startResult.scoreMate,
@@ -406,10 +458,19 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
         final batchEnd = (batchStart + batchSize).clamp(0, positions.length);
         final batch = positions.sublist(batchStart, batchEnd);
 
-        // Fire off Stockfish evals concurrently
+        // Fire off Stockfish evals concurrently. The terminal move of a
+        // mated/stalemated game gets a placeholder result: its eval is
+        // synthesized from the board below, never searched.
         final futures = <Future<EvalResult>>[];
-        for (final p in batch) {
-          futures.add(pool.evaluateFen(p.fenAfter, useDepth));
+        for (int j = 0; j < batch.length; j++) {
+          final isTerminal =
+              batchStart + j == positions.length - 1 &&
+              (lastIsCheckmate || lastIsStalemate);
+          futures.add(
+            isTerminal
+                ? Future.value(EvalResult(depth: useDepth))
+                : pool.evaluateFen(batch[j].fenAfter, useDepth),
+          );
         }
 
         final results = await Future.wait(futures);
@@ -422,13 +483,37 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
           final globalIdx = batchStart + j;
           final ply = globalIdx + 1;
 
-          final whiteNormCp = p.isWhiteToMove
-              ? result.scoreCp
-              : _negateCp(result.scoreCp);
-          final whiteNormMate = p.isWhiteToMove
-              ? result.scoreMate
-              : _negateMate(result.scoreMate);
-          final winChance = cpToWinningChance(whiteNormCp, whiteNormMate);
+          final isTerminal =
+              globalIdx == positions.length - 1 &&
+              (lastIsCheckmate || lastIsStalemate);
+          final int? whiteNormCp;
+          final int? whiteNormMate;
+          final double winChance;
+          if (isTerminal && lastIsCheckmate) {
+            // p.isWhiteToMove is the side to move in fenAfter — the side
+            // that got mated.
+            whiteNormCp = null;
+            whiteNormMate = null;
+            winChance = p.isWhiteToMove ? -1.0 : 1.0;
+          } else if (isTerminal) {
+            whiteNormCp = 0;
+            whiteNormMate = null;
+            winChance = cpToWinningChance(0, null);
+          } else {
+            whiteNormCp = p.isWhiteToMove
+                ? result.scoreCp
+                : _negateCp(result.scoreCp);
+            whiteNormMate = p.isWhiteToMove
+                ? result.scoreMate
+                : _negateMate(result.scoreMate);
+            winChance = cpToWinningChance(whiteNormCp, whiteNormMate);
+            _shareEval(
+              p.fenAfter,
+              result,
+              sideToMoveIsWhite: p.isWhiteToMove,
+              depth: useDepth,
+            );
+          }
 
           // Classify immediately
           final isWhiteMove = ply % 2 == 1;
@@ -497,9 +582,13 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
             maiaTopMove: maiaTopMove,
             maiaTopProb: maiaTopProb,
             depth: useDepth,
+            deliversCheckmate: isTerminal && lastIsCheckmate,
           );
           _evals.add(eval);
-          _injectEvalComment(p.moveData, eval);
+          // No [%eval] on the mating move: mate-on-board has no sign-safe
+          // encoding, and the cached-restore parser derives it from the
+          // board anyway.
+          if (!eval.deliversCheckmate) _injectEvalComment(p.moveData, eval);
           prevWinChance = winChance;
           prevBeforePv = result.pv;
           prevBeforeFen = p.fenAfter;
@@ -520,6 +609,27 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
       _isAnalyzing = false;
       notifyListeners();
     }
+  }
+
+  /// Feed this ply's score into the shared persistent [EvalCache] (the store
+  /// tree generation, audit, and — since the unified home — tactics mining
+  /// consult), so positions this pass evaluated are never searched twice.
+  /// Fire-and-forget; mates are skipped (the cache is centipawns-only).
+  void _shareEval(
+    String fen,
+    EvalResult result, {
+    required bool sideToMoveIsWhite,
+    required int depth,
+  }) {
+    final cp = result.scoreCp;
+    if (cp == null || result.scoreMate != null) return;
+    unawaited(
+      EvalCache.instance.putEvalCpWhite(
+        fen,
+        sideToMoveIsWhite ? cp : -cp,
+        depth,
+      ),
+    );
   }
 
   void _injectEvalComment(PgnNodeData moveData, MoveEval eval) {

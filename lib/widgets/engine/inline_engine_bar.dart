@@ -27,7 +27,7 @@ import '../../utils/chess_utils.dart'
     show fenAfterMoves, formatEvalDisplay, formatNodes, uciPvToSanCached;
 import '../../utils/fen_utils.dart';
 import '../clickable_move_line.dart';
-import '../analysis/analysis_settings_sheet.dart';
+import '../analysis/stockfish_settings_dialog.dart';
 import 'engine_gate.dart';
 import 'floating_board_preview.dart';
 
@@ -385,11 +385,8 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
           if (_engineEnabled)
             IconButton(
               icon: const Icon(Icons.settings, size: 18),
-              tooltip: 'Engine Settings',
-              onPressed: () => showAnalysisSettingsSheet(
-                context,
-                mode: AnalysisSettingsContext.engineOnly,
-              ),
+              tooltip: 'Stockfish settings',
+              onPressed: () => showStockfishSettingsDialog(context),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             ),

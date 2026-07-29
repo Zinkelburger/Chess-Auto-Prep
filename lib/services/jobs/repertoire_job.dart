@@ -10,7 +10,14 @@ import 'package:flutter/foundation.dart';
 
 enum JobStatus { queued, running, paused, completed, cancelled, failed }
 
-enum JobType { generation, audit, coverage, studyImport, tacticsImport }
+enum JobType {
+  generation,
+  audit,
+  coverage,
+  studyImport,
+  tacticsImport,
+  gameAnalysis,
+}
 
 // ── Progress snapshot ───────────────────────────────────────────────
 
@@ -121,6 +128,10 @@ class JobManager extends ChangeNotifier {
       .where((j) => j.type == JobType.tacticsImport && j.isActive)
       .firstOrNull;
 
+  RepertoireJob? get currentGameAnalysisJob => _jobs
+      .where((j) => j.type == JobType.gameAnalysis && j.isActive)
+      .firstOrNull;
+
   /// Create and register a new job. Returns the job for further configuration.
   RepertoireJob createJob({
     required JobType type,
@@ -187,6 +198,13 @@ class JobManager extends ChangeNotifier {
       return p.totalNodes == 0
           ? 'Tactics: running'
           : 'Tactics: ${p.nodesProcessed}/${p.totalNodes} games';
+    }
+    final gameAnalysis = currentGameAnalysisJob;
+    if (gameAnalysis != null) {
+      final p = gameAnalysis.progress;
+      return p.totalNodes == 0
+          ? 'Review: analyzing'
+          : 'Review: ${p.nodesProcessed}/${p.totalNodes} games';
     }
     return null;
   }

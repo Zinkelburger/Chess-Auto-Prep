@@ -5,6 +5,7 @@ library;
 import 'package:dartchess/dartchess.dart';
 
 import '../utils/pgn_comment_utils.dart' show filterDisplayComment;
+import '../utils/training_markers.dart' show hasPuzzleStart, hasPuzzleEnd;
 
 class RepertoireLine {
   final String id;
@@ -97,6 +98,39 @@ class RepertoireLine {
       }
       return 0; // no prose comments anywhere
     }();
+  }
+
+  bool _puzzleMarkersComputed = false;
+  int? _puzzleStartIndex;
+  int? _puzzleEndIndex;
+
+  void _computePuzzleMarkers() {
+    if (_puzzleMarkersComputed) return;
+    _puzzleMarkersComputed = true;
+    for (int i = 0; i < moves.length; i++) {
+      final comment = comments[i.toString()];
+      if (_puzzleStartIndex == null && hasPuzzleStart(comment)) {
+        _puzzleStartIndex = i;
+      }
+      if (_puzzleEndIndex == null && hasPuzzleEnd(comment)) {
+        _puzzleEndIndex = i;
+      }
+    }
+  }
+
+  /// Index of the move carrying the `[%tstart]` puzzle marker — the first
+  /// move the trainer quizzes (earlier moves auto-play as intro). Null when
+  /// the line has no marker and trains from the top as before.
+  int? get puzzleStartIndex {
+    _computePuzzleMarkers();
+    return _puzzleStartIndex;
+  }
+
+  /// Index of the move carrying the `[%tend]` puzzle marker — the last move
+  /// the trainer quizzes. Null trains to the end of the line.
+  int? get puzzleEndIndex {
+    _computePuzzleMarkers();
+    return _puzzleEndIndex;
   }
 
   /// Checks if this line trains the specified color

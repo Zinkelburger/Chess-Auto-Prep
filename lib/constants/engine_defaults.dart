@@ -66,6 +66,10 @@ const int kDefaultExpEvalDepth = 12;
 const int kMinExpEvalDepth = 6;
 const int kMaxExpEvalDepth = 20;
 
+/// Fast (best-first + priority pruning) vs Pure search for on-the-fly
+/// expectimax — same meaning as the Generate form's Fast/Pure choice.
+const bool kDefaultExpFastSearch = true;
+
 // ── Explorer ─────────────────────────────────────────────────────────────────
 
 const String kDefaultExplorerDatabase = 'lichess';

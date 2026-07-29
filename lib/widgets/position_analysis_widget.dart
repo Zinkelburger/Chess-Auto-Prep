@@ -38,7 +38,6 @@ import '../models/position_analysis.dart';
 import '../models/opening_tree.dart';
 import '../services/storage/storage_factory.dart';
 import '../theme/app_colors.dart';
-import '../screens/puzzle_creator_screen.dart';
 import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
 import '../utils/keyboard_shortcut_utils.dart';
@@ -62,10 +61,11 @@ const int _kTricksTabIndex = 5;
 /// Starting-position board, shown when no FEN has been selected yet.
 const Position _startingPosition = Chess.initial;
 
-/// Exposes the board handoff actions (add line to study, make puzzle, open
-/// games in the PGN viewer) to the host screen, which surfaces them in its
-/// app bar instead of buttons under the board. Both save paths land in the
-/// same place — a study chapter — so a puzzle *is* a line here.
+/// Exposes the board handoff actions (add line to study, open games in the
+/// PGN viewer) to the host screen, which surfaces them in its app bar
+/// instead of buttons under the board. Lines are the one save primitive: a
+/// puzzle is a segment of a study line marked "Puzzle starts here" in Study,
+/// not a separate artifact authored from this screen.
 class PositionAnalysisActions {
   _PositionAnalysisWidgetState? _state;
 
@@ -80,8 +80,6 @@ class PositionAnalysisActions {
 
   Future<void> addCurrentLineToStudy() async =>
       _state?._addCurrentLineToStudy();
-
-  void makePuzzleFromPosition() => _state?._makePuzzleFromPosition();
 
   void openGamesInPgnViewer() => _state?._openGamesInPgnViewer();
 }

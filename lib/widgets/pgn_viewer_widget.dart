@@ -18,6 +18,7 @@ import 'package:chess_auto_prep/theme/app_text_styles.dart';
 import 'package:chess_auto_prep/theme/pgn_text_styles.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
     show toggleQualityNag;
+import 'package:chess_auto_prep/widgets/info_hint.dart';
 import 'package:chess_auto_prep/widgets/pgn/add_to_study_dialog.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_movetext_view.dart';

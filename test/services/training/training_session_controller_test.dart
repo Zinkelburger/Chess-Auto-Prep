@@ -794,6 +794,58 @@ void main() {
       controller.dispose();
     });
 
+    test('a [%tstart] marker starts the quiz there — even in tactics mode, '
+        'where unmarked lines quiz cold', () async {
+      final controller = buildController()..settings = _fastSettings();
+      final line = _line(
+        'M1',
+        ['e4', 'e5', 'Nf3', 'Nc6'],
+        comments: {'2': 'Find it. [%tstart]'},
+      );
+      controller.lines = [line];
+      controller.reviewMap['M1'] = _entry('', 'M1');
+      controller.trainingMode = TrainingMode.tactics;
+
+      controller.startLine(line);
+      expect(controller.trainingStartIndex, 2);
+      await _waitFor(() => controller.waitingForUser);
+      // The prelude auto-played onto the board; the marked move is quizzed.
+      expect(controller.session.moveHistory, hasLength(2));
+      expect(controller.currentMoveIndex, 2);
+      controller.dispose();
+    });
+
+    test('a [%tend] marker stops the quiz after the marked move', () {
+      final controller = buildController()..settings = _fastSettings();
+      final line = _line(
+        'M2',
+        ['e4', 'e5', 'Nf3', 'Nc6'],
+        comments: {'1': '[%tend]'},
+      );
+      controller.lines = [line];
+      controller.reviewMap['M2'] = _entry('', 'M2');
+
+      controller.startLine(line);
+      expect(controller.currentLineLength, 2);
+      controller.dispose();
+    });
+
+    test('a marker past the training-depth clamp is ignored', () {
+      final controller = buildController()..settings = _fastSettings();
+      controller.settings.trainingDepth = 2;
+      final line = _line(
+        'M3',
+        ['e4', 'e5', 'Nf3', 'Nc6'],
+        comments: {'3': '[%tstart]'},
+      );
+      controller.lines = [line];
+      controller.reviewMap['M3'] = _entry('', 'M3');
+
+      controller.startLine(line);
+      expect(controller.trainingStartIndex, 0);
+      controller.dispose();
+    });
+
     test('setStudySource defaults to tactics + linear; setRepertoire resets '
         'to repertoire + spaced', () {
       final controller = buildController();

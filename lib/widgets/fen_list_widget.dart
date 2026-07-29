@@ -329,6 +329,8 @@ class _FenListWidgetState extends State<FenListWidget> {
     );
   }
 
+  String _gamesLabel(int games) => '$games game${games == 1 ? '' : 's'}';
+
   Widget _buildPositionItem(int rank, PositionStats stats) {
     final isSelected = _selectedFen == stats.fen;
     final showingEval = _isEvalSort;
@@ -367,7 +369,7 @@ class _FenListWidgetState extends State<FenListWidget> {
     final subtitle = reach != null
         ? '$movePrefix${reach.percentLabel}% reached · '
               '${reach.decisionPoints} branch '
-              'pt${reach.decisionPoints == 1 ? '' : 's'}'
+              'point${reach.decisionPoints == 1 ? '' : 's'}'
         : movePrefix +
               (stats.fen.length > 40
                   ? '${stats.fen.substring(0, 40)}...'
@@ -384,9 +386,11 @@ class _FenListWidgetState extends State<FenListWidget> {
       title: Text(
         showingEval && stats.hasEval
             ? '#$rank: ${stats.evalDisplay}  '
-                  '(${stats.winRatePercent.toStringAsFixed(0)}% in ${stats.games}g)'
+                  '(${stats.winRatePercent.toStringAsFixed(0)}% in '
+                  '${_gamesLabel(stats.games)})'
             : '#$rank: ${stats.winRatePercent.toStringAsFixed(1)}%$evalTag '
-                  '(${stats.wins}-${stats.losses}-${stats.draws} in ${stats.games})',
+                  '(${stats.wins}-${stats.losses}-${stats.draws} in '
+                  '${_gamesLabel(stats.games)})',
         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
       ),
       subtitle: Text(

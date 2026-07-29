@@ -2,10 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:chess_auto_prep/widgets/clickable_move_line.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/main.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
 
 import 'board_helpers.dart';
+
+/// Switch modes through the app-bar mode menu (from a freshly booted app,
+/// where only one screen — and thus one menu button — has been built).
+Future<void> switchToMode(WidgetTester tester, String label) async {
+  await tester.tap(find.byIcon(Icons.view_module).first);
+  await tester.pumpAndSettle();
+  final item = find.ancestor(
+    of: find.text(label),
+    matching: find.byType(PopupMenuItem<AppMode>),
+  );
+  await tester.tap(item);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
+  await tester.pumpAndSettle();
+}
 
 /// Boot the app and wait for it to settle.
 Future<void> pumpApp(WidgetTester tester) async {

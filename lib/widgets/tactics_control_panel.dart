@@ -3,7 +3,6 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:dartchess/dartchess.dart';
@@ -97,6 +96,10 @@ abstract class _TacticsControlPanelStateBase extends State<TacticsControlPanel>
   /// stored-PGN archive, so it must not run once per keystroke in the days
   /// field (typing "365" would fire it three times).
   Timer? _pendingCountDebounce;
+
+  /// Deferred engine/Maia warm-up (see initState); cancelled on dispose so a
+  /// short-lived panel never leaves the FFI init running behind it.
+  Timer? _warmUpTimer;
 
   /// Cache for the analysis tab's solution PGN — building it replays the
   /// solution line with dartchess, which is wasteful on every panel setState.
@@ -198,11 +201,20 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
     // Auto-load positions on startup
     _loadPositions();
 
-    // Pre-warm Stockfish pool + Maia so imports start instantly — but at
-    // genuine framework idle, not inside the startup frame burst. The 45MB
-    // Maia ONNX parse is synchronous FFI; running it during first paint janked
-    // startup. Imports still lazily force init if the user is quicker than idle.
-    SchedulerBinding.instance.scheduleTask(_warmUpEngines, Priority.idle);
+    // Pre-warm Stockfish pool + Maia so imports start instantly — but off the
+    // startup frame burst. The 45MB Maia ONNX parse is synchronous FFI;
+    // running it during first paint janked startup. Imports still lazily force
+    // init if the user is quicker than this.
+    //
+    // A plain delay, not scheduleTask(Priority.idle). An idle task is refused
+    // while anything animates, and SchedulerBinding then re-posts a
+    // *zero-delay* timer to retry. That retry loop cannot terminate under a
+    // widget test's fake clock: elapse() keeps draining the zero-delay repost
+    // without advancing time, so the animation it waits on never gets the
+    // frame that would end it. The result is a test that spins at 100% CPU and
+    // allocates until it is OOM-killed. It also means that in the real app the
+    // warm-up never ran while any spinner was on screen.
+    _warmUpTimer = Timer(const Duration(seconds: 2), _warmUpEngines);
   }
 
   void _onSessionChanged() {
@@ -273,6 +285,7 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
     _focusNode.dispose();
     _tabController.dispose();
     _pendingCountDebounce?.cancel();
+    _warmUpTimer?.cancel();
     _form.removeListener(_onFormChanged);
     _form.dispose();
     super.dispose();

@@ -24,6 +24,12 @@ import '../core/app_state.dart';
 import '../core/pgn_viewer_controller.dart';
 import '../core/pgn/solitaire_controller.dart';
 import '../core/study_controller.dart';
+import '../features/games/services/game_deviation_service.dart';
+import '../features/games/services/game_moves.dart';
+import '../features/games/services/my_repertoire_settings.dart';
+import '../features/games/services/game_auto_analysis_service.dart';
+import '../services/games_library/game_filter.dart' show dedupKeyForHeaders;
+import '../services/lichess_auth_service.dart';
 import '../services/storage/storage_factory.dart';
 import '../services/game_analysis_controller.dart';
 import '../models/solitaire_trophy.dart';
@@ -35,6 +41,8 @@ import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_mode_menu_button.dart';
+import '../widgets/app_settings_button.dart';
+import '../widgets/engine/engine_gate.dart';
 import '../widgets/jobs_status_button.dart';
 import '../widgets/layout/responsive_split_layout.dart';
 import '../widgets/chess_board_widget.dart';
@@ -54,7 +62,6 @@ import '../widgets/pgn/solitaire_status_widgets.dart';
 import '../widgets/pgn_viewer_widget.dart';
 import '../widgets/pgn_slice_dialog.dart';
 import '../widgets/solitaire_trophy_cabinet.dart';
-import 'puzzle_creator_screen.dart';
 
 part 'pgn_viewer_screen_app_bar.dart';
 part 'pgn_viewer_screen_panes.dart';
@@ -103,6 +110,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       onReclaimFocus: _reclaimFocus,
     );
     _controller.addListener(_onControllerUpdate);
+    MyRepertoireSettings.instance.addListener(_onRepertoireDesignationsChanged);
+    // Tell the background auto-analysis job which game this screen shows, so
+    // it never races the viewer's own analysis on the same game.
+    GameAutoAnalysisService.instance.currentlyOpenGame = _currentGameDedupKey;
     windowManager.addListener(this);
     _controller.loadRecentFiles();
     _controller.loadCollections();
@@ -126,6 +137,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         _controller.currentGameIndex != _trophyGameIndex) {
       _detectedTrophies = const [];
     }
+    _maybeUpdateDeviation();
     setState(() {});
   }
 
@@ -137,18 +149,134 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     }
   }
 
-  /// "Open Games in PGN Viewer" hook (Player Analysis): open the pending
-  /// file and, when a FEN is given, slice to games containing that position.
+  /// Handoff hook: open the pending file, then optionally slice to a
+  /// position ("Open Games in PGN Viewer"), jump to one game and start the
+  /// review ("Review" on the Games page).
   void _consumePendingViewerFile(AppState appState) {
     final handoff = appState.takeHandoff<OpenPgnViewer>();
     if (handoff == null) return;
-    _openFileWithPositionSlice(handoff.pgnPath, handoff.sliceFen);
+    _openFromHandoff(handoff);
   }
 
-  Future<void> _openFileWithPositionSlice(String path, String? sliceFen) async {
+  Future<void> _openFromHandoff(OpenPgnViewer handoff) async {
+    final gameId = handoff.gameId;
+
+    // Fast path: the requested game lives in the file that's already open
+    // (Games page → Review → breadcrumb back → Review again). Reloading
+    // would re-parse the whole games cache and — worse — cancel and forget
+    // an analysis that is still running, so reuse the loaded collection.
+    final sameFileLoaded =
+        handoff.sliceFen == null &&
+        gameId != null &&
+        handoff.pgnPath == _controller.filePath &&
+        _controller.errorMessage == null &&
+        _controller.allGames.isNotEmpty;
+    if (sameFileLoaded) {
+      if (_currentGameIs(gameId)) {
+        if (handoff.autoAnalyze && !_controller.isSolitaireMode) {
+          _startAutoAnalysisForCurrentGame();
+        }
+        return;
+      }
+      if (await _goToGameById(gameId)) {
+        if (!mounted) return;
+        if (handoff.autoAnalyze && !_controller.isSolitaireMode) {
+          _startAutoAnalysisForCurrentGame();
+        }
+        return;
+      }
+      // Not in the loaded copy (the cache gained games since) — fall through
+      // to a full reload.
+      if (!mounted) return;
+    }
+
+    await _openFileWithPositionSlice(
+      handoff.pgnPath,
+      handoff.sliceFen,
+      // A single-game handoff must not resurrect an old slice: it can hide
+      // the target game and its filtered/total counter reads as noise when
+      // all you asked for was one game.
+      restoreSavedSlice: gameId == null,
+    );
+    if (!mounted ||
+        _controller.errorMessage != null ||
+        _controller.filePath != handoff.pgnPath) {
+      return;
+    }
+    if (gameId != null) {
+      final found = await _goToGameById(gameId);
+      if (!found || !mounted) return;
+    }
+    // Solitaire hides the Analysis tab entirely; don't fight the mode.
+    if (handoff.autoAnalyze && !_controller.isSolitaireMode) {
+      _startAutoAnalysisForCurrentGame();
+    }
+  }
+
+  /// Whether the currently displayed game is [gameId].
+  bool _currentGameIs(String gameId) {
+    final key = _currentGameDedupKey();
+    return key != null && key == gameId;
+  }
+
+  /// Identity of the currently displayed game (also served to
+  /// [GameAutoAnalysisService] so its job skips the game on screen).
+  String? _currentGameDedupKey() {
+    final games = _controller.filteredGames;
+    if (games.isEmpty || _controller.currentGameIndex >= games.length) {
+      return null;
+    }
+    return dedupKeyForHeaders(games[_controller.currentGameIndex].headers);
+  }
+
+  Future<bool> _goToGameById(String gameId) async {
+    var index = _controller.filteredGames.indexWhere(
+      (g) => dedupKeyForHeaders(g.headers) == gameId,
+    );
+    if (index < 0) {
+      // A restored slice may hide the target game — widen to the whole file.
+      _controller.resetFilters();
+      index = _controller.filteredGames.indexWhere(
+        (g) => dedupKeyForHeaders(g.headers) == gameId,
+      );
+    }
+    if (index < 0) return false;
+    _controller.currentGameIndex = index;
+    // Awaited (goToGame fires loadCurrentGame without waiting): the
+    // cached-eval restore must finish before autoAnalyze decides whether an
+    // engine pass is still needed.
+    await _controller.loadCurrentGame();
+    return true;
+  }
+
+  /// Start the engine review of the current game unless cached `[%eval]`s
+  /// already cover it. Mirrors the Analysis tab's manual "Analyze Game"
+  /// button, including persistence and trophy detection.
+  void _startAutoAnalysisForCurrentGame() {
+    if (_controller.filteredGames.isEmpty) return;
+    _tabController.animateTo(1);
+    if (_analysisController.isAnalyzing) return;
+    if (_analysisController.evals.isNotEmpty) return;
+    if (!EngineGate.ensureAvailable(context)) return;
+    _analysisController.analyzeGame(
+      _controller.filteredGames[_controller.currentGameIndex].pgnText,
+      onAnnotatedMovetext: _controller.persistMoveComments,
+      onComplete: _detectTrophies,
+    );
+  }
+
+  Future<void> _openFileWithPositionSlice(
+    String path,
+    String? sliceFen, {
+    bool restoreSavedSlice = true,
+  }) async {
     // When a position slice is about to be applied it supersedes any restored
     // slice, so a "Restored last slice" notice would be misleading.
-    await _loadFile(path, notifySliceRestore: sliceFen == null);
+    await _loadFile(
+      path,
+      notifySliceRestore: sliceFen == null && restoreSavedSlice,
+      restoreSavedSlice: restoreSavedSlice,
+    );
     // Bail if the load failed (the old file's games would still be in the
     // controller and the slice would silently target the wrong collection).
     if (!mounted ||
@@ -178,6 +306,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   @override
   void dispose() {
     windowManager.removeListener(this);
+    GameAutoAnalysisService.instance.currentlyOpenGame = null;
+    MyRepertoireSettings.instance.removeListener(
+      _onRepertoireDesignationsChanged,
+    );
     _controller.removeListener(_onControllerUpdate);
     _controller.dispose();
     _analysisController.removeListener(_onAnalysisUpdate);
@@ -237,8 +369,12 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   @override
-  Future<void> _loadFile(String path, {bool notifySliceRestore = true}) async {
-    await _controller.loadFile(path);
+  Future<void> _loadFile(
+    String path, {
+    bool notifySliceRestore = true,
+    bool restoreSavedSlice = true,
+  }) async {
+    await _controller.loadFile(path, restoreSavedSlice: restoreSavedSlice);
     if (!mounted) return;
     final error = _controller.errorMessage;
     if (error != null) {
@@ -288,6 +424,89 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   /// Game index [_detectedTrophies] were found in.
   int _trophyGameIndex = -1;
+
+  /// Where the loaded game first left the designated repertoire (Settings →
+  /// My repertoires), when I played in it and a book is designated. Shown as
+  /// a banner above the side-panel tabs.
+  @override
+  DeviationReport? _deviationReport;
+
+  /// Identity (file + game) [_deviationReport] belongs to; also the
+  /// staleness guard for the async compute.
+  String? _deviationKey;
+
+  void _maybeUpdateDeviation() {
+    final games = _controller.filteredGames;
+    final index = _controller.currentGameIndex;
+    // Keyed by game identity, not index: applying or clearing a slice resets
+    // the index to 0 with a different game there, and an index-based key
+    // would keep the previous game's banner.
+    final key = games.isEmpty || index >= games.length
+        ? null
+        : '${_controller.filePath}'
+              '#${dedupKeyForHeaders(games[index].headers)}';
+    if (key == _deviationKey) return;
+    _deviationKey = key;
+    _deviationReport = null;
+    if (key == null) return;
+    _computeDeviation(key);
+  }
+
+  /// Settings → My repertoires changed: the banner may now be wrong (or
+  /// newly possible) for the already-loaded game, so recompute it.
+  void _onRepertoireDesignationsChanged() {
+    if (!mounted) return;
+    setState(() {
+      _deviationKey = null;
+      _deviationReport = null;
+    });
+    _maybeUpdateDeviation();
+  }
+
+  Future<void> _computeDeviation(String key) async {
+    final games = _controller.filteredGames;
+    if (games.isEmpty) return;
+    final entry = games[_controller.currentGameIndex];
+    final meWhite = _myColorIn(entry.headers);
+    if (meWhite == null) return;
+    final report = await GameDeviationService.instance.analyzeGame(
+      gameSans: extractMainlineSans(entry.pgnText),
+      meWhite: meWhite,
+    );
+    if (!mounted || key != _deviationKey) return;
+    setState(() => _deviationReport = report);
+  }
+
+  /// Which side I played in a game, by matching the configured account
+  /// usernames against the White/Black headers. Null when neither matches —
+  /// then the game isn't mine and deviation is meaningless.
+  bool? _myColorIn(Map<String, String> headers) {
+    final appState = context.read<AppState>();
+    final names = <String>{
+      for (final name in [
+        appState.chesscomUsername,
+        appState.lichessUsername,
+        LichessAuthService.instance.username,
+      ])
+        if (name != null && name.trim().isNotEmpty) name.trim().toLowerCase(),
+    };
+    final white = headers['White']?.trim().toLowerCase();
+    final black = headers['Black']?.trim().toLowerCase();
+    if (white != null && names.contains(white)) return true;
+    if (black != null && names.contains(black)) return false;
+    return null;
+  }
+
+  @override
+  void _openDeviationInBuilder() {
+    final report = _deviationReport;
+    if (report == null) return;
+    context.read<AppState>().switchToBuilder(
+      repertoirePath: report.chapterPath,
+      moveSequence: report.pathSans,
+      historyLabel: 'Repertoire: ${report.chapterName}',
+    );
+  }
 
   /// Runs after full-game analysis: every solitaire guess the user tried and
   /// had rejected is evaluated and compared to the move actually played.
@@ -395,7 +614,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         onAction: () async {
           await study.openStudy(path);
           study.selectChapter(study.doc.chapters.length - 1);
-          appState.setMode(AppMode.study);
+          appState.pushMode(
+            AppMode.study,
+            historyLabel: 'Study: ${result.studyName}',
+          );
         },
       );
     } catch (e) {

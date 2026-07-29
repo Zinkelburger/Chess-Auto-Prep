@@ -14,13 +14,22 @@ void main() {
   // ── App Launch ─────────────────────────────────────────────────────────
 
   group('App Launch', () {
-    testWidgets('boots into Tactics mode with import controls visible', (
-      tester,
-    ) async {
+    testWidgets('boots into the unified Tactics home', (tester) async {
       await pumpApp(tester);
 
-      expect(find.text('Tactics'), findsOneWidget);
-      expect(find.byType(ChessBoardWidget), findsOneWidget);
+      // App-bar title plus the breadcrumb root both say Tactics.
+      expect(find.text('Tactics'), findsWidgets);
+      expect(find.byTooltip('Back to previous screen'), findsOneWidget);
+
+      // Left pane: the recent-games home. A fresh environment has no
+      // usernames configured, so its empty-state card shows.
+      expect(find.text('No accounts configured'), findsOneWidget);
+      expect(find.text('Open Settings'), findsOneWidget);
+      // Idle Tactics shows the games home instead of a decorative board;
+      // the board returns only when a puzzle session starts.
+      expect(find.byType(ChessBoardWidget), findsNothing);
+
+      // Right pane: the tactics import/start controls, as before.
       expect(find.text('Import Games'), findsOneWidget);
       expect(find.text('Lichess Username'), findsOneWidget);
       expect(find.text('Chess.com Username'), findsOneWidget);
@@ -33,7 +42,7 @@ void main() {
   // ── Mode Switching ─────────────────────────────────────────────────────
 
   group('Mode Switching', () {
-    testWidgets('popup menu shows all four modes', (tester) async {
+    testWidgets('popup menu shows the modes', (tester) async {
       await pumpApp(tester);
 
       await tester.tap(find.byIcon(Icons.view_module));
@@ -105,23 +114,6 @@ void main() {
       expect(
         getAppState(tester).currentMode,
         equals(AppMode.repertoireTrainer),
-      );
-    });
-  });
-
-  // ── Chess Board ────────────────────────────────────────────────────────
-
-  group('Chess Board', () {
-    testWidgets('board renders at initial position', (tester) async {
-      await pumpApp(tester);
-
-      final board = find.byType(ChessBoardWidget);
-      expect(board, findsOneWidget);
-
-      final boardWidget = tester.widget<ChessBoardWidget>(board);
-      expect(
-        boardWidget.position.fen,
-        contains('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR'),
       );
     });
   });

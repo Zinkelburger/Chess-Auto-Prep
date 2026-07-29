@@ -25,6 +25,18 @@ sealed class PendingHandoff {
 
   /// Mode the app switches to in order to deliver this handoff.
   AppMode get targetMode;
+
+  /// Breadcrumb text when the producer passes no explicit label to
+  /// [AppState.handOff] — derived from the payload so every crumb is named.
+  String get defaultHistoryLabel;
+}
+
+/// File name without directory or `.pgn`, for breadcrumb labels.
+String _displayName(String path) {
+  final base = path.split(RegExp(r'[/\\]')).last;
+  return base.toLowerCase().endsWith('.pgn')
+      ? base.substring(0, base.length - 4)
+      : base;
 }
 
 /// Open a repertoire in the Builder.
@@ -51,6 +63,10 @@ final class OpenBuilder extends PendingHandoff {
 
   @override
   AppMode get targetMode => AppMode.repertoire;
+
+  @override
+  String get defaultHistoryLabel =>
+      'Repertoire: ${_displayName(repertoirePath)}';
 }
 
 /// Load something into the Repertoire Trainer. Both variants land on the same
@@ -68,6 +84,9 @@ sealed class TrainerHandoff extends PendingHandoff {
 
   @override
   AppMode get targetMode => AppMode.repertoireTrainer;
+
+  @override
+  String get defaultHistoryLabel => 'Training: ${_displayName(sourcePath)}';
 }
 
 /// Train a repertoire's lines.
@@ -106,11 +125,19 @@ final class EditStudy extends PendingHandoff {
 
   @override
   AppMode get targetMode => AppMode.study;
+
+  @override
+  String get defaultHistoryLabel => 'Study: ${_displayName(studyPath)}';
 }
 
 /// Open a PGN collection in the PGN Viewer.
 final class OpenPgnViewer extends PendingHandoff {
-  const OpenPgnViewer({required this.pgnPath, this.sliceFen});
+  const OpenPgnViewer({
+    required this.pgnPath,
+    this.sliceFen,
+    this.gameId,
+    this.autoAnalyze = false,
+  });
 
   final String pgnPath;
 
@@ -118,6 +145,18 @@ final class OpenPgnViewer extends PendingHandoff {
   /// position.
   final String? sliceFen;
 
+  /// When set, jump to the game with this identity (a games-library
+  /// `dedupKey`: the game URL, else players+date). Indices are not used
+  /// because the collection's order can change between refreshes.
+  final String? gameId;
+
+  /// Start the engine game review after opening, unless cached evals already
+  /// cover the game (the Games page's "Review" button).
+  final bool autoAnalyze;
+
   @override
   AppMode get targetMode => AppMode.pgnViewer;
+
+  @override
+  String get defaultHistoryLabel => 'PGN: ${_displayName(pgnPath)}';
 }

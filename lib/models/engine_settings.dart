@@ -390,6 +390,18 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
     }
   }
 
+  /// Fast search (best-first + priority pruning) vs Pure search for
+  /// on-the-fly expectimax — the same choice the Generate form offers.
+  bool _expectimaxFastSearch = kDefaultExpFastSearch;
+  bool get expectimaxFastSearch => _expectimaxFastSearch;
+  set expectimaxFastSearch(bool v) {
+    if (v != _expectimaxFastSearch) {
+      _expectimaxFastSearch = v;
+      _persist();
+      notifyListeners();
+    }
+  }
+
   // ── Singleton + system detection ─────────────────────────────────────
 
   /// Changes when analysis inputs change (not column dim state).
@@ -527,6 +539,8 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
         kMinExpEvalDepth,
         kMaxExpEvalDepth,
       );
+      _expectimaxFastSearch =
+          prefs.getBool('${_prefix}exp_fast_search') ?? kDefaultExpFastSearch;
       _probabilityStartMoves =
           prefs.getString('${_prefix}probability_start_moves') ?? '';
       _mutedAnalysisColumns
@@ -587,6 +601,7 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
       await prefs.setDouble('${_prefix}exp_min_prob', _expectimaxMinProb);
       await prefs.setInt('${_prefix}exp_max_eval_loss', _expectimaxMaxEvalLoss);
       await prefs.setInt('${_prefix}exp_eval_depth', _expectimaxEvalDepth);
+      await prefs.setBool('${_prefix}exp_fast_search', _expectimaxFastSearch);
       await prefs.setString(
         '${_prefix}probability_start_moves',
         _probabilityStartMoves,

@@ -12,6 +12,12 @@ int main(int argc, char** argv) {
     g_setenv("GDK_BACKEND", "wayland", TRUE);
   }
 
+  // When GNOME's accessibility bus (AT-SPI) connects, Flutter's semantics
+  // pipeline asserts every frame in debug builds (flutter/flutter#169214),
+  // wedging the UI. The app exposes no screen-reader support, so keep GTK's
+  // a11y bridge from loading at all; export NO_AT_BRIDGE=0 to override.
+  g_setenv("NO_AT_BRIDGE", "1", FALSE);
+
   g_autoptr(MyApplication) app = my_application_new();
   return g_application_run(G_APPLICATION(app), argc, argv);
 }

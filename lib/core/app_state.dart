@@ -16,11 +16,39 @@ enum AppMode {
   study,
 }
 
+extension AppModeLabel on AppMode {
+  /// Display name — the single source for the mode menu and the breadcrumb
+  /// trail, so a mode is never called two different things.
+  String get label => switch (this) {
+    AppMode.tactics => 'Tactics',
+    AppMode.positionAnalysis => 'Player Analysis',
+    AppMode.repertoire => 'Repertoire Builder',
+    AppMode.repertoireTrainer => 'Repertoire Trainer',
+    AppMode.pgnViewer => 'PGN Viewer',
+    AppMode.study => 'Study',
+  };
+}
+
+/// Hook through which [AppState] reports navigation to the app-level
+/// breadcrumb history. An interface (rather than importing AppHistory) so the
+/// dependency points one way and AppState stays constructible without it.
+abstract interface class NavigationHistoryRecorder {
+  /// A jump that should become a new crumb.
+  void recordPush(AppMode mode, PendingHandoff? handoff, String label);
+
+  /// A bare mode switch — erases the trail down to that mode's root.
+  void recordReset(AppMode mode);
+}
+
 class AppState extends ChangeNotifier with SafeChangeNotifier {
+  // Tactics is the app's home: the unified landing screen — recent games on
+  // the left, training on the right.
   AppMode _currentMode = AppMode.tactics;
+  NavigationHistoryRecorder? _history;
   Position _currentPosition = Chess.initial;
   String? _lichessUsername;
   String? _chesscomUsername;
+  bool _usernamesLoaded = false;
   bool _isAnalysisMode = false;
   bool _isRepertoireGenerating = false;
   bool? _initialBoardFlipped;
@@ -51,13 +79,36 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
     return handoff;
   }
 
+  /// Attach the breadcrumb history. Called once by AppHistory's constructor;
+  /// AppState never navigates through it, only reports into it.
+  void attachHistory(NavigationHistoryRecorder history) => _history = history;
+
   /// Park [handoff] and switch to the screen that can deliver it.
   ///
   /// Replaces any handoff still waiting: the newest navigation wins, and a
   /// stale one could otherwise fire on a screen the user has moved past.
-  void handOff(PendingHandoff handoff) {
+  ///
+  /// Every handoff becomes a breadcrumb; [historyLabel] names it in the trail
+  /// (falling back to a label derived from the payload).
+  void handOff(PendingHandoff handoff, {String? historyLabel}) {
+    _history?.recordPush(
+      handoff.targetMode,
+      handoff,
+      historyLabel ?? handoff.defaultHistoryLabel,
+    );
     _pendingHandoff = handoff;
     _currentMode = handoff.targetMode;
+    notifyListeners();
+  }
+
+  /// Switch modes as a breadcrumb *push* (not a trail reset) without parking
+  /// a handoff — for producers that prime the target's app-scoped controller
+  /// directly (e.g. "Added to study → Open", which mutates [StudyController]
+  /// before switching).
+  void pushMode(AppMode mode, {required String historyLabel}) {
+    _history?.recordPush(mode, null, historyLabel);
+    _pendingHandoff = null;
+    _currentMode = mode;
     notifyListeners();
   }
 
@@ -65,6 +116,10 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
   Position get currentPosition => _currentPosition;
   String? get lichessUsername => _lichessUsername;
   String? get chesscomUsername => _chesscomUsername;
+
+  /// Whether [loadUsernames] has completed. Until then, empty usernames may
+  /// just mean "prefs still loading", not "no accounts configured".
+  bool get usernamesLoaded => _usernamesLoaded;
   bool get isAnalysisMode => _isAnalysisMode;
   bool get isRepertoireGenerating => _isRepertoireGenerating;
   bool get tacticsAutoFetch => _tacticsAutoFetch;
@@ -80,7 +135,16 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
     return _currentPosition.turn == Side.black;
   }
 
+  /// Bare mode switch — the mode menu and defensive fallbacks. Erases the
+  /// breadcrumb trail down to the new mode's root ("click Tactics and the
+  /// history is gone"). Use [pushMode] to keep the trail instead.
+  ///
+  /// Also drops any still-parked handoff: it belongs to the navigation this
+  /// switch abandons, and would otherwise fire the next time its screen is
+  /// built — yanking the user back to a file they had navigated away from.
   void setMode(AppMode mode) {
+    _history?.recordReset(mode);
+    _pendingHandoff = null;
     _currentMode = mode;
     notifyListeners();
   }
@@ -88,23 +152,50 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
   /// Switch to the Repertoire Trainer with the study at [path] loaded as a
   /// tactics-mode training source ("Train" in Study mode).  [lineId]
   /// optionally starts on one chapter's line.
-  void switchToStudyTraining({required String path, String? lineId}) =>
-      handOff(TrainStudy(sourcePath: path, lineId: lineId));
+  void switchToStudyTraining({
+    required String path,
+    String? lineId,
+    String? historyLabel,
+  }) => handOff(
+    TrainStudy(sourcePath: path, lineId: lineId),
+    historyLabel: historyLabel,
+  );
 
   /// Switch to Study mode with the PGN file at [path] opened for editing
   /// ("Edit study" in the Repertoire Trainer).
-  void switchToStudyEdit({required String path}) =>
-      handOff(EditStudy(studyPath: path));
+  void switchToStudyEdit({required String path, String? historyLabel}) =>
+      handOff(EditStudy(studyPath: path), historyLabel: historyLabel);
 
   /// Switch to the PGN Viewer with the file at [path] opened, optionally
   /// sliced to games containing [sliceFen] ("Open Games in PGN Viewer" in
-  /// Player Analysis).
-  void switchToPgnViewer({required String path, String? sliceFen}) =>
-      handOff(OpenPgnViewer(pgnPath: path, sliceFen: sliceFen));
+  /// Player Analysis). [gameId] jumps to one game of the collection and
+  /// [autoAnalyze] starts the engine review on it (the Games page's
+  /// "Review").
+  void switchToPgnViewer({
+    required String path,
+    String? sliceFen,
+    String? gameId,
+    bool autoAnalyze = false,
+    String? historyLabel,
+  }) => handOff(
+    OpenPgnViewer(
+      pgnPath: path,
+      sliceFen: sliceFen,
+      gameId: gameId,
+      autoAnalyze: autoAnalyze,
+    ),
+    historyLabel: historyLabel,
+  );
 
   /// Switch to trainer with a specific repertoire and optional line.
-  void switchToTrainer({required String repertoirePath, String? lineId}) =>
-      handOff(TrainRepertoire(sourcePath: repertoirePath, lineId: lineId));
+  void switchToTrainer({
+    required String repertoirePath,
+    String? lineId,
+    String? historyLabel,
+  }) => handOff(
+    TrainRepertoire(sourcePath: repertoirePath, lineId: lineId),
+    historyLabel: historyLabel,
+  );
 
   /// Switch to builder with a specific repertoire and optional line to focus.
   /// [moveSequence] navigates the builder board to that position after load
@@ -113,12 +204,14 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
     required String repertoirePath,
     String? lineId,
     List<String>? moveSequence,
+    String? historyLabel,
   }) => handOff(
     OpenBuilder(
       repertoirePath: repertoirePath,
       lineId: lineId,
       moveSequence: moveSequence,
     ),
+    historyLabel: historyLabel,
   );
 
   /// Switch to builder and auto-open the generation tab in DB Explorer mode
@@ -126,8 +219,10 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
   void switchToBuilderWithGeneration({
     required String repertoirePath,
     required List<String> pgnPaths,
+    String? historyLabel,
   }) => handOff(
     OpenBuilder(repertoirePath: repertoirePath, generationPgnPaths: pgnPaths),
+    historyLabel: historyLabel,
   );
 
   void setLichessUsername(String? username) {
@@ -173,6 +268,11 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
     _chesscomLastFetch = chesscomMs != null
         ? DateTime.fromMillisecondsSinceEpoch(chesscomMs)
         : null;
+
+    // Flag + notify before the token load: the Games page only needs the
+    // usernames, and secure-storage reads can be slow.
+    _usernamesLoaded = true;
+    notifyListeners();
 
     await LichessAuthService.instance.loadTokens();
 

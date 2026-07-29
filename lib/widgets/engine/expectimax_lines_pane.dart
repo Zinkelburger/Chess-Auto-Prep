@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/build_tree_node.dart';
 import '../../models/engine_settings.dart';
+import '../../models/eval_database_settings.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../services/coherence_service.dart';
 import '../../services/expectimax_line_service.dart';
@@ -18,6 +19,7 @@ import '../../services/generation/fen_map.dart';
 import '../../services/generation/generation_config.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/chess_utils.dart' show fenAfterMoves;
+import '../analysis/expectimax_settings_dialog.dart';
 import '../clickable_move_line.dart';
 import 'floating_board_preview.dart';
 
@@ -33,7 +35,6 @@ class ExpectimaxLinesPane extends StatefulWidget {
   final CoherenceResult? coherenceResult;
   final OnTheFlyProgressiveLines? progressiveSnapshot;
   final bool onTheFlyMode;
-  final VoidCallback? onOpenSettings;
 
   /// Why on-the-fly compute is not running (e.g. engine off).  Shown instead
   /// of a fake "Computing…" spinner when the service is idle.
@@ -58,7 +59,6 @@ class ExpectimaxLinesPane extends StatefulWidget {
     this.coherenceResult,
     this.progressiveSnapshot,
     this.onTheFlyMode = false,
-    this.onOpenSettings,
     this.notRunningReason,
     this.onRetry,
     this.compact = false,
@@ -70,6 +70,7 @@ class ExpectimaxLinesPane extends StatefulWidget {
 
 class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
   final EngineSettings _settings = EngineSettings.instance;
+  final EvalDatabaseSettings _dbSettings = EvalDatabaseSettings.instance;
   List<ExpectimaxLine> _lines = [];
   int _maxPlies = 12;
   final GlobalKey _previewStackKey = GlobalKey();
@@ -81,6 +82,8 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
     super.initState();
     // Manual listener: _recompute rebuilds expectimax lines when settings change.
     _settings.addListener(_scheduleRecompute);
+    _dbSettings.addListener(_onDbSettingsChanged);
+    _dbSettings.load();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _recompute();
     });
@@ -89,8 +92,20 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
   @override
   void dispose() {
     _settings.removeListener(_scheduleRecompute);
+    _dbSettings.removeListener(_onDbSettingsChanged);
     super.dispose();
   }
+
+  void _onDbSettingsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// Live on-the-fly compute without a local eval database means a full
+  /// engine search per position — worth a nudge toward the fast path.
+  bool get _showEvalDbHint =>
+      widget.onTheFlyMode &&
+      _dbSettings.isLoaded &&
+      !(_dbSettings.enableCdbDirect && _dbSettings.cdbDirectPath.isNotEmpty);
 
   @override
   void didUpdateWidget(covariant ExpectimaxLinesPane old) {
@@ -222,7 +237,34 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
           ),
         ),
         if (!_useProgressive && !widget.compact) _buildControls(),
+        if (_showEvalDbHint) _buildEvalDbHint(),
       ],
+    );
+  }
+
+  /// Encourage configuring a local eval database: with one, on-the-fly
+  /// expectimax reads positions from disk instead of running the engine.
+  Widget _buildEvalDbHint() {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.lightbulb_outline,
+            size: 13,
+            color: AppColors.onSurfaceMuted,
+          ),
+          SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              'Tip: a local eval database makes these lines near-instant '
+              '(Settings → Evaluation database).',
+              style: TextStyle(color: AppColors.onSurfaceMuted, fontSize: 11),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -338,44 +380,51 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
     final target = prog.targetMaxDepth;
     final fraction = target > 0 ? done / target : 0.0;
 
-    return Padding(
-      padding: const EdgeInsets.all(12),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 20,
-            height: 20,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                CircularProgressIndicator(
-                  value: fraction > 0 ? fraction : null,
-                  strokeWidth: 2,
-                  color: AppColors.expectimax,
-                ),
-                if (done > 0)
-                  Text(
-                    '$done',
-                    style: const TextStyle(
-                      fontSize: 8,
-                      color: AppColors.onSurfaceSoft,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CircularProgressIndicator(
+                      value: fraction > 0 ? fraction : null,
+                      strokeWidth: 2,
+                      color: AppColors.expectimax,
                     ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Computing $done/$target',
-              style: const TextStyle(
-                color: AppColors.onSurfaceSoft,
-                fontSize: 12,
+                    if (done > 0)
+                      Text(
+                        '$done',
+                        style: const TextStyle(
+                          fontSize: 8,
+                          color: AppColors.onSurfaceSoft,
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Computing $done/$target',
+                  style: const TextStyle(
+                    color: AppColors.onSurfaceSoft,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+        if (_showEvalDbHint) _buildEvalDbHint(),
+      ],
     );
   }
 
@@ -450,8 +499,8 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
                 ? 'Best practical continuations considering how humans actually play.\n'
                       'Computed live for this position: Maia probabilities and\n'
                       'Stockfish evals combined via expectimax search.\n\n'
-                      'Depth/eval settings are in Settings → On-the-fly Expectimax '
-                      '(separate from Generation tab Engine Depth).'
+                      'Tune it with the gear icon in this pane — separate\n'
+                      'from the Generate form\'s search settings.'
                 : 'Best practical continuations considering how humans actually play.\n'
                       'Read from the built repertoire tree: Maia probabilities and\n'
                       'Stockfish evals stored at build time, combined via expectimax.',
@@ -487,14 +536,13 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
             ),
           ],
           const Spacer(),
-          if (widget.onOpenSettings != null)
-            IconButton(
-              icon: const Icon(Icons.settings, size: 16),
-              tooltip: 'Analysis settings',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-              onPressed: widget.onOpenSettings,
-            ),
+          IconButton(
+            icon: const Icon(Icons.settings, size: 16),
+            tooltip: 'On-the-fly expectimax settings',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            onPressed: () => showExpectimaxSettingsDialog(context),
+          ),
         ],
       ),
     );

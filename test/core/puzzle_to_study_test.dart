@@ -1,12 +1,13 @@
-/// The puzzle-creator → study pipeline: a recorded puzzle is encoded as one
-/// PGN game, appended to a study as a chapter, and comes back out of the
-/// study file as a trainable tactics line.
+/// The puzzle → study pipeline: a puzzle is encoded as one PGN game, appended
+/// to a study as a chapter, and comes back out of the study file as a
+/// trainable tactics line.
 library;
 
 import 'dart:io';
 
-import 'package:chess_auto_prep/core/puzzle_creator_controller.dart';
 import 'package:chess_auto_prep/core/study_controller.dart';
+import 'package:chess_auto_prep/models/tactics_position.dart';
+import 'package:chess_auto_prep/models/tactics_session_settings.dart';
 import 'package:chess_auto_prep/services/repertoire_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/services/tactics_pgn_codec.dart';
@@ -29,6 +30,25 @@ class _FakePathProvider extends PathProviderPlatform
 /// Mate-in-one for Black: back-rank rook mate (Re1#).
 const _blackToMateFen = '4r1k1/5ppp/8/8/8/8/5PPP/6K1 b - - 0 30';
 
+const _solutionSan = ['Re1#'];
+
+/// A one-move puzzle on [_blackToMateFen], shaped exactly as an authored
+/// custom puzzle reaches [encodePuzzlePgn].
+TacticsPosition _puzzle({String note = '', int rating = 0}) => TacticsPosition(
+  fen: _blackToMateFen,
+  userMove: '',
+  correctLine: _solutionSan,
+  mistakeType: TacticsSessionSettings.customMistakeType,
+  mistakeAnalysis: note,
+  positionContext: 'Move 30, Black to play',
+  gameWhite: '',
+  gameBlack: '',
+  gameResult: '*',
+  gameDate: '2026.07.28',
+  gameId: 'custom_test',
+  rating: rating,
+);
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -43,22 +63,14 @@ void main() {
     await tempDir.delete(recursive: true);
   });
 
-  test('creator puzzle → encodePuzzlePgn → study chapter → trainable line '
+  test('puzzle → encodePuzzlePgn → study chapter → trainable line '
       'round-trips FEN, solution, note and rating', () async {
-    // Record the puzzle the way the creator screen does.
-    final creator = PuzzleCreatorController(initialFen: _blackToMateFen);
-    expect(creator.startRecording(), isTrue);
-    expect(creator.playMoveSan('Re1#'), isTrue);
-    expect(creator.finishRecording(), isTrue);
-
-    final puzzle = creator.buildPuzzle(note: 'Back rank.', rating: 4);
     final chapterPgn = encodePuzzlePgn(
-      puzzle,
-      creator.solutionSan,
+      _puzzle(note: 'Back rank.', rating: 4),
+      _solutionSan,
       event: 'Back-rank mate',
       noteAfterLastMove: true,
     );
-    creator.dispose();
 
     // Save into a (not currently open) study file on disk.
     final study = StudyController();
@@ -95,16 +107,11 @@ void main() {
     await study.newStudy('Open study');
     final path = study.doc.filePath!;
 
-    final creator = PuzzleCreatorController(initialFen: _blackToMateFen);
-    creator.startRecording();
-    creator.playMoveSan('Re1#');
-    creator.finishRecording();
     final chapterPgn = encodePuzzlePgn(
-      creator.buildPuzzle(note: 'Note.', rating: 5),
-      creator.solutionSan,
+      _puzzle(note: 'Note.', rating: 5),
+      _solutionSan,
       event: 'Chapter 2',
     );
-    creator.dispose();
 
     // The open-document path routes through the in-memory StudyDocument —
     // the regression this guards: headers used to be dropped there.

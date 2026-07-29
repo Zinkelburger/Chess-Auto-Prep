@@ -15,7 +15,7 @@ import '../services/generation/generation_config.dart';
 import '../theme/app_colors.dart';
 import '../utils/lines_filter_helpers.dart' show isPlaceholderLineTitle;
 import '../utils/pgn_utils.dart' as pgn_utils;
-import 'analysis/analysis_settings_sheet.dart';
+import 'analysis/analysis_panels_dialog.dart';
 import 'layout/edit_main_zone.dart';
 import 'repertoire_analysis_dock.dart';
 
@@ -205,11 +205,11 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
             onPressed: widget.onReload,
           ),
           IconButton(
-            icon: const Icon(Icons.tune, size: 20),
-            tooltip: 'Analysis settings',
+            icon: const Icon(Icons.view_column, size: 20),
+            tooltip: 'Analysis panels',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-            onPressed: () => showAnalysisSettingsSheet(context),
+            onPressed: () => showAnalysisPanelsDialog(context),
           ),
           if (widget.embedAnalysisDock)
             TextButton.icon(

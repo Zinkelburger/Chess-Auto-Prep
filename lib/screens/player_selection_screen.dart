@@ -364,6 +364,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     );
 
     if (result != null && mounted) {
+      _rememberFirstUsername(appState, result);
       await _downloadGames(result);
     }
   }
@@ -435,7 +436,23 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     );
 
     if (result != null && mounted) {
+      _rememberFirstUsername(appState, result);
       await _downloadGames(result);
+    }
+  }
+
+  /// Seed the app-wide default username, but only when none is saved yet:
+  /// Player Analysis downloads opponents' games too, and an opponent's name
+  /// must not overwrite the user's own saved default (editable in Settings).
+  void _rememberFirstUsername(AppState appState, AnalysisPlayerInfo config) {
+    if (config.platform == 'lichess') {
+      if (appState.lichessUsername?.isNotEmpty != true) {
+        appState.setLichessUsername(config.username);
+      }
+    } else if (config.platform == 'chesscom') {
+      if (appState.chesscomUsername?.isNotEmpty != true) {
+        appState.setChesscomUsername(config.username);
+      }
     }
   }
 

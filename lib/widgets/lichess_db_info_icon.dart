@@ -1,5 +1,12 @@
-/// Small ⓘ icon that shows a popover explaining Lichess DB access and
-/// offers a one-click OAuth login.  Hidden when already authenticated.
+/// Small status icon next to Lichess database controls.
+///
+/// Logged out: an ⓘ that opens a popover explaining Lichess DB access with a
+/// one-click OAuth login. Logged in: a subdued check whose popover shows who
+/// is logged in and where to manage the account (App settings → Accounts —
+/// stated as text, never a navigation: this popover opens from inside
+/// dialogs, and pushing a settings screen over a settings dialog is exactly
+/// the nesting the per-surface dialogs exist to avoid). Always visible
+/// either way, so login state is readable at a glance.
 library;
 
 import 'package:flutter/material.dart';
@@ -17,19 +24,22 @@ class LichessDbInfoIcon extends StatelessWidget {
     return ListenableBuilder(
       listenable: LichessAuthService.instance,
       builder: (context, _) {
-        if (LichessAuthService.instance.isLoggedIn)
-          return const SizedBox.shrink();
+        final auth = LichessAuthService.instance;
         return IconButton(
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           iconSize: size,
           splashRadius: 24,
           icon: Icon(
-            Icons.info_outline,
+            auth.isLoggedIn ? Icons.check_circle_outline : Icons.info_outline,
             size: size,
-            color: AppColors.onSurfaceMuted,
+            color: auth.isLoggedIn
+                ? AppColors.successMuted
+                : AppColors.onSurfaceMuted,
           ),
-          tooltip: 'Lichess database info',
+          tooltip: auth.isLoggedIn
+              ? 'Lichess: logged in as ${auth.username ?? 'unknown'}'
+              : 'Lichess database info',
           onPressed: () => _showInfoPopup(context),
         );
       },
@@ -90,6 +100,9 @@ class _InfoPopupOverlayState extends State<_InfoPopupOverlay> {
     const bgColor = AppColors.surfaceContainer;
     const textColor = AppColors.inkSoft;
 
+    final loggedIn = LichessAuthService.instance.isLoggedIn;
+    final username = LichessAuthService.instance.username;
+
     return Stack(
       children: [
         GestureDetector(
@@ -123,39 +136,54 @@ class _InfoPopupOverlayState extends State<_InfoPopupOverlay> {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  const Text(
-                    'Database features require a Lichess account. '
-                    'Log in to enable database queries.',
-                    style: TextStyle(
+                  Text(
+                    loggedIn
+                        ? 'Logged in as ${username ?? 'unknown'} — database '
+                              'queries are enabled.'
+                        : 'Database features require a Lichess account. '
+                              'Log in to enable database queries.',
+                    style: const TextStyle(
                       fontSize: 12,
                       color: textColor,
                       height: 1.4,
                     ),
                   ),
                   const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 32,
-                    child: ElevatedButton.icon(
-                      onPressed: _oauthInProgress ? null : _startLogin,
-                      icon: _oauthInProgress
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.login, size: 16),
-                      label: Text(
-                        _oauthInProgress
-                            ? 'Waiting for browser...'
-                            : 'Log into Lichess',
-                        style: const TextStyle(fontSize: 12),
+                  if (loggedIn)
+                    const Text(
+                      'Log out or switch account in App settings → Accounts.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.onSurfaceMuted,
+                        height: 1.3,
                       ),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                    )
+                  else
+                    SizedBox(
+                      width: double.infinity,
+                      height: 32,
+                      child: ElevatedButton.icon(
+                        onPressed: _oauthInProgress ? null : _startLogin,
+                        icon: _oauthInProgress
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.login, size: 16),
+                        label: Text(
+                          _oauthInProgress
+                              ? 'Waiting for browser...'
+                              : 'Log into Lichess',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),

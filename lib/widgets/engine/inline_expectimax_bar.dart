@@ -1,8 +1,9 @@
 /// Compact inline expectimax bar — toggleable display of expectimax PV lines.
 ///
-/// Modeled on [InlineEngineBar]. Shows a toggle switch, live expectimax
-/// lines from the precomputed tree or on-the-fly computation, and a
-/// settings gear. Delegates all computation to [ExpectimaxPanelHost].
+/// Modeled on [InlineEngineBar]. Shows a toggle switch and live expectimax
+/// lines from the precomputed tree or on-the-fly computation. Delegates all
+/// computation to [ExpectimaxPanelHost]; the settings gear lives in the
+/// pane's own header.
 library;
 
 import 'package:flutter/material.dart';
@@ -15,7 +16,6 @@ import '../../services/engine/engine_lifecycle.dart';
 import '../../services/generation/fen_map.dart';
 import '../../services/generation/generation_config.dart';
 import '../../theme/app_colors.dart';
-import '../analysis/analysis_settings_sheet.dart';
 import 'expectimax_panel_host.dart';
 
 class InlineExpectimaxBar extends StatefulWidget {
@@ -150,17 +150,6 @@ class _InlineExpectimaxBarState extends State<InlineExpectimaxBar> {
               ),
             ),
           ),
-          if (_enabled)
-            IconButton(
-              icon: const Icon(Icons.settings, size: 18),
-              tooltip: 'Expectimax Settings',
-              onPressed: () => showAnalysisSettingsSheet(
-                context,
-                mode: AnalysisSettingsContext.expectimaxOnly,
-              ),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            ),
         ],
       ),
     );

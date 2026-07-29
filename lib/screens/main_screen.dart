@@ -9,11 +9,15 @@ import '../services/tactics_database.dart';
 import '../theme/app_colors.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/app_mode_menu_button.dart';
+import '../widgets/app_settings_button.dart';
 import '../widgets/jobs_status_button.dart';
 import '../widgets/tactics_control_panel.dart';
 import '../widgets/training/move_input_widget.dart';
 
+import '../features/games/controllers/recent_games_controller.dart';
+import '../features/games/widgets/tactics_games_pane.dart';
 import '../services/engine/engine_lifecycle.dart';
+import '../widgets/app_breadcrumb_bar.dart';
 import 'analysis_screen.dart';
 import 'pgn_viewer_screen.dart';
 import 'repertoire_screen.dart';
@@ -118,14 +122,21 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     }
 
     return Scaffold(
-      body: IndexedStack(
-        index: _supportedModes.indexOf(activeMode),
+      body: Column(
         children: [
-          for (final mode in _supportedModes)
-            _modeViews[mode] ??
-                (mode == activeMode
-                    ? const _ModeLoadingView()
-                    : const SizedBox.shrink()),
+          const AppBreadcrumbBar(),
+          Expanded(
+            child: IndexedStack(
+              index: _supportedModes.indexOf(activeMode),
+              children: [
+                for (final mode in _supportedModes)
+                  _modeViews[mode] ??
+                      (mode == activeMode
+                          ? const _ModeLoadingView()
+                          : const SizedBox.shrink()),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -165,10 +176,12 @@ class _TacticsModeView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // The three tactics state owners are provided here — above the layout —
-    // so they are a single shared source of truth that outlives any
+    // The tactics state owners are provided here — above the layout — so
+    // they are a single shared source of truth that outlives any
     // compact/wide rebuild of the panel. `_TacticsModeView` is cached in the
     // IndexedStack, so these are created once and live for the app session.
+    // RecentGamesController joins them: the games pane is swapped out for
+    // the board during a session, and the loaded list must survive that.
     return MultiProvider(
       providers: [
         ChangeNotifierProvider<TacticsDatabase>(
@@ -181,6 +194,15 @@ class _TacticsModeView extends StatelessWidget {
         ChangeNotifierProvider<TacticsImportCoordinator>(
           create: (ctx) =>
               TacticsImportCoordinator(database: ctx.read<TacticsDatabase>()),
+        ),
+        ChangeNotifierProvider<RecentGamesController>(
+          create: (ctx) {
+            final appState = ctx.read<AppState>();
+            return RecentGamesController(
+              lichessUsername: () => appState.lichessUsername,
+              chesscomUsername: () => appState.chesscomUsername,
+            );
+          },
         ),
       ],
       child: const _TacticsModeScaffold(),
@@ -203,7 +225,20 @@ class _TacticsModeScaffold extends StatelessWidget {
     // No AppState watch here: board-state changes rebuild only
     // [_TacticsBoardPane]; the scaffold, app bar, and control panel would
     // otherwise rebuild on every AppState notification from any mode — even
-    // while this screen sits hidden in the IndexedStack.
+    // while this screen sits hidden in the IndexedStack. The one select
+    // below fires only when a session starts or ends — that's the moment
+    // the left pane swaps between the recent-games list and the board.
+    final hasPuzzle = context.select<TacticsSessionController, bool>(
+      (session) => session.hasActivePosition,
+    );
+    final Widget leftPane = hasPuzzle
+        ? const _TacticsBoardPane()
+        : const TacticsGamesPane();
+    // Idle, the games list is the star and gets the wider half; during a
+    // session the board reclaims the traditional even split.
+    final leftFlex = hasPuzzle ? 5 : 6;
+    final rightFlex = hasPuzzle ? 5 : 4;
+
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 16,
@@ -216,7 +251,11 @@ class _TacticsModeScaffold extends StatelessWidget {
             _TacticsAppBarBackButton(),
           ],
         ),
-        actions: const [JobsStatusButton(), AppModeMenuButton()],
+        actions: const [
+          JobsStatusButton(),
+          AppSettingsButton(),
+          AppModeMenuButton(),
+        ],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
@@ -225,10 +264,10 @@ class _TacticsModeScaffold extends StatelessWidget {
           return isCompact
               ? Column(
                   children: [
-                    const Expanded(flex: 4, child: _TacticsBoardPane()),
+                    Expanded(flex: hasPuzzle ? 4 : 5, child: leftPane),
                     const Divider(height: 1, thickness: 1),
                     Expanded(
-                      flex: 6,
+                      flex: hasPuzzle ? 6 : 5,
                       child: Padding(
                         padding: const EdgeInsets.all(8.0),
                         child: TacticsControlPanel(key: _panelKey),
@@ -238,10 +277,10 @@ class _TacticsModeScaffold extends StatelessWidget {
                 )
               : Row(
                   children: [
-                    const Expanded(flex: 5, child: _TacticsBoardPane()),
+                    Expanded(flex: leftFlex, child: leftPane),
                     Container(width: 1, color: AppColors.outline),
                     Expanded(
-                      flex: 5,
+                      flex: rightFlex,
                       child: Padding(
                         padding: const EdgeInsets.all(8.0),
                         child: TacticsControlPanel(key: _panelKey),
@@ -298,6 +337,12 @@ class _TacticsBoardPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
+    // Before a puzzle is loaded the board is decorative: the session ignores
+    // every move (see TacticsSessionController.handleMoveAttempted), so both
+    // the move field and piece dragging would be input that goes nowhere.
+    final hasPuzzle = context.select<TacticsSessionController, bool>(
+      (session) => session.hasActivePosition,
+    );
     return Container(
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -309,31 +354,34 @@ class _TacticsBoardPane extends StatelessWidget {
                 child: ChessBoardWidget(
                   position: appState.currentPosition,
                   flipped: appState.boardFlipped,
+                  enableUserMoves: hasPuzzle,
                   onPieceSelected: (square) {},
                   onMove: (move) => _attemptMove(context, move.uci),
                 ),
               ),
             ),
           ),
-          const SizedBox(height: 8),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 320),
-            child: MoveInputWidget(
-              key: TacticsControlPanel.moveInputKey,
-              position: appState.currentPosition,
-              onMove: (move) => _attemptMove(context, move.uci),
-              // Route trainer navigation keys (Space, S/P, arrows, …) back to
-              // the control panel so they cycle puzzles / step the solution
-              // instead of typing into the field. Returns false for move
-              // characters, which then type normally.
-              onNavigationKey: (event) =>
-                  context
-                      .read<TacticsSessionController>()
-                      .onTrainerNavigationKey
-                      ?.call(event.logicalKey) ??
-                  false,
+          if (hasPuzzle) ...[
+            const SizedBox(height: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 320),
+              child: MoveInputWidget(
+                key: TacticsControlPanel.moveInputKey,
+                position: appState.currentPosition,
+                onMove: (move) => _attemptMove(context, move.uci),
+                // Route trainer navigation keys (Space, S/P, arrows, …) back
+                // to the control panel so they cycle puzzles / step the
+                // solution instead of typing into the field. Returns false for
+                // move characters, which then type normally.
+                onNavigationKey: (event) =>
+                    context
+                        .read<TacticsSessionController>()
+                        .onTrainerNavigationKey
+                        ?.call(event.logicalKey) ??
+                    false,
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );

@@ -106,16 +106,70 @@ class GameRecord {
     }
   }
 
-  static String _dedupKey(Map<String, String> h) {
-    final link = h['Link'] ?? h['Site'];
-    if (link != null && link.contains('://')) return link.trim();
-    return [
-      h['White'] ?? '',
-      h['Black'] ?? '',
-      h['UTCDate'] ?? h['Date'] ?? '',
-      h['UTCTime'] ?? h['Time'] ?? '',
-    ].join('|');
+  static String _dedupKey(Map<String, String> h) => dedupKeyForHeaders(h);
+}
+
+/// Stable game identity from PGN headers: the game URL when present, else
+/// players + date + time. Public so consumers holding headers from another
+/// parser (e.g. the PGN viewer locating a `gameId` handoff target) compute
+/// the same identity the library's [GameRecord.dedupKey] uses.
+String dedupKeyForHeaders(Map<String, String> h) {
+  final link = h['Link'] ?? h['Site'];
+  if (link != null && link.contains('://')) return link.trim();
+  return [
+    h['White'] ?? '',
+    h['Black'] ?? '',
+    h['UTCDate'] ?? h['Date'] ?? '',
+    h['UTCTime'] ?? h['Time'] ?? '',
+  ].join('|');
+}
+
+/// Merge a freshly downloaded multi-game PGN into an existing cache file's
+/// content, preserving the existing games' text *verbatim* — they may carry
+/// locally added analysis annotations (`[%eval]` comments written by the PGN
+/// viewer's game review) that a wholesale rewrite would destroy. Genuinely
+/// new games (by [GameRecord.dedupKey]) are appended after the existing ones
+/// so game order stays stable for anything referencing the file.
+///
+/// [maxGames] caps the merged file, dropping the *oldest* games once it is
+/// exceeded — without it the cache only ever grows, and every read re-parses
+/// the whole history. Survivors keep their existing relative order, so the
+/// cap reorders nothing. Null (the default) keeps everything.
+String mergeGamePgns({
+  required String existing,
+  required String fresh,
+  int? maxGames,
+}) {
+  final existingChunks = splitPgnIntoGames(existing);
+  final seen = existingChunks
+      .map((c) => dedupKeyForHeaders(extractHeaders(c)))
+      .toSet();
+  final newGames = <String>[
+    for (final chunk in splitPgnIntoGames(fresh))
+      if (seen.add(dedupKeyForHeaders(extractHeaders(chunk)))) chunk.trim(),
+  ];
+
+  final merged = <String>[
+    for (final chunk in existingChunks) chunk.trim(),
+    ...newGames,
+  ];
+  if (maxGames == null || merged.length <= maxGames) {
+    if (newGames.isEmpty) return existing;
+    final base = existing.trimRight();
+    if (base.isEmpty) return newGames.join('\n\n');
+    return '$base\n\n${newGames.join('\n\n')}';
   }
+
+  // Over the cap: keep the newest [maxGames] by date, then re-emit them in
+  // the order they already sat in the file.
+  final records = merged.map(GameRecord.parse).toList();
+  final byAge = [...records];
+  _sortNewestFirst(byAge);
+  final keep = byAge.take(maxGames).map((r) => r.dedupKey).toSet();
+  return [
+    for (final record in records)
+      if (keep.contains(record.dedupKey)) record.pgn.trim(),
+  ].join('\n\n');
 }
 
 /// What slice of a player's games to keep.

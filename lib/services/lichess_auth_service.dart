@@ -23,8 +23,9 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:chess_auto_prep/utils/log.dart';
+import 'package:chess_auto_prep/utils/safe_change_notifier.dart';
 
-class LichessAuthService extends ChangeNotifier {
+class LichessAuthService extends ChangeNotifier with SafeChangeNotifier {
   // ── Configuration ──────────────────────────────────────────────────
 
   /// Client ID — Lichess allows arbitrary IDs for PKCE public clients.

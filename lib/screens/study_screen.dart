@@ -23,7 +23,9 @@ import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
 import '../utils/board_shape_comments.dart';
 import '../utils/keyboard_shortcut_utils.dart';
+import '../utils/training_markers.dart';
 import '../widgets/app_mode_menu_button.dart';
+import '../widgets/app_settings_button.dart';
 import '../widgets/jobs_status_button.dart';
 import '../widgets/board_editor/board_editor_dialog.dart';
 import '../widgets/chess_board_widget.dart';
@@ -35,7 +37,6 @@ import '../widgets/study/import_from_url_dialog.dart';
 import '../widgets/study/study_import_status_chip.dart';
 import '../widgets/trainer_keyboard_scope.dart';
 import '../widgets/training/move_input_widget.dart';
-import 'puzzle_creator_screen.dart';
 
 class StudyScreen extends StatefulWidget {
   const StudyScreen({super.key});
@@ -615,18 +616,27 @@ class _StudyScreenState extends State<StudyScreen> {
             onPressed: _study.toggleFlipped,
           ),
           IconButton(
-            icon: const Icon(Icons.extension, size: 20),
+            icon: Icon(
+              Icons.flag,
+              size: 20,
+              color: hasPuzzleStart(_study.cursorComment)
+                  ? AppColors.accent
+                  : null,
+            ),
             tooltip:
-                'Save position as a puzzle — play the solution, then it is '
-                'stored as a study chapter you can train',
-            onPressed: () {
-              PuzzleCreatorScreen.push(
-                context,
-                initialFen: _study.currentPosition.fen,
-              );
-            },
+                'Puzzle starts at this move — training auto-plays the '
+                'earlier moves and quizzes from here on',
+            onPressed: _study.cursorHasNode
+                ? () => togglePuzzleMarker(
+                    _study.tree,
+                    _study.path,
+                    start: true,
+                    setComment: _study.setComment,
+                  )
+                : null,
           ),
           const JobsStatusButton(),
+          const AppSettingsButton(),
           const AppModeMenuButton(),
         ],
       ),

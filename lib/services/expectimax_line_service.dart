@@ -235,14 +235,17 @@ ExpectimaxLine? generateLineForFirstMove(
   );
 }
 
-/// True when [fen] exists in [tree] with expectimax and the subtree reaches
-/// at least [targetPly] (suitable for multi-move precomputed PV).
+/// True when [fen] exists in [tree] with expectimax and the subtree extends
+/// at least [targetPly] half-moves PAST the node (suitable for multi-move
+/// precomputed PV).  The comparison is relative to the node's own ply —
+/// comparing the absolute deepest ply would call any node deeper than
+/// [targetPly] "precomputed" even when it is one move from a leaf.
 bool hasPrecomputedExpectimaxAtPly(BuildTree tree, String fen, int targetPly) {
   final node = findNodeByFen(tree, fen);
   if (node == null || !node.hasExpectimax || node.children.isEmpty) {
     return false;
   }
-  return maxSubtreePly(node) >= targetPly;
+  return maxSubtreePly(node) - node.ply >= targetPly;
 }
 
 /// Deepest [BuildTreeNode.ply] in [node]'s subtree (including [node]).
@@ -261,6 +264,22 @@ bool isBranchCompleteToPly(BuildTreeNode node, int targetPly) {
   if (!node.explored && node.children.isEmpty) return false;
   if (node.children.isEmpty) return node.explored;
   return node.children.every((c) => isBranchCompleteToPly(c, targetPly));
+}
+
+/// Deepest ply [node]'s branch is fully explored to, capped at [cap]:
+/// the largest `p <= cap` with `isBranchCompleteToPly(node, p)`, computed in
+/// one DFS.  Explored leaves (depth-capped or pruned) are complete to any
+/// depth; an unexplored leaf bounds its branch at its own ply.
+int branchCompletePly(BuildTreeNode node, int cap) {
+  if (node.children.isEmpty) {
+    return node.explored ? cap : node.ply;
+  }
+  var minChild = cap;
+  for (final child in node.children) {
+    final p = branchCompletePly(child, cap);
+    if (p < minChild) minChild = p;
+  }
+  return minChild < node.ply ? node.ply : minChild;
 }
 
 /// Find a node in the tree by FEN (BFS — returns the shallowest match,

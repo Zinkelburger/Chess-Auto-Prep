@@ -504,10 +504,10 @@ mixin _GenerationConfigAdvanced
     return [
       Text(
         isPure
-            ? 'Full search is selected on the main form — these Quick-only '
-                  'narrowing knobs are ignored.'
-            : 'Quick search is selected on the main form. These control how '
-                  'much it narrows rarely-reached lines.',
+            ? 'Pure search is selected on the main form — these '
+                  'Fast-only narrowing knobs are ignored.'
+            : 'Fast search is selected on the main form. These control '
+                  'how much it narrows rarely-reached lines.',
         style: AppTextStyles.caption.copyWith(fontSize: 11),
       ),
       const SizedBox(height: 10),
@@ -536,7 +536,7 @@ mixin _GenerationConfigAdvanced
             enabled: !isPure && !isDb,
             disabledReason: isDb
                 ? 'Your PGN files decide which lines grow in this mode'
-                : 'Quick search only',
+                : 'Fast search only',
             tooltip:
                 'Search-priority multiplier for your non-best candidates. '
                 'Lower = more budget on the main line.',
@@ -550,7 +550,7 @@ mixin _GenerationConfigAdvanced
             disabledReason: isDb
                 ? 'Your PGN files decide which lines grow in this mode'
                 : isPure
-                ? 'Quick search only'
+                ? 'Fast search only'
                 : 'Ignored when maximizing opponent mistakes',
             tooltip:
                 'Your alternatives more than this far behind the best '

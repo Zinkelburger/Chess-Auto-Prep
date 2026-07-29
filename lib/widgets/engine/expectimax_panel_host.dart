@@ -30,7 +30,6 @@ class ExpectimaxPanelHost extends StatefulWidget {
   final bool isGenerating;
   final bool isGenerationPaused;
   final bool compact;
-  final VoidCallback? onOpenSettings;
   final void Function(String san)? onMoveSelected;
   final void Function(List<String> sanMoves, int index)? onLineMoveClicked;
 
@@ -55,7 +54,6 @@ class ExpectimaxPanelHost extends StatefulWidget {
     this.isGenerating = false,
     this.isGenerationPaused = false,
     this.compact = false,
-    this.onOpenSettings,
     this.onMoveSelected,
     this.onLineMoveClicked,
     this.autoComputeEnabled = true,
@@ -240,7 +238,6 @@ class _ExpectimaxPanelHostState extends State<ExpectimaxPanelHost> {
       notRunningReason: useMain ? null : _notRunningReason(),
       onRetry: useMain || !_retryAvailable ? null : _retry,
       compact: widget.compact,
-      onOpenSettings: widget.onOpenSettings,
       onMoveSelected: widget.onMoveSelected ?? widget.controller.playMove,
       onLineMoveClicked:
           widget.onLineMoveClicked ??

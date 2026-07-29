@@ -115,6 +115,8 @@ class PgnSliceChips extends StatelessWidget {
   }
 
   Widget _buildPresetChip(String label, HeaderFilterConfig filter) {
+    // Styled like the idle add-filter chip: a preset is just a shortcut to a
+    // filter, not a highlighted state of its own.
     return Tooltip(
       message: 'Slice: $label',
       child: GestureDetector(
@@ -122,20 +124,25 @@ class PgnSliceChips extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: AppColors.surfaceInset,
+            color: AppColors.chipInactiveBg,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.info.withAlpha(70), width: 0.5),
+            border: Border.all(color: AppColors.outline, width: 0.5),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.person_outline, size: 13, color: AppColors.info),
+              const Icon(
+                Icons.person_outline,
+                size: 13,
+                color: AppColors.onSurfaceSoft,
+              ),
               const SizedBox(width: 3),
               Text(
                 label,
-                // Matches the info icon beside it; chipActiveFg is reserved
-                // for text sitting on a chipActiveBg fill.
-                style: const TextStyle(fontSize: 11, color: AppColors.info),
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.onSurfaceSoft,
+                ),
               ),
             ],
           ),
