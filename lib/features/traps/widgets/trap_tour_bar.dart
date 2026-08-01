@@ -133,7 +133,7 @@ class TrapTourBarState extends State<TrapTourBar> {
                 const SizedBox(width: 6),
                 ShortcutIconButton(
                   description: 'Previous trap',
-                  shortcut: 'P',
+                  shortcut: '↑',
                   icon: const Icon(Icons.chevron_left, size: 20),
                   color: AppColors.warning,
                   visualDensity: VisualDensity.compact,
@@ -163,7 +163,7 @@ class TrapTourBarState extends State<TrapTourBar> {
                 ),
                 ShortcutIconButton(
                   description: 'Next trap',
-                  shortcut: 'N',
+                  shortcut: '↓',
                   icon: const Icon(Icons.chevron_right, size: 20),
                   color: AppColors.warning,
                   visualDensity: VisualDensity.compact,

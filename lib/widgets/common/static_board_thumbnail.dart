@@ -20,12 +20,21 @@ import '../../utils/chess_utils.dart' show roleChar;
 /// every thumbnail in the app.
 ///
 /// Oriented so the side to move is at the bottom (same perspective as
-/// training) when the FEN carries a turn field.
+/// training) when the FEN carries a turn field — pass [flipped] to override,
+/// e.g. a games list that always shows the position from *my* side.
 class StaticBoardThumbnail extends StatefulWidget {
-  const StaticBoardThumbnail({super.key, required this.fen, this.size = 60});
+  const StaticBoardThumbnail({
+    super.key,
+    required this.fen,
+    this.size = 60,
+    this.flipped,
+  });
 
   final String fen;
   final double size;
+
+  /// True = Black at the bottom. Null derives it from the FEN's turn field.
+  final bool? flipped;
 
   @override
   State<StaticBoardThumbnail> createState() => _StaticBoardThumbnailState();
@@ -49,14 +58,16 @@ class _StaticBoardThumbnailState extends State<StaticBoardThumbnail> {
   @override
   void didUpdateWidget(covariant StaticBoardThumbnail oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.fen != widget.fen) _parse();
+    if (oldWidget.fen != widget.fen || oldWidget.flipped != widget.flipped) {
+      _parse();
+    }
   }
 
   void _parse() {
     try {
       final fields = widget.fen.trim().split(' ');
       _board = Board.parseFen(fields[0]);
-      _flipped = fields.length > 1 && fields[1] == 'b';
+      _flipped = widget.flipped ?? (fields.length > 1 && fields[1] == 'b');
     } catch (_) {
       _board = null;
     }
@@ -177,8 +188,17 @@ class _PieceSprites {
   static const int _rasterSize = 48;
   static final Map<String, ui.Image> _sprites = {};
   static Future<void>? _pending;
+  static bool _loaded = false;
 
-  static bool get isLoaded => _sprites.isNotEmpty;
+  /// True only once *every* sprite has been rasterized.
+  ///
+  /// Deliberately not `_sprites.isNotEmpty`. The sprites land one at a time,
+  /// so any thumbnail built mid-load used to see this as `true`, paint the
+  /// pieces that happened to exist, skip the rest (`spriteFor` returns null),
+  /// and — having decided the sprites were ready — never register for the
+  /// repaint that would have fixed it. Black is rasterized after White, so
+  /// what that produced was a board with no black pieces, permanently.
+  static bool get isLoaded => _loaded;
 
   static ui.Image? spriteFor(Piece piece) {
     final color = piece.color == Side.white ? 'w' : 'b';
@@ -187,16 +207,23 @@ class _PieceSprites {
 
   static Future<void> ensureLoaded() => _pending ??= _loadAll();
 
+  /// All twelve at once rather than one after another: each is an independent
+  /// asset read, and doing them serially stretched the window in which a list
+  /// paints boards with pieces missing from milliseconds to a visible beat.
   static Future<void> _loadAll() async {
-    for (final color in const ['w', 'b']) {
-      for (final type in const ['K', 'Q', 'R', 'B', 'N', 'P']) {
-        final key = '$color$type';
-        try {
-          _sprites[key] = await _rasterize('assets/pieces/$key.svg');
-        } catch (_) {
-          // Missing/undecodable asset: thumbnails render without this piece.
-        }
-      }
+    await Future.wait([
+      for (final color in const ['w', 'b'])
+        for (final type in const ['K', 'Q', 'R', 'B', 'N', 'P'])
+          _rasterizeInto('$color$type'),
+    ]);
+    _loaded = true;
+  }
+
+  static Future<void> _rasterizeInto(String key) async {
+    try {
+      _sprites[key] = await _rasterize('assets/pieces/$key.svg');
+    } catch (_) {
+      // Missing/undecodable asset: thumbnails render without this piece.
     }
   }
 

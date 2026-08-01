@@ -244,11 +244,17 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                         color: AppColors.onSurfaceSoft,
                       ),
                       padding: EdgeInsets.zero,
-                      tooltip: 'Copy FEN',
-                      onPressed: () {
-                        Clipboard.setData(ClipboardData(text: currentNode.fen));
-                        showAppSnackBar(context, AppMessages.fenCopied);
-                      },
+                      tooltip: 'Copy moves',
+                      onPressed: currentNode.parent == null
+                          ? null
+                          : () {
+                              Clipboard.setData(
+                                ClipboardData(
+                                  text: _movetext(currentNode.getMovePath()),
+                                ),
+                              );
+                              showAppSnackBar(context, AppMessages.movesCopied);
+                            },
                     ),
                   ),
                 ],
@@ -445,6 +451,17 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
     );
   }
 
+  /// Path as PGN-style movetext, e.g. "1. e4 c5 2. Nf3 d6".
+  String _movetext(List<String> moves) {
+    final buffer = StringBuffer();
+    for (var i = 0; i < moves.length; i++) {
+      if (i.isEven) buffer.write('${i ~/ 2 + 1}. ');
+      buffer.write(moves[i]);
+      if (i < moves.length - 1) buffer.write(' ');
+    }
+    return buffer.toString();
+  }
+
   /// One-line position stats, with the reach annotation appended when the
   /// protagonist's color is known and we're past the starting position.
   Widget _buildStatsLine(
@@ -453,10 +470,19 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
     OpeningTreeNode currentNode,
   ) {
     final showReach = reach != null && currentNode.parent != null;
+    // Record from the displayed point of view (see [WdlPerspective]); the
+    // neutral perspective keeps a plain white-draws-black triple.
+    final flip = widget.wdlPerspective == WdlPerspective.playerIsBlack;
+    final rate = flip ? 100 - position.winRatePercent : position.winRatePercent;
+    final record = widget.wdlPerspective == WdlPerspective.whiteBlack
+        ? '${position.wins}-${position.draws}-${position.losses}'
+        : '${flip ? position.losses : position.wins}W-'
+              '${position.draws}D-'
+              '${flip ? position.wins : position.losses}L';
     final text = Text(
       '${position.gamesPlayed} games • '
-      '${position.winRatePercent.toStringAsFixed(1)}% '
-      '(${position.wins}-${position.losses}-${position.draws})'
+      '${rate.toStringAsFixed(1)}% '
+      '($record)'
       '${position.nodes.length > 1 ? ' • ${position.nodes.length} move orders' : ''}'
       '${showReach ? ' • ${reach.percentLabel}% reached' : ''}',
       style: TextStyle(fontSize: 11, color: AppColors.inkSoft),
@@ -469,8 +495,8 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
           'often they chose each of their moves along the path '
           '(${reach.decisionPoints} branch '
           'point${reach.decisionPoints == 1 ? '' : 's'} where they sometimes '
-          'play something else). Your own moves count as 100% — you pick '
-          'those.',
+          'play something else, highlighted in the move path above). Your '
+          'own moves count as 100% — you pick those.',
       child: text,
     );
   }
@@ -505,26 +531,47 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
       ),
     ];
 
+    // Node chain aligned with the SAN list: chain[i] is the node reached by
+    // moves[i], so each token can inspect its own frequency and siblings.
+    final reversedChain = <OpeningTreeNode>[];
+    for (
+      OpeningTreeNode? n = currentNode;
+      n != null && n.parent != null;
+      n = n.parent
+    ) {
+      reversedChain.add(n);
+    }
+    final chain = reversedChain.reversed.toList();
+
     for (int i = 0; i < moves.length; i++) {
       final label = i % 2 == 0 ? '${i ~/ 2 + 1}.${moves[i]}' : moves[i];
       final isCurrent = i == moves.length - 1;
-      tokens.add(
-        InkWell(
-          onTap: () => widget.onPathPlySelected!(i + 1),
-          borderRadius: BorderRadius.circular(3),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: isCurrent ? AppColors.pgnMove : AppColors.inkSoft,
-                fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
-              ),
+      final branchTip = i < chain.length ? _branchPointTip(chain[i]) : null;
+      Widget token = InkWell(
+        onTap: () => widget.onPathPlySelected!(i + 1),
+        borderRadius: BorderRadius.circular(3),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+          decoration: branchTip == null
+              ? null
+              : BoxDecoration(
+                  color: AppColors.infoTint,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: isCurrent ? AppColors.pgnMove : AppColors.inkSoft,
+              fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
             ),
           ),
         ),
       );
+      if (branchTip != null) {
+        token = Tooltip(message: branchTip, child: token);
+      }
+      tokens.add(token);
     }
 
     // Long lines wrap; cap the height and keep the latest moves in view.
@@ -535,6 +582,37 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
         child: Wrap(spacing: 2, runSpacing: 2, children: tokens),
       ),
     );
+  }
+
+  /// Tooltip for a path move that is one of the analyzed player's branch
+  /// points — a move they sometimes replace with something else. Null when
+  /// the move isn't theirs, they always play it, or no protagonist colour is
+  /// known (repertoire/PGN-viewer trees).
+  String? _branchPointTip(OpeningTreeNode node) {
+    final protagonistIsWhite = widget.protagonistIsWhite;
+    final parent = node.parent;
+    if (protagonistIsWhite == null || parent == null) return null;
+    if (node.moverWasWhite != protagonistIsWhite) return null;
+    if (parent.gamesPlayed <= 0 || node.gamesPlayed >= parent.gamesPlayed) {
+      return null;
+    }
+    final pct = (node.gamesPlayed / parent.gamesPlayed * 100).toStringAsFixed(
+      0,
+    );
+    final siblings = parent.sortedChildren
+        .where((c) => c.move != node.move)
+        .map(
+          (c) =>
+              '${c.move} (${c.gamesPlayed} game${c.gamesPlayed == 1 ? '' : 's'})',
+        )
+        .join(', ');
+    final alternatives = siblings.isEmpty
+        ? 'their other games ended before this move.'
+        : 'Elsewhere they played: $siblings.';
+    return 'Branch point: this player chose ${node.move} in '
+        '${node.gamesPlayed} of ${parent.gamesPlayed} games ($pct%). '
+        '$alternatives Tap the move before this one to see every branch in '
+        'the list below.';
   }
 
   Widget _buildLeafState() {

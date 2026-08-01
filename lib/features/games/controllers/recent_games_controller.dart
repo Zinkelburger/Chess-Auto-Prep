@@ -2,15 +2,22 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../services/games_library/game_filter.dart';
+import '../../../services/games_library/game_review_store.dart';
 import '../../../services/games_library/games_library_service.dart';
 import '../../../utils/safe_change_notifier.dart';
 import '../models/recent_game.dart';
 import '../services/game_deviation_service.dart';
 import '../services/game_moves.dart';
+import '../services/game_preview.dart';
 import '../services/game_review_summary.dart';
+import '../services/games_window.dart';
 
-/// Which speed buckets and how many games the games pane shows. Persisted so
-/// the pane looks the same every launch.
+/// Which speed buckets the games pane shows, and whether opening the app is
+/// allowed to start the review run by itself. Persisted so the pane looks the
+/// same every launch.
+///
+/// *How many* games it shows is not here: that is the app-wide
+/// [GamesWindowSettings], shared with the tactics fetch.
 class GamesListFilters {
   const GamesListFilters({
     this.speeds = const {
@@ -20,21 +27,21 @@ class GamesListFilters {
       GameSpeed.rapid,
       GameSpeed.classical,
     },
-    this.maxGames = 100,
-    this.sinceDays = 14,
-    this.autoAnalyze = true,
+    this.autoRun = false,
   });
 
   final Set<GameSpeed> speeds;
-  final int maxGames;
 
-  /// Only show games from the last N days (counting today), mirroring the
-  /// tactics fetch window. `0` = all time, same encoding tactics uses.
-  final int sinceDays;
+  /// Whether the review run (analysis, deviations, mining) starts on its own
+  /// when the list loads. Off by default — it is minutes of every core, and
+  /// the user gets to decide when that happens by pressing Start.
+  final bool autoRun;
 
-  /// Whether new games are analyzed automatically in the background so their
-  /// review summaries appear without opening them.
-  final bool autoAnalyze;
+  GamesListFilters copyWith({Set<GameSpeed>? speeds, bool? autoRun}) =>
+      GamesListFilters(
+        speeds: speeds ?? this.speeds,
+        autoRun: autoRun ?? this.autoRun,
+      );
 }
 
 /// State owner of the Games home page: loads recent games for the configured
@@ -46,12 +53,27 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
     required String? Function() chesscomUsername,
     GamesLibraryService? library,
     GameDeviationService? deviationService,
+    GamesWindowSettings? windowSettings,
+    GameReviewStore? reviewStore,
     DateTime Function()? now,
   }) : _lichessUsername = lichessUsername,
        _chesscomUsername = chesscomUsername,
        _library = library ?? GamesLibraryService(),
        _deviation = deviationService ?? GameDeviationService.instance,
-       _now = now ?? DateTime.now;
+       _windowSettings = windowSettings ?? GamesWindowSettings.instance,
+       _reviewStore = reviewStore ?? GameReviewStore.instance,
+       _now = now ?? DateTime.now {
+    // The engine pass files each game's counts in the store as it finishes, so
+    // the rows fill in during a run without this controller knowing the review
+    // is happening.
+    _reviewStore.addListener(_applyStoredSummaries);
+    // The window is edited on the accounts card, which writes straight through
+    // to the shared setting. Without this the list kept its old slice until
+    // something else reloaded it, while every label around it (they read the
+    // setting live) already said "last 50 games" — the strip claiming
+    // "Out of 20 in your last 50 games".
+    _windowSettings.addListener(_onWindowChanged);
+  }
 
   // Supplier callbacks, not cached values: the usernames live on AppState
   // and change when the user edits Settings → Accounts.
@@ -60,15 +82,27 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
   final GamesLibraryService _library;
   final GameDeviationService _deviation;
 
-  /// Injectable clock so the expiry-window tests don't depend on wall time.
+  /// The shared "which games" window (see [GamesWindowSettings]). Read through
+  /// the settings object on every load, never snapshotted, so editing it in
+  /// the tactics panel moves this list too.
+  final GamesWindowSettings _windowSettings;
+
+  /// Mistake counts the review's engine pass filed for each game.
+  final GameReviewStore _reviewStore;
+
+  /// Injectable clock so the window tests don't depend on wall time.
   final DateTime Function() _now;
 
   static const _speedsPrefsKey = 'recent_games.speeds';
-  static const _maxGamesPrefsKey = 'recent_games.max';
-  static const _sinceDaysPrefsKey = 'recent_games.since_days';
-  static const _autoAnalyzePrefsKey = 'recent_games.auto_analyze';
+  static const _autoRunPrefsKey = 'recent_games.auto_run';
 
   bool _loading = false;
+
+  /// The load currently in flight, so a caller who arrives mid-load *waits for
+  /// it* instead of being told there was nothing to do. Pressing Start while
+  /// the first-visit load was still running used to return instantly and then
+  /// review an empty list.
+  Future<void>? _inFlight;
   bool _refreshQueued = false;
   bool _hasLoadedOnce = false;
   String? _statusMessage;
@@ -89,18 +123,19 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
       (_chesscomUsername()?.trim().isNotEmpty ?? false) ||
       (_lichessUsername()?.trim().isNotEmpty ?? false);
 
-  /// Start of the expiry window (mirrors tactics' `sinceCutoff`: counting
-  /// today as day one), or null when the window is "all time".
-  DateTime? get sinceCutoff {
-    final days = _filters.sinceDays;
-    if (days <= 0) return null;
-    final today = _now();
-    return DateTime(
-      today.year,
-      today.month,
-      today.day,
-    ).subtract(Duration(days: days - 1));
-  }
+  /// The accounts this list is loading. The header names the user even before
+  /// the first game has arrived, so it cannot rely on the loaded games.
+  List<String> get usernames => [
+    for (final name in [_lichessUsername(), _chesscomUsername()])
+      if (name != null && name.trim().isNotEmpty) name.trim(),
+  ];
+
+  /// The shared window this list is showing.
+  GamesWindow get window => _windowSettings.window;
+
+  /// Start of the window (counting today as day one), or null in game-count
+  /// mode — there the cap, not a date, bounds the list.
+  DateTime? get sinceCutoff => window.cutoffFrom(_now());
 
   /// First-visit load: fetch once usernames exist, and never re-trigger on
   /// later notifications. Safe to call from a listener on every tick.
@@ -109,8 +144,27 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
     refresh();
   }
 
-  Future<void> refresh({bool force = false}) async {
-    if (_loading) return;
+  /// Load the window's games. Concurrent callers share one load: the second
+  /// caller gets the in-flight future rather than a no-op.
+  Future<void> refresh({bool force = false}) =>
+      _inFlight ??= _refresh(force: force).whenComplete(() => _inFlight = null);
+
+  /// The window the loaded games were selected with, so a notification from
+  /// [GamesWindowSettings] that changed nothing this list cares about (a
+  /// re-save of the same value, or the first load resolving) doesn't refetch.
+  GamesWindow? _loadedWindow;
+
+  /// True while [setFilters] is writing the window itself — it reloads once at
+  /// the end, and the listener must not race it into a second fetch.
+  bool _applyingWindow = false;
+
+  void _onWindowChanged() {
+    if (_applyingWindow || !_hasLoadedOnce) return;
+    if (_windowSettings.window == _loadedWindow) return;
+    refresh();
+  }
+
+  Future<void> _refresh({bool force = false}) async {
     final epoch = ++_refreshEpoch;
     _loading = true;
     _error = null;
@@ -122,11 +176,16 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
     // games…" with the refresh button disabled for the rest of the session.
     try {
       await _ensureFiltersLoaded();
+      await _windowSettings.ensureLoaded();
+      await _reviewStore.ensureLoaded();
+      _loadedWindow = window;
       final selection = GameSelection(
-        maxGames: _filters.maxGames,
+        // The shared window rides into the selection: it filters the cache
+        // slice locally *and* narrows the network fetch. Note this is a cap
+        // *per site*, which is what the label promises when only one account
+        // is configured — the common case.
+        maxGames: window.gameLimit,
         speeds: _filters.speeds,
-        // The expiry window rides into the selection: it filters the cache
-        // slice locally *and* narrows the network fetch to recent months.
         since: sinceCutoff,
       );
 
@@ -159,16 +218,24 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
           final summaries = await compute(computeReviewSummariesBatch, [
             for (final r in records) (r.pgn, _sideFor(r, username)),
           ]);
+          // Final positions for the row previews: a replay per game, off the
+          // UI isolate like the other two passes.
+          final finalFens = await compute(finalFensBatch, sansBatch);
           for (var i = 0; i < records.length; i++) {
+            final record = records[i];
             collected.add(
               RecentGame(
-                record: records[i],
+                record: record,
                 platform: platform,
                 cachePath: cachePath,
                 myUsername: username,
-                meWhite: _sideFor(records[i], username),
+                meWhite: _sideFor(record, username),
                 sans: sansBatch[i],
-              )..summary = summaries[i],
+                finalFen: finalFens[i],
+                // The review's own verdict wins over one derived from `[%eval]`
+                // comments: it is the pass that classified these moves, and it
+                // survives the evals being pruned from the cache.
+              )..summary = _storedSummary(record.dedupKey) ?? summaries[i],
             );
           }
         } catch (e) {
@@ -204,11 +271,19 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
     if (_refreshQueued) {
       // The filters changed while this load ran, so its result is already
       // stale — chain straight into a reload with the new selection instead
-      // of computing deviations nobody will see.
+      // of computing deviations nobody will see. Called directly, not through
+      // [refresh]: that would hand back this very future and deadlock.
       _refreshQueued = false;
-      return refresh();
+      return _refresh();
     }
     await _computeDeviations(epoch);
+    // Checked again on the way out: the deviation pass is the long tail of a
+    // load, and filters changed during it are just as stale-making as ones
+    // changed during the fetch.
+    if (_refreshQueued) {
+      _refreshQueued = false;
+      return _refresh();
+    }
   }
 
   /// Re-run only the deviation pass (designations or repertoire files
@@ -223,19 +298,35 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
     await _computeDeviations(_refreshEpoch);
   }
 
-  Future<void> setFilters(GamesListFilters filters) async {
+  /// Apply new filters and (optionally) a new shared window, then reload.
+  ///
+  /// The window is set *before* the reload so a single Apply from the settings
+  /// dialog produces one fetch with both changes, not two.
+  Future<void> setFilters(
+    GamesListFilters filters, {
+    GamesWindow? window,
+  }) async {
     _filters = filters;
+    if (window != null) {
+      _applyingWindow = true;
+      try {
+        await _windowSettings.set(window);
+      } finally {
+        _applyingWindow = false;
+      }
+    }
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_speedsPrefsKey, [
       for (final s in filters.speeds) s.name,
     ]);
-    await prefs.setInt(_maxGamesPrefsKey, filters.maxGames);
-    await prefs.setInt(_sinceDaysPrefsKey, filters.sinceDays);
-    await prefs.setBool(_autoAnalyzePrefsKey, filters.autoAnalyze);
-    if (_loading) {
-      // refresh() no-ops while a load is in flight, which would silently
+    await prefs.setBool(_autoRunPrefsKey, filters.autoRun);
+    if (_inFlight != null) {
+      // refresh() hands back the load already in flight, which would silently
       // drop the new filters; queue one — the running load chains into it.
+      // Gated on the whole chain, not just `_loading`: that goes false before
+      // the deviation pass, and new filters arriving in that gap used to be
+      // swallowed by the in-flight future with no reload at all.
       _refreshQueued = true;
       return;
     }
@@ -263,17 +354,50 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
+  /// The stored review verdict for one game, as the list's summary type.
+  GameReviewSummary? _storedSummary(String dedupKey) {
+    final counts = _reviewStore.countsFor(dedupKey);
+    if (counts == null) return null;
+    return GameReviewSummary(
+      blunders: counts.blunders,
+      mistakes: counts.mistakes,
+      inaccuracies: counts.inaccuracies,
+    );
+  }
+
+  /// A game finished its engine pass: adopt the counts for whichever loaded
+  /// rows they belong to.
+  void _applyStoredSummaries() {
+    var changed = false;
+    for (final game in _games) {
+      final stored = _storedSummary(game.record.dedupKey);
+      if (stored == null) continue;
+      final current = game.summary;
+      if (current != null &&
+          current.blunders == stored.blunders &&
+          current.mistakes == stored.mistakes &&
+          current.inaccuracies == stored.inaccuracies) {
+        continue;
+      }
+      game.summary = stored;
+      changed = true;
+    }
+    if (changed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _reviewStore.removeListener(_applyStoredSummaries);
+    _windowSettings.removeListener(_onWindowChanged);
+    super.dispose();
+  }
+
   Future<void> _ensureFiltersLoaded() async {
     if (_filtersLoaded) return;
     final prefs = await SharedPreferences.getInstance();
     final speedNames = prefs.getStringList(_speedsPrefsKey);
-    final maxGames = prefs.getInt(_maxGamesPrefsKey);
-    final sinceDays = prefs.getInt(_sinceDaysPrefsKey);
-    final autoAnalyze = prefs.getBool(_autoAnalyzePrefsKey);
-    if (speedNames != null ||
-        maxGames != null ||
-        sinceDays != null ||
-        autoAnalyze != null) {
+    final autoRun = prefs.getBool(_autoRunPrefsKey);
+    if (speedNames != null || autoRun != null) {
       _filters = GamesListFilters(
         speeds: speedNames == null
             ? _filters.speeds
@@ -282,9 +406,7 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
                   for (final s in GameSpeed.values)
                     if (s.name == name) s,
               },
-        maxGames: maxGames ?? _filters.maxGames,
-        sinceDays: sinceDays ?? _filters.sinceDays,
-        autoAnalyze: autoAnalyze ?? _filters.autoAnalyze,
+        autoRun: autoRun ?? _filters.autoRun,
       );
     }
     _filtersLoaded = true;

@@ -17,9 +17,9 @@ void main() {
     testWidgets('boots into the unified Tactics home', (tester) async {
       await pumpApp(tester);
 
-      // App-bar title plus the breadcrumb root both say Tactics.
+      // App-bar title. At the root of the history the breadcrumb trail is
+      // deliberately absent — a lone crumb would just repeat this title.
       expect(find.text('Tactics'), findsWidgets);
-      expect(find.byTooltip('Back to previous screen'), findsOneWidget);
 
       // Left pane: the recent-games home. A fresh environment has no
       // usernames configured, so its empty-state card shows.
@@ -29,13 +29,19 @@ void main() {
       // the board returns only when a puzzle session starts.
       expect(find.byType(ChessBoardWidget), findsNothing);
 
-      // Right pane: the tactics import/start controls, as before.
-      expect(find.text('Import Games'), findsOneWidget);
+      // Right pane: who you are, and what is in the puzzle database.
+      expect(find.text('My accounts'), findsOneWidget);
       expect(find.text('Lichess Username'), findsOneWidget);
       expect(find.text('Chess.com Username'), findsOneWidget);
-      // Stockfish depth moved into the engine-settings dialog behind the
-      // gear button; assert the button that opens it is present.
-      expect(find.byTooltip('Engine settings…'), findsOneWidget);
+      expect(find.text('My tactics'), findsOneWidget);
+      // The engine-settings gear is gone: cores and depth are steppers on the
+      // review strip, and downloading is the review's play button, so this card
+      // has neither a gear nor a per-site Import button.
+      expect(find.byTooltip('Engine settings…'), findsNothing);
+      expect(find.widgetWithText(ElevatedButton, 'Import'), findsNothing);
+      // Nor a play button of its own: both live on the review strip in the left
+      // pane, one under the other.
+      expect(find.textContaining('Start Practice Session'), findsNothing);
     });
   });
 

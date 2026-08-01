@@ -8,7 +8,15 @@ part of 'pgn_viewer_screen.dart';
 mixin _AppBarBuildersMixin
     on State<PgnViewerScreen>, _RepertoireGenerationMixin {
   bool get _editMode;
+
+  /// True while the viewer is showing one game handed to it by name (from the
+  /// recent-games list). See [_PgnViewerScreenState._openFromHandoff].
+  bool get _singleGameFocus;
+  set _singleGameFocus(bool value);
+
   void _toggleEditMode();
+  Future<void> _editInStudy();
+  Future<void> _saveSliceAsStudy();
   void _openSliceDialog();
   void _showTrophyCabinet();
   Future<void> _exportSlice();
@@ -33,22 +41,25 @@ mixin _AppBarBuildersMixin
               tooltip: 'Back to opening-tree position',
             )
           : null,
-      title: Row(
-        children: [
-          const Text('PGN Viewer'),
-          const SizedBox(width: 12),
-          Flexible(child: _buildOpenPgnMenuButton(fileName)),
-          if (_controller.allGames.isNotEmpty &&
-              !_controller.isSolitaireMode) ...[
-            const SizedBox(width: 8),
-            Expanded(
-              child: PgnSliceChips(
-                controller: _controller,
-                onOpenSliceDialog: _openSliceDialog,
+      title: AppBarTitleWithTrail(
+        title: Row(
+          children: [
+            const Text('PGN Viewer'),
+            const SizedBox(width: 12),
+            Flexible(child: _buildOpenPgnMenuButton(fileName)),
+            if (_controller.allGames.isNotEmpty &&
+                !_controller.isSolitaireMode &&
+                !_singleGameFocus) ...[
+              const SizedBox(width: 8),
+              Expanded(
+                child: PgnSliceChips(
+                  controller: _controller,
+                  onOpenSliceDialog: _openSliceDialog,
+                ),
               ),
-            ),
+            ],
           ],
-        ],
+        ),
       ),
       actions: [
         if (_controller.filteredGames.isNotEmpty) ...[
@@ -72,9 +83,12 @@ mixin _AppBarBuildersMixin
                 size: 20,
                 color: _editMode ? Theme.of(context).colorScheme.primary : null,
               ),
-              tooltip:
-                  'Amend game — moves, marks & comments '
-                  'are saved to the file (A)',
+              tooltip: 'Amend game',
+            ),
+            IconButton(
+              onPressed: _editInStudy,
+              icon: const Icon(Icons.edit_note, size: 20),
+              tooltip: 'Edit in Study (A)',
             ),
           ],
           IconButton(
@@ -88,7 +102,9 @@ mixin _AppBarBuildersMixin
                   ? Theme.of(context).colorScheme.primary
                   : null,
             ),
-            tooltip: 'Solitaire mode (Shift+S)',
+            tooltip: _controller.isSolitaireMode
+                ? 'Exit solitaire mode (Esc)'
+                : 'Solitaire mode (Ctrl+S)',
           ),
           if (_controller.isSolitaireMode && _controller.totalTrophyCount > 0)
             IconButton(
@@ -100,8 +116,14 @@ mixin _AppBarBuildersMixin
               ),
               tooltip: 'Trophies (${_controller.totalTrophyCount})',
             ),
-          _actionDivider(),
-          // Board view: flip, perspective.
+          // No group separators: the thin vertical rules read as part of the
+          // button beside them ("what is that bar doing on my button?"), and
+          // grouping by hairline was never worth that. Icons are spaced and
+          // tooltipped instead.
+          //
+          // "Check this game against my repertoire" used to live here as a
+          // fork icon that opened a dialog. It is the Line tab now — the
+          // question belongs next to Game and Analysis, not in the toolbar.
           IconButton(
             onPressed: _controller.toggleBoardFlipped,
             icon: const Icon(Icons.swap_vert, size: 20),
@@ -109,7 +131,6 @@ mixin _AppBarBuildersMixin
           ),
           if (!_controller.isSolitaireMode) ...[
             PgnPerspectiveButton(controller: _controller),
-            _actionDivider(),
             // File / misc: export, overflow.
             IconButton(
               onPressed: _exportSlice,
@@ -122,11 +143,43 @@ mixin _AppBarBuildersMixin
               onSelected: (value) {
                 if (value == 'generate_repertoire') {
                   _generateRepertoireFromGames();
+                } else if (value == 'save_as_study') {
+                  _saveSliceAsStudy();
                 } else if (value == 'trophies') {
                   _showTrophyCabinet();
+                } else if (value == 'slice') {
+                  // Leaving single-game focus is the point of asking for
+                  // filters: the chip bar comes back with the dialog.
+                  setState(() => _singleGameFocus = false);
+                  _openSliceDialog();
                 }
               },
               itemBuilder: (_) => [
+                // Only while the chip bar is hidden — otherwise this duplicates
+                // the "Slice" chip sitting in the title row.
+                if (_singleGameFocus)
+                  const PopupMenuItem(
+                    value: 'slice',
+                    child: ListTile(
+                      leading: Icon(Icons.filter_alt_outlined, size: 20),
+                      title: Text('Filter these games…'),
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                PopupMenuItem(
+                  value: 'save_as_study',
+                  child: ListTile(
+                    leading: const Icon(Icons.edit_note, size: 20),
+                    title: Text(
+                      'Save ${_controller.filteredGames.length} filtered '
+                      'game${_controller.filteredGames.length == 1 ? '' : 's'} '
+                      'as study…',
+                    ),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
                 PopupMenuItem(
                   value: 'generate_repertoire',
                   child: ListTile(
@@ -164,7 +217,6 @@ mixin _AppBarBuildersMixin
             ),
           ],
         ],
-        const JobsStatusButton(),
         const AppSettingsButton(),
         const AppModeMenuButton(),
       ],
@@ -182,6 +234,7 @@ mixin _AppBarBuildersMixin
         } else if (value == 'paste') {
           _pastePgn();
         } else if (value.startsWith('recent:')) {
+          _singleGameFocus = false;
           _loadFile(value.substring('recent:'.length));
         }
       },
@@ -237,21 +290,6 @@ mixin _AppBarBuildersMixin
             fileName.isEmpty ? 'Open PGN' : fileName,
             overflow: TextOverflow.ellipsis,
           ),
-        ),
-      ),
-    );
-  }
-
-  /// Thin vertical separator between app-bar action groups.
-  Widget _actionDivider() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: SizedBox(
-        height: 22,
-        child: VerticalDivider(
-          width: 1,
-          thickness: 1,
-          color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
         ),
       ),
     );

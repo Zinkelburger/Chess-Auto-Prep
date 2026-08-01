@@ -9,6 +9,8 @@ import '../models/tactics_position.dart';
 import 'tactics_engine.dart';
 import '../models/engine_settings.dart';
 import 'engine/stockfish_pool.dart';
+import 'games_library/game_filter.dart' show dedupKeyForHeaders;
+import 'games_library/game_review_store.dart';
 import 'chess_api_urls.dart';
 import 'lichess_api_client.dart';
 import 'maia_factory.dart';
@@ -40,6 +42,13 @@ typedef ProgressCallback = void Function(String message);
 /// completed games plus the in-flight game's evaluated share.
 typedef GameProgressCallback =
     void Function(double fraction, int gamesDone, int gamesTotal);
+
+/// One game finished its engine pass: how messy it was for the user, filed
+/// under the games-library identity of the game. Fires for clean games too —
+/// "reviewed, nothing wrong" is a result, and the list has to be able to tell
+/// it apart from "not reviewed yet".
+typedef GameReviewedCallback =
+    void Function(String dedupKey, ReviewCounts counts);
 
 /// Result of a tactics import or resume operation.
 typedef ImportResult = ({
@@ -187,6 +196,7 @@ class TacticsImportService {
     ProgressCallback? progressCallback,
     OnPositionFoundCallback? onPositionFound,
     GameProgressCallback? onGameProgress,
+    GameReviewedCallback? onGameReviewed,
   }) async {
     _cancelled = false;
     final content = await StorageFactory.instance.readImportedPgns();
@@ -234,6 +244,7 @@ class TacticsImportService {
         maxCores: maxCores,
         mapChessComEloForMaia: false,
         onGameProgress: onGameProgress,
+        onGameReviewed: onGameReviewed,
       );
       allPositions.addAll(result.positions);
       totalAnalyzed += result.gamesAnalyzed;
@@ -253,6 +264,7 @@ class TacticsImportService {
         maxCores: maxCores,
         mapChessComEloForMaia: true,
         onGameProgress: onGameProgress,
+        onGameReviewed: onGameReviewed,
       );
       allPositions.addAll(result.positions);
       totalAnalyzed += result.gamesAnalyzed;
@@ -263,6 +275,48 @@ class TacticsImportService {
       positions: allPositions,
       gamesAnalyzed: totalAnalyzed,
       gamesSkipped: totalSkipped,
+    );
+  }
+
+  /// Review games that have already been downloaded — the recent-games list's
+  /// own copy of them.
+  ///
+  /// The review used to fetch every game twice: once into the games-library
+  /// cache for the list, and again here for the engine pass. Same API, same
+  /// window, two round trips, and two slices that could disagree about which
+  /// games "recent" meant. This takes the PGNs the list already holds instead.
+  ///
+  /// They still go through [_savePgns] first: that is what injects the GameId
+  /// headers, feeds the resume queue, and keeps the source game available to
+  /// the puzzles mined from it.
+  ///
+  /// [forceDedupKeys] names games that must be analyzed even though the
+  /// database has them marked analyzed — see [_processGames].
+  Future<ImportResult> reviewFetchedGames({
+    required String pgnContent,
+    required String username,
+    required int depth,
+    int? maxCores,
+    bool mapChessComEloForMaia = false,
+    Set<String> forceDedupKeys = const {},
+    ProgressCallback? progressCallback,
+    OnPositionFoundCallback? onPositionFound,
+    GameProgressCallback? onGameProgress,
+    GameReviewedCallback? onGameReviewed,
+  }) async {
+    _cancelled = false;
+    await _savePgns(pgnContent);
+    return _processGames(
+      pgnContent,
+      username,
+      depth,
+      progressCallback,
+      onPositionFound,
+      maxCores: maxCores,
+      mapChessComEloForMaia: mapChessComEloForMaia,
+      forceDedupKeys: forceDedupKeys,
+      onGameProgress: onGameProgress,
+      onGameReviewed: onGameReviewed,
     );
   }
 
@@ -283,6 +337,7 @@ class TacticsImportService {
     Function(String)? progressCallback,
     OnPositionFoundCallback? onPositionFound,
     GameProgressCallback? onGameProgress,
+    GameReviewedCallback? onGameReviewed,
   }) async {
     _cancelled = false;
     final params = <String, String>{
@@ -327,6 +382,7 @@ class TacticsImportService {
       maxCores: maxCores,
       mapChessComEloForMaia: false,
       onGameProgress: onGameProgress,
+      onGameReviewed: onGameReviewed,
     );
   }
 
@@ -351,6 +407,7 @@ class TacticsImportService {
     Function(String)? progressCallback,
     OnPositionFoundCallback? onPositionFound,
     GameProgressCallback? onGameProgress,
+    GameReviewedCallback? onGameReviewed,
   }) async {
     _cancelled = false;
     // null = no game-count limit: the since window is the only limit. Only
@@ -450,6 +507,7 @@ class TacticsImportService {
       maxCores: maxCores,
       mapChessComEloForMaia: true,
       onGameProgress: onGameProgress,
+      onGameReviewed: onGameReviewed,
     );
   }
 
@@ -527,7 +585,19 @@ class TacticsImportService {
     /// When true, PGN [WhiteElo]/[BlackElo] are Chess.com blitz and converted
     /// via [chessComBlitzToLichessBlitz] before Maia line extension.
     bool mapChessComEloForMaia = false,
+
+    /// Games — by [dedupKeyForHeaders] identity — that must be analyzed even
+    /// if the database already has them marked analyzed.
+    ///
+    /// "Analyzed" only ever meant "its puzzles were mined". A game mined by an
+    /// older build, or through the tactics import panel, was never asked for
+    /// the mistake counts the recent-games list shows, and the pre-filter below
+    /// then skipped it forever: the list said "12 games to analyse", the run
+    /// said "you're all caught up", and the number never moved. Naming those
+    /// games here is what gets them looked at.
+    Set<String> forceDedupKeys = const {},
     GameProgressCallback? onGameProgress,
+    GameReviewedCallback? onGameReviewed,
   }) async {
     // A cancel during the fetch/download phase must stick — resetting
     // `_cancelled` here used to silently un-cancel the run once analysis
@@ -548,7 +618,10 @@ class TacticsImportService {
 
     for (int i = 0; i < games.length; i++) {
       final gameId = _extractGameId(games[i]);
-      if (skipAnalyzedGames && _isGameAnalyzed(gameId)) {
+      final forced =
+          forceDedupKeys.isNotEmpty &&
+          forceDedupKeys.contains(dedupKeyForHeaders(extractHeaders(games[i])));
+      if (skipAnalyzedGames && !forced && _isGameAnalyzed(gameId)) {
         skippedCount++;
         if (kDebugMode) log.w('Skipping already-analyzed game: $gameId');
         continue;
@@ -651,7 +724,7 @@ class TacticsImportService {
       final gameId = task['gameId'] as String;
 
       try {
-        final gamePositions = await _analyzeGameParallel(
+        final outcome = await _analyzeGameParallel(
           pool: pool,
           gameText: gameText,
           username: usernameLower,
@@ -674,6 +747,7 @@ class TacticsImportService {
           },
         );
         if (_cancelled) break;
+        final gamePositions = outcome?.positions ?? const <TacticsPosition>[];
         positions.addAll(gamePositions);
         totalPositionsFound += gamePositions.length;
 
@@ -683,6 +757,18 @@ class TacticsImportService {
           for (final pos in gamePositions) {
             await onPositionFound(pos);
           }
+        }
+        // The same pass that found the puzzles also knows how messy the game
+        // was; report it so the games list never needs a second engine pass.
+        if (outcome != null) {
+          onGameReviewed?.call(
+            outcome.dedupKey,
+            ReviewCounts(
+              inaccuracies: outcome.inaccuracies,
+              mistakes: outcome.mistakes,
+              blunders: outcome.blunders,
+            ),
+          );
         }
         await _database.markGameAnalyzed(gameId);
       } catch (e) {

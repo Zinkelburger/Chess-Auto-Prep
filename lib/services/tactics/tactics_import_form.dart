@@ -1,206 +1,138 @@
 /// Form state for the tactics import panel: text fields, debounced
-/// validation, fetch mode, and persisted count/depth/cores preferences.
+/// validation, and the persisted depth preference.
 ///
 /// Owned by the tactics control panel; extracted so the form logic is
 /// testable and the panel only renders it.
+///
+/// Three things this form deliberately does *not* own, because each already has
+/// exactly one owner elsewhere:
+///
+/// * **Which games to fetch** — that is the app-wide [GamesWindowSettings],
+///   shared with the recent-games home pane. Editing "last 20 games" here
+///   moves the home list too, and vice versa; there is one such setting.
+/// * **How many cores to use** — that is [EngineSettings.workers], the same
+///   machine-level knob the Settings screen shows. Mining used to keep its
+///   own copy, so turning it down in one place left the other at its old
+///   value.
+/// * **How deep to search** — that is [MiningSettings.depth], edited on the
+///   review strip where its cost is felt. This form used to own it as a text
+///   field behind a gear, which is how the two got out of step.
 library;
 
-import 'dart:async';
-
 import 'package:flutter/widgets.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import '../tactics_import_service.dart' show TacticsImportService;
+import '../../features/games/services/games_window.dart';
+import '../../models/engine_settings.dart';
+import 'mining_settings.dart';
 import 'tactics_import_coordinator.dart';
 
 class TacticsImportForm extends ChangeNotifier {
-  TacticsImportForm({int defaultCores = 1})
-    : coresText = TextEditingController(text: '$defaultCores');
+  TacticsImportForm({
+    EngineSettings? engine,
+    GamesWindowSettings? windowSettings,
+    MiningSettings? miningSettings,
+  }) : _engine = engine ?? EngineSettings.instance,
+       _windowSettings = windowSettings ?? GamesWindowSettings.instance,
+       _mining = miningSettings ?? MiningSettings.instance {
+    gamesText = TextEditingController(text: '${window.games}');
+    daysText = TextEditingController(text: '${window.days}');
+    _windowSettings.addListener(_onWindowChanged);
+  }
+
+  final EngineSettings _engine;
+  final GamesWindowSettings _windowSettings;
+  final MiningSettings _mining;
 
   final TextEditingController lichessUser = TextEditingController();
   final TextEditingController chessComUser = TextEditingController();
-  final TextEditingController fetchCount = TextEditingController(text: '20');
-  final TextEditingController depthText = TextEditingController(text: '15');
-  final TextEditingController coresText;
 
-  /// Default recency window for "games from the last N days" imports.
-  static const int defaultSinceDays = 14;
+  /// Game-count and day operands of the shared window. Text controllers, not
+  /// state: the value of record lives in [GamesWindowSettings].
+  late final TextEditingController gamesText;
+  late final TextEditingController daysText;
 
-  TacticsImportMode fetchMode = TacticsImportMode.sinceDate;
-
-  /// How far back the sinceDate mode reaches, in days.
-  int sinceDays = defaultSinceDays;
-
-  // Validation: *Valid tracks logical state (immediate), *Error is the
-  // displayed red text (debounced so it doesn't flash while typing).
-  bool depthValid = true;
-  bool coresValid = true;
-  String? depthError;
-  String? coresError;
-  Timer? _depthErrorTimer;
-  Timer? _coresErrorTimer;
+  /// The shared window (see [GamesWindowSettings]).
+  GamesWindow get window => _windowSettings.window;
 
   bool _disposed = false;
 
-  bool get fieldsValid => depthValid && coresValid;
+  /// Search depth — the shared [MiningSettings.depth], already clamped.
+  int get depth => _mining.depth;
 
-  /// Parsed engine depth, clamped to the supported range.
-  int get depth => (int.tryParse(depthText.text) ?? 15).clamp(1, 25);
-
-  /// Parsed worker count, clamped to available cores.
-  int get cores => (int.tryParse(coresText.text) ?? 1).clamp(
-    1,
-    TacticsImportService.availableCores,
-  );
-
-  /// Parsed recent-games fetch count.
-  int get count => int.tryParse(fetchCount.text) ?? 20;
+  /// Worker count — the shared [EngineSettings.workers], already clamped.
+  int get cores => _engine.workers;
 
   String usernameFor(TacticsImportSource source) =>
       source == TacticsImportSource.lichess
       ? lichessUser.text.trim()
       : chessComUser.text.trim();
 
-  /// Start of the sinceDate-mode window: midnight [sinceDays] days back
-  /// (counting today as day 1).
-  DateTime get sinceCutoff {
-    final now = DateTime.now();
-    return DateTime(
-      now.year,
-      now.month,
-      now.day,
-    ).subtract(Duration(days: sinceDays - 1));
-  }
+  /// Start of the window, or null when it counts games rather than days.
+  DateTime? get sinceCutoff => window.cutoffFrom(DateTime.now());
 
-  /// Import params for [source] from the current form values.
-  ///
-  /// In sinceDate mode the day window *is* the limit the user chose, so no
-  /// game count is imposed on top of it — `null` means "every game in the
-  /// window".
+  /// Import params for [source] from the current form values plus the shared
+  /// window: a game cap in game-count mode, a date cutoff in day mode, never
+  /// both (each mode is exactly the limit the user asked for).
   TacticsImportParams paramsFor(TacticsImportSource source) =>
       TacticsImportParams(
         username: usernameFor(source),
-        mode: fetchMode,
-        maxGames: fetchMode == TacticsImportMode.recent ? count : null,
-        since: fetchMode == TacticsImportMode.sinceDate ? sinceCutoff : null,
+        mode: window.isGameCount
+            ? TacticsImportMode.recent
+            : TacticsImportMode.sinceDate,
+        maxGames: window.gameLimit,
+        since: sinceCutoff,
         depth: depth,
         cores: cores,
       );
 
-  void setFetchMode(TacticsImportMode mode) {
-    fetchMode = mode;
-    notifyListeners();
-  }
+  Future<void> setWindowMode(GamesWindowMode mode) =>
+      _windowSettings.set(window.copyWith(mode: mode));
 
-  void setSinceDays(int days) {
-    sinceDays = days.clamp(1, 3650);
-    notifyListeners();
-  }
+  Future<void> setWindowGames(int games) =>
+      _windowSettings.set(window.copyWith(games: games));
 
-  void validateDepth(String value) {
-    final v = int.tryParse(value);
-    String? error;
-    if (v == null) {
-      error = 'Must be a number';
-    } else if (v < 1 || v > 25) {
-      error = 'Must be 1–25';
-    }
-    _depthErrorTimer = _applyFieldValidation(
-      error: error,
-      currentTimer: _depthErrorTimer,
-      setValid: (valid) => depthValid = valid,
-      setError: (e) => depthError = e,
-    );
-  }
+  Future<void> setWindowDays(int days) =>
+      _windowSettings.set(window.copyWith(days: days));
 
-  void validateCores(String value) {
-    final v = int.tryParse(value);
-    final max = TacticsImportService.availableCores;
-    String? error;
-    if (v == null) {
-      error = 'Must be a number';
-    } else if (v < 1 || v > max) {
-      error = 'Must be 1–$max';
-    }
-    _coresErrorTimer = _applyFieldValidation(
-      error: error,
-      currentTimer: _coresErrorTimer,
-      setValid: (valid) => coresValid = valid,
-      setError: (e) => coresError = e,
-    );
-  }
-
-  /// Applies a field validation result: updates logical validity immediately
-  /// and clears the error when valid, then debounces showing the red error
-  /// text. Returns the (possibly new) debounce timer to store for the field.
-  Timer? _applyFieldValidation({
-    required String? error,
-    required Timer? currentTimer,
-    required void Function(bool valid) setValid,
-    required void Function(String? error) setError,
-  }) {
-    currentTimer?.cancel();
-    setValid(error == null);
-    if (error == null) setError(null);
-    notifyListeners();
-    if (error == null) return null;
-    return Timer(const Duration(milliseconds: 500), () {
-      if (_disposed) return;
-      setError(error);
-      notifyListeners();
-    });
-  }
-
-  static const _prefImportCount = 'tactics_import.count';
-  static const _prefImportDepth = 'tactics_import.depth';
-  static const _prefImportCores = 'tactics_import.cores';
-  static const _prefImportMode = 'tactics_import.mode';
-  static const _prefImportSinceDays = 'tactics_import.since_days';
-
-  /// Restore the last-used import settings into the form fields.
-  Future<void> loadPrefs() async {
-    final prefs = await SharedPreferences.getInstance();
+  /// Reflect an externally applied window (the home pane's settings dialog)
+  /// into the fields, without fighting whichever one the user is typing in.
+  void _onWindowChanged() {
     if (_disposed) return;
-    final count = prefs.getInt(_prefImportCount);
-    final depth = prefs.getInt(_prefImportDepth);
-    final cores = prefs.getInt(_prefImportCores);
-    final mode = prefs.getString(_prefImportMode);
-    final days = prefs.getInt(_prefImportSinceDays);
-    if (count != null) fetchCount.text = '$count';
-    if (depth != null) depthText.text = '$depth';
-    if (cores != null) coresText.text = '$cores';
-    if (mode != null) {
-      fetchMode = TacticsImportMode.values.firstWhere(
-        (m) => m.name == mode,
-        orElse: () => TacticsImportMode.sinceDate,
-      );
+    if (!_gamesFocused && int.tryParse(gamesText.text) != window.games) {
+      gamesText.text = '${window.games}';
     }
-    if (days != null && days > 0) sinceDays = days;
+    if (!_daysFocused && int.tryParse(daysText.text) != window.days) {
+      daysText.text = '${window.days}';
+    }
+    notifyListeners();
   }
 
-  /// Remember the current import settings for next launch.
-  Future<void> savePrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    final count = int.tryParse(fetchCount.text);
-    final depth = int.tryParse(depthText.text);
-    final cores = int.tryParse(coresText.text);
-    if (count != null) await prefs.setInt(_prefImportCount, count);
-    if (depth != null) await prefs.setInt(_prefImportDepth, depth);
-    if (cores != null) await prefs.setInt(_prefImportCores, cores);
-    await prefs.setString(_prefImportMode, fetchMode.name);
-    await prefs.setInt(_prefImportSinceDays, sinceDays);
+  /// Set by the panel while the corresponding field has focus (see
+  /// [_onWindowChanged]).
+  bool _gamesFocused = false;
+  bool _daysFocused = false;
+  void setGamesFieldFocused(bool focused) => _gamesFocused = focused;
+  void setDaysFieldFocused(bool focused) => _daysFocused = focused;
+
+  /// Load the settings this form displays. Each value belongs to its own
+  /// owner; this only pulls them into the fields.
+  Future<void> loadPrefs() async {
+    await _windowSettings.ensureLoaded();
+    await _mining.ensureLoaded();
+    if (_disposed) return;
+    gamesText.text = '${window.games}';
+    daysText.text = '${window.days}';
+    notifyListeners();
   }
 
   @override
   void dispose() {
     _disposed = true;
-    _depthErrorTimer?.cancel();
-    _coresErrorTimer?.cancel();
+    _windowSettings.removeListener(_onWindowChanged);
     lichessUser.dispose();
     chessComUser.dispose();
-    fetchCount.dispose();
-    depthText.dispose();
-    coresText.dispose();
+    gamesText.dispose();
+    daysText.dispose();
     super.dispose();
   }
 }

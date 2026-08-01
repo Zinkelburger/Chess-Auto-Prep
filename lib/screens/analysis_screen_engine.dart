@@ -12,9 +12,8 @@ mixin _EngineWeaknessMixin on _AnalysisScreenStateBase {
     final config = await showDialog<EngineWeaknessConfig>(
       context: context,
       builder: (_) => EngineWeaknessConfigDialog(
-        whiteTree: _whiteTree,
-        blackTree: _blackTree,
         playerInfo: _currentPlayer,
+        isReanalysis: _hasEvals,
       ),
     );
 
@@ -43,9 +42,12 @@ mixin _EngineWeaknessMixin on _AnalysisScreenStateBase {
       _evalRunning = true;
       _evalCompleted = 0;
       _evalTotal = 0;
-      // Fresh run: results stream into this list as positions finish. Stale
-      // evals already merged into the stats stay visible until overwritten.
+      // Fresh run: results stream into this list as positions finish. The
+      // previous run's numbers go first — a stale eval is worse than none,
+      // because it colours a position by a verdict the user just asked to
+      // replace. The rolling update fills them back in position by position.
       _engineEvals = [];
+      _clearMergedEvals();
     });
 
     try {
@@ -96,6 +98,20 @@ mixin _EngineWeaknessMixin on _AnalysisScreenStateBase {
     _evalService?.dispose();
     _evalService = null;
     if (mounted) setState(() => _evalRunning = false);
+  }
+
+  /// Strip engine evals from both colours' position stats, so nothing on
+  /// screen keeps showing the previous run's number while the new run streams
+  /// in. Both colours are cleared because one run covers both trees.
+  void _clearMergedEvals() {
+    for (final analysis in [_whiteAnalysis, _blackAnalysis]) {
+      if (analysis == null) continue;
+      for (final stats in analysis.positionStats.values) {
+        stats.evalCp = null;
+        stats.evalMate = null;
+        stats.evalDepth = null;
+      }
+    }
   }
 
   /// Merge stored engine eval results into the current [_positionAnalysis].

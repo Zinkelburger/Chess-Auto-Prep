@@ -23,6 +23,7 @@ import '../services/opening_book_service.dart';
 import '../services/solitaire_trophy_service.dart';
 import '../services/storage/storage_factory.dart';
 import 'pgn/pgn_viewer_handle.dart';
+import '../utils/pgn_date_utils.dart';
 import '../utils/safe_change_notifier.dart';
 
 part 'pgn/pgn_viewer_controller_metadata.dart';
@@ -577,6 +578,18 @@ class PgnViewerController extends ChangeNotifier
     loadCurrentGame();
   }
 
+  /// Reorder newest-first *without* moving the cursor — for arrivals that are
+  /// about to select a game by identity ([GameSortMode.dateDesc]). Unlike
+  /// [setSortMode] this keeps no game loaded, because the caller is about to
+  /// pick one and loading the wrong one first is a wasted parse and a visible
+  /// flash of someone else's game.
+  void sortNewestFirst() {
+    if (sortMode == GameSortMode.dateDesc) return;
+    sortMode = GameSortMode.dateDesc;
+    applySortMode();
+    notifyListeners();
+  }
+
   @override
   void applySortMode() {
     _viewerTree.clearCache();
@@ -590,6 +603,18 @@ class PgnViewerController extends ChangeNotifier
         } else {
           filteredGames = List.of(allGames);
         }
+      case GameSortMode.dateDesc:
+        // Undated games sort last rather than clumping at the top: an empty
+        // key would otherwise beat every real date under a plain compare.
+        filteredGames.sort((a, b) {
+          final ka = pgnHeaderSortKey(a.headers);
+          final kb = pgnHeaderSortKey(b.headers);
+          if (ka.isEmpty || kb.isEmpty) {
+            if (ka.isEmpty && kb.isEmpty) return 0;
+            return ka.isEmpty ? 1 : -1;
+          }
+          return kb.compareTo(ka);
+        });
       case GameSortMode.ratingDesc:
         filteredGames.sort((a, b) {
           final aSort = a.studyRating == 0 ? 3 : a.studyRating;

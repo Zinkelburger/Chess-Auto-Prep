@@ -1,9 +1,24 @@
 # Unified home — Games inside Tactics — Design Note
 
-**Status:** implementing (2026-07-29). Supersedes the standalone Games mode
+**Status:** implemented (2026-07-29). Supersedes the standalone Games mode
 from [`RECENT_GAMES_AND_NAVIGATION.md`](RECENT_GAMES_AND_NAVIGATION.md)
 (everything else in that doc — breadcrumbs, deviation, viewer handoffs —
 stands and is reused here).
+
+> **Partly amended by [`HOME_REVIEW_RUN.md`](HOME_REVIEW_RUN.md)** (same day,
+> later). The layout and two-pane structure below stand. The 14-day window, the
+> welcome-header copy, the "2 blunders" Review chip and the automatic analysis
+> pass do **not** — they became the shared 20-game window, a labeled Elo line,
+> three coloured counts, and an explicit Start button. Read that note for the
+> current behaviour of those four.
+>
+> **Further amended by
+> [`GAME_REVIEW_ONE_PASS.md`](GAME_REVIEW_ONE_PASS.md)** (2026-07-30).
+> "Background auto-analysis" and "Shared evals between analysis and mining"
+> below are **gone**: `GameAutoAnalysisService` is deleted, and the mining pass
+> reports each game's mistake counts itself, so there is only one engine pass
+> over a game's moves. That note also closes the follow-up this one left open —
+> mining now reads the games-library corpus instead of downloading its own copy.
 
 ## Why
 

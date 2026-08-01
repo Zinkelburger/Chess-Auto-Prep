@@ -84,7 +84,7 @@ class SolitaireCompleteBanner extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   textStyle: const TextStyle(fontSize: 12),
                 ),
-                child: const Text('Next game (N)'),
+                child: const Text('Next game (↓)'),
               ),
             ],
           ),

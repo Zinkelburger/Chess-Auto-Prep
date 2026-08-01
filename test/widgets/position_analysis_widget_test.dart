@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:chess_auto_prep/models/position_analysis.dart';
 import 'package:chess_auto_prep/widgets/position_analysis_widget.dart';
 
 void main() {
@@ -26,5 +28,52 @@ void main() {
     expect(find.text('Positions'), findsOneWidget);
     expect(find.text('Details'), findsOneWidget);
     expect(find.byType(PositionAnalysisWidget), findsOneWidget);
+  });
+
+  testWidgets('down/up arrows step through the weak-positions list', (
+    tester,
+  ) async {
+    final analysis = PositionAnalysis();
+    for (final entry in {'fen-mid': 5, 'fen-low': 1, 'fen-high': 9}.entries) {
+      analysis.addPositionStats(
+        PositionStats(
+          fen: entry.key,
+          games: 10,
+          wins: entry.value,
+          losses: 10 - entry.value,
+        ),
+      );
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 400,
+              height: 800,
+              child: PositionAnalysisWidget(
+                playerIsWhite: true,
+                analysis: analysis,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The screen's Focus owns key events and forwards ↓/↑ to the list.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(find.text('1 of 3'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(find.text('2 of 3'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(find.text('1 of 3'), findsOneWidget);
   });
 }

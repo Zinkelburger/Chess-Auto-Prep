@@ -38,9 +38,9 @@ import '../services/unified_analysis_builder.dart';
 import '../theme/app_colors.dart';
 import '../widgets/engine/engine_gate.dart';
 import '../widgets/engine_weakness_dialog.dart';
+import '../widgets/app_breadcrumb_trail.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/app_settings_button.dart';
-import '../widgets/jobs_status_button.dart';
 import '../widgets/info_hint.dart';
 import '../widgets/position_analysis_widget.dart';
 import 'player_selection_screen.dart';
@@ -95,7 +95,10 @@ abstract class _AnalysisScreenStateBase extends State<AnalysisScreen> {
   int _evalCompleted = 0;
   int _evalTotal = 0;
 
-  bool get _hasEvals => _engineEvals.isNotEmpty;
+  /// True once this player has engine evals to show. A run in flight counts:
+  /// it starts by clearing the previous numbers, and without this the AppBar
+  /// button would flip its label back mid-run and resize the bar.
+  bool get _hasEvals => _engineEvals.isNotEmpty || _evalRunning;
 
   // ── Hole hunt state ─────────────────────────────────────────────────
   //
@@ -190,44 +193,23 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 16,
-        title: titleBlock,
+        title: AppBarTitleWithTrail(title: titleBlock),
         actions: [
           if (_currentPlayer != null) ..._buildColorControls(),
-          // Both engine actions stay rendered at all times and disable in
-          // place, so nothing in the AppBar moves when a job starts or stops.
+          // The one engine action that stays in the bar. It is rendered at all
+          // times and disables in place, so nothing in the AppBar moves when a
+          // job starts or stops; the two hunts live in the kebab beside it.
           TextButton.icon(
-            icon: const Icon(Icons.psychology, size: 18),
+            icon: const Icon(Icons.refresh, size: 18),
             label: Text(_hasEvals ? 'Re-analyze' : 'Analyze with Engine'),
             onPressed: _canStartEngineJob ? _showWeaknessConfig : null,
           ),
-          Tooltip(
-            message:
-                'Hunt exploitable holes from the opposite side '
-                '(coverage gaps, refutations, expectimax traps) — '
-                'not just bad raw evals',
-            child: TextButton.icon(
-              icon: const Icon(Icons.gps_fixed, size: 18),
-              label: const Text('Find Holes'),
-              onPressed: _canStartEngineJob ? _showHoleHuntConfig : null,
-            ),
-          ),
-          Tooltip(
-            message:
-                'Hunt tricky near-best moves and novelties for the '
-                'opposite side — moves that score better in practice '
-                'than the engine-best move',
-            child: TextButton.icon(
-              icon: const Icon(Icons.auto_fix_high, size: 18),
-              label: const Text('Find Tricks'),
-              onPressed: _canStartEngineJob ? _showTrickHuntConfig : null,
-            ),
-          ),
+          _buildActionsMenu(),
           IconButton(
             icon: const Icon(Icons.person_search),
             tooltip: 'Select Player',
             onPressed: _showPlayerSelection,
           ),
-          const JobsStatusButton(),
           const AppSettingsButton(),
           const AppModeMenuButton(),
         ],
@@ -281,20 +263,24 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
           ),
         ),
       ),
-      _buildPositionActionsMenu(),
     ];
   }
 
-  /// Kebab with the position handoffs (formerly buttons under the board).
-  /// Everything saves as a *line* in a study; puzzle-ness is a marker the
+  /// Kebab holding everything that isn't the primary engine run: the two
+  /// opponent hunts, then the position handoffs (formerly buttons under the
+  /// board). Handoffs save a *line* in a study; puzzle-ness is a marker the
   /// user sets on a move inside the study ("Puzzle starts here"), not a
   /// separate authored artifact.
-  Widget _buildPositionActionsMenu() {
+  Widget _buildActionsMenu() {
     return PopupMenuButton<String>(
       icon: const Icon(Icons.more_vert, size: 18),
-      tooltip: 'Position actions',
+      tooltip: 'More actions',
       onSelected: (action) {
         switch (action) {
+          case 'find_holes':
+            unawaited(_showHoleHuntConfig());
+          case 'find_tricks':
+            unawaited(_showTrickHuntConfig());
           case 'add_line':
             unawaited(_boardActions.addCurrentLineToStudy());
           case 'open_games':
@@ -302,6 +288,44 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
         }
       },
       itemBuilder: (_) => [
+        PopupMenuItem(
+          value: 'find_holes',
+          enabled: _canStartEngineJob,
+          child: ListTile(
+            enabled: _canStartEngineJob,
+            leading: const Icon(Icons.gps_fixed, size: 20),
+            title: const Text('Find holes…'),
+            trailing: const InfoHint(
+              'Attacks this player\'s games from the other side and reports\n'
+              'where the lines can be beaten: strong moves the games never\n'
+              'answer, moves with a verified refutation, and traps a human is\n'
+              'likely to fall into. Not the same as Analyze with Engine, which\n'
+              'only scores positions by raw eval — results here are ranked by\n'
+              'reach probability × gain, so it stays a short list.',
+            ),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        PopupMenuItem(
+          value: 'find_tricks',
+          enabled: _canStartEngineJob,
+          child: ListTile(
+            enabled: _canStartEngineJob,
+            leading: const Icon(Icons.auto_fix_high, size: 20),
+            title: const Text('Find tricks…'),
+            trailing: const InfoHint(
+              'Plays the other side of this player\'s games and hunts moves\n'
+              'that are close to engine-best but poisonous in practice —\n'
+              'including novelties the games never faced. A move is reported\n'
+              'when the mistakes it invites outweigh what it concedes, ranked\n'
+              'by reach probability × net gain.',
+            ),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuDivider(),
         PopupMenuItem(
           value: 'add_line',
           enabled: _boardActions.hasPosition,

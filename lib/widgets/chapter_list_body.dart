@@ -14,6 +14,7 @@ import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/storage/storage_factory.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
+import 'common/list_search_field.dart';
 import 'layout/empty_state_placeholder.dart';
 
 class ChapterListBody extends StatefulWidget {
@@ -37,8 +38,12 @@ class _ChapterListBodyState extends State<ChapterListBody> {
   List<RepertoireMetadata> _chapters = [];
   bool _isLoading = true;
   String? _loadError;
+  String _search = '';
 
   String get _dirPath => widget.repertoire.filePath;
+
+  List<RepertoireMetadata> get _visibleChapters =>
+      _chapters.where((c) => matchesSearch(_search, c.name)).toList();
 
   @override
   void initState() {
@@ -113,35 +118,66 @@ class _ChapterListBodyState extends State<ChapterListBody> {
     }
 
     if (_chapters.isEmpty) {
-      return EmptyStatePlaceholder(
-        icon: Icons.menu_book,
-        title: 'No Chapters Yet',
-        subtitle:
-            'Add a chapter (e.g. "King\'s Gambit") to start organizing '
-            'this repertoire',
-        actionLabel: 'Add Chapter',
-        actionIcon: Icons.add,
-        onAction: _showCreateDialog,
+      return Column(
+        children: [
+          _buildToolbar(),
+          const Divider(height: 1, thickness: 1),
+          const Expanded(
+            child: EmptyStatePlaceholder(
+              icon: Icons.menu_book,
+              title: 'No chapters yet',
+              subtitle:
+                  'Add a chapter (e.g. "King\'s Gambit") to start organizing '
+                  'this repertoire.',
+            ),
+          ),
+        ],
       );
     }
 
-    return Stack(
+    final chapters = _visibleChapters;
+    return Column(
       children: [
-        ListView.builder(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-          itemCount: _chapters.length,
-          itemBuilder: (context, index) => _buildChapterCard(_chapters[index]),
-        ),
-        Positioned(
-          right: 16,
-          bottom: 16,
-          child: FloatingActionButton.extended(
-            onPressed: _showCreateDialog,
-            icon: const Icon(Icons.add),
-            label: const Text('Add Chapter'),
-          ),
+        _buildToolbar(),
+        const Divider(height: 1, thickness: 1),
+        Expanded(
+          child: chapters.isEmpty
+              ? Center(
+                  child: Text(
+                    'No chapter matches "$_search".',
+                    style: const TextStyle(color: AppColors.onSurfaceMuted),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                  itemCount: chapters.length,
+                  itemBuilder: (context, index) =>
+                      _buildChapterCard(chapters[index]),
+                ),
         ),
       ],
+    );
+  }
+
+  Widget _buildToolbar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: ListSearchField(
+              hintText: 'Search chapters',
+              onChanged: (value) => setState(() => _search = value),
+            ),
+          ),
+          const SizedBox(width: 12),
+          FilledButton.icon(
+            onPressed: _showCreateDialog,
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Add chapter'),
+          ),
+        ],
+      ),
     );
   }
 

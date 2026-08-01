@@ -140,50 +140,13 @@ mixin _PgnViewerLineActions on _PgnViewerWidgetStateBase {
 
   /// Move data from the game start to [node]: the mainline up to the branch
   /// point, then the variation path. Null when the node can't be located.
-  List<PgnNodeData>? _lineToVariationNode(MoveNode node, int branchPly) {
-    final roots = _variationsByPly[branchPly];
-    if (roots == null) return null;
-    final path = _findPathToNode(node, roots);
-    if (path == null) return null;
-    return [
-      for (int i = 0; i < branchPly && i < _moveHistory.length; i++)
-        _moveHistory[i],
-      for (final n in path)
-        PgnNodeData(
-          san: n.san,
-          comments: (n.comment != null && n.comment!.trim().isNotEmpty)
-              ? [n.comment!.trim()]
-              : null,
-          nags: (n.nags != null && n.nags!.isNotEmpty)
-              ? List<int>.from(n.nags!)
-              : null,
-        ),
-    ];
-  }
+  List<PgnNodeData>? _lineToVariationNode(MoveNode node, int branchPly) =>
+      _m.lineToVariationNode(node, branchPly);
 
   /// Serialize a single line to PGN: `[FEN]`/`[SetUp]` headers when the game
   /// starts from a custom position, then numbered movetext (comments and
   /// NAGs of the source moves included).
-  String _buildLinePgn(List<PgnNodeData> line) {
-    final headers = <String, String>{};
-    final fen = _game?.headers['FEN'];
-    if (fen != null && fen.isNotEmpty) {
-      headers['FEN'] = fen;
-      headers['SetUp'] = '1';
-    }
-    final root = PgnNode<PgnNodeData>();
-    PgnNode<PgnNodeData> parent = root;
-    for (final data in line) {
-      final child = PgnChildNode<PgnNodeData>(data);
-      parent.children.add(child);
-      parent = child;
-    }
-    return PgnGame<PgnNodeData>(
-      headers: headers,
-      moves: root,
-      comments: const [],
-    ).makePgn().trim();
-  }
+  String _buildLinePgn(List<PgnNodeData> line) => _m.buildLinePgn(line);
 
   String _suggestChapterName(List<PgnNodeData> line) {
     final coords = coordsAtPly(
@@ -211,115 +174,22 @@ mixin _PgnViewerLineActions on _PgnViewerWidgetStateBase {
   Future<void> _addLineToStudy(List<PgnNodeData> line) async {
     if (line.isEmpty) return;
     final pgn = _buildLinePgn(line);
-    final result = await showDialog<AddToStudyResult>(
-      context: context,
-      builder: (_) =>
-          AddToStudyDialog(initialChapterName: _suggestChapterName(line)),
+    await runAddToStudyFlow(
+      context,
+      suggestedChapterName: _suggestChapterName(line),
+      buildPgn: (_) => pgn,
+      viewSanLine: [for (final data in line) data.san],
     );
-    if (result == null || !mounted) return;
-
-    final study = context.read<StudyController>();
-    final appState = context.read<AppState>();
-    try {
-      final path =
-          result.existingPath ??
-          await StorageFactory.instance.studyFilePath(result.newStudyName!);
-      await study.addChapterToStudyFile(path, result.chapterName, pgn);
-      if (!mounted) return;
-      showAppSnackBar(
-        context,
-        'Added "${result.chapterName}" to ${result.studyName}',
-        actionLabel: 'Open',
-        onAction: () async {
-          await study.openStudy(path);
-          study.selectChapter(study.doc.chapters.length - 1);
-          appState.pushMode(
-            AppMode.study,
-            historyLabel: 'Study: ${result.studyName}',
-          );
-        },
-      );
-    } catch (e) {
-      debugPrint('Add line to study failed: $e');
-      if (mounted) {
-        showAppSnackBar(context, 'Failed to add line to study.', isError: true);
-      }
-    }
   }
 
   @override
   void _notifyCommentsChanged() {
     if (widget.onCommentsChanged == null || _moveHistory.isEmpty) return;
-    final movetext = _buildAnnotatedMovetext();
+    // The model serializes mainline + saved sidelines (comments and NAGs
+    // intact, ephemeral nodes excluded), headers stripped for splicing back
+    // under the game's own headers.
+    final movetext = _m.buildAnnotatedMovetext();
     _lastEmittedMovetext = _normalizeMovetext(movetext);
     widget.onCommentsChanged!(movetext);
-  }
-
-  /// Serialize the current mainline *and* every saved sideline variation (with
-  /// their comments and NAGs) back to PGN movetext. Uses dartchess'
-  /// [PgnGame.makePgn] — which handles variations, NAGs, and move numbering for
-  /// games that start from a custom FEN — then strips the header block so the
-  /// caller can splice it back under the game's existing headers.
-  ///
-  /// Ephemeral (scratch) analysis nodes are excluded; only permanent edits are
-  /// written.
-  String _buildAnnotatedMovetext() {
-    final headers = <String, String>{};
-    final fen = _game?.headers['FEN'];
-    if (fen != null && fen.isNotEmpty) headers['FEN'] = fen;
-    final result = _game?.headers['Result'];
-    if (result != null && result.isNotEmpty) headers['Result'] = result;
-
-    final serializable = PgnGame<PgnNodeData>(
-      headers: headers,
-      moves: _buildPgnTree(),
-      comments: _game?.comments ?? const [],
-    );
-    return _stripHeaders(serializable.makePgn()).trim();
-  }
-
-  /// Rebuild a dartchess move tree from the flat mainline [_moveHistory] plus
-  /// the per-ply sidelines in [_variationsByPly]. Inverts [extractPgnVariations]:
-  /// sidelines keyed at ply `p` are siblings of the mainline move at index `p`
-  /// (i.e. `children[1..]` of the same parent). Ephemeral nodes are skipped.
-  PgnNode<PgnNodeData> _buildPgnTree() {
-    final root = PgnNode<PgnNodeData>();
-    PgnNode<PgnNodeData> parent = root;
-
-    void addSidelines(int ply) {
-      final roots = _variationsByPly[ply];
-      if (roots == null) return;
-      for (final sideline in roots) {
-        if (sideline.isEphemeral) continue;
-        parent.children.add(_moveNodeToPgnChild(sideline));
-      }
-    }
-
-    for (int i = 0; i < _moveHistory.length; i++) {
-      final mainChild = PgnChildNode<PgnNodeData>(_moveHistory[i]);
-      parent.children.add(mainChild); // index 0 = mainline continuation
-      addSidelines(i); // alternatives to _moveHistory[i], sharing `parent`
-      parent = mainChild;
-    }
-    // Sidelines branching after the final mainline move (user-added only).
-    addSidelines(_moveHistory.length);
-    return root;
-  }
-
-  PgnChildNode<PgnNodeData> _moveNodeToPgnChild(MoveNode node) {
-    final hasComment = node.comment != null && node.comment!.trim().isNotEmpty;
-    final hasNags = node.nags != null && node.nags!.isNotEmpty;
-    final child = PgnChildNode<PgnNodeData>(
-      PgnNodeData(
-        san: node.san,
-        comments: hasComment ? [node.comment!.trim()] : null,
-        nags: hasNags ? List<int>.from(node.nags!) : null,
-      ),
-    );
-    for (final c in node.children) {
-      if (c.isEphemeral) continue;
-      child.children.add(_moveNodeToPgnChild(c));
-    }
-    return child;
   }
 }

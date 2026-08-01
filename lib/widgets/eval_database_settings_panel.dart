@@ -112,31 +112,28 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
   Widget build(BuildContext context) {
     if (_featureVisible != true) return const SizedBox.shrink();
 
+    // No heading of its own: the enclosing settings card already names this
+    // section, and two titles stacked read as two sections.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(
-              'Database Downloads',
-              style: Theme.of(context).textTheme.titleMedium,
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            icon: const Icon(Icons.info_outline, size: 16),
+            label: const Text(
+              'What offline evals are',
+              style: TextStyle(fontSize: 12),
             ),
-            const SizedBox(width: 4),
-            IconButton(
-              icon: const Icon(Icons.info_outline, size: 18),
-              tooltip: 'About offline ChessDB evals',
-              onPressed: () => _showInfoDialog(context),
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
             ),
-          ],
+            onPressed: () => _showInfoDialog(context),
+          ),
         ),
         const SizedBox(height: 4),
-        const Text(
-          'Download once, point at the data/ folder, and evals use local data '
-          'first — then API, then Stockfish.',
-          style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
-        ),
         if (!_libraryAvailable) ...[
-          const SizedBox(height: 12),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(10),

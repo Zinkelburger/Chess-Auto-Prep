@@ -119,9 +119,28 @@ final class TrainStudy extends TrainerHandoff {
 
 /// Open a study for editing in Study mode.
 final class EditStudy extends PendingHandoff {
-  const EditStudy({required this.studyPath});
+  const EditStudy({
+    required this.studyPath,
+    this.chapterName,
+    this.chapterIndex,
+    this.initialSanLine,
+  });
 
   final String studyPath;
+
+  /// Chapter to select after opening, matched by name — the *last* match
+  /// wins, since add-to-study appends. Indices are not used because chapters
+  /// can be reordered between the handoff and a breadcrumb re-delivery.
+  final String? chapterName;
+
+  /// Chapter to select by position — the Browse↔Edit toggle, where the
+  /// producer is showing the same file this handoff opens, so the index is
+  /// exact. Wins over [chapterName] when both are set.
+  final int? chapterIndex;
+
+  /// SAN sequence to park the cursor on (its deepest reachable node) — the
+  /// "View line" target of an add-to-study confirmation.
+  final List<String>? initialSanLine;
 
   @override
   AppMode get targetMode => AppMode.study;
@@ -130,13 +149,22 @@ final class EditStudy extends PendingHandoff {
   String get defaultHistoryLabel => 'Study: ${_displayName(studyPath)}';
 }
 
+/// Which side-panel tab the PGN viewer should land on.
+///
+/// A handoff normally carries a question, not just a file: "how did this game
+/// go" (game), "where did it leave my book" (line), "what did the engine make
+/// of it" (analysis). The viewer opens on the tab that answers the one asked.
+enum PgnViewerTab { game, line, analysis }
+
 /// Open a PGN collection in the PGN Viewer.
 final class OpenPgnViewer extends PendingHandoff {
   const OpenPgnViewer({
     required this.pgnPath,
     this.sliceFen,
     this.gameId,
+    this.gameIndex,
     this.autoAnalyze = false,
+    this.tab = PgnViewerTab.game,
   });
 
   final String pgnPath;
@@ -150,9 +178,17 @@ final class OpenPgnViewer extends PendingHandoff {
   /// because the collection's order can change between refreshes.
   final String? gameId;
 
+  /// Jump to the game at this file position — the Edit↔Browse toggle on a
+  /// study, whose chapter order *is* the file order the producer was showing.
+  /// Never used for the games cache (see [gameId]).
+  final int? gameIndex;
+
   /// Start the engine game review after opening, unless cached evals already
-  /// cover the game (the Games page's "Review" button).
+  /// cover the game (the mistake counts on a game card).
   final bool autoAnalyze;
+
+  /// Tab to select on arrival.
+  final PgnViewerTab tab;
 
   @override
   AppMode get targetMode => AppMode.pgnViewer;

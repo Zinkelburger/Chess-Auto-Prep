@@ -7,9 +7,9 @@ import 'package:flutter/foundation.dart';
 
 import '../../models/tactics_position.dart';
 import '../../utils/app_messages.dart';
-import '../../utils/log.dart';
 import '../../utils/safe_change_notifier.dart';
 import '../engine/engine_lifecycle.dart';
+import '../games_library/game_review_store.dart';
 import '../jobs/repertoire_job.dart';
 import '../tactics_database.dart';
 import '../tactics_import_service.dart' show ImportResult, TacticsImportService;
@@ -66,6 +66,26 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
       totalNodes: total ?? _jobProgress.totalNodes,
     );
     job.updateProgress(_jobProgress);
+  }
+
+  /// How far the running pass has got, for the review strip's progress bar.
+  /// Zero when nothing is running.
+  double get progressFraction => _jobProgress.fraction;
+
+  /// Games finished / games this pass set out to review. Both zero before the
+  /// first game report arrives.
+  int get gamesDone => _jobProgress.nodesProcessed;
+  int get gamesTotal => _jobProgress.totalNodes;
+
+  /// Games whose mistake counts this coordinator has filed (see
+  /// [GameReviewStore]) since the current run started.
+  int gamesReviewed = 0;
+
+  /// File one game's verdict. The store is app-wide and notifies, so the games
+  /// list picks the counts up without this coordinator knowing it exists.
+  void _recordReview(String dedupKey, ReviewCounts counts) {
+    gamesReviewed++;
+    unawaited(GameReviewStore.instance.record(dedupKey, counts));
   }
 
   void _onGameProgress(double fraction, int gamesDone, int gamesTotal) {
@@ -199,8 +219,13 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
   }
 
   /// Register a starting run with the app-wide [JobManager] — so every
-  /// screen can see and cancel it — and lease the shared engine pool so a
+  /// screen can see and pause it — and lease the shared engine pool so a
   /// mode switch can't dispose the workers mid-run.
+  ///
+  /// The run is marked [RepertoireJob.resumable]: stopping it is a pause, not
+  /// a cancel. Every game it has already reviewed keeps its counts (see
+  /// [_recordReview]) and is marked analyzed, so the next run picks up at the
+  /// first game it did not reach.
   void _beginJob(String label) {
     EngineLifecycle.instance.retainPool();
     _jobProgress = JobProgress.zero;
@@ -208,6 +233,7 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
       type: JobType.tacticsImport,
       label: label,
     );
+    job.resumable = true;
     job.onCancel = cancelImport;
     job.updateStatus(JobStatus.running);
   }
@@ -240,6 +266,7 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
     importStatus = 'Resuming analysis…';
     isImporting = true;
     newPositionsFound = 0;
+    gamesReviewed = 0;
     _beginJob('Analyze stored games');
     notifyListeners();
 
@@ -254,6 +281,7 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
         progressCallback: _onProgress,
         onPositionFound: _onPositionFound,
         onGameProgress: _onGameProgress,
+        onGameReviewed: _recordReview,
       );
 
       await _flushFoundPositions();
@@ -284,9 +312,20 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
   /// `false` when it was skipped (another import already running) or
   /// cancelled partway. Throws [TacticsImportUsernameRequired] for an empty
   /// username; other failures propagate to the caller.
+  ///
+  /// Pass [pgnContent] to review games that are already downloaded (the
+  /// recent-games list's copy) instead of fetching them again — same job, same
+  /// bookkeeping, one less round trip. See
+  /// [TacticsImportService.reviewFetchedGames].
+  ///
+  /// [forceDedupKeys] names games in [pgnContent] to analyze even if they are
+  /// already marked analyzed — how the caller says "these still have no
+  /// mistake counts, look at them again".
   Future<bool> import({
     required TacticsImportSource source,
     required TacticsImportParams params,
+    String? pgnContent,
+    Set<String> forceDedupKeys = const {},
   }) async {
     if (isImporting) return false;
     if (params.username.isEmpty) {
@@ -302,7 +341,8 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
     importStatus = 'Initializing...';
     isImporting = true;
     newPositionsFound = 0;
-    _beginJob('Tactics import — ${params.username}');
+    gamesReviewed = 0;
+    _beginJob('Review games — ${params.username}');
     notifyListeners();
 
     try {
@@ -313,7 +353,20 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
           : null;
 
       final ImportResult result;
-      if (source == TacticsImportSource.lichess) {
+      if (pgnContent != null && pgnContent.trim().isNotEmpty) {
+        result = await importService.reviewFetchedGames(
+          pgnContent: pgnContent,
+          username: params.username,
+          depth: depth,
+          maxCores: cores,
+          mapChessComEloForMaia: source == TacticsImportSource.chessCom,
+          forceDedupKeys: forceDedupKeys,
+          progressCallback: _onProgress,
+          onPositionFound: _onPositionFound,
+          onGameProgress: _onGameProgress,
+          onGameReviewed: _recordReview,
+        );
+      } else if (source == TacticsImportSource.lichess) {
         result = await importService.importGamesFromLichess(
           params.username,
           maxGames: params.maxGames,
@@ -323,6 +376,7 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
           progressCallback: _onProgress,
           onPositionFound: _onPositionFound,
           onGameProgress: _onGameProgress,
+          onGameReviewed: _recordReview,
         );
       } else {
         result = await importService.importGamesFromChessCom(
@@ -334,6 +388,7 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
           progressCallback: _onProgress,
           onPositionFound: _onPositionFound,
           onGameProgress: _onGameProgress,
+          onGameReviewed: _recordReview,
         );
       }
 
@@ -370,60 +425,6 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
             : null,
       );
     }
-  }
-
-  /// Fetch new games since the last fetch for every configured platform.
-  /// Used by startup auto-fetch. Failures are logged and dismissed; a
-  /// successful fetch reports its timestamp through [onFetched] so the
-  /// caller can persist it.
-  Future<void> autoFetch({
-    String? lichessUsername,
-    String? chesscomUsername,
-    DateTime? lichessLastFetch,
-    DateTime? chesscomLastFetch,
-    required int depth,
-    required int cores,
-    void Function(TacticsImportSource source, DateTime fetchedAt)? onFetched,
-  }) async {
-    Future<void> fetchOne(
-      TacticsImportSource source,
-      String? username,
-      DateTime? since,
-    ) async {
-      if (username == null || username.isEmpty) return;
-      try {
-        final imported = await import(
-          source: source,
-          params: TacticsImportParams(
-            username: username,
-            mode: TacticsImportMode.sinceDate,
-            since: since ?? DateTime.now().subtract(const Duration(days: 14)),
-            depth: depth,
-            cores: cores,
-          ),
-        );
-        if (imported) {
-          onFetched?.call(source, DateTime.now());
-        }
-      } catch (e) {
-        log.w(
-          'Auto-fetch ${source.name} failed: $e',
-          name: 'TacticsImportCoordinator',
-        );
-        dismissImportStatus();
-      }
-    }
-
-    await fetchOne(
-      TacticsImportSource.lichess,
-      lichessUsername,
-      lichessLastFetch,
-    );
-    await fetchOne(
-      TacticsImportSource.chessCom,
-      chesscomUsername,
-      chesscomLastFetch,
-    );
   }
 
   /// Ask the running import to stop. `isImporting` stays true until the run

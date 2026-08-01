@@ -82,11 +82,8 @@ mixin _TacticsKeyboardActions
         _pgnViewerController.goBack();
       }
     }),
-    KeyBinding.run(LogicalKeyboardKey.keyN, 'Skip/next position', () {
-      if (_session.hasNext) {
-        _loadCurrentPosition(_session.skipPosition());
-      }
-    }),
+    // No N alias for skip: S/↓ already do it, and N is the knight — it must
+    // stay a typed move character, never navigation.
     // 'A' is the mnemonic but it's the a-file, so it's swallowed as a typed
     // move character while the move box has focus (its default state). 'V' is
     // never part of SAN/UCI, so it stays [KeyBinding.safeWhileTypingMoves] and
@@ -113,11 +110,23 @@ mixin _TacticsKeyboardActions
         'Focus move input',
         () => TacticsControlPanel.moveInputKey.currentState?.focus(),
       ),
-    KeyBinding(LogicalKeyboardKey.escape, 'Back to Tactic tab', () {
-      if (_tabController.index == 0) return false;
-      _tabController.animateTo(0);
-      return true;
-    }),
+    // Same app-wide contract as the PGN viewer's Escape: leave whatever you are
+    // in, innermost first. Here that is the PGN/Browse tab, then the puzzle
+    // itself — which is what the app-bar back arrow does, so the key and the
+    // button can never disagree about what "back" means.
+    KeyBinding(
+      LogicalKeyboardKey.escape,
+      'Back to Tactic tab / leave puzzle',
+      () {
+        if (_tabController.index != 0) {
+          _tabController.animateTo(0);
+          return true;
+        }
+        if (!_session.hasActivePosition) return false;
+        _onBackRequested();
+        return true;
+      },
+    ),
   ];
 
   /// Core trainer key dispatch, shared by the panel's own [Focus] handler and

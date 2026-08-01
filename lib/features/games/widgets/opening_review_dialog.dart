@@ -4,30 +4,41 @@ import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../models/recent_game.dart';
 import '../services/opening_review.dart';
+import 'my_repertoires_panel.dart';
 import 'opening_review_detail_dialog.dart';
 
 /// All opening mistakes from the recent-games window in one place — the
-/// aggregate complement of the per-game "Left book" chip, so leaks can be
+/// aggregate complement of the per-game "Left book" line, so leaks can be
 /// reviewed like a tactics queue instead of by opening every game.
 ///
-/// Each entry deep-links into the repertoire builder at the deviation point;
-/// the game links open the individual games. The dialog pops itself before
-/// invoking any callback (they all navigate away from the Tactics home).
+/// Two ways out of an entry, and they are deliberately different verbs:
+/// [onOpenGame] opens one of the games in the viewer, where the Line tab shows
+/// the prep beside it, and [onEditLine] goes to the Repertoire Builder to
+/// *change* the book. Reviewing is the common case, so it is the one the game
+/// links and the detail view's primary action lead to.
+///
+/// The dialog pops itself before invoking any callback (they all navigate away
+/// from the Tactics home).
 class OpeningReviewDialog extends StatelessWidget {
   const OpeningReviewDialog({
     super.key,
     required this.data,
-    required this.sinceDays,
-    required this.onOpenLine,
+    required this.windowLabel,
+    required this.onEditLine,
     required this.onOpenGame,
-    required this.onOpenSettings,
   });
 
   final OpeningReviewData data;
-  final int sinceDays;
-  final ValueChanged<OpeningReviewEntry> onOpenLine;
+
+  /// How the current window reads ("last 20 games"), so the copy here names
+  /// the same slice the list above it shows.
+  final String windowLabel;
+
+  /// Open the entry's chapter in the Repertoire Builder, to edit the prep.
+  final ValueChanged<OpeningReviewEntry> onEditLine;
+
+  /// Open one of the entry's games in the PGN viewer, on its Line tab.
   final ValueChanged<RecentGame> onOpenGame;
-  final VoidCallback onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -56,14 +67,10 @@ class OpeningReviewDialog extends StatelessWidget {
         icon: Icons.menu_book,
         message:
             'No repertoire is designated for your games yet, so there is '
-            'nothing to compare them against.\n\nPick your repertoire folders '
-            'in Settings → My repertoires and this review will show every '
-            'game where you left book.',
-        buttonLabel: 'Open Settings',
-        onPressed: () {
-          Navigator.of(context).pop();
-          onOpenSettings();
-        },
+            'nothing to compare them against.\n\nPick the books you play and '
+            'this review will show every game where you left them.',
+        buttonLabel: 'Pick my repertoires',
+        onPressed: () => showMyRepertoiresDialog(context),
       );
     }
     if (data.isEmpty) {
@@ -71,17 +78,15 @@ class OpeningReviewDialog extends StatelessWidget {
         context,
         icon: Icons.verified_outlined,
         message:
-            'You stayed in book in every game '
-            '${sinceDays > 0 ? 'of the last $sinceDays days' : 'shown'} — '
-            'your prep held up. Nothing to review here.',
+            'You stayed in book in every game of your $windowLabel. '
+            'Nothing to review here.',
       );
     }
-    final windowLabel = sinceDays > 0 ? 'the last $sinceDays days' : 'the list';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Everywhere your games left your book in $windowLabel, '
+          'Everywhere your games left your book in your $windowLabel, '
           'most repeated first. Click an entry to review it — the game and '
           'your book line side by side.',
           style: AppTextStyles.body.copyWith(
@@ -97,7 +102,7 @@ class OpeningReviewDialog extends StatelessWidget {
           for (final entry in data.mistakes)
             _EntryTile(
               entry: entry,
-              onOpenLine: onOpenLine,
+              onEditLine: onEditLine,
               onOpenGame: onOpenGame,
             ),
         ],
@@ -110,7 +115,7 @@ class OpeningReviewDialog extends StatelessWidget {
             _EntryTile(
               entry: entry,
               bookEnd: true,
-              onOpenLine: onOpenLine,
+              onEditLine: onEditLine,
               onOpenGame: onOpenGame,
             ),
         ],
@@ -165,14 +170,14 @@ class OpeningReviewDialog extends StatelessWidget {
 class _EntryTile extends StatelessWidget {
   const _EntryTile({
     required this.entry,
-    required this.onOpenLine,
+    required this.onEditLine,
     required this.onOpenGame,
     this.bookEnd = false,
   });
 
   final OpeningReviewEntry entry;
   final bool bookEnd;
-  final ValueChanged<OpeningReviewEntry> onOpenLine;
+  final ValueChanged<OpeningReviewEntry> onEditLine;
   final ValueChanged<RecentGame> onOpenGame;
 
   @override
@@ -191,16 +196,31 @@ class _EntryTile extends StatelessWidget {
         // both dialogs (detail first, then this list) before switching.
         onTap: () => showDialog<void>(
           context: context,
-          builder: (_) => OpeningReviewDetailDialog(
+          builder: (_) => OpeningReviewDetailDialog.forEntry(
             entry: entry,
             bookEnd: bookEnd,
+            games: [
+              for (final game in entry.games)
+                ReviewGameSource(
+                  label:
+                      'vs ${game.meWhite == true ? game.black : game.white} '
+                      '(${game.dateDisplayShort})',
+                  pgn: game.record.pgn,
+                  stableKey: game.record.dedupKey,
+                ),
+            ],
+            // Every game in an entry is one of mine from the same side of the
+            // book, so the first game's colour orients the board.
+            flipped:
+                entry.games.isNotEmpty && entry.games.first.meWhite == false,
             onEditInBuilder: () {
               Navigator.of(context)
                 ..pop()
                 ..pop();
-              onOpenLine(entry);
+              onEditLine(entry);
             },
-            onOpenGame: (game) {
+            onOpenGame: (index) {
+              final game = entry.games[index];
               Navigator.of(context)
                 ..pop()
                 ..pop();

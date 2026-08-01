@@ -16,6 +16,7 @@ class RecentGame {
     required this.myUsername,
     required this.meWhite,
     required this.sans,
+    this.finalFen,
   });
 
   final GameRecord record;
@@ -33,6 +34,10 @@ class RecentGame {
 
   /// Mainline SAN moves (feeds the move count and the deviation walk).
   final List<String> sans;
+
+  /// The position the game ended in, for the row's board preview. Null when
+  /// the mainline could not be replayed (a from-position game).
+  final String? finalFen;
 
   /// Filled in after the list loads; null until computed (or when no
   /// repertoire is designated for my color).
@@ -67,6 +72,60 @@ class RecentGame {
   }
 
   int get moveCount => (sans.length + 1) ~/ 2;
+
+  /// Who I played, or null when neither name is mine.
+  String? get opponent => switch (meWhite) {
+    true => black,
+    false => white,
+    null => null,
+  };
+
+  /// ECO code, when the platform sent one ("B22").
+  String? get ecoCode {
+    final eco = record.headers['ECO']?.trim();
+    if (eco == null || eco.isEmpty || eco == '?') return null;
+    // Chess.com puts the opening *name* in ECO for some exports; a real code
+    // is a letter and two digits.
+    return RegExp(r'^[A-E]\d\d$').hasMatch(eco) ? eco : null;
+  }
+
+  /// Opening name, from Lichess's `Opening` header or Chess.com's `ECOUrl`
+  /// slug. Null when neither is present — nothing here is guessed from the
+  /// moves, since a wrong opening name is worse than none.
+  String? get openingName {
+    final named = record.headers['Opening']?.trim();
+    if (named != null && named.isNotEmpty && named != '?') return named;
+    final url = record.headers['ECOUrl']?.trim();
+    if (url == null || url.isEmpty) return null;
+    final slug = url.split('/').where((p) => p.isNotEmpty).lastOrNull;
+    if (slug == null || slug.isEmpty) return null;
+    return slug.replaceAll('-', ' ').trim();
+  }
+
+  /// "B22 · Sicilian Defense, Alapin", dropping whichever half is missing.
+  String? get openingDisplay {
+    final parts = [
+      if (ecoCode != null) ecoCode!,
+      if (openingName != null) openingName!,
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
+
+  /// The game's opening moves as numbered movetext, for the row's one-line
+  /// preview: enough to recognise which of your games this was.
+  String movesPreview({int plies = 8}) {
+    final shown = sans.take(plies).toList();
+    if (shown.isEmpty) return '';
+    final buf = StringBuffer();
+    for (var i = 0; i < shown.length; i++) {
+      if (i.isEven) buf.write('${i ~/ 2 + 1}. ');
+      buf
+        ..write(shown[i])
+        ..write(' ');
+    }
+    final text = buf.toString().trimRight();
+    return sans.length > shown.length ? '$text …' : text;
+  }
 
   /// The game's web URL (chess.com `Link`, lichess `Site`), when present.
   String? get gameUrl {

@@ -12,6 +12,7 @@
 library;
 
 import 'dart:convert';
+import 'package:dartchess/dartchess.dart' show Position;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -23,12 +24,13 @@ import '../constants/ui_breakpoints.dart';
 import '../core/app_state.dart';
 import '../core/pgn_viewer_controller.dart';
 import '../core/pgn/solitaire_controller.dart';
-import '../core/study_controller.dart';
 import '../features/games/services/game_deviation_service.dart';
 import '../features/games/services/game_moves.dart';
 import '../features/games/services/my_repertoire_settings.dart';
-import '../features/games/services/game_auto_analysis_service.dart';
+import '../features/games/widgets/repertoire_line_panel.dart';
+import '../core/study_controller.dart';
 import '../services/games_library/game_filter.dart' show dedupKeyForHeaders;
+import '../services/storage/app_paths.dart';
 import '../services/lichess_auth_service.dart';
 import '../services/storage/storage_factory.dart';
 import '../services/game_analysis_controller.dart';
@@ -40,10 +42,10 @@ import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
 import '../utils/keyboard_shortcut_utils.dart';
+import '../widgets/app_breadcrumb_trail.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/app_settings_button.dart';
 import '../widgets/engine/engine_gate.dart';
-import '../widgets/jobs_status_button.dart';
 import '../widgets/layout/responsive_split_layout.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/engine/inline_engine_bar.dart';
@@ -52,8 +54,8 @@ import '../widgets/game_analysis_tab.dart';
 import '../widgets/game_nav_bar.dart';
 import '../widgets/game_search_dialog.dart';
 import '../widgets/info_hint.dart';
-import '../widgets/pgn/add_to_study_dialog.dart';
 import '../widgets/pgn/generate_repertoire_dialog.dart';
+import '../widgets/study/add_to_study_flow.dart';
 import '../widgets/pgn/pgn_annotation_panel.dart';
 import '../widgets/pgn/pgn_opening_tree_panel.dart';
 import '../widgets/pgn/pgn_perspective_button.dart';
@@ -66,6 +68,13 @@ import '../widgets/solitaire_trophy_cabinet.dart';
 part 'pgn_viewer_screen_app_bar.dart';
 part 'pgn_viewer_screen_panes.dart';
 part 'pgn_viewer_screen_repertoire.dart';
+
+/// Side-panel tab indices, shared by the tab bar, the handoff and the
+/// keyboard routing (an `animateTo(1)` that means "Analysis" breaks the day a
+/// tab is inserted before it — which is what happened when Line arrived).
+const int _kGameTab = 0;
+const int _kLineTab = 1;
+const int _kAnalysisTab = 2;
 
 class PgnViewerScreen extends StatefulWidget {
   const PgnViewerScreen({super.key});
@@ -85,6 +94,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   late final PgnViewerController _controller;
   @override
   late final PgnViewerWidgetController _pgnWidgetController;
+
+  /// Movetext cursor for the Line tab's book line, so arrow keys drive whichever
+  /// pane is on screen instead of always the game.
+  @override
+  late final PgnViewerWidgetController _lineWidgetController;
   @override
   late final GameAnalysisController _analysisController;
   @override
@@ -95,10 +109,16 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   bool _editMode = false;
 
   @override
+  bool _singleGameFocus = false;
+
+  @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    // Game · Line · Analysis — the three questions you can ask about the game
+    // on the board, all on the same board (see [_buildSidePanel]).
+    _tabController = TabController(length: 3, vsync: this);
     _pgnWidgetController = PgnViewerWidgetController();
+    _lineWidgetController = PgnViewerWidgetController();
     _analysisController = GameAnalysisController();
     _analysisController.addListener(_onAnalysisUpdate);
     _controller = PgnViewerController(
@@ -111,10 +131,19 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     );
     _controller.addListener(_onControllerUpdate);
     MyRepertoireSettings.instance.addListener(_onRepertoireDesignationsChanged);
-    // Tell the background auto-analysis job which game this screen shows, so
-    // it never races the viewer's own analysis on the same game.
-    GameAutoAnalysisService.instance.currentlyOpenGame = _currentGameDedupKey;
     windowManager.addListener(this);
+    // Leaving the Line tab hands the board back to the game: the tab you are
+    // reading owns the board, so flipping between them is a comparison of the
+    // same position rather than two viewers fighting over one board.
+    _tabController.addListener(() {
+      if (!mounted || _tabController.indexIsChanging) return;
+      if (_tabController.index == _kLineTab) {
+        if (!_lineTabVisited) setState(() => _lineTabVisited = true);
+        return;
+      }
+      final gamePosition = _gamePanePosition;
+      if (gamePosition != null) _controller.onPositionChanged(gamePosition);
+    });
     _controller.loadRecentFiles();
     _controller.loadCollections();
     _controller.loadSolitaireSettings();
@@ -160,6 +189,12 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   Future<void> _openFromHandoff(OpenPgnViewer handoff) async {
     final gameId = handoff.gameId;
+    // Arriving with one game named is a different job from opening a
+    // collection: the app bar's slice machinery (player presets, add-filter
+    // chip, filtered/total counter) is about carving a dataset up, and none of
+    // it applies to "show me this game". [_singleGameFocus] takes it off the
+    // bar; opening any file yourself brings it back.
+    _singleGameFocus = gameId != null;
 
     // Fast path: the requested game lives in the file that's already open
     // (Games page → Review → breadcrumb back → Review again). Reloading
@@ -173,16 +208,12 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         _controller.allGames.isNotEmpty;
     if (sameFileLoaded) {
       if (_currentGameIs(gameId)) {
-        if (handoff.autoAnalyze && !_controller.isSolitaireMode) {
-          _startAutoAnalysisForCurrentGame();
-        }
+        _applyHandoffTab(handoff);
         return;
       }
       if (await _goToGameById(gameId)) {
         if (!mounted) return;
-        if (handoff.autoAnalyze && !_controller.isSolitaireMode) {
-          _startAutoAnalysisForCurrentGame();
-        }
+        _applyHandoffTab(handoff);
         return;
       }
       // Not in the loaded copy (the cache gained games since) — fall through
@@ -195,8 +226,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       handoff.sliceFen,
       // A single-game handoff must not resurrect an old slice: it can hide
       // the target game and its filtered/total counter reads as noise when
-      // all you asked for was one game.
-      restoreSavedSlice: gameId == null,
+      // all you asked for was one game. Same for a file-position jump —
+      // a restored slice would shift the indices it was computed against.
+      restoreSavedSlice: gameId == null && handoff.gameIndex == null,
     );
     if (!mounted ||
         _controller.errorMessage != null ||
@@ -206,11 +238,30 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (gameId != null) {
       final found = await _goToGameById(gameId);
       if (!found || !mounted) return;
+    } else if (handoff.gameIndex != null &&
+        _controller.filteredGames.isNotEmpty) {
+      _controller.goToGame(
+        handoff.gameIndex!.clamp(0, _controller.filteredGames.length - 1),
+      );
     }
-    // Solitaire hides the Analysis tab entirely; don't fight the mode.
-    if (handoff.autoAnalyze && !_controller.isSolitaireMode) {
-      _startAutoAnalysisForCurrentGame();
+    _applyHandoffTab(handoff);
+  }
+
+  /// Land on the tab that answers the question the handoff asked, and start the
+  /// engine only when it was the engine's answer that was wanted.
+  ///
+  /// Solitaire hides the side-panel tabs entirely; don't fight the mode.
+  void _applyHandoffTab(OpenPgnViewer handoff) {
+    if (_controller.isSolitaireMode) return;
+    switch (handoff.tab) {
+      case PgnViewerTab.game:
+        _tabController.animateTo(_kGameTab);
+      case PgnViewerTab.line:
+        _showLineTab();
+      case PgnViewerTab.analysis:
+        _tabController.animateTo(_kAnalysisTab);
     }
+    if (handoff.autoAnalyze) _startAutoAnalysisForCurrentGame();
   }
 
   /// Whether the currently displayed game is [gameId].
@@ -219,8 +270,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     return key != null && key == gameId;
   }
 
-  /// Identity of the currently displayed game (also served to
-  /// [GameAutoAnalysisService] so its job skips the game on screen).
+  /// Identity of the currently displayed game — the games-library
+  /// [dedupKeyForHeaders], which is what a single-game handoff names.
   String? _currentGameDedupKey() {
     final games = _controller.filteredGames;
     if (games.isEmpty || _controller.currentGameIndex >= games.length) {
@@ -230,11 +281,18 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   Future<bool> _goToGameById(String gameId) async {
+    // Newest-first before locating it: this game came from the recent-games
+    // list, and the games cache's file order is a download log — the game you
+    // played five minutes ago sits wherever its batch landed ("Game 301 of
+    // 312"). Sorted, the counter agrees with the list you clicked from, and
+    // Prev/Next walk back through time instead of through fetch history.
+    _controller.sortNewestFirst();
     var index = _controller.filteredGames.indexWhere(
       (g) => dedupKeyForHeaders(g.headers) == gameId,
     );
     if (index < 0) {
       // A restored slice may hide the target game — widen to the whole file.
+      // (resetFilters re-applies the sort, so the order survives.)
       _controller.resetFilters();
       index = _controller.filteredGames.indexWhere(
         (g) => dedupKeyForHeaders(g.headers) == gameId,
@@ -254,7 +312,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// button, including persistence and trophy detection.
   void _startAutoAnalysisForCurrentGame() {
     if (_controller.filteredGames.isEmpty) return;
-    _tabController.animateTo(1);
+    _tabController.animateTo(_kAnalysisTab);
     if (_analysisController.isAnalyzing) return;
     if (_analysisController.evals.isNotEmpty) return;
     if (!EngineGate.ensureAvailable(context)) return;
@@ -306,7 +364,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   @override
   void dispose() {
     windowManager.removeListener(this);
-    GameAutoAnalysisService.instance.currentlyOpenGame = null;
     MyRepertoireSettings.instance.removeListener(
       _onRepertoireDesignationsChanged,
     );
@@ -341,6 +398,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   Future<void> _pickFile() async {
+    _singleGameFocus = false;
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pgn', 'txt'],
@@ -352,6 +410,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   Future<void> _pastePgn() async {
+    _singleGameFocus = false;
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     if (!mounted) return;
     await _controller.loadPgnContent(data?.text ?? '');
@@ -497,15 +556,70 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     return null;
   }
 
+  /// Open a book chapter in the Repertoire Builder — the deliberate trip to
+  /// *edit* the prep, as opposed to reviewing it on the Line tab.
   @override
-  void _openDeviationInBuilder() {
-    final report = _deviationReport;
-    if (report == null) return;
+  void _openInBuilder(DeviationReport report) {
     context.read<AppState>().switchToBuilder(
       repertoirePath: report.chapterPath,
       moveSequence: report.pathSans,
       historyLabel: 'Repertoire: ${report.chapterName}',
     );
+  }
+
+  /// Where the game's own movetext cursor is, so returning from the Line tab
+  /// restores the board instead of leaving a book position on it.
+  Position? _gamePanePosition;
+
+  /// Mainline SANs of the game on screen, memoized by game identity.
+  ///
+  /// Two reasons this is not parsed in `build`: the side panel rebuilds on
+  /// every controller notification (engine ticks included), and the Line panel
+  /// treats a new list *instance* as a new game — so a fresh parse per frame
+  /// would restart its book walk and flash it back to a spinner.
+  String? _lineSansKey;
+  List<String> _lineSans = const [];
+
+  @override
+  List<String> _currentGameSans(PgnGameEntry entry) {
+    final key =
+        '${_controller.filePath}#${entry.label}#${entry.pgnText.length}';
+    if (key != _lineSansKey) {
+      _lineSansKey = key;
+      _lineSans = extractMainlineSans(entry.pgnText);
+    }
+    return _lineSans;
+  }
+
+  @override
+  void _onGamePosition(Position position) {
+    _gamePanePosition = position;
+    _controller.onPositionChanged(position);
+  }
+
+  /// Whether the Line tab has been opened in this screen's lifetime.
+  ///
+  /// `TabBarView` builds every child eagerly, and the Line panel's first build
+  /// walks the designated books off disk. Opening a game to read it should not
+  /// pay for a question nobody asked, so the panel waits for its first visit.
+  @override
+  bool _lineTabVisited = false;
+
+  /// Show the book line beside the game: the Line tab, not a dialog.
+  @override
+  void _showLineTab() {
+    if (_controller.isSolitaireMode) return;
+    if (!_lineTabVisited) setState(() => _lineTabVisited = true);
+    _tabController.animateTo(_kLineTab);
+  }
+
+  /// A book-line move was selected on the Line tab — put it on the main board.
+  /// The tab that has focus owns the board, which is what makes flipping
+  /// between Game and Line a comparison rather than two separate viewers.
+  @override
+  void _showLinePosition(Position position) {
+    if (_tabController.index != _kLineTab) return;
+    _controller.onPositionChanged(position);
   }
 
   /// Runs after full-game analysis: every solitaire guess the user tried and
@@ -587,45 +701,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     final black = game.headers['Black'] ?? 'Black';
     final suggested = '$white – $black (solitaire)';
 
-    final result = await showDialog<AddToStudyResult>(
-      context: context,
-      builder: (_) => AddToStudyDialog(
-        initialChapterName: suggested,
-        title: 'Add game to study',
-      ),
+    await runAddToStudyFlow(
+      context,
+      suggestedChapterName: suggested,
+      pickerTitle: 'Add game to study',
+      viewActionLabel: 'View game',
+      buildPgn: (_) => pgn,
     );
-    if (result == null || !mounted) {
-      _reclaimFocus();
-      return;
-    }
-
-    final study = context.read<StudyController>();
-    final appState = context.read<AppState>();
-    try {
-      final path =
-          result.existingPath ??
-          await StorageFactory.instance.studyFilePath(result.newStudyName!);
-      await study.addChapterToStudyFile(path, result.chapterName, pgn);
-      if (!mounted) return;
-      showAppSnackBar(
-        context,
-        'Added "${result.chapterName}" to ${result.studyName}',
-        actionLabel: 'Open',
-        onAction: () async {
-          await study.openStudy(path);
-          study.selectChapter(study.doc.chapters.length - 1);
-          appState.pushMode(
-            AppMode.study,
-            historyLabel: 'Study: ${result.studyName}',
-          );
-        },
-      );
-    } catch (e) {
-      debugPrint('Add game to study failed: $e');
-      if (mounted) {
-        showAppSnackBar(context, 'Failed to add game to study.', isError: true);
-      }
-    }
     _reclaimFocus();
   }
 
@@ -669,6 +751,113 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     setState(() => _editMode = !_editMode);
   }
 
+  /// The Browse↔Edit toggle (A). A study file reopens in Study mode on the
+  /// same chapter and position; any other collection offers the safe path —
+  /// copy the current game into a study and edit it there. (In-place study
+  /// editing of a shared collection is deliberately not offered: Study
+  /// autosave rewrites the whole file, which a games cache can't tolerate.)
+  Future<void> _editInStudy() async {
+    final games = _controller.filteredGames;
+    if (games.isEmpty) return;
+    final path = _controller.filePath;
+    final game = games[_controller.currentGameIndex];
+
+    final played = _pgnWidgetController.mainLineIndex;
+    final sanLine = played <= 0
+        ? null
+        : _pgnWidgetController.mainLineMoves.take(played).toList();
+
+    if (path != null && await _isStudyPath(path)) {
+      final indexInFile = _controller.allGames.indexOf(game);
+      if (!mounted) return;
+      context.read<AppState>().switchToStudyEdit(
+        path: path,
+        chapterIndex: indexInFile < 0 ? null : indexInFile,
+        initialSanLine: sanLine,
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    final white = game.headers['White'] ?? 'White';
+    final black = game.headers['Black'] ?? 'Black';
+    await runAddToStudyFlow(
+      context,
+      suggestedChapterName: '$white – $black',
+      pickerTitle: 'Edit game in a study',
+      viewActionLabel: 'Edit in study',
+      buildPgn: (_) => game.pgnText,
+      viewSanLine: sanLine,
+    );
+    _reclaimFocus();
+  }
+
+  Future<bool> _isStudyPath(String path) async {
+    final dir = await AppPaths.studiesDirectory();
+    return p.isWithin(dir.path, path);
+  }
+
+  /// "Save filtered games as study…": promote the current slice (or the whole
+  /// collection when unsliced) into a study of its own — the bridge from
+  /// exploring a big collection to curating the interesting games.
+  Future<void> _saveSliceAsStudy() async {
+    final games = _controller.filteredGames;
+    if (games.isEmpty) return;
+
+    final suggested = _controller.filePath == null
+        ? 'New study'
+        : p.basenameWithoutExtension(_controller.filePath!);
+    final nameController = TextEditingController(text: suggested);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Save ${games.length} games as study'),
+        content: TextField(
+          controller: nameController,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Study name',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+          onSubmitted: (value) => Navigator.pop(ctx, value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, nameController.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    nameController.dispose();
+    final trimmed = name?.trim();
+    if (trimmed == null || trimmed.isEmpty || !mounted) {
+      _reclaimFocus();
+      return;
+    }
+
+    final study = context.read<StudyController>();
+    final appState = context.read<AppState>();
+    final path = await study.createStudyFromPgn(
+      trimmed,
+      _controller.buildExportContent(),
+    );
+    if (!mounted) return;
+    showAppSnackBar(
+      context,
+      'Saved ${games.length} game${games.length == 1 ? '' : 's'} as '
+      '"${study.doc.name}".',
+      actionLabel: 'Edit study',
+      onAction: () => appState.switchToStudyEdit(path: path),
+    );
+    _reclaimFocus();
+  }
+
   Future<void> _openGameSearch() async {
     if (_controller.filteredGames.isEmpty) return;
     final selected = await showDialog<int>(
@@ -703,6 +892,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     LogicalKeyboardKey.digit9,
   ];
 
+  /// Whether the Line tab is the one on screen (and so owns the board and the
+  /// arrow keys).
+  bool get _onLineTab =>
+      !_controller.isSolitaireMode && _tabController.index == _kLineTab;
+
   /// The viewer's keyboard shortcuts, dispatched through [handleKeyBindings]
   /// (never while typing). Order matters: the solitaire block shadows keys
   /// that would disturb a puzzle. Keep descriptions in sync with the button
@@ -724,16 +918,23 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       ])
         KeyBinding(key, 'Disabled during solitaire', () => true),
     ],
+    // Arrows step whichever pane is on screen: the book line while the Line
+    // tab is up, the game otherwise. Keys that move a board the user isn't
+    // looking at are how the Line tab would have felt broken.
     KeyBinding.run(
       LogicalKeyboardKey.arrowLeft,
       'Back one move',
-      _controller.navigateBack,
+      () => _onLineTab
+          ? _lineWidgetController.goBack()
+          : _controller.navigateBack(),
       repeats: true,
     ),
     KeyBinding.run(
       LogicalKeyboardKey.arrowRight,
       'Forward one move',
-      _controller.navigateForward,
+      () => _onLineTab
+          ? _lineWidgetController.goForward()
+          : _controller.navigateForward(),
       repeats: true,
     ),
     KeyBinding.run(
@@ -746,14 +947,18 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       'Go to end',
       _controller.navigateToEnd,
     ),
+    // ↓/↑ step the game list — the app-wide convention (←/→ move through a
+    // game, ↓/↑ step the active list). The old N/P pair is gone: N is the
+    // knight, which made it the wrong letter on any screen where moves are
+    // typed (solitaire here).
     KeyBinding.run(
-      LogicalKeyboardKey.keyN,
+      LogicalKeyboardKey.arrowDown,
       'Next game',
       _controller.nextGame,
       repeats: true,
     ),
     KeyBinding.run(
-      LogicalKeyboardKey.keyP,
+      LogicalKeyboardKey.arrowUp,
       'Previous game',
       _controller.prevGame,
       repeats: true,
@@ -795,17 +1000,19 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       'Toggle auto next game',
       () => _controller.setAutoNextGame(!_controller.autoNextGame),
     ),
-    KeyBinding.run(
-      LogicalKeyboardKey.keyA,
-      'Toggle amend mode',
-      _toggleEditMode,
-    ),
+    KeyBinding.run(LogicalKeyboardKey.keyA, 'Edit in Study', _editInStudy),
     KeyBinding.run(LogicalKeyboardKey.keyS, 'Search games', _openGameSearch),
+    // Escape leaves whatever you are in, innermost first — the ordering is the
+    // whole contract: solitaire and amend are modes you entered, full screen is
+    // a view you entered, and scratch analysis moves are the only thing left to
+    // back out of once you are in none of them.
     KeyBinding.run(
       LogicalKeyboardKey.escape,
-      'Exit amend mode / fullscreen, clear analysis moves',
+      'Exit solitaire / amend / fullscreen, clear analysis moves',
       () {
-        if (_editMode) {
+        if (_controller.isSolitaireMode) {
+          _controller.toggleSolitaire();
+        } else if (_editMode) {
           _toggleEditMode();
         } else if (_controller.isFullScreen) {
           _controller.exitFullScreen();
@@ -838,10 +1045,20 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         'Play fork candidate ${i + 1}',
         () => _pgnWidgetController.selectBranchCandidate(i),
       ),
-    KeyBinding(LogicalKeyboardKey.keyS, 'Toggle solitaire mode', () {
-      if (!_controller.showOpeningTree) _controller.toggleSolitaire();
-      return true;
-    }, shift: true),
+    // Ctrl+S is the one people reach for; Shift+S stays because it is what the
+    // mode has always answered to. Escape (above) is the way out of it.
+    KeyBinding(
+      LogicalKeyboardKey.keyS,
+      'Toggle solitaire mode',
+      _toggleSolitaireMode,
+      control: true,
+    ),
+    KeyBinding(
+      LogicalKeyboardKey.keyS,
+      'Toggle solitaire mode',
+      _toggleSolitaireMode,
+      shift: true,
+    ),
     // Jump into the annotation panel's comment field (amend mode only).
     KeyBinding(
       LogicalKeyboardKey.keyC,
@@ -850,8 +1067,17 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     ),
   ];
 
+  /// Solitaire is refused while the opening tree owns the board — the tree is
+  /// a view of every game at once and there is no single game to guess through.
+  /// Always consumes the key, so the two bindings that reach it can't fall
+  /// through to a bare-S "search games" while the tree is up.
+  bool _toggleSolitaireMode() {
+    if (!_controller.showOpeningTree) _controller.toggleSolitaire();
+    return true;
+  }
+
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) =>
-      handleKeyBindings(_keyBindings, event);
+      handleKeyBindings(_keyBindings, event, node: node);
 
   @override
   Widget build(BuildContext context) {

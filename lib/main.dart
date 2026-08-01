@@ -16,6 +16,7 @@ import 'theme/app_text_styles.dart';
 import 'services/default_pgn_service.dart';
 import 'services/engine/engine_lifecycle.dart';
 import 'services/eval_cache.dart';
+import 'widgets/escape_to_pop_scope.dart';
 
 void main() {
   runZonedGuarded(
@@ -221,7 +222,10 @@ class ChessAutoPrepApp extends StatelessWidget {
         // handling until restart. Keep the semantics tree empty — the app has
         // no screen-reader support to lose. Remove once the upstream bug is
         // fixed in the pinned Flutter.
-        builder: (context, child) => ExcludeSemantics(child: child!),
+        // EscapeToPopScope sits above the Navigator on purpose — see its doc
+        // for why Flutter's own Escape handling stops at dismissible dialogs.
+        builder: (context, child) =>
+            ExcludeSemantics(child: EscapeToPopScope(child: child!)),
         home: const MainScreen(),
         debugShowCheckedModeBanner: false,
       ),

@@ -1,5 +1,7 @@
 /// FEN list widget – left panel of the Player Analysis screen.
 /// Displays positions with statistics, filtered by minimum games and sorted.
+/// Selection steps through the ranked list via the Prev/Next header buttons
+/// or a [ListNavController] (↓/↑ forwarded by the host screen).
 library;
 
 import 'dart:async';
@@ -10,7 +12,9 @@ import 'package:flutter/services.dart';
 import '../models/opening_tree.dart';
 import '../models/position_analysis.dart';
 import '../theme/app_colors.dart';
+import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
+import 'common/list_nav.dart';
 
 class FenListWidget extends StatefulWidget {
   final PositionAnalysis analysis;
@@ -28,6 +32,9 @@ class FenListWidget extends StatefulWidget {
   /// is gone and the tree is the only source of depth).
   final OpeningTree? openingTree;
 
+  /// Lets the host screen step the selection (keyboard shortcuts).
+  final ListNavController? navController;
+
   const FenListWidget({
     super.key,
     required this.analysis,
@@ -35,13 +42,15 @@ class FenListWidget extends StatefulWidget {
     this.playerIsWhite = true,
     this.hasEvals = false,
     this.openingTree,
+    this.navController,
   });
 
   @override
   State<FenListWidget> createState() => _FenListWidgetState();
 }
 
-class _FenListWidgetState extends State<FenListWidget> {
+class _FenListWidgetState extends State<FenListWidget>
+    implements ListNavTarget {
   int _minGames = 3;
   int _minDepth = 1;
   String _sortBy = 'Lowest Win Rate';
@@ -55,6 +64,11 @@ class _FenListWidgetState extends State<FenListWidget> {
   Timer? _minDepthErrorTimer;
   String? _minDepthError;
 
+  /// Fixed row height (ListView.itemExtent) so keyboard stepping can compute
+  /// scroll offsets exactly instead of estimating.
+  static const double _itemExtent = 56.0;
+  final ScrollController _scrollController = ScrollController();
+
   /// FEN → move number, memoised per tree (null = position not in tree).
   final Map<String, int?> _moveNumberCache = {};
 
@@ -67,6 +81,7 @@ class _FenListWidgetState extends State<FenListWidget> {
     'Lowest Win Rate': 'win_rate',
     'Highest Win Rate': 'win_rate_desc',
     'Most Games': 'games',
+    'Most Wins': 'wins',
     'Most Losses': 'losses',
   };
 
@@ -81,6 +96,7 @@ class _FenListWidgetState extends State<FenListWidget> {
   @override
   void initState() {
     super.initState();
+    widget.navController?.attach(this);
     _minGamesController = TextEditingController(text: _minGames.toString());
     _minDepthController = TextEditingController(text: _minDepth.toString());
   }
@@ -88,6 +104,10 @@ class _FenListWidgetState extends State<FenListWidget> {
   @override
   void didUpdateWidget(FenListWidget old) {
     super.didUpdateWidget(old);
+    if (!identical(widget.navController, old.navController)) {
+      old.navController?.detach(this);
+      widget.navController?.attach(this);
+    }
     if (widget.hasEvals && !old.hasEvals && _sortBy == 'Lowest Win Rate') {
       setState(() => _sortBy = 'Bad Eval');
     }
@@ -104,6 +124,8 @@ class _FenListWidgetState extends State<FenListWidget> {
 
   @override
   void dispose() {
+    widget.navController?.detach(this);
+    _scrollController.dispose();
     _minGamesController.dispose();
     _minGamesErrorTimer?.cancel();
     _minDepthController.dispose();
@@ -192,16 +214,9 @@ class _FenListWidgetState extends State<FenListWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final positions = _visiblePositions();
     return Column(
       children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          child: const Text(
-            'Weak Positions',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            textAlign: TextAlign.center,
-          ),
-        ),
         _buildFilterRow(
           label: 'Min games:',
           controller: _minGamesController,
@@ -245,10 +260,50 @@ class _FenListWidgetState extends State<FenListWidget> {
             ],
           ),
         ),
+        _buildNavRow(positions),
         const Divider(height: 1),
-        Expanded(child: _buildPositionsList()),
+        Expanded(child: _buildPositionsList(positions)),
       ],
     );
+  }
+
+  /// Previous/Next stepping over the displayed list with a "k of n" readout.
+  /// The keyboard equivalents (↓/↑) come in from the host screen through
+  /// [ListNavController].
+  Widget _buildNavRow(List<PositionStats> positions) {
+    final selectedIndex = positions.indexWhere((s) => s.fen == _selectedFen);
+    return ListNavRow(
+      itemLabel: 'position',
+      canPrevious: selectedIndex > 0,
+      canNext: positions.isNotEmpty && selectedIndex < positions.length - 1,
+      onPrevious: stepPrevious,
+      onNext: stepNext,
+      counterText: selectedIndex >= 0
+          ? '${selectedIndex + 1} of ${positions.length}'
+          : '${positions.length} position${positions.length == 1 ? '' : 's'}',
+    );
+  }
+
+  @override
+  void stepNext() => _step(1);
+
+  @override
+  void stepPrevious() => _step(-1);
+
+  /// Move the selection [delta] rows. With no current selection (or the
+  /// selected position filtered out of view), any step selects the top row.
+  void _step(int delta) {
+    final positions = _visiblePositions();
+    if (positions.isEmpty) return;
+    final current = positions.indexWhere((s) => s.fen == _selectedFen);
+    final target = current < 0
+        ? 0
+        : (current + delta).clamp(0, positions.length - 1);
+    if (target == current) return;
+    final stats = positions[target];
+    setState(() => _selectedFen = stats.fen);
+    widget.onFenSelected(stats.fen);
+    ensureRowVisible(_scrollController, target, _itemExtent);
   }
 
   Widget _buildFilterRow({
@@ -288,7 +343,9 @@ class _FenListWidgetState extends State<FenListWidget> {
     );
   }
 
-  Widget _buildPositionsList() {
+  /// The list exactly as displayed — sorted, filtered, capped at 50 rows —
+  /// so stepping and the "k of n" counter can never disagree with the view.
+  List<PositionStats> _visiblePositions() {
     final sortKey = _sortMap[_sortBy]!;
     var positions = widget.analysis.getSortedPositions(
       minGames: _minGames,
@@ -304,6 +361,10 @@ class _FenListWidgetState extends State<FenListWidget> {
       }).toList();
     }
 
+    return positions.length > 50 ? positions.sublist(0, 50) : positions;
+  }
+
+  Widget _buildPositionsList(List<PositionStats> positions) {
     if (positions.isEmpty) {
       final isEvalSort = _isEvalSort;
       return Center(
@@ -321,7 +382,9 @@ class _FenListWidgetState extends State<FenListWidget> {
     }
 
     return ListView.builder(
-      itemCount: positions.length > 50 ? 50 : positions.length,
+      controller: _scrollController,
+      itemCount: positions.length,
+      itemExtent: _itemExtent,
       itemBuilder: (context, index) {
         final stats = positions[index];
         return _buildPositionItem(index + 1, stats);
@@ -389,7 +452,7 @@ class _FenListWidgetState extends State<FenListWidget> {
                   '(${stats.winRatePercent.toStringAsFixed(0)}% in '
                   '${_gamesLabel(stats.games)})'
             : '#$rank: ${stats.winRatePercent.toStringAsFixed(1)}%$evalTag '
-                  '(${stats.wins}-${stats.losses}-${stats.draws} in '
+                  '(${stats.wins}W-${stats.draws}D-${stats.losses}L in '
                   '${_gamesLabel(stats.games)})',
         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
       ),
@@ -398,6 +461,23 @@ class _FenListWidgetState extends State<FenListWidget> {
         style: const TextStyle(fontSize: 10, fontFamily: 'monospace'),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
+      ),
+      trailing: SizedBox(
+        width: 28,
+        height: 28,
+        child: IconButton(
+          icon: const Icon(
+            Icons.copy,
+            size: 14,
+            color: AppColors.onSurfaceSoft,
+          ),
+          padding: EdgeInsets.zero,
+          tooltip: 'Copy FEN',
+          onPressed: () {
+            Clipboard.setData(ClipboardData(text: expandFen(stats.fen)));
+            showAppSnackBar(context, AppMessages.fenCopied);
+          },
+        ),
       ),
       onTap: () {
         setState(() => _selectedFen = stats.fen);

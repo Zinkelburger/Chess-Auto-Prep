@@ -9,9 +9,8 @@ import 'package:flutter/services.dart';
 
 import '../models/analysis_player_info.dart';
 import '../models/engine_settings.dart';
-import '../models/opening_tree.dart';
-import '../services/engine/stockfish_pool.dart';
 import '../theme/app_colors.dart';
+import 'info_hint.dart';
 import 'labeled_toggle.dart';
 
 /// Settings returned by the config dialog.
@@ -35,16 +34,21 @@ class EngineWeaknessConfig {
   });
 }
 
+/// Depth that actually gets used: deep enough to be trusted for opening
+/// positions, shallow enough that a few hundred of them finish in minutes.
+const int _kDefaultDepth = 15;
+
 class EngineWeaknessConfigDialog extends StatefulWidget {
-  final OpeningTree? whiteTree;
-  final OpeningTree? blackTree;
   final AnalysisPlayerInfo? playerInfo;
+
+  /// True when the player already has engine evals, i.e. this run replaces
+  /// them. Only changes the wording of the header.
+  final bool isReanalysis;
 
   const EngineWeaknessConfigDialog({
     super.key,
-    this.whiteTree,
-    this.blackTree,
     this.playerInfo,
+    this.isReanalysis = false,
   });
 
   @override
@@ -60,13 +64,21 @@ class _EngineWeaknessConfigDialogState
   late final TextEditingController _blackCpCtrl;
   late final TextEditingController _workersCtrl;
   late final TextEditingController _monthsCtrl;
-  bool _redownload = false;
+
+  /// Freshness is what people almost always want when they re-run this, so
+  /// the fetch is opted *out* of, not into — but only where there is a source
+  /// to fetch from. Imported game-sets have none, and leaving it on there
+  /// would abort the run in [_redownloadGames].
+  late bool _redownload = _canRedownload;
+
+  bool get _canRedownload =>
+      widget.playerInfo != null && !widget.playerInfo!.isImported;
 
   @override
   void initState() {
     super.initState();
     final settings = EngineSettings.instance;
-    _depthCtrl = TextEditingController(text: '20');
+    _depthCtrl = TextEditingController(text: '$_kDefaultDepth');
     _minGamesCtrl = TextEditingController(text: '3');
     _whiteCpCtrl = TextEditingController(text: '-50');
     _blackCpCtrl = TextEditingController(text: '100');
@@ -87,33 +99,10 @@ class _EngineWeaknessConfigDialogState
     super.dispose();
   }
 
-  int get _positionCount {
-    final minGames = int.tryParse(_minGamesCtrl.text) ?? 3;
-    int count = 0;
-    for (final tree in [widget.whiteTree, widget.blackTree]) {
-      if (tree == null) continue;
-      for (final nodes in tree.fenToNodes.values) {
-        if (nodes.isEmpty) continue;
-        final best = nodes.reduce(
-          (a, b) => a.gamesPlayed >= b.gamesPlayed ? a : b,
-        );
-        if (best.gamesPlayed >= minGames) count++;
-      }
-    }
-    return count;
-  }
-
-  String get _resourceSummary {
-    final workers =
-        int.tryParse(_workersCtrl.text) ?? EngineSettings.instance.workers;
-    return '$workers workers × $kPoolHashPerWorkerMb MB hash each = '
-        '${workers * kPoolHashPerWorkerMb} MB total';
-  }
-
   void _submit() {
     Navigator.of(context).pop(
       EngineWeaknessConfig(
-        depth: int.tryParse(_depthCtrl.text) ?? 20,
+        depth: int.tryParse(_depthCtrl.text) ?? _kDefaultDepth,
         minGames: int.tryParse(_minGamesCtrl.text) ?? 3,
         whiteCp: int.tryParse(_whiteCpCtrl.text) ?? -50,
         blackCp: int.tryParse(_blackCpCtrl.text) ?? 100,
@@ -142,29 +131,59 @@ class _EngineWeaknessConfigDialogState
                 spacing: 16,
                 runSpacing: 12,
                 children: [
-                  _field('Depth', _depthCtrl, 80),
-                  _field('Min games', _minGamesCtrl, 80),
-                  _field('CP score (white)', _whiteCpCtrl, 120),
-                  _field('CP score (black)', _blackCpCtrl, 120),
+                  _field(
+                    'Depth',
+                    _depthCtrl,
+                    80,
+                    hint:
+                        'How deep Stockfish searches every position.\n'
+                        'Each extra ply costs roughly double the time, so $_kDefaultDepth '
+                        'keeps a\nfew hundred positions to minutes. Raise it to '
+                        '20+ only for a\nfinal pass over a short list.',
+                  ),
+                  _field(
+                    'Min games',
+                    _minGamesCtrl,
+                    80,
+                    hint:
+                        'Skip positions you have reached fewer times than this.\n'
+                        'Raising it keeps the run on lines you actually play '
+                        'instead of\none-off transpositions.',
+                  ),
+                  _field(
+                    'CP score (white)',
+                    _whiteCpCtrl,
+                    120,
+                    hint:
+                        'Flags a position as bad for White when the evaluation is\n'
+                        'at or below this, in centipawns (100 = one pawn).\n'
+                        'Negative means White already stands worse, so -50 marks\n'
+                        '"half a pawn down or worse". Only affects which positions\n'
+                        'are highlighted — every position is still evaluated.',
+                  ),
+                  _field(
+                    'CP score (black)',
+                    _blackCpCtrl,
+                    120,
+                    hint:
+                        'Flags a position as bad for Black when the evaluation is\n'
+                        'at or above this, in centipawns (100 = one pawn).\n'
+                        'Evaluations are always from White\'s side, so a positive\n'
+                        'number means Black stands worse: 100 marks "a pawn down\n'
+                        'or worse". Only affects highlighting, not what is evaluated.',
+                  ),
+                  _field(
+                    'Workers',
+                    _workersCtrl,
+                    80,
+                    hint:
+                        'How many Stockfish processes evaluate positions in parallel.\n'
+                        'More finishes sooner but leaves less CPU for the rest of\n'
+                        'the machine. The default follows your engine settings.',
+                  ),
                 ],
               ),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 16,
-                runSpacing: 12,
-                children: [_field('Workers', _workersCtrl, 80)],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _resourceSummary,
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: AppColors.onSurfaceMuted,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-              if (widget.playerInfo != null &&
-                  !widget.playerInfo!.isImported) ...[
+              if (_canRedownload) ...[
                 const Divider(height: 24),
                 Row(
                   children: [
@@ -175,8 +194,27 @@ class _EngineWeaknessConfigDialogState
                       value: _redownload,
                       onChanged: (v) => setState(() => _redownload = v),
                     ),
+                    const SizedBox(width: 6),
+                    InfoHint(
+                      'Fetches this player\'s latest games from '
+                      '${widget.playerInfo!.platformDisplayName} and rebuilds\n'
+                      'the opening trees before the engine runs, so games played\n'
+                      'since the last download are included. Leave it off to\n'
+                      'analyze the games already on disk.',
+                    ),
                     const SizedBox(width: 12),
-                    if (_redownload) _field('Months', _monthsCtrl, 64),
+                    // Kept mounted and merely disabled when the box is off, so
+                    // ticking it doesn't shuffle the row.
+                    _field(
+                      'Months',
+                      _monthsCtrl,
+                      64,
+                      enabled: _redownload,
+                      hint:
+                          'How far back to fetch, in months. Larger ranges take\n'
+                          'longer to download and analyze. Used only when '
+                          're-downloading.',
+                    ),
                   ],
                 ),
                 if (widget.playerInfo!.downloadedAt != null)
@@ -193,15 +231,6 @@ class _EngineWeaknessConfigDialogState
                     ),
                   ),
               ],
-              const SizedBox(height: 12),
-              Text(
-                '$_positionCount positions will be evaluated'
-                '${widget.whiteTree != null && widget.blackTree != null ? ' (both colors)' : ''}',
-                style: const TextStyle(
-                  color: AppColors.onSurfaceSoft,
-                  fontSize: 13,
-                ),
-              ),
               const SizedBox(height: 24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -226,20 +255,32 @@ class _EngineWeaknessConfigDialogState
   }
 
   Widget _buildHeader(BuildContext context) {
+    // On a re-run the title says what the button said — "Re-analyze" — and the
+    // explanation drops to the subtitle, rather than repeating the first-run
+    // title back at someone who has already done this once.
+    final title = widget.isReanalysis ? 'Re-analyze' : 'Analyze with Engine';
+    final subtitle = widget.isReanalysis
+        ? 'Analyze with Engine · re-evaluate your most-played positions '
+              'with Stockfish'
+        : 'Evaluate your most-played positions with Stockfish';
+
     return Row(
       children: [
-        const Icon(Icons.psychology, size: 28),
+        const Icon(Icons.refresh, size: 28),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Analyze with Engine',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               Text(
-                'Evaluate your most-played positions with Stockfish',
+                subtitle,
                 style: const TextStyle(
                   color: AppColors.onSurfaceSoft,
                   fontSize: 13,
@@ -252,17 +293,37 @@ class _EngineWeaknessConfigDialogState
     );
   }
 
-  Widget _field(String label, TextEditingController ctrl, double width) {
+  Widget _field(
+    String label,
+    TextEditingController ctrl,
+    double width, {
+    bool enabled = true,
+    required String hint,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: const TextStyle(fontSize: 12)),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: enabled ? null : AppColors.onSurfaceMuted,
+              ),
+            ),
+            const SizedBox(width: 4),
+            InfoHint(hint, size: 14),
+          ],
+        ),
         const SizedBox(height: 4),
         SizedBox(
           width: width,
           child: TextField(
             controller: ctrl,
+            enabled: enabled,
             style: const TextStyle(fontSize: 13),
             keyboardType: const TextInputType.numberWithOptions(signed: true),
             inputFormatters: [
@@ -273,7 +334,6 @@ class _EngineWeaknessConfigDialogState
               contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               border: OutlineInputBorder(),
             ),
-            onChanged: (_) => setState(() {}),
           ),
         ),
       ],

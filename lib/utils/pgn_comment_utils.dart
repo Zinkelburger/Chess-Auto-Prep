@@ -51,8 +51,64 @@ NagInfo? nagInfoById(int id) {
   return null;
 }
 
-/// Get the display symbol for a NAG ID. Returns `\$N` for unknown NAGs.
-String nagSymbol(int id) => nagInfoById(id)?.symbol ?? '\$$id';
+/// Standard PGN glyphs that annotate the *position* rather than the move —
+/// what an annotator writes after the move instead of `!`/`?`.
+///
+/// Only [kMoveNags] (ids 1–6) are editable in the app, because only those are
+/// mutually exclusive move verdicts. These are read-only: they arrive in
+/// imported PGNs (Lichess studies, Chessable and ChessBase exports) and used to
+/// vanish from the movetext because the renderers filtered to 1–6. A symbol is
+/// the whole content of the annotation, so dropping it drops the annotation.
+const Map<int, String> kPositionNagSymbols = {
+  7: '□', // forced move — only move
+  10: '=', // drawish position
+  11: '=', // equal chances, quiet position
+  13: '∞', // unclear position
+  14: '⩲', // White stands slightly better
+  15: '⩱', // Black stands slightly better
+  16: '±', // White has a moderate advantage
+  17: '∓', // Black has a moderate advantage
+  18: '+−', // White has a decisive advantage
+  19: '−+', // Black has a decisive advantage
+  22: '⨀', // White is in zugzwang
+  23: '⨀', // Black is in zugzwang
+  32: '⟳', // White has a lasting development advantage
+  33: '⟳', // Black has a lasting development advantage
+  36: '↑', // White has the initiative
+  37: '↑', // Black has the initiative
+  40: '→', // White has the attack
+  41: '→', // Black has the attack
+  44: '=∞', // White has compensation for material
+  45: '=∞', // Black has compensation for material
+  132: '⇆', // White has counterplay
+  133: '⇆', // Black has counterplay
+  138: '⊕', // White is in time trouble
+  139: '⊕', // Black is in time trouble
+  140: '∆', // with the idea
+  146: 'N', // novelty
+};
+
+/// Get the display symbol for a NAG ID. Falls back to `\$N` for ids that have
+/// no conventional glyph, so an unrecognised annotation still shows up rather
+/// than disappearing.
+String nagSymbol(int id) =>
+    nagInfoById(id)?.symbol ?? kPositionNagSymbols[id] ?? '\$$id';
+
+/// Every NAG on [nags] as one glyph run, in the order the PGN wrote them —
+/// quality verdicts and positional assessments alike (`Nf3!⩲`). Empty when
+/// there are none.
+///
+/// Contrast [qualityNagSuffix], which is the *editable* subset (ids 1–6) and
+/// exists for the annotation toolbar. Movetext display wants this one: a
+/// reader loses information when `$14` is silently swallowed.
+String allNagSuffix(List<int>? nags) {
+  if (nags == null || nags.isEmpty) return '';
+  final buf = StringBuffer();
+  for (final n in nags) {
+    buf.write(nagSymbol(n));
+  }
+  return buf.toString();
+}
 
 /// Get the color for a NAG ID. Returns a neutral grey for unknown NAGs.
 Color nagColor(int id) => nagInfoById(id)?.color ?? AppColors.onSurfaceMuted;
@@ -92,6 +148,22 @@ List<int> toggleQualityNag(List<int>? current, int nagId) {
   ];
   final alreadyOn = (current ?? const <int>[]).contains(nagId);
   return <int>[if (!alreadyOn && nagId >= 1 && nagId <= 6) nagId, ...others];
+}
+
+// ---------------------------------------------------------------------------
+// Multi-block comments
+// ---------------------------------------------------------------------------
+
+/// Every `{}` block a PGN attached to one move, as one string.
+///
+/// dartchess keeps them as a list, but the app's own model ([MoveNode]) and
+/// every editing surface treat a move as having one comment. Joining is the
+/// only lossless way to bridge that: reading `comments.first` silently dropped
+/// whichever block came second, which is how Lichess study exports (prose in
+/// one block, `[%cal]` shapes in another) and book PGNs lost half their notes.
+String joinComments(List<String>? comments) {
+  if (comments == null || comments.isEmpty) return '';
+  return comments.where((c) => c.trim().isNotEmpty).join(' ');
 }
 
 // ---------------------------------------------------------------------------

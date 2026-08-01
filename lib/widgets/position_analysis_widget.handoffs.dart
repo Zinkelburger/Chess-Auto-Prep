@@ -14,7 +14,7 @@ mixin _StudyHandoffMixin on _PositionAnalysisWidgetStateBase {
     if (stats == null || stats.games == 0) return null;
     final who = widget.playerName ?? 'Player';
     return '$who scored ${stats.winRatePercent.toStringAsFixed(1)}% here '
-        '(${stats.wins}-${stats.losses}-${stats.draws} '
+        '(${stats.wins}W-${stats.draws}D-${stats.losses}L '
         'in ${stats.games} game${stats.games == 1 ? '' : 's'}).';
   }
 
@@ -106,40 +106,15 @@ mixin _StudyHandoffMixin on _PositionAnalysisWidgetStateBase {
     MoveTree lineTree,
     String suggestedChapter,
   ) async {
-    final result = await showDialog<AddToStudyResult>(
-      context: context,
-      builder: (_) => AddToStudyDialog(initialChapterName: suggestedChapter),
+    await runAddToStudyFlow(
+      context,
+      suggestedChapterName: suggestedChapter,
+      buildPgn: (chapterName) =>
+          lineTree.toPgn(event: chapterName, result: '*'),
+      viewSanLine: lineTree.sanSequenceAt(
+        lineTree.mainlineEndFrom(TreePath.empty),
+      ),
     );
-    if (result == null || !mounted) return;
-
-    final study = context.read<StudyController>();
-    final appState = context.read<AppState>();
-    try {
-      final path =
-          result.existingPath ??
-          await StorageFactory.instance.studyFilePath(result.newStudyName!);
-      final pgn = lineTree.toPgn(event: result.chapterName, result: '*');
-      await study.addChapterToStudyFile(path, result.chapterName, pgn);
-      if (!mounted) return;
-      showAppSnackBar(
-        context,
-        'Added "${result.chapterName}" to ${result.studyName}',
-        actionLabel: 'Open',
-        onAction: () async {
-          await study.openStudy(path);
-          study.selectChapter(study.doc.chapters.length - 1);
-          appState.pushMode(
-            AppMode.study,
-            historyLabel: 'Study: ${result.studyName}',
-          );
-        },
-      );
-    } catch (e) {
-      debugPrint('Add line to study failed: $e');
-      if (mounted) {
-        showAppSnackBar(context, 'Failed to add line to study.', isError: true);
-      }
-    }
   }
 
   void _openGamesInPgnViewer() {

@@ -346,6 +346,14 @@ class StudyController extends ChangeNotifier
     notifyListeners();
   }
 
+  /// Park the cursor at the deepest node reachable by replaying [sanLine]
+  /// from the root — how an [EditStudy] handoff's "View line" target lands
+  /// on the position it advertised.
+  void jumpToSanLine(List<String> sanLine) {
+    _reanchorCursor(sanLine);
+    notifyListeners();
+  }
+
   // ── Editing ──────────────────────────────────────────────────────────
 
   /// Play [san] at the cursor: follows an existing child or adds a new node

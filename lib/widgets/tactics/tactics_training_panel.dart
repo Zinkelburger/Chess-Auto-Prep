@@ -47,9 +47,9 @@ String _evalFromWinPercent(double winPercent) {
   return '${pawns >= 0 ? '+' : ''}${pawns.toStringAsFixed(1)}';
 }
 
-/// The tactic note ready for display: legacy generated notes rewritten to
-/// the terse eval format, engine tokens and scraped-PGN noise stripped.
-String displayTacticsNote(String raw) {
+/// The stored note in its canonical shape: legacy formats rewritten to the
+/// terse eval format, engine tokens and scraped-PGN noise stripped.
+String _normalizeTacticsNote(String raw) {
   final trimmed = raw.trim();
   final percent = _legacyPercentNoteRe.firstMatch(trimmed);
   if (percent != null) {
@@ -66,6 +66,79 @@ String displayTacticsNote(String raw) {
     }
   }
   return filterDisplayComment(raw);
+}
+
+/// A stored eval (`+0.5`, `-2.1`, `#3`, `#-4`).
+const _evalPattern = r'(#-?\d+|[+-]?\d+(?:\.\d+)?)';
+
+/// The canonical note, e.g. `h5 +0.5 → -2.1, Qf3 +0.5`: the played move with
+/// the eval it started from and the eval it reached, then the best move with
+/// the eval it would have held. The leading SAN and the trailing best-move
+/// clause are both optional — the oldest stored format has neither.
+final _terseNoteRe = RegExp(
+  '^(?:([^\\s,]+)\\s+)?$_evalPattern\\s*→\\s*$_evalPattern'
+  '(?:,\\s*([^\\s,]+)\\s+$_evalPattern)?\$',
+);
+
+/// A generated tactic note, split so each half can be shown where it belongs.
+class TacticsNoteParts {
+  const TacticsNoteParts({
+    required this.playedSan,
+    required this.evalBefore,
+    required this.evalAfter,
+    required this.bestSan,
+    required this.evalBest,
+  });
+
+  /// The move actually played. Empty in the oldest stored format.
+  final String playedSan;
+
+  /// Eval before the move — what was there to keep.
+  final String evalBefore;
+
+  /// Eval the played move reached, from the player's side.
+  final String evalAfter;
+
+  /// The move that should have been played. Empty when the note omits it.
+  final String bestSan;
+
+  /// Eval the best move holds. Equal to [evalBefore] for notes this app
+  /// generates; kept separate because nothing guarantees that.
+  final String evalBest;
+
+  /// What the note box shows: one move and what it cost. The best move is not
+  /// repeated here — it is the first move of the solution line right below,
+  /// where its eval is shown next to it.
+  ///
+  /// Falls back to the eval arc for the oldest format, which never recorded
+  /// which move was played; a bare `-0.1` on its own would say nothing.
+  String get playedLabel =>
+      playedSan.isEmpty ? '$evalBefore → $evalAfter' : '$playedSan $evalAfter';
+}
+
+/// Split a stored note into its parts, or null when it is not one of the
+/// generated eval notes (user prose, a scraped PGN comment).
+TacticsNoteParts? parseTacticsNote(String raw) =>
+    _parseTerseNote(_normalizeTacticsNote(raw));
+
+TacticsNoteParts? _parseTerseNote(String normalized) {
+  final m = _terseNoteRe.firstMatch(normalized);
+  if (m == null) return null;
+  return TacticsNoteParts(
+    playedSan: m.group(1) ?? '',
+    evalBefore: m.group(2)!,
+    evalAfter: m.group(3)!,
+    bestSan: m.group(4) ?? '',
+    evalBest: m.group(5) ?? m.group(2)!,
+  );
+}
+
+/// The tactic note ready for the note box. Generated notes are reduced to the
+/// played move and the eval it reached; everything else (user prose, scraped
+/// comments) is shown as written, minus engine tokens.
+String displayTacticsNote(String raw) {
+  final normalized = _normalizeTacticsNote(raw);
+  return _parseTerseNote(normalized)?.playedLabel ?? normalized;
 }
 
 /// Puzzle-solving controls shown during an active tactics session.
@@ -418,6 +491,27 @@ class _TacticsTrainingPanelState extends State<TacticsTrainingPanel> {
     );
   }
 
+  /// The best move's eval, shown next to the move it belongs to (`Qf3 +0.5`)
+  /// rather than restated in the note box above.
+  ///
+  /// Only the first move is annotated: it is the one the engine scored. The
+  /// rest of the line is its principal variation, never evaluated ply by ply,
+  /// so a number beside those moves would be made up.
+  List<MoveAnnotation>? _bestMoveEvalAnnotation(List<String> san) {
+    if (san.isEmpty) return null;
+    final parts = parseTacticsNote(widget.position.mistakeAnalysis);
+    if (parts == null || parts.evalBest.isEmpty) return null;
+    // A note whose best move isn't the line being shown belongs to a different
+    // solution (an edited or custom puzzle) — better no eval than a wrong one.
+    if (parts.bestSan.isNotEmpty && parts.bestSan != san.first) return null;
+    return [
+      MoveAnnotation(
+        suffix: ' ${parts.evalBest}',
+        suffixColor: AppColors.onSurfaceMuted,
+      ),
+    ];
+  }
+
   Widget _buildSolutionLine(BuildContext context) {
     final san = widget.solutionSanMoves;
     if (san.isEmpty) {
@@ -439,6 +533,7 @@ class _TacticsTrainingPanelState extends State<TacticsTrainingPanel> {
       key: const Key('tactic-solution-line'),
       sanMoves: san,
       startPly: widget.solutionStartPly,
+      annotations: _bestMoveEvalAnnotation(san),
       maxMoves: san.length,
       singleLine: false,
       fontSize: 14,

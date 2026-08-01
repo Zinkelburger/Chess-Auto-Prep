@@ -87,6 +87,33 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// providers, so they can't call each other directly.
   VoidCallback? onBackRequested;
 
+  /// Set by the control panel: starts a practice session with [sessionSettings]
+  /// and puts its first puzzle on the board.
+  ///
+  /// The Study-tactics button lives in the *left* pane, directly under Review
+  /// games — two play buttons half a window apart was the confusing part, not
+  /// either button on its own. Setting up a puzzle is still the panel's job
+  /// (board, PGN tab, recap), and the pane and the panel are siblings under the
+  /// shared providers, so the button asks through here exactly like
+  /// [onBackRequested] does.
+  VoidCallback? onStartRequested;
+
+  /// The saved practice-session filters (expiry, mistake types, order).
+  ///
+  /// Owned here rather than inside the panel's start card because two surfaces
+  /// now need them: the card that edits them, and the left pane's button, which
+  /// has to say how many puzzles they queue up before you press it.
+  TacticsSessionSettings sessionSettings = const TacticsSessionSettings();
+
+  /// Replace [sessionSettings] (and persist them). Never called during build —
+  /// it notifies.
+  void setSessionSettings(TacticsSessionSettings settings, {bool save = true}) {
+    if (settings == sessionSettings) return;
+    sessionSettings = settings;
+    if (save) settings.save();
+    notifyListeners();
+  }
+
   /// Set by the control panel: routes a navigation key pressed while the
   /// move-input field owns focus (Space, S/P, the arrow keys, J) to the panel's
   /// trainer shortcuts, so those keys drive puzzle/solution navigation instead

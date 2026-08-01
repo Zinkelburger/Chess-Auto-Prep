@@ -126,6 +126,33 @@ Future<void> _putSharedEval(
   );
 }
 
+/// What one game's engine pass produced: the puzzles worth training, and the
+/// same pass's verdict on how messy the game was.
+///
+/// The counts are not a by-product bolted on — they fall out of the very
+/// numbers that decide whether a move becomes a puzzle (the winning-chance
+/// swing of each of my moves), which is why the review no longer runs a
+/// separate full-game analysis to obtain them.
+class _GameMineOutcome {
+  _GameMineOutcome({
+    required this.positions,
+    required this.dedupKey,
+    required this.inaccuracies,
+    required this.mistakes,
+    required this.blunders,
+  });
+
+  final List<TacticsPosition> positions;
+
+  /// Games-library identity of this game, so the counts can be filed against
+  /// the same game the recent-games list shows.
+  final String dedupKey;
+
+  final int inaccuracies;
+  final int mistakes;
+  final int blunders;
+}
+
 /// Position after playing [uci] from [fen], or null when it doesn't apply.
 ///
 /// FEN identity is how the user's played move is compared against the
@@ -139,7 +166,11 @@ String? _fenAfterUci(String fen, String uci) {
   return san == null ? null : newPos.fen;
 }
 
-/// Analyze a single game for tactics. Returns them in game order.
+/// Analyze a single game: puzzles in game order, plus my mistake counts.
+///
+/// Null when there is nothing to say about the game — it isn't one of mine
+/// (neither header matches [username]), or the run was cancelled partway, in
+/// which case the game is discarded whole and re-analyzed on resume.
 ///
 /// The replay is synchronous; every engine evaluation is distributed across
 /// the whole [pool], so even a single game keeps all workers busy — the
@@ -151,7 +182,7 @@ String? _fenAfterUci(String fen, String uci) {
 /// move differs from the engine's best — playing the engine's own choice
 /// cannot have lost winning chances at this depth, so the confirming search
 /// is skipped and `wcAfter := wcBefore`.
-Future<List<TacticsPosition>> _analyzeGameParallel({
+Future<_GameMineOutcome?> _analyzeGameParallel({
   required StockfishPool pool,
   required String gameText,
   required String username,
@@ -182,7 +213,7 @@ Future<List<TacticsPosition>> _analyzeGameParallel({
   } else if (black == username) {
     userColor = Side.black;
   }
-  if (userColor == null) return [];
+  if (userColor == null) return null;
 
   final moves = <String>[];
   final clocks = <double?>[];
@@ -428,15 +459,33 @@ Future<List<TacticsPosition>> _analyzeGameParallel({
 
   // A cancelled game is discarded whole (and re-analyzed on resume), so the
   // partially-filled results are not worth assembling.
-  if (shouldAbort?.call() ?? false) return [];
+  if (shouldAbort?.call() ?? false) return null;
 
   // ── Phase 3: assemble in game order + tag pass ──
   // Tags need the full user-move eval series (miss looks back one user
   // move, lucky looks ahead one), so they are assigned after all sites
   // completed. results[i] pairs with sites[i]; both are in game order.
   final positions = <TacticsPosition>[];
+  var inaccuracies = 0, mistakes = 0, blunders = 0;
   for (var i = 0; i < results.length; i++) {
     final result = results[i];
+    final wcAfterAny = result?.wcAfter;
+    // Count every one of my moves that lost winning chances, whether or not it
+    // became a puzzle: a move can be a mistake and still be untrainable (no PV
+    // to build a solution from), and the counts must not silently drop those.
+    // Moves that ended the game have no post-eval and cannot be mistakes.
+    if (result != null && wcAfterAny != null) {
+      switch (result.wcBefore - wcAfterAny) {
+        case >= 0.30:
+          blunders++;
+        case >= 0.20:
+          mistakes++;
+        case >= 0.10:
+          inaccuracies++;
+        default:
+          break;
+      }
+    }
     final mined = result?.mined;
     if (result == null || mined == null) continue;
     final wcAfter = result.wcAfter;
@@ -461,7 +510,13 @@ Future<List<TacticsPosition>> _analyzeGameParallel({
     positions.add(mined.copyWith(flawTags: tags));
   }
 
-  return positions;
+  return _GameMineOutcome(
+    positions: positions,
+    dedupKey: dedupKeyForHeaders(game.headers),
+    inaccuracies: inaccuracies,
+    mistakes: mistakes,
+    blunders: blunders,
+  );
 }
 
 (String? san, Position newPos) _makeUciMoveAndGetSan(Position pos, String uci) {

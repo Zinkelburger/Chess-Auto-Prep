@@ -5,16 +5,25 @@ import '../../models/tactics_position.dart';
 import '../pgn_viewer_widget.dart';
 
 /// Owns the "Show Solution" navigation state for the tactics Tactic tab:
-/// caching the solution line and walking the board / PGN cursor forward and
-/// back through it.  The solution moves live in the PGN viewer's mainline
-/// (built from tactic FEN + solution SAN by the control panel), so this
-/// navigator only drives the cursor — it does not inject moves.
+/// caching the solution line and walking the board / PGN cursor along it.
+///
+/// The solution is **not** the PGN mainline. The mainline is the tactic's
+/// source game — the line where the player actually went wrong — so the
+/// solution is shown the same way any other move played at the board is: as a
+/// variation branching off the tactic's own ply. Navigating to solution move
+/// `i` means "park on the mainline at the tactic's position, then replay
+/// solution moves 0..i from there". Replaying is idempotent — the viewer
+/// follows the mainline where the game happens to have played the same move
+/// and reuses the existing variation node otherwise — so the same call both
+/// seeds the line the first time and moves the cursor every time after.
+///
+/// Nothing here clears the PGN tree. The moves the player tried are theirs;
+/// asking to see the solution is not a reason to throw them away.
 class TacticsSolutionNavigator {
   TacticsSolutionNavigator({
     required this.pgn,
     required this.currentTactic,
     required this.solutionToSan,
-    required this.syncPgnToTactic,
     required this.setBoardPosition,
   });
 
@@ -27,23 +36,27 @@ class TacticsSolutionNavigator {
   /// Computes the SAN solution line for a tactic.
   final List<String> Function(TacticsPosition) solutionToSan;
 
-  /// Re-positions the PGN viewer at the tactic's start (mainline index 0).
-  final VoidCallback syncPgnToTactic;
-
   /// Writes a board position to the app/board state.
   final void Function(Position position) setBoardPosition;
 
-  /// Current arrow-key position in the solution line (-1 = at tactic start).
+  /// Current position in the solution line (-1 = at the tactic's own position,
+  /// before any solution move).
   int _navIndex = -1;
 
-  /// Cached SAN solution for the current position so we don't recompute.
+  /// Cached SAN solution for [_cachedForFen] so we don't replay the line with
+  /// dartchess on every rebuild.
   List<String> _sanCache = const [];
 
-  /// FEN for which the solution has already been cached.
-  String? _seededForFen;
+  /// FEN the cached solution belongs to.
+  String? _cachedForFen;
 
-  /// SAN moves of the solution line (empty until seeded).
-  List<String> get sanMoves => _sanCache;
+  /// SAN moves of the solution line for the loaded tactic, computed on first
+  /// use and cached until the tactic changes. Empty when nothing is loaded or
+  /// the tactic has no replayable solution.
+  List<String> get sanMoves {
+    _ensureCached();
+    return _sanCache;
+  }
 
   /// The move index to highlight in the solution line, or `null` for none.
   int? get activeIndex => _navIndex >= 0 ? _navIndex : null;
@@ -52,69 +65,65 @@ class TacticsSolutionNavigator {
   void reset() {
     _navIndex = -1;
     _sanCache = const [];
-    _seededForFen = null;
+    _cachedForFen = null;
   }
 
-  /// Cache the solution line and navigate the PGN viewer to the start.
-  /// The solution is the PGN mainline, so no ephemeral moves are added.
-  void ensureSeeded() {
-    final tactic = currentTactic();
-    if (tactic == null) return;
-    if (_seededForFen == tactic.fen) return;
-
-    final san = solutionToSan(tactic);
-    if (san.isEmpty) return;
-
-    _sanCache = san;
-    _seededForFen = tactic.fen;
-    _navIndex = -1;
-
-    syncPgnToTactic();
-  }
-
-  /// Navigate the board and PGN viewer to a specific index in the solution.
+  /// Navigate the board and PGN viewer to a specific index in the solution
+  /// (-1 = back at the tactic's own position).
   void navigateToIndex(int targetIndex) {
-    final san = _sanCache;
+    final san = sanMoves;
     if (san.isEmpty) return;
-    targetIndex = targetIndex.clamp(-1, san.length - 1);
 
-    _navIndex = targetIndex;
-    // mainline index 0 = tactic start; targetIndex 0 = after first move.
-    pgn.goToMainLineIndex(targetIndex + 1);
+    _navIndex = targetIndex.clamp(-1, san.length - 1);
+    _syncPgnCursor(_navIndex);
     _navigateBoard(_navIndex);
   }
 
   /// Step one move forward. Returns `true` if the cursor moved.
   bool arrowForward() {
-    final san = _sanCache;
-    if (san.isEmpty) return false;
-    if (_navIndex >= san.length - 1) return false;
-
-    _navIndex++;
-    _navigateBoard(_navIndex);
-    pgn.goForward();
+    final san = sanMoves;
+    if (san.isEmpty || _navIndex >= san.length - 1) return false;
+    navigateToIndex(_navIndex + 1);
     return true;
   }
 
   /// Step one move back. Returns `true` if the cursor moved.
   bool arrowBack() {
-    if (_navIndex < 0) return false;
-
-    _navIndex--;
-    _navigateBoard(_navIndex);
-    pgn.goBack();
+    if (_navIndex < 0 || sanMoves.isEmpty) return false;
+    navigateToIndex(_navIndex - 1);
     return true;
   }
 
   /// Click handler: jump from wherever we are to [clickedIndex].
-  void onMoveTapped(List<String> sanMoves, int clickedIndex) {
-    if (sanMoves.isEmpty || clickedIndex < 0) return;
+  void onMoveTapped(int clickedIndex) {
+    if (clickedIndex < 0) return;
+    navigateToIndex(clickedIndex);
+  }
 
-    ensureSeeded();
+  /// Compute and cache the solution SANs for the loaded tactic.
+  void _ensureCached() {
+    final tactic = currentTactic();
+    if (tactic == null) {
+      if (_cachedForFen != null) reset();
+      return;
+    }
+    if (_cachedForFen == tactic.fen) return;
 
-    _navIndex = clickedIndex;
-    pgn.goToMainLineIndex(clickedIndex + 1);
-    _navigateBoard(clickedIndex);
+    _cachedForFen = tactic.fen;
+    _sanCache = solutionToSan(tactic);
+    _navIndex = -1;
+  }
+
+  /// Put the PGN cursor on solution move [index] — on the tactic's own ply
+  /// when [index] is negative. Best-effort: a viewer that isn't mounted, or
+  /// one still showing a different game, leaves the tree untouched.
+  void _syncPgnCursor(int index) {
+    final tactic = currentTactic();
+    if (tactic == null) return;
+    if (!pgn.goToFen(tactic.fen)) return;
+    for (int i = 0; i <= index && i < _sanCache.length; i++) {
+      pgn.addEphemeralMove(_sanCache[i]);
+    }
   }
 
   /// Set the board to the state after playing solution moves 0..[index]

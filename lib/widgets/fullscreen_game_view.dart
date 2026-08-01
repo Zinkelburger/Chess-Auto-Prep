@@ -158,7 +158,7 @@ class FullscreenGameView extends StatelessWidget {
                         Icons.skip_previous,
                         color: AppColors.overlayInk,
                       ),
-                      tooltip: 'Previous game (P)',
+                      tooltip: 'Previous game (↑)',
                     ),
                     IconButton(
                       onPressed: onGoBack,
@@ -199,7 +199,7 @@ class FullscreenGameView extends StatelessWidget {
                         Icons.skip_next,
                         color: AppColors.overlayInk,
                       ),
-                      tooltip: 'Next game (N)',
+                      tooltip: 'Next game (↓)',
                     ),
                     const SizedBox(width: 12),
                     PopupMenuButton<double>(

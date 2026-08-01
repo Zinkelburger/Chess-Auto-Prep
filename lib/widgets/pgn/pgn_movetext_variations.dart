@@ -213,9 +213,9 @@ InlineSpan _variationMoveSpan(
   final isCurrentNode =
       view.analysisPath.isNotEmpty && view.analysisPath.last.id == node.id;
 
-  final nagSuffix = (node.nags != null && node.nags!.isNotEmpty)
-      ? node.nags!.where((n) => n >= 1 && n <= 6).map(nagSymbol).join()
-      : '';
+  // Every NAG, same as the mainline — a sideline's `⩲` is the reason the
+  // sideline is there.
+  final nagSuffix = allNagSuffix(node.nags);
 
   final base = PgnTextStyles.moveAt(depth, ephemeral: node.isEphemeral);
   final sanStyle = isCurrentNode

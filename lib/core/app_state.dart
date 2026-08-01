@@ -53,8 +53,9 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
   bool _isRepertoireGenerating = false;
   bool? _initialBoardFlipped;
 
-  // Tactics auto-fetch preferences
-  bool _tacticsAutoFetch = false;
+  // When each account's games were last downloaded (shown on the accounts
+  // card). Whether a review runs on startup is one opt-in, and it lives with
+  // the review: `recent_games.auto_run`.
   DateTime? _lichessLastFetch;
   DateTime? _chesscomLastFetch;
 
@@ -122,7 +123,6 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
   bool get usernamesLoaded => _usernamesLoaded;
   bool get isAnalysisMode => _isAnalysisMode;
   bool get isRepertoireGenerating => _isRepertoireGenerating;
-  bool get tacticsAutoFetch => _tacticsAutoFetch;
   DateTime? get lichessLastFetch => _lichessLastFetch;
   DateTime? get chesscomLastFetch => _chesscomLastFetch;
   bool get boardFlipped {
@@ -162,27 +162,42 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
   );
 
   /// Switch to Study mode with the PGN file at [path] opened for editing
-  /// ("Edit study" in the Repertoire Trainer).
-  void switchToStudyEdit({required String path, String? historyLabel}) =>
-      handOff(EditStudy(studyPath: path), historyLabel: historyLabel);
+  /// ("Edit study" in the Repertoire Trainer, the viewer's Edit toggle).
+  void switchToStudyEdit({
+    required String path,
+    int? chapterIndex,
+    List<String>? initialSanLine,
+    String? historyLabel,
+  }) => handOff(
+    EditStudy(
+      studyPath: path,
+      chapterIndex: chapterIndex,
+      initialSanLine: initialSanLine,
+    ),
+    historyLabel: historyLabel,
+  );
 
   /// Switch to the PGN Viewer with the file at [path] opened, optionally
   /// sliced to games containing [sliceFen] ("Open Games in PGN Viewer" in
-  /// Player Analysis). [gameId] jumps to one game of the collection and
-  /// [autoAnalyze] starts the engine review on it (the Games page's
-  /// "Review").
+  /// Player Analysis). [gameId] jumps to one game of the collection, [tab]
+  /// picks the side panel it lands on, and [autoAnalyze] starts the engine
+  /// review on it.
   void switchToPgnViewer({
     required String path,
     String? sliceFen,
     String? gameId,
+    int? gameIndex,
     bool autoAnalyze = false,
+    PgnViewerTab tab = PgnViewerTab.game,
     String? historyLabel,
   }) => handOff(
     OpenPgnViewer(
       pgnPath: path,
       sliceFen: sliceFen,
       gameId: gameId,
+      gameIndex: gameIndex,
       autoAnalyze: autoAnalyze,
+      tab: tab,
     ),
     historyLabel: historyLabel,
   );
@@ -237,12 +252,6 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
-  void setTacticsAutoFetch(bool value) {
-    _tacticsAutoFetch = value;
-    _saveTacticsAutoFetch(value);
-    notifyListeners();
-  }
-
   void setLichessLastFetch(DateTime? date) {
     _lichessLastFetch = date;
     _saveLastFetch('lichess_last_fetch_ms', date);
@@ -259,7 +268,6 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _lichessUsername = prefs.getString('lichess_username');
     _chesscomUsername = prefs.getString('chesscom_username');
-    _tacticsAutoFetch = prefs.getBool('tactics_auto_fetch') ?? false;
     final lichessMs = prefs.getInt('lichess_last_fetch_ms');
     _lichessLastFetch = lichessMs != null
         ? DateTime.fromMillisecondsSinceEpoch(lichessMs)
@@ -295,11 +303,6 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
     } else {
       await prefs.remove('chesscom_username');
     }
-  }
-
-  Future<void> _saveTacticsAutoFetch(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('tactics_auto_fetch', value);
   }
 
   Future<void> _saveLastFetch(String key, DateTime? date) async {

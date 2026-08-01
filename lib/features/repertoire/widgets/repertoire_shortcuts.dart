@@ -62,11 +62,11 @@ class RepertoireShortcuts extends StatelessWidget {
   /// Called on Shift+Right before [onGoForward]. Return true if trap nav handled.
   final bool Function() onGoToNextTrap;
 
-  /// N — next trap-tour stop when the tour is open, otherwise next finding
+  /// ↓ — next trap-tour stop when the tour is open, otherwise next finding
   /// in the audit findings panel.
   final bool Function()? onNextFinding;
 
-  /// P — previous trap-tour stop when the tour is open, otherwise previous
+  /// ↑ — previous trap-tour stop when the tour is open, otherwise previous
   /// finding in the audit findings panel.
   final bool Function()? onPrevFinding;
 
@@ -101,15 +101,19 @@ class RepertoireShortcuts extends StatelessWidget {
     KeyBinding.run(LogicalKeyboardKey.keyF, 'Flip board', onFlip),
     KeyBinding(LogicalKeyboardKey.keyT, 'Toggle trap tour', onToggleTrapTour),
     KeyBinding.run(LogicalKeyboardKey.keyE, 'Toggle engine', onToggleEngine),
+    // ↓/↑ step the active list (trap tour stops, audit findings) — the
+    // app-wide convention; N/P are gone (N is the knight).
     KeyBinding(
-      LogicalKeyboardKey.keyN,
+      LogicalKeyboardKey.arrowDown,
       'Next trap stop / finding',
       () => onNextFinding?.call() ?? false,
+      repeats: true,
     ),
     KeyBinding(
-      LogicalKeyboardKey.keyP,
+      LogicalKeyboardKey.arrowUp,
       'Previous trap stop / finding',
       () => onPrevFinding?.call() ?? false,
+      repeats: true,
     ),
     KeyBinding(
       LogicalKeyboardKey.keyD,
@@ -170,7 +174,8 @@ class RepertoireShortcuts extends StatelessWidget {
       child: Focus(
         focusNode: focusNode,
         autofocus: autofocus,
-        onKeyEvent: (node, event) => handleKeyBindings(_keyBindings, event),
+        onKeyEvent: (node, event) =>
+            handleKeyBindings(_keyBindings, event, node: node),
         child: child,
       ),
     );

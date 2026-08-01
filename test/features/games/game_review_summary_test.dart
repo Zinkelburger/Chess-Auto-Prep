@@ -30,13 +30,13 @@ void main() {
     expect(asWhite!.blunders, 1); // 2. g4
     expect(asWhite.mistakes, 0);
     expect(asWhite.clean, isFalse);
-    expect(asWhite.chipLabel, '1 blunder');
+    expect(asWhite.breakdown, contains('1 blunder'));
 
     final asBlack = summarizeGameReview(_foolsMate, meWhite: false);
     expect(asBlack, isNotNull);
     // Black played fine (the mating move is a board fact, not a swing).
     expect(asBlack!.clean, isTrue);
-    expect(asBlack.chipLabel, 'Clean');
+    expect(asBlack.breakdown, contains('no blunders'));
   });
 
   test('a game without eval comments is not analyzed', () {
@@ -60,24 +60,15 @@ void main() {
     expect(out[2], isNull);
   });
 
-  test('chip label pluralizes and picks the worst category', () {
-    const twoBlunders = GameReviewSummary(
-      blunders: 2,
-      mistakes: 1,
-      inaccuracies: 3,
+  test('the breakdown names every category, pluralized', () {
+    const mixed = GameReviewSummary(blunders: 2, mistakes: 1, inaccuracies: 3);
+    expect(
+      mixed.breakdown,
+      'Analyzed: 2 blunders, 1 mistake, 3 inaccuracies.',
+      reason: 'all three counts, not just the worst',
     );
-    expect(twoBlunders.chipLabel, '2 blunders');
-    const inaccOnly = GameReviewSummary(
-      blunders: 0,
-      mistakes: 0,
-      inaccuracies: 1,
-    );
-    expect(inaccOnly.chipLabel, '1 inaccuracy');
-    const several = GameReviewSummary(
-      blunders: 0,
-      mistakes: 0,
-      inaccuracies: 2,
-    );
-    expect(several.chipLabel, '2 inaccuracies');
+    const one = GameReviewSummary(blunders: 1, mistakes: 0, inaccuracies: 1);
+    expect(one.breakdown, contains('1 blunder,'));
+    expect(one.breakdown, contains('1 inaccuracy.'));
   });
 }

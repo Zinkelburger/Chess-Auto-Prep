@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/study_controller.dart';
 import '../../theme/app_colors.dart';
+import '../common/list_search_field.dart';
 
 Future<void> showChapterManagerDialog(
   BuildContext context, {
@@ -33,6 +34,21 @@ class _ChapterManagerDialog extends StatefulWidget {
 
 class _ChapterManagerDialogState extends State<_ChapterManagerDialog> {
   StudyController get _study => widget.study;
+
+  String _search = '';
+
+  /// Chapter indices to show, in study order. Everything below addresses
+  /// chapters by their *real* index, so filtering never has to renumber
+  /// rename / delete / select.
+  List<int> get _visibleIndices {
+    final chapters = _study.doc.chapters;
+    return [
+      for (var i = 0; i < chapters.length; i++)
+        if (matchesSearch(_search, chapters[i].name)) i,
+    ];
+  }
+
+  bool get _isFiltering => _search.trim().isNotEmpty;
 
   Future<void> _rename(int index) async {
     final name = await widget.promptName(
@@ -71,6 +87,7 @@ class _ChapterManagerDialogState extends State<_ChapterManagerDialog> {
   Widget build(BuildContext context) {
     final chapters = _study.doc.chapters;
     final onlyOne = chapters.length <= 1;
+    final visible = _visibleIndices;
 
     return Dialog(
       child: ConstrainedBox(
@@ -87,9 +104,11 @@ class _ChapterManagerDialogState extends State<_ChapterManagerDialog> {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(width: 10),
-                  const Text(
-                    'Drag to reorder',
-                    style: TextStyle(
+                  Text(
+                    _isFiltering
+                        ? 'Reordering is off while searching'
+                        : 'Drag to reorder',
+                    style: const TextStyle(
                       fontSize: 12,
                       color: AppColors.onSurfaceMuted,
                     ),
@@ -103,32 +122,58 @@ class _ChapterManagerDialogState extends State<_ChapterManagerDialog> {
                 ],
               ),
             ),
-            const Divider(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+              child: ListSearchField(
+                hintText: 'Search chapters',
+                onChanged: (value) => setState(() => _search = value),
+              ),
+            ),
+            const Divider(height: 1),
+            if (visible.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'No chapter matches that search.',
+                  style: TextStyle(color: AppColors.onSurfaceMuted),
+                ),
+              ),
             Flexible(
+              // Dragging a *filtered* list would reorder by the wrong index,
+              // so a search turns reordering off rather than guessing.
               child: ReorderableListView.builder(
                 shrinkWrap: true,
                 padding: const EdgeInsets.symmetric(vertical: 4),
-                itemCount: chapters.length,
+                itemCount: visible.length,
+                buildDefaultDragHandles: false,
                 // onReorderItem, unlike the deprecated onReorder, already
                 // accounts for the dragged row being lifted out of the list,
                 // so these are final positions.
                 onReorderItem: (oldIndex, newIndex) {
+                  if (_isFiltering) return;
                   setState(() => _study.reorderChapter(oldIndex, newIndex));
                 },
-                itemBuilder: (context, index) {
+                itemBuilder: (context, position) {
+                  final index = visible[position];
                   final chapter = chapters[index];
                   final isCurrent = index == _study.chapterIndex;
                   return ListTile(
                     key: ValueKey('${chapter.name}#$index'),
                     dense: true,
-                    leading: ReorderableDragStartListener(
-                      index: index,
-                      child: const Icon(
-                        Icons.drag_indicator,
-                        size: 20,
-                        color: AppColors.onSurfaceMuted,
-                      ),
-                    ),
+                    leading: _isFiltering
+                        ? const Icon(
+                            Icons.drag_indicator,
+                            size: 20,
+                            color: AppColors.onSurfaceDisabled,
+                          )
+                        : ReorderableDragStartListener(
+                            index: position,
+                            child: const Icon(
+                              Icons.drag_indicator,
+                              size: 20,
+                              color: AppColors.onSurfaceMuted,
+                            ),
+                          ),
                     title: Text(
                       chapter.name,
                       overflow: TextOverflow.ellipsis,

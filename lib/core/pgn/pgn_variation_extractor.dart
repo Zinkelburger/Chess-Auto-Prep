@@ -71,10 +71,18 @@ MoveNode? _convertPgnSubtree(
     }
   }
 
-  final comment =
-      (pgnNode.data.comments != null && pgnNode.data.comments!.isNotEmpty)
-      ? pgnNode.data.comments!.first
-      : null;
+  // [MoveNode] holds a single comment string, so everything the PGN attached
+  // to this move is joined into it rather than dropped: all of `comments` (a
+  // move may carry several `{}` blocks), preceded by any `startingComments`.
+  // Those are written *before* the move and are almost always the line's
+  // introduction — rendering them right after the sideline's first move is
+  // close enough to where they belong, and far better than losing them, which
+  // is what "keep comments.first" did.
+  final parts = [
+    ...?pgnNode.data.startingComments,
+    ...?pgnNode.data.comments,
+  ].where((c) => c.trim().isNotEmpty);
+  final comment = parts.isEmpty ? null : parts.join(' ');
 
   final nags = (pgnNode.data.nags != null && pgnNode.data.nags!.isNotEmpty)
       ? pgnNode.data.nags!.toList()

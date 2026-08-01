@@ -2,93 +2,61 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_state.dart';
+import '../../features/games/services/games_window.dart';
 import '../../models/tactics_position.dart';
 import '../../models/tactics_session_settings.dart';
-import '../../services/tactics/tactics_import_coordinator.dart';
-import '../../services/tactics_import_service.dart';
+import '../../services/tactics/tactics_import_form.dart';
+import '../../services/tactics/tactics_session_controller.dart';
 import '../../theme/app_colors.dart';
 import '../labeled_toggle.dart';
 
 part 'tactics_import_panel_start_card.dart';
-part 'tactics_import_panel_import_card.dart';
+part 'tactics_import_panel_accounts_card.dart';
 part 'tactics_import_panel_widgets.dart';
 
-/// Tactics home screen when no puzzle is active: an always-visible Import
-/// Games card (usernames front and center, engine knobs behind a gear
-/// dialog), then the Practice card with the start button at the bottom.
+/// Tactics home screen when no puzzle is active: an always-visible accounts
+/// card (usernames front and centre, and which games count as recent), then the
+/// Tactics card — what is in the database and the filters that decide which of
+/// it you practise.
+///
+/// What is *not* here any more:
+///
+/// * An Import button per site and an engine gear. Downloading games, checking
+///   them against your books and finding your mistakes are one job, and it
+///   belongs beside the games it produces — the review strip in the left pane
+///   owns it, including how many cores and how much depth it may use.
+/// * The big Start Practice button, and the import/resume status banners. Both
+///   have moved to that same strip: two play buttons half a window apart, and a
+///   progress banner on the opposite side from the progress bar, is a screen
+///   that reads as two unrelated apps. One column starts things and reports on
+///   them; this side is what they act on.
 ///
 /// Layout rule: the structure is static. Sections never collapse, reorder,
-/// or appear/disappear in reaction to typing — only transient status
-/// (import progress, resume-analysis) may come and go.
+/// or appear/disappear in reaction to typing.
+///
+/// The panel renders [TacticsImportForm] directly rather than taking a dozen
+/// controller props: the form *is* this card's state, and threading each field
+/// through its own parameter only obscured that the two are one thing.
 class TacticsImportPanel extends StatefulWidget {
   const TacticsImportPanel({
     super.key,
-    this.importStatus,
+    required this.form,
     required this.isImporting,
-    this.isCancelling = false,
-    this.activeImport,
-    required this.lichessUserController,
-    required this.lichessCountController,
-    required this.chessComUserController,
-    required this.stockfishDepthController,
-    required this.coresController,
-    this.depthError,
-    this.coresError,
-    required this.importFieldsValid,
-    required this.onValidateDepth,
-    required this.onValidateCores,
-    required this.onImportLichess,
-    required this.onImportChessCom,
-    required this.onDismissImportStatus,
-    required this.onCancelImport,
     required this.positions,
-    required this.onStartSession,
     required this.onClearDatabase,
     required this.onBrowseTactics,
     this.clearDatabaseEnabled = true,
-    required this.fetchMode,
-    required this.onFetchModeChanged,
-    required this.sinceDays,
-    required this.onSinceDaysChanged,
-    this.pendingGameCount = 0,
-    this.totalStoredGames = 0,
-    this.onResumeAnalysis,
-    this.onFetchNew,
   });
 
-  final String? importStatus;
+  /// Text fields, the shared games window, and the shared engine settings.
+  /// Owned by the control panel; this widget only renders it.
+  final TacticsImportForm form;
+
   final bool isImporting;
-  final bool isCancelling;
-  final TacticsImportService? activeImport;
-  final TextEditingController lichessUserController;
-  final TextEditingController lichessCountController;
-  final TextEditingController chessComUserController;
-  final TextEditingController stockfishDepthController;
-  final TextEditingController coresController;
-  final String? depthError;
-  final String? coresError;
-  final bool importFieldsValid;
-  final ValueChanged<String> onValidateDepth;
-  final ValueChanged<String> onValidateCores;
-  final VoidCallback onImportLichess;
-  final VoidCallback onImportChessCom;
-  final VoidCallback onDismissImportStatus;
-  final VoidCallback onCancelImport;
   final List<TacticsPosition> positions;
-  final void Function(TacticsSessionSettings settings) onStartSession;
   final VoidCallback onClearDatabase;
   final VoidCallback onBrowseTactics;
   final bool clearDatabaseEnabled;
-  final TacticsImportMode fetchMode;
-  final ValueChanged<TacticsImportMode> onFetchModeChanged;
-  final int sinceDays;
-  final ValueChanged<int> onSinceDaysChanged;
-  final int pendingGameCount;
-  final int totalStoredGames;
-  final VoidCallback? onResumeAnalysis;
-
-  /// Fetch new games from every configured source (the sync-row refresh).
-  final VoidCallback? onFetchNew;
 
   @override
   State<TacticsImportPanel> createState() => _TacticsImportPanelState();
@@ -98,46 +66,53 @@ class TacticsImportPanel extends StatefulWidget {
 /// mutate. The concrete [_TacticsImportPanelState] applies the card mixins and
 /// keeps the lifecycle hooks and [build].
 abstract class _TacticsImportPanelStateBase extends State<TacticsImportPanel> {
-  var _settings = const TacticsSessionSettings();
+  final _daysFocus = FocusNode();
+  final _gamesFocus = FocusNode();
 
-  final _sinceDaysController = TextEditingController();
-  final _sinceDaysFocus = FocusNode();
+  TacticsImportForm get _form => widget.form;
+
+  /// The practice filters, owned by [TacticsSessionController] so the left
+  /// pane's Study-tactics button can count what they queue up.
+  TacticsSessionSettings get _settings =>
+      context.read<TacticsSessionController>().sessionSettings;
 }
 
 class _TacticsImportPanelState extends _TacticsImportPanelStateBase
-    with _TacticsImportPanelStartCard, _TacticsImportPanelImportCard {
+    with _TacticsImportPanelStartCard, _TacticsImportPanelAccountsCard {
   @override
   void initState() {
     super.initState();
-    // The Import buttons enable/disable based on whether a username is
-    // present, so rebuild as the user types. (Controllers are owned by the
-    // parent; we only add/remove listeners here, never dispose them.)
-    widget.lichessUserController.addListener(_onUsernameChanged);
-    widget.chessComUserController.addListener(_onUsernameChanged);
-    _sinceDaysController.text = '${widget.sinceDays}';
-    // Restore the user's last-used session settings.
+    // Rebuild as the user types so the review's enablement (which reads these
+    // same usernames) and the last-downloaded lines stay in step. (Controllers
+    // are owned by the form; we only add/remove listeners here, never dispose
+    // them.)
+    _form.lichessUser.addListener(_onUsernameChanged);
+    _form.chessComUser.addListener(_onUsernameChanged);
+    // The form keeps the window fields in sync with the shared setting, but
+    // must not overwrite whichever one the user is typing in.
+    _daysFocus.addListener(
+      () => _form.setDaysFieldFocused(_daysFocus.hasFocus),
+    );
+    _gamesFocus.addListener(
+      () => _form.setGamesFieldFocused(_gamesFocus.hasFocus),
+    );
+    // Restore the user's last-used session settings into the shared controller
+    // (save: false — this *is* what was saved).
     TacticsSessionSettings.load().then((saved) {
-      if (mounted) setState(() => _settings = saved);
+      if (!mounted) return;
+      context.read<TacticsSessionController>().setSessionSettings(
+        saved,
+        save: false,
+      );
     });
   }
 
   @override
-  void didUpdateWidget(TacticsImportPanel oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Reflect externally restored prefs into the days field, but never fight
-    // the user while they're typing in it.
-    if (!_sinceDaysFocus.hasFocus &&
-        int.tryParse(_sinceDaysController.text) != widget.sinceDays) {
-      _sinceDaysController.text = '${widget.sinceDays}';
-    }
-  }
-
-  @override
   void dispose() {
-    widget.lichessUserController.removeListener(_onUsernameChanged);
-    widget.chessComUserController.removeListener(_onUsernameChanged);
-    _sinceDaysController.dispose();
-    _sinceDaysFocus.dispose();
+    _form.lichessUser.removeListener(_onUsernameChanged);
+    _form.chessComUser.removeListener(_onUsernameChanged);
+    _daysFocus.dispose();
+    _gamesFocus.dispose();
     super.dispose();
   }
 
@@ -152,25 +127,7 @@ class _TacticsImportPanelState extends _TacticsImportPanelStateBase
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (widget.importStatus != null) ...[
-          TacticsImportStatusBanner(
-            status: widget.importStatus!,
-            isImporting: widget.isImporting,
-            hasActiveImport: widget.activeImport != null,
-            isCancelling: widget.isCancelling,
-            onCancelImport: widget.onCancelImport,
-            onDismiss: widget.onDismissImportStatus,
-          ),
-          const SizedBox(height: 16),
-        ],
-        if (widget.pendingGameCount > 0 && !widget.isImporting) ...[
-          _ResumeAnalysisBanner(
-            pendingGameCount: widget.pendingGameCount,
-            onResume: widget.onResumeAnalysis,
-          ),
-          const SizedBox(height: 16),
-        ],
-        _buildImportCard(),
+        _buildAccountsCard(),
         const SizedBox(height: 12),
         _buildStartCard(positionCount),
         const SizedBox(height: 8),

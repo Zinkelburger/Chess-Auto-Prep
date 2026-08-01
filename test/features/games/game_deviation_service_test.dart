@@ -201,4 +201,71 @@ void main() {
     );
     expect(after!.matchedPlies, 2);
   });
+
+  group('analyzeGameByRepertoire (one verdict per designated book)', () {
+    // Two White books that diverge from the same game at different points:
+    // the aggregate "deepest match wins" answer hides what the other says.
+    const shallowChapter = '''
+// Color: White
+
+[Event "London"]
+[Result "*"]
+
+1. d4 d5 2. Bf4 *
+''';
+
+    test('reports every designated folder separately', () async {
+      final deep = await Directory('${tempDir.path}/deep').create();
+      final shallow = await Directory('${tempDir.path}/shallow').create();
+      await File('${deep.path}/Main.pgn').writeAsString(mainChapter);
+      await File('${shallow.path}/London.pgn').writeAsString(shallowChapter);
+      await settings.setPaths(white: true, paths: [deep.path, shallow.path]);
+
+      final reports = await service.analyzeGameByRepertoire(
+        gameSans: ['d4', 'd5', 'c4', 'e6', 'Nf3'],
+        meWhite: true,
+      );
+
+      expect(reports.keys, unorderedEquals([deep.path, shallow.path]));
+      expect(reports[deep.path]!.matchedPlies, 4);
+      expect(reports[deep.path]!.playedSan, 'Nf3');
+      expect(reports[shallow.path]!.matchedPlies, 2);
+      expect(reports[shallow.path]!.playedSan, 'c4');
+    });
+
+    test('analyzeGame still collapses to the deepest of them', () async {
+      final deep = await Directory('${tempDir.path}/deep2').create();
+      final shallow = await Directory('${tempDir.path}/shallow2').create();
+      await File('${deep.path}/Main.pgn').writeAsString(mainChapter);
+      await File('${shallow.path}/London.pgn').writeAsString(shallowChapter);
+      await settings.setPaths(white: true, paths: [shallow.path, deep.path]);
+
+      final report = await service.analyzeGame(
+        gameSans: ['d4', 'd5', 'c4', 'e6', 'Nf3'],
+        meWhite: true,
+      );
+      expect(report!.matchedPlies, 4, reason: 'the deeper book wins');
+    });
+
+    test('an explicit folder list overrides the designations', () async {
+      final other = await Directory('${tempDir.path}/other').create();
+      await File('${other.path}/London.pgn').writeAsString(shallowChapter);
+      await settings.setPaths(white: true, paths: [tempDir.path]);
+
+      final reports = await service.analyzeGameByRepertoire(
+        gameSans: ['d4', 'd5', 'c4'],
+        meWhite: true,
+        folders: [other.path],
+      );
+      expect(reports.keys, [other.path]);
+    });
+
+    test('a game with no moves yields nothing', () async {
+      await settings.setPaths(white: true, paths: [tempDir.path]);
+      expect(
+        await service.analyzeGameByRepertoire(gameSans: [], meWhite: true),
+        isEmpty,
+      );
+    });
+  });
 }

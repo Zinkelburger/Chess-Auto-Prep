@@ -24,16 +24,9 @@ class GameReviewSummary {
 
   bool get clean => blunders == 0 && mistakes == 0 && inaccuracies == 0;
 
-  /// Compact cell text: the worst category with its count ("2 blunders",
-  /// "1 mistake", "3 inaccuracies", "Clean"). The full breakdown belongs in
-  /// a tooltip ([breakdown]).
-  String get chipLabel {
-    if (blunders > 0) return _counted(blunders, 'blunder');
-    if (mistakes > 0) return _counted(mistakes, 'mistake');
-    if (inaccuracies > 0) return _counted(inaccuracies, 'inaccuracy');
-    return 'Clean';
-  }
-
+  /// Tooltip text for the counts cell. The cell itself shows the three numbers
+  /// (see `MistakeCounts`) — it used to show only the worst category, which
+  /// named one number and silently dropped the other two.
   String get breakdown {
     if (clean) return 'Analyzed: no blunders, mistakes or inaccuracies. 🎉';
     return 'Analyzed: ${_counted(blunders, 'blunder')}, '

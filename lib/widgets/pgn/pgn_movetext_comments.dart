@@ -1,9 +1,8 @@
 part of 'pgn_movetext_view.dart';
 
-String _rawComment(PgnNodeData moveData) {
-  if (moveData.comments == null || moveData.comments!.isEmpty) return '';
-  return moveData.comments!.first;
-}
+/// The move's comment as the inline editor should show it: every block joined,
+/// so editing it edits all of it (see `_writeWholeComment`).
+String _rawComment(PgnNodeData moveData) => joinComments(moveData.comments);
 
 /// Render a comment as plain flowing prose: engine tokens stripped, all
 /// whitespace collapsed, no paragraph or block structure. Moves written in

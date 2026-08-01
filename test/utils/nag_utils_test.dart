@@ -62,4 +62,46 @@ void main() {
       expect(toggleQualityNag(const [1, 22], 10), const [22]);
     });
   });
+
+  group('allNagSuffix', () {
+    test('is empty for null / empty', () {
+      expect(allNagSuffix(null), '');
+      expect(allNagSuffix(const []), '');
+    });
+
+    test('renders positional NAGs the quality suffix drops', () {
+      // These are exactly the annotations the movetext used to swallow by
+      // filtering to ids 1..6.
+      expect(qualityNagSuffix(const [14]), '');
+      expect(allNagSuffix(const [14]), '⩲');
+      expect(allNagSuffix(const [16]), '±');
+      expect(allNagSuffix(const [19]), '−+');
+      expect(allNagSuffix(const [13]), '∞');
+      expect(allNagSuffix(const [40]), '→');
+    });
+
+    test('keeps quality and positional NAGs together, in PGN order', () {
+      expect(allNagSuffix(const [1, 14]), '!⩲');
+      expect(allNagSuffix(const [14, 1]), '⩲!');
+    });
+
+    test('falls back to \$N so an unknown annotation is still visible', () {
+      expect(allNagSuffix(const [250]), '\$250');
+    });
+  });
+
+  group('joinComments', () {
+    test('is empty for null / empty / whitespace-only blocks', () {
+      expect(joinComments(null), '');
+      expect(joinComments(const []), '');
+      expect(joinComments(const ['', '   ']), '');
+    });
+
+    test('keeps every block, not just the first', () {
+      expect(
+        joinComments(const ['A sharp line.', '[%cal Rf3g5]']),
+        'A sharp line. [%cal Rf3g5]',
+      );
+    });
+  });
 }

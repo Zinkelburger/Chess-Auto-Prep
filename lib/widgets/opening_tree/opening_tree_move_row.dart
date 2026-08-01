@@ -120,7 +120,13 @@ class OpeningTreeMoveRow extends StatelessWidget {
                 SizedBox(
                   width: 100,
                   child: Text(
-                    '${entry.wins}-${entry.draws}-${entry.losses}',
+                    // Same point of view as [displayRate]; the neutral
+                    // perspective keeps a plain white-draws-black triple.
+                    perspective == WdlPerspective.whiteBlack
+                        ? '${entry.wins}-${entry.draws}-${entry.losses}'
+                        : perspective == WdlPerspective.playerIsBlack
+                        ? '${entry.losses}W-${entry.draws}D-${entry.wins}L'
+                        : '${entry.wins}W-${entry.draws}D-${entry.losses}L',
                     style: const TextStyle(
                       fontSize: 11,
                       color: AppColors.onSurfaceMuted,

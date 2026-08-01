@@ -99,38 +99,74 @@ class GameDeviationService {
     required List<String> gameSans,
     required bool meWhite,
   }) async {
-    if (gameSans.isEmpty) return null;
-    await _settings.ensureLoaded();
-    final folders = _settings.pathsFor(white: meWhite);
-    if (folders.isEmpty) return null;
-
+    final all = await analyzeGameByRepertoire(
+      gameSans: gameSans,
+      meWhite: meWhite,
+    );
     DeviationReport? best;
-    for (final folder in folders) {
-      for (final chapter in await _chapterPathsIn(folder)) {
-        final root = await _trieFor(chapter);
-        if (root == null || root.children.isEmpty) continue;
-
-        var node = root;
-        var matched = 0;
-        for (final san in gameSans) {
-          final child = node.children[normalizeSan(san)];
-          if (child == null) break;
-          node = child;
-          matched++;
-        }
-
-        if (best != null && matched <= best.matchedPlies) continue;
-        final diverged = matched < gameSans.length;
-        best = DeviationReport(
-          matchedPlies: matched,
-          chapterPath: chapter,
-          chapterName: _chapterDisplayName(chapter),
-          pathSans: gameSans.sublist(0, matched),
-          playedSan: diverged ? gameSans[matched] : null,
-          byMe: diverged ? (matched.isEven == meWhite) : null,
-          expectedSans: diverged ? node.display.values.toList() : const [],
-        );
+    for (final report in all.values) {
+      if (best == null || report.matchedPlies > best.matchedPlies) {
+        best = report;
       }
+    }
+    return best;
+  }
+
+  /// The same walk, but reported **per designated repertoire folder** instead
+  /// of collapsed to the single deepest match.
+  ///
+  /// Two books for one colour is a supported setup ("I have two White things
+  /// loaded"), and for a manual check against a game the interesting answer is
+  /// what *each* of them says: the deepest match alone silently hides that the
+  /// other book covers the line too, or doesn't. Keyed by repertoire folder
+  /// path; folders with no usable chapter are absent.
+  Future<Map<String, DeviationReport>> analyzeGameByRepertoire({
+    required List<String> gameSans,
+    required bool meWhite,
+    List<String>? folders,
+  }) async {
+    if (gameSans.isEmpty) return const {};
+    await _settings.ensureLoaded();
+    final targets = folders ?? _settings.pathsFor(white: meWhite);
+    final out = <String, DeviationReport>{};
+    for (final folder in targets) {
+      final best = await _bestInFolder(folder, gameSans, meWhite);
+      if (best != null) out[folder] = best;
+    }
+    return out;
+  }
+
+  /// Deepest-matching chapter within one repertoire folder.
+  Future<DeviationReport?> _bestInFolder(
+    String folder,
+    List<String> gameSans,
+    bool meWhite,
+  ) async {
+    DeviationReport? best;
+    for (final chapter in await _chapterPathsIn(folder)) {
+      final root = await _trieFor(chapter);
+      if (root == null || root.children.isEmpty) continue;
+
+      var node = root;
+      var matched = 0;
+      for (final san in gameSans) {
+        final child = node.children[normalizeSan(san)];
+        if (child == null) break;
+        node = child;
+        matched++;
+      }
+
+      if (best != null && matched <= best.matchedPlies) continue;
+      final diverged = matched < gameSans.length;
+      best = DeviationReport(
+        matchedPlies: matched,
+        chapterPath: chapter,
+        chapterName: _chapterDisplayName(chapter),
+        pathSans: gameSans.sublist(0, matched),
+        playedSan: diverged ? gameSans[matched] : null,
+        byMe: diverged ? (matched.isEven == meWhite) : null,
+        expectedSans: diverged ? node.display.values.toList() : const [],
+      );
     }
     return best;
   }

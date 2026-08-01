@@ -6,6 +6,7 @@ library;
 import 'dart:async';
 
 import 'package:chess_auto_prep/features/games/controllers/recent_games_controller.dart';
+import 'package:chess_auto_prep/features/games/services/games_window.dart';
 import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:chess_auto_prep/services/games_library/games_library_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -67,6 +68,7 @@ void main() {
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       library: library,
+      windowSettings: GamesWindowSettings.forTest(),
     );
     addTearDown(controller.dispose);
 
@@ -84,6 +86,7 @@ void main() {
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       library: library,
+      windowSettings: GamesWindowSettings.forTest(),
     );
     addTearDown(controller.dispose);
 
@@ -108,6 +111,7 @@ void main() {
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       library: library,
+      windowSettings: GamesWindowSettings.forTest(),
     );
     addTearDown(controller.dispose);
 
@@ -120,7 +124,8 @@ void main() {
     // refresh() no-ops while loading, so without queueing these filters
     // would be persisted but never applied to the visible list.
     await controller.setFilters(
-      const GamesListFilters(speeds: {GameSpeed.blitz}, maxGames: 5),
+      const GamesListFilters(speeds: {GameSpeed.blitz}),
+      window: const GamesWindow(games: 5),
     );
     expect(library.calls, hasLength(1), reason: 'reload waits for the load');
 

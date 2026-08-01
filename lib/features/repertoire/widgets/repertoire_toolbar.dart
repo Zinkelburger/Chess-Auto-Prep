@@ -4,7 +4,9 @@ import '../../../constants/ui_breakpoints.dart';
 import '../../../models/repertoire_metadata.dart';
 import '../../../screens/settings_screen.dart';
 import '../../../theme/app_colors.dart';
+import '../../../widgets/app_breadcrumb_trail.dart';
 import '../../../widgets/app_mode_menu_button.dart';
+import '../../../widgets/common/searchable_picker_dialog.dart';
 import '../../../widgets/layout/board_zone.dart';
 
 /// App bar for the repertoire screen: title, generation status, and actions.
@@ -76,12 +78,14 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     return AppBar(
       titleSpacing: 16,
-      title: _titleIsSwitcher
-          ? RepertoireSwitcherTitle(
-              title: title,
-              onTap: generationLocked ? null : onSelectRepertoire,
-            )
-          : title,
+      title: AppBarTitleWithTrail(
+        title: _titleIsSwitcher
+            ? RepertoireSwitcherTitle(
+                title: title,
+                onTap: generationLocked ? null : onSelectRepertoire,
+              )
+            : title,
+      ),
       actions: [
         BoardZoneControls(trapNavigation: trapNavigation),
         if (showChaptersAction && onOpenChapters != null)
@@ -350,79 +354,66 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
 
     if (!enabled) return child;
 
+    // A searchable dialog rather than a popup menu: a real repertoire runs to
+    // dozens of chapters, and a menu has nowhere to put a text box. The two
+    // actions ride along as rows so nothing is lost in the swap.
     return Tooltip(
       message: 'Switch chapter',
       waitDuration: const Duration(milliseconds: 600),
-      child: PopupMenuButton<String>(
-        tooltip: '',
-        position: PopupMenuPosition.under,
-        onSelected: (value) {
-          if (value == _addValue) {
-            onAddChapter?.call();
-          } else if (value == _viewAllValue) {
-            onViewChapters?.call();
-          } else {
-            for (final c in chapters) {
-              if (c.filePath == value) {
-                onSelectChapter(c);
-                break;
-              }
-            }
-          }
-        },
-        itemBuilder: (context) => [
-          for (final c in chapters)
-            PopupMenuItem<String>(value: c.filePath, child: _chapterRow(c)),
-          const PopupMenuDivider(),
-          const PopupMenuItem<String>(
-            value: _addValue,
-            child: ListTile(
-              leading: Icon(Icons.add, size: 20),
-              title: Text('Add chapter'),
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-            ),
-          ),
-          const PopupMenuItem<String>(
-            value: _viewAllValue,
-            child: ListTile(
-              leading: Icon(Icons.list_alt, size: 20),
-              title: Text('View all chapters'),
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-            ),
-          ),
-        ],
+      child: InkWell(
+        borderRadius: BorderRadius.circular(4),
+        onTap: () => _openChapterPicker(context),
         child: child,
       ),
     );
   }
 
-  Widget _chapterRow(RepertoireMetadata c) {
-    final isCurrent = c.filePath == currentChapterPath;
-    return Row(
-      children: [
-        SizedBox(
-          width: 24,
-          child: isCurrent ? const Icon(Icons.check, size: 18) : null,
-        ),
-        Expanded(
-          child: Text(
-            c.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontWeight: isCurrent ? FontWeight.w600 : FontWeight.normal,
-            ),
+  Future<void> _openChapterPicker(BuildContext context) async {
+    final picked = await showSearchablePicker<String>(
+      context: context,
+      title: 'Switch chapter',
+      searchHint: 'Search chapters',
+      selected: currentChapterPath,
+      items: [
+        for (final c in chapters)
+          PickerItem(
+            value: c.filePath,
+            label: c.name,
+            subtitle: '${c.gameCount} line${c.gameCount == 1 ? '' : 's'}',
+            icon: Icons.bookmark_outline,
+            // The counts are noise to type against; chapters are found by
+            // name.
+            searchText: c.name,
           ),
+        const PickerItem(
+          value: _addValue,
+          label: 'Add chapter',
+          icon: Icons.add,
         ),
-        const SizedBox(width: 8),
-        Text(
-          '${c.gameCount}',
-          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+        const PickerItem(
+          value: _viewAllValue,
+          label: 'View all chapters',
+          icon: Icons.list_alt,
         ),
       ],
+      emptyMessage: 'This repertoire has no chapters yet.',
     );
+
+    if (picked == null) return;
+    if (picked == _addValue) {
+      onAddChapter?.call();
+      return;
+    }
+    if (picked == _viewAllValue) {
+      onViewChapters?.call();
+      return;
+    }
+    for (final c in chapters) {
+      if (c.filePath == picked) {
+        onSelectChapter(c);
+        return;
+      }
+    }
   }
 }
 

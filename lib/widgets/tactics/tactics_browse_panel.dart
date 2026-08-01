@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/tactics_position.dart';
 import '../../theme/app_colors.dart';
+import '../common/list_search_field.dart';
 import '../common/static_board_thumbnail.dart';
 import '../labeled_toggle.dart';
 import 'puzzle_stats_display.dart';
@@ -79,6 +80,10 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
   /// Flaw-tag filter: a tactic must carry EVERY selected tag (empty = all).
   final Set<String> _tagFilter = {};
 
+  /// Free-text filter, applied alongside the chips in [_buildVisibleIndices]
+  /// so the visible count in the bar already accounts for it.
+  String _search = '';
+
   /// Show a small board preview next to each tactic.
   bool _showBoards = true;
 
@@ -113,6 +118,12 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
       if (!_enabledTypes.contains(pos.mistakeType)) continue;
       if (_minRating > 0 && pos.rating < _minRating) continue;
       if (_tagFilter.isNotEmpty && !_tagFilter.every(pos.flawTags.contains)) {
+        continue;
+      }
+      if (!matchesSearch(
+        _search,
+        '${pos.gameWhite} ${pos.gameBlack} ${pos.gameDate} ${pos.userMove}',
+      )) {
         continue;
       }
       switch (_statusFilter) {
@@ -234,6 +245,16 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
             setState(() => _selected.addAll(visibleIndices));
           },
           onClearAll: widget.onClearAll,
+        ),
+        const Divider(height: 1),
+        // Under the chips, above the column header: the chips say *what kind*
+        // of puzzle, this says *which game it came from*.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+          child: ListSearchField(
+            hintText: 'Search by player, date or move',
+            onChanged: (v) => setState(() => _search = v),
+          ),
         ),
         const Divider(height: 1),
         TacticsBrowseHeader(showBoards: _showBoards),

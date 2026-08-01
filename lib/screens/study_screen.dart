@@ -23,16 +23,17 @@ import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
 import '../utils/board_shape_comments.dart';
 import '../utils/keyboard_shortcut_utils.dart';
-import '../utils/training_markers.dart';
+import '../widgets/app_breadcrumb_trail.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/app_settings_button.dart';
-import '../widgets/jobs_status_button.dart';
 import '../widgets/board_editor/board_editor_dialog.dart';
 import '../widgets/chess_board_widget.dart';
+import '../widgets/common/searchable_picker_dialog.dart';
 import '../widgets/engine/inline_engine_bar.dart';
 import '../widgets/pgn/pgn_annotation_panel.dart';
 import '../widgets/interactive_pgn_editor.dart';
 import '../widgets/study/chapter_manager_dialog.dart';
+import '../widgets/study/study_chapter_sidebar.dart';
 import '../widgets/study/import_from_url_dialog.dart';
 import '../widgets/study/study_import_status_chip.dart';
 import '../widgets/trainer_keyboard_scope.dart';
@@ -94,7 +95,31 @@ class _StudyScreenState extends State<StudyScreen> {
   void _consumePendingStudyPath(AppState appState) {
     final handoff = appState.takeHandoff<EditStudy>();
     if (handoff == null) return;
-    _study.openStudy(handoff.studyPath);
+    unawaited(_openFromHandoff(handoff));
+  }
+
+  Future<void> _openFromHandoff(EditStudy handoff) async {
+    await _study.openStudy(handoff.studyPath);
+    if (!mounted) return;
+    final chapterIndex = handoff.chapterIndex;
+    final chapterName = handoff.chapterName;
+    if (chapterIndex != null && _study.doc.chapters.isNotEmpty) {
+      // Browse↔Edit toggle: the producer showed this same file, index is
+      // exact.
+      _study.selectChapter(
+        chapterIndex.clamp(0, _study.doc.chapters.length - 1),
+      );
+    } else if (chapterName != null) {
+      // Last match: add-to-study appends, and names aren't unique.
+      final index = _study.doc.chapters.lastIndexWhere(
+        (c) => c.name == chapterName,
+      );
+      if (index >= 0) _study.selectChapter(index);
+    }
+    final sanLine = handoff.initialSanLine;
+    if (sanLine != null && sanLine.isNotEmpty) {
+      _study.jumpToSanLine(sanLine);
+    }
   }
 
   @override
@@ -128,14 +153,34 @@ class _StudyScreenState extends State<StudyScreen> {
       _study.goForward,
       repeats: true,
     ),
-    KeyBinding.run(LogicalKeyboardKey.arrowUp, 'Go to start', _study.goToStart),
-    KeyBinding.run(LogicalKeyboardKey.arrowDown, 'Go to end', _study.goToEnd),
+    // Home/End jump to the line's ends (as in the PGN viewer); ↓/↑ step
+    // chapters — the app-wide convention is ↓/↑ = step the active list,
+    // which here is the chapter list. N/P are gone (N is the knight).
+    KeyBinding.run(LogicalKeyboardKey.home, 'Go to start', _study.goToStart),
+    KeyBinding.run(LogicalKeyboardKey.end, 'Go to end', _study.goToEnd),
     KeyBinding.run(
       LogicalKeyboardKey.keyE,
       'Toggle engine',
       InlineEngineBar.toggleEngine,
     ),
     KeyBinding.run(LogicalKeyboardKey.keyF, 'Flip board', _study.toggleFlipped),
+    KeyBinding.run(
+      LogicalKeyboardKey.keyA,
+      'Browse in PGN viewer',
+      _browseInViewer,
+    ),
+    KeyBinding.run(
+      LogicalKeyboardKey.arrowDown,
+      'Next chapter',
+      () => _study.selectChapter(_study.chapterIndex + 1),
+      repeats: true,
+    ),
+    KeyBinding.run(
+      LogicalKeyboardKey.arrowUp,
+      'Previous chapter',
+      () => _study.selectChapter(_study.chapterIndex - 1),
+      repeats: true,
+    ),
     KeyBinding.run(
       LogicalKeyboardKey.slash,
       'Focus move input',
@@ -150,7 +195,7 @@ class _StudyScreenState extends State<StudyScreen> {
   ];
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) =>
-      handleKeyBindings(_keyBindings, event);
+      handleKeyBindings(_keyBindings, event, node: node);
 
   /// Click on an engine-line move: play the PV into the chapter up to and
   /// including the clicked move (existing moves are followed, new ones
@@ -528,6 +573,28 @@ class _StudyScreenState extends State<StudyScreen> {
     context.read<AppState>().switchToStudyTraining(path: path, lineId: lineId);
   }
 
+  /// The Edit↔Browse toggle: reopen this study as a game collection in the
+  /// PGN viewer, parked on the same chapter. The viewer's own toggle comes
+  /// straight back here.
+  Future<void> _browseInViewer() async {
+    final path = _study.doc.filePath;
+    if (path == null) {
+      showAppSnackBar(
+        context,
+        'Save the study first (create it by name).',
+        isError: true,
+      );
+      return;
+    }
+    await _study.flushSave();
+    if (!mounted) return;
+    context.read<AppState>().switchToPgnViewer(
+      path: path,
+      gameIndex: _study.chapterIndex,
+      historyLabel: 'PGN: ${_study.doc.name}',
+    );
+  }
+
   Future<void> _manageChapters() async {
     await showChapterManagerDialog(
       context,
@@ -537,16 +604,23 @@ class _StudyScreenState extends State<StudyScreen> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _renameChapter() async {
+  Future<void> _renameChapterAt(int index) async {
     final name = await _promptName(
       'Rename chapter',
-      initial: _study.chapter.name,
+      initial: _study.doc.chapters[index].name,
     );
     if (name == null) return;
-    _study.renameChapter(_study.chapterIndex, name);
+    _study.renameChapter(index, name);
   }
 
-  Future<void> _deleteChapter() async {
+  /// Gear action on a sidebar row: the board-editor flow edits the *current*
+  /// chapter, so switch to that chapter first.
+  Future<void> _setStartingPositionAt(int index) async {
+    _study.selectChapter(index);
+    await _editChapterPosition();
+  }
+
+  Future<void> _deleteChapterAt(int index) async {
     if (_study.doc.chapters.length <= 1) {
       showAppSnackBar(
         context,
@@ -558,7 +632,7 @@ class _StudyScreenState extends State<StudyScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Delete chapter "${_study.chapter.name}"?'),
+        title: Text('Delete chapter "${_study.doc.chapters[index].name}"?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -574,7 +648,7 @@ class _StudyScreenState extends State<StudyScreen> {
         ],
       ),
     );
-    if (confirmed == true) _study.deleteChapter(_study.chapterIndex);
+    if (confirmed == true) _study.deleteChapter(index);
   }
 
   // ── Build ────────────────────────────────────────────────────────────
@@ -584,13 +658,15 @@ class _StudyScreenState extends State<StudyScreen> {
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 16,
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Study'),
-            const SizedBox(width: 16),
-            _buildStudyPicker(),
-          ],
+        title: AppBarTitleWithTrail(
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Study'),
+              const SizedBox(width: 16),
+              Flexible(child: _buildStudyPicker()),
+            ],
+          ),
         ),
         actions: [
           // Only visible while a collection download is running.
@@ -611,31 +687,15 @@ class _StudyScreenState extends State<StudyScreen> {
             ],
           ),
           IconButton(
+            icon: const Icon(Icons.menu_book, size: 20),
+            tooltip: 'Browse in PGN viewer (A)',
+            onPressed: _study.doc.filePath == null ? null : _browseInViewer,
+          ),
+          IconButton(
             icon: const Icon(Icons.swap_vert, size: 20),
             tooltip: 'Flip board',
             onPressed: _study.toggleFlipped,
           ),
-          IconButton(
-            icon: Icon(
-              Icons.flag,
-              size: 20,
-              color: hasPuzzleStart(_study.cursorComment)
-                  ? AppColors.accent
-                  : null,
-            ),
-            tooltip:
-                'Puzzle starts at this move — training auto-plays the '
-                'earlier moves and quizzes from here on',
-            onPressed: _study.cursorHasNode
-                ? () => togglePuzzleMarker(
-                    _study.tree,
-                    _study.path,
-                    start: true,
-                    setComment: _study.setComment,
-                  )
-                : null,
-          ),
-          const JobsStatusButton(),
           const AppSettingsButton(),
           const AppModeMenuButton(),
         ],
@@ -648,7 +708,10 @@ class _StudyScreenState extends State<StudyScreen> {
           builder: (context, constraints) {
             final compact = constraints.maxWidth < kCompactBreakpoint;
             final board = _buildBoardPane();
-            final side = _buildSidePane();
+            final side = _buildSidePane(compact: compact);
+            // Wide: Lichess study layout — chapters | board | moves. Compact
+            // keeps the stacked two-pane layout with the chapter bar in the
+            // side pane.
             return compact
                 ? Column(
                     children: [
@@ -659,6 +722,19 @@ class _StudyScreenState extends State<StudyScreen> {
                   )
                 : Row(
                     children: [
+                      SizedBox(
+                        width: 240,
+                        child: StudyChapterSidebar(
+                          study: _study,
+                          onAddChapter: _addChapter,
+                          onAddChapterFromPosition: () =>
+                              _addChapter(fromPosition: true),
+                          onRenameChapter: _renameChapterAt,
+                          onSetStartingPosition: _setStartingPositionAt,
+                          onDeleteChapter: _deleteChapterAt,
+                        ),
+                      ),
+                      Container(width: 1, color: AppColors.outline),
                       Expanded(flex: 5, child: board),
                       Container(width: 1, color: AppColors.outline),
                       Expanded(flex: 4, child: side),
@@ -668,6 +744,55 @@ class _StudyScreenState extends State<StudyScreen> {
         ),
       ),
     );
+  }
+
+  /// Both the study and the chapter chooser go through a searchable dialog
+  /// rather than a dropdown: neither a `DropdownButton` nor a
+  /// `PopupMenuButton` can host a text field, and a course-sized study is a
+  /// scroll hunt without one.
+  Future<void> _pickStudy() async {
+    final current = _study.doc;
+    final picked = await showSearchablePicker<String>(
+      context: context,
+      title: 'Switch study',
+      searchHint: 'Search studies',
+      selected: current.filePath,
+      items: [
+        for (final study in _study.availableStudies)
+          PickerItem(
+            value: study.filePath,
+            label: study.name,
+            subtitle:
+                '${study.gameCount} chapter'
+                '${study.gameCount == 1 ? '' : 's'}',
+            icon: Icons.menu_book_outlined,
+          ),
+      ],
+      emptyMessage: 'No studies yet — import or create one.',
+    );
+    if (picked != null && picked != current.filePath) {
+      await _study.openStudy(picked);
+    }
+  }
+
+  Future<void> _pickChapter() async {
+    final picked = await showSearchablePicker<int>(
+      context: context,
+      title: 'Go to chapter',
+      searchHint: 'Search chapters',
+      selected: _study.chapterIndex,
+      items: [
+        for (final (i, chapter) in _study.doc.chapters.indexed)
+          PickerItem(
+            value: i,
+            label: chapter.name,
+            subtitle: 'Chapter ${i + 1}',
+            icon: Icons.bookmark_outline,
+          ),
+      ],
+      emptyMessage: 'This study has no chapters yet.',
+    );
+    if (picked != null) _study.selectChapter(picked);
   }
 
   Widget _buildStudyPicker() {
@@ -736,19 +861,11 @@ class _StudyScreenState extends State<StudyScreen> {
               ),
             ),
           ),
-        PopupMenuButton<String>(
+        IconButton(
           icon: const Icon(Icons.arrow_drop_down, size: 22),
           tooltip: 'Switch study',
-          onSelected: (path) {
-            if (path != current.filePath) _study.openStudy(path);
-          },
-          itemBuilder: (_) => [
-            for (final study in _study.availableStudies)
-              PopupMenuItem(
-                value: study.filePath,
-                child: Text(study.name, overflow: TextOverflow.ellipsis),
-              ),
-          ],
+          visualDensity: VisualDensity.compact,
+          onPressed: _pickStudy,
         ),
         IconButton(
           icon: const Icon(Icons.add, size: 20),
@@ -864,7 +981,7 @@ class _StudyScreenState extends State<StudyScreen> {
     );
   }
 
-  Widget _buildSidePane() {
+  Widget _buildSidePane({required bool compact}) {
     final theme = Theme.of(context);
     return Column(
       children: [
@@ -875,91 +992,100 @@ class _StudyScreenState extends State<StudyScreen> {
           onLineMoveTapped: _addEngineLine,
         ),
         const Divider(height: 1),
-        // Chapter bar
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
-          child: Row(
-            children: [
-              Icon(
-                Icons.bookmark_outline,
-                size: 16,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: DropdownButton<int>(
-                  value: _study.chapterIndex,
-                  isExpanded: true,
-                  isDense: true,
-                  underline: const SizedBox.shrink(),
-                  items: [
-                    for (final (i, chapter) in _study.doc.chapters.indexed)
-                      DropdownMenuItem(
-                        value: i,
-                        child: Text(
-                          chapter.name,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                  ],
-                  onChanged: (i) {
-                    if (i != null) _study.selectChapter(i);
-                  },
+        // Compact-only chapter bar; on wide layouts the sidebar owns
+        // chapter switching and management.
+        if (compact) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.bookmark_outline,
+                  size: 16,
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.add, size: 18),
-                tooltip: 'New chapter',
-                visualDensity: VisualDensity.compact,
-                onPressed: _addChapter,
-              ),
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert, size: 18),
-                tooltip: 'Chapter actions',
-                onSelected: (action) {
-                  switch (action) {
-                    case 'manage':
-                      _manageChapters();
-                    case 'add_from_position':
-                      _addChapter(fromPosition: true);
-                    case 'set_position':
-                      _editChapterPosition();
-                    case 'rename':
-                      _renameChapter();
-                    case 'delete':
-                      _deleteChapter();
-                  }
-                },
-                // "Train this chapter" used to sit here as well as in the app
-                // bar's train menu; one home each is enough.
-                itemBuilder: (_) => const [
-                  PopupMenuItem(
-                    value: 'manage',
-                    child: Text('Manage & reorder chapters…'),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: InkWell(
+                    onTap: _pickChapter,
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _study.doc.chapters.isEmpty
+                                  ? 'No chapters'
+                                  : _study
+                                        .doc
+                                        .chapters[_study.chapterIndex]
+                                        .name,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodyMedium,
+                            ),
+                          ),
+                          const Icon(Icons.arrow_drop_down, size: 20),
+                        ],
+                      ),
+                    ),
                   ),
-                  PopupMenuDivider(),
-                  PopupMenuItem(
-                    value: 'add_from_position',
-                    child: Text('New chapter from position…'),
-                  ),
-                  PopupMenuItem(
-                    value: 'set_position',
-                    child: Text('Set starting position…'),
-                  ),
-                  PopupMenuItem(
-                    value: 'rename',
-                    child: Text('Rename chapter…'),
-                  ),
-                  PopupMenuItem(
-                    value: 'delete',
-                    child: Text('Delete chapter…'),
-                  ),
-                ],
-              ),
-            ],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.add, size: 18),
+                  tooltip: 'New chapter',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _addChapter,
+                ),
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, size: 18),
+                  tooltip: 'Chapter actions',
+                  onSelected: (action) {
+                    switch (action) {
+                      case 'manage':
+                        _manageChapters();
+                      case 'add_from_position':
+                        _addChapter(fromPosition: true);
+                      case 'set_position':
+                        _editChapterPosition();
+                      case 'rename':
+                        _renameChapterAt(_study.chapterIndex);
+                      case 'delete':
+                        _deleteChapterAt(_study.chapterIndex);
+                    }
+                  },
+                  // "Train this chapter" used to sit here as well as in the app
+                  // bar's train menu; one home each is enough.
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: 'manage',
+                      child: Text('Manage & reorder chapters…'),
+                    ),
+                    PopupMenuDivider(),
+                    PopupMenuItem(
+                      value: 'add_from_position',
+                      child: Text('New chapter from position…'),
+                    ),
+                    PopupMenuItem(
+                      value: 'set_position',
+                      child: Text('Set starting position…'),
+                    ),
+                    PopupMenuItem(
+                      value: 'rename',
+                      child: Text('Rename chapter…'),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Text('Delete chapter…'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
-        const Divider(height: 8),
+          const Divider(height: 8),
+        ] else
+          const SizedBox(height: 8),
         Expanded(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -967,6 +1093,7 @@ class _StudyScreenState extends State<StudyScreen> {
               tree: _study.tree,
               currentPath: _study.path,
               currentRepertoireName: _study.chapter.name,
+              showAnnotationPanel: true,
               onJump: _study.jump,
               onCommentChanged: _study.setComment,
               onToggleNag: _study.toggleNag,

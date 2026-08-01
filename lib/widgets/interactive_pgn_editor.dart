@@ -85,6 +85,11 @@ class InteractivePgnEditor extends StatefulWidget {
   /// (e.g. "Trap #45 · Sicilian Defense").
   final String? ephemeralTitle;
 
+  /// Show the persistent annotation panel (comment field, NAG glyphs, puzzle
+  /// markers) even when this host saves through a controller rather than the
+  /// editor's own line-save callbacks (which imply the panel on their own).
+  final bool showAnnotationPanel;
+
   const InteractivePgnEditor({
     super.key,
     required this.tree,
@@ -107,6 +112,7 @@ class InteractivePgnEditor extends StatefulWidget {
     this.trapIndex,
     this.boardPreview,
     this.ephemeralTitle,
+    this.showAnnotationPanel = false,
   });
 
   @override
@@ -383,9 +389,11 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
               text: 'Make Main Line',
             ),
           ),
+        // Copies root→leaf through this move (the old "Duplicate Line" label
+        // promised an edit it never performed).
         const PopupMenuItem(
           value: 'duplicate',
-          child: _PopupMenuRow(icon: Icons.copy_all, text: 'Duplicate Line'),
+          child: _PopupMenuRow(icon: Icons.copy_all, text: 'Copy Whole Line'),
         ),
         const PopupMenuItem(
           value: 'copy',
@@ -544,7 +552,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                 ),
               ),
             ),
-            if (_showTitleField) _buildAnnotationPanel(),
+            if (_showTitleField || widget.showAnnotationPanel)
+              _buildAnnotationPanel(),
           ],
         ),
       ],

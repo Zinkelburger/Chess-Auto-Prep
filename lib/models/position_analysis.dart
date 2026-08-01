@@ -295,6 +295,8 @@ class PositionAnalysis {
       filtered.sort((a, b) => b.winRate.compareTo(a.winRate));
     } else if (sortBy == 'games') {
       filtered.sort((a, b) => b.games.compareTo(a.games));
+    } else if (sortBy == 'wins') {
+      filtered.sort((a, b) => b.wins.compareTo(a.wins));
     } else if (sortBy == 'losses') {
       filtered.sort((a, b) => b.losses.compareTo(a.losses));
     }

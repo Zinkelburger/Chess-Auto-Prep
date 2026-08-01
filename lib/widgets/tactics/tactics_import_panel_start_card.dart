@@ -3,6 +3,12 @@ part of 'tactics_import_panel.dart';
 mixin _TacticsImportPanelStartCard on _TacticsImportPanelStateBase {
   int get _matchingCount => _settings.countMatching(widget.positions);
 
+  /// Mistake types that actually occur in the current database — the Filters
+  /// dialog only offers a "Custom puzzles" checkbox when there are some.
+  Set<String> get _presentMistakeTypes => {
+    for (final pos in widget.positions) pos.mistakeType,
+  };
+
   Future<void> _showSessionSettingsDialog() async {
     var draft = _settings;
     await showDialog<void>(
@@ -29,8 +35,9 @@ mixin _TacticsImportPanelStartCard on _TacticsImportPanelStateBase {
               ),
               FilledButton(
                 onPressed: () {
-                  setState(() => _settings = draft);
-                  draft.save();
+                  context.read<TacticsSessionController>().setSessionSettings(
+                    draft,
+                  );
                   Navigator.pop(ctx);
                 },
                 child: Text('Apply ($matching positions)'),
@@ -42,27 +49,37 @@ mixin _TacticsImportPanelStartCard on _TacticsImportPanelStateBase {
     );
   }
 
-  // ── Start card ─────────────────────────────────────────────────────────
+  // ── Tactics card ───────────────────────────────────────────────────────
 
+  /// What you can play right now, counted by the only thing that means anything
+  /// here — what kind of mistake it was. The button that plays them is in the
+  /// left pane under Review games; see the class doc on [TacticsImportPanel].
+  ///
+  /// This card used to say "157 of 842 puzzles ready to play". Both numbers
+  /// were true and neither was answerable: 842 counted positions the filters
+  /// have already ruled out (old games, mistake types switched off), so the
+  /// pair read as "684 puzzles are being kept from you" with no way to tell
+  /// why. What you actually want to know before pressing play is what is in
+  /// the queue, and that is "84 blunders, 51 mistakes".
   Widget _buildStartCard(int positionCount) {
     final matchingCount = _matchingCount;
 
-    // A single helper line under the button; exactly one variant renders so
-    // the card height stays stable.
-    // Only shown when the user needs to act (or wait); no hint in the
-    // ordinary ready state — the button's "(N ready)" already says it all.
-    String? hint;
-    Color hintColor = AppColors.onSurfaceSoft;
+    // A single line; exactly one variant renders so the card height is stable.
+    String line;
+    Color color = AppColors.onSurfaceSoft;
     if (positionCount == 0) {
-      hint = 'No tactics yet — import your games above to get started.';
+      line = 'No tactics yet — press Review games on the left to find some.';
     } else if (matchingCount == 0) {
-      hint =
-          'All $positionCount positions are filtered out — '
-          'loosen the filters.';
-      hintColor = AppColors.warning;
-    } else if (widget.isImporting) {
-      hint = 'Import is running — new tactics are added as they\'re found.';
-      hintColor = AppColors.success;
+      line =
+          'Nothing to play: your filters rule out every puzzle you have. '
+          'Press Filters… to loosen them.';
+      color = AppColors.warning;
+    } else {
+      line = 'Ready to play: $_readyBreakdown';
+      if (widget.isImporting) {
+        line = '$line — more are added as the review finds them';
+        color = AppColors.success;
+      }
     }
 
     return Card(
@@ -71,112 +88,66 @@ mixin _TacticsImportPanelStartCard on _TacticsImportPanelStateBase {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Practice', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            _buildFilterSummaryRow(),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: matchingCount > 0
-                    ? () => widget.onStartSession(_settings)
-                    : null,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.all(16),
-                  backgroundColor: AppColors.successSurface,
-                  foregroundColor: AppColors.ink,
-                ),
-                icon: const Icon(Icons.play_arrow),
-                label: Text(
-                  'Start Practice Session ($matchingCount ready)',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'My tactics',
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
-              ),
+                TextButton.icon(
+                  onPressed: _showSessionSettingsDialog,
+                  icon: const Icon(Icons.tune, size: 16),
+                  label: const Text('Filters…'),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ],
             ),
-            if (hint != null) ...[
-              const SizedBox(height: 6),
-              Text(hint, style: TextStyle(fontSize: 12, color: hintColor)),
-            ],
+            const SizedBox(height: 4),
+            Text(line, style: TextStyle(fontSize: 12.5, color: color)),
           ],
         ),
       ),
     );
   }
 
-  static String _recencyLabel(int? maxAgeDays) => switch (maxAgeDays) {
-    null => 'All time',
-    1 => 'Today',
-    final d => 'Last $d days',
+  /// Plural/singular noun per mistake type, in the order they are worth
+  /// looking at.
+  static const _typeNouns = <String, (String, String)>{
+    '??': ('blunder', 'blunders'),
+    '?': ('mistake', 'mistakes'),
+    '?!': ('inaccuracy', 'inaccuracies'),
+    TacticsSessionSettings.customMistakeType: (
+      'custom puzzle',
+      'custom puzzles',
+    ),
   };
 
-  static const _mistakeTypeNames = {
-    '??': 'Blunders',
-    '?': 'Mistakes',
-    '?!': 'Inaccuracies',
-    TacticsSessionSettings.customMistakeType: 'Custom puzzles',
-  };
-
-  /// Mistake types that actually occur in the current database.
-  Set<String> get _presentMistakeTypes => {
-    for (final pos in widget.positions) pos.mistakeType,
-  };
-
-  String get _mistakeTypesLabel {
-    // Only talk about types the database actually has — mentioning "Custom
-    // puzzles" when there are none just confuses. With an empty database,
-    // fall back to the standard three.
-    final present = _presentMistakeTypes;
-    final relevant = present.isEmpty
-        ? (_mistakeTypeNames.keys.toSet()
-            ..remove(TacticsSessionSettings.customMistakeType))
-        : present;
-    final selected = [
-      for (final entry in _mistakeTypeNames.entries)
-        if (relevant.contains(entry.key) &&
-            _settings.mistakeTypes.contains(entry.key))
-          entry.value,
-    ];
-    if (selected.isEmpty) return 'No mistake types selected';
-    if (selected.length == relevant.length && relevant.length >= 3) {
-      return 'All mistake types';
+  /// "84 blunders, 51 mistakes" — the playable queue by kind. Types with none
+  /// in it are left out rather than shown as a zero: a row of zeroes is noise,
+  /// and the Filters dialog is where you go to change what counts.
+  String get _readyBreakdown {
+    final counts = <String, int>{};
+    for (final pos in widget.positions) {
+      if (_settings.accepts(pos)) {
+        counts[pos.mistakeType] = (counts[pos.mistakeType] ?? 0) + 1;
+      }
     }
-    return selected.join(', ');
-  }
-
-  /// One plain-text summary of the active session filter plus a single,
-  /// clearly-labeled button that opens the settings dialog.
-  Widget _buildFilterSummaryRow() {
-    final summary =
-        '${_recencyLabel(_settings.maxAgeDays)} · $_mistakeTypesLabel';
-    return Row(
-      children: [
-        const Icon(
-          Icons.filter_alt_outlined,
-          size: 14,
-          color: AppColors.onSurfaceMuted,
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            summary,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.onSurfaceSoft,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        TextButton.icon(
-          onPressed: _showSessionSettingsDialog,
-          icon: const Icon(Icons.tune, size: 16),
-          label: const Text('Filters…'),
-          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-        ),
-      ],
-    );
+    final parts = <String>[
+      for (final entry in _typeNouns.entries)
+        if ((counts[entry.key] ?? 0) > 0)
+          '${counts[entry.key]} '
+              '${counts[entry.key] == 1 ? entry.value.$1 : entry.value.$2}',
+    ];
+    // Any mistake type the database grew that this map doesn't name.
+    final named = _typeNouns.keys.toSet();
+    final other = counts.entries
+        .where((e) => !named.contains(e.key))
+        .fold(0, (sum, e) => sum + e.value);
+    if (other > 0) parts.add('$other other');
+    return parts.join(', ');
   }
 }

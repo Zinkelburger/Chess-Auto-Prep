@@ -60,7 +60,7 @@ mixin _TacticsBrowseActions on _TacticsControlPanelStateBase, _TacticsPlayback {
         browseQueue: [for (final i in visibleIndices) _database.positions[i]],
       );
       if (setup != null) _applyPositionSetup(setup);
-      _syncPgnToCurrentTactic();
+      _resetToCurrentTactic();
       // Land on the Tactic tab so the loaded puzzle is front and center.
       _tabController.animateTo(0);
       _focusNode.requestFocus();
@@ -161,7 +161,7 @@ mixin _TacticsBrowseActions on _TacticsControlPanelStateBase, _TacticsPlayback {
         // data without changing how it was launched (session vs browse).
         final setup = _session.reloadCurrentPosition(updated);
         if (setup != null) _applyPositionSetup(setup);
-        _syncPgnToCurrentTactic();
+        _resetToCurrentTactic();
       }
     }
   }

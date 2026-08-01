@@ -1,9 +1,12 @@
 /// Position analysis widget – three-panel layout for the Player Analysis screen.
 ///
-/// Left: FEN list (or loading spinner). Centre: chess board. Right: engine
-/// bar + tabbed pane (Move Tree · Games · PGN · Analysis · Holes · Tricks).
-/// The
-/// study / puzzle / PGN-viewer handoffs are exposed to the host screen's
+/// Left: the ranked lists that drive the board — Positions · Holes · Tricks,
+/// chosen with a selector that always shows each report's finding count.
+/// Centre: chess board. Right: engine bar + a tabbed pane of views onto the
+/// *current* position (Move Tree · Games · PGN · Analysis), four tabs so none
+/// of them can be pushed off a scrolling tab bar.
+///
+/// The study / puzzle / PGN-viewer handoffs are exposed to the host screen's
 /// app bar through [PositionAnalysisActions].
 ///
 /// All position changes from *any* source (board drag, tree click, FEN list,
@@ -25,7 +28,6 @@ import 'package:dartchess/dartchess.dart';
 import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
-import '../core/study_controller.dart';
 import '../features/audit/models/audit_finding.dart';
 import '../features/audit/models/audit_result.dart';
 import '../features/audit/services/audit_board_annotations.dart';
@@ -36,7 +38,6 @@ import '../features/tricks/widgets/tricks_report_panel.dart';
 import '../models/move_tree.dart';
 import '../models/position_analysis.dart';
 import '../models/opening_tree.dart';
-import '../services/storage/storage_factory.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
@@ -45,9 +46,10 @@ import '../widgets/fen_list_widget.dart';
 import '../widgets/games_list_widget.dart';
 import '../widgets/opening_tree_widget.dart';
 import 'chess_board_widget.dart';
+import 'common/list_nav.dart';
 import 'engine/inline_engine_bar.dart';
 import 'interactive_pgn_editor.dart';
-import 'pgn/add_to_study_dialog.dart';
+import 'study/add_to_study_flow.dart';
 import 'pgn_viewer_widget.dart';
 
 part 'position_analysis_widget.scratch.dart';
@@ -55,8 +57,12 @@ part 'position_analysis_widget.handoffs.dart';
 part 'position_analysis_widget.navigation.dart';
 
 const int _kAnalysisTabIndex = 3;
-const int _kHolesTabIndex = 4;
-const int _kTricksTabIndex = 5;
+
+/// What the left column is listing. All three are "pick an item, the board
+/// jumps there" lists, which is why they share one column instead of being
+/// squeezed into the right pane's tab bar alongside views of the *current*
+/// position.
+enum _LeftPanelMode { positions, holes, tricks }
 
 /// Starting-position board, shown when no FEN has been selected yet.
 const Position _startingPosition = Chess.initial;
@@ -205,6 +211,16 @@ abstract class _PositionAnalysisWidgetStateBase
   final PgnViewerWidgetController _pgnController = PgnViewerWidgetController();
   int _lastNavigateGeneration = 0;
 
+  // One nav controller per left-column list; ↓/↑ go to whichever is showing.
+  final ListNavController _positionsNav = ListNavController();
+  final ListNavController _holesNav = ListNavController();
+  final ListNavController _tricksNav = ListNavController();
+
+  /// Which list the left column shows. Never hidden behind a menu: the
+  /// selector carries the finding counts, so an unread report announces
+  /// itself instead of sitting off the end of a scrolled tab bar.
+  _LeftPanelMode _leftMode = _LeftPanelMode.positions;
+
   // ── Scratch analysis tree (Analysis tab) ───────────────────────────
   //
   // User workspace: off-book board moves, engine lines and manual
@@ -237,7 +253,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
   void initState() {
     super.initState();
     widget.actions?._attach(this);
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(_onTabChanged);
   }
 
@@ -263,6 +279,14 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
         });
       }
     }
+    // Starting a hunt is a request to watch it: swing the left column to the
+    // report so findings stream into view instead of accumulating behind a
+    // selector the user has to think to press.
+    if (widget.isHoleHunting && !oldWidget.isHoleHunting) {
+      _leftMode = _LeftPanelMode.holes;
+    } else if (widget.isTrickHunting && !oldWidget.isTrickHunting) {
+      _leftMode = _LeftPanelMode.tricks;
+    }
     if (widget.externalNavigateFen != null &&
         widget.externalNavigateGeneration != _lastNavigateGeneration) {
       _lastNavigateGeneration = widget.externalNavigateGeneration;
@@ -282,8 +306,8 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
 
   /// Entering the Analysis tab: seed the scratch tree with the line to the
   /// current position so the analysis starts with its opening context.
-  /// Every settled tab change rebuilds, so the board's hole-finding arrows
-  /// (gated on the Holes tab) appear and clear with the tab.
+  /// Every settled tab change rebuilds, so the arrow-key bindings (whose
+  /// meaning depends on the active tab) are re-read.
   void _onTabChanged() {
     if (_tabController.indexIsChanging) return;
     if (_tabController.index == _kAnalysisTabIndex && _currentFen != null) {
@@ -384,7 +408,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
           const TabBar(
             isScrollable: true,
             tabs: [
-              Tab(text: 'Positions'),
+              Tab(text: 'Positions & Reports'),
               Tab(text: 'Details'),
             ],
           ),
@@ -403,12 +427,38 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
   // =====================================================================
 
   /// Shortcuts, dispatched through [handleKeyBindings] (never while typing).
-  /// Arrow-key meaning depends on the active tab.
+  /// Left/right arrows navigate *moves* and follow the active right-pane
+  /// tab; down/up step the left column's active list — two axes that never
+  /// collide.
   List<KeyBinding> get _keyBindings => [
     KeyBinding.run(
       LogicalKeyboardKey.keyE,
       'Toggle engine',
       InlineEngineBar.toggleEngine,
+    ),
+    // The app-wide Escape contract: leave what you are in. Here the only thing
+    // you can be "in" is a tab other than the first, so Escape backs out to it
+    // — the same key doing the same thing as on the tactics panel.
+    KeyBinding(LogicalKeyboardKey.escape, 'Back to the first tab', () {
+      if (_tabController.index == 0) return false;
+      _tabController.animateTo(0);
+      return true;
+    }),
+    // ↓/↑ step whichever left-column list is showing (positions, holes or
+    // tricks). Deliberately no letter aliases: N is the knight and most
+    // other candidates are SAN characters too, so arrows are the app-wide
+    // list-stepping keys.
+    KeyBinding.run(
+      LogicalKeyboardKey.arrowDown,
+      'Next item in the left list',
+      _activeListNav.selectNext,
+      repeats: true,
+    ),
+    KeyBinding.run(
+      LogicalKeyboardKey.arrowUp,
+      'Previous item in the left list',
+      _activeListNav.selectPrevious,
+      repeats: true,
     ),
     // Move Tree tab: arrow keys navigate the tree.
     if (_tabController.index == 0 && widget.openingTree != null) ...[
@@ -451,13 +501,80 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
   ];
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) =>
-      handleKeyBindings(_keyBindings, event);
+      handleKeyBindings(_keyBindings, event, node: node);
+
+  /// The nav controller of the list the left column is showing. Stepping is
+  /// a no-op when that list isn't mounted (nothing attached).
+  ListNavController get _activeListNav => switch (_leftMode) {
+    _LeftPanelMode.positions => _positionsNav,
+    _LeftPanelMode.holes => _holesNav,
+    _LeftPanelMode.tricks => _tricksNav,
+  };
 
   // =====================================================================
   // Left panel
   // =====================================================================
 
+  /// The left column: a mode selector over whichever list is active. The
+  /// reports live here rather than in the right pane's tabs because they are
+  /// the same *kind* of thing as the position list — a ranked list you work
+  /// down, each row driving the board — whereas every right-pane tab is a
+  /// view of the position you are already on.
   Widget _buildLeftPanel() {
+    return Column(
+      children: [
+        _buildLeftModeSelector(),
+        const Divider(height: 1),
+        Expanded(
+          child: switch (_leftMode) {
+            _LeftPanelMode.positions => _buildPositionsList(),
+            _LeftPanelMode.holes => _buildHolesReport(),
+            _LeftPanelMode.tricks => _buildTricksReport(),
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLeftModeSelector() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: SizedBox(
+        width: double.infinity,
+        child: SegmentedButton<_LeftPanelMode>(
+          segments: [
+            const ButtonSegment(
+              value: _LeftPanelMode.positions,
+              label: Text('Positions'),
+            ),
+            ButtonSegment(
+              value: _LeftPanelMode.holes,
+              label: Text('Holes${_holesCountLabel()}'),
+            ),
+            ButtonSegment(
+              value: _LeftPanelMode.tricks,
+              label: Text('Tricks${_tricksCountLabel()}'),
+            ),
+          ],
+          selected: {_leftMode},
+          // The board's finding arrows are gated on the mode, so switching
+          // has to repaint the board too.
+          onSelectionChanged: (s) => setState(() => _leftMode = s.first),
+          showSelectedIcon: false,
+          style: const ButtonStyle(
+            visualDensity: VisualDensity.compact,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            padding: WidgetStatePropertyAll(
+              EdgeInsets.symmetric(horizontal: 6),
+            ),
+            textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 11)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPositionsList() {
     if (widget.analysis != null) {
       return FenListWidget(
         analysis: widget.analysis!,
@@ -465,6 +582,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
         playerIsWhite: widget.playerIsWhite ?? true,
         hasEvals: widget.hasEvals,
         openingTree: widget.openingTree,
+        navController: _positionsNav,
       );
     }
 
@@ -513,17 +631,17 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
           onLineMoveTapped: _onEngineLineTapped,
         ),
         const Divider(height: 1),
+        // Four tabs, all of them views of the position you are on, so they
+        // fit without scrolling — no label can be pushed off the edge.
         TabBar(
           controller: _tabController,
-          isScrollable: true,
-          tabs: [
-            const Tab(text: 'Move Tree'),
-            const Tab(text: 'Games'),
-            const Tab(text: 'PGN'),
-            const Tab(text: 'Analysis'),
-            Tab(text: 'Holes${_holesCountLabel()}'),
-            Tab(text: 'Tricks${_tricksCountLabel()}'),
+          tabs: const [
+            Tab(text: 'Move Tree'),
+            Tab(text: 'Games'),
+            Tab(text: 'PGN'),
+            Tab(text: 'Analysis'),
           ],
+          labelPadding: const EdgeInsets.symmetric(horizontal: 4),
         ),
         Expanded(
           child: TabBarView(
@@ -537,8 +655,6 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
               ),
               _buildPgnTab(),
               _buildScratchTab(),
-              _buildHolesTab(),
-              _buildTricksTab(),
             ],
           ),
         ),
@@ -612,10 +728,10 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
   }
 
   // =====================================================================
-  // Holes tab (hole-hunt report)
+  // Holes report (left column)
   // =====================================================================
 
-  /// " (n)" suffix for the Holes tab label, or empty when nothing to count.
+  /// " (n)" suffix for the Holes segment, or empty when nothing to count.
   String _holesCountLabel() {
     final count =
         (widget.holesResult?.activeFindingCount ?? 0) +
@@ -623,7 +739,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
     return count > 0 ? ' ($count)' : '';
   }
 
-  Widget _buildHolesTab() {
+  Widget _buildHolesReport() {
     return HolesReportPanel(
       result: widget.holesResult,
       liveFindings: widget.holesLiveFindings,
@@ -633,6 +749,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
       onFindingSelected: _onHoleFindingSelected,
       onResultChanged: widget.onHolesResultChanged,
       onStartHunt: widget.onStartHoleHunt,
+      navController: _holesNav,
     );
   }
 
@@ -643,9 +760,9 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
   }
 
   /// Arrows for hole findings at the displayed position — built only while
-  /// the Holes tab is active so they never bleed into normal browsing.
+  /// the Holes report is showing so they never bleed into normal browsing.
   List<BoardAnnotation> _holesBoardAnnotations() {
-    if (_tabController.index != _kHolesTabIndex || _currentFen == null) {
+    if (_leftMode != _LeftPanelMode.holes || _currentFen == null) {
       return const [];
     }
     return buildAuditBoardAnnotations(
@@ -655,10 +772,10 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
   }
 
   // =====================================================================
-  // Tricks tab (trick-hunt report)
+  // Tricks report (left column)
   // =====================================================================
 
-  /// " (n)" suffix for the Tricks tab label, or empty when nothing to count.
+  /// " (n)" suffix for the Tricks segment, or empty when nothing to count.
   String _tricksCountLabel() {
     final count =
         (widget.tricksResult?.activeFindingCount ?? 0) +
@@ -666,7 +783,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
     return count > 0 ? ' ($count)' : '';
   }
 
-  Widget _buildTricksTab() {
+  Widget _buildTricksReport() {
     return TricksReportPanel(
       result: widget.tricksResult,
       liveFindings: widget.tricksLiveFindings,
@@ -676,6 +793,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
       onFindingSelected: _onTrickFindingSelected,
       onResultChanged: widget.onTricksResultChanged,
       onStartHunt: widget.onStartTrickHunt,
+      navController: _tricksNav,
     );
   }
 
@@ -686,9 +804,9 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
   }
 
   /// Arrows for trick findings at the displayed position — built only while
-  /// the Tricks tab is active so they never bleed into normal browsing.
+  /// the Tricks report is showing so they never bleed into normal browsing.
   List<BoardAnnotation> _tricksBoardAnnotations() {
-    if (_tabController.index != _kTricksTabIndex || _currentFen == null) {
+    if (_leftMode != _LeftPanelMode.tricks || _currentFen == null) {
       return const [];
     }
     return buildAuditBoardAnnotations(

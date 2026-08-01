@@ -157,10 +157,32 @@ bool handleMoveInputNavigationKey(List<KeyBinding> bindings, KeyEvent event) {
 /// Centralized guards: key-down (and opted-in repeat) events only, an exact
 /// modifier match per binding, and — non-negotiable — nothing fires while a
 /// text field has focus, so bindings can never swallow typing.
-KeyEventResult handleKeyBindings(List<KeyBinding> bindings, KeyEvent event) {
+///
+/// One exception inside a text field: **Escape blurs it**. The app-wide
+/// Escape contract is "leave what you're in, innermost first", and the
+/// innermost thing you can be in is a search/filter box — the next Escape
+/// then reaches the screen's own ladder (tab, mode, screen). Pass the
+/// dispatching [Focus.onKeyEvent] node as [node] so focus lands back on the
+/// shortcut owner; a plain unfocus would drop it on the enclosing scope,
+/// where the screen's bindings can no longer hear the keyboard.
+KeyEventResult handleKeyBindings(
+  List<KeyBinding> bindings,
+  KeyEvent event, {
+  FocusNode? node,
+}) {
   final isRepeat = event is KeyRepeatEvent;
   if (event is! KeyDownEvent && !isRepeat) return KeyEventResult.ignored;
-  if (isTextInputFocused()) return KeyEventResult.ignored;
+  if (isTextInputFocused()) {
+    if (event.logicalKey == LogicalKeyboardKey.escape && !isRepeat) {
+      if (node != null) {
+        node.requestFocus();
+      } else {
+        FocusManager.instance.primaryFocus?.unfocus();
+      }
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
   return runKeyBindings(bindings, event.logicalKey, isRepeat: isRepeat);
 }
 

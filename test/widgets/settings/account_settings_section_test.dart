@@ -11,15 +11,15 @@ void main() {
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  Future<AppState> pumpSection(WidgetTester tester) async {
+  /// Logging in and naming your accounts are two separate sections now, so
+  /// each test pumps only the one it is about.
+  Future<AppState> pumpSection(WidgetTester tester, Widget section) async {
     final appState = AppState();
     await tester.pumpWidget(
       ChangeNotifierProvider<AppState>.value(
         value: appState,
-        child: const MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(child: AccountSettingsSection()),
-          ),
+        child: MaterialApp(
+          home: Scaffold(body: SingleChildScrollView(child: section)),
         ),
       ),
     );
@@ -27,7 +27,7 @@ void main() {
   }
 
   testWidgets('logged out: shows status and login button', (tester) async {
-    await pumpSection(tester);
+    await pumpSection(tester, const LichessLoginSection());
 
     expect(find.text('Lichess: not logged in'), findsOneWidget);
     expect(find.text('Log into Lichess'), findsOneWidget);
@@ -35,7 +35,7 @@ void main() {
   });
 
   testWidgets('PAT field is hidden until requested', (tester) async {
-    await pumpSection(tester);
+    await pumpSection(tester, const LichessLoginSection());
 
     expect(find.text('Personal access token'), findsNothing);
 
@@ -46,11 +46,20 @@ void main() {
     expect(find.text('Save token'), findsOneWidget);
   });
 
-  testWidgets('username fields commit to AppState on submit', (tester) async {
-    final appState = await pumpSection(tester);
+  testWidgets('the usernames section carries no login controls', (
+    tester,
+  ) async {
+    await pumpSection(tester, const ChessUsernamesSection());
 
-    // The two default-username fields are the only TextFields while the PAT
-    // field is collapsed: index 0 = Lichess, index 1 = Chess.com.
+    expect(find.text('Log into Lichess'), findsNothing);
+    expect(find.text('Lichess username'), findsOneWidget);
+    expect(find.text('Chess.com username'), findsOneWidget);
+  });
+
+  testWidgets('username fields commit to AppState on submit', (tester) async {
+    final appState = await pumpSection(tester, const ChessUsernamesSection());
+
+    // Index 0 = Lichess, index 1 = Chess.com.
     await tester.enterText(find.byType(TextField).at(0), '  MyLichessName ');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
@@ -78,7 +87,7 @@ void main() {
         value: appState,
         child: const MaterialApp(
           home: Scaffold(
-            body: SingleChildScrollView(child: AccountSettingsSection()),
+            body: SingleChildScrollView(child: ChessUsernamesSection()),
           ),
         ),
       ),

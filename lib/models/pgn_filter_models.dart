@@ -152,4 +152,12 @@ typedef GameRecord = ({Map<String, String> headers, String pgnText});
 
 // ── Sort mode ────────────────────────────────────────────────────────────────
 
-enum GameSortMode { fileOrder, ratingDesc, ratingAsc }
+/// How the game list is ordered.
+///
+/// [dateDesc] exists because "file order" is meaningless for the games cache:
+/// it is a merge log (new downloads append, and the two sites' fetchers hand
+/// back their own orders), so the game you just played can land anywhere in it
+/// — "Game 301 / 312" for the most recent game is not a bug, it is file order
+/// being the wrong question. Anything opened from the recent-games list starts
+/// newest-first instead, which is the order that list itself is in.
+enum GameSortMode { fileOrder, dateDesc, ratingDesc, ratingAsc }

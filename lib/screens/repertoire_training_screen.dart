@@ -19,9 +19,9 @@ import '../services/training/training_session_controller.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/keyboard_shortcut_utils.dart';
+import '../widgets/app_breadcrumb_trail.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/app_settings_button.dart';
-import '../widgets/jobs_status_button.dart';
 import '../widgets/pgn_viewer_widget.dart';
 import '../widgets/trainer_keyboard_scope.dart';
 import '../widgets/training/chapter_setup_dialog.dart';
@@ -273,7 +273,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       }
     }
 
-    return handleKeyBindings(_keyBindings, event);
+    return handleKeyBindings(_keyBindings, event, node: node);
   }
 
   /// Trainer shortcuts, dispatched through [handleKeyBindings] (never while
@@ -300,6 +300,13 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       _training.restartLine();
       return true;
     }),
+    // The app-wide Escape contract: leave what you are in. Here that is the
+    // line being drilled — back to the browser, same as "Back to list".
+    KeyBinding(LogicalKeyboardKey.escape, 'Leave this line', () {
+      if (_training.currentLine == null) return false;
+      _training.stopSession();
+      return true;
+    }),
   ];
 
   PreferredSizeWidget _buildAppBar() {
@@ -307,19 +314,21 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     final repertoire = _training.repertoire;
     return AppBar(
       titleSpacing: 16,
-      title: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Repertoire Trainer', style: theme.textTheme.titleMedium),
-          if (repertoire != null)
-            Text(
-              repertoire.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall,
-            ),
-        ],
+      title: AppBarTitleWithTrail(
+        title: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Repertoire Trainer', style: theme.textTheme.titleMedium),
+            if (repertoire != null)
+              Text(
+                repertoire.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall,
+              ),
+          ],
+        ),
       ),
       actions: [
         if (repertoire != null)
@@ -345,7 +354,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
           icon: const Icon(Icons.library_books),
           onPressed: _selectRepertoire,
         ),
-        const JobsStatusButton(),
         const AppSettingsButton(),
         const AppModeMenuButton(),
         const SizedBox(width: 8),

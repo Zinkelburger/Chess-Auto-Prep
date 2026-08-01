@@ -6,12 +6,33 @@ import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../widgets/chess_board_widget.dart';
 import '../../../widgets/pgn_viewer_widget.dart';
-import '../models/recent_game.dart';
 import '../services/opening_review.dart';
 
 enum _DetailTab { game, book }
 
-/// One opening mistake, reviewable in place: a board with a Game / Your book
+/// One game in the review, as this dialog needs it: something to call it and
+/// the movetext to step through.
+///
+/// A plain record rather than a `RecentGame`: the same dialog reviews an
+/// arbitrary PGN opened in the viewer, which has no cache path, no platform
+/// and no rating headers to speak of.
+class ReviewGameSource {
+  const ReviewGameSource({
+    required this.label,
+    required this.pgn,
+    this.stableKey,
+  });
+
+  /// Menu/selector label, e.g. "vs Bob (Jul 12)".
+  final String label;
+  final String pgn;
+
+  /// Seeds the viewer's [ValueKey] so switching games rebuilds it. Falls back
+  /// to the label, which is unique enough for a selector.
+  final String? stableKey;
+}
+
+/// One opening deviation, reviewable in place: a board with a Game / Your book
 /// tab pair, both opened at the exact position where the game left the
 /// repertoire. The Game tab steps through the actual game (the wrong move is
 /// the next move from the landing position); the Your book tab steps through
@@ -20,24 +41,74 @@ enum _DetailTab { game, book }
 ///
 /// The dialog never pops itself for navigation: [onEditInBuilder] and
 /// [onOpenGame] are expected to close the whole review stack (this dialog
-/// and the list under it) before switching screens.
+/// and whatever list is under it) before switching screens.
 class OpeningReviewDetailDialog extends StatefulWidget {
   const OpeningReviewDetailDialog({
     super.key,
-    required this.entry,
+    required this.chapterName,
+    required this.matchedPlies,
+    required this.playedDisplay,
+    required this.expectedDisplay,
+    required this.games,
     required this.bookEnd,
-    required this.onEditInBuilder,
-    required this.onOpenGame,
-    this.loadLines = loadBookLinesForEntry,
+    required this.loadLines,
+    this.flipped = false,
+    this.onEditInBuilder,
+    this.onOpenGame,
   });
 
-  final OpeningReviewEntry entry;
-  final bool bookEnd;
-  final VoidCallback onEditInBuilder;
-  final ValueChanged<RecentGame> onOpenGame;
+  /// Build the dialog for an aggregate-review entry (the recent-games queue).
+  factory OpeningReviewDetailDialog.forEntry({
+    Key? key,
+    required OpeningReviewEntry entry,
+    required bool bookEnd,
+    required List<ReviewGameSource> games,
+    bool flipped = false,
+    VoidCallback? onEditInBuilder,
+    ValueChanged<int>? onOpenGame,
+    Future<List<RepertoireLine>> Function(OpeningReviewEntry) loadLines =
+        loadBookLinesForEntry,
+  }) {
+    return OpeningReviewDetailDialog(
+      key: key,
+      chapterName: entry.chapterName,
+      matchedPlies: entry.matchedPlies,
+      playedDisplay: entry.playedDisplay,
+      expectedDisplay: entry.expectedDisplay,
+      games: games,
+      bookEnd: bookEnd,
+      flipped: flipped,
+      onEditInBuilder: onEditInBuilder,
+      onOpenGame: onOpenGame,
+      loadLines: () => loadLines(entry),
+    );
+  }
 
-  /// Injectable for tests — production uses [loadBookLinesForEntry].
-  final Future<List<RepertoireLine>> Function(OpeningReviewEntry) loadLines;
+  final String chapterName;
+
+  /// Plies matched before the game left book — the landing ply for both tabs.
+  final int matchedPlies;
+
+  /// "3... Nf6" and "3... cxd4 / 3... e6", already numbered.
+  final String playedDisplay;
+  final String expectedDisplay;
+
+  final List<ReviewGameSource> games;
+
+  /// Whether the prep simply ran out here (as opposed to a wrong move).
+  final bool bookEnd;
+
+  /// Board orientation: true when the reviewing player had Black.
+  final bool flipped;
+
+  /// The book lines through the deviation point, comments included.
+  final Future<List<RepertoireLine>> Function() loadLines;
+
+  final VoidCallback? onEditInBuilder;
+
+  /// Open the selected game (by index into [games]) elsewhere, or null to
+  /// omit the action — an arbitrary PGN is already open in the viewer.
+  final ValueChanged<int>? onOpenGame;
 
   @override
   State<OpeningReviewDetailDialog> createState() =>
@@ -52,20 +123,15 @@ class _OpeningReviewDetailDialogState extends State<OpeningReviewDetailDialog> {
   Position _bookPosition = Chess.initial;
   List<RepertoireLine>? _bookLines;
 
-  OpeningReviewEntry get _entry => widget.entry;
-
   /// Both viewers open at the position where the deviating move is about to
   /// be played — the decision point the user failed at the board.
-  int get _landingMoveNumber => _entry.matchedPlies ~/ 2 + 1;
-  bool get _landingIsWhiteToPlay => _entry.matchedPlies.isEven;
-
-  bool get _flipped =>
-      _entry.games.isNotEmpty && _entry.games.first.meWhite == false;
+  int get _landingMoveNumber => widget.matchedPlies ~/ 2 + 1;
+  bool get _landingIsWhiteToPlay => widget.matchedPlies.isEven;
 
   @override
   void initState() {
     super.initState();
-    widget.loadLines(_entry).then((lines) {
+    widget.loadLines().then((lines) {
       if (mounted) setState(() => _bookLines = lines);
     });
   }
@@ -96,7 +162,7 @@ class _OpeningReviewDetailDialogState extends State<OpeningReviewDetailDialog> {
                                 ? _gamePosition
                                 : _bookPosition,
                             enableUserMoves: false,
-                            flipped: _flipped,
+                            flipped: widget.flipped,
                           ),
                         ),
                       ),
@@ -117,9 +183,9 @@ class _OpeningReviewDetailDialogState extends State<OpeningReviewDetailDialog> {
 
   Widget _buildHeader(BuildContext context) {
     final subtitle = widget.bookEnd
-        ? 'Your book ends here — the game continued ${_entry.playedDisplay}.'
-        : 'You played ${_entry.playedDisplay} — book plays '
-              '${_entry.expectedDisplay}.';
+        ? 'Your book ends here — the game continued ${widget.playedDisplay}.'
+        : 'You played ${widget.playedDisplay} — book plays '
+              '${widget.expectedDisplay}.';
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
       child: Row(
@@ -129,7 +195,7 @@ class _OpeningReviewDetailDialogState extends State<OpeningReviewDetailDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${_entry.chapterName} · move ${_entry.moveNumber}',
+                  '${widget.chapterName} · move $_landingMoveNumber',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleMedium,
@@ -195,25 +261,21 @@ class _OpeningReviewDetailDialogState extends State<OpeningReviewDetailDialog> {
   }
 
   Widget _buildGamePane() {
-    if (_entry.games.isEmpty) return const SizedBox.shrink();
-    final game = _entry.games[_gameIndex];
+    if (widget.games.isEmpty) return const SizedBox.shrink();
+    final game = widget.games[_gameIndex];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_entry.games.length > 1)
+        if (widget.games.length > 1)
           _buildSelectorRow(
             value: _gameIndex,
-            labels: [
-              for (final g in _entry.games)
-                'vs ${g.meWhite == true ? g.black : g.white} '
-                    '(${g.dateDisplayShort})',
-            ],
+            labels: [for (final g in widget.games) g.label],
             onChanged: (i) => setState(() => _gameIndex = i),
           ),
         Expanded(
           child: PgnViewerWidget(
-            key: ValueKey('game-${game.record.dedupKey}'),
-            pgnText: game.record.pgn,
+            key: ValueKey('game-${game.stableKey ?? game.label}'),
+            pgnText: game.pgn,
             moveNumber: _landingMoveNumber,
             isWhiteToPlay: _landingIsWhiteToPlay,
             onPositionChanged: (position) =>
@@ -234,9 +296,9 @@ class _OpeningReviewDetailDialogState extends State<OpeningReviewDetailDialog> {
         padding: const EdgeInsets.all(16),
         child: Center(
           child: Text(
-            'Could not match this line inside ${_entry.chapterName} '
+            'Could not match this line inside ${widget.chapterName} '
             '(it may start from a custom position). '
-            'Use "Edit in Builder" below to open the chapter.',
+            'Open the chapter in the builder to look at it.',
             textAlign: TextAlign.center,
             style: AppTextStyles.body.copyWith(
               fontSize: 13,
@@ -301,16 +363,21 @@ class _OpeningReviewDetailDialogState extends State<OpeningReviewDetailDialog> {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: Row(
         children: [
-          TextButton.icon(
-            onPressed: widget.onEditInBuilder,
-            icon: const Icon(Icons.edit, size: 16),
-            label: const Text('Edit in Builder'),
-          ),
-          if (_entry.games.isNotEmpty)
-            TextButton.icon(
-              onPressed: () => widget.onOpenGame(_entry.games[_gameIndex]),
+          // Reviewing comes first: the viewer shows this game with the Line tab
+          // beside it, on a full-size board. Editing the book is the deliberate
+          // second step, and says so.
+          if (widget.onOpenGame != null && widget.games.isNotEmpty)
+            FilledButton.icon(
+              onPressed: () => widget.onOpenGame!(_gameIndex),
               icon: const Icon(Icons.open_in_new, size: 16),
-              label: const Text('Open game in viewer'),
+              label: const Text('Open in viewer'),
+            ),
+          const SizedBox(width: 8),
+          if (widget.onEditInBuilder != null)
+            TextButton.icon(
+              onPressed: widget.onEditInBuilder,
+              icon: const Icon(Icons.edit, size: 16),
+              label: const Text('Edit in Builder'),
             ),
           const Spacer(),
           TextButton(

@@ -14,101 +14,29 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
     _goToMainLineMove(targetPly);
   }
 
-  void _jumpToFen(String targetFen) {
-    if (_moveHistory.isEmpty) return;
-    final target = normalizeFen(targetFen);
-    Position pos = _startPosition;
-    for (int i = 0; i < _moveHistory.length; i++) {
-      final san = _moveHistory[i].san;
-      if (san == '--') continue;
-      final move = pos.parseSan(san);
-      if (move == null) break;
-      pos = pos.play(move);
-      if (normalizeFen(pos.fen) == target) {
-        _goToMainLineMove(i + 1);
-        return;
-      }
-    }
+  /// Park the mainline cursor on the position matching [targetFen]. Returns
+  /// false when the game never reaches it — callers that navigate by position
+  /// (a tactic's own ply inside its source game) need to know, because acting
+  /// on a miss would drive the cursor against the wrong game entirely.
+  bool _jumpToFen(String targetFen) {
+    final index = _m.mainlineIndexOfFen(targetFen);
+    if (index == null) return false;
+    _goToMainLineMove(index);
+    return true;
   }
 
   void _goToMainLineMove(int moveIndex) {
-    // Solitaire: never walk the board past the revealed frontier.
-    if (widget.revealedPly != null && moveIndex > widget.revealedPly!) {
-      moveIndex = widget.revealedPly!;
-    }
-    if (moveIndex < 0 || moveIndex > _moveHistory.length) return;
-    Position pos = _startPosition;
-    for (int i = 0; i < moveIndex; i++) {
-      final san = _moveHistory[i].san;
-      if (san == '--') continue;
-      final move = pos.parseSan(san);
-      if (move == null) break;
-      pos = pos.play(move);
-    }
-    setState(() {
-      _mainLineIndex = moveIndex;
-      _currentPosition = pos;
-      _analysisPath = [];
-      _activeBranchPly = -1;
-      _clearInlineLine();
-    });
-    widget.onPositionChanged?.call(pos);
+    // Solitaire: the model clamps to the revealed frontier.
+    _m.revealedPly = widget.revealedPly;
+    if (!_m.goToMainLineMove(moveIndex)) return;
+    setState(_clearInlineLine);
+    widget.onPositionChanged?.call(_currentPosition);
   }
 
-  @override
   void _goToAnalysisNode(MoveNode targetNode, int branchPly) {
-    final roots = _variationsByPly[branchPly];
-    if (roots == null) return;
-
-    final path = _findPathToNode(targetNode, roots);
-    if (path == null) return;
-
-    Position pos = _startPosition;
-    for (int i = 0; i < branchPly; i++) {
-      final san = _moveHistory[i].san;
-      if (san == '--') continue;
-      final move = pos.parseSan(san);
-      if (move == null) break;
-      pos = pos.play(move);
-    }
-    for (final node in path) {
-      if (node.san == '--') continue;
-      final move = pos.parseSan(node.san);
-      if (move == null) break;
-      pos = pos.play(move);
-    }
-
-    setState(() {
-      _mainLineIndex = branchPly;
-      _activeBranchPly = branchPly;
-      _currentPosition = pos;
-      _analysisPath = path;
-      _clearInlineLine();
-    });
-    widget.onPositionChanged?.call(pos);
-  }
-
-  @override
-  List<MoveNode>? _findPathToNode(MoveNode target, List<MoveNode> roots) {
-    for (final root in roots) {
-      final path = _findPathRecursive(root, target, []);
-      if (path != null) return path;
-    }
-    return null;
-  }
-
-  List<MoveNode>? _findPathRecursive(
-    MoveNode current,
-    MoveNode target,
-    List<MoveNode> pathSoFar,
-  ) {
-    final newPath = [...pathSoFar, current];
-    if (current.id == target.id) return newPath;
-    for (final child in current.children) {
-      final result = _findPathRecursive(child, target, newPath);
-      if (result != null) return result;
-    }
-    return null;
+    if (!_m.goToAnalysisNode(targetNode, branchPly)) return;
+    setState(_clearInlineLine);
+    widget.onPositionChanged?.call(_currentPosition);
   }
 
   void _goToStart() {
@@ -396,11 +324,8 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
     }
     if (!mounted) return;
     setState(() {
-      _mainLineIndex = _inlineBaseIndex;
-      _analysisPath = [];
-      _activeBranchPly = -1;
+      _m.setInlinePreviewPosition(_inlineBaseIndex, pos);
       _inlineCursor = played;
-      _currentPosition = pos;
     });
     widget.onPositionChanged?.call(pos);
   }

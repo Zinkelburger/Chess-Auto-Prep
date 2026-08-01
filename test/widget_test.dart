@@ -50,9 +50,9 @@ void main() {
   testWidgets('App loads without crashing', (WidgetTester tester) async {
     await _pumpDesktopSizedWidget(tester, const ChessAutoPrepApp());
 
-    // Boots into the unified Tactics home: the app-bar title and the
-    // breadcrumb root both say Tactics, and the left pane shows the
-    // recent-games empty state (fresh environment, no usernames).
+    // Boots into the unified Tactics home: the app-bar title says Tactics,
+    // and the left pane shows the recent-games empty state (fresh
+    // environment, no usernames).
     expect(find.text('Tactics'), findsWidgets);
     expect(find.text('No accounts configured'), findsOneWidget);
   });

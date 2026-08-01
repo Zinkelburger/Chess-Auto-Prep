@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/features/games/services/games_window.dart';
+import 'package:chess_auto_prep/models/engine_settings.dart';
+import 'package:chess_auto_prep/services/tactics/mining_settings.dart';
 import 'package:chess_auto_prep/services/tactics/tactics_import_coordinator.dart';
 import 'package:chess_auto_prep/services/tactics/tactics_import_form.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,37 +9,63 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('defaults: last 14 days, 20 recent games, depth 15, given cores', () {
-    final form = TacticsImportForm(defaultCores: 4);
-    expect(form.count, 20);
-    expect(form.depth, 15);
-    expect(form.cores, 4);
-    expect(form.fetchMode, TacticsImportMode.sinceDate);
-    expect(form.sinceDays, 14);
-    expect(form.fieldsValid, isTrue);
+  TacticsImportForm build({
+    GamesWindowSettings? window,
+    MiningSettings? mining,
+  }) => TacticsImportForm(
+    windowSettings: window ?? GamesWindowSettings.forTest(),
+    miningSettings: mining ?? MiningSettings.forTest(),
+  );
+
+  test('defaults: the shared last-20-games window, depth 15', () {
+    final form = build();
+    expect(form.window, const GamesWindow());
+    expect(form.gamesText.text, '20');
+    expect(form.daysText.text, '2');
+    expect(form.depth, MiningSettings.defaultDepth);
     form.dispose();
   });
 
-  test('paramsFor builds recent-mode params from the fields', () {
-    final form = TacticsImportForm(defaultCores: 2);
+  test('the form owns neither knob: depth and cores are the shared '
+      'settings', () async {
+    final mining = MiningSettings.forTest();
+    final form = build(mining: mining);
+
+    expect(form.cores, EngineSettings.instance.workers);
+    expect(form.depth, mining.depth);
+
+    // Editing the setting (the review strip's steppers) moves the form's view
+    // of it, with no second copy to fall out of step.
+    SharedPreferences.setMockInitialValues({});
+    await mining.setDepth(20);
+    expect(form.depth, 20);
+
+    form.dispose();
+  });
+
+  test('paramsFor in game-count mode caps games and sends no cutoff', () async {
+    SharedPreferences.setMockInitialValues({});
+    final mining = MiningSettings.forTest();
+    await mining.setDepth(18);
+    final form = build(mining: mining);
     form.lichessUser.text = '  someone  ';
-    form.fetchCount.text = '50';
-    form.depthText.text = '18';
-    form.setFetchMode(TacticsImportMode.recent);
+    await form.setWindowGames(50);
 
     final params = form.paramsFor(TacticsImportSource.lichess);
     expect(params.username, 'someone', reason: 'trimmed');
+    expect(params.mode, TacticsImportMode.recent);
     expect(params.maxGames, 50);
     expect(params.depth, 18);
-    expect(params.cores, 2);
     expect(params.since, isNull);
     form.dispose();
   });
 
-  test('paramsFor in since-days mode passes the cutoff and no game cap', () {
-    final form = TacticsImportForm();
+  test('paramsFor in day mode passes the cutoff and no game cap', () async {
+    SharedPreferences.setMockInitialValues({});
+    final form = build();
     form.chessComUser.text = 'player';
-    form.setSinceDays(7);
+    await form.setWindowMode(GamesWindowMode.lastDays);
+    await form.setWindowDays(7);
 
     final params = form.paramsFor(TacticsImportSource.chessCom);
     expect(params.username, 'player');
@@ -53,52 +82,32 @@ void main() {
     form.dispose();
   });
 
-  test('depth and cores getters clamp out-of-range input', () {
-    final form = TacticsImportForm(defaultCores: 2);
-    form.depthText.text = '99';
-    expect(form.depth, 25);
-    form.depthText.text = 'abc';
-    expect(form.depth, 15, reason: 'falls back to default');
-    form.coresText.text = '0';
-    expect(form.cores, 1);
-    form.dispose();
-  });
-
-  test('validation: invalid depth flips validity immediately, error is '
-      'debounced', () async {
-    final form = TacticsImportForm();
-    form.validateDepth('99');
-    expect(form.depthValid, isFalse);
-    expect(form.depthError, isNull, reason: 'error text debounced');
-
-    await Future<void>.delayed(const Duration(milliseconds: 600));
-    expect(form.depthError, 'Must be 1–25');
-
-    form.validateDepth('20');
-    expect(form.depthValid, isTrue);
-    expect(form.depthError, isNull);
-    expect(form.fieldsValid, isTrue);
-    form.dispose();
-  });
-
-  test('prefs round-trip restores count/depth/cores/mode/sinceDays', () async {
+  test('an external window change lands in the fields', () async {
     SharedPreferences.setMockInitialValues({});
-    final form = TacticsImportForm();
-    form.fetchCount.text = '77';
-    form.depthText.text = '21';
-    form.coresText.text = '3';
-    form.setFetchMode(TacticsImportMode.recent);
-    form.setSinceDays(30);
-    await form.savePrefs();
-    form.dispose();
+    final window = GamesWindowSettings.forTest();
+    final form = build(window: window);
 
-    final restored = TacticsImportForm();
+    // Stands in for the home pane's settings dialog applying a new window.
+    await window.set(const GamesWindow(games: 7, days: 3));
+
+    expect(form.gamesText.text, '7');
+    expect(form.daysText.text, '3');
+    form.dispose();
+  });
+
+  test('loadPrefs pulls the persisted window and depth into view', () async {
+    SharedPreferences.setMockInitialValues({});
+    final saved = build();
+    await saved.setWindowGames(77);
+    saved.dispose();
+
+    final mining = MiningSettings.forTest();
+    await mining.setDepth(21);
+
+    final restored = build(mining: mining);
     await restored.loadPrefs();
-    expect(restored.fetchCount.text, '77');
-    expect(restored.depthText.text, '21');
-    expect(restored.coresText.text, '3');
-    expect(restored.fetchMode, TacticsImportMode.recent);
-    expect(restored.sinceDays, 30);
+    expect(restored.window.games, 77);
+    expect(restored.depth, 21);
     restored.dispose();
   });
 }

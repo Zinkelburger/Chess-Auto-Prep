@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../theme/app_colors.dart';
+import '../../../widgets/common/list_nav.dart';
 import '../../audit/models/audit_finding.dart';
 import '../../audit/models/audit_result.dart';
 import '../../audit/widgets/finding_style.dart';
@@ -31,6 +32,9 @@ class HolesReportPanel extends StatefulWidget {
   /// Open the hunt config to start (or re-run) a hunt.
   final VoidCallback? onStartHunt;
 
+  /// Lets the host screen step the selection (↓/↑ shortcuts).
+  final ListNavController? navController;
+
   const HolesReportPanel({
     super.key,
     required this.result,
@@ -41,14 +45,17 @@ class HolesReportPanel extends StatefulWidget {
     this.onFindingSelected,
     this.onResultChanged,
     this.onStartHunt,
+    this.navController,
   });
 
   @override
   State<HolesReportPanel> createState() => _HolesReportPanelState();
 }
 
-class _HolesReportPanelState extends State<HolesReportPanel> {
+class _HolesReportPanelState extends State<HolesReportPanel>
+    implements ListNavTarget {
   static const int _defaultCap = 10;
+  static const double _itemExtent = 56.0;
 
   final ScrollController _scrollController = ScrollController();
   late final TextEditingController _capCtrl = TextEditingController(
@@ -64,10 +71,49 @@ class _HolesReportPanelState extends State<HolesReportPanel> {
   String? _selectedKey;
 
   @override
+  void initState() {
+    super.initState();
+    widget.navController?.attach(this);
+  }
+
+  @override
+  void didUpdateWidget(HolesReportPanel old) {
+    super.didUpdateWidget(old);
+    if (!identical(widget.navController, old.navController)) {
+      old.navController?.detach(this);
+      widget.navController?.attach(this);
+    }
+  }
+
+  @override
   void dispose() {
+    widget.navController?.detach(this);
     _scrollController.dispose();
     _capCtrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void stepNext() => _step(1);
+
+  @override
+  void stepPrevious() => _step(-1);
+
+  /// Move the selection [delta] rows through the ranked list, exactly as a
+  /// click would (board jump included). With no current selection any step
+  /// selects the top finding.
+  void _step(int delta) {
+    final findings = _visibleFindings();
+    if (findings.isEmpty) return;
+    final current = findings.indexWhere((f) => f.dismissKey == _selectedKey);
+    final target = current < 0
+        ? 0
+        : (current + delta).clamp(0, findings.length - 1);
+    if (target == current) return;
+    final finding = findings[target];
+    setState(() => _selectedKey = finding.dismissKey);
+    widget.onFindingSelected?.call(finding);
+    ensureRowVisible(_scrollController, target, _itemExtent);
   }
 
   List<AuditFinding> get _allFindings => [
@@ -184,6 +230,7 @@ class _HolesReportPanelState extends State<HolesReportPanel> {
           visibleCount: findings.length,
           totalMatching: _totalMatching,
         ),
+        _buildNavRow(findings),
         const Divider(height: 1),
         Expanded(
           child: findings.isEmpty
@@ -201,7 +248,7 @@ class _HolesReportPanelState extends State<HolesReportPanel> {
               : ListView.builder(
                   controller: _scrollController,
                   itemCount: findings.length,
-                  itemExtent: 56,
+                  itemExtent: _itemExtent,
                   itemBuilder: (context, index) {
                     final finding = findings[index];
                     return FindingTile(
@@ -246,6 +293,24 @@ class _HolesReportPanelState extends State<HolesReportPanel> {
           ),
         ],
       ],
+    );
+  }
+
+  /// Prev/Next stepping over the ranked list. Counter only while a finding
+  /// is selected — the status row above already shows the plain count.
+  Widget _buildNavRow(List<AuditFinding> findings) {
+    final selectedIndex = findings.indexWhere(
+      (f) => f.dismissKey == _selectedKey,
+    );
+    return ListNavRow(
+      itemLabel: 'finding',
+      canPrevious: selectedIndex > 0,
+      canNext: findings.isNotEmpty && selectedIndex < findings.length - 1,
+      onPrevious: stepPrevious,
+      onNext: stepNext,
+      counterText: selectedIndex >= 0
+          ? '${selectedIndex + 1} of ${findings.length}'
+          : null,
     );
   }
 

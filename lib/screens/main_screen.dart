@@ -10,14 +10,14 @@ import '../theme/app_colors.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/app_settings_button.dart';
-import '../widgets/jobs_status_button.dart';
 import '../widgets/tactics_control_panel.dart';
 import '../widgets/training/move_input_widget.dart';
 
 import '../features/games/controllers/recent_games_controller.dart';
+import '../features/games/services/home_review_runner.dart';
 import '../features/games/widgets/tactics_games_pane.dart';
 import '../services/engine/engine_lifecycle.dart';
-import '../widgets/app_breadcrumb_bar.dart';
+import '../widgets/app_breadcrumb_trail.dart';
 import 'analysis_screen.dart';
 import 'pgn_viewer_screen.dart';
 import 'repertoire_screen.dart';
@@ -122,21 +122,14 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     }
 
     return Scaffold(
-      body: Column(
+      body: IndexedStack(
+        index: _supportedModes.indexOf(activeMode),
         children: [
-          const AppBreadcrumbBar(),
-          Expanded(
-            child: IndexedStack(
-              index: _supportedModes.indexOf(activeMode),
-              children: [
-                for (final mode in _supportedModes)
-                  _modeViews[mode] ??
-                      (mode == activeMode
-                          ? const _ModeLoadingView()
-                          : const SizedBox.shrink()),
-              ],
-            ),
-          ),
+          for (final mode in _supportedModes)
+            _modeViews[mode] ??
+                (mode == activeMode
+                    ? const _ModeLoadingView()
+                    : const SizedBox.shrink()),
         ],
       ),
     );
@@ -204,6 +197,20 @@ class _TacticsModeView extends StatelessWidget {
             );
           },
         ),
+        // The Start-review pipeline. Lives here, not in the pane: a run must
+        // survive the pane being swapped out for the board when the user
+        // starts a puzzle while the review is still going.
+        ChangeNotifierProvider<HomeReviewRunner>(
+          create: (ctx) {
+            final appState = ctx.read<AppState>();
+            return HomeReviewRunner(
+              games: ctx.read<RecentGamesController>(),
+              importCoordinator: ctx.read<TacticsImportCoordinator>(),
+              lichessUsername: () => appState.lichessUsername,
+              chesscomUsername: () => appState.chesscomUsername,
+            );
+          },
+        ),
       ],
       child: const _TacticsModeScaffold(),
     );
@@ -244,18 +251,17 @@ class _TacticsModeScaffold extends StatelessWidget {
         titleSpacing: 16,
         // The back arrow sits in the title row (not the `leading` slot) so
         // the title doesn't shift right when the arrow appears/disappears.
-        title: const Row(
-          children: [
-            Text('Tactics'),
-            SizedBox(width: 8),
-            _TacticsAppBarBackButton(),
-          ],
+        title: const AppBarTitleWithTrail(
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Tactics'),
+              SizedBox(width: 8),
+              _TacticsAppBarBackButton(),
+            ],
+          ),
         ),
-        actions: const [
-          JobsStatusButton(),
-          AppSettingsButton(),
-          AppModeMenuButton(),
-        ],
+        actions: const [AppSettingsButton(), AppModeMenuButton()],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {

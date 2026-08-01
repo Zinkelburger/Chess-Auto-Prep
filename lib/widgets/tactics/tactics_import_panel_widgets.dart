@@ -74,13 +74,13 @@ class _SessionSettingsForm extends StatelessWidget {
     TacticsSessionOrder.random: 'Random',
   };
 
-  /// Recency presets: days back, or null for all time.
+  /// Expiry presets: days a puzzle stays trainable, or null for never.
   static const _agePresets = <(int?, String)>[
     (1, 'Today'),
     (2, '2 days'),
     (7, '7 days'),
     (14, '14 days'),
-    (null, 'All time'),
+    (null, 'Never'),
   ];
 
   @override
@@ -89,9 +89,14 @@ class _SessionSettingsForm extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          'From games in the last:',
-          style: const TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
+        const Text(
+          'Expire puzzles after:',
+          style: TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
+        ),
+        const Text(
+          'How long a mined mistake stays in the queue. Separate from which '
+          'games get fetched.',
+          style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
         ),
         const SizedBox(height: 6),
         Wrap(
@@ -201,126 +206,8 @@ class _SessionSettingsForm extends StatelessWidget {
   }
 }
 
-/// Offer to finish analyzing games that were fetched but never analyzed
-/// (a stopped or interrupted import). Sits at the top and mirrors
-/// [TacticsImportStatusBanner]'s look, so stopping an import and resuming
-/// it live in the same place: stop button while running, run button after.
-class _ResumeAnalysisBanner extends StatelessWidget {
-  const _ResumeAnalysisBanner({
-    required this.pendingGameCount,
-    required this.onResume,
-  });
-
-  final int pendingGameCount;
-  final VoidCallback? onResume;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.infoTint,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.info),
-      ),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.pause_circle_outline,
-            size: 16,
-            color: AppColors.info,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              '$pendingGameCount recent game${pendingGameCount == 1 ? '' : 's'} '
-              'fetched but not analyzed yet',
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.play_circle_outlined, size: 20),
-            tooltip: 'Resume analysis',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-            onPressed: onResume,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Progress/status banner shown during or after game import.
-class TacticsImportStatusBanner extends StatelessWidget {
-  const TacticsImportStatusBanner({
-    super.key,
-    required this.status,
-    required this.isImporting,
-    required this.hasActiveImport,
-    this.isCancelling = false,
-    required this.onCancelImport,
-    required this.onDismiss,
-  });
-
-  final String status;
-  final bool isImporting;
-  final bool hasActiveImport;
-
-  /// Pause was clicked and the run is winding down: the pause button greys
-  /// out instead of accepting further clicks.
-  final bool isCancelling;
-  final VoidCallback onCancelImport;
-  final VoidCallback onDismiss;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.infoTint,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.info),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              if (isImporting)
-                const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              if (isImporting) const SizedBox(width: 12),
-              if (!isImporting)
-                const Icon(
-                  Icons.check_circle_outline,
-                  size: 16,
-                  color: AppColors.success,
-                ),
-              if (!isImporting) const SizedBox(width: 8),
-              Expanded(child: Text(status)),
-              if (hasActiveImport)
-                IconButton(
-                  icon: const Icon(Icons.pause_circle_outlined, size: 20),
-                  tooltip: isCancelling ? 'Pausing…' : 'Pause analysis',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onPressed: isCancelling ? null : onCancelImport,
-                ),
-              if (!isImporting)
-                IconButton(
-                  icon: const Icon(Icons.close, size: 16),
-                  tooltip: 'Dismiss',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onPressed: onDismiss,
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
+// The import status banner and the resume-analysis banner used to live here.
+// Both are gone: the review strip in the left pane is the one place a run is
+// started, reported on and paused, and a second progress readout on the
+// opposite side of the screen (with its own pause button, and a Dismiss that
+// hid live progress) was the thing that made the page confusing.

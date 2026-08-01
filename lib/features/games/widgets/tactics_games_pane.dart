@@ -1,30 +1,44 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/app_state.dart';
+import '../../../core/pending_handoff.dart' show PgnViewerTab;
 import '../../../screens/settings_screen.dart';
-import '../../../services/games_library/game_filter.dart';
+import '../../../services/tactics/tactics_import_coordinator.dart';
+import '../../../services/tactics/tactics_session_controller.dart';
+import '../../../services/tactics_database.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
-import '../../../widgets/labeled_toggle.dart';
+import '../../../widgets/common/list_search_field.dart';
+import '../../../widgets/engine/engine_gate.dart';
 import '../controllers/recent_games_controller.dart';
 import '../models/recent_game.dart';
-import '../services/game_auto_analysis_service.dart';
+import '../services/home_review_runner.dart';
 import '../services/my_repertoire_settings.dart';
 import '../services/opening_review.dart';
-import '../services/rating_trend.dart';
+import 'game_card.dart';
+import 'games_home_header.dart';
+import 'home_review_settings_dialog.dart';
 import 'opening_review_dialog.dart';
+import 'review_strip.dart';
 
-/// The recent-games half of the unified Tactics home: welcome header, then a
-/// static table of the last two weeks' games — time control, players, result,
-/// review summary, repertoire deviation, date. Shown in the Tactics screen's
-/// left pane whenever no puzzle is active; the board takes the pane back
-/// during a session.
+/// The recent-games half of the unified Tactics home: who you are, the review
+/// job, then your games as cards. Shown in the Tactics screen's left pane
+/// whenever no puzzle is active; the board takes the pane back during a
+/// session.
 ///
-/// The [RecentGamesController] is provided by `_TacticsModeView` (it must
-/// outlive this widget: the pane is swapped out for the board mid-session
-/// and the list should not reload when it comes back).
+/// Nothing here starts the engine on its own — the review waits for its play
+/// button (see [HomeReviewRunner]).
+///
+/// Layout rule: the header and the review strip are always on screen once an
+/// account exists. Only the *list* area shows loading and empty states; hiding
+/// the play button until games arrived meant the one control that fetches them
+/// was missing exactly when it was needed.
+///
+/// The [RecentGamesController] and [HomeReviewRunner] are provided by
+/// `_TacticsModeView` (they must outlive this widget: the pane is swapped out
+/// for the board mid-session and neither the list nor a running review should
+/// restart when it comes back).
 class TacticsGamesPane extends StatefulWidget {
   const TacticsGamesPane({super.key});
 
@@ -34,7 +48,16 @@ class TacticsGamesPane extends StatefulWidget {
 
 class _TacticsGamesPaneState extends State<TacticsGamesPane> {
   RecentGamesController? _controller;
+  HomeReviewRunner? _runner;
   AppState? _appState;
+
+  /// Guard so the opt-in auto-run fires at most once per app session, however
+  /// many times the pane is rebuilt or swapped back in.
+  static bool _autoRunAttempted = false;
+
+  /// Type-to-filter over the loaded games. Narrows the list only — the window
+  /// and time-control filters (gear dialog) still decide what gets fetched.
+  String _search = '';
 
   @override
   void initState() {
@@ -46,10 +69,10 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
       final controller = context.read<RecentGamesController>();
       _appState = appState;
       _controller = controller;
+      _runner = context.read<HomeReviewRunner>();
       appState.addListener(_onAppStateChanged);
       controller.addListener(_onControllerChanged);
       controller.ensureLoaded();
-      _maybeAutoAnalyze();
     });
   }
 
@@ -68,7 +91,7 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
     if (_appState?.currentMode == AppMode.tactics) _controller?.ensureLoaded();
   }
 
-  void _onControllerChanged() => _maybeAutoAnalyze();
+  void _onControllerChanged() => _maybeAutoRun();
 
   void _onRepertoireSettingsChanged() {
     final controller = _controller;
@@ -77,39 +100,36 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
     }
   }
 
-  /// Hand freshly loaded games to the background analyzer. Idempotent — the
-  /// service no-ops while running and attempts each game once per session.
-  void _maybeAutoAnalyze() {
+  /// Opt-in only: the review costs every core for minutes, so it starts itself
+  /// exactly when the user asked it to in the settings dialog.
+  void _maybeAutoRun() {
     final controller = _controller;
-    if (controller == null || controller.isLoading) return;
-    if (!controller.hasLoadedOnce || !controller.filters.autoAnalyze) return;
-    GameAutoAnalysisService.instance.maybeRun(controller.games);
+    final runner = _runner;
+    if (controller == null || runner == null) return;
+    if (!controller.hasLoadedOnce || controller.isLoading) return;
+    if (!controller.filters.autoRun || _autoRunAttempted) return;
+    _autoRunAttempted = true;
+    runner.start();
   }
 
-  void _openGame(RecentGame game) {
+  void _startReview() {
+    // The review is an engine pass — refuse while tree generation holds
+    // Stockfish, with the same message every other engine consumer shows.
+    if (!EngineGate.ensureAvailable(context)) return;
+    _runner?.start();
+  }
+
+  /// Open one game in the PGN viewer, on the tab that answers the question the
+  /// user clicked on.
+  void _openGame(RecentGame game, {PgnViewerTab tab = PgnViewerTab.game}) {
     context.read<AppState>().switchToPgnViewer(
       path: game.cachePath,
       gameId: game.record.dedupKey,
-      autoAnalyze: true,
+      tab: tab,
+      // Only the Analysis tab is worth an engine pass on arrival; opening a
+      // game to read it, or to see the line it left, should not start one.
+      autoAnalyze: tab == PgnViewerTab.analysis,
       historyLabel: 'Game: ${game.white} vs ${game.black}',
-    );
-  }
-
-  void _openDeviation(RecentGame game) {
-    final report = game.deviation;
-    if (report == null) return;
-    context.read<AppState>().switchToBuilder(
-      repertoirePath: report.chapterPath,
-      moveSequence: report.pathSans,
-      historyLabel: 'Repertoire: ${report.chapterName}',
-    );
-  }
-
-  void _openReviewEntry(OpeningReviewEntry entry) {
-    context.read<AppState>().switchToBuilder(
-      repertoirePath: entry.chapterPath,
-      moveSequence: entry.pathSans,
-      historyLabel: 'Repertoire: ${entry.chapterName}',
     );
   }
 
@@ -122,22 +142,35 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
       context: context,
       builder: (_) => OpeningReviewDialog(
         data: aggregateOpeningReview(controller.games),
-        sinceDays: controller.filters.sinceDays,
-        onOpenLine: _openReviewEntry,
-        onOpenGame: _openGame,
-        onOpenSettings: _openSettings,
+        windowLabel: controller.window.label,
+        onEditLine: _openLineInBuilder,
+        onOpenGame: (game) => _openGame(game, tab: PgnViewerTab.line),
       ),
     );
   }
 
-  Future<void> _showFilterDialog() async {
+  /// The deliberate trip to the builder: editing the book, not reviewing it.
+  void _openLineInBuilder(OpeningReviewEntry entry) {
+    context.read<AppState>().switchToBuilder(
+      repertoirePath: entry.chapterPath,
+      moveSequence: entry.pathSans,
+      historyLabel: 'Repertoire: ${entry.chapterName}',
+    );
+  }
+
+  Future<void> _showSettingsDialog() async {
     final controller = _controller;
     if (controller == null) return;
-    final result = await showDialog<GamesListFilters>(
+    final result = await showDialog<HomeReviewSettingsResult>(
       context: context,
-      builder: (_) => _GamesFilterDialog(initial: controller.filters),
+      builder: (_) => HomeReviewSettingsDialog(filters: controller.filters),
     );
-    if (result != null) await controller.setFilters(result);
+    if (result != null) {
+      await controller.setFilters(result.filters);
+      // A different set of games means "review complete" was about the old
+      // set — back to the resting state so the button reads honestly.
+      _runner?.reset();
+    }
   }
 
   void _openSettings() {
@@ -146,21 +179,52 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
     ).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
   }
 
+  /// Step two of the loop: play the puzzles the review found. The button is
+  /// here, next to Review games; setting a puzzle up is the control panel's
+  /// job, so it is asked through the shared session controller (the two panes
+  /// are siblings and can't call each other).
+  void _studyTactics() {
+    context.read<TacticsSessionController>().onStartRequested?.call();
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = context.read<RecentGamesController>();
+    final runner = context.read<HomeReviewRunner>();
+    final coordinator = context.read<TacticsImportCoordinator>();
+    final database = context.read<TacticsDatabase>();
+    final session = context.read<TacticsSessionController>();
     return ListenableBuilder(
-      // The auto-analysis service notifies as each game's summary lands, so
-      // the chips fill in while the job runs.
+      // The coordinator reports each reviewed game, so the strip's counters and
+      // the rows' mistake counts fill in while the review runs. The database and
+      // session join them for the Study-tactics button's ready count — puzzles
+      // stream in during a review, so the number has to keep up.
       listenable: Listenable.merge([
         controller,
-        GameAutoAnalysisService.instance,
+        runner,
+        coordinator,
+        database,
+        session,
       ]),
-      builder: (context, _) => _buildBody(context, controller),
+      builder: (context, _) => _buildBody(
+        context,
+        controller,
+        runner,
+        coordinator,
+        database,
+        session,
+      ),
     );
   }
 
-  Widget _buildBody(BuildContext context, RecentGamesController controller) {
+  Widget _buildBody(
+    BuildContext context,
+    RecentGamesController controller,
+    HomeReviewRunner runner,
+    TacticsImportCoordinator coordinator,
+    TacticsDatabase database,
+    TacticsSessionController session,
+  ) {
     // Usernames come out of prefs asynchronously at startup; until that read
     // finishes, "no usernames" may just mean "still loading" — don't flash
     // the no-accounts card at a configured user.
@@ -181,6 +245,42 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
         onPressed: _openSettings,
       );
     }
+    final games = controller.games;
+    // Cheap enough to recompute per build (a walk over ≤ a window of games,
+    // no IO) and it has to be: the count on the Opening-review button ticks up
+    // as the analysis reports each game.
+    final openingReview = aggregateOpeningReview(games);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        GamesHomeHeader(controller: controller),
+        ReviewStrip(
+          runner: runner,
+          coordinator: coordinator,
+          isLoadingGames: controller.isLoading,
+          gamesInWindow: games.length,
+          unreviewedCount: games
+              .where((g) => g.meWhite != null && g.summary == null)
+              .length,
+          windowLabel: controller.window.label,
+          readyPuzzleCount: session.sessionSettings.countMatching(
+            database.positions,
+          ),
+          openingIssueCount:
+              openingReview.mistakes.length + openingReview.bookEnds.length,
+          onStart: _startReview,
+          onPause: runner.pause,
+          onStudyTactics: _studyTactics,
+          onRefresh: () => controller.refresh(force: true),
+          onSettings: _showSettingsDialog,
+          onOpeningReview: _showOpeningReview,
+        ),
+        Expanded(child: _buildList(controller)),
+      ],
+    );
+  }
+
+  Widget _buildList(RecentGamesController controller) {
     if (controller.isLoading && controller.games.isEmpty) {
       return Center(
         child: Column(
@@ -204,675 +304,59 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
         title: 'No games found',
         message:
             controller.error ??
-            'No games in the last ${controller.filters.sinceDays} days '
-                'matched the current filters.',
+            'Nothing in your ${controller.window.label} matched the current '
+                'time controls.',
         buttonLabel: 'Try again',
         onPressed: () => controller.refresh(force: true),
       );
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _WelcomeHeader(controller: controller),
-        _GamesToolbarRow(
-          controller: controller,
-          onRefresh: () => controller.refresh(force: true),
-          onFilters: _showFilterDialog,
-          onOpeningReview: _showOpeningReview,
-        ),
-        SizedBox(
-          height: 3,
-          child: controller.isLoading
-              ? const LinearProgressIndicator(minHeight: 3)
-              : const SizedBox.expand(),
-        ),
-        const _GamesHeaderRow(),
-        const Divider(height: 1, thickness: 1),
-        Expanded(
-          child: ListView.builder(
-            itemCount: controller.games.length,
-            itemBuilder: (context, index) {
-              final game = controller.games[index];
-              return _GameRow(
-                game: game,
-                onOpen: () => _openGame(game),
-                onOpenDeviation: () => _openDeviation(game),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ── Welcome header ─────────────────────────────────────────────────────────
-
-/// The friendly part of coming home: greeting, rating trend over the visible
-/// window, and a one-line pointer at what deserves attention. Static layout —
-/// nothing moves, nothing animates.
-class _WelcomeHeader extends StatelessWidget {
-  const _WelcomeHeader({required this.controller});
-
-  final RecentGamesController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final games = controller.games;
-    final trends = computeRatingTrends(games);
-    final name = games.isNotEmpty ? games.first.myUsername : '';
-
-    final analyzed = games.where((g) => g.summary != null).length;
-    final unanalyzed = games.where((g) => g.meWhite != null).length - analyzed;
-    final withMistakes = games
-        .where((g) => (g.summary?.clean ?? true) == false)
-        .length;
-    final leftBook = games
-        .where(
-          (g) =>
-              g.deviation != null &&
-              !g.deviation!.inBook &&
-              !g.deviation!.bookEnded &&
-              g.deviation!.byMe == true,
-        )
-        .length;
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.divider)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            name.isEmpty ? 'Welcome back!' : 'Welcome back, $name!',
-            style: AppTextStyles.body.copyWith(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          if (trends.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 16,
-              runSpacing: 4,
-              children: [for (final t in trends.take(2)) _TrendLine(trend: t)],
-            ),
-          ],
-          const SizedBox(height: 6),
-          Text(
-            _encouragement(trends),
-            style: AppTextStyles.body.copyWith(fontSize: 13),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            _attentionLine(
-              total: games.length,
-              days: controller.filters.sinceDays,
-              unanalyzed: unanalyzed,
-              withMistakes: withMistakes,
-              leftBook: leftBook,
-            ),
-            style: AppTextStyles.body.copyWith(
-              fontSize: 12,
-              color: AppColors.onSurfaceSoft,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static String _encouragement(List<RatingTrendEntry> trends) {
-    final top = trends.isEmpty ? null : trends.first;
-    if (top == null || !top.hasTrend) {
-      return 'Ready to sharpen up? Your recent games are below.';
-    }
-    if (top.delta > 0) {
-      return 'Congrats on +${top.delta} ${top.speedLabel} — keep it rolling!';
-    }
-    if (top.delta < 0) {
-      return 'Down ${-top.delta} ${top.speedLabel} — your mistakes below '
-          'are the fastest way back.';
-    }
-    return 'Holding steady — a review below might find the next step up.';
-  }
-
-  static String _attentionLine({
-    required int total,
-    required int days,
-    required int unanalyzed,
-    required int withMistakes,
-    required int leftBook,
-  }) {
-    final parts = <String>[
-      days > 0 ? '$total games in the last $days days' : '$total games',
-      if (unanalyzed > 0) '$unanalyzed awaiting analysis',
-      if (withMistakes > 0) '$withMistakes with mistakes to review',
-      if (unanalyzed == 0 && withMistakes == 0) 'all reviewed — clean!',
-      if (leftBook > 0)
-        'left book in $leftBook ${leftBook == 1 ? 'game' : 'games'}',
+    final games = [
+      for (final game in controller.games)
+        if (matchesSearch(_search, _gameHaystack(game))) game,
     ];
-    return parts.join(' · ');
-  }
-}
-
-class _TrendLine extends StatelessWidget {
-  const _TrendLine({required this.trend});
-
-  final RatingTrendEntry trend;
-
-  @override
-  Widget build(BuildContext context) {
-    final delta = trend.delta;
-    final deltaColor = !trend.hasTrend || delta == 0
-        ? AppColors.onSurfaceSoft
-        : (delta > 0 ? AppColors.success : AppColors.danger);
-    final deltaText = !trend.hasTrend
-        ? ''
-        : '  ${delta >= 0 ? '+$delta' : '$delta'}';
-    return Text.rich(
-      TextSpan(
-        children: [
-          TextSpan(
-            text: '${trend.speedLabel} ${trend.latestElo}',
-            style: AppTextStyles.body.copyWith(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+          child: ListSearchField(
+            hintText: 'Search by opponent, opening or date',
+            onChanged: (v) => setState(() => _search = v),
           ),
-          if (deltaText.isNotEmpty)
-            TextSpan(
-              text: deltaText,
-              style: AppTextStyles.body.copyWith(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: deltaColor,
-              ),
-            ),
-          TextSpan(
-            text:
-                '  (${trend.gameCount} '
-                '${trend.gameCount == 1 ? 'game' : 'games'}, '
-                '${trend.platformLabel})',
-            style: AppTextStyles.body.copyWith(
-              fontSize: 12,
-              color: AppColors.onSurfaceMuted,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Toolbar row (section title + refresh + filters) ────────────────────────
-
-class _GamesToolbarRow extends StatelessWidget {
-  const _GamesToolbarRow({
-    required this.controller,
-    required this.onRefresh,
-    required this.onFilters,
-    required this.onOpeningReview,
-  });
-
-  final RecentGamesController controller;
-  final VoidCallback onRefresh;
-  final VoidCallback onFilters;
-  final VoidCallback onOpeningReview;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
-      child: Row(
-        children: [
-          Text(
-            'Recent games',
-            style: AppTextStyles.body.copyWith(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.onSurfaceMuted,
-            ),
-          ),
-          const Spacer(),
-          // Static entry point (not gated on there being mistakes): the
-          // dialog itself explains the no-repertoire and all-clean states.
-          TextButton.icon(
-            onPressed: onOpeningReview,
-            icon: const Icon(Icons.menu_book, size: 16),
-            label: const Text('Opening review'),
-            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh, size: 18),
-            tooltip: 'Refresh games',
-            visualDensity: VisualDensity.compact,
-            onPressed: controller.isLoading ? null : onRefresh,
-          ),
-          IconButton(
-            icon: const Icon(Icons.tune, size: 18),
-            tooltip: 'Game list filters…',
-            visualDensity: VisualDensity.compact,
-            onPressed: onFilters,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Layout constants shared by header and rows (static table) ─────────────
-//
-// Fixed columns stay narrow so the two flexible cells (players, repertoire)
-// absorb whatever width the pane actually gets; every text cell ellipsizes,
-// so the row cannot overflow even in a half-window pane.
-
-const double _kTimeColWidth = 64;
-const double _kScoreColWidth = 40;
-const double _kReviewColWidth = 104;
-const double _kDateColWidth = 48;
-const double _kLinkColWidth = 32;
-const int _kPlayersFlex = 5;
-const int _kPrepFlex = 4;
-
-class _GamesHeaderRow extends StatelessWidget {
-  const _GamesHeaderRow();
-
-  @override
-  Widget build(BuildContext context) {
-    final style = AppTextStyles.body.copyWith(
-      fontSize: 12,
-      fontWeight: FontWeight.w600,
-      color: AppColors.onSurfaceMuted,
-    );
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          SizedBox(
-            width: _kTimeColWidth,
-            child: Text('Time', style: style),
-          ),
-          Expanded(
-            flex: _kPlayersFlex,
-            child: Text('Players', style: style),
-          ),
-          SizedBox(
-            width: _kScoreColWidth,
-            child: Text('Result', style: style),
-          ),
-          SizedBox(
-            width: _kReviewColWidth,
-            child: Text('Review', style: style),
-          ),
-          Expanded(
-            flex: _kPrepFlex,
-            child: Text('Repertoire', style: style),
-          ),
-          SizedBox(
-            width: _kDateColWidth,
-            child: Text('Date', style: style, textAlign: TextAlign.right),
-          ),
-          const SizedBox(width: _kLinkColWidth),
-        ],
-      ),
-    );
-  }
-}
-
-class _GameRow extends StatelessWidget {
-  const _GameRow({
-    required this.game,
-    required this.onOpen,
-    required this.onOpenDeviation,
-  });
-
-  final RecentGame game;
-  final VoidCallback onOpen;
-  final VoidCallback onOpenDeviation;
-
-  @override
-  Widget build(BuildContext context) {
-    final (whiteScore, blackScore) = game.scorePair;
-    return InkWell(
-      onTap: onOpen,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: AppColors.divider)),
         ),
-        child: Row(
-          children: [
-            SizedBox(width: _kTimeColWidth, child: _buildTimeCell()),
-            Expanded(flex: _kPlayersFlex, child: _buildPlayersCell()),
-            SizedBox(
-              width: _kScoreColWidth,
-              child: _ScorePair(
-                white: whiteScore,
-                black: blackScore,
-                outcome: game.myOutcome,
-                meWhite: game.meWhite,
-              ),
-            ),
-            SizedBox(
-              width: _kReviewColWidth,
-              child: _ReviewCell(game: game, onOpen: onOpen),
-            ),
-            Expanded(
-              flex: _kPrepFlex,
-              child: _DeviationCell(game: game, onOpen: onOpenDeviation),
-            ),
-            SizedBox(
-              width: _kDateColWidth,
-              child: Text(
-                game.dateDisplayShort,
-                textAlign: TextAlign.right,
-                overflow: TextOverflow.ellipsis,
-                style: AppTextStyles.body.copyWith(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceSoft,
-                ),
-              ),
-            ),
-            SizedBox(
-              width: _kLinkColWidth,
-              child: game.gameUrl == null
-                  ? const SizedBox.shrink()
-                  : IconButton(
-                      icon: const Icon(Icons.open_in_new, size: 16),
-                      tooltip:
-                          'Open on ${game.platform.name == 'chesscom' ? 'Chess.com' : 'Lichess'}',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () => launchUrl(Uri.parse(game.gameUrl!)),
+        Expanded(
+          child: games.isEmpty
+              ? Center(
+                  child: Text(
+                    'No games match "$_search"',
+                    style: AppTextStyles.body.copyWith(
+                      color: AppColors.onSurfaceMuted,
                     ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTimeCell() {
-    return Row(
-      children: [
-        Icon(
-          _speedIcon(game.record.speed),
-          size: 16,
-          color: AppColors.onSurfaceMuted,
-        ),
-        const SizedBox(width: 4),
-        Flexible(
-          child: Text(
-            game.timeControlDisplay,
-            overflow: TextOverflow.ellipsis,
-            style: AppTextStyles.body.copyWith(fontSize: 13),
-          ),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  itemCount: games.length,
+                  itemBuilder: (context, index) {
+                    final game = games[index];
+                    return GameCard(
+                      game: game,
+                      onOpen: () => _openGame(game),
+                      onOpenAnalysis: () =>
+                          _openGame(game, tab: PgnViewerTab.analysis),
+                      onOpenLine: () => _openGame(game, tab: PgnViewerTab.line),
+                    );
+                  },
+                ),
         ),
       ],
     );
   }
 
-  Widget _buildPlayersCell() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _PlayerLine(
-          name: game.white,
-          elo: game.whiteElo,
-          isWhitePiece: true,
-          isMe: game.meWhite == true,
-        ),
-        const SizedBox(height: 2),
-        _PlayerLine(
-          name: game.black,
-          elo: game.blackElo,
-          isWhitePiece: false,
-          isMe: game.meWhite == false,
-        ),
-      ],
-    );
-  }
-
-  static IconData _speedIcon(GameSpeed speed) => switch (speed) {
-    GameSpeed.ultraBullet || GameSpeed.bullet => Icons.rocket_launch,
-    GameSpeed.blitz => Icons.bolt,
-    GameSpeed.rapid => Icons.timer,
-    GameSpeed.classical => Icons.hourglass_bottom,
-    GameSpeed.correspondence => Icons.mail_outline,
-    GameSpeed.unknown => Icons.help_outline,
-  };
-}
-
-/// The Review column: a "Review" button until the game has stored evals,
-/// then the analysis verdict — worst mistake category with its count (full
-/// breakdown in the tooltip). Both forms open the game; the verdict text is
-/// what makes "where did I go wrong?" answerable from the list.
-class _ReviewCell extends StatelessWidget {
-  const _ReviewCell({required this.game, required this.onOpen});
-
-  final RecentGame game;
-  final VoidCallback onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    final summary = game.summary;
-    if (summary == null) {
-      return Align(
-        alignment: Alignment.centerLeft,
-        child: OutlinedButton(
-          onPressed: onOpen,
-          style: OutlinedButton.styleFrom(
-            visualDensity: VisualDensity.compact,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-          ),
-          child: const Text('Review'),
-        ),
-      );
-    }
-    final Color color;
-    if (summary.blunders > 0) {
-      color = AppColors.danger;
-    } else if (summary.mistakes > 0) {
-      color = AppColors.warning;
-    } else if (summary.inaccuracies > 0) {
-      color = AppColors.info;
-    } else {
-      color = AppColors.successMuted;
-    }
-    return Tooltip(
-      message: summary.breakdown,
-      child: InkWell(
-        onTap: onOpen,
-        borderRadius: BorderRadius.circular(4),
-        child: Text(
-          summary.chipLabel,
-          overflow: TextOverflow.ellipsis,
-          style: AppTextStyles.body.copyWith(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: color,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PlayerLine extends StatelessWidget {
-  const _PlayerLine({
-    required this.name,
-    required this.elo,
-    required this.isWhitePiece,
-    required this.isMe,
-  });
-
-  final String name;
-  final String? elo;
-  final bool isWhitePiece;
-  final bool isMe;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            color: isWhitePiece ? AppColors.ink : AppColors.surface,
-            border: Border.all(color: AppColors.outline),
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        const SizedBox(width: 6),
-        Flexible(
-          child: Text(
-            elo == null ? name : '$name ($elo)',
-            overflow: TextOverflow.ellipsis,
-            style: AppTextStyles.body.copyWith(
-              fontSize: 13,
-              fontWeight: isMe ? FontWeight.w700 : FontWeight.w400,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ScorePair extends StatelessWidget {
-  const _ScorePair({
-    required this.white,
-    required this.black,
-    required this.outcome,
-    required this.meWhite,
-  });
-
-  final String white;
-  final String black;
-  final MyGameOutcome outcome;
-  final bool? meWhite;
-
-  @override
-  Widget build(BuildContext context) {
-    Color colorFor({required bool whiteLine}) {
-      if (meWhite == null || meWhite != whiteLine) {
-        return AppColors.onSurfaceSoft;
-      }
-      return switch (outcome) {
-        MyGameOutcome.win => AppColors.success,
-        MyGameOutcome.loss => AppColors.danger,
-        MyGameOutcome.draw => AppColors.onSurfaceSoft,
-        MyGameOutcome.unknown => AppColors.onSurfaceSoft,
-      };
-    }
-
-    TextStyle styleFor({required bool whiteLine}) =>
-        AppTextStyles.body.copyWith(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: colorFor(whiteLine: whiteLine),
-        );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(white, style: styleFor(whiteLine: true)),
-        const SizedBox(height: 2),
-        Text(black, style: styleFor(whiteLine: false)),
-      ],
-    );
-  }
-}
-
-class _DeviationCell extends StatelessWidget {
-  const _DeviationCell({required this.game, required this.onOpen});
-
-  final RecentGame game;
-  final VoidCallback onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    final muted = AppTextStyles.body.copyWith(
-      fontSize: 12,
-      color: AppColors.onSurfaceMuted,
-    );
-    if (!game.deviationComputed) {
-      return Text('…', style: muted);
-    }
-    final report = game.deviation;
-    if (report == null) {
-      final String message;
-      if (game.meWhite == null) {
-        message = 'Could not tell which side you played';
-      } else if (!game.bookDesignated) {
-        message =
-            'No repertoire designated for this color '
-            '(Settings → My repertoires)';
-      } else {
-        message =
-            'The designated repertoire has no usable chapters '
-            '(folder missing or empty?)';
-      }
-      return Tooltip(
-        message: message,
-        child: Text('—', style: muted),
-      );
-    }
-    if (report.inBook) {
-      return Text(
-        'In book',
-        style: AppTextStyles.body.copyWith(
-          fontSize: 12,
-          color: AppColors.successMuted,
-        ),
-      );
-    }
-    if (report.bookEnded) {
-      // The prep simply ran out — nobody "left" anything; offer to extend.
-      return Tooltip(
-        message:
-            'Your prep ends here — ${report.chapterName} has no moves past '
-            'this point.\nClick to open it at this position and extend it.',
-        child: InkWell(
-          onTap: onOpen,
-          borderRadius: BorderRadius.circular(4),
-          child: Text(
-            'Book ends: move ${report.moveNumber}',
-            overflow: TextOverflow.ellipsis,
-            style: AppTextStyles.body.copyWith(
-              fontSize: 12,
-              color: AppColors.onSurfaceSoft,
-              decoration: TextDecoration.underline,
-              decorationColor: AppColors.onSurfaceDim,
-            ),
-          ),
-        ),
-      );
-    }
-    final who = report.byMe == true ? 'you' : 'them';
-    return Tooltip(
-      message:
-          'Played ${report.playedSan} — expected '
-          '${report.expectedSans.join(' / ')}.\n'
-          'Click to open ${report.chapterName} at this position.',
-      child: InkWell(
-        onTap: onOpen,
-        borderRadius: BorderRadius.circular(4),
-        child: Text(
-          'Left book: move ${report.moveNumber} ($who)',
-          overflow: TextOverflow.ellipsis,
-          style: AppTextStyles.body.copyWith(
-            fontSize: 12,
-            color: report.byMe == true ? AppColors.warning : AppColors.info,
-            decoration: TextDecoration.underline,
-            decorationColor: AppColors.onSurfaceDim,
-          ),
-        ),
-      ),
-    );
-  }
+  /// What a game can be looked up by: either player's name (so it works
+  /// whichever side you had), the opening, and the date as displayed.
+  String _gameHaystack(RecentGame game) =>
+      '${game.white} ${game.black} ${game.openingName ?? ''} '
+      '${game.dateDisplay}';
 }
 
 class _EmptyStateCard extends StatelessWidget {
@@ -927,124 +411,6 @@ class _EmptyStateCard extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _GamesFilterDialog extends StatefulWidget {
-  const _GamesFilterDialog({required this.initial});
-
-  final GamesListFilters initial;
-
-  @override
-  State<_GamesFilterDialog> createState() => _GamesFilterDialogState();
-}
-
-class _GamesFilterDialogState extends State<_GamesFilterDialog> {
-  late Set<GameSpeed> _speeds;
-  late final TextEditingController _maxGames;
-  late final TextEditingController _sinceDays;
-  late bool _autoAnalyze;
-
-  static const _speedLabels = {
-    GameSpeed.ultraBullet: 'UltraBullet',
-    GameSpeed.bullet: 'Bullet',
-    GameSpeed.blitz: 'Blitz',
-    GameSpeed.rapid: 'Rapid',
-    GameSpeed.classical: 'Classical',
-    GameSpeed.correspondence: 'Correspondence',
-  };
-
-  @override
-  void initState() {
-    super.initState();
-    _speeds = {...widget.initial.speeds};
-    _maxGames = TextEditingController(text: '${widget.initial.maxGames}');
-    _sinceDays = TextEditingController(text: '${widget.initial.sinceDays}');
-    _autoAnalyze = widget.initial.autoAnalyze;
-  }
-
-  @override
-  void dispose() {
-    _maxGames.dispose();
-    _sinceDays.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Game list filters'),
-      content: SizedBox(
-        width: 320,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final entry in _speedLabels.entries)
-              AppCheckbox(
-                label: entry.value,
-                value: _speeds.contains(entry.key),
-                onChanged: (checked) => setState(() {
-                  if (checked == true) {
-                    _speeds.add(entry.key);
-                  } else {
-                    _speeds.remove(entry.key);
-                  }
-                }),
-              ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _sinceDays,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Show games from the last N days (0 = any time)',
-                isDense: true,
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _maxGames,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Maximum games per site',
-                isDense: true,
-              ),
-            ),
-            const SizedBox(height: 12),
-            AppCheckbox(
-              label: 'Analyze new games automatically',
-              value: _autoAnalyze,
-              onChanged: (checked) => setState(() => _autoAnalyze = checked),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () {
-            final max = int.tryParse(_maxGames.text.trim());
-            final since = int.tryParse(_sinceDays.text.trim());
-            Navigator.of(context).pop(
-              GamesListFilters(
-                speeds: _speeds,
-                maxGames: (max == null || max < 1)
-                    ? widget.initial.maxGames
-                    : max.clamp(1, 1000),
-                sinceDays: (since == null || since < 0)
-                    ? widget.initial.sinceDays
-                    : since.clamp(0, 3650),
-                autoAnalyze: _autoAnalyze,
-              ),
-            );
-          },
-          child: const Text('Apply'),
-        ),
-      ],
     );
   }
 }

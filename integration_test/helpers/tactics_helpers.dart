@@ -36,7 +36,14 @@ Future<void> pumpApp(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-/// Run the Lichess import flow and poll until a start button appears.
+/// Run the review (download → book check → engine pass) and poll until puzzles
+/// exist, i.e. until the Study-tactics button reports a ready count.
+///
+/// This is the one way to get games into the app now: there is no per-site
+/// Import button any more, because downloading and analysing are the same job
+/// — the review strip's play button in the left pane. All of the home's
+/// buttons live on that strip: the engine-analysis job, then Study tactics and
+/// Opening review under it.
 Future<void> importAndWaitForPositions(
   WidgetTester tester, {
   String username = 'DrNykterstein',
@@ -48,41 +55,50 @@ Future<void> importAndWaitForPositions(
   await tester.enterText(lichessField, username);
   await tester.pumpAndSettle();
 
-  final gameCountField = find.widgetWithText(TextField, 'Recent Games').first;
-  await tester.enterText(gameCountField, gameCount);
+  // The shared games window defaults to "my last N games", so the count field
+  // is already the active one; it carries no label, hence the key.
+  await tester.enterText(
+    find.byKey(const Key('window-games-field')),
+    gameCount,
+  );
   await tester.pumpAndSettle();
 
-  final importButtons = find.widgetWithText(ElevatedButton, 'Import');
-  await tester.tap(importButtons.first);
+  // The username makes the left pane load, which is what brings the review
+  // strip on screen; wait for its button before pressing it. Found by key, not
+  // by label: the label says what pressing it will do ("Start engine analysis
+  // (5)", "Resume engine analysis (3)", "Check for new games"), so it depends
+  // on what is already downloaded and analysed.
+  final reviewButton = find.byKey(const Key('review-transport-button'));
+  for (int i = 0; i < maxPolls && reviewButton.evaluate().isEmpty; i++) {
+    await tester.pump(pollInterval);
+  }
+  if (reviewButton.evaluate().isEmpty) {
+    fail('The review strip never appeared after setting a username');
+  }
+  await tester.tap(reviewButton.first);
   await tester.pump();
 
   for (int i = 0; i < maxPolls; i++) {
     await tester.pump(pollInterval);
-    if (find.textContaining('Start Practice Session').evaluate().isNotEmpty ||
-        find.textContaining('Start Training Now').evaluate().isNotEmpty) {
-      return;
-    }
+    if (_studyButton().evaluate().isNotEmpty) return;
   }
   fail(
-    'Start button never appeared after importing $gameCount games for $username',
+    'Study tactics never reported any puzzles after reviewing $gameCount '
+    'games for $username',
   );
 }
 
-/// Tap the start-session button (whichever variant is visible).
-///
-/// The button text toggles between "Start Practice Session" and
-/// "Start Training Now" depending on import state, so we re-evaluate the
-/// finder after pumping to avoid stale references.
-Future<void> tapStartSession(WidgetTester tester) async {
-  Finder _currentButton() {
-    final startPractice = find.textContaining('Start Practice Session');
-    if (startPractice.evaluate().isNotEmpty) return startPractice;
-    return find.textContaining('Start Training Now');
-  }
+/// The Study-tactics button once it has puzzles to offer. Its label carries the
+/// count ("Study tactics (12)"), which is exactly the signal that the review
+/// produced something — with none it renders as a bare, disabled label.
+Finder _studyButton() => find.textContaining(RegExp(r'Study tactics \(\d+\)'));
 
-  await tester.ensureVisible(_currentButton());
+/// Tap the Study-tactics button, re-evaluating the finder after pumping so a
+/// count that ticks up mid-test can't leave a stale reference behind.
+Future<void> tapStartSession(WidgetTester tester) async {
+  await tester.ensureVisible(_studyButton());
   await tester.pumpAndSettle();
-  await tester.tap(_currentButton());
+  await tester.tap(_studyButton());
   await tester.pumpAndSettle();
 }
 

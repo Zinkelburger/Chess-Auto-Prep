@@ -116,7 +116,7 @@ class GameNavBar extends StatelessWidget {
           children: [
             ShortcutTooltip(
               description: 'Previous game',
-              shortcut: 'P',
+              shortcut: '↑',
               child: TextButton.icon(
                 onPressed: currentIndex > 0 ? onPrev : null,
                 icon: const Icon(Icons.skip_previous, size: 20),
@@ -126,7 +126,7 @@ class GameNavBar extends StatelessWidget {
             const SizedBox(width: 16),
             ShortcutTooltip(
               description: 'Next game',
-              shortcut: 'N',
+              shortcut: '↓',
               child: TextButton.icon(
                 onPressed: currentIndex < games.length - 1 ? onNext : null,
                 icon: const Icon(Icons.skip_next, size: 20),
@@ -196,7 +196,7 @@ class GameNavBar extends StatelessWidget {
         const SizedBox(width: 4),
         ShortcutTooltip(
           description: 'Exit solitaire',
-          shortcut: 'Shift+S',
+          shortcut: 'Esc',
           child: ActionChip(
             onPressed: onExitSolitaire,
             avatar: const Icon(Icons.close, size: 16),
@@ -236,7 +236,7 @@ class GameNavBar extends StatelessWidget {
           children: [
             ShortcutTooltip(
               description: 'Previous game',
-              shortcut: 'P',
+              shortcut: '↑',
               child: TextButton.icon(
                 onPressed: currentIndex > 0 ? onPrev : null,
                 icon: const Icon(Icons.skip_previous, size: 20),
@@ -267,7 +267,7 @@ class GameNavBar extends StatelessWidget {
             const SizedBox(width: 16),
             ShortcutTooltip(
               description: 'Next game',
-              shortcut: 'N',
+              shortcut: '↓',
               child: TextButton.icon(
                 onPressed: currentIndex < games.length - 1 ? onNext : null,
                 icon: const Icon(Icons.skip_next, size: 20),
@@ -297,6 +297,7 @@ class GameNavBar extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(switch (mode) {
                   GameSortMode.fileOrder => 'File order',
+                  GameSortMode.dateDesc => 'Newest first',
                   GameSortMode.ratingDesc => 'Stars (high first)',
                   GameSortMode.ratingAsc => 'Stars (low first)',
                 }),
@@ -317,6 +318,7 @@ class GameNavBar extends StatelessWidget {
             const SizedBox(width: 4),
             Text(switch (sortMode) {
               GameSortMode.fileOrder => 'File order',
+              GameSortMode.dateDesc => 'Newest first',
               GameSortMode.ratingDesc => 'Stars ↓',
               GameSortMode.ratingAsc => 'Stars ↑',
             }, style: const TextStyle(fontSize: 11)),
@@ -344,8 +346,19 @@ class GameNavBar extends StatelessWidget {
   }
 
   Widget _buildGameCounterDropdown(BuildContext context) {
+    // The counter is a position in *this* order, and the order is the sort
+    // dropdown's — say so. "Game 301 / 312" with no ordering named is the one
+    // number on this bar nobody can interpret.
+    final ordering = switch (sortMode) {
+      GameSortMode.fileOrder => 'in file order',
+      GameSortMode.dateDesc => 'newest first',
+      GameSortMode.ratingDesc => 'by stars, high first',
+      GameSortMode.ratingAsc => 'by stars, low first',
+    };
     return Tooltip(
-      message: 'Jump to game (S)',
+      message:
+          'Game ${currentIndex + 1} of ${games.length}, $ordering.\n'
+          'Click to jump to another (S)',
       child: InkWell(
         borderRadius: BorderRadius.circular(6),
         onTap: games.isEmpty

@@ -15,6 +15,7 @@ import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/storage/storage_factory.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
+import 'common/list_search_field.dart';
 import 'layout/empty_state_placeholder.dart';
 import 'pgn_import_dialog.dart';
 
@@ -43,6 +44,13 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
   List<RepertoireMetadata> _studies = [];
   bool _isLoading = true;
   String? _loadError;
+  String _search = '';
+
+  List<RepertoireMetadata> get _visibleRepertoires =>
+      _repertoires.where((r) => matchesSearch(_search, r.name)).toList();
+
+  List<RepertoireMetadata> get _visibleStudies =>
+      _studies.where((s) => matchesSearch(_search, s.name)).toList();
 
   @override
   void initState() {
@@ -114,43 +122,105 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
       );
     }
 
+    // Empty and non-empty share the toolbar: "New repertoire" and
+    // "Import PGN…" are exactly what a first-time user needs, and the layout
+    // must not rearrange itself the moment the first repertoire exists.
     if (_repertoires.isEmpty && _studies.isEmpty) {
-      return EmptyStatePlaceholder(
-        icon: Icons.library_books,
-        title: 'No Repertoires Found',
-        subtitle: 'Create a new repertoire to get started',
-        actionLabel: 'Create Repertoire',
-        actionIcon: Icons.add,
-        onAction: _showCreateDialog,
+      return Column(
+        children: [
+          _buildToolbar(),
+          const Divider(height: 1, thickness: 1),
+          const Expanded(
+            child: EmptyStatePlaceholder(
+              icon: Icons.library_books,
+              title: 'No repertoires yet',
+              subtitle:
+                  'Start one from scratch, or import a PGN you already have.',
+            ),
+          ),
+        ],
       );
     }
 
     final showSections = _studies.isNotEmpty;
-    return Stack(
+    final repertoires = _visibleRepertoires;
+    final studies = _visibleStudies;
+    final nothingMatched = repertoires.isEmpty && studies.isEmpty;
+
+    return Column(
       children: [
-        ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-          children: [
-            if (showSections && _repertoires.isNotEmpty)
-              _buildSectionHeader('Repertoires'),
-            for (final repertoire in _repertoires)
-              _buildRepertoireCard(repertoire),
-            if (showSections) ...[
-              _buildSectionHeader('Studies — custom tactics'),
-              for (final study in _studies) _buildStudyCard(study),
-            ],
-          ],
-        ),
-        Positioned(
-          right: 16,
-          bottom: 16,
-          child: FloatingActionButton.extended(
-            onPressed: _showCreateDialog,
-            icon: const Icon(Icons.add),
-            label: const Text('Create New'),
-          ),
+        _buildToolbar(),
+        const Divider(height: 1, thickness: 1),
+        Expanded(
+          child: nothingMatched
+              ? Center(
+                  child: Text(
+                    'Nothing matches "$_search".',
+                    style: const TextStyle(color: AppColors.onSurfaceMuted),
+                  ),
+                )
+              : ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                  children: [
+                    if (showSections && repertoires.isNotEmpty)
+                      _buildSectionHeader('Repertoires'),
+                    for (final repertoire in repertoires)
+                      _buildRepertoireCard(repertoire),
+                    if (showSections && studies.isNotEmpty) ...[
+                      _buildSectionHeader('Studies — custom tactics'),
+                      for (final study in studies) _buildStudyCard(study),
+                    ],
+                  ],
+                ),
         ),
       ],
+    );
+  }
+
+  /// Search plus the two ways a repertoire comes into existence, both spelled
+  /// out. "Import PGN" used to be a chip hidden inside the create dialog, so
+  /// the app's most common starting point looked unsupported.
+  Widget _buildToolbar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: ListSearchField(
+              hintText: 'Search repertoires',
+              onChanged: (value) => setState(() => _search = value),
+            ),
+          ),
+          const SizedBox(width: 12),
+          FilledButton.icon(
+            onPressed: () => _showCreateDialog(),
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('New repertoire'),
+          ),
+          const SizedBox(width: 8),
+          OutlinedButton.icon(
+            onPressed: _importFromPgn,
+            icon: const Icon(Icons.file_upload_outlined, size: 18),
+            label: const Text('Import PGN…'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Import-first path: pick the file, then name it. The create dialog opens
+  /// with the PGN already attached and the file's own name filled in.
+  Future<void> _importFromPgn() async {
+    final picked = await pickPgnImport();
+    if (picked == null || !mounted) return;
+    if (picked.error != null) {
+      showAppSnackBar(context, picked.error!, isError: true);
+      return;
+    }
+    await _showCreateDialog(
+      initialImport: picked.result,
+      initialName: picked.suggestedName,
+      initialFileName: picked.fileName,
     );
   }
 
@@ -331,11 +401,15 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
 
   // ── Create / Delete / Rename ──────────────────────────────────────────
 
-  Future<void> _showCreateDialog() async {
-    final nameController = TextEditingController();
+  Future<void> _showCreateDialog({
+    PgnImportResult? initialImport,
+    String? initialName,
+    String? initialFileName,
+  }) async {
+    final nameController = TextEditingController(text: initialName ?? '');
     String selectedColor = 'White';
     String? nameError;
-    PgnImportResult? importResult;
+    PgnImportResult? importResult = initialImport;
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -383,6 +457,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
               const SizedBox(height: 16),
               _InlinePgnAttach(
                 importResult: importResult,
+                initialFileName: initialFileName,
                 onChanged: (result) {
                   setState(() => importResult = result);
                   if (result != null && nameController.text.trim().isEmpty) {
@@ -620,6 +695,59 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
+/// Outcome of picking a `.pgn` off disk: either a parsed [result] with the
+/// file's name, or a human-readable [error]. Cancelling the picker returns
+/// null instead of an instance, so "cancelled" never looks like "failed".
+class PickedPgnImport {
+  const PickedPgnImport({
+    this.result,
+    this.error,
+    this.fileName,
+    this.suggestedName,
+  });
+
+  final PgnImportResult? result;
+  final String? error;
+  final String? fileName;
+
+  /// The file's base name, used to prefill the repertoire name so importing
+  /// "Caro-Kann.pgn" doesn't produce a repertoire called "Imported".
+  final String? suggestedName;
+}
+
+Future<PickedPgnImport?> pickPgnImport() async {
+  try {
+    final picked = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pgn', 'txt'],
+      withData: false,
+      withReadStream: false,
+    );
+    if (picked == null || picked.files.isEmpty) return null;
+
+    final path = picked.files.single.path;
+    if (path == null) return null;
+
+    final content = await StorageFactory.instance.readFile(path);
+    if (content == null) {
+      return const PickedPgnImport(error: 'Could not read that file.');
+    }
+
+    final count = pgn.countPgnGames(content);
+    final name = picked.files.single.name;
+    if (count == 0) {
+      return PickedPgnImport(error: 'No lines found in $name.', fileName: name);
+    }
+    return PickedPgnImport(
+      result: PgnImportResult(pgnContent: content, gameCount: count),
+      fileName: name,
+      suggestedName: p.basenameWithoutExtension(name),
+    );
+  } catch (e) {
+    return PickedPgnImport(error: 'Could not read file: $e');
+  }
+}
+
 String _truncateFilename(String name, {int maxLength = 24}) {
   if (name.length <= maxLength) return name;
   final ext = p.extension(name);
@@ -631,9 +759,17 @@ String _truncateFilename(String name, {int maxLength = 24}) {
 
 class _InlinePgnAttach extends StatefulWidget {
   final PgnImportResult? importResult;
+
+  /// Name of a file already attached by the import-first path, so the chip
+  /// shows what was picked instead of an empty "Add PGN".
+  final String? initialFileName;
   final ValueChanged<PgnImportResult?> onChanged;
 
-  const _InlinePgnAttach({required this.importResult, required this.onChanged});
+  const _InlinePgnAttach({
+    required this.importResult,
+    required this.onChanged,
+    this.initialFileName,
+  });
 
   @override
   State<_InlinePgnAttach> createState() => _InlinePgnAttachState();
@@ -643,39 +779,20 @@ class _InlinePgnAttachState extends State<_InlinePgnAttach> {
   String? _fileName;
   String? _error;
 
+  @override
+  void initState() {
+    super.initState();
+    _fileName = widget.initialFileName;
+  }
+
   Future<void> _pickFile() async {
-    try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pgn', 'txt'],
-        withData: false,
-        withReadStream: false,
-      );
-      if (result == null || result.files.isEmpty) return;
-
-      final path = result.files.single.path;
-      if (path == null) return;
-
-      final content = await StorageFactory.instance.readFile(path);
-      if (content == null) return;
-
-      final count = pgn.countPgnGames(content);
-      setState(() {
-        _fileName = result.files.single.name;
-        _error = count == 0 ? 'No lines found in file.' : null;
-      });
-
-      if (count > 0) {
-        widget.onChanged(
-          PgnImportResult(pgnContent: content, gameCount: count),
-        );
-      } else {
-        widget.onChanged(null);
-      }
-    } catch (e) {
-      setState(() => _error = 'Could not read file: $e');
-      widget.onChanged(null);
-    }
+    final picked = await pickPgnImport();
+    if (picked == null || !mounted) return;
+    setState(() {
+      _fileName = picked.fileName;
+      _error = picked.error;
+    });
+    widget.onChanged(picked.result);
   }
 
   void _clear() {

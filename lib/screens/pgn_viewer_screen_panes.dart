@@ -8,6 +8,7 @@ part of 'pgn_viewer_screen.dart';
 mixin _PaneBuildersMixin on State<PgnViewerScreen> {
   PgnViewerController get _controller;
   PgnViewerWidgetController get _pgnWidgetController;
+  PgnViewerWidgetController get _lineWidgetController;
   GameAnalysisController get _analysisController;
   TabController get _tabController;
   bool get _editMode;
@@ -20,7 +21,13 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
   List<SolitaireTrophy> get _detectedTrophies;
   Future<void> _detectTrophies();
   DeviationReport? get _deviationReport;
-  void _openDeviationInBuilder();
+  void _openInBuilder(DeviationReport report);
+  void _showLineTab();
+  bool get _lineTabVisited;
+  void _showLinePosition(Position position);
+  void _onGamePosition(Position position);
+  bool? _myColorIn(Map<String, String> headers);
+  List<String> _currentGameSans(PgnGameEntry entry);
 
   Widget _buildFullScreenView(ThemeData theme) {
     return FullscreenGameView(
@@ -127,7 +134,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
     return Column(
       children: [
         if (deviation != null && !deviation.inBook && showTabs)
-          _DeviationBanner(report: deviation, onOpen: _openDeviationInBuilder),
+          _DeviationBanner(report: deviation, onShowLine: _showLineTab),
         if (showTabs)
           Row(
             children: [
@@ -136,6 +143,27 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
                   controller: _tabController,
                   tabs: [
                     const Tab(text: 'Game'),
+                    // The book line this game left. Always present, even when
+                    // the game is in book or isn't mine — a tab that comes and
+                    // goes is a tab you can't learn the position of.
+                    Tab(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('Line'),
+                          if (deviation != null && !deviation.inBook) ...[
+                            const SizedBox(width: 5),
+                            Icon(
+                              Icons.circle,
+                              size: 7,
+                              color: deviation.bookEnded
+                                  ? AppColors.onSurfaceMuted
+                                  : AppColors.warning,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
                     Tab(
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -165,6 +193,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
                   controller: _tabController,
                   children: [
                     _buildGameTab(),
+                    _buildLineTab(),
                     GameAnalysisTab(
                       analysisController: _analysisController,
                       pgnController: _pgnWidgetController,
@@ -239,6 +268,43 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
             onExitSolitaire: _controller.toggleSolitaire,
           ),
       ],
+    );
+  }
+
+  /// The Line tab: what my books say about the game on screen, and the prepared
+  /// line itself on the same board.
+  Widget _buildLineTab() {
+    final games = _controller.filteredGames;
+    if (!_lineTabVisited) {
+      // Built but never looked at (see [_lineTabVisited]) — nothing to do yet.
+      return const SizedBox.shrink();
+    }
+    if (games.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            'Open a game to check it against your books.',
+            textAlign: TextAlign.center,
+            style: AppTextStyles.body.copyWith(
+              fontSize: 13,
+              color: AppColors.onSurfaceSoft,
+            ),
+          ),
+        ),
+      );
+    }
+    final entry = games[_controller.currentGameIndex];
+    return RepertoireLinePanel(
+      // Keyed by game identity: a new game is a new question, and the panel's
+      // colour guess and loaded line must not carry over.
+      key: ValueKey('line_${_controller.filePath}_${entry.label}'),
+      gameLabel: entry.label,
+      sans: _currentGameSans(entry),
+      initialMeWhite: _myColorIn(entry.headers),
+      lineController: _lineWidgetController,
+      onShowPosition: _showLinePosition,
+      onEditInBuilder: _openInBuilder,
     );
   }
 
@@ -384,7 +450,10 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
             key: ValueKey('game_${_controller.currentGameIndex}'),
             pgnText: game.pgnText,
             controller: _pgnWidgetController,
-            onPositionChanged: _controller.onPositionChanged,
+            // Through the screen, not straight to the controller: it remembers
+            // where the game's cursor is so leaving the Line tab can put the
+            // board back (see [_onGamePosition]).
+            onPositionChanged: _onGamePosition,
             // Bound to this game object: the annotation panel debounces its
             // saves, which may flush after the user switches games.
             onCommentsChanged: (movetext) =>
@@ -426,8 +495,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Moves you play are saved to the file · '
-              'click any move, then comment or glyph it below',
+              'Changes are saved to the file',
               style: AppTextStyles.caption.copyWith(fontSize: 11),
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
@@ -458,12 +526,12 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
 }
 
 /// One-line banner above the side-panel tabs: where this game first left the
-/// designated repertoire, with a jump into the builder at that position.
+/// designated repertoire, with a jump to the Line tab that shows the prep.
 class _DeviationBanner extends StatelessWidget {
-  const _DeviationBanner({required this.report, required this.onOpen});
+  const _DeviationBanner({required this.report, required this.onShowLine});
 
   final DeviationReport report;
-  final VoidCallback onOpen;
+  final VoidCallback onShowLine;
 
   @override
   Widget build(BuildContext context) {
@@ -502,14 +570,14 @@ class _DeviationBanner extends StatelessWidget {
             ),
           ),
           TextButton(
-            onPressed: onOpen,
+            onPressed: onShowLine,
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
             child: Text(
-              'Open in repertoire',
+              'Show my line',
               style: AppTextStyles.caption.copyWith(fontSize: 11),
             ),
           ),

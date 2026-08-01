@@ -1,14 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dartchess/dartchess.dart';
-import 'package:provider/provider.dart';
-import 'package:chess_auto_prep/core/app_state.dart';
-import 'package:chess_auto_prep/core/study_controller.dart';
-import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
-import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/services/stored_game_lookup.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
-import 'package:chess_auto_prep/utils/fen_utils.dart';
 import 'package:chess_auto_prep/utils/pgn_date_utils.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart'
     show coordsAtPly, plyBeforeMove, recentMoveTrailSquares;
@@ -16,14 +10,13 @@ import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/theme/app_colors.dart';
 import 'package:chess_auto_prep/theme/app_text_styles.dart';
 import 'package:chess_auto_prep/theme/pgn_text_styles.dart';
-import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
-    show toggleQualityNag;
+import 'package:chess_auto_prep/utils/pgn_comment_utils.dart' show joinComments;
 import 'package:chess_auto_prep/widgets/info_hint.dart';
-import 'package:chess_auto_prep/widgets/pgn/add_to_study_dialog.dart';
+import 'package:chess_auto_prep/widgets/study/add_to_study_flow.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_movetext_view.dart';
-import 'package:chess_auto_prep/core/pgn/pgn_variation_extractor.dart';
 import 'package:chess_auto_prep/core/pgn/pgn_viewer_handle.dart';
+import 'package:chess_auto_prep/core/pgn/viewer_game_model.dart';
 
 part 'pgn/pgn_viewer_widget_navigation.dart';
 part 'pgn/pgn_viewer_widget_move_edits.dart';
@@ -81,27 +74,23 @@ class PgnViewerWidgetController implements PgnViewerHandle {
     _state?._goToMainLineMove(moveIndex);
   }
 
+  /// Park the mainline cursor on the position matching [fen], leaving any
+  /// ephemeral analysis in place (unlike [jumpToMove], which discards it).
+  ///
+  /// Returns false when the loaded game never reaches that position — which
+  /// is also the answer while no viewer is attached, so a caller navigating a
+  /// position it cares about ("the ply this tactic starts from") can bail out
+  /// instead of driving the cursor blind.
+  bool goToFen(String fen) => _state?._jumpToFen(fen) ?? false;
+
   void deleteAnalysisNode(int nodeId) {
     _state?._deleteAnalysisNode(nodeId);
   }
 
-  bool get hasAnalysis {
-    final state = _state;
-    if (state == null) return false;
-    return state._variationsByPly.values.any((list) => list.isNotEmpty);
-  }
+  bool get hasAnalysis => _state?._m.hasAnalysis ?? false;
 
   /// True when the user has added ephemeral analysis lines (not from PGN).
-  bool get hasEphemeralMoves {
-    final state = _state;
-    if (state == null) return false;
-    for (final roots in state._variationsByPly.values) {
-      for (final root in roots) {
-        if (state._subtreeHasEphemeral(root)) return true;
-      }
-    }
-    return false;
-  }
+  bool get hasEphemeralMoves => _state?._m.hasEphemeralMoves ?? false;
 
   @override
   int get mainLineIndex => _state?._mainLineIndex ?? 0;
@@ -224,17 +213,21 @@ bool _isBlankHeader(String value) {
 /// Members defined by one mixin but called from another are declared abstract
 /// here so every mixin can reach them through its `on` constraint.
 abstract class _PgnViewerWidgetStateBase extends State<PgnViewerWidget> {
-  PgnGame? _game;
-  List<PgnNodeData> _moveHistory = [];
-  int _mainLineIndex = 0;
-  Position _currentPosition = Chess.initial;
-  Position _startPosition = Chess.initial;
+  /// The game model — single owner of the parsed game, mainline spine,
+  /// per-ply sidelines, and cursor. Widget code reads it through the
+  /// forwarding getters below (so the renderer call sites and the mixins'
+  /// read-only logic stay unchanged) and mutates it only inside the thin
+  /// setState wrappers in the part-file mixins.
+  final ViewerGameModel _m = ViewerGameModel();
 
-  // Variations: ply (0-based mainline index) -> list of root MoveNodes.
-  // Supports multiple branch points simultaneously.
-  Map<int, List<MoveNode>> _variationsByPly = {};
-  int _activeBranchPly = -1; // which ply we're currently navigating in
-  List<MoveNode> _analysisPath = [];
+  PgnGame? get _game => _m.game;
+  List<PgnNodeData> get _moveHistory => _m.moveHistory;
+  int get _mainLineIndex => _m.mainLineIndex;
+  Position get _currentPosition => _m.currentPosition;
+  Position get _startPosition => _m.startPosition;
+  Map<int, List<MoveNode>> get _variationsByPly => _m.variationsByPly;
+  int get _activeBranchPly => _m.activeBranchPly;
+  List<MoveNode> get _analysisPath => _m.analysisPath;
 
   // Inline-comment line preview: steps the board through a clickable analysis
   // line embedded in a comment WITHOUT injecting it into the move tree, so the
@@ -253,12 +246,6 @@ abstract class _PgnViewerWidgetStateBase extends State<PgnViewerWidget> {
   void _clearAnalysis(); // move edits
   void _deleteAnalysisNode(int nodeId); // move edits
   void _clearInlineLine(); // navigation
-  void _goToAnalysisNode(MoveNode targetNode, int branchPly); // navigation
-  List<MoveNode>? _findPathToNode(
-    MoveNode target,
-    List<MoveNode> roots,
-  ); // navigation
-  void _promoteNodeLineage(MoveNode node); // annotations
   void _startEditingComment(int moveIndex); // annotations
   void _notifyCommentsChanged(); // line actions
 }
@@ -323,6 +310,9 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
   @override
   void didUpdateWidget(PgnViewerWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.revealedPly != oldWidget.revealedPly) {
+      _m.revealedPly = widget.revealedPly;
+    }
     final gameIdChanged = widget.gameId != oldWidget.gameId;
     final pgnChanged = widget.pgnText != oldWidget.pgnText;
 
@@ -390,23 +380,13 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
       }
 
       final game = PgnGame.parsePgn(pgnText);
-      final moveHistory = game.moves.mainline().toList();
       if (!mounted) return;
 
-      final startPos = startPositionFromGame(game);
-      final pgnVariations = extractPgnVariations(game, startPos);
-
       setState(() {
-        _game = game;
-        _moveHistory = moveHistory;
-        _mainLineIndex = 0;
-        _startPosition = startPos;
-        _currentPosition = startPos;
+        _m.load(game);
+        _m.revealedPly = widget.revealedPly;
         _gameInfo = _buildGameInfo(game);
         _isLoading = false;
-        _variationsByPly = pgnVariations;
-        _activeBranchPly = -1;
-        _analysisPath = [];
       });
 
       // Defer the position notification so it doesn't fire during

@@ -18,6 +18,7 @@ import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 import '../widgets/analysis_download_dialog.dart';
 import '../widgets/analysis_import_dialog.dart';
+import '../widgets/common/list_search_field.dart';
 
 class PlayerSelectionScreen extends StatefulWidget {
   const PlayerSelectionScreen({super.key});
@@ -31,6 +32,15 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
   List<AnalysisPlayerInfo> _cachedPlayers = [];
   bool _isLoading = true;
   String? _loadError;
+  String _search = '';
+
+  /// Matched against the username and the platform name, so "lichess" narrows
+  /// to one site as readily as a name prefix does to one player.
+  List<AnalysisPlayerInfo> get _visiblePlayers => _cachedPlayers
+      .where(
+        (p) => matchesSearch(_search, '${p.username} ${p.platformDisplayName}'),
+      )
+      .toList();
 
   @override
   void initState() {
@@ -177,10 +187,34 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _cachedPlayers.length,
-      itemBuilder: (_, index) => _buildPlayerCard(_cachedPlayers[index]),
+    final visible = _visiblePlayers;
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: ListSearchField(
+            hintText: 'Search players',
+            autofocus: true,
+            onChanged: (v) => setState(() => _search = v),
+          ),
+        ),
+        Expanded(
+          child: visible.isEmpty
+              ? Center(
+                  child: Text(
+                    'No players match "$_search"',
+                    style: const TextStyle(color: AppColors.onSurfaceMuted),
+                  ),
+                )
+              : ListView.builder(
+                  // Room at the bottom for the two floating action buttons,
+                  // which otherwise sit on top of the last card.
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
+                  itemCount: visible.length,
+                  itemBuilder: (_, index) => _buildPlayerCard(visible[index]),
+                ),
+        ),
+      ],
     );
   }
 

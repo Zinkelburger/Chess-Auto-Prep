@@ -83,12 +83,16 @@ class SettingsGroup extends StatelessWidget {
   /// can skip whole sections instead of reading every row.
   final String? subtitle;
 
+  /// Optional control pinned to the right of the heading (a help ⓘ, a link).
+  final Widget? trailing;
+
   const SettingsGroup({
     super.key,
     required this.title,
     required this.icon,
     required this.children,
     this.subtitle,
+    this.trailing,
   });
 
   @override
@@ -102,13 +106,16 @@ class SettingsGroup extends StatelessWidget {
             children: [
               Icon(icon, size: 18, color: AppColors.pgnMainLine),
               const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
+              if (trailing != null) trailing!,
             ],
           ),
         ),
@@ -286,6 +293,197 @@ class SettingsSliderTile extends StatelessWidget {
     );
     if (tooltip == null) return content;
     return Tooltip(message: tooltip!, child: content);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Number row: name + plain-English explanation left, − value + stepper right
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// A numeric setting as a stepper rather than a slider. A slider reads as a
+/// scrollbar, hides the value until you drag it, and makes "one more core"
+/// a pixel-accuracy problem; −/+ says the number out loud and moves by one.
+class SettingsStepperTile extends StatelessWidget {
+  final String label;
+
+  /// Plain-English second line: what changing this actually does.
+  final String? description;
+  final int value;
+  final int min;
+  final int max;
+  final int step;
+
+  /// Trails the number ("of 16 cores"), for scale.
+  final String? suffix;
+  final ValueChanged<int> onChanged;
+
+  const SettingsStepperTile({
+    super.key,
+    required this.label,
+    this.description,
+    required this.value,
+    required this.min,
+    required this.max,
+    this.step = 1,
+    this.suffix,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Persisted values can outlive the machine they were written on (fewer
+    // cores today than yesterday), so never render an out-of-range number.
+    final clamped = value.clamp(min, max);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: _LabelBlock(label: label, description: description),
+          ),
+          const SizedBox(width: 12),
+          _StepperControl(
+            value: clamped,
+            min: min,
+            max: max,
+            step: step,
+            suffix: suffix,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepperControl extends StatelessWidget {
+  const _StepperControl({
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.step,
+    required this.suffix,
+    required this.onChanged,
+  });
+
+  final int value;
+  final int min;
+  final int max;
+  final int step;
+  final String? suffix;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.remove, size: 18),
+          tooltip: 'Less',
+          visualDensity: VisualDensity.compact,
+          onPressed: value > min
+              ? () => onChanged((value - step).clamp(min, max))
+              : null,
+        ),
+        // Fixed width so the −/+ pair doesn't shuffle as digits are added.
+        SizedBox(
+          width: suffix == null ? 44 : 96,
+          child: Text(
+            suffix == null ? '$value' : '$value $suffix',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              fontFamily: 'monospace',
+            ),
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.add, size: 18),
+          tooltip: 'More',
+          visualDensity: VisualDensity.compact,
+          onPressed: value < max
+              ? () => onChanged((value + step).clamp(min, max))
+              : null,
+        ),
+      ],
+    );
+  }
+}
+
+/// A setting picked from a short list: name and explanation left, dropdown
+/// right. Same row shape as [SettingsStepperTile] so a settings card scans as
+/// one column of names with one column of controls.
+class SettingsChoiceTile<T> extends StatelessWidget {
+  final String label;
+  final String? description;
+  final T value;
+  final List<(T, String)> items;
+  final ValueChanged<T> onChanged;
+
+  const SettingsChoiceTile({
+    super.key,
+    required this.label,
+    this.description,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: _LabelBlock(label: label, description: description),
+          ),
+          const SizedBox(width: 12),
+          DropdownButton<T>(
+            value: value,
+            underline: const SizedBox.shrink(),
+            style: const TextStyle(fontSize: 13, color: AppColors.ink),
+            items: items
+                .map((e) => DropdownMenuItem(value: e.$1, child: Text(e.$2)))
+                .toList(),
+            onChanged: (v) {
+              if (v != null) onChanged(v);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LabelBlock extends StatelessWidget {
+  const _LabelBlock({required this.label, this.description});
+
+  final String label;
+  final String? description;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 13)),
+        if (description != null) ...[
+          const SizedBox(height: 2),
+          Text(
+            description!,
+            style: const TextStyle(
+              fontSize: 11,
+              height: 1.3,
+              color: AppColors.onSurfaceMuted,
+            ),
+          ),
+        ],
+      ],
+    );
   }
 }
 

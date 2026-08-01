@@ -55,6 +55,14 @@ class RepertoireJob extends ChangeNotifier {
   /// knowing the owner.
   VoidCallback? onCancel;
 
+  /// Stopping this job parks it instead of throwing its work away: everything
+  /// it finished is already persisted, and starting it again carries on from
+  /// there rather than repeating it (the games review works this way — each
+  /// reviewed game files its counts as it completes). Jobs UI offers **Pause**
+  /// rather than Cancel for these, and reports a stopped one as paused —
+  /// "Cancelled" would claim the work was lost.
+  bool resumable = false;
+
   JobStatus _status = JobStatus.queued;
   JobProgress _progress = JobProgress.zero;
   String? _error;

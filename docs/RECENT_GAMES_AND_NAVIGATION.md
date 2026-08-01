@@ -88,22 +88,35 @@ Rules:
   should be none after migration) resets the stack defensively to a single
   root, so the trail can never lie.
 
-### The breadcrumb bar (new, `lib/widgets/app_breadcrumb_bar.dart`)
+### The breadcrumb trail (`lib/widgets/app_breadcrumb_trail.dart`)
 
-One global strip, mounted **once** in `MainScreen` above the `IndexedStack`
-(`Scaffold(body: Column[AppBreadcrumbBar, Expanded(IndexedStack)])`). This is
-deliberately *not* per-screen app-bar surgery: one implementation, all six
-modes get it for free, and no boot-screen tooltips move (the integration test
-asserts those).
+**Superseded 2026-07-30.** The first version was a global strip mounted once in
+`MainScreen` above the `IndexedStack`. It bought implementation simplicity with
+a full-width band of chrome above every screen's app bar — two stacked headers,
+the top one usually holding a single word that the app bar underneath already
+said. It read as a mistake, so it is gone.
 
-Contents, left → right (static layout, spelled-out labels, per UI
-preferences):
+The trail now lives *inside* each screen's app bar, right of its title:
+`PGN Viewer   Tactics ▸ Game 12 vs foo`. `AppBarTitleWithTrail` wraps whatever
+widget a screen already passed as `AppBar.title`, and all six modes opt in by
+that one-line change.
 
-- A back arrow (enabled when depth > 1) → `history.back()`.
-- The crumb chips with `▸` separators; last crumb is the current location and
-  is not clickable. Adapt `NavigationTrail`'s rendering; its board-position
-  scope stays where it is (the repertoire screen's internal stack is a
-  different concern and keeps working unchanged).
+Rules it enforces, so per-screen adoption stays safe:
+
+- **No trail at the root.** One crumb only repeats the title beside it, so
+  depth < 2 renders the title alone, unchanged.
+- **The title never gets squeezed.** The trail is secondary: below
+  `minWidthForTrail` (520px of bar) it is dropped entirely rather than split
+  the row. An unconditional split shrank the repertoire switcher until its
+  dropdown arrow overflowed — that is the bug this rule exists for.
+- **Nullable `AppHistory` lookup.** Screens are also pumped standalone in
+  widget tests and pushed routes with no history in scope.
+- The crumbs scroll horizontally (newest kept visible) instead of overflowing,
+  so any width the parent hands them is safe.
+- Crumb clicks are disabled while `AppState.isRepertoireGenerating`, as before.
+- There is no back arrow. The previous crumb *is* the back button, one click
+  either way, and the arrow cost a permanent 36px of every app bar.
+
 - The existing `AppModeMenuButton` stays in each screen's app bar as the mode
   *switcher*; its `onSelected` becomes `history.resetTo(mode)`.
 

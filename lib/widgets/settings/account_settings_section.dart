@@ -1,9 +1,11 @@
-/// Accounts section for the global settings screen.
+/// The two account-shaped settings sections, deliberately kept apart.
 ///
-/// The one full login/logout surface for the Lichess account (the small ⓘ
-/// icons next to database controls offer an in-context login shortcut, but
-/// point here for management), plus the default usernames that download and
-/// import forms prefill across the app.
+/// [LichessLoginSection] is authentication: it proves you own a Lichess
+/// account, raising API rate limits and unlocking private study import.
+/// [ChessUsernamesSection] is just *whose games to download* — plain text,
+/// no login, and it covers Chess.com too. Stacking them in one "Accounts"
+/// card read as one setting with four controls; they are two unrelated
+/// things that happen to both mention Lichess.
 library;
 
 import 'package:flutter/material.dart';
@@ -14,23 +16,34 @@ import '../../services/lichess_auth_service.dart';
 import '../../theme/app_colors.dart';
 import 'settings_widgets.dart';
 
-class AccountSettingsSection extends StatelessWidget {
-  const AccountSettingsSection({super.key});
+class LichessLoginSection extends StatelessWidget {
+  const LichessLoginSection({super.key});
 
   @override
   Widget build(BuildContext context) {
     return const SettingsGroup(
-      title: 'Accounts',
+      title: 'Lichess login',
+      icon: Icons.key_outlined,
+      subtitle:
+          'Optional. Signing in raises Lichess API rate limits and lets the '
+          'app import your private studies.',
+      children: [_LichessLoginTile()],
+    );
+  }
+}
+
+class ChessUsernamesSection extends StatelessWidget {
+  const ChessUsernamesSection({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const SettingsGroup(
+      title: 'Your chess usernames',
       icon: Icons.person_outline,
       subtitle:
-          'Lichess login raises API rate limits and unlocks private study '
-          'import. Default usernames are prefilled wherever the app asks '
-          'whose games to fetch.',
-      children: [
-        _LichessLoginTile(),
-        Divider(height: 16, indent: 16, endIndent: 16),
-        _DefaultUsernameFields(),
-      ],
+          'Whose games the app downloads — for the home game review, tactics '
+          'mining and every "fetch games" form. No login needed.',
+      children: [_DefaultUsernameFields()],
     );
   }
 }
@@ -302,13 +315,6 @@ class _DefaultUsernameFieldsState extends State<_DefaultUsernameFields> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Default usernames', style: TextStyle(fontSize: 13)),
-          const SizedBox(height: 2),
-          const Text(
-            'Prefilled in game download and tactics import forms.',
-            style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
-          ),
-          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(

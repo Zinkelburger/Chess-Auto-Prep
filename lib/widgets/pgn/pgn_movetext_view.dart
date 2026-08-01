@@ -26,13 +26,14 @@ import '../../utils/pgn_comment_utils.dart'
         parseRichComment,
         parseCommentTokens,
         stripEngineTokens,
+        allNagSuffix,
+        joinComments,
         CommentToken,
         CommentProse,
         CommentMove,
         RichSegment,
         RichSegmentType,
-        kSanCorePattern,
-        nagSymbol;
+        kSanCorePattern;
 
 part 'pgn_movetext_prose_scan.dart';
 part 'pgn_movetext_comments.dart';
@@ -301,8 +302,8 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
 
       // Skip rendering null-move SAN but still show its comments
       if (san == '--') {
-        if (moveData.comments != null && moveData.comments!.isNotEmpty) {
-          emitComment(moveData.comments!.first);
+        for (final c in moveData.comments ?? const <String>[]) {
+          emitComment(c);
         }
         if (!isWhiteTurn) moveNumber++;
         isWhiteTurn = !isWhiteTurn;
@@ -336,10 +337,10 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
           ? PgnTextStyles.moveAt(0).copyWith(color: AppColors.pgnMoveCurrentFg)
           : PgnTextStyles.moveAt(0);
 
-      // Build SAN + NAG text (always shown — annotations survive view mode)
-      final nagSuffix = (moveData.nags != null && moveData.nags!.isNotEmpty)
-          ? moveData.nags!.where((n) => n >= 1 && n <= 6).map(nagSymbol).join()
-          : '';
+      // Build SAN + NAG text (always shown — annotations survive view mode).
+      // Every NAG, not just the six editable quality glyphs: `⩲`, `∞`, `→` and
+      // friends are the annotator's whole verdict on the position.
+      final nagSuffix = allNagSuffix(moveData.nags);
 
       final currentDecoration = BoxDecoration(
         color: AppColors.pgnMoveCurrentBg,
@@ -385,12 +386,14 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
             onCancel: view.onCancelEditingComment,
           ),
         );
-      } else if (moveData.comments != null && moveData.comments!.isNotEmpty) {
-        emitComment(
-          moveData.comments!.first,
-          anchorPos: _posAt(prefix, i + 1),
-          anchorPly: i + 1,
-        );
+      } else {
+        // All of them. A PGN may attach several `{}` blocks to one move (a
+        // Lichess study export splits prose from a `[%cal]` block, book PGNs
+        // split a header from its text); showing only the first quietly hid
+        // whichever half came second.
+        for (final c in moveData.comments ?? const <String>[]) {
+          emitComment(c, anchorPos: _posAt(prefix, i + 1), anchorPly: i + 1);
+        }
       }
 
       // Variations branch *after* the move at index i (ply = i + 1). In

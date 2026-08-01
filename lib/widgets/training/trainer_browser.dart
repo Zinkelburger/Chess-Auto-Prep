@@ -17,6 +17,7 @@ import '../../models/line_status.dart';
 import '../../models/repertoire_line.dart';
 import '../../models/repertoire_review_entry.dart';
 import '../../theme/app_colors.dart';
+import '../common/list_search_field.dart';
 
 part 'trainer_browser_cards.dart';
 
@@ -137,6 +138,17 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
   bool _savingSelection = false;
   final Set<String> _checked = {};
 
+  /// Type-to-filter over whichever list is showing. Deliberately *not* part
+  /// of the selection scope: "mark known" keeps applying to the whole
+  /// chapter, so narrowing the view can never silently shrink what a save
+  /// writes.
+  String _search = '';
+
+  List<RepertoireLine> _searchFiltered(List<RepertoireLine> lines) => [
+    for (final line in lines)
+      if (matchesSearch(_search, '${line.name} ${line.moves.join(' ')}')) line,
+  ];
+
   /// Chapter titles in file order; empty when the source has no chapters.
   List<String> get _chapters {
     final resolve = widget.chapterOf;
@@ -234,6 +246,12 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
         chapters.isNotEmpty && widget.activeChapter == null;
     final visible = _visibleLines;
     final counts = countLines(visible, widget.reviewMap);
+    final matchedChapters = [
+      for (final chapter in chapters)
+        if (matchesSearch(_search, chapter)) chapter,
+    ];
+    final matchedLines = _searchFiltered(visible);
+    final searching = _search.trim().isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -258,10 +276,17 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
         ),
         const Divider(height: 1),
         _ListToolbar(
+          // While filtering the count reads "n of m" so a short list is
+          // obviously the filter's doing, not lines having gone missing.
           label: showingChapterList
-              ? '${chapters.length} chapter'
-                    '${chapters.length == 1 ? '' : 's'}'
-              : '${visible.length} line${visible.length == 1 ? '' : 's'}',
+              ? (searching
+                    ? '${matchedChapters.length} of ${chapters.length} chapters'
+                    : '${chapters.length} chapter'
+                          '${chapters.length == 1 ? '' : 's'}')
+              : (searching
+                    ? '${matchedLines.length} of ${visible.length} lines'
+                    : '${visible.length} line'
+                          '${visible.length == 1 ? '' : 's'}'),
           sortMode: _sortMode,
           onSortChanged: showingChapterList || widget.dense
               ? null
@@ -282,10 +307,17 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
                 ? null
                 : () => setState(() => _selecting = false),
           ),
+        Padding(
+          padding: EdgeInsets.fromLTRB(widget.dense ? 8 : 16, 8, 16, 0),
+          child: ListSearchField(
+            hintText: showingChapterList ? 'Search chapters' : 'Search lines',
+            onChanged: (v) => setState(() => _search = v),
+          ),
+        ),
         Expanded(
           child: showingChapterList
-              ? _buildChapterList(chapters)
-              : _buildLineList(_sorted(visible)),
+              ? _buildChapterList(chapters, matchedChapters)
+              : _buildLineList(_sorted(matchedLines), searching),
         ),
       ],
     );
@@ -294,7 +326,10 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
   String _chapterTitle(String chapter) =>
       chapter == widget.ungroupedChapter ? 'Other lines' : chapter;
 
-  Widget _buildChapterList(List<String> chapters) {
+  /// [chapters] is every chapter (lines are grouped against all of them, or
+  /// a filtered-out chapter's lines would have nowhere to land); [shown] is
+  /// the subset that survived the search box.
+  Widget _buildChapterList(List<String> chapters, List<String> shown) {
     final resolve = widget.chapterOf;
     final grouped = <String, List<RepertoireLine>>{
       for (final chapter in chapters) chapter: <RepertoireLine>[],
@@ -315,14 +350,14 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
         vertical: 10,
       ),
       children: [
-        for (final chapter in chapters)
+        for (final chapter in shown)
           _ChapterCard(
             title: chapter,
             counts: countLines(grouped[chapter]!, widget.reviewMap),
             dense: widget.dense,
             onTap: () => _openChapter(chapter),
           ),
-        if (ungrouped.isNotEmpty)
+        if (ungrouped.isNotEmpty && matchesSearch(_search, 'Other lines'))
           _ChapterCard(
             title: 'Other lines',
             counts: countLines(ungrouped, widget.reviewMap),
@@ -333,14 +368,14 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
     );
   }
 
-  Widget _buildLineList(List<RepertoireLine> lines) {
+  Widget _buildLineList(List<RepertoireLine> lines, bool searching) {
     if (lines.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(24),
+          padding: const EdgeInsets.all(24),
           child: Text(
-            'No lines here yet.',
-            style: TextStyle(color: AppColors.onSurfaceMuted),
+            searching ? 'No lines match "$_search".' : 'No lines here yet.',
+            style: const TextStyle(color: AppColors.onSurfaceMuted),
           ),
         ),
       );

@@ -72,9 +72,12 @@ Future<void> _pumpDialog(WidgetTester tester) async {
   await tester.pumpWidget(
     MaterialApp(
       home: Material(
-        child: OpeningReviewDetailDialog(
+        child: OpeningReviewDetailDialog.forEntry(
           entry: _entry(),
           bookEnd: false,
+          games: const [
+            ReviewGameSource(label: 'vs opp (Jul 12)', pgn: _gamePgn),
+          ],
           onEditInBuilder: () {},
           onOpenGame: (_) {},
           loadLines: (_) async => [_bookLine()],
@@ -99,8 +102,10 @@ void main() {
     expect(find.text('Game'), findsOneWidget);
     expect(find.text('Your book'), findsOneWidget);
     expect(find.byType(ChessBoardWidget), findsOneWidget);
+    // Reviewing is the primary action (the viewer's Line tab shows the prep
+    // next to the game on a full-size board); editing the book is secondary.
+    expect(find.text('Open in viewer'), findsOneWidget);
     expect(find.text('Edit in Builder'), findsOneWidget);
-    expect(find.text('Open game in viewer'), findsOneWidget);
   });
 
   testWidgets('book tab shows the repertoire line with its comment', (

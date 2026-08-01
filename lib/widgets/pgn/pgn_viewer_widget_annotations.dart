@@ -33,28 +33,8 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
     return '${coords.moveNumber}${coords.isWhite ? '.' : '...'}$san';
   }
 
-  /// Mark [node] and every ancestor up to its variation root as saved
-  /// (non-ephemeral): the serializer drops ephemeral nodes wholesale, so an
-  /// annotation or permanent move under an ephemeral ancestor would silently
-  /// never reach the file.
-  @override
-  void _promoteNodeLineage(MoveNode node) {
-    for (final roots in _variationsByPly.values) {
-      final path = _findPathToNode(node, roots);
-      if (path == null) continue;
-      for (final n in path) {
-        n.isEphemeral = false;
-      }
-      return;
-    }
-  }
-
   void _togglePanelNodeNag(MoveNode node, int nagId) {
-    _promoteNodeLineage(node);
-    setState(() {
-      final next = toggleQualityNag(node.nags, nagId);
-      node.nags = next.isEmpty ? null : next;
-    });
+    setState(() => _m.toggleNodeNag(node, nagId));
     _notifyCommentsChanged();
   }
 
@@ -62,9 +42,7 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
   /// possibly as a debounce flush after navigation moved off [node] (or during
   /// panel dispose) — hence the object binding and the `mounted` guard.
   void _setPanelNodeComment(MoveNode node, String text) {
-    final trimmed = text.trim();
-    if (trimmed.isNotEmpty) _promoteNodeLineage(node);
-    node.comment = trimmed.isEmpty ? null : trimmed;
+    _m.setNodeComment(node, text);
     if (mounted) setState(() {});
     _notifyCommentsChanged();
   }
@@ -72,14 +50,7 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
   /// Mainline counterpart of [_setPanelNodeComment], bound to the move's
   /// [PgnNodeData] so late flushes hit the move they were typed on.
   void _setPanelMainlineComment(PgnNodeData moveData, String text) {
-    final trimmed = text.trim();
-    if (trimmed.isEmpty) {
-      moveData.comments?.clear();
-    } else if (moveData.comments == null || moveData.comments!.isEmpty) {
-      moveData.comments = [trimmed];
-    } else {
-      moveData.comments![0] = trimmed;
-    }
+    ViewerGameModel.writeWholeComment(moveData, text);
     if (mounted) setState(() {});
     _notifyCommentsChanged();
   }
@@ -111,9 +82,7 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
       final moveData = _moveHistory[mainIndex];
       label = _moveLabelAt(mainIndex, moveData.san);
       nags = moveData.nags ?? const [];
-      comment = (moveData.comments == null || moveData.comments!.isEmpty)
-          ? ''
-          : moveData.comments!.first;
+      comment = joinComments(moveData.comments);
       onToggleNag = (nagId) => _toggleNag(mainIndex, nagId);
       onCommentChanged = (text) => _setPanelMainlineComment(moveData, text);
     }
@@ -130,18 +99,8 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
 
   void _saveComment(int moveIndex, String newComment) {
     if (moveIndex < 0 || moveIndex >= _moveHistory.length) return;
-    final moveData = _moveHistory[moveIndex];
-    final trimmed = newComment.trim();
     setState(() {
-      if (trimmed.isEmpty) {
-        moveData.comments?.clear();
-      } else {
-        if (moveData.comments == null || moveData.comments!.isEmpty) {
-          moveData.comments = [trimmed];
-        } else {
-          moveData.comments![0] = trimmed;
-        }
-      }
+      ViewerGameModel.writeWholeComment(_moveHistory[moveIndex], newComment);
       _editingCommentIndex = null;
     });
     _notifyCommentsChanged();
@@ -155,33 +114,13 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
   /// the game's own annotations (unlike replacing the whole movetext).
   void _addGuessAnnotations(Map<int, String> notes) {
     if (notes.isEmpty || _moveHistory.isEmpty) return;
-    setState(() {
-      notes.forEach((index, note) {
-        if (index < 0 || index >= _moveHistory.length) return;
-        final moveData = _moveHistory[index];
-        final existing =
-            (moveData.comments == null || moveData.comments!.isEmpty)
-            ? ''
-            : moveData.comments!.first;
-        if (existing.contains(note)) return;
-        final merged = existing.isEmpty ? note : '$existing $note';
-        if (moveData.comments == null || moveData.comments!.isEmpty) {
-          moveData.comments = [merged];
-        } else {
-          moveData.comments![0] = merged;
-        }
-      });
-    });
+    setState(() => _m.appendGuessNotes(notes));
     _notifyCommentsChanged();
   }
 
   void _toggleNag(int moveIndex, int nagId) {
     if (moveIndex < 0 || moveIndex >= _moveHistory.length) return;
-    final moveData = _moveHistory[moveIndex];
-    setState(() {
-      final next = toggleQualityNag(moveData.nags, nagId);
-      moveData.nags = next.isEmpty ? null : next;
-    });
+    setState(() => _m.toggleMainlineNag(moveIndex, nagId));
     _notifyCommentsChanged();
   }
 }

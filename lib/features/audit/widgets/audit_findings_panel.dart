@@ -266,25 +266,24 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
   }
 
   /// Panel shortcuts, dispatched through [handleKeyBindings] (never while
-  /// typing).
+  /// typing). ↓/↑ only — the app-wide list-stepping keys; the old N/P
+  /// aliases are gone (N is the knight).
   List<KeyBinding> get _keyBindings => [
-    for (final key in [LogicalKeyboardKey.keyN, LogicalKeyboardKey.arrowDown])
-      KeyBinding.run(key, 'Next finding', () {
-        if (_selectedIndex < _visibleFindings.length - 1) {
-          _selectFinding(_selectedIndex + 1);
-        }
-      }, repeats: true),
-    for (final key in [LogicalKeyboardKey.keyP, LogicalKeyboardKey.arrowUp])
-      KeyBinding.run(key, 'Previous finding', () {
-        if (_selectedIndex > 0) {
-          _selectFinding(_selectedIndex - 1);
-        }
-      }, repeats: true),
+    KeyBinding.run(LogicalKeyboardKey.arrowDown, 'Next finding', () {
+      if (_selectedIndex < _visibleFindings.length - 1) {
+        _selectFinding(_selectedIndex + 1);
+      }
+    }, repeats: true),
+    KeyBinding.run(LogicalKeyboardKey.arrowUp, 'Previous finding', () {
+      if (_selectedIndex > 0) {
+        _selectFinding(_selectedIndex - 1);
+      }
+    }, repeats: true),
     KeyBinding.run(LogicalKeyboardKey.keyD, 'Dismiss finding', _dismissCurrent),
   ];
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) =>
-      handleKeyBindings(_keyBindings, event);
+      handleKeyBindings(_keyBindings, event, node: node);
 
   // ── Bulk dismiss ──────────────────────────────────────────────────────
 

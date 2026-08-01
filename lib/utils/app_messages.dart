@@ -31,6 +31,7 @@ class AppMessages {
   static const invalidFen = 'Invalid FEN string.';
   static const pgnCopied = 'PGN copied to clipboard.';
   static const fenCopied = 'FEN copied to clipboard.';
+  static const movesCopied = 'Moves copied to clipboard.';
   static const linkCopied = 'Link copied to clipboard.';
 
   // ── Validation (inline on form fields, not SnackBars) ──────────

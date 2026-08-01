@@ -344,9 +344,12 @@ class JobsPanel extends StatelessWidget {
       resourceLabel: null,
       progress: job.progress.fraction > 0 ? job.progress.fraction : null,
       isPaused: false,
-      onPause: null,
+      // Pause, not Cancel: stopping a review keeps every game it has already
+      // been through, and starting it again resumes at the next one. Offering
+      // "Cancel" here read as "throw the last twenty minutes away".
+      onPause: job.onCancel,
       onResume: null,
-      onCancel: job.onCancel,
+      onCancel: null,
     );
   }
 
@@ -384,27 +387,39 @@ class JobsPanel extends StatelessWidget {
       JobType.tacticsImport => Icons.extension_outlined,
       JobType.gameAnalysis => Icons.reviews_outlined,
     };
-    final statusColor = switch (job.status) {
-      JobStatus.running => Theme.of(context).colorScheme.primary,
-      JobStatus.paused => AppColors.warning,
-      JobStatus.completed => AppColors.success,
-      JobStatus.failed => AppColors.danger,
-      JobStatus.cancelled => AppColors.onSurfaceMuted,
-      JobStatus.queued => AppColors.onSurfaceMuted,
-    };
-    final statusLabel = switch (job.status) {
-      JobStatus.running => 'Running',
-      JobStatus.paused => 'Paused',
-      JobStatus.completed => 'Completed',
-      JobStatus.failed => 'Failed',
-      JobStatus.cancelled => 'Cancelled',
-      JobStatus.queued => 'Queued',
-    };
+    // A stopped *resumable* job was paused, not cancelled: its work is already
+    // on disk and starting it again carries on from there. "Cancelled" would
+    // claim the run has to be redone.
+    final paused =
+        job.status == JobStatus.paused ||
+        (job.status == JobStatus.cancelled && job.resumable);
+    final statusColor = paused
+        ? AppColors.warning
+        : switch (job.status) {
+            JobStatus.running => Theme.of(context).colorScheme.primary,
+            JobStatus.paused => AppColors.warning,
+            JobStatus.completed => AppColors.success,
+            JobStatus.failed => AppColors.danger,
+            JobStatus.cancelled => AppColors.onSurfaceMuted,
+            JobStatus.queued => AppColors.onSurfaceMuted,
+          };
+    final statusLabel = paused
+        ? 'Paused'
+        : switch (job.status) {
+            JobStatus.running => 'Running',
+            JobStatus.paused => 'Paused',
+            JobStatus.completed => 'Completed',
+            JobStatus.failed => 'Failed',
+            JobStatus.cancelled => 'Cancelled',
+            JobStatus.queued => 'Queued',
+          };
 
     final subtitleParts = <String>[statusLabel];
     final error = job.error;
     if (job.status == JobStatus.failed && error != null) {
       subtitleParts.add(error);
+    } else if (paused && job.resumable) {
+      subtitleParts.add('press play on the Tactics home to carry on');
     } else if (job.progress.message.isNotEmpty) {
       subtitleParts.add(job.progress.message);
     } else if (job.type == JobType.audit && job.configSnapshot != null) {
@@ -433,6 +448,8 @@ class JobsPanel extends StatelessWidget {
             ? Icons.check_circle_outline
             : job.status == JobStatus.failed
             ? Icons.error_outline
+            : paused
+            ? Icons.pause_circle_outline
             : Icons.cancel_outlined,
         size: 16,
         color: statusColor,

@@ -211,6 +211,9 @@ class GamesLibraryService {
       // Clocks feed the tempo flaw tags when these PGNs are re-mined.
       'clocks': 'true',
       'evals': 'false',
+      // ECO + opening name headers, so a game card can say which opening it
+      // was instead of making the reader parse the moves.
+      'opening': 'true',
     };
     if (since != null) {
       params['since'] = '${since.millisecondsSinceEpoch}';

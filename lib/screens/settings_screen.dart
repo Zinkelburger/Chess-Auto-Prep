@@ -1,11 +1,19 @@
 /// Centralized settings screen accessible from the app bar.
 ///
-/// Holds machine-level configuration only: accounts (Lichess login, default
-/// usernames), engine resources, and the offline eval database. Analysis
-/// behavior lives on the gear next to each analysis surface — see
-/// stockfish_settings_dialog.dart, expectimax_settings_dialog.dart, and
-/// analysis_panels_dialog.dart — so every knob sits where its effect is
-/// visible.
+/// Holds machine-level configuration only: who you are (Lichess login, chess
+/// usernames), which repertoires are your books, how much of the machine the
+/// engine may use, and the offline eval database. Analysis *behavior* lives on
+/// the gear next to each analysis surface — see stockfish_settings_dialog.dart,
+/// expectimax_settings_dialog.dart, and analysis_panels_dialog.dart — so every
+/// knob sits where its effect is visible.
+///
+/// Two rules this screen keeps to, both learned the hard way:
+/// - **No state toggles.** Turning the engine on/off is not configuration, it
+///   is an action with a visible result; it belongs on the ⚡ button by the
+///   board, not buried in a settings list.
+/// - **No sliders.** A slider reads as a scrollbar, hides its value until
+///   dragged, and turns "give it one more core" into a pixel-hunt. Numbers get
+///   −/+ steppers, short lists get dropdowns.
 ///
 /// Uses [ListenableBuilder] so it always reflects the latest singleton state,
 /// even if another UI surface mutates [EngineSettings] concurrently.
@@ -17,7 +25,6 @@ import 'package:provider/provider.dart';
 import '../features/games/widgets/my_repertoires_section.dart';
 import '../models/engine_settings.dart';
 import '../models/eval_database_settings.dart';
-import '../services/engine/engine_lifecycle.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/system_info.dart';
 import '../widgets/eval_database_settings_panel.dart';
@@ -56,33 +63,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 760),
+              // Bordered cards already separate the sections; the extra
+              // dividers between them were lines drawn next to lines.
               child: ListView(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
                 children: [
                   Text(
-                    'Machine-level settings only. Search depth, number of '
-                    'lines, expectimax tuning and panel visibility live on '
-                    'the gear (⚙) next to each analysis panel, where their '
-                    'effect is visible.',
+                    'Settings for this machine. Search depth, number of lines, '
+                    'expectimax tuning and panel visibility live on the gear '
+                    '(⚙) next to each analysis panel instead, where you can '
+                    'see what they change.',
                     style: AppTextStyles.caption,
                   ),
-                  const SizedBox(height: 8),
-                  const Divider(height: 24),
 
-                  // ── Accounts ─────────────────────────────────
-                  const AccountSettingsSection(),
-                  const SizedBox(height: 8),
-                  const Divider(height: 24),
+                  // ── Who you are ──────────────────────────────
+                  const ChessUsernamesSection(),
+                  const LichessLoginSection(),
 
                   // ── My repertoires ───────────────────────────
                   const MyRepertoiresSection(),
-                  const SizedBox(height: 8),
-                  const Divider(height: 24),
 
                   // ── Engine ───────────────────────────────────
                   _buildEngineSection(cores),
-                  const SizedBox(height: 8),
-                  const Divider(height: 24),
 
                   // ── Database ─────────────────────────────────
                   Builder(
@@ -91,19 +93,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       return _buildDatabaseSection();
                     },
                   ),
-                  const SizedBox(height: 8),
-                  const Divider(height: 24),
 
                   // ── Reset ────────────────────────────────────
-                  _buildResetButton(),
-                  const SizedBox(height: 16),
-                  Center(
-                    child: Text(
-                      'Chess Auto Prep',
-                      style: AppTextStyles.caption.copyWith(fontSize: 11),
-                    ),
-                  ),
                   const SizedBox(height: 24),
+                  _buildResetButton(),
                 ],
               ),
             ),
@@ -117,59 +110,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildEngineSection(int cores) {
     return SettingsGroup(
-      title: 'Stockfish engine',
+      title: 'Engine power',
       icon: Icons.bolt,
+      // No on/off switch here on purpose: starting and stopping Stockfish is
+      // an action you want to see the result of, so it lives on the ⚡ button
+      // next to the board.
       subtitle:
-          'How much of this machine the engine may use, and which Maia '
-          'opponent model predicts human replies.',
+          'How much of this computer Stockfish may use. Turn the engine on and '
+          'off with the ⚡ button next to the board.',
       children: [
-        Builder(
-          builder: (context) {
-            final lifecycle = context.watch<EngineLifecycle>();
-            final isOn = lifecycle.state != EngineState.off;
-            final isGenerating = lifecycle.state == EngineState.generating;
-            return SettingsSwitchTile(
-              label: 'Enable engine analysis',
-              tooltip: isGenerating
-                  ? 'Engine is busy during tree generation.'
-                  : 'Run Stockfish in the background for interactive analysis.',
-              value: isOn,
-              onChanged: (enabled) {
-                if (isGenerating) return;
-                if (enabled) {
-                  lifecycle.toggleOn();
-                } else {
-                  lifecycle.toggleOff();
-                }
-              },
-            );
-          },
-        ),
-        SettingsSliderTile(
-          label: 'Workers (interactive)',
-          tooltip: 'Parallel Stockfish processes for interactive analysis.',
+        SettingsStepperTile(
+          label: 'Engine copies for analysis',
+          description:
+              'More copies analyze games and build repertoires faster, but '
+              'leave less of the machine for everything else.',
           value: _engine.workers,
           min: 1,
           max: cores,
-          suffix: '/ $cores cores',
+          suffix: 'of $cores cores',
           onChanged: (v) => _engine.workers = v,
         ),
-        SettingsSliderTile(
-          label: 'Inline threads (PGN viewer)',
-          tooltip: 'Threads for the single-process inline engine bar.',
+        SettingsStepperTile(
+          label: 'Threads for the board engine bar',
+          description:
+              'Used by the single engine readout under the board in the PGN '
+              'viewer and study.',
           value: _engine.inlineThreads,
           min: 1,
           max: cores,
+          suffix: 'of $cores cores',
           onChanged: (v) => _engine.inlineThreads = v,
         ),
-        SettingsSliderTile(
-          label: 'Maia opponent rating',
-          tooltip:
-              'Skill level of the simulated opponent for Maia predictions.',
-          value: _engine.maiaElo,
-          min: 600,
-          max: 2400,
-          divisions: 18,
+        SettingsChoiceTile<int>(
+          label: 'Human-opponent strength (Maia)',
+          description:
+              'The rating the app assumes your opponents play at when it '
+              'guesses which reply a human would pick.',
+          value: _engine.maiaElo.clamp(600, 2400) ~/ 100 * 100,
+          items: [
+            for (var elo = 600; elo <= 2400; elo += 100) (elo, '$elo Elo'),
+          ],
           onChanged: (v) => _engine.maiaElo = v,
         ),
       ],
@@ -180,11 +160,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildDatabaseSection() {
     return const SettingsGroup(
-      title: 'Evaluation database',
+      title: 'Offline evaluation database',
       icon: Icons.storage,
       subtitle:
-          'Offline evaluation sources consulted before the engine runs, so '
-          'known positions cost nothing to evaluate.',
+          'Optional. A local copy of ChessDB answers "how good is this '
+          'position?" instantly, so the engine only runs for positions nobody '
+          'has looked at yet.',
       children: [
         Padding(
           padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),

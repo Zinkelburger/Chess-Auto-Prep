@@ -5,6 +5,20 @@
 part of '../tactics_control_panel.dart';
 
 mixin _TacticsPlayback on _TacticsControlPanelStateBase {
+  /// Apply a move (or position) the session produced to the board, and record
+  /// it in the PGN tab.
+  ///
+  /// Everything played at the board lands in the PGN tree — the solution moves
+  /// you found, the wrong ones you tried, and the opponent's replies — as a
+  /// variation off the position you played it from. Switching to the PGN tab
+  /// then shows the line you just played instead of an untouched game you have
+  /// to re-enter by hand.
+  ///
+  /// This replaced a `goForward()` on the PGN cursor, which assumed the
+  /// solution *was* the PGN mainline. That stopped being true once puzzles
+  /// started carrying their whole source game: the mainline there is the game
+  /// as played, so stepping it forward walked onto the move the player
+  /// actually blundered, not the one they had just found.
   void _applyBoardUpdate(TacticsBoardUpdate update) {
     if (!mounted) return;
     final appState = context.read<AppState>();
@@ -12,15 +26,18 @@ mixin _TacticsPlayback on _TacticsControlPanelStateBase {
       if (update.applyMoveUci != null) {
         final move = Move.parse(update.applyMoveUci!);
         if (move != null) {
-          appState.setCurrentPosition(appState.currentPosition.play(move));
+          final (newPos, san) = appState.currentPosition.makeSan(move);
+          appState.setCurrentPosition(newPos);
           appState.notifyGameChanged();
+          _pgnViewerController.addEphemeralMove(san);
         }
       } else if (update.setFen != null) {
         final position = Chess.fromSetup(Setup.parseFen(update.setFen!));
         appState.setCurrentPosition(position);
-      }
-      if (update.san != null) {
-        _pgnViewerController.goForward();
+        // The opponent's reply arrives as a FEN plus its SAN.
+        if (update.san != null) {
+          _pgnViewerController.addEphemeralMove(update.san!);
+        }
       }
     } catch (e) {
       debugPrint('[TacticsPanel] Board update failed: $e');
@@ -50,19 +67,31 @@ mixin _TacticsPlayback on _TacticsControlPanelStateBase {
     appState.setBoardFlipped(false);
   }
 
-  /// Re-sync the PGN viewer to the tactic start (solution mainline index 0).
-  void _syncPgnToCurrentTactic() {
+  /// The tactic on the board changed (loaded, reloaded after an edit, or
+  /// reset): drop the solution-line cursor and the scratch analysis, and park
+  /// the PGN viewer back on the tactic's own position.
+  ///
+  /// That position is a ply *inside* the source game, not its first move —
+  /// this used to jump to mainline index 0, which is where the game starts,
+  /// left over from when a tactic's PGN was its solution and nothing else.
+  /// Falls back to the game start only when the tactic's position isn't in
+  /// the loaded game (a viewer that hasn't mounted yet, or still holds the
+  /// previous tactic).
+  void _resetToCurrentTactic() {
+    _solutionNav.reset();
     _pgnViewerController.clearEphemeralMoves();
-    _pgnViewerController.goToMainLineIndex(0);
+    final fen = _session.currentPosition?.fen;
+    if (fen == null || !_pgnViewerController.goToFen(fen)) {
+      _pgnViewerController.goToMainLineIndex(0);
+    }
   }
 
   void _resetAnalysis() {
     if (_session.currentPosition == null) return;
 
-    _solutionNav.reset();
     final setup = _session.resetPuzzleState();
     if (setup != null) _applyPositionSetup(setup);
-    _syncPgnToCurrentTactic();
+    _resetToCurrentTactic();
   }
 
   void _onStartSession(TacticsSessionSettings settings) {
@@ -122,9 +151,8 @@ mixin _TacticsPlayback on _TacticsControlPanelStateBase {
   }
 
   void _loadPositionSetup(TacticsPositionSetup setup) {
-    _solutionNav.reset();
     _applyPositionSetup(setup);
-    _syncPgnToCurrentTactic();
+    _resetToCurrentTactic();
     // The move field only exists while a puzzle is loaded (the pre-training
     // board has none), so on the first puzzle of a session it mounts in the
     // frame this call schedules — focus it once that frame has built.
@@ -135,8 +163,10 @@ mixin _TacticsPlayback on _TacticsControlPanelStateBase {
   }
 
   /// Click handler for a move in the solution line: jump there and repaint.
-  void _onSolutionLineMoveTapped(List<String> sanMoves, int clickedIndex) {
-    _solutionNav.onMoveTapped(sanMoves, clickedIndex);
+  /// The rendered SANs come from the navigator's own cache, so the list the
+  /// widget hands back is redundant here.
+  void _onSolutionLineMoveTapped(List<String> _, int clickedIndex) {
+    _solutionNav.onMoveTapped(clickedIndex);
     setState(() {});
   }
 
@@ -163,33 +193,13 @@ mixin _TacticsPlayback on _TacticsControlPanelStateBase {
     final suggested = tactic.gameWhite.isEmpty && tactic.gameBlack.isEmpty
         ? 'Tactic game'
         : '${tactic.gameWhite} vs ${tactic.gameBlack}';
-    final result = await showDialog<AddToStudyResult>(
-      context: context,
-      builder: (_) => AddToStudyDialog(
-        initialChapterName: suggested,
-        title: 'Add game to study',
-      ),
+    await runAddToStudyFlow(
+      context,
+      suggestedChapterName: suggested,
+      pickerTitle: 'Add game to study',
+      viewActionLabel: 'View game',
+      buildPgn: (_) => _currentGamePgn(tactic),
     );
-    if (result == null || !mounted) return;
-    try {
-      final pgn = await _currentGamePgn(tactic);
-      if (!mounted) return;
-      final study = context.read<StudyController>();
-      final path =
-          result.existingPath ??
-          await StorageFactory.instance.studyFilePath(result.newStudyName!);
-      await study.addChapterToStudyFile(path, result.chapterName, pgn);
-      if (!mounted) return;
-      showAppSnackBar(
-        context,
-        'Added "${result.chapterName}" to ${result.studyName}',
-      );
-    } catch (e) {
-      debugPrint('Add game to study failed: $e');
-      if (mounted) {
-        showAppSnackBar(context, 'Failed to add game to study.', isError: true);
-      }
-    }
   }
 
   /// "Copy game PGN" from the game menu.

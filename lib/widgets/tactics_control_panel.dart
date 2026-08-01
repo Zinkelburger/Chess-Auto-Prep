@@ -8,7 +8,6 @@ import 'package:provider/provider.dart';
 import 'package:dartchess/dartchess.dart';
 
 import '../core/app_state.dart';
-import '../core/study_controller.dart';
 import '../models/engine_settings.dart';
 import '../models/tactics_position.dart';
 import '../models/tactics_session_settings.dart';
@@ -25,9 +24,7 @@ import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
 import '../utils/keyboard_shortcut_utils.dart';
-import 'engine/engine_gate.dart';
 import 'engine/inline_engine_bar.dart';
-import 'pgn/add_to_study_dialog.dart';
 import 'trainer_keyboard_scope.dart';
 import 'pgn_viewer_widget.dart';
 import 'pgn_with_engine.dart';
@@ -37,6 +34,7 @@ import 'tactics/tactics_import_panel.dart';
 import 'tactics/tactics_session_recap.dart';
 import 'tactics/tactics_solution_navigator.dart';
 import 'tactics/tactics_training_panel.dart';
+import 'study/add_to_study_flow.dart';
 import 'training/move_input_widget.dart';
 
 part 'tactics_control_panel/tactics_control_panel_import.dart';
@@ -81,6 +79,10 @@ abstract class _TacticsControlPanelStateBase extends State<TacticsControlPanel>
   /// Tracks opponent-waiting state to detect when it's the user's turn again
   /// in multi-move puzzles (so we can refocus the move input).
   bool _wasWaitingForOpponent = false;
+
+  /// Tracks solution visibility so the reveal jump fires on the press that
+  /// reveals it, not on every subsequent session notification.
+  bool _wasShowingSolution = false;
 
   /// Show the end-of-session recap card in the Tactic tab (set when the
   /// session queue is exhausted, cleared when a new session starts).
@@ -128,16 +130,22 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
       pgn: _pgnViewerController,
       currentTactic: () => _session.currentPosition,
       solutionToSan: (tactic) => _session.engine.correctLineToSan(tactic),
-      syncPgnToTactic: _syncPgnToCurrentTactic,
       setBoardPosition: (position) =>
           context.read<AppState>().setCurrentPosition(position),
     );
     _session.onBoardUpdate = _applyBoardUpdate;
     _session.onPositionSetup = _loadPositionSetup;
     _session.onAnalysisMove = _addMoveToAnalysis;
-    _session.onUserMoveAccepted = _pgnViewerController.goForward;
+    // Nothing to do on top of [_applyBoardUpdate], which already records the
+    // accepted move in the PGN tab. This used to step the PGN cursor forward,
+    // on the assumption that the solution was the mainline — see the note
+    // there for why that stopped being true.
+    _session.onUserMoveAccepted = null;
     _session.onSessionCompleted = _onQueueExhausted;
     _session.onBackRequested = _onBackRequested;
+    // The Study-tactics button lives in the left pane, beside Review games;
+    // setting a puzzle up is still this panel's job.
+    _session.onStartRequested = () => _onStartSession(_session.sessionSettings);
     // Bridge navigation keys pressed while the move-input field owns focus back
     // to the panel shortcuts (the field is a focus-tree sibling — see
     // _handleTrainerNavigationKey).
@@ -161,7 +169,7 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
       animationDuration: Duration.zero,
     );
 
-    _form = TacticsImportForm(defaultCores: EngineSettings.instance.workers);
+    _form = TacticsImportForm();
     _form.addListener(_onFormChanged);
     // Pending/resume only considers games inside the fetch window — older
     // fetched-but-unanalyzed games are expired, not nagged about forever.
@@ -219,13 +227,16 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
 
   void _onSessionChanged() {
     if (mounted) {
-      // When solution is toggled on, seed ephemeral moves into PGN once
-      // and advance one ply past the current position so the board shows
-      // the move the user needed to find.
-      if (_session.showSolution && _session.currentPosition != null) {
-        _solutionNav.ensureSeeded();
+      // Jump to the move the user needed to find, but only on the press that
+      // reveals the solution. Doing it on every notification meant any other
+      // session change (a rating, the auto-advance toggle) yanked the cursor
+      // back to the start of the line while the user was reading it.
+      final showingSolution =
+          _session.showSolution && _session.currentPosition != null;
+      if (showingSolution && !_wasShowingSolution) {
         _solutionNav.navigateToIndex(_session.currentMoveIndex);
       }
+      _wasShowingSolution = showingSolution;
 
       // Auto-blur move input when puzzle is resolved or solution is shown.
       if (_session.positionSolved || _session.showSolution) {
@@ -281,6 +292,7 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
     _session.onUserMoveAccepted = null;
     _session.onSessionCompleted = null;
     _session.onBackRequested = null;
+    _session.onStartRequested = null;
     _session.onTrainerNavigationKey = null;
     _focusNode.dispose();
     _tabController.dispose();
@@ -412,10 +424,10 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
         final solutionStartPly = ctx.moveNumber != null
             ? (ctx.moveNumber! - 1) * 2 + ((ctx.isWhiteToPlay ?? true) ? 0 : 1)
             : 0;
+        // The navigator computes the line lazily and caches it per tactic —
+        // rebuilding it here would replay it with dartchess on every setState.
         final solutionSan = _session.showSolution && current != null
-            ? _solutionNav.sanMoves.isNotEmpty
-                  ? _solutionNav.sanMoves
-                  : _session.engine.correctLineToSan(current)
+            ? _solutionNav.sanMoves
             : const <String>[];
 
         return SingleChildScrollView(
@@ -477,37 +489,12 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
                 )
               else
                 TacticsImportPanel(
-                  importStatus: _import.importStatus,
+                  form: _form,
                   isImporting: _import.isImporting,
-                  isCancelling: _import.isCancelling,
-                  activeImport: _import.activeImport,
-                  lichessUserController: _form.lichessUser,
-                  lichessCountController: _form.fetchCount,
-                  chessComUserController: _form.chessComUser,
-                  stockfishDepthController: _form.depthText,
-                  coresController: _form.coresText,
-                  depthError: _form.depthError,
-                  coresError: _form.coresError,
-                  importFieldsValid: _form.fieldsValid,
-                  onValidateDepth: _form.validateDepth,
-                  onValidateCores: _form.validateCores,
-                  onImportLichess: _importLichess,
-                  onImportChessCom: _importChessCom,
-                  onDismissImportStatus: _import.dismissImportStatus,
-                  onCancelImport: _import.cancelImport,
                   positions: _database.positions,
-                  onStartSession: _onStartSession,
                   clearDatabaseEnabled: !_import.isImporting,
                   onClearDatabase: _confirmClearDatabase,
                   onBrowseTactics: () => _tabController.animateTo(1),
-                  fetchMode: _form.fetchMode,
-                  onFetchModeChanged: _form.setFetchMode,
-                  sinceDays: _form.sinceDays,
-                  onSinceDaysChanged: _form.setSinceDays,
-                  pendingGameCount: _import.pendingGameCount,
-                  totalStoredGames: _import.totalStoredGames,
-                  onResumeAnalysis: _resumeAnalysis,
-                  onFetchNew: _fetchNewGames,
                 ),
             ],
           ),
