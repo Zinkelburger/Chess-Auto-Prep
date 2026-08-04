@@ -610,7 +610,10 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
           });
     }
 
-    schedule(const Duration(milliseconds: 600), () {
+    // Dwell on the wrong position long enough to actually see what was
+    // played and why it fails — at 600ms the piece read as teleporting there
+    // and back with a subliminal red flash.
+    schedule(const Duration(milliseconds: 1200), () {
       if (!isMounted() || currentPosition == null) return;
       final resetFen = fenAfterIncorrect();
       if (resetFen != null) {

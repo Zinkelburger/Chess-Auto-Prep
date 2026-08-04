@@ -62,8 +62,13 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
       return KeyEventResult.handled;
     }
 
-    // Tab blurs the input, returning keyboard control to the panel shortcuts.
+    // Tab is offered to the host first (the tactics trainer uses it to flip
+    // between the Tactic and PGN tabs); if unclaimed it blurs the input,
+    // returning keyboard control to the panel shortcuts.
     if (key == LogicalKeyboardKey.tab) {
+      if (widget.onNavigationKey?.call(event) ?? false) {
+        return KeyEventResult.handled;
+      }
       _focusNode.unfocus();
       return KeyEventResult.handled;
     }
@@ -138,6 +143,28 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
   /// Blur the text field, returning keyboard control to parent shortcuts.
   void unfocus() {
     _focusNode.unfocus();
+  }
+
+  /// Route a move character typed while the *host* owned focus into this
+  /// field, as if it had been typed here: focus the field, append the
+  /// character, and run the same unique-match logic as normal typing. This is
+  /// what makes the box feel permanently hot — the user never has to click it
+  /// before typing "Qxb5". Returns false when the character was refused
+  /// (disabled field, non-move character, or already at the length cap).
+  bool typeCharacter(String character) {
+    if (!widget.enabled) return false;
+    // Mirror the field's own input rules — programmatic writes bypass the
+    // inputFormatters, so re-apply them here.
+    if (!RegExp(r'^[a-zA-Z0-9\-]$').hasMatch(character)) return false;
+    final text = _controller.text + character;
+    if (text.length > 7) return false;
+    focus();
+    _controller.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+    _onChanged(text);
+    return true;
   }
 
   // ---------------------------------------------------------------------------

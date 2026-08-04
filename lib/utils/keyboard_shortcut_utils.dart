@@ -136,6 +136,12 @@ final Set<LogicalKeyboardKey> _chessMoveTextKeys = {
   LogicalKeyboardKey.equal,
 };
 
+/// Whether [key] can appear in typed chess-move text (see
+/// [_chessMoveTextKeys]). Hosts with an always-hot move box use this to
+/// route such keys into the box while a move is wanted.
+bool isChessMoveTextKey(LogicalKeyboardKey key) =>
+    _chessMoveTextKeys.contains(key);
+
 /// Handler for `MoveInputWidget.onNavigationKey`: runs only the bindings
 /// that are [KeyBinding.safeWhileTypingMoves], so shortcuts on non-move keys
 /// (Space, S, J, arrows, …) keep working while a move is being typed, and

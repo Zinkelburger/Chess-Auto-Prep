@@ -287,7 +287,9 @@ class _TacticsTrainingPanelState extends State<TacticsTrainingPanel> {
               child: widget.isAtStartingPosition
                   ? shortcutTooltip(
                       description: 'Analyze',
-                      shortcut: 'A or V',
+                      // V only: A is the a-file, and the move box is always
+                      // hot while solving, so an A binding can never fire.
+                      shortcut: 'V',
                       child: SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
@@ -318,7 +320,7 @@ class _TacticsTrainingPanelState extends State<TacticsTrainingPanel> {
                 description: widget.onPreviousPosition != null
                     ? 'Previous position'
                     : 'Already at the first position',
-                shortcut: 'P or ↑',
+                shortcut: '← or P',
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -332,7 +334,7 @@ class _TacticsTrainingPanelState extends State<TacticsTrainingPanel> {
             Expanded(
               child: shortcutTooltip(
                 description: _nextDescription,
-                shortcut: 'N or ↓',
+                shortcut: '→ or S',
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(

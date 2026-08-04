@@ -22,7 +22,37 @@ mixin _TacticsKeyboardActions
       return KeyEventResult.ignored;
     }
 
+    // Typing is always live while the puzzle wants a move: a move character
+    // pressed while the *panel* owns focus (after a board click, a button
+    // press, a tab switch back…) is routed into the move box as if the box
+    // were focused, instead of dying here or firing a letter shortcut. The
+    // user should never have to click the box before typing "Qxb5".
+    if (_routeMoveCharacter(event)) return KeyEventResult.handled;
+
     return _dispatchTrainerKey(event.logicalKey, typingMove: false);
+  }
+
+  /// True when [event] is a chess-move character the move box should receive
+  /// right now: Tactic tab up front, the puzzle still waiting for the user's
+  /// move, and no Ctrl/Alt held. Shift is allowed — piece letters are typed
+  /// as capitals. While a move is wanted, e and f are files first, which is
+  /// why the E/F shortcuts only fire once the puzzle is solved or revealed.
+  bool _routeMoveCharacter(KeyEvent event) {
+    if (_tabController.index != 0) return false;
+    if (_session.positionSolved ||
+        _session.showSolution ||
+        _session.waitingForOpponent) {
+      return false;
+    }
+    if (isPrimaryModifierPressed || HardwareKeyboard.instance.isAltPressed) {
+      return false;
+    }
+    if (!isChessMoveTextKey(event.logicalKey)) return false;
+    final character = event.character;
+    if (character == null || character.isEmpty) return false;
+    final input = TacticsControlPanel.moveInputKey.currentState;
+    if (input == null) return false;
+    return input.typeCharacter(character);
   }
 
   /// Bridge for keys pressed while the move-input field owns focus. The field
@@ -67,31 +97,44 @@ mixin _TacticsKeyboardActions
       'Toggle auto-advance',
       () => _session.setAutoAdvance(!_session.autoAdvance),
     ),
-    // ←/→ walk the solution line (Tactic tab) or the PGN (Analysis tab).
-    KeyBinding.run(LogicalKeyboardKey.arrowRight, 'Forward one move', () {
-      if (_tabController.index == 0 && _session.showSolution) {
-        if (_solutionNav.arrowForward()) setState(() {});
-      } else {
-        _pgnViewerController.goForward();
-      }
-    }),
-    KeyBinding.run(LogicalKeyboardKey.arrowLeft, 'Back one move', () {
-      if (_tabController.index == 0 && _session.showSolution) {
-        if (_solutionNav.arrowBack()) setState(() {});
-      } else {
-        _pgnViewerController.goBack();
-      }
-    }),
-    // No N alias for skip: S/↓ already do it, and N is the knight — it must
+    // ←/→ follow what is on screen. While you are solving there are no moves
+    // to step through, so they switch puzzles — same as ↑/↓ — which is how
+    // the Previous/Skip buttons advertise them. Once the solution is on the
+    // board they walk it move by move, and on the PGN tab they step the game
+    // (the app-wide ←/→ = moves convention).
+    KeyBinding.run(
+      LogicalKeyboardKey.arrowRight,
+      'Skip / forward one move',
+      () {
+        if (_tabController.index != 0) {
+          _pgnViewerController.goForward();
+        } else if (_session.showSolution) {
+          if (_solutionNav.arrowForward()) setState(() {});
+        } else if (_session.hasNext) {
+          _loadCurrentPosition(_session.skipPosition());
+        }
+      },
+    ),
+    KeyBinding.run(
+      LogicalKeyboardKey.arrowLeft,
+      'Previous / back one move',
+      () {
+        if (_tabController.index != 0) {
+          _pgnViewerController.goBack();
+        } else if (_session.showSolution) {
+          if (_solutionNav.arrowBack()) setState(() {});
+        } else if (_session.hasPrevious) {
+          _loadCurrentPosition(_session.previousPosition());
+        }
+      },
+    ),
+    // No N alias for skip: S/↓/→ already do it, and N is the knight — it must
     // stay a typed move character, never navigation.
-    // 'A' is the mnemonic but it's the a-file, so it's swallowed as a typed
-    // move character while the move box has focus (its default state). 'V' is
-    // never part of SAN/UCI, so it stays [KeyBinding.safeWhileTypingMoves] and
-    // opens the PGN tab even mid-type — the reliable key to reach for. Both
-    // always open the PGN tab; 'A' used to mean Reset when mid-tactic, which
-    // made "open PGN" need two presses. Reset stays a button-only action.
-    for (final key in [LogicalKeyboardKey.keyA, LogicalKeyboardKey.keyV])
-      KeyBinding.run(key, 'Analyze (open PGN)', _onAnalyze),
+    // Analyze is V alone. 'A' was once its alias, but a is the a-file and the
+    // move box is now always hot while solving, so an A binding could never
+    // fire — advertising two keys where one is dead is worse than one key.
+    // 'V' never appears in SAN/UCI, so it works even mid-type.
+    KeyBinding.run(LogicalKeyboardKey.keyV, 'Analyze (open PGN)', _onAnalyze),
     KeyBinding.run(
       LogicalKeyboardKey.keyE,
       'Toggle engine',
@@ -104,12 +147,17 @@ mixin _TacticsKeyboardActions
       final appState = context.read<AppState>();
       appState.setBoardFlipped(!appState.boardFlipped);
     }),
-    for (final key in [LogicalKeyboardKey.slash, LogicalKeyboardKey.tab])
-      KeyBinding.run(
-        key,
-        'Focus move input',
-        () => TacticsControlPanel.moveInputKey.currentState?.focus(),
-      ),
+    KeyBinding.run(
+      LogicalKeyboardKey.slash,
+      'Focus move input',
+      () => TacticsControlPanel.moveInputKey.currentState?.focus(),
+    ),
+    // Tab flips between the two sides of the panel — the puzzle and its PGN.
+    // (It used to focus the move box, but the box is always hot now; the
+    // reachable-by-keyboard thing you actually switch to is the other tab.)
+    KeyBinding.run(LogicalKeyboardKey.tab, 'Switch Tactic/PGN tab', () {
+      _tabController.animateTo(_tabController.index == 0 ? 1 : 0);
+    }),
     // Same app-wide contract as the PGN viewer's Escape: leave whatever you are
     // in, innermost first. Here that is the PGN/Browse tab, then the puzzle
     // itself — which is what the app-bar back arrow does, so the key and the

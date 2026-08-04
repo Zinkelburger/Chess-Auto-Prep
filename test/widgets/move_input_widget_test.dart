@@ -339,9 +339,10 @@ void main() {
       expect(textField.controller!.text, 'Nb');
     });
 
-    testWidgets('Escape and Tab are handled by the field, not forwarded', (
-      tester,
-    ) async {
+    testWidgets('Tab is offered to the host first, and claimed keys never '
+        'blur the field', (tester) async {
+      // The tactics trainer claims Tab to flip Tactic↔PGN; a host that
+      // claims it keeps the field focused and the key swallowed.
       final received = <LogicalKeyboardKey>[];
       await tester.pumpWidget(
         buildWidget(
@@ -358,7 +359,72 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
 
-      expect(received, isEmpty);
+      expect(received, [LogicalKeyboardKey.tab]);
+    });
+
+    testWidgets('unclaimed Tab blurs the field (the repertoire-trainer '
+        'contract), and Escape is never forwarded', (tester) async {
+      final received = <LogicalKeyboardKey>[];
+      await tester.pumpWidget(
+        buildWidget(
+          onNavigationKey: (event) {
+            received.add(event.logicalKey);
+            return false;
+          },
+        ),
+      );
+
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(received, isEmpty, reason: 'Escape stays the field\'s own');
+
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+
+      final field = tester.widget<TextField>(find.byType(TextField));
+      expect(field.focusNode!.hasFocus, isFalse, reason: 'unclaimed Tab blurs');
+    });
+
+    testWidgets('typeCharacter routes host-side keystrokes into the field '
+        'and auto-submits like normal typing', (tester) async {
+      final key = GlobalKey<MoveInputWidgetState>();
+      CompletedMove? received;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MoveInputWidget(
+              key: key,
+              position: startPosition,
+              onMove: (m) => received = m,
+            ),
+          ),
+        ),
+      );
+
+      // Deliberately no tap on the field: the characters arrive through the
+      // host route (the panel had focus when the user started typing).
+      expect(key.currentState!.typeCharacter('N'), isTrue);
+      await tester.pump();
+      expect(
+        key.currentState!.hasFocus,
+        isTrue,
+        reason: 'routing a character claims focus for the rest of the move',
+      );
+      expect(key.currentState!.typeCharacter('f'), isTrue);
+      expect(key.currentState!.typeCharacter('3'), isTrue);
+      await tester.pump();
+
+      expect(received, isNotNull);
+      expect(received!.san, 'Nf3');
+
+      // Characters the field's own formatter would refuse are refused here
+      // too — the route must not become a formatter bypass.
+      expect(key.currentState!.typeCharacter('!'), isFalse);
     });
   });
 }

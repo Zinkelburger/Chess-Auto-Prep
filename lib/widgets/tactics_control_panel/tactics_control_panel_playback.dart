@@ -153,6 +153,11 @@ mixin _TacticsPlayback on _TacticsControlPanelStateBase {
   void _loadPositionSetup(TacticsPositionSetup setup) {
     _applyPositionSetup(setup);
     _resetToCurrentTactic();
+    // A new puzzle always lands on the Tactic tab, whatever tab the last one
+    // was left on — reopening a puzzle onto its predecessor's PGN read as
+    // opening the wrong screen. (Browse-launched play does the same in
+    // _playTacticFromBrowse.)
+    _tabController.animateTo(0);
     // The move field only exists while a puzzle is loaded (the pre-training
     // board has none), so on the first puzzle of a session it mounts in the
     // frame this call schedules — focus it once that frame has built.
