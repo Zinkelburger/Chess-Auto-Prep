@@ -92,6 +92,23 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
   String? selectedSquare;
   final Set<String> _internalHighlights = {};
 
+  /// Identity of each piece across position changes, keyed by its current
+  /// square. [AnimatedPositioned] slides a piece from its old square to its
+  /// new one only if the widget keeps the same key across the change; this
+  /// map is what turns "the knight that was on g1 is now on f3" into "widget
+  /// #7 moved". Rebuilt wholesale (fresh ids, so no slide) on flips and on
+  /// position jumps bigger than one move.
+  final Map<String, int> _pieceIds = {};
+  int _nextPieceId = 0;
+
+  /// From/to of a move the user just played by dragging. The dropped piece is
+  /// already under the cursor at its destination — sliding it there from its
+  /// origin would replay the drag — so that one piece gets a fresh id and
+  /// renders in place. Click-click, typed and programmatic moves all animate.
+  (String, String)? _instantMove;
+
+  static const _moveAnimationDuration = Duration(milliseconds: 180);
+
   String? _dragStartSquare;
 
   /// Square a right-button drag started on, while it is in progress.
@@ -243,7 +260,12 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
           final y = row * squareSize;
 
           pieces.add(
-            Positioned(
+            AnimatedPositioned(
+              key: ValueKey(
+                'piece-${_pieceIds[squareName] ??= _nextPieceId++}',
+              ),
+              duration: _moveAnimationDuration,
+              curve: Curves.easeOutCubic,
               left: x,
               top: y,
               width: squareSize,
@@ -258,6 +280,81 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
     }
 
     return pieces;
+  }
+
+  /// Reassign every piece a fresh id — the next build renders in place with
+  /// no slide. Used for the first build, flips (every coordinate changes),
+  /// and position jumps bigger than one move (a new puzzle, a reset).
+  void _assignAllPieceIds() {
+    _pieceIds.clear();
+    for (final file in ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']) {
+      for (var rank = 1; rank <= 8; rank++) {
+        final name = '$file$rank';
+        final sq = parseSquare(name);
+        if (sq != null && widget.position.board.pieceAt(sq) != null) {
+          _pieceIds[name] = _nextPieceId++;
+        }
+      }
+    }
+  }
+
+  /// Diff [oldBoard] against the new position and carry piece ids across the
+  /// change, so the moved piece keeps its widget and slides. Only single-move
+  /// diffs animate: each appeared piece is paired with the vacated square
+  /// holding the same piece (captures never pair with their victim — the
+  /// colour differs; promotions never pair — the role differs, so they pop in
+  /// place, which is fine).
+  void _retrackPieces(Board oldBoard) {
+    final newBoard = widget.position.board;
+    final vacated = <String, Piece>{};
+    final appeared = <String>[];
+    for (final file in ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']) {
+      for (var rank = 1; rank <= 8; rank++) {
+        final name = '$file$rank';
+        final sq = parseSquare(name);
+        if (sq == null) continue;
+        final oldPiece = oldBoard.pieceAt(sq);
+        final newPiece = newBoard.pieceAt(sq);
+        if (oldPiece == newPiece) continue;
+        if (oldPiece != null) vacated[name] = oldPiece;
+        if (newPiece != null) appeared.add(name);
+      }
+    }
+    if (vacated.isEmpty && appeared.isEmpty) return;
+    // More than one move's worth of change (castling is the biggest at 2+2).
+    if (vacated.length > 2 || appeared.length > 2) {
+      _instantMove = null;
+      _assignAllPieceIds();
+      return;
+    }
+    final ids = <String, int>{};
+    _pieceIds.forEach((square, id) {
+      if (!vacated.containsKey(square)) ids[square] = id;
+    });
+    final instant = _instantMove;
+    _instantMove = null;
+    for (final dest in appeared) {
+      final destSq = parseSquare(dest);
+      final destPiece = destSq == null ? null : newBoard.pieceAt(destSq);
+      String? source;
+      if (destPiece != null) {
+        for (final entry in vacated.entries) {
+          if (entry.key != dest &&
+              entry.value.role == destPiece.role &&
+              entry.value.color == destPiece.color) {
+            source = entry.key;
+            break;
+          }
+        }
+      }
+      final viaDrag =
+          instant != null && source == instant.$1 && dest == instant.$2;
+      final carriedId = source == null ? null : _pieceIds[source];
+      ids[dest] = (viaDrag || carriedId == null) ? _nextPieceId++ : carriedId;
+    }
+    _pieceIds
+      ..clear()
+      ..addAll(ids);
   }
 
   (int, int) _squareToCoords(String square) {
@@ -330,7 +427,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
       if (col >= 0 && col < 8 && row >= 0 && row < 8) {
         final endSquare = _coordsToSquare(col, row);
         if (endSquare != _dragStartSquare) {
-          _tryMakeMove(_dragStartSquare!, endSquare);
+          _tryMakeMove(_dragStartSquare!, endSquare, viaDrag: true);
         }
       }
       _resetDragState();
@@ -451,6 +548,14 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
   void didUpdateWidget(covariant ChessBoardWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
+    if (widget.flipped != oldWidget.flipped) {
+      // Every coordinate changes on a flip; sliding all 32 pieces across the
+      // board would be noise, so they re-render in place.
+      _assignAllPieceIds();
+    } else if (widget.position.fen != oldWidget.position.fen) {
+      _retrackPieces(oldWidget.position.board);
+    }
+
     if (widget.position != oldWidget.position ||
         widget.flipped != oldWidget.flipped) {
       _resetDragState();
@@ -463,7 +568,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
     super.dispose();
   }
 
-  void _tryMakeMove(String from, String to) {
+  void _tryMakeMove(String from, String to, {bool viaDrag = false}) {
     try {
       final fenBefore = widget.position.fen;
 
@@ -502,6 +607,11 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
       final (newPosition, san) = widget.position.makeSan(move);
       final fenAfter = newPosition.fen;
       final uci = isPromotion ? '$from${to}q' : '$from$to';
+
+      // The host applies the move and the new position arrives on the next
+      // build; remember a dragged move so _retrackPieces renders that piece
+      // in place instead of sliding it in from its origin.
+      if (viaDrag) _instantMove = (from, to);
 
       _clearSelection();
 
