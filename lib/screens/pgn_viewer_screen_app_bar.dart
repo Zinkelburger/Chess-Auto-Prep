@@ -23,6 +23,7 @@ mixin _AppBarBuildersMixin
   Future<void> _pickFile();
   Future<void> _pastePgn();
   Future<void> _loadFile(String path);
+  void _closeFile();
   void _reclaimFocus();
 
   PreferredSizeWidget _buildAppBar(ThemeData theme) {
@@ -224,8 +225,11 @@ mixin _AppBarBuildersMixin
   }
 
   /// App-bar file button: shows the loaded file name and opens a menu with
-  /// recent files, a file browser, and paste-from-clipboard.
+  /// recent files, a file browser, paste-from-clipboard, and — once something
+  /// is loaded — the way back out to the start screen.
   Widget _buildOpenPgnMenuButton(String fileName) {
+    final hasCollection =
+        _controller.allGames.isNotEmpty || _controller.filePath != null;
     return PopupMenuButton<String>(
       tooltip: 'Open PGN — recent files, browse, or paste',
       onSelected: (value) {
@@ -233,6 +237,8 @@ mixin _AppBarBuildersMixin
           _pickFile();
         } else if (value == 'paste') {
           _pastePgn();
+        } else if (value == 'close') {
+          _closeFile();
         } else if (value.startsWith('recent:')) {
           _singleGameFocus = false;
           _loadFile(value.substring('recent:'.length));
@@ -279,6 +285,21 @@ mixin _AppBarBuildersMixin
             contentPadding: EdgeInsets.zero,
           ),
         ),
+        // The way back out. Without it the viewer has no "nothing open" state
+        // once a file has been opened — every route through this menu swaps
+        // one collection for another.
+        if (hasCollection) ...[
+          const PopupMenuDivider(),
+          const PopupMenuItem(
+            value: 'close',
+            child: ListTile(
+              leading: Icon(Icons.close, size: 20),
+              title: Text('Close file — back to the start screen'),
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+        ],
       ],
       // IgnorePointer lets the PopupMenuButton's own tap region handle the
       // click while keeping the outlined-button look.

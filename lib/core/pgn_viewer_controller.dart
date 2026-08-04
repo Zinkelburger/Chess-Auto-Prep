@@ -430,6 +430,41 @@ class PgnViewerController extends ChangeNotifier
     _buildFenIndex();
   }
 
+  /// Close the loaded collection and put the viewer back on its start screen
+  /// ("No PGN loaded" — browse button plus the recent list).
+  ///
+  /// Two things are deliberately *not* cleared: the recent-files list (it is
+  /// the way back in) and the slice persisted on disk for this file, so
+  /// reopening it still restores what you were looking at.
+  void closeFile() {
+    // Bumped first: an in-flight load or slice recompute would otherwise land
+    // its results — and its isLoading release — on the cleared state.
+    _sliceEpoch++;
+    stopAutoPlay();
+    if (isSolitaireMode) solitaire.stop();
+    analysisController.cancel();
+    analysisController.clearEvals();
+    isLoading = false;
+    errorMessage = null;
+    pendingSliceRestore = null;
+    filePath = null;
+    allGames = <PgnGameEntry>[];
+    filteredGames = <PgnGameEntry>[];
+    hasActiveFilters = false;
+    activeSliceConfig = const SliceConfig.empty();
+    _activeSliceIndices = null;
+    sliceProtagonist = null;
+    protagonistFixedSide = null;
+    sortMode = GameSortMode.fileOrder;
+    currentGameIndex = 0;
+    perspective = const Perspective();
+    currentPosition = Chess.initial;
+    boardFlipped = false;
+    _fenIndex.reset();
+    _viewerTree.resetForNewFile();
+    notifyListeners();
+  }
+
   void _buildFenIndex() {
     final gameData = allGames
         .map(

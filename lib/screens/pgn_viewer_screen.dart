@@ -111,6 +111,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   @override
   bool _singleGameFocus = false;
 
+  /// Whether the PGN Viewer is the app's visible mode, so that arriving here
+  /// can be told from any other [AppState] change (see [_onAppStateChanged]).
+  bool _isCurrentMode = false;
+
   @override
   void initState() {
     super.initState();
@@ -151,6 +155,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       if (mounted) {
         final appState = context.read<AppState>();
         appState.addListener(_onAppStateChanged);
+        _isCurrentMode = appState.currentMode == AppMode.pgnViewer;
         // The screen may have been created by the very mode switch that set
         // the pending file (listener not registered yet) — consume it now.
         _consumePendingViewerFile(appState);
@@ -172,19 +177,40 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   void _onAppStateChanged() {
     final appState = context.read<AppState>();
-    if (appState.currentMode == AppMode.pgnViewer) {
-      _consumePendingViewerFile(appState);
-      _reclaimFocus();
+    final isCurrent = appState.currentMode == AppMode.pgnViewer;
+    final arrived = isCurrent && !_isCurrentMode;
+    _isCurrentMode = isCurrent;
+    if (!isCurrent) return;
+    if (!_consumePendingViewerFile(appState) && arrived) {
+      _dropHandedOffGame();
     }
+    _reclaimFocus();
   }
 
   /// Handoff hook: open the pending file, then optionally slice to a
   /// position ("Open Games in PGN Viewer"), jump to one game and start the
-  /// review ("Review" on the Games page).
-  void _consumePendingViewerFile(AppState appState) {
+  /// review ("Review" on the Games page). Returns whether one was waiting.
+  bool _consumePendingViewerFile(AppState appState) {
     final handoff = appState.takeHandoff<OpenPgnViewer>();
-    if (handoff == null) return;
+    if (handoff == null) return false;
     _openFromHandoff(handoff);
+    return true;
+  }
+
+  /// Entering the viewer from the mode menu asks for the viewer itself, not
+  /// for the last game something else sent here: "Review" on a game card
+  /// leaves the whole games cache loaded and focused on one game, and meeting
+  /// that file again — instead of the start screen — reads as the viewer
+  /// having opinions about what you want to look at. So a single-game handoff
+  /// is dropped on the way back in; the file stays in the recent list, which
+  /// is the one click back.
+  ///
+  /// A collection *you* opened here (browse, recent, paste, a study, a sliced
+  /// player-analysis dataset) is your own choice and stays put. So does a game
+  /// whose engine review is still running — you left to let it finish.
+  void _dropHandedOffGame() {
+    if (!_singleGameFocus || _analysisController.isAnalyzing) return;
+    _closeFile();
   }
 
   Future<void> _openFromHandoff(OpenPgnViewer handoff) async {
@@ -441,6 +467,25 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       return;
     }
     if (notifySliceRestore) _showPendingSliceRestoreSnackBar();
+  }
+
+  /// "Close file": drop the collection and land back on the start screen.
+  ///
+  /// The screen's own per-file modes go with it — amend mode, single-game
+  /// focus and the trophies found in one game are all about a game that no
+  /// longer exists — and the side panel returns to the Game tab, since Line
+  /// and Analysis have nothing to say about an empty viewer.
+  @override
+  void _closeFile() {
+    _controller.closeFile();
+    setState(() {
+      _editMode = false;
+      _singleGameFocus = false;
+      _detectedTrophies = const [];
+      _trophyGameIndex = -1;
+    });
+    if (_tabController.index != _kGameTab) _tabController.animateTo(_kGameTab);
+    _reclaimFocus();
   }
 
   void _showPendingSliceRestoreSnackBar() {

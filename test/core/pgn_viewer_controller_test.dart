@@ -171,4 +171,66 @@ void main() {
       expect(c.currentGameIndex, 0);
     });
   });
+
+  group('closeFile', () {
+    test('clears the collection back to the start-screen state', () {
+      final c = _makeController();
+      final games = List.generate(3, (i) => _game(white: 'P$i'));
+      _seed(c, games);
+      c.applySlice([1], const SliceConfig.empty());
+      c.setPerspective(const Perspective(mode: PerspectiveMode.black));
+      // Set last: a non-null path makes applySlice/setPerspective persist,
+      // and this suite has no storage.
+      c.filePath = '/tmp/games.pgn';
+      c.errorMessage = 'stale';
+
+      c.closeFile();
+
+      expect(c.filePath, isNull);
+      expect(c.allGames, isEmpty);
+      expect(c.filteredGames, isEmpty);
+      expect(c.hasActiveFilters, isFalse);
+      expect(c.activeSliceConfig.isEmpty, isTrue);
+      expect(c.currentGameIndex, 0);
+      expect(c.errorMessage, isNull);
+      expect(c.isLoading, isFalse);
+      expect(c.showOpeningTree, isFalse);
+      expect(c.perspective.mode, PerspectiveMode.white);
+      expect(c.boardFlipped, isFalse);
+    });
+
+    test('keeps the recent-files list — it is the way back in', () {
+      final c = _makeController();
+      c.recentFiles = ['/tmp/a.pgn', '/tmp/b.pgn'];
+      _seed(c, [_game()]);
+      c.filePath = '/tmp/a.pgn';
+
+      c.closeFile();
+
+      expect(c.recentFiles, ['/tmp/a.pgn', '/tmp/b.pgn']);
+    });
+
+    test('leaves the emptied lists mutable for the next sort', () {
+      final c = _makeController();
+      _seed(c, [_game(white: 'A'), _game(white: 'B')]);
+
+      c.closeFile();
+
+      // A const [] here would throw: applySortMode sorts filteredGames
+      // in place for every mode but fileOrder.
+      expect(() => c.setSortMode(GameSortMode.dateDesc), returnsNormally);
+    });
+
+    test('navigation after a close is a no-op', () {
+      final c = _makeController();
+      _seed(c, [_game(), _game()]);
+      c.goToGame(1);
+
+      c.closeFile();
+      c.nextGame();
+      c.prevGame();
+
+      expect(c.currentGameIndex, 0);
+    });
+  });
 }
