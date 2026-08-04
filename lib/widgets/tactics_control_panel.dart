@@ -353,8 +353,12 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
   // ── Game menu ──────────────────────────────────────────────────────────
 
   /// Kebab menu next to the tabs while a puzzle is loaded: actions on the
-  /// tactic's source game (add to a study, copy the PGN).
+  /// tactic's source game (add to a study, copy the PGN) plus editing the
+  /// tactic itself.
   Widget _buildGameMenu() {
+    // Same gate as the pencil in the position info: no structural edits on an
+    // external set, and no revealing the answer of the unsolved session head.
+    final canEdit = !_database.isExternalSet && _session.canEditCurrent;
     return PopupMenuButton<String>(
       icon: const Icon(Icons.more_vert, size: 18),
       tooltip: 'Game actions',
@@ -364,11 +368,21 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
             unawaited(_addGameToStudy());
           case 'copy_pgn':
             unawaited(_copyGamePgn());
+          case 'edit_tactic':
+            _editCurrentTactic();
         }
       },
-      itemBuilder: (_) => const [
-        PopupMenuItem(value: 'add_to_study', child: Text('Add game to study…')),
-        PopupMenuItem(value: 'copy_pgn', child: Text('Copy game PGN')),
+      itemBuilder: (_) => [
+        const PopupMenuItem(
+          value: 'add_to_study',
+          child: Text('Add game to study…'),
+        ),
+        const PopupMenuItem(value: 'copy_pgn', child: Text('Copy game PGN')),
+        PopupMenuItem(
+          value: 'edit_tactic',
+          enabled: canEdit,
+          child: const Text('Edit tactic…'),
+        ),
       ],
     );
   }
@@ -576,12 +590,14 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
   Widget _buildBrowseTab() {
     return TacticsBrowsePanel(
       positions: _database.positions,
+      revision: _database.revision,
       isLoading: _database.isLoading,
       selectedFen: _session.currentPosition?.fen,
       onSelectTactic: _playTacticFromBrowse,
       onDeleteTactic: _deleteTactic,
       onEditTactic: _showEditDialog,
-      onClearAll: _confirmClearDatabase,
+      onDeleteAll: _confirmClearDatabase,
+      onTrainMany: _trainTactics,
       onSetRating: (index, rating) async {
         final pos = _database.positions[index];
         await _database.setRating(pos.fen, rating);

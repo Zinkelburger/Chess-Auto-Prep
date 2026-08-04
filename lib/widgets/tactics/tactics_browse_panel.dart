@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/tactics_position.dart';
 import '../../theme/app_colors.dart';
 import '../common/list_search_field.dart';
 import '../common/static_board_thumbnail.dart';
-import '../labeled_toggle.dart';
 import 'puzzle_stats_display.dart';
 
 part 'tactics_browse_row.dart';
@@ -37,17 +35,25 @@ class TacticsBrowsePanel extends StatefulWidget {
   const TacticsBrowsePanel({
     super.key,
     required this.positions,
+    this.revision = 0,
     this.isLoading = false,
     this.selectedFen,
     required this.onSelectTactic,
     required this.onDeleteTactic,
     required this.onEditTactic,
-    required this.onClearAll,
+    required this.onDeleteAll,
+    this.onTrainMany,
     this.onSetRating,
     this.onBatchDelete,
   });
 
   final List<TacticsPosition> positions;
+
+  /// The database's change counter. [positions] is mutated in place, so the
+  /// list identity can't tell "same list, new contents" from "nothing
+  /// changed" — this can, and it is what invalidates the memoized
+  /// filter/sort below.
+  final int revision;
 
   /// True while the database is still loading — shows a progress state
   /// instead of the misleading "no tactics yet" empty card.
@@ -60,7 +66,16 @@ class TacticsBrowsePanel extends StatefulWidget {
   final void Function(int index, List<int> visibleIndices) onSelectTactic;
   final ValueChanged<int> onDeleteTactic;
   final ValueChanged<int> onEditTactic;
-  final VoidCallback onClearAll;
+
+  /// Wipe the whole database (a destructive act, so the label says "delete",
+  /// never "clear" — clearing sounds like resetting filters).
+  final VoidCallback onDeleteAll;
+
+  /// Start a scored training session over exactly these database indices, in
+  /// the given order — the "Train these" button on the current filter result
+  /// and the "Train" action on a multi-selection.
+  final void Function(List<int> indices)? onTrainMany;
+
   final void Function(int index, int rating)? onSetRating;
   final void Function(List<int> indices)? onBatchDelete;
 
@@ -69,8 +84,6 @@ class TacticsBrowsePanel extends StatefulWidget {
 }
 
 class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
-  static const String _showBoardsPrefKey = 'tactics_browse_show_boards';
-
   // Mistake-type filters (all enabled by default).
   final Set<String> _enabledTypes = {'??', '?', '?!', 'custom'};
   TacticsStatusFilter _statusFilter = TacticsStatusFilter.all;
@@ -84,30 +97,30 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
   /// so the visible count in the bar already accounts for it.
   String _search = '';
 
-  /// Show a small board preview next to each tactic.
-  bool _showBoards = true;
-
   // Multi-select state.
   bool _selectMode = false;
   final Set<int> _selected = {};
 
-  @override
-  void initState() {
-    super.initState();
-    SharedPreferences.getInstance().then((prefs) {
-      if (!mounted) return;
-      final saved = prefs.getBool(_showBoardsPrefKey);
-      if (saved != null && saved != _showBoards) {
-        setState(() => _showBoards = saved);
-      }
-    });
-  }
+  /// Memoized [_buildVisibleIndices] result. The whole control panel
+  /// setStates on every session/import notification, and re-filtering and
+  /// re-sorting the full database on each of those repaints was pure waste —
+  /// the visible list only changes when the database does ([revision]) or a
+  /// filter here does (each setter calls [_invalidateVisible]).
+  List<int>? _visibleCache;
+  int _cacheRevision = -1;
+  List<TacticsPosition>? _cachePositions;
 
-  void _setShowBoards(bool value) {
-    setState(() => _showBoards = value);
-    SharedPreferences.getInstance().then(
-      (prefs) => prefs.setBool(_showBoardsPrefKey, value),
-    );
+  void _invalidateVisible() => _visibleCache = null;
+
+  List<int> get _visibleIndices {
+    if (_visibleCache == null ||
+        _cacheRevision != widget.revision ||
+        !identical(_cachePositions, widget.positions)) {
+      _visibleCache = _buildVisibleIndices();
+      _cacheRevision = widget.revision;
+      _cachePositions = widget.positions;
+    }
+    return _visibleCache!;
   }
 
   List<int> _buildVisibleIndices() {
@@ -120,10 +133,13 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
       if (_tagFilter.isNotEmpty && !_tagFilter.every(pos.flawTags.contains)) {
         continue;
       }
-      if (!matchesSearch(
-        _search,
-        '${pos.gameWhite} ${pos.gameBlack} ${pos.gameDate} ${pos.userMove}',
-      )) {
+      // Only build the haystack when there is a needle — the concat per
+      // position per pass showed up as pure garbage-churn with no search.
+      if (_search.isNotEmpty &&
+          !matchesSearch(
+            _search,
+            '${pos.gameWhite} ${pos.gameBlack} ${pos.gameDate} ${pos.userMove}',
+          )) {
         continue;
       }
       switch (_statusFilter) {
@@ -182,7 +198,8 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
             children: [
               const Text(
                 'No tactics in this set yet.\n'
-                'Import games to discover tactical positions.',
+                'Run the engine analysis on the home screen to mine '
+                'your games for puzzles.',
                 textAlign: TextAlign.center,
               ),
             ],
@@ -191,7 +208,7 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
       );
     }
 
-    final visibleIndices = _buildVisibleIndices();
+    final visibleIndices = _visibleIndices;
 
     return Column(
       children: [
@@ -203,19 +220,28 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
           sort: _sort,
           minRating: _minRating,
           tagFilter: _tagFilter,
-          showBoards: _showBoards,
-          onShowBoardsChanged: _setShowBoards,
           selectMode: _selectMode,
           selectedCount: _selected.length,
           onToggleType: (type) => setState(() {
+            _invalidateVisible();
             _enabledTypes.contains(type)
                 ? _enabledTypes.remove(type)
                 : _enabledTypes.add(type);
           }),
-          onStatusChanged: (f) => setState(() => _statusFilter = f),
-          onSortChanged: (s) => setState(() => _sort = s),
-          onMinRatingChanged: (r) => setState(() => _minRating = r),
+          onStatusChanged: (f) => setState(() {
+            _invalidateVisible();
+            _statusFilter = f;
+          }),
+          onSortChanged: (s) => setState(() {
+            _invalidateVisible();
+            _sort = s;
+          }),
+          onMinRatingChanged: (r) => setState(() {
+            _invalidateVisible();
+            _minRating = r;
+          }),
           onToggleTag: (tag) => setState(() {
+            _invalidateVisible();
             if (tag.isEmpty) {
               _tagFilter.clear();
             } else if (!_tagFilter.remove(tag)) {
@@ -244,27 +270,45 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
           onSelectAll: () {
             setState(() => _selected.addAll(visibleIndices));
           },
-          onClearAll: widget.onClearAll,
+          onDeleteAll: widget.onDeleteAll,
+          // Train what you see: the filtered/sorted list, or in select mode
+          // the checked rows in the order the list shows them.
+          onTrainVisible: widget.onTrainMany == null || visibleIndices.isEmpty
+              ? null
+              : () => widget.onTrainMany!(visibleIndices),
+          onTrainSelected: widget.onTrainMany == null || _selected.isEmpty
+              ? null
+              : () {
+                  final ordered = [
+                    for (final i in visibleIndices)
+                      if (_selected.contains(i)) i,
+                  ];
+                  _exitSelectMode();
+                  widget.onTrainMany!(ordered);
+                },
         ),
         const Divider(height: 1),
         // Under the chips, above the column header: the chips say *what kind*
         // of puzzle, this says *which game it came from*.
         Padding(
-          padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+          padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
           child: ListSearchField(
             hintText: 'Search by player, date or move',
-            onChanged: (v) => setState(() => _search = v),
+            onChanged: (v) => setState(() {
+              _invalidateVisible();
+              _search = v;
+            }),
           ),
         ),
         const Divider(height: 1),
-        TacticsBrowseHeader(showBoards: _showBoards),
+        const TacticsBrowseHeader(),
         const Divider(height: 1),
         Expanded(
           child: ListView.builder(
             itemCount: visibleIndices.length,
             // Fixed row height lets the list lay out without measuring every
-            // child — noticeably snappier with board previews on.
-            itemExtent: _showBoards ? 64 : 36,
+            // child — noticeably snappier with board previews.
+            itemExtent: 68,
             itemBuilder: (context, visIdx) {
               final realIndex = visibleIndices[visIdx];
               final pos = positions[realIndex];
@@ -273,7 +317,6 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
                 index: realIndex,
                 isSelected:
                     widget.selectedFen != null && widget.selectedFen == pos.fen,
-                showBoard: _showBoards,
                 // Plain click edits; the play button loads it for training.
                 onTap: _selectMode
                     ? () => setState(() {

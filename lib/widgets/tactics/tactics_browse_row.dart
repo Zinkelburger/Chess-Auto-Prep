@@ -1,10 +1,7 @@
 part of 'tactics_browse_panel.dart';
 
 class TacticsBrowseHeader extends StatelessWidget {
-  const TacticsBrowseHeader({super.key, this.showBoards = false});
-
-  /// Match the leading space of the rows (board preview + action buttons).
-  final bool showBoards;
+  const TacticsBrowseHeader({super.key});
 
   static const _headerStyle = TextStyle(
     fontWeight: FontWeight.bold,
@@ -18,7 +15,8 @@ class TacticsBrowseHeader extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: Row(
         children: [
-          SizedBox(width: showBoards ? 168 : 100),
+          // Leading space of the rows: board preview + the action buttons.
+          const SizedBox(width: 168),
           const SizedBox(width: 32, child: Text('Type', style: _headerStyle)),
           const SizedBox(width: 8),
           const SizedBox(width: 80, child: Text('Rating', style: _headerStyle)),
@@ -59,7 +57,6 @@ class TacticsBrowseRow extends StatelessWidget {
     this.onSetRating,
     this.selectMode = false,
     this.checked = false,
-    this.showBoard = false,
   });
 
   final TacticsPosition position;
@@ -74,9 +71,6 @@ class TacticsBrowseRow extends StatelessWidget {
   final ValueChanged<int>? onSetRating;
   final bool selectMode;
   final bool checked;
-
-  /// Show a small board preview of the position.
-  final bool showBoard;
 
   @override
   Widget build(BuildContext context) {
@@ -100,10 +94,8 @@ class TacticsBrowseRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           child: Row(
             children: [
-              if (showBoard) ...[
-                StaticBoardThumbnail(fen: position.fen),
-                const SizedBox(width: 8),
-              ],
+              StaticBoardThumbnail(fen: position.fen),
+              const SizedBox(width: 8),
               if (selectMode)
                 Checkbox(
                   value: checked,

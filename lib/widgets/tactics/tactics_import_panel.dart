@@ -155,7 +155,7 @@ class _TacticsImportPanelState extends _TacticsImportPanelStateBase
                     ? widget.onClearDatabase
                     : null,
                 icon: const Icon(Icons.delete_outline, size: 16),
-                label: const Text('Clear Database'),
+                label: const Text('Delete All Tactics'),
               ),
             ),
           ],

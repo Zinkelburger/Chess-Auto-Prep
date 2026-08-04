@@ -34,6 +34,18 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
   int sessionPositionIndex = 0;
   Future<void> _pendingWrite = Future<void>.value();
 
+  /// Monotonic change counter, bumped with every notification. [positions]
+  /// is mutated in place, so listeners that memoize something derived from
+  /// it (the browse tab's filtered/sorted index list) can't use list
+  /// identity as a dirty check — they compare this instead.
+  int revision = 0;
+
+  @override
+  void notifyListeners() {
+    revision++;
+    super.notifyListeners();
+  }
+
   /// Bumped on every [loadPositions] call.  The decode now runs off the UI
   /// isolate, so a set switch / import reload can start a second load while
   /// the first is still decoding; the load that owns the latest token clears

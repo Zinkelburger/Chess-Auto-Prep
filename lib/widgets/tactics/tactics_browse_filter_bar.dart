@@ -10,8 +10,6 @@ class _BrowseFilterBar extends StatelessWidget {
     required this.minRating,
     required this.tagFilter,
     required this.onToggleTag,
-    required this.showBoards,
-    required this.onShowBoardsChanged,
     required this.selectMode,
     required this.selectedCount,
     required this.onToggleType,
@@ -21,7 +19,9 @@ class _BrowseFilterBar extends StatelessWidget {
     required this.onToggleSelectMode,
     required this.onDeleteSelected,
     required this.onSelectAll,
-    required this.onClearAll,
+    required this.onDeleteAll,
+    required this.onTrainVisible,
+    required this.onTrainSelected,
   });
 
   final int totalCount;
@@ -32,8 +32,6 @@ class _BrowseFilterBar extends StatelessWidget {
   final int minRating;
   final Set<String> tagFilter;
   final ValueChanged<String> onToggleTag;
-  final bool showBoards;
-  final ValueChanged<bool> onShowBoardsChanged;
   final bool selectMode;
   final int selectedCount;
   final ValueChanged<String> onToggleType;
@@ -43,16 +41,23 @@ class _BrowseFilterBar extends StatelessWidget {
   final VoidCallback onToggleSelectMode;
   final VoidCallback onDeleteSelected;
   final VoidCallback onSelectAll;
-  final VoidCallback onClearAll;
+  final VoidCallback onDeleteAll;
+
+  /// Train everything the current filters let through. Null disables.
+  final VoidCallback? onTrainVisible;
+
+  /// Train the checked rows (select mode). Null disables.
+  final VoidCallback? onTrainSelected;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top row: count + actions
+          // Top row: count, then the one thing browsing is *for* — training
+          // what the filters matched — then selection and the delete-all.
           Row(
             children: [
               Text(
@@ -63,11 +68,27 @@ class _BrowseFilterBar extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              AppSwitch(
-                label: 'Show board previews',
-                value: showBoards,
-                onChanged: onShowBoardsChanged,
-              ),
+              if (!selectMode)
+                Tooltip(
+                  message: visibleCount == 0
+                      ? 'Nothing matches the current filters'
+                      : 'Train these $visibleCount '
+                            '${visibleCount == 1 ? 'puzzle' : 'puzzles'} in '
+                            'the order shown — e.g. filter on Struggling, '
+                            'then train what is left',
+                  child: FilledButton.tonalIcon(
+                    onPressed: onTrainVisible,
+                    icon: const Icon(Icons.play_arrow, size: 16),
+                    label: Text(
+                      'Train these ($visibleCount)',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    style: FilledButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                    ),
+                  ),
+                ),
               const Spacer(),
               if (selectMode) ...[
                 Text(
@@ -78,6 +99,12 @@ class _BrowseFilterBar extends StatelessWidget {
                 TextButton(
                   onPressed: onSelectAll,
                   child: const Text('All', style: TextStyle(fontSize: 12)),
+                ),
+                const SizedBox(width: 4),
+                TextButton.icon(
+                  onPressed: onTrainSelected,
+                  icon: const Icon(Icons.play_arrow, size: 14),
+                  label: const Text('Train', style: TextStyle(fontSize: 12)),
                 ),
                 const SizedBox(width: 4),
                 TextButton.icon(
@@ -105,22 +132,28 @@ class _BrowseFilterBar extends StatelessWidget {
                   visualDensity: VisualDensity.compact,
                 ),
                 const SizedBox(width: 4),
+                // Muted, not red: this wipes the whole database, and painting
+                // it the loudest colour on the bar begged the eye to press
+                // it. The confirm dialog is where the danger colour lives.
                 TextButton.icon(
-                  onPressed: onClearAll,
+                  onPressed: onDeleteAll,
                   icon: const Icon(
                     Icons.delete_outline,
                     size: 14,
-                    color: AppColors.danger,
+                    color: AppColors.onSurfaceMuted,
                   ),
                   label: const Text(
-                    'Clear All',
-                    style: TextStyle(color: AppColors.danger, fontSize: 12),
+                    'Delete all…',
+                    style: TextStyle(
+                      color: AppColors.onSurfaceMuted,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
               ],
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           // Filter row: mistake types + status + rating
           Wrap(
             spacing: 6,
@@ -174,7 +207,7 @@ class _BrowseFilterBar extends StatelessWidget {
               _FlawTagChip(selected: tagFilter, onToggle: onToggleTag),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           // Sort row
           Row(
             children: [
@@ -292,7 +325,7 @@ class _FlawTagChip extends StatelessWidget {
             ),
             const SizedBox(width: 2),
             Text(
-              selected.isEmpty ? 'Tags' : selected.join(' + '),
+              selected.isEmpty ? 'Any tags' : selected.join(' + '),
               style: const TextStyle(fontSize: 11),
             ),
           ],
@@ -312,11 +345,14 @@ class _MinRatingChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The chip and its menu say what the filter does in words. The old
+    // "Any ★" / bare "3+" read as a cryptic glyph next to an equally cryptic
+    // number — nobody could tell it meant "my own star ratings".
     return PopupMenuButton<int>(
-      tooltip: 'Minimum star rating',
+      tooltip: 'Show only puzzles you rated at least this many stars',
       onSelected: onChanged,
       itemBuilder: (_) => [
-        const PopupMenuItem(value: 0, child: Text('Any rating')),
+        const PopupMenuItem(value: 0, child: Text('Any star rating')),
         for (int r = 2; r <= 5; r++)
           PopupMenuItem(
             value: r,
@@ -325,7 +361,7 @@ class _MinRatingChip extends StatelessWidget {
               children: [
                 Text('$r'),
                 const Icon(Icons.star, size: 14, color: AppColors.starAccent),
-                const Text('+'),
+                const Text(' and up'),
               ],
             ),
           ),
@@ -343,7 +379,7 @@ class _MinRatingChip extends StatelessWidget {
             ),
             const SizedBox(width: 2),
             Text(
-              minRating > 0 ? '$minRating+' : 'Any',
+              minRating > 0 ? '$minRating★ and up' : 'Any star rating',
               style: const TextStyle(fontSize: 11),
             ),
           ],

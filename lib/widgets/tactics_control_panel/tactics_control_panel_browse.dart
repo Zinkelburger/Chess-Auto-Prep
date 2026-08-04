@@ -49,6 +49,19 @@ mixin _TacticsBrowseActions on _TacticsControlPanelStateBase, _TacticsPlayback {
     }
   }
 
+  /// "Train these" / "Train" on the browse bar: a real scored session over
+  /// exactly [indices] (the filtered list, or the checked rows), in the order
+  /// the list showed them — filter on Struggling, press Train, and you are
+  /// drilling your struggling puzzles with a recap at the end.
+  void _trainTactics(List<int> indices) {
+    if (indices.isEmpty) return;
+    final subset = [for (final i in indices) _database.positions[i]];
+    final setup = _session.startRetrySession(subset);
+    if (setup == null) return;
+    _showRecap = false;
+    _loadPositionSetup(setup);
+  }
+
   /// Play button on a browse row: load the tactic unscored, with
   /// Previous/Next walking [visibleIndices] (the list as filtered/sorted at
   /// click time) and the back button returning to the list.
@@ -108,10 +121,13 @@ mixin _TacticsBrowseActions on _TacticsControlPanelStateBase, _TacticsPlayback {
 
   void _confirmClearDatabase() async {
     if (_blockStructuralEditOnExternalSet()) return;
+    // "Delete", never "clear": clearing sounds like resetting filters, and
+    // this destroys every stored tactic. The danger colour lives here on the
+    // confirm, not on the browse-bar button that opens it.
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Clear Database'),
+        title: const Text('Delete all tactics?'),
         content: Text(
           'Delete all ${_database.positions.length} tactics positions, '
           'imported PGNs, and analyzed-games history?\n\n'
@@ -125,7 +141,7 @@ mixin _TacticsBrowseActions on _TacticsControlPanelStateBase, _TacticsPlayback {
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text(
-              'Clear All',
+              'Delete all',
               style: TextStyle(color: AppColors.danger),
             ),
           ),
