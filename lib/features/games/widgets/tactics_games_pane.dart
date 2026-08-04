@@ -30,10 +30,11 @@ import 'review_strip.dart';
 /// Nothing here starts the engine on its own — the review waits for its play
 /// button (see [HomeReviewRunner]).
 ///
-/// Layout rule: the header and the review strip are always on screen once an
-/// account exists. Only the *list* area shows loading and empty states; hiding
-/// the play button until games arrived meant the one control that fetches them
-/// was missing exactly when it was needed.
+/// Layout rule: the header and the review strip are always on screen — even
+/// with no account set, because the header *is* where the Lichess username is
+/// typed. Only the *list* area shows loading and empty states; hiding the play
+/// button until games arrived meant the one control that fetches them was
+/// missing exactly when it was needed.
 ///
 /// The [RecentGamesController] and [HomeReviewRunner] are provided by
 /// `_TacticsModeView` (they must outlive this widget: the pane is swapped out
@@ -234,17 +235,6 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
     if (!usernamesLoaded && !controller.hasAnyUsername) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (!controller.hasAnyUsername) {
-      return _EmptyStateCard(
-        icon: Icons.person_off,
-        title: 'No accounts configured',
-        message:
-            'Set your Chess.com or Lichess username in Settings → Accounts '
-            'and your recent games will appear here.',
-        buttonLabel: 'Open Settings',
-        onPressed: _openSettings,
-      );
-    }
     final games = controller.games;
     // Cheap enough to recompute per build (a walk over ≤ a window of games,
     // no IO) and it has to be: the count on the Opening-review button ticks up
@@ -268,6 +258,8 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
           ),
           openingIssueCount:
               openingReview.mistakes.length + openingReview.bookEnds.length,
+          autoRun: controller.filters.autoRun,
+          onAutoRunChanged: controller.setAutoRun,
           onStart: _startReview,
           onPause: runner.pause,
           onStudyTactics: _studyTactics,
@@ -281,6 +273,18 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
   }
 
   Widget _buildList(RecentGamesController controller) {
+    if (!controller.hasAnyUsername) {
+      return _EmptyStateCard(
+        icon: Icons.person_off,
+        title: 'No accounts configured',
+        message:
+            'Type your Lichess username in the box above — or set your '
+            'usernames in Settings → Accounts — and your recent games will '
+            'appear here.',
+        buttonLabel: 'Open Settings',
+        onPressed: _openSettings,
+      );
+    }
     if (controller.isLoading && controller.games.isEmpty) {
       return Center(
         child: Column(

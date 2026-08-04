@@ -51,7 +51,9 @@ Future<void> importAndWaitForPositions(
   Duration pollInterval = const Duration(seconds: 2),
   int maxPolls = 60,
 }) async {
-  final lichessField = find.widgetWithText(TextField, 'Lichess Username');
+  // The username box lives in the games-pane header now (always on screen,
+  // blank until typed), not on the accounts card.
+  final lichessField = find.byKey(const Key('lichess-username-field'));
   await tester.enterText(lichessField, username);
   await tester.pumpAndSettle();
 

@@ -6,6 +6,7 @@ import '../../../services/tactics/tactics_import_coordinator.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/system_info.dart';
+import '../../../widgets/labeled_toggle.dart';
 import '../services/home_review_runner.dart';
 
 /// The tactics home's three buttons in one column, plus the progress they share
@@ -31,16 +32,22 @@ import '../services/home_review_runner.dart';
 ///   waited for is ever thrown away.
 /// * **The button says what pressing it will do.** Not a fixed verb with the
 ///   real state hidden in a caption: with games downloaded but not yet analysed
-///   it reads "Resume engine analysis (12)", because that is the situation the
-///   user is in and the question they arrive with. All three carry the count of
-///   what is waiting for them, for the same reason.
+///   it reads "Resume engine analysis", because that is the situation the user
+///   is in. The *count* of waiting work is not in the button — it is the
+///   headline right beside it ("12 unanalysed games"), so the button stays
+///   short. The two result buttons below still carry their counts.
+/// * **The job button is gray, not green.** It is the biggest control on the
+///   screen already; painted green it read as "the thing to press", when it is
+///   really "the thing that costs minutes of CPU". Amber only while running,
+///   as Pause.
 /// * **Cores and depth are stated, not steppered.** How much of the laptop goes
 ///   away and how long the wait is belong on screen, but as a sentence you read
 ///   in passing; changing them is a trip to the strip's one gear.
-/// * **One gear.** Everything you can change about the analysis — which games,
-///   whether it starts itself, how hard it works — is behind the single
-///   settings button, not split between a "which games" gear and a separate
-///   "review speed" button that read as two different features.
+/// * **Auto-start is on the strip, not behind the gear.** Whether the analysis
+///   starts itself when the app opens is the one setting users toggle often
+///   enough to want in reach; the checkbox sits with the refresh and gear
+///   buttons and its tooltip says what it spends. The gear keeps what is left:
+///   which games, and how hard the engine works.
 /// * **Static.** Every control is always present; only labels, the enabled
 ///   states and the progress bar change.
 class ReviewStrip extends StatelessWidget {
@@ -54,6 +61,8 @@ class ReviewStrip extends StatelessWidget {
     required this.windowLabel,
     required this.readyPuzzleCount,
     required this.openingIssueCount,
+    required this.autoRun,
+    required this.onAutoRunChanged,
     required this.onStart,
     required this.onPause,
     required this.onStudyTactics,
@@ -64,7 +73,7 @@ class ReviewStrip extends StatelessWidget {
 
   /// Width of the button column. Fixed so the three buttons are the same size
   /// and the status beside them starts at the same x in every state. Wide
-  /// enough for the longest transport label ("Resume engine analysis (12)")
+  /// enough for the longest transport label ("Resume engine analysis")
   /// without ellipsis.
   static const double _buttonWidth = 250;
 
@@ -90,6 +99,11 @@ class ReviewStrip extends StatelessWidget {
   /// number on the Opening-review button. Zero is still openable: the dialog
   /// is also where "no book was designated for this game" gets explained.
   final int openingIssueCount;
+
+  /// Whether the analysis starts itself when the app opens — the checkbox in
+  /// the icon row. Persisted with the list filters.
+  final bool autoRun;
+  final ValueChanged<bool> onAutoRunChanged;
 
   final VoidCallback onStart;
   final VoidCallback onPause;
@@ -137,6 +151,14 @@ class ReviewStrip extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Expanded(child: _buildStatus(running)),
+              AppCheckbox(
+                label: 'Auto-start',
+                tooltip:
+                    'Start the engine analysis by itself when the app opens. '
+                    'It puts your CPU cores on Stockfish for several minutes.',
+                value: autoRun,
+                onChanged: onAutoRunChanged,
+              ),
               IconButton(
                 icon: const Icon(Icons.refresh, size: 18),
                 tooltip: 'Download my games again, without analysing them',
@@ -169,19 +191,19 @@ class ReviewStrip extends StatelessWidget {
       (unreviewedCount > 0 && unreviewedCount < gamesInWindow);
 
   /// What pressing the button will do, in the button. Always "analysis", never
-  /// "review" — see the class doc.
+  /// "review" — see the class doc. No count in the label: the headline beside
+  /// the button carries it ("12 unanalysed games").
   String _transportLabel(bool running) {
     if (running) return 'Pause';
     if (unreviewedCount > 0) {
-      return _isResume
-          ? 'Resume engine analysis ($unreviewedCount)'
-          : 'Start engine analysis ($unreviewedCount)';
+      return _isResume ? 'Resume engine analysis' : 'Start engine analysis';
     }
     return gamesInWindow > 0 ? 'Check for new games' : 'Start engine analysis';
   }
 
   /// The job: the one control here that costs minutes and every core, so the
-  /// one control here that is filled, green and a size larger than the rest.
+  /// one control here that is filled and a size larger than the rest. Gray,
+  /// not green — see the class doc.
   Widget _buildTransportButton(bool running) {
     final enabled = running || runner.hasAnySource;
     return Tooltip(
@@ -210,7 +232,7 @@ class ReviewStrip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           backgroundColor: running
               ? AppColors.warningSurface
-              : AppColors.successSurface,
+              : AppColors.surfaceInset,
           foregroundColor: AppColors.ink,
         ),
       ),
@@ -317,12 +339,12 @@ class ReviewStrip extends StatelessWidget {
           : 'Paused';
     }
     if (unreviewedCount > 0) {
-      return '$unreviewedCount ${_games(unreviewedCount)} to analyse';
+      return '$unreviewedCount unanalysed ${_games(unreviewedCount)}';
     }
     return gamesInWindow > 0 ? 'No new games to analyse' : 'No games yet';
   }
 
-  /// The supporting line: where the number above came from.
+  /// The supporting line under the headline.
   String _detailLine(bool running) {
     if (runner.stage == HomeReviewStage.failed) {
       return runner.detail ?? 'Something went wrong';
@@ -347,8 +369,10 @@ class ReviewStrip extends StatelessWidget {
     if (gamesInWindow == 0) {
       return 'Press Start engine analysis to download them';
     }
+    // No "Out of 20 in your last 20 games" line: the headline already counts
+    // the work, and restating the window read as a fact without a use.
     return unreviewedCount > 0
-        ? 'Out of $gamesInWindow in your $windowLabel'
+        ? ''
         : 'Your $windowLabel is downloaded and analysed';
   }
 

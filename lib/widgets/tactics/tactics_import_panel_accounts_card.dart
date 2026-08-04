@@ -11,8 +11,12 @@ mixin _TacticsImportPanelAccountsCard on _TacticsImportPanelStateBase {
   /// engine-settings gear. Both are gone: downloading, checking against your
   /// books and finding your mistakes is one job now, started by the review's
   /// play button on the left, and the engine knobs are on that same strip where
-  /// you can see them. What is left here is the two things this card is
-  /// genuinely about — who you are, and which games count.
+  /// you can see them.
+  ///
+  /// The Lichess username is not here either: it is the always-visible text box
+  /// at the top of the games pane on the left (see `GamesHomeHeader`). Two
+  /// editable copies of the same name on one screen would drift apart the
+  /// moment either was typed in.
   Widget _buildAccountsCard() {
     return Card(
       child: Padding(
@@ -27,14 +31,6 @@ mixin _TacticsImportPanelAccountsCard on _TacticsImportPanelStateBase {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 14),
-              _buildUsernameField(
-                controller: _form.lichessUser,
-                label: 'Lichess Username',
-                onChanged: (v) =>
-                    context.read<AppState>().setLichessUsername(v),
-                lastSynced: context.read<AppState>().lichessLastFetch,
-              ),
-              const SizedBox(height: 12),
               _buildUsernameField(
                 controller: _form.chessComUser,
                 label: 'Chess.com Username',
@@ -115,10 +111,10 @@ mixin _TacticsImportPanelAccountsCard on _TacticsImportPanelStateBase {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Says what pressing Review games will fetch, rather than defining a
-        // word ("recent") the user never asked about.
+        // Says what pressing the analysis button will fetch, rather than
+        // defining a word ("recent") the user never asked about.
         const Text(
-          'Games to download and review',
+          'Games to download',
           style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
         ),
         const SizedBox(height: 6),

@@ -12,6 +12,7 @@ import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:chess_auto_prep/services/games_library/games_library_service.dart';
 import 'package:chess_auto_prep/services/tactics/mining_settings.dart';
 import 'package:chess_auto_prep/services/tactics/tactics_import_coordinator.dart';
+import 'package:chess_auto_prep/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -97,6 +98,8 @@ void main() {
     VoidCallback? onStudy,
     VoidCallback? onSettings,
     VoidCallback? onOpeningReview,
+    ValueChanged<bool>? onAutoRunChanged,
+    bool autoRun = false,
     int unreviewed = 3,
     int ready = 12,
     int openingIssues = 4,
@@ -114,6 +117,8 @@ void main() {
             windowLabel: 'last 20 games',
             readyPuzzleCount: ready,
             openingIssueCount: openingIssues,
+            autoRun: autoRun,
+            onAutoRunChanged: onAutoRunChanged ?? (_) {},
             onStart: onStart ?? () {},
             onPause: onPause ?? () {},
             onStudyTactics: onStudy ?? () {},
@@ -138,14 +143,45 @@ void main() {
 
     expect(find.byIcon(Icons.pause), findsNothing);
     expect(
-      find.text('3 games to analyse'),
+      find.text('3 unanalysed games'),
       findsOneWidget,
       reason: 'the strip leads with the work waiting, not a game count',
     );
     expect(
-      find.textContaining('Out of 20 in your last 20 games'),
-      findsOneWidget,
+      find.textContaining('Out of 20'),
+      findsNothing,
+      reason: 'restating the window under the count was a fact without a use',
     );
+  });
+
+  testWidgets('the job button is gray, and auto-start sits on the strip', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final h = build();
+    addTearDown(h.games.dispose);
+    addTearDown(h.runner.dispose);
+    final flips = <bool>[];
+
+    await pump(
+      tester,
+      runner: h.runner,
+      coordinator: h.co,
+      onAutoRunChanged: flips.add,
+    );
+
+    final button = tester.widget<FilledButton>(
+      find.byKey(const Key('review-transport-button')),
+    );
+    final bg = button.style?.backgroundColor?.resolve({});
+    expect(
+      bg,
+      AppColors.surfaceInset,
+      reason: 'the job button is gray, not the green "press me" control',
+    );
+
+    await tester.tap(find.text('Auto-start'));
+    expect(flips, [true]);
   });
 
   testWidgets('the button offers to resume when only some games are analysed', (
@@ -157,13 +193,16 @@ void main() {
     addTearDown(h.runner.dispose);
 
     // 3 of 20 left: the app was closed mid-review, so the button must not
-    // pretend this is a fresh start.
+    // pretend this is a fresh start. The count lives in the headline beside
+    // the button, not in its label.
     await pump(tester, runner: h.runner, coordinator: h.co);
-    expect(find.text('Resume engine analysis (3)'), findsOneWidget);
+    expect(find.text('Resume engine analysis'), findsOneWidget);
+    expect(find.text('3 unanalysed games'), findsOneWidget);
 
-    // Nothing analysed yet — a first run, and it says how much work that is.
+    // Nothing analysed yet — a first run.
     await pump(tester, runner: h.runner, coordinator: h.co, unreviewed: 20);
-    expect(find.text('Start engine analysis (20)'), findsOneWidget);
+    expect(find.text('Start engine analysis'), findsOneWidget);
+    expect(find.text('20 unanalysed games'), findsOneWidget);
 
     // All caught up: pressing play only looks for new games.
     await pump(tester, runner: h.runner, coordinator: h.co, unreviewed: 0);
@@ -180,7 +219,7 @@ void main() {
 
     await pump(tester, runner: h.runner, coordinator: h.co);
 
-    final analysis = tester.getTopLeft(find.text('Resume engine analysis (3)'));
+    final analysis = tester.getTopLeft(find.text('Resume engine analysis'));
     final study = tester.getTopLeft(find.text('Study tactics (12)'));
     final opening = tester.getTopLeft(find.text('Opening review (4)'));
     expect(
@@ -386,7 +425,7 @@ void main() {
 
     await pump(tester, runner: runner, coordinator: co);
 
-    expect(find.text('Resume engine analysis (3)'), findsOneWidget);
+    expect(find.text('Resume engine analysis'), findsOneWidget);
     expect(find.text('Paused — 3 games left'), findsOneWidget);
     expect(
       find.textContaining('carry on where it stopped'),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../../core/app_state.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../controllers/recent_games_controller.dart';
@@ -8,8 +10,9 @@ import '../services/my_repertoire_settings.dart';
 import '../services/rating_trend.dart';
 import 'my_repertoires_panel.dart';
 
-/// The top of the recent-games home: who you are, what your rating did, what
-/// is left to look at, and which books your games are being checked against.
+/// The top of the recent-games home: who you are (an editable username box,
+/// on screen even before a name is typed), what your rating did, what is left
+/// to look at, and which books your games are being checked against.
 ///
 /// No encouragement, no coaching voice, no exclamation marks. This screen is
 /// opened to train, and a greeting that congratulates you on your rating is
@@ -22,12 +25,6 @@ class GamesHomeHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final games = controller.games;
-    // Whose games these are, always on screen — including before the first one
-    // arrives, when the list has no game to read the name off.
-    final name = games.isEmpty
-        ? controller.usernames.join(' · ')
-        : games.first.myUsername;
-
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
       decoration: const BoxDecoration(
@@ -36,14 +33,7 @@ class GamesHomeHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (name.isNotEmpty)
-            Text(
-              name,
-              style: AppTextStyles.body.copyWith(
-                fontSize: 19,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+          const _UsernameBox(),
           const SizedBox(height: 4),
           _RatingRow(games: games),
           const SizedBox(height: 4),
@@ -77,6 +67,86 @@ class GamesHomeHeader extends StatelessWidget {
       '${games.length} ${games.length == 1 ? 'game' : 'games'}',
       if (leftBook > 0) '$leftBook left book',
     ].join(' · ');
+  }
+}
+
+/// The Lichess username, as a text box that is always on screen — blank with a
+/// hint when no name is set, rather than appearing only once games exist. Typed
+/// straight through to [AppState.setLichessUsername] (the app-wide value the
+/// downloads read); the Chess.com name keeps its field on the accounts card.
+class _UsernameBox extends StatefulWidget {
+  const _UsernameBox();
+
+  @override
+  State<_UsernameBox> createState() => _UsernameBoxState();
+}
+
+class _UsernameBoxState extends State<_UsernameBox> {
+  final _controller = TextEditingController();
+  final _focus = FocusNode();
+  AppState? _appState;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final appState = context.read<AppState>();
+    if (!identical(appState, _appState)) {
+      _appState?.removeListener(_syncFromAppState);
+      _appState = appState;
+      appState.addListener(_syncFromAppState);
+      _syncFromAppState();
+    }
+  }
+
+  @override
+  void dispose() {
+    _appState?.removeListener(_syncFromAppState);
+    _controller.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  /// Adopt edits made elsewhere (Settings → Accounts, the async prefs load at
+  /// startup) — but never while the user is typing here, or the caret jumps.
+  void _syncFromAppState() {
+    final name = _appState?.lichessUsername ?? '';
+    if (!_focus.hasFocus && _controller.text != name) {
+      _controller.text = name;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      // Keyed for the boot integration test: the hint is this field's only
+      // text, and hints double as real text matches too easily.
+      key: const Key('lichess-username-field'),
+      controller: _controller,
+      focusNode: _focus,
+      onChanged: (v) => context.read<AppState>().setLichessUsername(v),
+      style: AppTextStyles.body.copyWith(
+        fontSize: 19,
+        fontWeight: FontWeight.w700,
+      ),
+      decoration: InputDecoration(
+        hintText: 'Lichess username',
+        hintStyle: AppTextStyles.body.copyWith(
+          fontSize: 19,
+          fontWeight: FontWeight.w600,
+          color: AppColors.onSurfaceMuted,
+        ),
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(vertical: 4),
+        // A faint underline, not a boxed field: this is the page's title that
+        // happens to be editable, and a full outline made it read as a form.
+        enabledBorder: const UnderlineInputBorder(
+          borderSide: BorderSide(color: AppColors.divider),
+        ),
+        focusedBorder: const UnderlineInputBorder(
+          borderSide: BorderSide(color: AppColors.outline),
+        ),
+      ),
+    );
   }
 }
 

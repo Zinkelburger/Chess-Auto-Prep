@@ -1,5 +1,5 @@
-/// The review strip's one gear dialog: which games, whether it starts itself,
-/// and how hard it works — all in the same place, applied by one button.
+/// The review strip's one gear dialog: which games and how hard the engine
+/// works, applied by one button. (Auto-start lives on the strip itself.)
 library;
 
 import 'package:chess_auto_prep/features/games/controllers/recent_games_controller.dart';

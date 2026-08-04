@@ -29,9 +29,12 @@ void main() {
       // the board returns only when a puzzle session starts.
       expect(find.byType(ChessBoardWidget), findsNothing);
 
+      // Left pane header: the Lichess username box is on screen even before a
+      // name is typed. The Chess.com field stays on the accounts card.
+      expect(find.byKey(const Key('lichess-username-field')), findsOneWidget);
+
       // Right pane: who you are, and what is in the puzzle database.
       expect(find.text('My accounts'), findsOneWidget);
-      expect(find.text('Lichess Username'), findsOneWidget);
       expect(find.text('Chess.com Username'), findsOneWidget);
       expect(find.text('My tactics'), findsOneWidget);
       // The engine-settings gear is gone: cores and depth are steppers on the

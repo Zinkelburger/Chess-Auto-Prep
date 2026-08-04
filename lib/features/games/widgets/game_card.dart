@@ -20,7 +20,10 @@ import '../models/recent_game.dart';
 ///
 /// Three things are clickable, and each opens the game at the thing you
 /// clicked: the card opens it in the viewer, the mistake counts open its
-/// analysis, and the book verdict opens the line you left.
+/// analysis, and the book verdict opens the line you left. The same three
+/// destinations also sit as a fixed column of icon buttons on the card's right
+/// edge — the text targets are discoverable only once you know they are links,
+/// and the space was blank anyway.
 class GameCard extends StatelessWidget {
   const GameCard({
     super.key,
@@ -76,6 +79,8 @@ class GameCard extends StatelessWidget {
                 _buildBoard(),
                 const SizedBox(width: 10),
                 Expanded(child: _buildBody(context)),
+                const SizedBox(width: 4),
+                _buildActions(),
               ],
             ),
           ),
@@ -171,27 +176,59 @@ class GameCard extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         MistakeCounts(game: game, onOpen: onOpenAnalysis),
-        // Fixed slot, present whether or not the game has a URL: the counts to
-        // its left only read as columns if they sit at the same x on every card.
-        SizedBox(
-          width: 24,
-          child: game.gameUrl == null
+      ],
+    );
+  }
+
+  /// The card's actions as a fixed column on its right edge. Every card gets
+  /// all three slots — a button that is not applicable is disabled, not
+  /// missing, so the column reads the same on every row.
+  Widget _buildActions() {
+    final siteName = game.platform == GamesPlatform.chesscom
+        ? 'Chess.com'
+        : 'Lichess';
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _actionButton(
+          icon: Icons.query_stats,
+          tooltip: 'Open the engine analysis of this game',
+          onPressed: onOpenAnalysis,
+        ),
+        _actionButton(
+          icon: Icons.fork_right,
+          tooltip: game.deviation == null
+              ? 'No book comparison for this game'
+              : 'See the game beside your book line',
+          onPressed: game.deviation == null ? null : onOpenLine,
+        ),
+        _actionButton(
+          icon: Icons.open_in_new,
+          tooltip: game.gameUrl == null
+              ? 'No link to this game'
+              : 'Open on $siteName',
+          onPressed: game.gameUrl == null
               ? null
-              : IconButton(
-                  icon: const Icon(Icons.open_in_new, size: 16),
-                  tooltip:
-                      'Open in '
-                      '${game.platform == GamesPlatform.chesscom ? 'Chess.com' : 'Lichess'}',
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 24,
-                    minHeight: 20,
-                  ),
-                  onPressed: () => launchUrl(Uri.parse(game.gameUrl!)),
-                ),
+              : () => launchUrl(Uri.parse(game.gameUrl!)),
         ),
       ],
+    );
+  }
+
+  Widget _actionButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback? onPressed,
+  }) {
+    return IconButton(
+      icon: Icon(icon, size: 17),
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+      color: AppColors.onSurfaceSoft,
+      disabledColor: AppColors.onSurfaceDim,
+      onPressed: onPressed,
     );
   }
 

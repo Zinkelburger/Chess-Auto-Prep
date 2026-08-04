@@ -298,6 +298,16 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
     await _computeDeviations(_refreshEpoch);
   }
 
+  /// Flip only the auto-start preference. Unlike [setFilters] this does not
+  /// reload: auto-run changes nothing about which games are listed, and the
+  /// strip's checkbox should not cost a re-download.
+  Future<void> setAutoRun(bool value) async {
+    _filters = _filters.copyWith(autoRun: value);
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_autoRunPrefsKey, value);
+  }
+
   /// Apply new filters and (optionally) a new shared window, then reload.
   ///
   /// The window is set *before* the reload so a single Apply from the settings

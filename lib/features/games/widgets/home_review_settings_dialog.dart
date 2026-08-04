@@ -18,8 +18,9 @@ class HomeReviewSettingsResult {
 }
 
 /// The dialog behind the review strip's gear — the only one there is. Which
-/// time controls count as "my games", whether the engine analysis is allowed to
-/// start by itself, and how hard it is allowed to work.
+/// time controls count as "my games", and how hard the engine is allowed to
+/// work. Whether the analysis starts by itself is not here: that checkbox sits
+/// on the strip next to the refresh and gear buttons, in plain sight.
 ///
 /// Titled "Analysis settings", matching its button: "Review settings" was a
 /// third thing called a review, next to Opening review and the analysis run.
@@ -56,7 +57,6 @@ class HomeReviewSettingsDialog extends StatefulWidget {
 
 class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
   late Set<GameSpeed> _speeds;
-  late bool _autoRun;
   late final TextEditingController _cores;
   late final TextEditingController _depth;
   final int _maxCores = getLogicalCores();
@@ -74,7 +74,6 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
   void initState() {
     super.initState();
     _speeds = {...widget.filters.speeds};
-    _autoRun = widget.filters.autoRun;
     _cores = TextEditingController(text: '${EngineSettings.instance.workers}');
     _depth = TextEditingController(text: '${MiningSettings.instance.depth}');
   }
@@ -100,9 +99,10 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
         depth.clamp(MiningSettings.minDepth, MiningSettings.maxDepth),
       );
     }
+    // Auto-start is edited on the strip, not here — pass it through untouched.
     Navigator.of(context).pop(
       HomeReviewSettingsResult(
-        filters: GamesListFilters(speeds: _speeds, autoRun: _autoRun),
+        filters: widget.filters.copyWith(speeds: _speeds),
       ),
     );
   }
@@ -131,24 +131,6 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
                     }
                   }),
                 ),
-              _label('Starting the analysis'),
-              AppCheckbox(
-                label:
-                    'Start the engine analysis automatically when I open the app',
-                value: _autoRun,
-                onChanged: (v) => setState(() => _autoRun = v),
-              ),
-              // The one hint kept: this checkbox commits every core to minutes
-              // of Stockfish without being asked, which is not something to
-              // discover by having it happen.
-              Text(
-                'Off by default — the analysis puts your CPU cores on Stockfish '
-                'for several minutes.',
-                style: AppTextStyles.body.copyWith(
-                  fontSize: 11,
-                  color: AppColors.onSurfaceMuted,
-                ),
-              ),
               _label('How hard it works'),
               _numberField(
                 key: const Key('review-cores-field'),
