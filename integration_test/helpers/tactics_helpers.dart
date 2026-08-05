@@ -51,8 +51,8 @@ Future<void> importAndWaitForPositions(
   Duration pollInterval = const Duration(seconds: 2),
   int maxPolls = 60,
 }) async {
-  // The username box lives in the games-pane header now (always on screen,
-  // blank until typed), not on the accounts card.
+  // The username field lives on the accounts card in the right pane; found
+  // by key so its label text can change without breaking the test.
   final lichessField = find.byKey(const Key('lichess-username-field'));
   await tester.enterText(lichessField, username);
   await tester.pumpAndSettle();

@@ -11,12 +11,14 @@ mixin _TacticsImportPanelAccountsCard on _TacticsImportPanelStateBase {
   /// engine-settings gear. Both are gone: downloading, checking against your
   /// books and finding your mistakes is one job now, started by the review's
   /// play button on the left, and the engine knobs are on that same strip where
-  /// you can see them.
+  /// you can see them. What is left here is the two things this card is
+  /// genuinely about — who you are, and which games count.
   ///
-  /// The Lichess username is not here either: it is the always-visible text box
-  /// at the top of the games pane on the left (see `GamesHomeHeader`). Two
-  /// editable copies of the same name on one screen would drift apart the
-  /// moment either was typed in.
+  /// Both usernames live here rather than at the head of the games pane: that
+  /// pane already carries the rating, the counts, the books and the list, and
+  /// an underline-styled box up there had no label saying what it was. Here
+  /// each field has a title. (An earlier pass tried the games-pane header;
+  /// the user sent them back.)
   Widget _buildAccountsCard() {
     return Card(
       child: Padding(
@@ -31,12 +33,20 @@ mixin _TacticsImportPanelAccountsCard on _TacticsImportPanelStateBase {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 14),
-              _buildUsernameField(
-                controller: _form.chessComUser,
+              _AccountUsernameField(
+                fieldKey: const Key('lichess-username-field'),
+                label: 'Lichess Username',
+                read: (s) => s.lichessUsername,
+                write: (s, v) => s.setLichessUsername(v),
+                lastFetch: (s) => s.lichessLastFetch,
+              ),
+              const SizedBox(height: 12),
+              _AccountUsernameField(
+                fieldKey: const Key('chesscom-username-field'),
                 label: 'Chess.com Username',
-                onChanged: (v) =>
-                    context.read<AppState>().setChesscomUsername(v),
-                lastSynced: context.read<AppState>().chesscomLastFetch,
+                read: (s) => s.chesscomUsername,
+                write: (s, v) => s.setChesscomUsername(v),
+                lastFetch: (s) => s.chesscomLastFetch,
               ),
               const SizedBox(height: 16),
               const Divider(height: 1),
@@ -46,50 +56,6 @@ mixin _TacticsImportPanelAccountsCard on _TacticsImportPanelStateBase {
           ),
         ),
       ),
-    );
-  }
-
-  /// One account: the name, and — only once there *is* a name — when its games
-  /// were last pulled down. An empty field has no download history to report,
-  /// and "Not downloaded yet" under a blank box reads as a problem to fix
-  /// rather than as the absence of an account.
-  Widget _buildUsernameField({
-    required TextEditingController controller,
-    required String label,
-    required ValueChanged<String> onChanged,
-    required DateTime? lastSynced,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextField(
-          controller: controller,
-          decoration: InputDecoration(
-            labelText: label,
-            border: const OutlineInputBorder(),
-            isDense: true,
-          ),
-          onChanged: onChanged,
-        ),
-        ValueListenableBuilder<TextEditingValue>(
-          valueListenable: controller,
-          builder: (context, value, _) {
-            if (value.text.trim().isEmpty) return const SizedBox.shrink();
-            return Padding(
-              padding: const EdgeInsets.only(top: 3),
-              child: Text(
-                lastSynced != null
-                    ? 'Last downloaded ${_formatDate(lastSynced)}'
-                    : 'Not downloaded yet',
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: AppColors.onSurfaceMuted,
-                ),
-              ),
-            );
-          },
-        ),
-      ],
     );
   }
 
@@ -219,6 +185,118 @@ mixin _TacticsImportPanelAccountsCard on _TacticsImportPanelStateBase {
             ),
           ],
         ),
+      ],
+    );
+  }
+}
+
+/// One account: a labelled username box, and — only once there *is* a name —
+/// when its games were last pulled down. An empty field has no download
+/// history to report, and "Not downloaded yet" under a blank box reads as a
+/// problem to fix rather than as the absence of an account.
+///
+/// The value of record is [AppState]'s (persisted per keystroke as the saved
+/// default; Settings → Accounts edits the same value). Edits made elsewhere
+/// are adopted here — but never while this field has focus, or the caret
+/// jumps.
+class _AccountUsernameField extends StatefulWidget {
+  const _AccountUsernameField({
+    required this.fieldKey,
+    required this.label,
+    required this.read,
+    required this.write,
+    required this.lastFetch,
+  });
+
+  /// Keyed for the boot integration test, which types a username into the
+  /// field to drive a download.
+  final Key fieldKey;
+  final String label;
+  final String? Function(AppState state) read;
+  final void Function(AppState state, String value) write;
+  final DateTime? Function(AppState state) lastFetch;
+
+  @override
+  State<_AccountUsernameField> createState() => _AccountUsernameFieldState();
+}
+
+class _AccountUsernameFieldState extends State<_AccountUsernameField> {
+  final _controller = TextEditingController();
+  final _focus = FocusNode();
+  AppState? _appState;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final appState = context.read<AppState>();
+    if (!identical(appState, _appState)) {
+      _appState?.removeListener(_onAppStateChanged);
+      _appState = appState;
+      appState.addListener(_onAppStateChanged);
+      _syncFromAppState();
+    }
+  }
+
+  @override
+  void dispose() {
+    _appState?.removeListener(_onAppStateChanged);
+    _controller.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  /// Every write goes through [AppState] (including this field's own
+  /// onChanged), so one listener covers both the name and the
+  /// last-downloaded line.
+  void _onAppStateChanged() {
+    _syncFromAppState();
+    if (mounted) setState(() {});
+  }
+
+  void _syncFromAppState() {
+    final appState = _appState;
+    if (appState == null) return;
+    final name = widget.read(appState) ?? '';
+    if (!_focus.hasFocus && _controller.text != name) {
+      _controller.text = name;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final appState = context.read<AppState>();
+    final lastSynced = widget.lastFetch(appState);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          key: widget.fieldKey,
+          controller: _controller,
+          focusNode: _focus,
+          decoration: InputDecoration(
+            labelText: widget.label,
+            // Pinned small on the border, never full-size inside the box: an
+            // empty field that says "Lichess Username" in body type reads as
+            // a filled-in value, not as the field's title.
+            floatingLabelBehavior: FloatingLabelBehavior.always,
+            border: const OutlineInputBorder(),
+            isDense: true,
+          ),
+          onChanged: (v) => widget.write(appState, v),
+        ),
+        if (_controller.text.trim().isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 3),
+            child: Text(
+              lastSynced != null
+                  ? 'Last downloaded ${_formatDate(lastSynced)}'
+                  : 'Not downloaded yet',
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppColors.onSurfaceMuted,
+              ),
+            ),
+          ),
       ],
     );
   }

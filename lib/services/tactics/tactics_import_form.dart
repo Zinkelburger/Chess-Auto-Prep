@@ -4,9 +4,14 @@
 /// Owned by the tactics control panel; extracted so the form logic is
 /// testable and the panel only renders it.
 ///
-/// Three things this form deliberately does *not* own, because each already has
+/// Four things this form deliberately does *not* own, because each already has
 /// exactly one owner elsewhere:
 ///
+/// * **Whose games** — the usernames are `AppState`'s, edited on the accounts
+///   card and in Settings → Accounts. This form used to keep text-controller
+///   copies of both; nothing read them once the review pipeline switched to
+///   supplier callbacks over `AppState`, and the card's fields now sync with
+///   `AppState` directly.
 /// * **Which games to fetch** — that is the app-wide [GamesWindowSettings],
 ///   shared with the recent-games home pane. Editing "last 20 games" here
 ///   moves the home list too, and vice versa; there is one such setting.
@@ -24,7 +29,6 @@ import 'package:flutter/widgets.dart';
 import '../../features/games/services/games_window.dart';
 import '../../models/engine_settings.dart';
 import 'mining_settings.dart';
-import 'tactics_import_coordinator.dart';
 
 class TacticsImportForm extends ChangeNotifier {
   TacticsImportForm({
@@ -43,9 +47,6 @@ class TacticsImportForm extends ChangeNotifier {
   final GamesWindowSettings _windowSettings;
   final MiningSettings _mining;
 
-  final TextEditingController lichessUser = TextEditingController();
-  final TextEditingController chessComUser = TextEditingController();
-
   /// Game-count and day operands of the shared window. Text controllers, not
   /// state: the value of record lives in [GamesWindowSettings].
   late final TextEditingController gamesText;
@@ -62,28 +63,8 @@ class TacticsImportForm extends ChangeNotifier {
   /// Worker count — the shared [EngineSettings.workers], already clamped.
   int get cores => _engine.workers;
 
-  String usernameFor(TacticsImportSource source) =>
-      source == TacticsImportSource.lichess
-      ? lichessUser.text.trim()
-      : chessComUser.text.trim();
-
   /// Start of the window, or null when it counts games rather than days.
   DateTime? get sinceCutoff => window.cutoffFrom(DateTime.now());
-
-  /// Import params for [source] from the current form values plus the shared
-  /// window: a game cap in game-count mode, a date cutoff in day mode, never
-  /// both (each mode is exactly the limit the user asked for).
-  TacticsImportParams paramsFor(TacticsImportSource source) =>
-      TacticsImportParams(
-        username: usernameFor(source),
-        mode: window.isGameCount
-            ? TacticsImportMode.recent
-            : TacticsImportMode.sinceDate,
-        maxGames: window.gameLimit,
-        since: sinceCutoff,
-        depth: depth,
-        cores: cores,
-      );
 
   Future<void> setWindowMode(GamesWindowMode mode) =>
       _windowSettings.set(window.copyWith(mode: mode));
@@ -129,8 +110,6 @@ class TacticsImportForm extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _windowSettings.removeListener(_onWindowChanged);
-    lichessUser.dispose();
-    chessComUser.dispose();
     gamesText.dispose();
     daysText.dispose();
     super.dispose();

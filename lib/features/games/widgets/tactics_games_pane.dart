@@ -31,10 +31,11 @@ import 'review_strip.dart';
 /// button (see [HomeReviewRunner]).
 ///
 /// Layout rule: the header and the review strip are always on screen — even
-/// with no account set, because the header *is* where the Lichess username is
-/// typed. Only the *list* area shows loading and empty states; hiding the play
-/// button until games arrived meant the one control that fetches them was
-/// missing exactly when it was needed.
+/// with no account set. Only the *list* area shows loading and empty states;
+/// hiding the play button until games arrived meant the one control that
+/// fetches them was missing exactly when it was needed. The usernames are
+/// edited on the accounts card in the right pane (each box has a title
+/// there); this pane only *shows* whose games it lists.
 ///
 /// The [RecentGamesController] and [HomeReviewRunner] are provided by
 /// `_TacticsModeView` (they must outlive this widget: the pane is swapped out
@@ -278,9 +279,8 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
         icon: Icons.person_off,
         title: 'No accounts configured',
         message:
-            'Type your Lichess username in the box above — or set your '
-            'usernames in Settings → Accounts — and your recent games will '
-            'appear here.',
+            'Type your username on the My accounts card to the right — or in '
+            'Settings → Accounts — and your recent games will appear here.',
         buttonLabel: 'Open Settings',
         onPressed: _openSettings,
       );

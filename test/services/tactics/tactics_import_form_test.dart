@@ -1,7 +1,6 @@
 import 'package:chess_auto_prep/features/games/services/games_window.dart';
 import 'package:chess_auto_prep/models/engine_settings.dart';
 import 'package:chess_auto_prep/services/tactics/mining_settings.dart';
-import 'package:chess_auto_prep/services/tactics/tactics_import_coordinator.dart';
 import 'package:chess_auto_prep/services/tactics/tactics_import_form.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -40,45 +39,6 @@ void main() {
     await mining.setDepth(20);
     expect(form.depth, 20);
 
-    form.dispose();
-  });
-
-  test('paramsFor in game-count mode caps games and sends no cutoff', () async {
-    SharedPreferences.setMockInitialValues({});
-    final mining = MiningSettings.forTest();
-    await mining.setDepth(18);
-    final form = build(mining: mining);
-    form.lichessUser.text = '  someone  ';
-    await form.setWindowGames(50);
-
-    final params = form.paramsFor(TacticsImportSource.lichess);
-    expect(params.username, 'someone', reason: 'trimmed');
-    expect(params.mode, TacticsImportMode.recent);
-    expect(params.maxGames, 50);
-    expect(params.depth, 18);
-    expect(params.since, isNull);
-    form.dispose();
-  });
-
-  test('paramsFor in day mode passes the cutoff and no game cap', () async {
-    SharedPreferences.setMockInitialValues({});
-    final form = build();
-    form.chessComUser.text = 'player';
-    await form.setWindowMode(GamesWindowMode.lastDays);
-    await form.setWindowDays(7);
-
-    final params = form.paramsFor(TacticsImportSource.chessCom);
-    expect(params.username, 'player');
-    expect(params.mode, TacticsImportMode.sinceDate);
-    // Today counts as day 1, so the cutoff is 6 midnights back.
-    final now = DateTime.now();
-    expect(
-      params.since,
-      DateTime(now.year, now.month, now.day).subtract(const Duration(days: 6)),
-    );
-    // The day window is the only limit the user chose — no hidden game cap
-    // on top of it.
-    expect(params.maxGames, isNull);
     form.dispose();
   });
 

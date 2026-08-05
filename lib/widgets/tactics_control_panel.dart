@@ -176,14 +176,10 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
     _import.pendingSinceProvider = () => _form.sinceCutoff;
     _lastPendingCutoff = _form.sinceCutoff;
 
-    // Initialize the form from AppState and reset board
+    // Load the form's shared settings and reset the board
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        final appState = context.read<AppState>();
-        _form.lichessUser.text = appState.lichessUsername ?? '';
-        _form.chessComUser.text = appState.chesscomUsername ?? '';
         _form.loadPrefs();
-
         _resetBoardToStart();
       }
     });

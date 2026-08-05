@@ -354,6 +354,9 @@ class _DefaultUsernameFieldsState extends State<_DefaultUsernameFields> {
         decoration: InputDecoration(
           labelText: label,
           labelStyle: const TextStyle(fontSize: 12),
+          // Pinned small on the border, never full-size inside the box — an
+          // empty field showing its own label as if typed reads as a value.
+          floatingLabelBehavior: FloatingLabelBehavior.always,
           border: const OutlineInputBorder(),
           isDense: true,
         ),

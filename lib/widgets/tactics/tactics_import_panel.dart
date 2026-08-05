@@ -82,12 +82,6 @@ class _TacticsImportPanelState extends _TacticsImportPanelStateBase
   @override
   void initState() {
     super.initState();
-    // Rebuild as the user types so the review's enablement (which reads these
-    // same usernames) and the last-downloaded lines stay in step. (Controllers
-    // are owned by the form; we only add/remove listeners here, never dispose
-    // them.)
-    _form.lichessUser.addListener(_onUsernameChanged);
-    _form.chessComUser.addListener(_onUsernameChanged);
     // The form keeps the window fields in sync with the shared setting, but
     // must not overwrite whichever one the user is typing in.
     _daysFocus.addListener(
@@ -109,15 +103,9 @@ class _TacticsImportPanelState extends _TacticsImportPanelStateBase
 
   @override
   void dispose() {
-    _form.lichessUser.removeListener(_onUsernameChanged);
-    _form.chessComUser.removeListener(_onUsernameChanged);
     _daysFocus.dispose();
     _gamesFocus.dispose();
     super.dispose();
-  }
-
-  void _onUsernameChanged() {
-    if (mounted) setState(() {});
   }
 
   @override
