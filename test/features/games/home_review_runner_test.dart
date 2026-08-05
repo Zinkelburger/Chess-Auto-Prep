@@ -22,6 +22,7 @@ class _EmptyLibrary extends GamesLibraryService {
     required GamesPlatform platform,
     required String username,
     GameSelection selection = const GameSelection(),
+    List<GameSelection> unionWith = const [],
     bool forceRefresh = false,
     void Function(String message)? onProgress,
   }) async {
@@ -54,6 +55,7 @@ class _OneGameLibrary extends GamesLibraryService {
     required GamesPlatform platform,
     required String username,
     GameSelection selection = const GameSelection(),
+    List<GameSelection> unionWith = const [],
     bool forceRefresh = false,
     void Function(String message)? onProgress,
   }) async => [GameRecord.parse(_pgn)];

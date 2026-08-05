@@ -104,4 +104,41 @@ void main() {
       expect(kept.length, 1);
     });
   });
+
+  group('applySelectionUnion', () {
+    test('keeps a game when any selection keeps it, de-duplicated and '
+        'newest first', () {
+      final pgn = [
+        game(white: 'w1', black: 'a', date: '2026.08.04', tc: '300'),
+        game(white: 'w2', black: 'b', date: '2026.08.03', tc: '300'),
+        game(white: 'w3', black: 'c', date: '2026.08.01', tc: '300'),
+      ].join('\n\n');
+      final records = parseGameRecords(pgn);
+
+      final union = applySelectionUnion(records, [
+        // Newest one game — keeps w1.
+        const GameSelection(maxGames: 1, speeds: {}),
+        // Since Aug 3 — keeps w1 (again) and w2.
+        GameSelection(since: DateTime.utc(2026, 8, 3), speeds: const {}),
+      ]);
+
+      expect([for (final r in union) r.white], ['w1', 'w2']);
+    });
+
+    test('a single selection matches applySelection exactly', () {
+      final pgn = [
+        game(white: 'w1', black: 'a', date: '2026.08.04', tc: '300'),
+        game(white: 'w2', black: 'b', date: '2026.08.03', tc: '60'),
+      ].join('\n\n');
+      final records = parseGameRecords(pgn);
+      const selection = GameSelection(speeds: {GameSpeed.blitz});
+
+      expect(
+        [
+          for (final r in applySelectionUnion(records, [selection])) r.dedupKey,
+        ],
+        [for (final r in applySelection(records, selection)) r.dedupKey],
+      );
+    });
+  });
 }

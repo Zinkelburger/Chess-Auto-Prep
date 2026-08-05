@@ -107,6 +107,12 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
   bool _hasLoadedOnce = false;
   String? _statusMessage;
   String? _error;
+
+  /// Every row the last load built: the union of the game-count slice *and*
+  /// the day slice, whatever mode was active. [_games] is the active window's
+  /// view of it — which is why flipping "last N games" ↔ "last N days" is a
+  /// synchronous re-slice, not a reload (see [_onWindowChanged]).
+  List<RecentGame> _allGames = const [];
   List<RecentGame> _games = const [];
   GamesListFilters _filters = const GamesListFilters();
   bool _filtersLoaded = false;
@@ -154,14 +160,50 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
   /// re-save of the same value, or the first load resolving) doesn't refetch.
   GamesWindow? _loadedWindow;
 
+  /// The window whose *operands* the rows in [_allGames] cover — both of
+  /// them, since every load builds both slices. A new window inside these
+  /// bounds is served from memory; a larger one needs a reload.
+  GamesWindow? _builtWindow;
+
   /// True while [setFilters] is writing the window itself — it reloads once at
   /// the end, and the listener must not race it into a second fetch.
   bool _applyingWindow = false;
 
   void _onWindowChanged() {
     if (_applyingWindow || !_hasLoadedOnce) return;
-    if (_windowSettings.window == _loadedWindow) return;
+    final next = _windowSettings.window;
+    if (next == _loadedWindow) return;
+    final built = _builtWindow;
+    if (built != null && next.games <= built.games && next.days <= built.days) {
+      // Both operands are within what the last load already built rows for,
+      // so the toggle (or a shrink) is answered from memory: no fetch, no
+      // cache re-parse, no isolate passes, no spinner.
+      _loadedWindow = next;
+      _games = _sliceForWindow(next);
+      notifyListeners();
+      return;
+    }
     refresh();
+  }
+
+  /// The active window's slice of [_allGames]. Mirrors [applySelection]'s
+  /// semantics: the game cap counts per site, the day cutoff drops undated
+  /// games, and order is preserved — [_allGames] is already newest-first.
+  List<RecentGame> _sliceForWindow(GamesWindow window) {
+    if (window.isGameCount) {
+      final taken = <GamesPlatform, int>{};
+      return [
+        for (final g in _allGames)
+          if ((taken[g.platform] = (taken[g.platform] ?? 0) + 1) <=
+              window.games)
+            g,
+      ];
+    }
+    final cutoff = window.cutoffFrom(_now())!;
+    return [
+      for (final g in _allGames)
+        if (g.record.date != null && !g.record.date!.isBefore(cutoff)) g,
+    ];
   }
 
   Future<void> _refresh({bool force = false}) async {
@@ -178,16 +220,28 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
       await _ensureFiltersLoaded();
       await _windowSettings.ensureLoaded();
       await _reviewStore.ensureLoaded();
-      _loadedWindow = window;
-      final selection = GameSelection(
-        // The shared window rides into the selection: it filters the cache
-        // slice locally *and* narrows the network fetch. Note this is a cap
-        // *per site*, which is what the label promises when only one account
-        // is configured — the common case.
-        maxGames: window.gameLimit,
+      final buildWindow = window;
+      _loadedWindow = buildWindow;
+      // Both modes ride into one load: the active mode drives the network
+      // fetch, and the other mode's slice is built from the same parse so a
+      // later flip of the games/days toggle re-slices in memory instead of
+      // re-running this whole pipeline. The game cap is per *site*, which is
+      // what the label promises when only one account is configured — the
+      // common case.
+      final countSelection = GameSelection(
+        maxGames: buildWindow.games,
         speeds: _filters.speeds,
-        since: sinceCutoff,
       );
+      final daySelection = GameSelection(
+        since: buildWindow
+            .copyWith(mode: GamesWindowMode.lastDays)
+            .cutoffFrom(_now()),
+        speeds: _filters.speeds,
+      );
+      final selection = buildWindow.isGameCount ? countSelection : daySelection;
+      final otherSelection = buildWindow.isGameCount
+          ? daySelection
+          : countSelection;
 
       final collected = <RecentGame>[];
       final errors = <String>[];
@@ -204,6 +258,7 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
             platform: platform,
             username: username,
             selection: selection,
+            unionWith: [otherSelection],
             forceRefresh: force,
             onProgress: (message) {
               if (epoch != _refreshEpoch) return;
@@ -252,7 +307,9 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
         return db.compareTo(da);
       });
 
-      _games = collected;
+      _allGames = collected;
+      _builtWindow = buildWindow;
+      _games = _sliceForWindow(buildWindow);
       _hasLoadedOnce = true;
       _statusMessage = null;
       _error = collected.isEmpty && errors.isNotEmpty
@@ -290,7 +347,7 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
   /// changed; the game list itself is still valid).
   Future<void> recomputeDeviations() async {
     _deviation.invalidateCache();
-    for (final g in _games) {
+    for (final g in _allGames) {
       g.deviation = null;
       g.deviationComputed = false;
     }
@@ -343,10 +400,12 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
     await refresh();
   }
 
+  /// Runs over [_allGames], not the visible slice: the rows are shared, so
+  /// a window flip finds its deviations already computed.
   Future<void> _computeDeviations(int epoch) async {
     final hasWhiteBook = await _deviation.hasRepertoireFor(white: true);
     final hasBlackBook = await _deviation.hasRepertoireFor(white: false);
-    for (final game in _games) {
+    for (final game in _allGames) {
       if (epoch != _refreshEpoch) return;
       final meWhite = game.meWhite;
       if (meWhite == null) {
@@ -379,7 +438,7 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
   /// rows they belong to.
   void _applyStoredSummaries() {
     var changed = false;
-    for (final game in _games) {
+    for (final game in _allGames) {
       final stored = _storedSummary(game.record.dedupKey);
       if (stored == null) continue;
       final current = game.summary;

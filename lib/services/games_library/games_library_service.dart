@@ -62,6 +62,13 @@ class GamesLibraryService {
   static List<GameRecord> selectFromPgn(String pgn, GameSelection selection) =>
       applySelection(parseGameRecords(pgn), selection);
 
+  /// Parse once, keep the union of several selections' slices (see
+  /// [applySelectionUnion]).
+  static List<GameRecord> selectFromPgnUnion(
+    String pgn,
+    List<GameSelection> selections,
+  ) => applySelectionUnion(parseGameRecords(pgn), selections);
+
   Future<File> _cacheFile(GamesPlatform platform, String username) async {
     final dir = await AppPaths.gamesLibraryDirectory(create: true);
     final safe = username.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]'), '_');
@@ -92,10 +99,17 @@ class GamesLibraryService {
   ///
   /// Uses the on-disk cache when fresh (or when [forceRefresh] is false and a
   /// cache exists offline); otherwise fetches, caches, then filters.
+  ///
+  /// [unionWith] adds further selections whose slices are unioned into the
+  /// result from the same parse: one load that leaves the caller holding
+  /// several windows' games at once. Only [selection] drives the network
+  /// fetch hint — the extra selections are served from whatever the cache
+  /// holds, exactly as a later call with them would have been.
   Future<List<GameRecord>> getGames({
     required GamesPlatform platform,
     required String username,
     GameSelection selection = const GameSelection(),
+    List<GameSelection> unionWith = const [],
     bool forceRefresh = false,
     void Function(String message)? onProgress,
   }) async {
@@ -133,7 +147,7 @@ class GamesLibraryService {
       }
     }
 
-    return selectFromPgn(pgn, selection);
+    return selectFromPgnUnion(pgn, [selection, ...unionWith]);
   }
 
   /// Replace one game's movetext inside a cache file, keeping its headers and

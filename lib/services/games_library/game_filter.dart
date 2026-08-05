@@ -224,6 +224,26 @@ List<GameRecord> applySelection(
   return out;
 }
 
+/// The union of [applySelection] over [selections]: a game is kept when any
+/// one selection keeps it. De-duplicated, newest first — the shape a caller
+/// needs to serve several windows from a single parse (the games home builds
+/// its last-N-games and last-N-days slices together this way, so flipping
+/// the window mode never re-runs the pipeline).
+List<GameRecord> applySelectionUnion(
+  List<GameRecord> records,
+  List<GameSelection> selections,
+) {
+  final seen = <String>{};
+  final out = <GameRecord>[];
+  for (final selection in selections) {
+    for (final record in applySelection(records, selection)) {
+      if (seen.add(record.dedupKey)) out.add(record);
+    }
+  }
+  _sortNewestFirst(out);
+  return out;
+}
+
 /// Serialize records back into a multi-game PGN string.
 String recordsToPgn(List<GameRecord> records) =>
     records.map((r) => r.pgn.trim()).join('\n\n');

@@ -22,6 +22,7 @@ class _FakeGamesLibrary extends GamesLibraryService {
     required GamesPlatform platform,
     required String username,
     GameSelection selection = const GameSelection(),
+    List<GameSelection> unionWith = const [],
     bool forceRefresh = false,
     void Function(String message)? onProgress,
   }) async {
