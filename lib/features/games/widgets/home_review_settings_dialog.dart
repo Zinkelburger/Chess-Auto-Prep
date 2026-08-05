@@ -145,7 +145,7 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
               _numberField(
                 key: const Key('review-depth-field'),
                 controller: _depth,
-                label: 'Stockfish search depth',
+                label: 'Engine depth',
                 hint:
                     'Between ${MiningSettings.minDepth} and '
                     '${MiningSettings.maxDepth}. Deeper is more accurate about '

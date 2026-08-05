@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../services/games_library/game_filter.dart';
-import '../../../services/games_library/games_library_service.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../widgets/common/static_board_thumbnail.dart';
@@ -20,10 +18,10 @@ import '../models/recent_game.dart';
 ///
 /// Three things are clickable, and each opens the game at the thing you
 /// clicked: the card opens it in the viewer, the mistake counts open its
-/// analysis, and the book verdict opens the line you left. The same three
-/// destinations also sit as a fixed column of icon buttons on the card's right
-/// edge — the text targets are discoverable only once you know they are links,
-/// and the space was blank anyway.
+/// analysis, and the book verdict opens the line you left. Those text targets
+/// are the only way in. A column of icon buttons on the right edge used to
+/// repeat them; it read as clutter on every row and said nothing the words
+/// beside it didn't already say.
 class GameCard extends StatelessWidget {
   const GameCard({
     super.key,
@@ -79,8 +77,6 @@ class GameCard extends StatelessWidget {
                 _buildBoard(),
                 const SizedBox(width: 10),
                 Expanded(child: _buildBody(context)),
-                const SizedBox(width: 4),
-                _buildActions(),
               ],
             ),
           ),
@@ -177,58 +173,6 @@ class GameCard extends StatelessWidget {
         const SizedBox(width: 8),
         MistakeCounts(game: game, onOpen: onOpenAnalysis),
       ],
-    );
-  }
-
-  /// The card's actions as a fixed column on its right edge. Every card gets
-  /// all three slots — a button that is not applicable is disabled, not
-  /// missing, so the column reads the same on every row.
-  Widget _buildActions() {
-    final siteName = game.platform == GamesPlatform.chesscom
-        ? 'Chess.com'
-        : 'Lichess';
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _actionButton(
-          icon: Icons.query_stats,
-          tooltip: 'Open the engine analysis of this game',
-          onPressed: onOpenAnalysis,
-        ),
-        _actionButton(
-          icon: Icons.fork_right,
-          tooltip: game.deviation == null
-              ? 'No book comparison for this game'
-              : 'See the game beside your book line',
-          onPressed: game.deviation == null ? null : onOpenLine,
-        ),
-        _actionButton(
-          icon: Icons.open_in_new,
-          tooltip: game.gameUrl == null
-              ? 'No link to this game'
-              : 'Open on $siteName',
-          onPressed: game.gameUrl == null
-              ? null
-              : () => launchUrl(Uri.parse(game.gameUrl!)),
-        ),
-      ],
-    );
-  }
-
-  Widget _actionButton({
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback? onPressed,
-  }) {
-    return IconButton(
-      icon: Icon(icon, size: 17),
-      tooltip: tooltip,
-      visualDensity: VisualDensity.compact,
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
-      color: AppColors.onSurfaceSoft,
-      disabledColor: AppColors.onSurfaceDim,
-      onPressed: onPressed,
     );
   }
 

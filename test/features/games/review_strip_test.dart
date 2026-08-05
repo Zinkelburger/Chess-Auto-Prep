@@ -355,7 +355,7 @@ void main() {
     await pump(tester, runner: h.runner, coordinator: h.co);
 
     expect(find.textContaining('CPU cores'), findsOneWidget);
-    expect(find.textContaining('search depth'), findsOneWidget);
+    expect(find.textContaining('engine depth'), findsOneWidget);
     expect(
       find.byIcon(Icons.remove),
       findsNothing,

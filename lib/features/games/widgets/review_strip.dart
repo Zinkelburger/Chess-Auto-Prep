@@ -462,7 +462,7 @@ class _EngineLoadRow extends StatelessWidget {
               message: 'Change these in Analysis settings — the gear above',
               child: Text(
                 'Analysis uses ${engine.workers} of $maxCores CPU cores, '
-                'at search depth ${mining.depth}',
+                'at engine depth ${mining.depth}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: AppTextStyles.body.copyWith(
