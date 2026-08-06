@@ -29,6 +29,7 @@ import '../theme/app_text_styles.dart';
 import '../utils/system_info.dart';
 import '../widgets/eval_database_settings_panel.dart';
 import '../widgets/settings/account_settings_section.dart';
+import '../widgets/settings/agent_bridge_section.dart';
 import '../widgets/settings/settings_widgets.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -93,6 +94,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       return _buildDatabaseSection();
                     },
                   ),
+
+                  // ── Agent bridge ─────────────────────────────
+                  const AgentBridgeSection(),
 
                   // ── Reset ────────────────────────────────────
                   const SizedBox(height: 24),

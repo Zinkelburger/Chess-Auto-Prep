@@ -94,10 +94,7 @@ class RepertoireAuditService {
     // Build a merged opening tree from clash PGNs (books/courses) if provided.
     OpeningTree? clashTree;
     if (config.clashPgnPaths.isNotEmpty) {
-      clashTree = await _buildClashTree(
-        config.clashPgnPaths,
-        isWhiteRepertoire,
-      );
+      clashTree = await _buildClashTree(config, isWhiteRepertoire);
     }
 
     final startNode = _resolveStartNode(tree, startFen);
@@ -549,11 +546,18 @@ class RepertoireAuditService {
     return findings;
   }
 
-  /// Build a merged [OpeningTree] from the given PGN file paths.
+  /// Build a merged [OpeningTree] from the configured clash PGN paths.
+  ///
+  /// With [AuditConfig.clashUsername] empty this merges every game in the
+  /// files, which is what a book or course PGN wants. With a username set it
+  /// filters to that player's games on [AuditConfig.clashUserIsWhite], which
+  /// is what modeling a specific opponent's archive requires — their games on
+  /// the other color say nothing about how they meet our repertoire.
   Future<OpeningTree> _buildClashTree(
-    List<String> paths,
+    AuditConfig config,
     bool isWhiteRepertoire,
   ) async {
+    final paths = config.clashPgnPaths;
     final allGames = <String>[];
     for (final path in paths) {
       try {
@@ -566,9 +570,9 @@ class RepertoireAuditService {
     }
     return OpeningTreeBuilder.buildTree(
       pgnList: allGames,
-      username: '',
-      userIsWhite: isWhiteRepertoire,
-      strictPlayerMatching: false,
+      username: config.clashUsername,
+      userIsWhite: config.clashUserIsWhite ?? isWhiteRepertoire,
+      strictPlayerMatching: config.clashUsername.isNotEmpty,
       maxDepth: 40,
     );
   }

@@ -23,6 +23,7 @@ import 'pgn_viewer_screen.dart';
 import 'repertoire_screen.dart';
 import 'repertoire_training_screen.dart';
 import 'study_screen.dart';
+import 'tournament_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -39,6 +40,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     AppMode.repertoireTrainer,
     AppMode.pgnViewer,
     AppMode.study,
+    AppMode.tournament,
   ];
 
   final Map<AppMode, Widget> _modeViews = <AppMode, Widget>{};
@@ -149,6 +151,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         return const PgnViewerScreen();
       case AppMode.study:
         return const StudyScreen();
+      case AppMode.tournament:
+        return const TournamentScreen();
     }
   }
 }

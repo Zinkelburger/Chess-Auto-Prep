@@ -41,6 +41,7 @@ class AppModeMenuButton extends StatelessWidget {
     AppMode.repertoireTrainer => Icons.school,
     AppMode.pgnViewer => Icons.menu_book,
     AppMode.study => Icons.edit_note,
+    AppMode.tournament => Icons.emoji_events_outlined,
   };
 
   PopupMenuItem<AppMode> _buildMenuItem({

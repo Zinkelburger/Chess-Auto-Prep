@@ -54,6 +54,21 @@ class AuditConfig {
   /// files and flags opponent moves the repertoire doesn't cover.
   final List<String> clashPgnPaths;
 
+  /// Restrict the clash tree to one player's games.
+  ///
+  /// Empty (the default) keeps the original book/course behavior: every game
+  /// in the PGN contributes, whichever side played it. Set this to an
+  /// opponent's username to model *that player* instead of a body of theory —
+  /// their archive contains both colors, and only the games where they
+  /// answered our repertoire are evidence about them.
+  final String clashUsername;
+
+  /// Which color [clashUsername] must have played for a game to count.
+  /// Null falls back to the repertoire's own color, which is correct for a
+  /// book written from our side and wrong for an opponent archive — so
+  /// tournament prep always sets it explicitly.
+  final bool? clashUserIsWhite;
+
   const AuditConfig({
     this.mistakeThresholdCp = 100,
     this.inaccuracyThresholdCp = 40,
@@ -71,6 +86,8 @@ class AuditConfig {
     this.explorerRatings = '1800,2000,2200,2500',
     this.multiPv = 3,
     this.clashPgnPaths = const [],
+    this.clashUsername = '',
+    this.clashUserIsWhite,
   });
 
   Map<String, dynamic> toMap() => {
@@ -90,6 +107,8 @@ class AuditConfig {
     'explorerRatings': explorerRatings,
     'multiPv': multiPv,
     if (clashPgnPaths.isNotEmpty) 'clashPgnPaths': clashPgnPaths,
+    if (clashUsername.isNotEmpty) 'clashUsername': clashUsername,
+    if (clashUserIsWhite != null) 'clashUserIsWhite': clashUserIsWhite,
   };
 
   factory AuditConfig.fromMap(Map<String, dynamic> m) => AuditConfig(
@@ -109,6 +128,8 @@ class AuditConfig {
     explorerRatings: m['explorerRatings'] as String? ?? '1800,2000,2200,2500',
     multiPv: m['multiPv'] as int? ?? 3,
     clashPgnPaths: (m['clashPgnPaths'] as List?)?.cast<String>() ?? const [],
+    clashUsername: m['clashUsername'] as String? ?? '',
+    clashUserIsWhite: m['clashUserIsWhite'] as bool?,
   );
 
   /// Compact one-line summary for display in Jobs tab.
@@ -139,6 +160,8 @@ class AuditConfig {
     String? explorerRatings,
     int? multiPv,
     List<String>? clashPgnPaths,
+    String? clashUsername,
+    bool? clashUserIsWhite,
   }) {
     return AuditConfig(
       mistakeThresholdCp: mistakeThresholdCp ?? this.mistakeThresholdCp,
@@ -160,6 +183,8 @@ class AuditConfig {
       explorerRatings: explorerRatings ?? this.explorerRatings,
       multiPv: multiPv ?? this.multiPv,
       clashPgnPaths: clashPgnPaths ?? this.clashPgnPaths,
+      clashUsername: clashUsername ?? this.clashUsername,
+      clashUserIsWhite: clashUserIsWhite ?? this.clashUserIsWhite,
     );
   }
 }
