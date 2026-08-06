@@ -192,7 +192,12 @@ void main() {
   });
 
   group('matchingBookLines', () {
-    RepertoireLine line(String name, List<String> moves, {Position? start}) {
+    RepertoireLine line(
+      String name,
+      List<String> moves, {
+      Position? start,
+      bool isModelGame = false,
+    }) {
       return RepertoireLine(
         id: name,
         name: name,
@@ -200,6 +205,7 @@ void main() {
         color: 'white',
         startPosition: start ?? Chess.initial,
         fullPgn: '',
+        isModelGame: isModelGame,
       );
     }
 
@@ -221,6 +227,24 @@ void main() {
         line('too short', ['e4']),
       ];
       expect(matchingBookLines(lines, ['e4', 'c5']), isEmpty);
+    });
+
+    test('skips model games — illustration is not your book', () {
+      final lines = [
+        line('Kasparov – Karpov', [
+          'e4',
+          'c5',
+          'Nf3',
+          'd6',
+          'd4',
+          'cxd4',
+        ], isModelGame: true),
+        line('your line', ['e4', 'c5', 'Nf3', 'd6', 'Bb5+']),
+      ];
+      expect(
+        matchingBookLines(lines, ['e4', 'c5', 'Nf3', 'd6']).map((l) => l.name),
+        ['your line'],
+      );
     });
   });
 

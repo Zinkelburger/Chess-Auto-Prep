@@ -106,8 +106,10 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   final GlobalKey<RepertoireGenerationTabState> _generationTabKey =
       GlobalKey<RepertoireGenerationTabState>();
   final AuditSessionController _auditController = AuditSessionController();
-  final GlobalKey<BottomPaneState> _bottomPaneKey =
-      GlobalKey<BottomPaneState>();
+
+  /// Open/closed state of the bottom pane. Owned here rather than reached
+  /// into through a GlobalKey, so opening a tab is a call that always lands.
+  final BottomPaneController _bottomPane = BottomPaneController();
   final GlobalKey<AuditFindingsPanelState> _findingsPanelKey =
       GlobalKey<AuditFindingsPanelState>();
   bool _isCompactLayout = false;
@@ -203,16 +205,12 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
     }
   }
 
-  void _openBottomPane(BottomPaneTab tab) {
-    _bottomPaneKey.currentState?.open(tab);
-  }
+  void _openBottomPane(BottomPaneTab tab) => _bottomPane.open(tab);
 
-  void _toggleBottomPane(BottomPaneTab tab) {
-    _bottomPaneKey.currentState?.toggle(tab);
-  }
+  void _toggleBottomPane(BottomPaneTab tab) => _bottomPane.toggle(tab);
 
   void _closeBottomPane() {
-    _bottomPaneKey.currentState?.close();
+    _bottomPane.close();
     _clearInlineConfigFlags();
   }
 
@@ -263,12 +261,7 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   bool _whenFindingsPanelHasKeys(
     bool Function(AuditFindingsPanelState) action,
   ) {
-    final pane = _bottomPaneKey.currentState;
-    if (pane == null ||
-        pane.isCollapsed ||
-        pane.activeTab != BottomPaneTab.findings) {
-      return false;
-    }
+    if (!_bottomPane.isShowing(BottomPaneTab.findings)) return false;
     final panel = _findingsPanelKey.currentState;
     return panel != null && action(panel);
   }
@@ -475,6 +468,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       _auditController.saveProgress(_repertoireFilePath);
     }
     _genRebuildThrottle?.cancel();
+    _bottomPane.dispose();
     _trapSession.removeListener(_onTrapsChanged);
     _trapSession.dispose();
     _layout.removeListener(_onLayoutChanged);

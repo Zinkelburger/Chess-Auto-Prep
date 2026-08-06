@@ -12,7 +12,7 @@ import '../../../models/opening_tree.dart';
 import '../../../services/engine/stockfish_pool.dart';
 import '../../../services/eval/eval_move_helpers.dart';
 import '../../../services/eval_cache.dart';
-import '../../../services/maia_factory.dart';
+import '../../../services/maia/maia_factory.dart';
 import '../../../services/opening_tree_builder.dart';
 import '../../../services/pgn_parsing_service.dart' as pgn;
 import '../../../services/probability_service.dart';

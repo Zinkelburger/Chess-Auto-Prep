@@ -6,6 +6,7 @@ import '../../../core/repertoire_controller.dart';
 import '../../../models/repertoire_line.dart';
 import '../../../theme/app_colors.dart';
 import 'package:chess_auto_prep/models/trap_line_info.dart';
+import '../../../utils/app_shortcuts.dart';
 import '../services/trap_index_service.dart';
 
 /// Prev/next trap controls for the repertoire board toolbar.
@@ -147,7 +148,7 @@ class TrapNavigationButtons extends StatelessWidget {
       description: tourActive
           ? 'Trap tour is open'
           : 'Tour every trap on the board',
-      shortcut: 'T',
+      shortcut: AppShortcut.toggleTrapTour,
       child: FilledButton.icon(
         onPressed: onStartTour,
         icon: const Icon(Icons.tour, size: 16),
@@ -205,7 +206,7 @@ class TrapNavigationButtons extends StatelessWidget {
             const SizedBox(width: 4),
             ShortcutIconButton(
               description: 'Previous trap',
-              shortcut: 'Shift+←',
+              shortcut: AppShortcut.previousTrapInLine,
               icon: const Icon(Icons.skip_previous, size: 20),
               color: AppColors.warning,
               onPressed: canGoPrev
@@ -228,7 +229,7 @@ class TrapNavigationButtons extends StatelessWidget {
             ),
             ShortcutIconButton(
               description: 'Next trap',
-              shortcut: 'Shift+→',
+              shortcut: AppShortcut.nextTrapInLine,
               icon: const Icon(Icons.skip_next, size: 20),
               color: AppColors.warning,
               onPressed: canGoNext

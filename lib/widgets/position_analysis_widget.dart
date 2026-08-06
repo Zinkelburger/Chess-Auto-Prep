@@ -41,10 +41,11 @@ import '../models/opening_tree.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
+import '../utils/app_shortcuts.dart';
 import '../utils/keyboard_shortcut_utils.dart';
-import '../widgets/fen_list_widget.dart';
-import '../widgets/games_list_widget.dart';
-import '../widgets/opening_tree_widget.dart';
+import 'fen_list_widget.dart';
+import 'games_list_widget.dart';
+import 'opening_tree_widget.dart';
 import 'chess_board_widget.dart';
 import 'common/list_nav.dart';
 import 'engine/inline_engine_bar.dart';
@@ -211,7 +212,8 @@ abstract class _PositionAnalysisWidgetStateBase
   final PgnViewerWidgetController _pgnController = PgnViewerWidgetController();
   int _lastNavigateGeneration = 0;
 
-  // One nav controller per left-column list; ↓/↑ go to whichever is showing.
+  // One nav controller per left-column list; previous/next go to whichever
+  // is showing.
   final ListNavController _positionsNav = ListNavController();
   final ListNavController _holesNav = ListNavController();
   final ListNavController _tricksNav = ListNavController();
@@ -428,75 +430,77 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
 
   /// Shortcuts, dispatched through [handleKeyBindings] (never while typing).
   /// Left/right arrows navigate *moves* and follow the active right-pane
-  /// tab; down/up step the left column's active list — two axes that never
-  /// collide.
+  /// tab; P/S (and ↓/↑) step the left column's active list — two axes that
+  /// never collide.
   List<KeyBinding> get _keyBindings => [
-    KeyBinding.run(
-      LogicalKeyboardKey.keyE,
+    ...KeyBinding.forShortcut(
+      AppShortcut.toggleEngine,
       'Toggle engine',
       InlineEngineBar.toggleEngine,
     ),
     // The app-wide Escape contract: leave what you are in. Here the only thing
     // you can be "in" is a tab other than the first, so Escape backs out to it
     // — the same key doing the same thing as on the tactics panel.
-    KeyBinding(LogicalKeyboardKey.escape, 'Back to the first tab', () {
+    ...KeyBinding.forShortcutIf(AppShortcut.leave, 'Back to the first tab', () {
       if (_tabController.index == 0) return false;
       _tabController.animateTo(0);
       return true;
     }),
-    // ↓/↑ step whichever left-column list is showing (positions, holes or
-    // tricks). Deliberately no letter aliases: N is the knight and most
-    // other candidates are SAN characters too, so arrows are the app-wide
-    // list-stepping keys.
-    KeyBinding.run(
-      LogicalKeyboardKey.arrowDown,
+    // P/S (and ↓/↑) step whichever left-column list is showing (positions,
+    // holes or tricks) — the app-wide pair, same as games and chapters.
+    ...KeyBinding.forShortcut(
+      AppShortcut.nextItem,
       'Next item in the left list',
       _activeListNav.selectNext,
       repeats: true,
     ),
-    KeyBinding.run(
-      LogicalKeyboardKey.arrowUp,
+    ...KeyBinding.forShortcut(
+      AppShortcut.previousItem,
       'Previous item in the left list',
       _activeListNav.selectPrevious,
       repeats: true,
     ),
     // Move Tree tab: arrow keys navigate the tree.
     if (_tabController.index == 0 && widget.openingTree != null) ...[
-      KeyBinding.run(
-        LogicalKeyboardKey.arrowLeft,
+      ...KeyBinding.forShortcut(
+        AppShortcut.backOneMove,
         'Back one move',
         _treeGoBack,
       ),
-      KeyBinding.run(
-        LogicalKeyboardKey.arrowRight,
+      ...KeyBinding.forShortcut(
+        AppShortcut.forwardOneMove,
         'Forward one move',
         _treeGoForward,
       ),
     ],
     // PGN tab: arrow keys navigate the PGN.
     if (_tabController.index == 2) ...[
-      KeyBinding.run(
-        LogicalKeyboardKey.arrowLeft,
+      ...KeyBinding.forShortcut(
+        AppShortcut.backOneMove,
         'Back one move',
         _pgnController.goBack,
       ),
-      KeyBinding.run(
-        LogicalKeyboardKey.arrowRight,
+      ...KeyBinding.forShortcut(
+        AppShortcut.forwardOneMove,
         'Forward one move',
         _pgnController.goForward,
       ),
     ],
     // Analysis tab: arrow keys move the scratch cursor.
     if (_tabController.index == _kAnalysisTabIndex) ...[
-      KeyBinding.run(LogicalKeyboardKey.arrowLeft, 'Back one move', () {
+      ...KeyBinding.forShortcut(AppShortcut.backOneMove, 'Back one move', () {
         if (_scratchCursor.isNotEmpty) _jumpScratch(_scratchCursor.parent);
       }),
-      KeyBinding.run(LogicalKeyboardKey.arrowRight, 'Forward one move', () {
-        final children = _scratchCursor.isEmpty
-            ? _scratchTree.roots
-            : (_scratchTree.nodeAt(_scratchCursor)?.children ?? const []);
-        if (children.isNotEmpty) _jumpScratch(_scratchCursor.child(0));
-      }),
+      ...KeyBinding.forShortcut(
+        AppShortcut.forwardOneMove,
+        'Forward one move',
+        () {
+          final children = _scratchCursor.isEmpty
+              ? _scratchTree.roots
+              : (_scratchTree.nodeAt(_scratchCursor)?.children ?? const []);
+          if (children.isNotEmpty) _jumpScratch(_scratchCursor.child(0));
+        },
+      ),
     ],
   ];
 

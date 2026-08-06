@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../utils/app_shortcuts.dart';
 import '../../../utils/keyboard_shortcut_utils.dart';
 
 /// Keyboard shortcuts for the repertoire screen, declared as [KeyBinding]s
@@ -62,19 +63,20 @@ class RepertoireShortcuts extends StatelessWidget {
   /// Called on Shift+Right before [onGoForward]. Return true if trap nav handled.
   final bool Function() onGoToNextTrap;
 
-  /// ↓ — next trap-tour stop when the tour is open, otherwise next finding
-  /// in the audit findings panel.
+  /// [AppShortcut.nextItem] — next trap-tour stop when the tour is open,
+  /// otherwise next finding in the audit findings panel.
   final bool Function()? onNextFinding;
 
-  /// ↑ — previous trap-tour stop when the tour is open, otherwise previous
-  /// finding in the audit findings panel.
+  /// [AppShortcut.previousItem] — previous trap-tour stop when the tour is
+  /// open, otherwise previous finding in the audit findings panel.
   final bool Function()? onPrevFinding;
 
-  /// D — dismiss current finding in the audit findings panel.
+  /// [AppShortcut.dismissFinding] — dismiss the current finding in the audit
+  /// findings panel.
   final bool Function()? onDismissFinding;
 
-  /// C — focus the annotation panel's comment field for the current move.
-  /// Return true if a comment field was focused.
+  /// [AppShortcut.commentMove] — focus the annotation panel's comment field
+  /// for the current move. Return true if a comment field was focused.
   final bool Function()? onFocusComment;
 
   final Widget child;
@@ -82,77 +84,79 @@ class RepertoireShortcuts extends StatelessWidget {
   List<KeyBinding> get _keyBindings => [
     // Ctrl+Z lives here (not in CallbackShortcuts) so text fields keep
     // their native undo while typing.
-    KeyBinding.run(LogicalKeyboardKey.keyZ, 'Undo', onUndo, control: true),
-    KeyBinding.run(
-      LogicalKeyboardKey.keyX,
+    ...KeyBinding.forShortcut(AppShortcut.undo, 'Undo', onUndo),
+    ...KeyBinding.forShortcut(
+      AppShortcut.toggleExpectimax,
       'Toggle expectimax bar',
       onToggleExpectimax,
     ),
-    KeyBinding.run(
-      LogicalKeyboardKey.keyL,
+    ...KeyBinding.forShortcut(
+      AppShortcut.toggleLinesPanel,
       'Toggle lines panel',
       onToggleLinesTab,
     ),
-    KeyBinding(
-      LogicalKeyboardKey.escape,
+    ...KeyBinding.forShortcutIf(
+      AppShortcut.leave,
       'Collapse bottom pane',
       onCollapseBottomPane,
     ),
-    KeyBinding.run(LogicalKeyboardKey.keyF, 'Flip board', onFlip),
-    KeyBinding(LogicalKeyboardKey.keyT, 'Toggle trap tour', onToggleTrapTour),
-    KeyBinding.run(LogicalKeyboardKey.keyE, 'Toggle engine', onToggleEngine),
-    // ↓/↑ step the active list (trap tour stops, audit findings) — the
-    // app-wide convention; N/P are gone (N is the knight).
-    KeyBinding(
-      LogicalKeyboardKey.arrowDown,
+    ...KeyBinding.forShortcut(AppShortcut.flipBoard, 'Flip board', onFlip),
+    ...KeyBinding.forShortcutIf(
+      AppShortcut.toggleTrapTour,
+      'Toggle trap tour',
+      onToggleTrapTour,
+    ),
+    ...KeyBinding.forShortcut(
+      AppShortcut.toggleEngine,
+      'Toggle engine',
+      onToggleEngine,
+    ),
+    // P/S (and ↓/↑) step the active list — trap tour stops while the tour is
+    // open, audit findings otherwise. Same pair as games and chapters.
+    ...KeyBinding.forShortcutIf(
+      AppShortcut.nextItem,
       'Next trap stop / finding',
       () => onNextFinding?.call() ?? false,
       repeats: true,
     ),
-    KeyBinding(
-      LogicalKeyboardKey.arrowUp,
+    ...KeyBinding.forShortcutIf(
+      AppShortcut.previousItem,
       'Previous trap stop / finding',
       () => onPrevFinding?.call() ?? false,
       repeats: true,
     ),
-    KeyBinding(
-      LogicalKeyboardKey.keyD,
+    ...KeyBinding.forShortcutIf(
+      AppShortcut.dismissFinding,
       'Dismiss finding',
       () => onDismissFinding?.call() ?? false,
     ),
-    KeyBinding(
-      LogicalKeyboardKey.keyC,
+    ...KeyBinding.forShortcutIf(
+      AppShortcut.commentMove,
       'Comment current move',
       () => onFocusComment?.call() ?? false,
     ),
-    // Shift+←/→ jump between traps, falling back to plain navigation when
-    // there is no trap to jump to.
-    KeyBinding.run(
-      LogicalKeyboardKey.arrowLeft,
+    // Shift+←/→ jump between traps *inside the current line* — a different
+    // axis from P/S, which step the trap list. They fall back to plain move
+    // navigation when there is no trap to jump to.
+    ...KeyBinding.forShortcut(
+      AppShortcut.previousTrapInLine,
       'Previous trap',
       () {
         if (!onGoToPreviousTrap()) onGoBack();
       },
-      shift: true,
       repeats: true,
     ),
-    KeyBinding.run(
-      LogicalKeyboardKey.arrowRight,
-      'Next trap',
-      () {
-        if (!onGoToNextTrap()) onGoForward();
-      },
-      shift: true,
-      repeats: true,
-    ),
-    KeyBinding.run(
-      LogicalKeyboardKey.arrowLeft,
+    ...KeyBinding.forShortcut(AppShortcut.nextTrapInLine, 'Next trap', () {
+      if (!onGoToNextTrap()) onGoForward();
+    }, repeats: true),
+    ...KeyBinding.forShortcut(
+      AppShortcut.backOneMove,
       'Back one move',
       onGoBack,
       repeats: true,
     ),
-    KeyBinding.run(
-      LogicalKeyboardKey.arrowRight,
+    ...KeyBinding.forShortcut(
+      AppShortcut.forwardOneMove,
       'Forward one move',
       onGoForward,
       repeats: true,

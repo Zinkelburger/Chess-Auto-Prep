@@ -74,11 +74,17 @@ class BuildTreeNode implements MoveTreeNodeView {
   /// 1.0, which degrades a rebuild to the undiscounted (pre-fix) behaviour.
   double searchPriorityDiscount = 1.0;
 
-  // Lichess stats
+  // Human-practice stats for this move, from whichever game database the
+  // build was given (see `PgnFreqMap`).  All zero when the build had none.
   int whiteWins = 0;
   int blackWins = 0;
   int draws = 0;
   int totalGames = 0;
+
+  /// Most recent year this move appears in the game database (0 = unknown).
+  /// A move that stopped being played is worth flagging even when the engine
+  /// still likes it.
+  int lastPlayedYear = 0;
 
   /// Whether this node's position has been fully processed by the builder.
   bool explored = false;

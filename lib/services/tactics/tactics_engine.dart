@@ -1,10 +1,10 @@
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
-import '../models/tactics_position.dart';
-import 'engine/eval_worker.dart';
-import 'maia_factory.dart';
-import 'maia_service.dart';
+import '../../models/tactics_position.dart';
+import '../engine/eval_worker.dart';
+import '../maia/maia_factory.dart';
+import '../maia/maia_service.dart';
 import 'tactics_database.dart';
 
 /// Engine for checking tactical solutions - Flutter port of Python's TacticsEngine

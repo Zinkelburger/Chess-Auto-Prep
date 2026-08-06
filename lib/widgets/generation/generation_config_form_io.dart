@@ -34,7 +34,6 @@ mixin _GenerationConfigIo
     _dbMinGamesCtrl.text = config.dbMinGames.toString();
     _dbMinProbCtrl.text = config.dbMinProb.toString();
     _minEloCtrl.text = config.minElo.toString();
-    _lichessMinGamesCtrl.text = config.minGames.toString();
     // Old snapshots may carry trapFinder, which the Build-from dropdown no
     // longer offers; an unlisted value would crash the dropdown assert.
     _buildMode = config.buildMode == BuildMode.trapFinder
@@ -45,24 +44,17 @@ mixin _GenerationConfigIo
     _preferNovelties = config.noveltyWeight > 0;
     _targetLinesCtrl.text = config.targetLineCount.toString();
     _rankLinesByImportance = config.rankLinesByImportance;
-    _annotateMoveProbabilities = config.annotateMoveProbabilities;
-    _annotateMaiaOnly = config.annotateMaiaOnly;
+    _annotationDetail = config.annotationDetail;
+    _organizeIntoChapters = config.organizeIntoChapters;
+    _maxLinesPerChapterCtrl.text = config.maxLinesPerChapter.toString();
+    _minLinesPerChapterCtrl.text = config.minLinesPerChapter.toString();
+    _modelGameCountCtrl.text = config.modelGameCount.toString();
+    _modelGameMinEloCtrl.text = config.modelGameMinElo.toString();
+    _refutationLines = config.refutationLines;
+    _alternativeLines = config.alternativeLines;
     _pgnFilePaths
       ..clear()
       ..addAll(config.pgnFilePaths);
-    if (config.useLichessDb) {
-      _lichessDbOverride = config.useMasters
-          ? LichessDatabase.masters
-          : LichessDatabase.lichess;
-    } else {
-      _lichessDbOverride = null;
-    }
-    _lichessSpeeds
-      ..clear()
-      ..addAll(config.speeds.split(',').where((s) => s.isNotEmpty));
-    _lichessRatings
-      ..clear()
-      ..addAll(config.ratingRange.split(',').where((s) => s.isNotEmpty));
   }
 
   /// Pre-configure DB Explorer mode with the given PGN file paths and
@@ -199,7 +191,6 @@ mixin _GenerationConfigIo
       maxEvalCp:
           int.tryParse(_maxEvalCtrl.text.trim()) ?? (playAsWhite ? 200 : 100),
       maiaElo: int.tryParse(_maiaEloCtrl.text.trim()) ?? 2200,
-      maiaOnly: _lichessDbOverride == null,
       oppPolicyTemperature:
           (double.tryParse(_oppPolicyTempCtrl.text.trim()) ?? 1.0).clamp(
             0.1,
@@ -209,8 +200,24 @@ mixin _GenerationConfigIo
           .clamp(0, 100000),
       trapsOnly: _trapsOnly,
       rankLinesByImportance: _rankLinesByImportance,
-      annotateMoveProbabilities: _annotateMoveProbabilities,
-      annotateMaiaOnly: _annotateMaiaOnly,
+      annotationDetail: _annotationDetail,
+      organizeIntoChapters: _organizeIntoChapters,
+      maxLinesPerChapter:
+          (int.tryParse(_maxLinesPerChapterCtrl.text.trim()) ?? 40).clamp(
+            1,
+            100000,
+          ),
+      minLinesPerChapter:
+          (int.tryParse(_minLinesPerChapterCtrl.text.trim()) ?? 5).clamp(
+            1,
+            100000,
+          ),
+      modelGameCount: (int.tryParse(_modelGameCountCtrl.text.trim()) ?? 6)
+          .clamp(0, 100),
+      modelGameMinElo: (int.tryParse(_modelGameMinEloCtrl.text.trim()) ?? 2200)
+          .clamp(0, 4000),
+      refutationLines: _refutationLines,
+      alternativeLines: _alternativeLines,
       ourMultipv: int.tryParse(_multipvCtrl.text.trim()) ?? 4,
       oppMaxChildren: int.tryParse(_oppMaxChildrenCtrl.text.trim()) ?? 4,
       oppMassTarget: double.tryParse(_oppMassTargetCtrl.text.trim()) ?? 0.80,
@@ -247,11 +254,6 @@ mixin _GenerationConfigIo
               0,
               500,
             ),
-      useLichessDb: _lichessDbOverride != null,
-      useMasters: _lichessDbOverride == LichessDatabase.masters,
-      speeds: _lichessSpeeds.join(','),
-      ratingRange: (_lichessRatings.toList()..sort()).join(','),
-      minGames: int.tryParse(_lichessMinGamesCtrl.text.trim()) ?? 10,
       relativeEval: _relativeEval,
       selectionMode: _selectionMode,
       noveltyWeight: _preferNovelties ? 60 : 0,

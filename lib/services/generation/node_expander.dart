@@ -19,11 +19,10 @@
 library;
 
 import '../../models/build_tree_node.dart';
-import '../../models/explorer_response.dart';
 import '../../utils/chess_utils.dart' show playUciMove, sanToUci, uciToSan;
 import '../../utils/fen_utils.dart';
-import '../maia_factory.dart';
-import '../maia_service.dart';
+import '../maia/maia_factory.dart';
+import '../maia/maia_service.dart';
 import 'build_run.dart';
 import 'frontier_queue.dart';
 import 'generation_config.dart';
@@ -202,25 +201,17 @@ abstract class NodeExpander {
     bool coverageOnly = false,
   });
 
-  /// Expand an opponent node from a single source (Lichess stats, falling
-  /// back to Maia; or Maia only) and enqueue all children — eval-window
-  /// checks happen when each child is dequeued.
+  /// Expand an opponent node from Maia's policy and enqueue all children —
+  /// eval-window checks happen when each child is dequeued.
+  ///
+  /// Real game frequencies reach the tree through [BuildMode.dbExplorer],
+  /// which drives expansion from a scanned PGN database instead of per-node
+  /// lookups; see `tree_build_db_explorer.dart`.
   Future<void> expandOpponentMove(
     BuildTreeNode node,
     FrontierQueue queue,
   ) async {
-    if (config.maiaOnly) {
-      await _addOpponentChildrenFromMaia(node, maiaForInject: true);
-    } else {
-      await _addOpponentChildrenFromLichess(node);
-      // Fall back to Maia when the Lichess DB has no data for this position
-      if (node.children.isEmpty) {
-        await _addOpponentChildrenFromMaia(node, maiaForInject: true);
-      } else {
-        await _maybeInjectPvContinuation(node);
-      }
-    }
-
+    await _addOpponentChildrenFromMaia(node, maiaForInject: true);
     if (node.children.isEmpty) return;
 
     for (final child in List.of(node.children)) {
@@ -230,58 +221,6 @@ abstract class NodeExpander {
   }
 
   // ── Shared opponent sources ─────────────────────────────────────────────
-
-  Future<void> _addOpponentChildrenFromLichess(BuildTreeNode node) async {
-    final response = await run.evalResolver.getDbData(node.fen, config);
-    if (response == null || response.totalGames == 0) return;
-
-    final totalW = response.moves.fold(0, (s, m) => s + m.white);
-    final totalB = response.moves.fold(0, (s, m) => s + m.black);
-    final totalD = response.moves.fold(0, (s, m) => s + m.draws);
-    node.setLichessStats(totalW, totalB, totalD);
-
-    // λ-smoothing: blend DB counts with Maia's policy so sparsely covered
-    // positions degrade continuously toward Maia instead of trusting the
-    // frequencies from a handful of games (or falling off a hard cliff).
-    final maiaPolicy = await maiaPolicyForSmoothing(
-      run,
-      node.fen,
-      response.totalGames,
-    );
-    final smoothing = maiaPolicy.isNotEmpty;
-
-    final candidates = smoothOpponentMoves(
-      observed: [
-        for (final m in response.moves)
-          ObservedMove(
-            uci: m.uci,
-            san: m.san,
-            games: m.total,
-            whiteWins: m.white,
-            blackWins: m.black,
-            draws: m.draws,
-          ),
-      ],
-      totalGames: response.totalGames,
-      maiaPolicy: maiaPolicy,
-      priorGames: smoothing ? config.maiaPriorGames : 0.0,
-    );
-
-    // Fast halves the fan-out at cold nodes; coverage-floor replies bypass
-    // the cap inside addOpponentChildren, so no silent holes.
-    addOpponentChildren(
-      run: run,
-      node: node,
-      candidates: candidates,
-      smoothing: smoothing,
-      minGames: config.minGames,
-      maxChildren: config.effectiveOppMaxChildren(
-        effectiveSearchPriority(node),
-      ),
-      massTarget: config.oppMassTarget,
-      attachStats: true,
-    );
-  }
 
   Future<void> _addOpponentChildrenFromMaia(
     BuildTreeNode node, {

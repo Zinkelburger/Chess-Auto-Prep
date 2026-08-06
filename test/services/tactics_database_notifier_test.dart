@@ -1,5 +1,5 @@
 import 'package:chess_auto_prep/models/tactics_position.dart';
-import 'package:chess_auto_prep/services/tactics_database.dart';
+import 'package:chess_auto_prep/services/tactics/tactics_database.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 TacticsPosition _pos(String fen) {

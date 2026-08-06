@@ -65,6 +65,8 @@ extension TreeBuildServiceDbExplorer on TreeBuildService {
           startMoves: hasStartMoves ? startMoves : null,
           maxPly: config.maxPly,
           minElo: config.minElo,
+          retainGames: config.retainedGameCount,
+          retainMinElo: config.modelGameMinElo,
         ),
         onProgress: (games, file) {
           onProgress(
@@ -81,9 +83,11 @@ extension TreeBuildServiceDbExplorer on TreeBuildService {
         throw const BuildCancelledException('Cancelled during PGN parsing.');
       }
 
+      lastGameDatabase = freqMap;
       _log(
         'Freq map: ${freqStats.totalGames} games, '
         '${freqStats.positions} positions, '
+        '${freqStats.retainedGames} retained for model games, '
         '${freqStats.skippedElo} elo-filtered, '
         '${freqStats.parseErrors} movetext errors, '
         '${freqStats.fileReadErrors} file read errors',
@@ -259,6 +263,7 @@ extension TreeBuildServiceDbExplorer on TreeBuildService {
 
         child.moveProbability = 1.0;
         child.cumulativeProbability = node.cumulativeProbability;
+        child.setLichessStats(m.whiteWins, m.blackWins, m.draws);
         final discount = reach > 0 ? m.count / reach : 1.0;
         child.searchPriority = basePri * discount;
         child.searchPriorityDiscount = discount;
@@ -278,7 +283,14 @@ extension TreeBuildServiceDbExplorer on TreeBuildService {
       final candidates = smoothOpponentMoves(
         observed: [
           for (final m in pos.moves)
-            ObservedMove(uci: m.uci, san: m.san, games: m.count),
+            ObservedMove(
+              uci: m.uci,
+              san: m.san,
+              games: m.count,
+              whiteWins: m.whiteWins,
+              blackWins: m.blackWins,
+              draws: m.draws,
+            ),
         ],
         totalGames: reach,
         maiaPolicy: maiaPolicy,
@@ -293,6 +305,7 @@ extension TreeBuildServiceDbExplorer on TreeBuildService {
         minGames: config.dbMinGames,
         minMoveProb: config.dbMinProb,
         respectMaxNodes: true,
+        attachStats: true,
         emitProgressPerChild: false,
         onChild: queue.add,
       );

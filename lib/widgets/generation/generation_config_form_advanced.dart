@@ -227,75 +227,14 @@ mixin _GenerationConfigAdvanced
   }
 
   List<Widget> _opponentModelSection(VoidCallback refresh) {
-    final dbActive = _lichessDbOverride != null;
     return [
-      Wrap(
-        spacing: 4,
-        runSpacing: 6,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          const Text('Move frequencies from', style: TextStyle(fontSize: 13)),
-          const SizedBox(width: 4),
-          ChoiceChip(
-            label: const Text('Maia (neural)'),
-            selected: !dbActive,
-            onSelected: widget.isGenerating
-                ? null
-                : (_) {
-                    _lichessDbOverride = null;
-                    refresh();
-                  },
-          ),
-          ChoiceChip(
-            label: const Text('Lichess database'),
-            selected: dbActive,
-            onSelected: widget.isGenerating
-                ? null
-                : (_) {
-                    _lichessDbOverride ??= LichessDatabase.lichess;
-                    refresh();
-                  },
-          ),
-          const LichessDbInfoIcon(size: 14),
-        ],
-      ),
       _caption(
-        'Maia predicts human moves at the target rating. The Lichess '
-        'database uses real game frequencies, with Maia as fallback for '
-        'uncovered positions.',
-      ),
-      const SizedBox(height: 8),
-      Padding(
-        padding: const EdgeInsets.only(left: 16),
-        child: LichessDbSelector(
-          database: _lichessDbOverride ?? LichessDatabase.lichess,
-          onDatabaseChanged: (db) {
-            final wasMasters = _lichessDbOverride == LichessDatabase.masters;
-            final isMasters = db == LichessDatabase.masters;
-            _lichessDbOverride = db;
-            if (wasMasters != isMasters) {
-              _lichessMinGamesCtrl.text = isMasters ? '4' : '10';
-            }
-            refresh();
-          },
-          selectedSpeeds: _lichessSpeeds,
-          onSpeedsChanged: (s) {
-            _lichessSpeeds
-              ..clear()
-              ..addAll(s);
-            refresh();
-          },
-          selectedRatings: _lichessRatings,
-          onRatingsChanged: (r) {
-            _lichessRatings
-              ..clear()
-              ..addAll(r);
-            refresh();
-          },
-          minGamesController: _lichessMinGamesCtrl,
-          enabled: dbActive && !widget.isGenerating,
-          compact: true,
-        ),
+        _buildMode == BuildMode.dbExplorer
+            ? 'Opponent replies come from move frequencies in your PGN '
+                  'files, blended with Maia where the database is thin.'
+            : 'Opponent replies come from Maia, which predicts human moves '
+                  'at the rating you set. To model real opponents from real '
+                  'games, switch the build source to a PGN database.',
       ),
       const SizedBox(height: 12),
       Wrap(
@@ -317,8 +256,8 @@ mixin _GenerationConfigAdvanced
             'Blend with Maia (virtual games)',
             defaultText: '30',
             onEdited: refresh,
-            enabled: dbActive,
-            disabledReason: 'Needs the Lichess database source',
+            enabled: _buildMode == BuildMode.dbExplorer,
+            disabledReason: 'Needs a PGN database as the build source',
             tooltip:
                 'Dirichlet prior weight: database counts are blended with '
                 'Maia as if Maia contributed this many games. Sparse '
@@ -626,39 +565,132 @@ mixin _GenerationConfigAdvanced
           refresh();
         },
       ),
+      const SizedBox(height: 8),
+      DropdownButtonFormField<MoveAnnotationDetail>(
+        initialValue: _annotationDetail,
+        decoration: const InputDecoration(
+          labelText: 'Per-move annotations',
+          border: OutlineInputBorder(),
+          isDense: true,
+        ),
+        items: const [
+          DropdownMenuItem(
+            value: MoveAnnotationDetail.none,
+            child: Text('None — moves only'),
+          ),
+          DropdownMenuItem(
+            value: MoveAnnotationDetail.likelihood,
+            child: Text('Reply likelihood'),
+          ),
+          DropdownMenuItem(
+            value: MoveAnnotationDetail.full,
+            child: Text('Full — eval, ease, scores'),
+          ),
+        ],
+        onChanged: widget.isGenerating
+            ? null
+            : (v) {
+                if (v == null) return;
+                _annotationDetail = v;
+                refresh();
+              },
+      ),
+      _caption(
+        'Full writes the numbers the build already computed — evaluation, '
+        'how hard each move is to find, and how the move scores in real '
+        'games — next to every move.',
+      ),
+      const SizedBox(height: 12),
       _labeledCheckbox(
-        'Annotate opponent-move probabilities',
-        _annotateMoveProbabilities,
+        'Group lines into named chapters',
+        _organizeIntoChapters,
         (v) {
-          _annotateMoveProbabilities = v;
+          _organizeIntoChapters = v;
           refresh();
         },
+        tooltip:
+            'Cuts the export at the branch points where your repertoire '
+            'divides and names each chapter from the opening database, the '
+            'way a published course is laid out.',
       ),
-      Padding(
-        padding: const EdgeInsets.only(left: 8, bottom: 8),
-        child: DropdownButtonFormField<bool>(
-          initialValue: _annotateMaiaOnly,
-          decoration: const InputDecoration(
-            labelText: 'Probability source',
-            border: OutlineInputBorder(),
-            isDense: true,
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          _numField(
+            _maxLinesPerChapterCtrl,
+            'Max lines per chapter',
+            defaultText: '40',
+            onEdited: refresh,
+            enabled: _organizeIntoChapters,
+            disabledReason: 'Chapters are off',
+            tooltip:
+                'A chapter bigger than this is split again at its next '
+                'branch point.',
           ),
-          items: const [
-            DropdownMenuItem(value: true, child: Text('Maia only')),
-            DropdownMenuItem(
-              value: false,
-              child: Text('Lichess database + Maia fallback'),
-            ),
-          ],
-          onChanged: (_annotateMoveProbabilities && !widget.isGenerating)
-              ? (v) {
-                  if (v != null) {
-                    _annotateMaiaOnly = v;
-                    refresh();
-                  }
-                }
-              : null,
-        ),
+          _numField(
+            _minLinesPerChapterCtrl,
+            'Min lines per chapter',
+            defaultText: '5',
+            onEdited: refresh,
+            enabled: _organizeIntoChapters,
+            disabledReason: 'Chapters are off',
+            tooltip:
+                'Branches smaller than this are collected into a single '
+                '"Rare sidelines" chapter instead of getting one each.',
+          ),
+          _numField(
+            _modelGameCountCtrl,
+            'Model games',
+            defaultText: '6',
+            onEdited: refresh,
+            tooltip:
+                'Strong games from your PGN database that follow this '
+                'repertoire out of the opening, appended as a final '
+                'chapter. Needs a PGN database as the build source.',
+          ),
+          _numField(
+            _modelGameMinEloCtrl,
+            'Model game minimum rating',
+            defaultText: '2200',
+            onEdited: refresh,
+            tooltip:
+                'A game between weaker players is not a model game. Games '
+                'with no rating at all are still eligible.',
+          ),
+        ],
+      ),
+      const SizedBox(height: 12),
+      _labeledCheckbox(
+        'Show how a losing reply is punished',
+        _refutationLines,
+        (v) {
+          _refutationLines = v;
+          refresh();
+        },
+        tooltip:
+            'When a reply leaves you winning the build stops there, because '
+            'there is nothing left to prepare. This asks the engine how the '
+            'position is won and writes the answer as a variation on that '
+            'move.',
+      ),
+      const SizedBox(height: 12),
+      _labeledCheckbox(
+        'Show why a natural move is not in the book',
+        _alternativeLines,
+        (v) {
+          _alternativeLines = v;
+          refresh();
+        },
+        tooltip:
+            'At each position in a line, the move a human is most likely to '
+            'play is checked against the book. When it is missing because it '
+            'loses material or the game, the engine\'s answer to it is '
+            'written as a variation — the natural move you pass over, and the '
+            'try your opponent should avoid. Moves that are simply playable '
+            'are left out, so a variation here always means something. Adds '
+            'an engine pass after the build.',
       ),
     ];
   }

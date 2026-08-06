@@ -33,7 +33,7 @@ class TricksReportPanel extends StatefulWidget {
   /// Open the hunt config to start (or re-run) a hunt.
   final VoidCallback? onStartHunt;
 
-  /// Lets the host screen step the selection (↓/↑ shortcuts).
+  /// Lets the host screen step the selection (previous/next shortcuts).
   final ListNavController? navController;
 
   const TricksReportPanel({

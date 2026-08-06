@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'app_shortcuts.dart';
+
 /// Returns true when the primary focus is on a text-editing widget.
 bool isTextInputFocused() {
   final primaryFocus = FocusManager.instance.primaryFocus;
@@ -43,7 +45,18 @@ class KeyBinding {
     this.control = false,
     this.shift = false,
     this.repeats = false,
-  });
+    this.preempts = false,
+  }) : alwaysConsumes = false;
+
+  const KeyBinding._alwaysConsuming(
+    this.key,
+    this.description,
+    this.action, {
+    this.control = false,
+    this.shift = false,
+    this.repeats = false,
+    this.preempts = false,
+  }) : alwaysConsumes = true;
 
   /// A binding that always consumes the key — for unconditional actions.
   factory KeyBinding.run(
@@ -53,8 +66,9 @@ class KeyBinding {
     bool control = false,
     bool shift = false,
     bool repeats = false,
+    bool preempts = false,
   }) {
-    return KeyBinding(
+    return KeyBinding._alwaysConsuming(
       key,
       description,
       () {
@@ -64,7 +78,60 @@ class KeyBinding {
       control: control,
       shift: shift,
       repeats: repeats,
+      preempts: preempts,
     );
+  }
+
+  /// One always-consuming binding per chord of a registry entry, so a screen
+  /// binds *everything* [AppShortcut.label] advertises and cannot bind less.
+  /// Spread it into the screen's list:
+  ///
+  /// ```dart
+  /// ...KeyBinding.forShortcut(AppShortcut.nextItem, 'Next game', nextGame,
+  ///     repeats: true),
+  /// ```
+  static List<KeyBinding> forShortcut(
+    AppShortcut shortcut,
+    String description,
+    VoidCallback run, {
+    bool repeats = false,
+    bool preempts = false,
+  }) {
+    return [
+      for (final chord in shortcut.chords)
+        KeyBinding.run(
+          chord.key,
+          description,
+          run,
+          control: chord.control,
+          shift: chord.shift,
+          repeats: repeats,
+          preempts: preempts,
+        ),
+    ];
+  }
+
+  /// [forShortcut] for an action that can decline: it returns true when it
+  /// consumed the key, false to let later bindings have it.
+  static List<KeyBinding> forShortcutIf(
+    AppShortcut shortcut,
+    String description,
+    bool Function() action, {
+    bool repeats = false,
+    bool preempts = false,
+  }) {
+    return [
+      for (final chord in shortcut.chords)
+        KeyBinding(
+          chord.key,
+          description,
+          action,
+          control: chord.control,
+          shift: chord.shift,
+          repeats: repeats,
+          preempts: preempts,
+        ),
+    ];
   }
 
   final LogicalKeyboardKey key;
@@ -85,6 +152,22 @@ class KeyBinding {
 
   /// Also fire on key-repeat while held (navigation keys).
   final bool repeats;
+
+  /// True when [action] can never return false — i.e. the binding built by
+  /// [KeyBinding.run]. Anything later in the list on the same chord is then
+  /// provably unreachable, which is what [debugAssertNoDeadBindings] checks.
+  final bool alwaysConsumes;
+
+  /// Set this when a binding *deliberately* claims a chord ahead of a later
+  /// binding for the same chord — a mode that shadows the normal meaning of
+  /// the key, like solitaire taking R for "reveal" from "return to mainline".
+  /// It is the one way to silence [debugAssertNoDeadBindings], so shadowing is
+  /// always a decision someone wrote down rather than an accident.
+  final bool preempts;
+
+  /// The chord this binding answers to. Two bindings collide iff their chords
+  /// are equal.
+  KeyChord get chord => KeyChord(key, control: control, shift: shift);
 
   /// True when this binding may fire while a chess *move-input* field owns
   /// focus: a bare key that can never appear in typed move text (SAN or
@@ -141,6 +224,43 @@ final Set<LogicalKeyboardKey> _chessMoveTextKeys = {
 /// route such keys into the box while a move is wanted.
 bool isChessMoveTextKey(LogicalKeyboardKey key) =>
     _chessMoveTextKeys.contains(key);
+
+/// Debug-only invariant: **no binding in a list may be unreachable.**
+///
+/// [runKeyBindings] is first-match-wins, so a binding placed after one that
+/// always consumes the same chord can never fire. That used to be invisible —
+/// the key simply did nothing, and the tooltip advertising it kept lying (an
+/// `A` alias in the tactics panel was dead for exactly this reason). Now it
+/// throws the moment the list is dispatched, in debug and in tests.
+///
+/// Deliberate shadowing is spelled `preempts: true` on the *earlier* binding.
+///
+/// Returns true so it can be used inside an `assert(...)`; throws
+/// [FlutterError] rather than returning false, because the message is the
+/// whole point.
+bool debugAssertNoDeadBindings(List<KeyBinding> bindings) {
+  for (var later = 1; later < bindings.length; later++) {
+    for (var earlier = 0; earlier < later; earlier++) {
+      final shadow = bindings[earlier];
+      final dead = bindings[later];
+      if (!shadow.alwaysConsumes || shadow.preempts) continue;
+      if (shadow.chord != dead.chord) continue;
+      // A binding that ignores key-repeat leaves repeats to later bindings,
+      // so the later one is still reachable while the key is held.
+      if (!shadow.repeats && dead.repeats) continue;
+      throw FlutterError(
+        'Dead keyboard binding: "${dead.description}" is bound to '
+        '${dead.chord}, but "${shadow.description}" is bound to the same '
+        'chord earlier in the list and always consumes it, so '
+        '"${dead.description}" can never fire.\n'
+        'Fix it by giving one of them a different chord, or — if the earlier '
+        'binding is meant to shadow the later one (a mode taking over a key) '
+        '— pass preempts: true to "${shadow.description}".',
+      );
+    }
+  }
+  return true;
+}
 
 /// Handler for `MoveInputWidget.onNavigationKey`: runs only the bindings
 /// that are [KeyBinding.safeWhileTypingMoves], so shortcuts on non-move keys
@@ -202,6 +322,7 @@ KeyEventResult runKeyBindings(
   LogicalKeyboardKey key, {
   bool isRepeat = false,
 }) {
+  assert(debugAssertNoDeadBindings(bindings));
   for (final binding in bindings) {
     if (binding._matches(key, isRepeat: isRepeat) && binding.action()) {
       return KeyEventResult.handled;

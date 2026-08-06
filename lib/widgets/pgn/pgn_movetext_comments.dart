@@ -4,6 +4,19 @@ part of 'pgn_movetext_view.dart';
 /// so editing it edits all of it (see `_writeWholeComment`).
 String _rawComment(PgnNodeData moveData) => joinComments(moveData.comments);
 
+/// The generated `[%...]` metrics of a move as one quiet run — "eval +0.31 ·
+/// only move · 42% likely".
+///
+/// Empty for every comment a human wrote, which is what makes this safe to
+/// call on all of them: the tokens only exist in generated repertoires, and
+/// [filterDisplayComment] strips them out of the prose beside it, so the two
+/// renderers never show the same thing twice.
+List<InlineSpan> _metricsSpans(String raw, {int depth = 0}) {
+  final summary = MoveMetrics.parse(raw).summary;
+  if (summary.isEmpty) return const [];
+  return [TextSpan(text: '$summary ', style: PgnTextStyles.metricsAt(depth))];
+}
+
 /// Render a comment as plain flowing prose: engine tokens stripped, all
 /// whitespace collapsed, no paragraph or block structure. Moves written in
 /// the prose stay clickable when they are legal from the anchor position.
@@ -209,11 +222,14 @@ List<InlineSpan> _variationCommentSpans(
   PgnMovetextView view,
   String rawComment,
   int depth,
-) => commentProseSpans(
-  rawComment,
-  bookFormatting: view.bookFormatting,
-  style: PgnTextStyles.commentAt(depth),
-);
+) => [
+  ..._metricsSpans(rawComment, depth: depth),
+  ...commentProseSpans(
+    rawComment,
+    bookFormatting: view.bookFormatting,
+    style: PgnTextStyles.commentAt(depth),
+  ),
+];
 
 /// Split a prose string into flowing text + clickable chips for any word that
 /// parses as a *legal* SAN move from [anchorPos]. The legality check filters

@@ -47,6 +47,7 @@ import 'generation/generation_config.dart';
 import 'generation/node_expander.dart';
 import 'generation/opponent_prior.dart';
 import 'generation/pgn_freq_map.dart';
+import 'generation/pgn_freq_parser.dart';
 import 'generation/run_debug_dump.dart';
 import 'generation/tree_build_progress.dart';
 import 'jobs/generation_phase.dart';
@@ -81,6 +82,13 @@ class TreeBuildService {
   /// Eval-too-low lines removed by the post-build prune of the most recent
   /// [build] run (they no longer exist in the returned tree).
   List<PrunedLine> lastPrunedTooLow = const [];
+
+  /// Human-practice statistics scanned from the user's PGN database by the
+  /// most recent DB Explorer run, or null when the last build had no game
+  /// database behind it.  Downstream phases (model-game selection, practical
+  /// scores) read it; it is cleared at the start of every run so a later
+  /// engine-only build cannot inherit a previous run's games.
+  PgnFreqMap? lastGameDatabase;
 
   BuildStats get buildStats => _stats;
   ChessDbApiProvider? get chessDbApiProvider =>
@@ -161,6 +169,7 @@ class TreeBuildService {
     _evalResolver.stats = _stats;
     runLog.clear();
     lastPrunedTooLow = const [];
+    lastGameDatabase = null;
 
     final run = BuildRun(
       config: config,
@@ -213,7 +222,6 @@ class TreeBuildService {
         tree.computeMetadata();
       }
     } else {
-      _evalResolver.reset();
       nextNodeId = 1;
       final rootFen = config.startFen;
       final root = BuildTreeNode(

@@ -28,10 +28,10 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 
-import '../utils/movetext_builder.dart';
-import '../models/tactics_position.dart';
-import '../models/tactics_session_settings.dart';
-import 'pgn_parsing_service.dart'
+import '../../utils/movetext_builder.dart';
+import '../../models/tactics_position.dart';
+import '../../models/tactics_session_settings.dart';
+import '../pgn_parsing_service.dart'
     show splitPgnIntoGames, extractHeaders, stripBom;
 import 'tactics_engine.dart';
 

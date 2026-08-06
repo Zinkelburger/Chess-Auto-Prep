@@ -180,6 +180,39 @@ void main() {
       expect(lines[2].name, '10.a4 #1');
     });
 
+    test('a model game is marked as one, its neighbours are not', () {
+      // The generator's trailing "Model games" chapter: a real game, so it
+      // has to carry Result "*" and a chapter title like any other game, and
+      // says what it really is in the ModelGame* tags.
+      final pgn = '''
+[Event "My repertoire"]
+[White "1. Open Sicilian"]
+[Black "2... d6"]
+[Result "*"]
+
+1. e4 c5 2. Nf3 d6 *
+
+[Event "My repertoire"]
+[White "2. Model games"]
+[Black "Kasparov, G – Karpov, A, Linares 1993 (1-0)"]
+[Result "*"]
+[ModelGameWhite "Kasparov, G"]
+[ModelGameBlack "Karpov, A"]
+[ModelGameResult "1-0"]
+
+1. e4 c5 2. Nf3 d6 3. d4 cxd4 *
+''';
+
+      final lines = RepertoireService().parseRepertoirePgn(pgn);
+
+      expect(lines.map((l) => l.isModelGame), [false, true]);
+      expect(
+        lines[1].chapter,
+        '2. Model games',
+        reason: 'it still groups in the sidebar like any other chapter',
+      );
+    });
+
     test('game collections and own exports get no chapters', () {
       // Real games: player names in White but decisive results.
       final gamesPgn = '''

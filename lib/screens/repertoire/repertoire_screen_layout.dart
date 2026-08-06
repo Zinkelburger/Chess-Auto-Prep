@@ -50,8 +50,8 @@ mixin _RepertoireLayout
   ///
   /// Handlers that can decline (returning false) are how a key reaches
   /// the right owner: Esc unwinds the innermost thing that is open, and
-  /// N/P belong to the trap tour while it runs and to the findings panel
-  /// otherwise.
+  /// previous/next belong to the trap tour while it runs and to the findings
+  /// panel otherwise.
   Widget _buildShortcuts({required Widget child}) {
     return RepertoireShortcuts(
       focusNode: _focusNode,
@@ -71,8 +71,7 @@ mixin _RepertoireLayout
           return true;
         }
         if (_trapSession.closeTour()) return true;
-        final pane = _bottomPaneKey.currentState;
-        if (pane != null && !pane.isCollapsed) {
+        if (!_bottomPane.isCollapsed) {
           _closeBottomPane();
           return true;
         }
@@ -99,7 +98,7 @@ mixin _RepertoireLayout
         controller: _controller,
       ),
       onNextFinding: () {
-        // While the trap tour is open, N/P belong to the tour.
+        // While the trap tour is open, previous/next belong to the tour.
         if (_trapSession.tourVisible) {
           _trapTourKey.currentState?.next();
           return true;

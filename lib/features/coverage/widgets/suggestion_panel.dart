@@ -343,10 +343,7 @@ class _SuggestionRow extends StatelessWidget {
     );
   }
 
-  String _formatEval(int cp) {
-    final pawns = cp / 100.0;
-    return '${pawns >= 0 ? "+" : ""}${pawns.toStringAsFixed(2)}';
-  }
+  String _formatEval(int cp) => formatPackedEval(cp, decimals: 2);
 }
 
 class _MetricChip extends StatelessWidget {

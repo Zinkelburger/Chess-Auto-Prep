@@ -8,8 +8,8 @@ import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import '../../models/tactics_position.dart';
 import '../../models/tactics_session_settings.dart';
 import '../../utils/fen_utils.dart';
-import '../tactics_database.dart';
-import '../tactics_engine.dart';
+import 'tactics_database.dart';
+import 'tactics_engine.dart';
 import '../../utils/safe_change_notifier.dart';
 
 /// Board updates the UI must apply after session logic runs.

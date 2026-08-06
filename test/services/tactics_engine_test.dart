@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:chess_auto_prep/models/tactics_position.dart';
-import 'package:chess_auto_prep/services/tactics_database.dart';
-import 'package:chess_auto_prep/services/tactics_engine.dart';
+import 'package:chess_auto_prep/services/tactics/tactics_database.dart';
+import 'package:chess_auto_prep/services/tactics/tactics_engine.dart';
 import 'package:chess_auto_prep/services/engine/engine_connection.dart';
 import 'package:chess_auto_prep/services/engine/eval_worker.dart';
-import 'package:chess_auto_prep/services/maia_factory.dart';
-import 'package:chess_auto_prep/services/maia_service.dart';
+import 'package:chess_auto_prep/services/maia/maia_factory.dart';
+import 'package:chess_auto_prep/services/maia/maia_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 // ── Test fixtures ────────────────────────────────────────────────────────────

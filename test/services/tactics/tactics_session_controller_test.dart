@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:chess_auto_prep/models/tactics_position.dart';
 import 'package:chess_auto_prep/models/tactics_session_settings.dart';
 import 'package:chess_auto_prep/services/tactics/tactics_session_controller.dart';
-import 'package:chess_auto_prep/services/tactics_database.dart';
+import 'package:chess_auto_prep/services/tactics/tactics_database.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 TacticsPosition _samplePosition({

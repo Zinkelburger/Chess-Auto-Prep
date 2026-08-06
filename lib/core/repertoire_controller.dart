@@ -632,6 +632,8 @@ class RepertoireController
         comments: comments,
         headers: Map<String, String>.from(parsed.headers),
         importance: old.importance,
+        chapter: old.chapter,
+        isModelGame: old.isModelGame,
       );
       _repertoireLines = updated;
       _selectedPgnLine = updated[idx];

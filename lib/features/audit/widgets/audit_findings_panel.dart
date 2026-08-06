@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../theme/app_colors.dart';
+import '../../../utils/app_shortcuts.dart';
 import '../../../utils/keyboard_shortcut_utils.dart';
 import '../models/audit_finding.dart';
 import '../models/audit_result.dart';
@@ -266,20 +267,24 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
   }
 
   /// Panel shortcuts, dispatched through [handleKeyBindings] (never while
-  /// typing). ↓/↑ only — the app-wide list-stepping keys; the old N/P
-  /// aliases are gone (N is the knight).
+  /// typing). The findings list is the queue in front of you, so it answers
+  /// to the app-wide [AppShortcut.previousItem]/[AppShortcut.nextItem] pair.
   List<KeyBinding> get _keyBindings => [
-    KeyBinding.run(LogicalKeyboardKey.arrowDown, 'Next finding', () {
+    ...KeyBinding.forShortcut(AppShortcut.nextItem, 'Next finding', () {
       if (_selectedIndex < _visibleFindings.length - 1) {
         _selectFinding(_selectedIndex + 1);
       }
     }, repeats: true),
-    KeyBinding.run(LogicalKeyboardKey.arrowUp, 'Previous finding', () {
+    ...KeyBinding.forShortcut(AppShortcut.previousItem, 'Previous finding', () {
       if (_selectedIndex > 0) {
         _selectFinding(_selectedIndex - 1);
       }
     }, repeats: true),
-    KeyBinding.run(LogicalKeyboardKey.keyD, 'Dismiss finding', _dismissCurrent),
+    ...KeyBinding.forShortcut(
+      AppShortcut.dismissFinding,
+      'Dismiss finding',
+      _dismissCurrent,
+    ),
   ];
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) =>

@@ -12,6 +12,7 @@ import '../../../theme/app_colors.dart';
 import '../../../utils/pgn_comment_utils.dart' show nagColor;
 import '../../../widgets/shortcut_tooltip.dart';
 import 'package:chess_auto_prep/models/trap_line_info.dart';
+import '../../../utils/app_shortcuts.dart';
 import '../services/trap_index_service.dart';
 import '../services/trap_tour_order.dart';
 
@@ -133,7 +134,7 @@ class TrapTourBarState extends State<TrapTourBar> {
                 const SizedBox(width: 6),
                 ShortcutIconButton(
                   description: 'Previous trap',
-                  shortcut: '↑',
+                  shortcut: AppShortcut.previousItem,
                   icon: const Icon(Icons.chevron_left, size: 20),
                   color: AppColors.warning,
                   visualDensity: VisualDensity.compact,
@@ -163,7 +164,7 @@ class TrapTourBarState extends State<TrapTourBar> {
                 ),
                 ShortcutIconButton(
                   description: 'Next trap',
-                  shortcut: '↓',
+                  shortcut: AppShortcut.nextItem,
                   icon: const Icon(Icons.chevron_right, size: 20),
                   color: AppColors.warning,
                   visualDensity: VisualDensity.compact,
@@ -193,7 +194,7 @@ class TrapTourBarState extends State<TrapTourBar> {
                 const SizedBox(width: 2),
                 ShortcutIconButton(
                   description: 'Close tour',
-                  shortcut: 'Esc',
+                  shortcut: AppShortcut.leave,
                   icon: const Icon(Icons.close, size: 16),
                   visualDensity: VisualDensity.compact,
                   onPressed: widget.onClose,

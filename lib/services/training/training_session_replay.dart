@@ -7,9 +7,9 @@ part of 'training_session_controller.dart';
 /// The wrong-move replay phase for [TrainingSessionController]. Shared fields
 /// and cross-phase helpers are provided by the host class ([_MoveDisplayMixin],
 /// [_MoveValidationMixin], and [updateMoveProgress]).
-mixin _ReplayPhaseMixin
-    on ChangeNotifier, _MoveDisplayMixin, _MoveValidationMixin {
+mixin _ReplayPhaseMixin on ChangeNotifier {
   // Shared state provided by the host class.
+  RepertoireLine? get currentLine;
   List<int> get wrongMoveIndices;
   set wrongMoveIndices(List<int> value);
   int get replayIndex;
@@ -71,7 +71,11 @@ mixin _ReplayPhaseMixin
     final generation = _lineGeneration;
     final targetMoveIndex = wrongMoveIndices[replayIndex];
     final expectedSan = currentLine!.moves[targetMoveIndex];
-    final isCorrect = isCorrectUserMove(move, expectedSan);
+    final isCorrect = validation.isCorrectUserMove(
+      session.position,
+      move,
+      expectedSan,
+    );
 
     if (isCorrect) {
       updateMoveProgress(currentLine!, targetMoveIndex, wasCorrect: true);

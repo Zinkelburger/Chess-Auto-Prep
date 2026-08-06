@@ -1,36 +1,18 @@
 /// Line extraction from a [BuildTree] after repertoire selection.
 ///
-/// Walks the tree following `isRepertoireMove` flags at our-move nodes
-/// and all children at opponent nodes to produce complete lines.
-/// Ports C's `extract_lines` from `repertoire.c`.
+/// Walks the tree following `isRepertoireMove` flags at our-move nodes and all
+/// children at opponent nodes to produce complete lines, gathering per-move
+/// annotations on the way out.  Ports C's `extract_lines` from `repertoire.c`.
+///
+/// Extraction is a pure function of the valued tree — no engine, no network —
+/// which is what lets the whole of Phase 3 be unit-tested on synthetic trees.
 library;
 
 import '../../models/build_tree_node.dart';
-import '../../utils/fen_utils.dart';
 import '../eval/eval_canonicalize.dart';
+import 'export/move_annotation.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
-
-// ── Per-move annotation ──────────────────────────────────────────────────
-
-class MoveProbabilityAnnotation {
-  /// Local move probability (0–1). Null for our moves.
-  final double? probability;
-
-  /// True when probability came from Lichess explorer data.
-  final bool fromLichess;
-
-  /// True when this opponent move was injected from engine PV continuation.
-  final bool engineInjected;
-
-  const MoveProbabilityAnnotation({
-    this.probability,
-    this.fromLichess = false,
-    this.engineInjected = false,
-  });
-
-  static const none = MoveProbabilityAnnotation();
-}
 
 // ── Coverage unit ────────────────────────────────────────────────────────
 
@@ -49,6 +31,48 @@ class LineCoverageUnit {
   const LineCoverageUnit({required this.key, required this.value});
 }
 
+// ── Choice point ─────────────────────────────────────────────────────────
+
+/// A position an exported line passes through, with everything needed to ask
+/// "what if a human played something else here?".
+///
+/// The build tree cannot answer that on its own: our-move children are all
+/// inside the eval-loss window (an engine-approved alternative is a different
+/// move, not a refuted one), and a reply Maia ranks below the candidate floor
+/// never becomes a child at all.  So the export records the *position* and
+/// what the tree already knows about it, and the alternatives pass brings its
+/// own move source — see `course/refutation_prober.dart`.
+class LineChoice {
+  /// Index in the line's `movesSan` of the move actually played here.
+  final int moveIndex;
+
+  /// The position the move was played from.  Doubles as the dedup key: two
+  /// lines sharing a prefix share this choice, and everything on it is a
+  /// property of the position rather than of the branch taken.
+  final String fenBefore;
+
+  final bool isOurMove;
+
+  /// Best eval available to the side to move here, from *our* perspective and
+  /// over the tree's children — the highest for us at an our-move node, the
+  /// lowest at an opponent node.  Null when no child carries an eval, which
+  /// is what makes "this alternative loses N centipawns" unanswerable.
+  final int? bestEvalCpForUs;
+
+  /// Moves the tree already holds at this position.  They are either exported
+  /// elsewhere or known to be inside the eval window, so neither needs an
+  /// engine probe to be explained.
+  final List<String> knownUcis;
+
+  const LineChoice({
+    required this.moveIndex,
+    required this.fenBefore,
+    required this.isOurMove,
+    required this.bestEvalCpForUs,
+    required this.knownUcis,
+  });
+}
+
 // ── Extracted line ───────────────────────────────────────────────────────
 
 class ExtractedLine {
@@ -60,8 +84,17 @@ class ExtractedLine {
   final String? openingName;
   final String? openingEco;
   final int? leafEvalCp;
-  final List<MoveProbabilityAnnotation> moveAnnotations;
+
+  /// Position the line ends in.  Anything that wants to say more about a
+  /// line's end than the tree recorded — an engine probe, a lookup — starts
+  /// from here.
+  final String? leafFen;
+
+  final List<MoveAnnotation> moveAnnotations;
   final List<LineCoverageUnit> coverageUnits;
+
+  /// Every position this line passes through, in move order.
+  final List<LineChoice> choices;
 
   const ExtractedLine({
     required this.movesSan,
@@ -72,81 +105,17 @@ class ExtractedLine {
     this.openingName,
     this.openingEco,
     this.leafEvalCp,
+    this.leafFen,
     this.moveAnnotations = const [],
     this.coverageUnits = const [],
+    this.choices = const [],
   });
 
-  /// Format as PGN movetext with annotations.
-  ///
-  /// Pass [startFen] when the line starts from a non-standard position so
-  /// the emitted PGN includes a correct `[FEN]` / `[SetUp]` header.
-  String toPgn({
-    required bool rootWhiteToMove,
-    String? event,
-    String? startFen,
-    bool rankByImportance = true,
-    bool annotateMoveProbabilities = true,
-    bool annotateMaiaOnly = true,
-  }) {
-    final sb = StringBuffer();
-
-    if (event != null) sb.writeln('[Event "$event"]');
-    sb.writeln('[Site "tree_builder"]');
-    sb.writeln('[Date "????.??.??"]');
-    sb.writeln('[Round "-"]');
-    sb.writeln('[Result "*"]');
-    if (rankByImportance) {
-      sb.writeln('[CumProb "${(probability * 100).toStringAsFixed(3)}%"]');
-    }
-    const standardStartpos =
-        'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-    if (startFen != null &&
-        startFen.isNotEmpty &&
-        startFen != standardStartpos) {
-      sb.writeln('[FEN "$startFen"]');
-      sb.writeln('[SetUp "1"]');
-    }
-    sb.writeln();
-
-    if (rankByImportance) {
-      sb.write('{[%cumProb ${(probability * 100).toStringAsFixed(3)}%]} ');
-    }
-
-    for (int j = 0; j < movesSan.length; j++) {
-      final ply = j + (rootWhiteToMove ? 0 : 1);
-      if (ply % 2 == 0) {
-        sb.write('${(ply ~/ 2) + 1}. ');
-      } else if (j == 0 && !rootWhiteToMove) {
-        sb.write('${(ply ~/ 2) + 1}... ');
-      }
-      sb.write(movesSan[j]);
-
-      if (annotateMoveProbabilities && j < moveAnnotations.length) {
-        final ann = moveAnnotations[j];
-        if (ann.probability != null) {
-          final prob = ann.probability!;
-          final tag = ann.fromLichess && !annotateMaiaOnly
-              ? '[%humanFrequency ${prob.toStringAsFixed(3)}]'
-              : '[%maiaProbability ${prob.toStringAsFixed(3)}]';
-          sb.write(' {$tag}');
-        }
-        if (ann.engineInjected) {
-          sb.write(' {engine-injected}');
-        }
-      }
-      sb.write(' ');
-    }
-
-    if (leafPruneReason == PruneReason.evalTooHigh && leafPruneEvalCp != null) {
-      sb.write(
-        '{Already winning '
-        '(${leafPruneEvalCp! >= 0 ? "+" : ""}${(leafPruneEvalCp! / 100).toStringAsFixed(1)}); '
-        'no further preparation needed} ',
-      );
-    }
-    sb.write('*');
-    return sb.toString();
-  }
+  /// Our moves only, as UCI — the identity of what this line actually teaches.
+  /// Two lines with the same projection are training duplicates however much
+  /// their opponent moves differ.
+  String get ourMoveProjection =>
+      coverageUnits.isEmpty ? '' : coverageUnits.last.key;
 }
 
 // ── Extractor ────────────────────────────────────────────────────────────
@@ -157,6 +126,12 @@ class LineExtractor {
 
   LineExtractor({required this.config, this.fenMap});
 
+  /// Eval gaps beyond this add no extra only-move weight.
+  static const int _sharpnessCapCp = 200;
+
+  /// An our-move this far ahead of every alternative is effectively forced.
+  static const int _onlyMoveGapCp = 100;
+
   /// Extract complete repertoire lines from the tree.
   List<ExtractedLine> extract(BuildTree tree, {int maxLines = 10000}) {
     final lines = <ExtractedLine>[];
@@ -166,6 +141,7 @@ class LineExtractor {
       movesUci: const [],
       moveAnnotations: const [],
       coverageUnits: const [],
+      choices: const [],
       lines: lines,
       maxLines: maxLines,
       visited: <String>{},
@@ -173,71 +149,13 @@ class LineExtractor {
     return lines;
   }
 
-  /// Eval gaps beyond this add no extra only-move weight.
-  static const int _sharpnessCapCp = 200;
-
-  /// Coverage unit for choosing [selected] at [position].  [projectionKey]
-  /// is the our-move projection prefix including [selected].
-  LineCoverageUnit _coverageUnit(
-    BuildTreeNode position,
-    BuildTreeNode selected,
-    String projectionKey,
-  ) {
-    final ourEval = selected.evalForUs(config.playAsWhite);
-    int? bestAlt;
-    for (final c in position.children) {
-      if (identical(c, selected) || !c.hasEngineEval) continue;
-      final v = c.evalForUs(config.playAsWhite);
-      if (bestAlt == null || v > bestAlt) bestAlt = v;
-    }
-    // No evaluated sibling means every alternative fell outside the build's
-    // eval-loss window, so the move is at least that much better.
-    final gapCp = (bestAlt == null ? config.maxEvalLossCp : ourEval - bestAlt)
-        .clamp(0, _sharpnessCapCp);
-    return LineCoverageUnit(
-      key: projectionKey,
-      value: selected.cumulativeProbability * (1.0 + gapCp / 100.0),
-    );
-  }
-
-  MoveProbabilityAnnotation _annotationForChild(BuildTreeNode child) {
-    if (config.annotateMaiaOnly) {
-      final prob = child.maiaFrequency >= 0
-          ? child.maiaFrequency
-          : child.moveProbability;
-      return MoveProbabilityAnnotation(
-        probability: prob,
-        fromLichess: false,
-        engineInjected: child.engineInjected,
-      );
-    }
-    if (child.totalGames > 0) {
-      return MoveProbabilityAnnotation(
-        probability: child.moveProbability,
-        fromLichess: true,
-        engineInjected: child.engineInjected,
-      );
-    }
-    if (child.maiaFrequency >= 0) {
-      return MoveProbabilityAnnotation(
-        probability: child.maiaFrequency,
-        fromLichess: false,
-        engineInjected: child.engineInjected,
-      );
-    }
-    return MoveProbabilityAnnotation(
-      probability: child.moveProbability,
-      fromLichess: false,
-      engineInjected: child.engineInjected,
-    );
-  }
-
   void _extractDfs({
     required BuildTreeNode node,
     required List<String> movesSan,
     required List<String> movesUci,
-    required List<MoveProbabilityAnnotation> moveAnnotations,
+    required List<MoveAnnotation> moveAnnotations,
     required List<LineCoverageUnit> coverageUnits,
+    required List<LineChoice> choices,
     required List<ExtractedLine> lines,
     required int maxLines,
     required Set<String> visited,
@@ -254,7 +172,7 @@ class LineExtractor {
     final cycle = isTransposed && visited.contains(key);
 
     final isOurMove = node.isWhiteToMove == config.playAsWhite;
-    bool pushedAny = false;
+    var pushedAny = false;
 
     if (!cycle) {
       visited.add(key);
@@ -264,6 +182,7 @@ class LineExtractor {
             .firstOrNull;
         if (selected != null) {
           pushedAny = true;
+          final gapCp = _leadOverAlternatives(resolved, selected);
           final projectionKey = coverageUnits.isEmpty
               ? selected.moveUci
               : '${coverageUnits.last.key} ${selected.moveUci}';
@@ -273,11 +192,20 @@ class LineExtractor {
             movesUci: [...movesUci, selected.moveUci],
             moveAnnotations: [
               ...moveAnnotations,
-              MoveProbabilityAnnotation.none,
+              _annotateOurMove(selected, gapCp),
+            ],
+            choices: [
+              ...choices,
+              _choiceAt(resolved, movesSan.length, isOurMove: true),
             ],
             coverageUnits: [
               ...coverageUnits,
-              _coverageUnit(resolved, selected, projectionKey),
+              LineCoverageUnit(
+                key: projectionKey,
+                value:
+                    selected.cumulativeProbability *
+                    (1.0 + gapCp.clamp(0, _sharpnessCapCp) / 100.0),
+              ),
             ],
             lines: lines,
             maxLines: maxLines,
@@ -299,7 +227,14 @@ class LineExtractor {
             node: child,
             movesSan: [...movesSan, child.moveSan],
             movesUci: [...movesUci, child.moveUci],
-            moveAnnotations: [...moveAnnotations, _annotationForChild(child)],
+            moveAnnotations: [
+              ...moveAnnotations,
+              _annotateOpponentMove(resolved, child),
+            ],
+            choices: [
+              ...choices,
+              _choiceAt(resolved, movesSan.length, isOurMove: false),
+            ],
             coverageUnits: coverageUnits,
             lines: lines,
             maxLines: maxLines,
@@ -312,19 +247,7 @@ class LineExtractor {
 
     if (pushedAny || movesSan.isEmpty) return;
 
-    String? openingName;
-    String? openingEco;
-    for (
-      BuildTreeNode? current = node;
-      current != null;
-      current = current.parent
-    ) {
-      if (current.openingName != null) {
-        openingName = current.openingName;
-        openingEco = current.openingEco;
-        break;
-      }
-    }
+    final (name: openingName, eco: openingEco) = _nearestOpening(node);
 
     lines.add(
       ExtractedLine(
@@ -336,37 +259,117 @@ class LineExtractor {
         openingName: openingName,
         openingEco: openingEco,
         leafEvalCp: node.engineEvalCp,
+        leafFen: node.fen,
         moveAnnotations: moveAnnotations,
         coverageUnits: coverageUnits,
+        choices: choices,
       ),
     );
   }
 
-  /// Export all extracted lines as a single PGN string.
-  String exportPgn(List<ExtractedLine> lines, {String? repertoireName}) {
-    final sorted = List<ExtractedLine>.from(lines);
-    if (config.rankLinesByImportance) {
-      sorted.sort((a, b) => b.probability.compareTo(a.probability));
+  /// The choice point at [position], where the move at [moveIndex] was played.
+  LineChoice _choiceAt(
+    BuildTreeNode position,
+    int moveIndex, {
+    required bool isOurMove,
+  }) {
+    int? best;
+    for (final child in position.children) {
+      if (!child.hasEngineEval) continue;
+      final value = child.evalForUs(config.playAsWhite);
+      if (best == null) {
+        best = value;
+      } else if (isOurMove ? value > best : value < best) {
+        // Our node: the best we can do.  Opponent node: the best they can do,
+        // which is the worst for us — the bar an alternative has to fall below
+        // before it counts as a mistake by them.
+        best = value;
+      }
     }
+    return LineChoice(
+      moveIndex: moveIndex,
+      fenBefore: position.fen,
+      isOurMove: isOurMove,
+      bestEvalCpForUs: best,
+      knownUcis: [for (final child in position.children) child.moveUci],
+    );
+  }
 
-    final rootWhiteToMove = isWhiteToMove(config.startFen);
-    return sorted
-        .asMap()
-        .entries
-        .map((e) {
-          final idx = e.key + 1;
-          final eventName = repertoireName != null
-              ? '$repertoireName Line #$idx'
-              : 'Repertoire Line #$idx';
-          return e.value.toPgn(
-            rootWhiteToMove: rootWhiteToMove,
-            event: eventName,
-            startFen: config.startFen,
-            rankByImportance: config.rankLinesByImportance,
-            annotateMoveProbabilities: config.annotateMoveProbabilities,
-            annotateMaiaOnly: config.annotateMaiaOnly,
-          );
-        })
-        .join('\n\n');
+  // ── Annotation ────────────────────────────────────────────────────────
+
+  MoveAnnotation _annotateOurMove(BuildTreeNode selected, int gapCp) =>
+      MoveAnnotation(
+        evalCp: selected.hasEngineEval
+            ? selected.evalForUs(config.playAsWhite)
+            : null,
+        myEase: selected.myEase >= 0 ? selected.myEase : null,
+        isOnlyMove: gapCp >= _onlyMoveGapCp,
+        practicalScore: _practicalScore(selected),
+        gameCount: selected.totalGames > 0 ? selected.totalGames : null,
+        lastPlayedYear: selected.lastPlayedYear > 0
+            ? selected.lastPlayedYear
+            : null,
+      );
+
+  MoveAnnotation _annotateOpponentMove(
+    BuildTreeNode position,
+    BuildTreeNode child,
+  ) {
+    final (likelihood, source) = _likelihoodOf(child);
+    return MoveAnnotation(
+      likelihood: likelihood,
+      likelihoodSource: source,
+      gameCount: child.totalGames > 0 ? child.totalGames : null,
+      practicalScore: _practicalScore(child),
+      evalCp: child.hasEngineEval ? child.evalForUs(config.playAsWhite) : null,
+      // The ease of the position the opponent was choosing from is what says
+      // whether this move was easy to find — not the ease of where it lands.
+      opponentEase: position.ease,
+      lastPlayedYear: child.lastPlayedYear > 0 ? child.lastPlayedYear : null,
+    );
+  }
+
+  /// Move likelihood and where it came from.  Real game frequencies win over
+  /// Maia's prediction; an engine-injected reply has no human number at all.
+  (double?, MoveLikelihoodSource?) _likelihoodOf(BuildTreeNode child) {
+    if (child.engineInjected) {
+      return (child.moveProbability, MoveLikelihoodSource.engine);
+    }
+    if (child.totalGames > 0) {
+      return (child.moveProbability, MoveLikelihoodSource.gameDatabase);
+    }
+    if (child.maiaFrequency >= 0) {
+      return (child.maiaFrequency, MoveLikelihoodSource.maia);
+    }
+    return (child.moveProbability, MoveLikelihoodSource.maia);
+  }
+
+  double? _practicalScore(BuildTreeNode node) =>
+      node.totalGames > 0 ? node.winRateFor(config.playAsWhite) : null;
+
+  /// How far [selected]'s eval leads the best evaluated alternative, in
+  /// centipawns.  No evaluated sibling means every alternative fell outside
+  /// the build's eval-loss window, so the move leads by at least that much.
+  int _leadOverAlternatives(BuildTreeNode position, BuildTreeNode selected) {
+    if (!selected.hasEngineEval) return 0;
+    final ourEval = selected.evalForUs(config.playAsWhite);
+    int? bestAlt;
+    for (final sibling in position.children) {
+      if (identical(sibling, selected) || !sibling.hasEngineEval) continue;
+      final value = sibling.evalForUs(config.playAsWhite);
+      if (bestAlt == null || value > bestAlt) bestAlt = value;
+    }
+    final lead = bestAlt == null ? config.maxEvalLossCp : ourEval - bestAlt;
+    return lead < 0 ? 0 : lead;
+  }
+
+  /// Nearest named opening at or above [node], walking toward the root.
+  ({String? name, String? eco}) _nearestOpening(BuildTreeNode node) {
+    for (BuildTreeNode? cur = node; cur != null; cur = cur.parent) {
+      if (cur.openingName != null) {
+        return (name: cur.openingName, eco: cur.openingEco);
+      }
+    }
+    return (name: null, eco: null);
   }
 }

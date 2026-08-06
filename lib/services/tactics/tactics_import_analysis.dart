@@ -14,6 +14,13 @@ double _winningChances(int centipawns) {
 /// ("#3" delivering, "#-3" getting mated). Scores arrive in side-to-move
 /// perspective; pass [negate] when that side is the opponent so the number
 /// reads from the user's point of view.
+///
+/// Deliberately *not* routed through `formatPackedEval`, despite looking like
+/// a near-duplicate. What this produces is written into the mistake-analysis
+/// note that is persisted in the puzzle PGN and read back by
+/// `parseTacticsNote`'s regex — a wire format, not a display string. Sharing a
+/// display helper would let a cosmetic tweak (`#-3` → `-#3`, an extra decimal)
+/// silently invalidate every note already on disk.
 String _formatEval({int? scoreCp, int? scoreMate, bool negate = false}) {
   if (scoreMate != null) {
     final mate = negate ? -scoreMate : scoreMate;

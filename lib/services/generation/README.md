@@ -17,6 +17,8 @@ The Dart implementation ports a proven C `tree_builder`; comments saying
 | 2 | Value + select: ease, expectimax, CPL, trap scores, selection | `tree_ease.dart`, `tree_my_ease.dart`, `eca_calculator.dart`, `repertoire_selector.dart`, `node_selection.dart` |
 | 2.5 | Deep verification of the selected moves | `repertoire_verifier.dart` |
 | 3 | Extract lines, prune similar ones, export PGN / snapshots / traps | `line_extractor.dart`, `line_pruner.dart`, `pgn_export.dart`, `snapshot_export.dart`, `trap_extractor.dart` |
+| 3.5 | Ask the engine how each losing reply is punished, and what the moves the book leaves out run into | `course/refutation_prober.dart` |
+| 3.5 | Compose the surviving lines into a course: chapters, ECO names, model games | `course/` |
 
 `line_pruner.dart` runs after extraction when `targetLineCount > 0`
 (default 100): greedy weighted set cover over each line's
@@ -26,9 +28,99 @@ that answer different opponent deviations with the same our-moves collapse
 to one representative. The build tree itself is never pruned by this; it is
 an export-time view.
 
-Phase 1 is the only phase that touches engines or the network. Phases 2–3
+Phase 1 is the only phase that touches engines or the network. Phases 2–3.5
 are pure functions over the tree — keep them that way; it is what makes
-them unit-testable without fakes.
+them unit-testable without fakes. (Phase 3.5 loads the bundled ECO book, an
+asset read, and degrades to move-based names when it is unavailable.)
+
+## Course composition (`course/`)
+
+A repertoire tree flattened into root-to-leaf paths is what a machine wants
+and not at all how a person studies one. Phase 3.5 re-imposes the structure
+the flattening destroyed:
+
+| File | Job |
+|---|---|
+| `chapter_planner.dart` | Cut the line list at branch points until every chapter is between `minLinesPerChapter` and `maxLinesPerChapter`. Branches too small to be chapters are swept into one "rare sidelines" bucket. Pure list surgery — no chess. |
+| `opening_namer.dart` | Deepest ECO-book hit along a move sequence (FEN-keyed, so transpositions name correctly), plus move-reference formatting (`6.Be3` / `6...Bg7`). |
+| `chapter_titles.dart` | Course title, chapter names, variation names. Strips the opening-family segments every chapter shares — a Maroczy course does not repeat "Sicilian Defense: Accelerated Dragon" twelve times — then disambiguates collisions with the defining move. |
+| `model_game_selector.dart` | Picks database games that follow the *selected* repertoire (our moves must be the chosen ones), ranked by follow depth, then result from our side, then rating; round-robins over variations so a course covers its chapters instead of showing six wins in one line. |
+| `course_composer.dart` | Assembles everything into `PgnGameSpec`s. |
+
+**Chapters are headers, not variation trees.** Each line stays its own PGN
+game and the chapter is named in `[White]`, the variation in `[Black]`, with
+`[Result "*"]` — the format `RepertoireService.detectHeaderChapters` already
+reads. This is deliberate: `parseRepertoirePgn` follows `mainline()` only, so
+folding a chapter's lines into one game with variations would silently reduce
+the chapter to a single trainable line. Any change here must keep
+`course_composer_test.dart`'s round-trip through `RepertoireService` green.
+
+Model games carry `[Result "*"]` for the same reason — a decisive result would
+drop them out of chapter detection — with the real game preserved under
+`ModelGame*` tags. Those tags are also the *marker*: `RepertoireLine.
+isModelGame` reads them back, and the trainer, the deviation walker and
+`matchingBookLines` all skip such lines. A model game is somebody else's moves
+in a file full of yours — drilling it, or counting it as your book when your
+own games are checked, is wrong in both directions.
+
+**Nothing writes prose comments.** A generated comment nobody asked for is
+noise a reader learns to skip, which costs the annotations that do carry
+information (`[%eval]`, `[%maiaProbability]`, …). Where the export used to
+explain in words that a line ended because we were already winning, it now
+*shows* it: `RefutationProber` asks the engine how the position is won and the
+punishment is written as a sideline on the losing move, repeating that move so
+it reads as a continuation rather than an alternative. The mainline still ends
+where the repertoire ends, so nothing new becomes trainable.
+
+The same prober answers the other question a reader asks — "why isn't the
+natural move here?" — in `probeAlternatives`. The tree cannot answer it: our
+children are all inside the eval-loss window (default 50cp), so a *refuted*
+move of ours was never a child, and their rejected tries sit below the Maia
+candidate floor. So the pass brings its own move source (Maia's policy, or the
+game database when Maia is unavailable), skips whatever the tree already
+holds, and searches the position after each candidate. Only a move that costs
+the side playing it at least `minLossCp` is written, as an alternative sideline
+carrying `?`/`?!` and a `[%loss]` token — a move that turns out to be playable
+drops out, because "we don't play this" about a perfectly good move is a lie.
+`LineChoice` (from `line_extractor.dart`) is what carries the position, its
+best available eval and its known moves out of extraction; it is keyed by FEN
+so lines sharing a prefix share one search.
+
+Both passes are capped, deduplicated and best-effort: no engine, no move
+source, a cancelled run or a failed search costs variations, never the export.
+
+## Export (`export/`)
+
+`writePgnGame` is the **only** PGN emitter in the pipeline. There used to be
+two (`LineExtractor.exportPgn` and `pgn_export.buildRepertoirePgnEntry`) with
+separately maintained copies of the annotation logic, which is exactly how
+they drifted. `MoveAnnotation` carries everything the tree knows about a move
+— eval, ease, naturalness, practical score, recency — and
+`MoveAnnotationDetail` decides how much of it reaches the file. Absent fields
+are omitted rather than defaulted: an unmeasured score must not read like an
+even one.
+
+## Where human-practice data comes from
+
+Only `BuildMode.dbExplorer`. The Lichess Explorer fetch path is mothballed
+app-wide (`ProbabilityService` returns null unconditionally), so the
+generation pipeline no longer asks for it — `useLichessDb`, `useMasters`,
+`speeds`, `ratingRange`, `minGames` and `maiaOnly` on `TreeBuildConfig` are
+inert and survive only because the audit/holes/tricks features still build
+configs with them. Opponent replies come from Maia everywhere else.
+
+`pgn_freq_map.dart` is therefore the app's model of human practice: per move,
+counts **plus** win/draw/loss, mean rating, and the last year played, with a
+bounded reservoir of the strongest games retained whole
+(`TopGamesReservoir`) so model-game selection needs no second pass over the
+source files. Retention deliberately runs on its own terms: it continues past
+`maxPly` (statistics stop at the build depth; a model game truncated there
+would be ten moves of opening and nothing to illustrate), keeps its own rating
+floor, and is sized well above `modelGameCount` because retention ranks by
+rating while selection needs games that *follow this repertoire*.
+`pgn_freq_parser.dart` does the scanning;
+`pgn_freq_cache.dart` persists it in a versioned, length-prefixed format —
+a stale or corrupt cache is a miss, never a wrong answer.
 
 `BuildRun` holds all per-run state (id allocator, stats, cancellation,
 pause gate). `TreeBuildService._startRun` must stay **synchronous up to the
@@ -180,3 +272,11 @@ All in `test/services/generation/` unless noted:
   `select_then_extract_test.dart`, `line_extractor_test.dart`
 - Session controller progress/dispose:
   `test/core/generation_session_controller_test.dart`
+- Chapter cutting, naming, model games, and the composed PGN (including the
+  round-trip back through `RepertoireService`): `course/` subdirectory
+- Annotation rendering: `export/move_annotation_test.dart`
+- Frequency-map scanning (results, ratings, recency, game retention):
+  `pgn_freq_map_test.dart`; cache round trip and every invalidation path:
+  `pgn_freq_cache_test.dart`
+- Persisted config shape (adding a key is safe, removing one is not):
+  `generation_config_wire_format_test.dart`

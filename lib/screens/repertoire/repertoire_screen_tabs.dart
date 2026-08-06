@@ -235,7 +235,7 @@ mixin _RepertoireTabContent
     return ListenableBuilder(
       listenable: _jobManager,
       builder: (context, _) => BottomPane(
-        key: _bottomPaneKey,
+        controller: _bottomPane,
         findingsContent: _buildFindingsContent(),
         jobsContent: _buildJobsContent(),
         linesContent: Stack(

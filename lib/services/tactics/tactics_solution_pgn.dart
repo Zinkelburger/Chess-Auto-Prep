@@ -2,7 +2,7 @@
 library;
 
 import '../../models/tactics_position.dart';
-import '../tactics_pgn_codec.dart' show encodePuzzlePgn;
+import 'tactics_pgn_codec.dart' show encodePuzzlePgn;
 
 /// PGN from the tactic FEN with [solutionSan] as the mainline, carrying the
 /// source-game headers so the analysis tab shows meaningful context.

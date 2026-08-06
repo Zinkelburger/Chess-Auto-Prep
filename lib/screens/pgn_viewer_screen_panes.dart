@@ -238,7 +238,12 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
             autoNextGame: _controller.autoNextGame,
             onPrev: _controller.prevGame,
             onNext: _controller.nextGame,
-            onGoToGame: _controller.goToGame,
+            onGoToGame: (index) {
+              _controller.goToGame(index);
+              // Typing a number leaves focus in the nav bar's box; put it back
+              // on the screen so ←/→ move through the game we just landed on.
+              _reclaimFocus();
+            },
             onSetRating: _controller.setRating,
             onSetSortMode: _controller.setSortMode,
             onToggleAutoPlay: _controller.toggleAutoPlay,

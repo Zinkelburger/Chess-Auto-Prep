@@ -11,8 +11,8 @@ import '../../utils/safe_change_notifier.dart';
 import '../engine/engine_lifecycle.dart';
 import '../games_library/game_review_store.dart';
 import '../jobs/repertoire_job.dart';
-import '../tactics_database.dart';
-import '../tactics_import_service.dart' show ImportResult, TacticsImportService;
+import 'tactics_database.dart';
+import 'tactics_import_service.dart' show ImportResult, TacticsImportService;
 
 enum TacticsImportSource { lichess, chessCom }
 

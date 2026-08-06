@@ -4,7 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:onnxruntime/onnxruntime.dart';
-import 'eval_cache.dart';
+import '../eval_cache.dart';
 import 'maia_tensor.dart';
 import 'package:chess_auto_prep/utils/log.dart';
 

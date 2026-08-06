@@ -30,7 +30,7 @@ void main() {
     expect(find.byType(PositionAnalysisWidget), findsOneWidget);
   });
 
-  testWidgets('down/up arrows step through the weak-positions list', (
+  testWidgets('P/S and ↑/↓ both step through the weak-positions list', (
     tester,
   ) async {
     final analysis = PositionAnalysis();
@@ -63,17 +63,24 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // The screen's Focus owns key events and forwards ↓/↑ to the list.
+    // The screen's Focus owns key events and forwards previous/next to the
+    // list. Every chord AppShortcut.nextItem/previousItem advertises has to
+    // work, not just the first one — that is the whole point of binding a
+    // registry entry rather than a single key.
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
     expect(find.text('1 of 3'), findsOneWidget);
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
     await tester.pumpAndSettle();
     expect(find.text('2 of 3'), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pumpAndSettle();
     expect(find.text('1 of 3'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
+    await tester.pumpAndSettle();
+    expect(find.text('1 of 3'), findsOneWidget, reason: 'stops at the top');
   });
 }

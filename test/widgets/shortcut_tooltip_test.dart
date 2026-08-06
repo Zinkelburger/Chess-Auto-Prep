@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/utils/app_shortcuts.dart';
 import 'package:chess_auto_prep/widgets/shortcut_tooltip.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -5,29 +6,41 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('actionTooltip', () {
-    test('appends shortcut in parentheses', () {
-      expect(actionTooltip('Flip board', shortcut: 'F'), 'Flip board (F)');
+    test('appends the registry label in parentheses', () {
       expect(
-        actionTooltip('Undo last add', shortcut: 'Ctrl+Z'),
+        actionTooltip('Flip board', shortcut: AppShortcut.flipBoard),
+        'Flip board (F)',
+      );
+      expect(
+        actionTooltip('Undo last add', shortcut: AppShortcut.undo),
         'Undo last add (Ctrl+Z)',
       );
     });
 
-    test('actionTooltipIf omits suffix when shortcut absent', () {
+    test('a multi-chord action advertises all of its keys', () {
+      expect(
+        actionTooltip('Next game', shortcut: AppShortcut.nextItem),
+        'Next game (S or ↓)',
+      );
+    });
+
+    test('actionTooltipIf omits the suffix when there is no shortcut', () {
       expect(actionTooltipIf('Settings'), 'Settings');
-      expect(actionTooltipIf('Reload', shortcut: ''), 'Reload');
-      expect(actionTooltipIf('Next', shortcut: 'Space'), 'Next (Space)');
+      expect(
+        actionTooltipIf('Next', shortcut: AppShortcut.nextItem),
+        'Next (S or ↓)',
+      );
     });
   });
 
   group('ShortcutIconButton', () {
-    testWidgets('tooltip includes shortcut on hover', (tester) async {
+    testWidgets('tooltip includes the shortcut on hover', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: ShortcutIconButton(
               description: 'Next game',
-              shortcut: 'N',
+              shortcut: AppShortcut.nextItem,
               onPressed: () {},
               icon: const Icon(Icons.skip_next),
             ),
@@ -36,19 +49,19 @@ void main() {
       );
 
       final iconButton = tester.widget<IconButton>(find.byType(IconButton));
-      expect(iconButton.tooltip, 'Next game (N)');
+      expect(iconButton.tooltip, 'Next game (S or ↓)');
     });
   });
 
   group('shortcutTooltip', () {
-    testWidgets('shows shortcut immediately on hover', (tester) async {
+    testWidgets('shows the shortcut immediately on hover', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: Center(
               child: shortcutTooltip(
                 description: 'Analyze',
-                shortcut: 'A',
+                shortcut: AppShortcut.analyzePosition,
                 child: ElevatedButton(
                   onPressed: () {},
                   child: const Text('Analyze'),
@@ -66,25 +79,30 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
-      expect(find.text('Analyze (A)'), findsOneWidget);
+      expect(find.text('Analyze (V)'), findsOneWidget);
     });
   });
 
   group('ShortcutTooltip', () {
-    testWidgets('asserts when shortcut is empty', (tester) async {
+    testWidgets('renders the label the screens bind', (tester) async {
+      // There is no "empty shortcut" case left to assert against: the API
+      // takes an AppShortcut, and every registry entry has at least one
+      // chord, so a tooltip advertising nothing is unrepresentable rather
+      // than caught at runtime.
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: ShortcutTooltip(
-              description: 'Action',
-              shortcut: '',
+              description: 'Previous game',
+              shortcut: AppShortcut.previousItem,
               child: const Text('Go'),
             ),
           ),
         ),
       );
 
-      expect(tester.takeException(), isA<AssertionError>());
+      final tooltip = tester.widget<Tooltip>(find.byType(Tooltip));
+      expect(tooltip.message, 'Previous game (P or ↑)');
     });
   });
 }

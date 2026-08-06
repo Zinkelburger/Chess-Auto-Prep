@@ -28,6 +28,15 @@ bool isWhiteToMove(String fen) {
   return parts.length >= 2 && parts[1] == 'w';
 }
 
+/// Full-move number of [fen] — the number a PGN emitter must start counting
+/// from when its movetext begins at this position.  Defaults to 1 for short
+/// or malformed FENs, which is the standard start's value.
+int fullMoveNumber(String fen) {
+  final parts = fen.split(' ');
+  if (parts.length < 6) return 1;
+  return int.tryParse(parts[5]) ?? 1;
+}
+
 /// Expand a possibly-short (4-field) FEN into a full 6-field FEN by appending
 /// default half-move clock 0 and full-move number 1.  Needed by libraries that
 /// require a complete FEN string (e.g. `chess.Chess.fromFEN`).

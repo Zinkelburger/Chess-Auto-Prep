@@ -12,17 +12,6 @@ mixin _GenerationConfigCard
         _GenerationConfigDescriptions,
         _GenerationConfigFields,
         _GenerationConfigIo {
-  static const List<int> _lichessRatingBuckets = [
-    1000,
-    1200,
-    1400,
-    1600,
-    1800,
-    2000,
-    2200,
-    2500,
-  ];
-
   // ── Section chrome ──────────────────────────────────────────────────────
 
   /// Titled block with a rule above it, so the form reads as four short
@@ -53,37 +42,13 @@ mixin _GenerationConfigCard
 
   // ── Opponent ────────────────────────────────────────────────────────────
 
-  /// Keeps the Lichess rating bucket in step with the typed rating; the
-  /// fine-grained multi-bucket selection stays in the advanced dialog.
-  void _syncLichessBucketToElo() {
-    if (_lichessDbOverride == null) return;
-    // A deliberate multi-bucket selection (Advanced) survives rating edits.
-    if (_lichessRatings.length > 1) return;
-    final elo = int.tryParse(_maiaEloCtrl.text.trim());
-    if (elo == null) return;
-    final nearest = _lichessRatingBuckets.reduce(
-      (a, b) => (a - elo).abs() <= (b - elo).abs() ? a : b,
-    );
-    _lichessRatings
-      ..clear()
-      ..add(nearest.toString());
-  }
-
   Widget _opponentSection() {
-    final speeds = _lichessDbOverride != null && _lichessSpeeds.isNotEmpty
-        ? ' (${_lichessSpeeds.join(', ')})'
-        : '';
-    final source = _lichessDbOverride == null
-        ? 'Maia neural opponent (human-like)'
-        : (_lichessDbOverride == LichessDatabase.masters
-              ? 'Lichess Masters database'
-              : 'Lichess players database');
     return _cardSection('Opponent', leadingRule: false, [
       _numField(
         _maiaEloCtrl,
         'Opponent rating (Elo)',
         defaultText: '2200',
-        onEdited: () => setState(_syncLichessBucketToElo),
+        onEdited: () => setState(() {}),
         tooltip:
             'The rating the opponent model plays at. Everything about how '
             'likely a reply is comes from this number. Set it to the '
@@ -94,7 +59,8 @@ mixin _GenerationConfigCard
             ? 'Opponent replies come from move frequencies in your PGN '
                   'files; this rating still drives annotations and trap '
                   'findability.'
-            : 'Replies modeled from: $source$speeds — change under Advanced.',
+            : 'Replies are predicted by Maia at this rating. For frequencies '
+                  'from real games, build from a PGN database instead.',
       ),
     ]);
   }

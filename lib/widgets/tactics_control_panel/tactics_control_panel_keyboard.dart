@@ -73,37 +73,43 @@ mixin _TacticsKeyboardActions
   /// field keeps ←/→ for caret editing (see [MoveInputWidget]) and never
   /// forwards them.
   List<KeyBinding> get _keyBindings => [
-    KeyBinding.run(
-      LogicalKeyboardKey.space,
+    ...KeyBinding.forShortcut(
+      AppShortcut.toggleSolution,
       'Show/hide solution',
       _session.toggleSolution,
     ),
-    // Mirror the button enablement: at the ends of the queue the shortcuts do
-    // nothing, same as the grayed-out Previous/Next.
-    for (final key in [LogicalKeyboardKey.keyP, LogicalKeyboardKey.arrowUp])
-      KeyBinding.run(key, 'Previous position', () {
+    // The puzzle queue is stepped by the same pair as every other list in the
+    // app. This screen is *why* the pair is P/S: with an always-hot move box,
+    // any chord that could appear in SAN or UCI would be typed instead of
+    // firing. Mirror the button enablement — at the ends of the queue the
+    // shortcuts do nothing, same as the grayed-out Previous/Next.
+    ...KeyBinding.forShortcut(
+      AppShortcut.previousItem,
+      'Previous position',
+      () {
         if (_session.hasPrevious) {
           _loadCurrentPosition(_session.previousPosition());
         }
-      }),
-    for (final key in [LogicalKeyboardKey.keyS, LogicalKeyboardKey.arrowDown])
-      KeyBinding.run(key, 'Skip/next position', () {
-        if (_session.hasNext) {
-          _loadCurrentPosition(_session.skipPosition());
-        }
-      }),
-    KeyBinding.run(
-      LogicalKeyboardKey.keyJ,
+      },
+    ),
+    ...KeyBinding.forShortcut(AppShortcut.nextItem, 'Skip/next position', () {
+      if (_session.hasNext) {
+        _loadCurrentPosition(_session.skipPosition());
+      }
+    }),
+    ...KeyBinding.forShortcut(
+      AppShortcut.autoAdvance,
       'Toggle auto-advance',
       () => _session.setAutoAdvance(!_session.autoAdvance),
     ),
     // ←/→ follow what is on screen. While you are solving there are no moves
-    // to step through, so they switch puzzles — same as ↑/↓ — which is how
-    // the Previous/Skip buttons advertise them. Once the solution is on the
-    // board they walk it move by move, and on the PGN tab they step the game
-    // (the app-wide ←/→ = moves convention).
-    KeyBinding.run(
-      LogicalKeyboardKey.arrowRight,
+    // to step through, so they fall through to switching puzzles. Once the
+    // solution is on the board they walk it move by move, and on the PGN tab
+    // they step the game (the app-wide ←/→ = moves convention). They are a
+    // contextual convenience, not the advertised way to change puzzle — that
+    // is P/S, which works in every state.
+    ...KeyBinding.forShortcut(
+      AppShortcut.forwardOneMove,
       'Skip / forward one move',
       () {
         if (_tabController.index != 0) {
@@ -115,8 +121,8 @@ mixin _TacticsKeyboardActions
         }
       },
     ),
-    KeyBinding.run(
-      LogicalKeyboardKey.arrowLeft,
+    ...KeyBinding.forShortcut(
+      AppShortcut.backOneMove,
       'Previous / back one move',
       () {
         if (_tabController.index != 0) {
@@ -128,42 +134,44 @@ mixin _TacticsKeyboardActions
         }
       },
     ),
-    // No N alias for skip: S/↓/→ already do it, and N is the knight — it must
-    // stay a typed move character, never navigation.
     // Analyze is V alone. 'A' was once its alias, but a is the a-file and the
     // move box is now always hot while solving, so an A binding could never
     // fire — advertising two keys where one is dead is worse than one key.
     // 'V' never appears in SAN/UCI, so it works even mid-type.
-    KeyBinding.run(LogicalKeyboardKey.keyV, 'Analyze (open PGN)', _onAnalyze),
-    KeyBinding.run(
-      LogicalKeyboardKey.keyE,
+    ...KeyBinding.forShortcut(
+      AppShortcut.analyzePosition,
+      'Analyze (open PGN)',
+      _onAnalyze,
+    ),
+    ...KeyBinding.forShortcut(
+      AppShortcut.toggleEngine,
       'Toggle engine',
       InlineEngineBar.toggleEngine,
     ),
     // Match the app-wide F = flip convention (study, PGN viewer, repertoire).
     // F is the f-file so it isn't safeWhileTypingMoves — like those screens it
     // fires only when the board/panel (not the move box) owns focus.
-    KeyBinding.run(LogicalKeyboardKey.keyF, 'Flip board', () {
+    ...KeyBinding.forShortcut(AppShortcut.flipBoard, 'Flip board', () {
       final appState = context.read<AppState>();
       appState.setBoardFlipped(!appState.boardFlipped);
     }),
-    KeyBinding.run(
-      LogicalKeyboardKey.slash,
+    ...KeyBinding.forShortcut(
+      AppShortcut.focusMoveInput,
       'Focus move input',
       () => TacticsControlPanel.moveInputKey.currentState?.focus(),
     ),
     // Tab flips between the two sides of the panel — the puzzle and its PGN.
     // (It used to focus the move box, but the box is always hot now; the
     // reachable-by-keyboard thing you actually switch to is the other tab.)
-    KeyBinding.run(LogicalKeyboardKey.tab, 'Switch Tactic/PGN tab', () {
+    ...KeyBinding.forShortcut(AppShortcut.nextTab, 'Switch Tactic/PGN tab', () {
       _tabController.animateTo(_tabController.index == 0 ? 1 : 0);
     }),
     // Same app-wide contract as the PGN viewer's Escape: leave whatever you are
     // in, innermost first. Here that is the PGN/Browse tab, then the puzzle
     // itself — which is what the app-bar back arrow does, so the key and the
     // button can never disagree about what "back" means.
-    KeyBinding(
-      LogicalKeyboardKey.escape,
+    ...KeyBinding.forShortcutIf(
+      AppShortcut.leave,
       'Back to Tactic tab / leave puzzle',
       () {
         if (_tabController.index != 0) {

@@ -7,6 +7,23 @@ import 'package:dartchess/dartchess.dart';
 import '../utils/pgn_comment_utils.dart' show filterDisplayComment;
 import '../utils/training_markers.dart' show hasPuzzleStart, hasPuzzleEnd;
 
+/// Tag holding a model game's real White player.  A model game has to carry
+/// `[Result "*"]` and a chapter title in `[White]` for header-based chapter
+/// detection to work, so its real identity moves to `ModelGame*` tags — and
+/// their presence is what marks the game as illustration rather than book.
+const String kModelGameWhiteTag = 'ModelGameWhite';
+const String kModelGameBlackTag = 'ModelGameBlack';
+const String kModelGameResultTag = 'ModelGameResult';
+const String kModelGameEventTag = 'ModelGameEvent';
+const String kModelGameDateTag = 'ModelGameDate';
+const String kModelGameWhiteEloTag = 'ModelGameWhiteElo';
+const String kModelGameBlackEloTag = 'ModelGameBlackElo';
+
+/// Whether [headers] belong to a model game rather than a repertoire line.
+bool isModelGameHeaders(Map<String, String> headers) =>
+    headers.containsKey(kModelGameWhiteTag) ||
+    headers.containsKey(kModelGameResultTag);
+
 class RepertoireLine {
   final String id;
   final String name; // e.g., "French Defense - Main Line"
@@ -27,6 +44,12 @@ class RepertoireLine {
   /// [White] header). Null for files without chapters.
   final String? chapter;
 
+  /// A real game included as illustration, not a line you are meant to know
+  /// (see the generator's "Model games" chapter). It is somebody else's moves
+  /// in a file full of yours, so it must never be drilled, and must never
+  /// count as your book when your own games are checked against the file.
+  final bool isModelGame;
+
   RepertoireLine({
     required this.id,
     required this.name,
@@ -39,6 +62,7 @@ class RepertoireLine {
     this.headers = const {},
     this.importance,
     this.chapter,
+    this.isModelGame = false,
   });
 
   /// Creates a training question at the specified move index

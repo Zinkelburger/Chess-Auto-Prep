@@ -25,24 +25,20 @@ import '../repertoire_review_service.dart';
 import '../repertoire_service.dart';
 import '../storage/storage_factory.dart';
 import 'chapter_layout.dart';
+import 'move_display.dart';
+export 'move_display.dart' show MoveDisplayInfo;
+import 'move_validation.dart' as validation;
 import 'chapter_scope.dart';
 import 'review_progress_store.dart';
 import 'training_phase.dart';
 
-part 'training_session_display.dart';
-part 'training_session_validation.dart';
 part 'training_session_learn.dart';
 part 'training_session_replay.dart';
 
 /// Manages repertoire training session state: phases, line queue, move validation,
 /// progress persistence, and session statistics.
 class TrainingSessionController extends ChangeNotifier
-    with
-        SafeChangeNotifier,
-        _MoveDisplayMixin,
-        _MoveValidationMixin,
-        _LearnPhaseMixin,
-        _ReplayPhaseMixin {
+    with SafeChangeNotifier, _LearnPhaseMixin, _ReplayPhaseMixin {
   final RepertoireService repertoireService;
   final RepertoireReviewService reviewService;
 
@@ -711,7 +707,7 @@ class TrainingSessionController extends ChangeNotifier
       }
       session.playMove(san);
       final isUser = _isUserMove(i);
-      final display = _buildMoveDisplay(i, isOpponent: !isUser);
+      final display = buildMoveDisplay(currentLine, i, isOpponent: !isUser);
       if (isUser) {
         currentPairUser = display;
       } else {
@@ -825,7 +821,7 @@ class TrainingSessionController extends ChangeNotifier
     }
     session.playMove(san);
 
-    final display = _buildMoveDisplay(moveIndex, isOpponent: true);
+    final display = buildMoveDisplay(currentLine, moveIndex, isOpponent: true);
     currentPairOpponent = display;
     currentPairUser = null;
 
@@ -857,11 +853,19 @@ class TrainingSessionController extends ChangeNotifier
 
     final generation = _lineGeneration;
     final expectedSan = currentLine!.moves[currentMoveIndex];
-    final isCorrect = isCorrectUserMove(move, expectedSan);
+    final isCorrect = validation.isCorrectUserMove(
+      session.position,
+      move,
+      expectedSan,
+    );
 
     if (isCorrect) {
       updateMoveProgress(currentLine!, currentMoveIndex, wasCorrect: true);
-      final display = _buildMoveDisplay(currentMoveIndex, isOpponent: false);
+      final display = buildMoveDisplay(
+        currentLine,
+        currentMoveIndex,
+        isOpponent: false,
+      );
       session.playMove(expectedSan);
       waitingForUser = false;
       feedback = 'Correct!';
@@ -890,7 +894,11 @@ class TrainingSessionController extends ChangeNotifier
       await Future.delayed(const Duration(milliseconds: 1200));
       if (generation != _lineGeneration) return;
 
-      final display = _buildMoveDisplay(currentMoveIndex, isOpponent: false);
+      final display = buildMoveDisplay(
+        currentLine,
+        currentMoveIndex,
+        isOpponent: false,
+      );
       session.playMove(expectedSan);
       currentPairUser = display;
       currentAnnotation = null;

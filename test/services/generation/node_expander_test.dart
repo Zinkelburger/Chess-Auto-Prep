@@ -20,7 +20,7 @@ import 'package:chess_auto_prep/services/generation/node_expander.dart';
 import 'package:chess_auto_prep/services/generation/run_debug_dump.dart';
 import 'package:chess_auto_prep/services/generation/tree_build_progress.dart';
 import 'package:chess_auto_prep/services/generation/tree_eval_resolver.dart';
-import 'package:chess_auto_prep/services/maia_factory.dart';
+import 'package:chess_auto_prep/services/maia/maia_factory.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart' show playUciMove;
 import 'package:flutter_test/flutter_test.dart';
 

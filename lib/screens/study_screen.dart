@@ -22,6 +22,7 @@ import '../services/study_import/study_import_exception.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
 import '../utils/board_shape_comments.dart';
+import '../utils/app_shortcuts.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_breadcrumb_trail.dart';
 import '../widgets/app_mode_menu_button.dart';
@@ -141,54 +142,61 @@ class _StudyScreenState extends State<StudyScreen> {
   /// Study-mode shortcuts, dispatched through [handleKeyBindings] (never
   /// while typing).
   List<KeyBinding> get _keyBindings => [
-    KeyBinding.run(
-      LogicalKeyboardKey.arrowLeft,
+    ...KeyBinding.forShortcut(
+      AppShortcut.backOneMove,
       'Back one move',
       _study.goBack,
       repeats: true,
     ),
-    KeyBinding.run(
-      LogicalKeyboardKey.arrowRight,
+    ...KeyBinding.forShortcut(
+      AppShortcut.forwardOneMove,
       'Forward one move',
       _study.goForward,
       repeats: true,
     ),
-    // Home/End jump to the line's ends (as in the PGN viewer); ↓/↑ step
-    // chapters — the app-wide convention is ↓/↑ = step the active list,
-    // which here is the chapter list. N/P are gone (N is the knight).
-    KeyBinding.run(LogicalKeyboardKey.home, 'Go to start', _study.goToStart),
-    KeyBinding.run(LogicalKeyboardKey.end, 'Go to end', _study.goToEnd),
-    KeyBinding.run(
-      LogicalKeyboardKey.keyE,
+    // Home/End jump to the line's ends (as in the PGN viewer); P/S (and ↓/↑)
+    // step the queue in front of you, which here is the chapter list.
+    ...KeyBinding.forShortcut(
+      AppShortcut.goToStart,
+      'Go to start',
+      _study.goToStart,
+    ),
+    ...KeyBinding.forShortcut(AppShortcut.goToEnd, 'Go to end', _study.goToEnd),
+    ...KeyBinding.forShortcut(
+      AppShortcut.toggleEngine,
       'Toggle engine',
       InlineEngineBar.toggleEngine,
     ),
-    KeyBinding.run(LogicalKeyboardKey.keyF, 'Flip board', _study.toggleFlipped),
-    KeyBinding.run(
-      LogicalKeyboardKey.keyA,
+    ...KeyBinding.forShortcut(
+      AppShortcut.flipBoard,
+      'Flip board',
+      _study.toggleFlipped,
+    ),
+    ...KeyBinding.forShortcut(
+      AppShortcut.browseInViewer,
       'Browse in PGN viewer',
       _browseInViewer,
     ),
-    KeyBinding.run(
-      LogicalKeyboardKey.arrowDown,
+    ...KeyBinding.forShortcut(
+      AppShortcut.nextItem,
       'Next chapter',
       () => _study.selectChapter(_study.chapterIndex + 1),
       repeats: true,
     ),
-    KeyBinding.run(
-      LogicalKeyboardKey.arrowUp,
+    ...KeyBinding.forShortcut(
+      AppShortcut.previousItem,
       'Previous chapter',
       () => _study.selectChapter(_study.chapterIndex - 1),
       repeats: true,
     ),
-    KeyBinding.run(
-      LogicalKeyboardKey.slash,
+    ...KeyBinding.forShortcut(
+      AppShortcut.focusMoveInput,
       'Focus move input',
       () => _moveInputKey.currentState?.focus(),
     ),
     // Jump into the annotation panel's comment field for the current move.
-    KeyBinding(
-      LogicalKeyboardKey.keyC,
+    ...KeyBinding.forShortcutIf(
+      AppShortcut.commentMove,
       'Comment current move',
       PgnAnnotationPanel.focusActive,
     ),

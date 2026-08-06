@@ -41,6 +41,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
+import '../utils/app_shortcuts.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_breadcrumb_trail.dart';
 import '../widgets/app_mode_menu_button.dart';
@@ -52,6 +53,7 @@ import '../widgets/engine/inline_engine_bar.dart';
 import '../widgets/fullscreen_game_view.dart';
 import '../widgets/game_analysis_tab.dart';
 import '../widgets/game_nav_bar.dart';
+import '../widgets/game_number_field.dart';
 import '../widgets/game_search_dialog.dart';
 import '../widgets/info_hint.dart';
 import '../widgets/pgn/generate_repertoire_dialog.dart';
@@ -952,107 +954,128 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     // autoplay/tab-switch/engine/amend keys are swallowed so they can't
     // disturb the puzzle.
     if (_controller.isSolitaireMode) ...[
-      KeyBinding.run(LogicalKeyboardKey.keyR, 'Reveal current move', () {
-        if (_controller.solitaire.canReveal) _controller.revealCurrentMove();
-      }),
-      for (final key in [
-        LogicalKeyboardKey.space,
-        LogicalKeyboardKey.tab,
-        LogicalKeyboardKey.keyE,
-        LogicalKeyboardKey.keyA,
+      // preempts: solitaire deliberately shadows the normal meaning of these
+      // keys — R stops being "return to mainline", and the four below stop
+      // doing anything at all. Saying so here is what keeps the dead-binding
+      // check from flagging the ones underneath.
+      ...KeyBinding.forShortcut(
+        AppShortcut.revealMove,
+        'Reveal current move',
+        () {
+          if (_controller.solitaire.canReveal) _controller.revealCurrentMove();
+        },
+        preempts: true,
+      ),
+      for (final shortcut in [
+        AppShortcut.autoPlay,
+        AppShortcut.nextTab,
+        AppShortcut.toggleEngine,
+        AppShortcut.amendGame,
       ])
-        KeyBinding(key, 'Disabled during solitaire', () => true),
+        ...KeyBinding.forShortcutIf(
+          shortcut,
+          'Disabled during solitaire',
+          () => true,
+          preempts: true,
+        ),
     ],
     // Arrows step whichever pane is on screen: the book line while the Line
     // tab is up, the game otherwise. Keys that move a board the user isn't
     // looking at are how the Line tab would have felt broken.
-    KeyBinding.run(
-      LogicalKeyboardKey.arrowLeft,
+    ...KeyBinding.forShortcut(
+      AppShortcut.backOneMove,
       'Back one move',
       () => _onLineTab
           ? _lineWidgetController.goBack()
           : _controller.navigateBack(),
       repeats: true,
     ),
-    KeyBinding.run(
-      LogicalKeyboardKey.arrowRight,
+    ...KeyBinding.forShortcut(
+      AppShortcut.forwardOneMove,
       'Forward one move',
       () => _onLineTab
           ? _lineWidgetController.goForward()
           : _controller.navigateForward(),
       repeats: true,
     ),
-    KeyBinding.run(
-      LogicalKeyboardKey.home,
+    ...KeyBinding.forShortcut(
+      AppShortcut.goToStart,
       'Go to start',
       _controller.navigateToStart,
     ),
-    KeyBinding.run(
-      LogicalKeyboardKey.end,
+    ...KeyBinding.forShortcut(
+      AppShortcut.goToEnd,
       'Go to end',
       _controller.navigateToEnd,
     ),
-    // ↓/↑ step the game list — the app-wide convention (←/→ move through a
-    // game, ↓/↑ step the active list). The old N/P pair is gone: N is the
-    // knight, which made it the wrong letter on any screen where moves are
-    // typed (solitaire here).
-    KeyBinding.run(
-      LogicalKeyboardKey.arrowDown,
+    // P/S (and ↓/↑) step the game list — the app-wide pair for "previous /
+    // next thing in the queue in front of me", while ←/→ stay on moves. Both
+    // chords are move-text safe, which is the whole reason the pair is P/S and
+    // not N/P: N is the knight.
+    ...KeyBinding.forShortcut(
+      AppShortcut.nextItem,
       'Next game',
       _controller.nextGame,
       repeats: true,
     ),
-    KeyBinding.run(
-      LogicalKeyboardKey.arrowUp,
+    ...KeyBinding.forShortcut(
+      AppShortcut.previousItem,
       'Previous game',
       _controller.prevGame,
       repeats: true,
     ),
-    KeyBinding.run(
-      LogicalKeyboardKey.f11,
+    ...KeyBinding.forShortcut(
+      AppShortcut.fullScreen,
       'Toggle fullscreen',
       _controller.toggleFullScreen,
     ),
-    KeyBinding.run(
-      LogicalKeyboardKey.keyF,
-      'Toggle fullscreen',
-      _controller.toggleFullScreen,
-      control: true,
-    ),
-    KeyBinding.run(
-      LogicalKeyboardKey.keyF,
+    ...KeyBinding.forShortcut(
+      AppShortcut.flipBoard,
       'Flip board',
       _controller.toggleBoardFlipped,
     ),
-    KeyBinding.run(
-      LogicalKeyboardKey.keyV,
-      'Paste PGN',
-      _pastePgn,
-      control: true,
-    ),
-    KeyBinding.run(
-      LogicalKeyboardKey.keyE,
+    ...KeyBinding.forShortcut(AppShortcut.pastePgn, 'Paste PGN', _pastePgn),
+    ...KeyBinding.forShortcut(
+      AppShortcut.toggleEngine,
       'Toggle engine',
       InlineEngineBar.toggleEngine,
     ),
-    KeyBinding.run(
-      LogicalKeyboardKey.space,
+    ...KeyBinding.forShortcut(
+      AppShortcut.autoPlay,
       'Toggle auto-play',
       _controller.toggleAutoPlay,
     ),
-    KeyBinding.run(
-      LogicalKeyboardKey.keyW,
+    ...KeyBinding.forShortcut(
+      AppShortcut.autoNextGame,
       'Toggle auto next game',
       () => _controller.setAutoNextGame(!_controller.autoNextGame),
     ),
-    KeyBinding.run(LogicalKeyboardKey.keyA, 'Edit in Study', _editInStudy),
-    KeyBinding.run(LogicalKeyboardKey.keyS, 'Search games', _openGameSearch),
+    ...KeyBinding.forShortcut(
+      AppShortcut.amendGame,
+      'Edit in Study',
+      _editInStudy,
+    ),
+    // Search moved off S when S became "next game": one key, one meaning,
+    // app-wide. `/` is the search key everywhere it is free, and it is free
+    // here because the viewer has no move box for it to focus.
+    ...KeyBinding.forShortcut(
+      AppShortcut.searchGames,
+      'Search games',
+      _openGameSearch,
+    ),
+    // Straight to the nav bar's number box — a game number you already know
+    // never needs the search dialog. Falls through when no box is on screen.
+    ...KeyBinding.forShortcutIf(
+      AppShortcut.goToGameNumber,
+      'Go to game number',
+      GameNumberField.focusActive,
+    ),
     // Escape leaves whatever you are in, innermost first — the ordering is the
     // whole contract: solitaire and amend are modes you entered, full screen is
     // a view you entered, and scratch analysis moves are the only thing left to
     // back out of once you are in none of them.
-    KeyBinding.run(
-      LogicalKeyboardKey.escape,
+    ...KeyBinding.forShortcut(
+      AppShortcut.leave,
       'Exit solitaire / amend / fullscreen, clear analysis moves',
       () {
         if (_controller.isSolitaireMode) {
@@ -1066,24 +1089,31 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         }
       },
     ),
-    KeyBinding.run(
-      LogicalKeyboardKey.tab,
+    ...KeyBinding.forShortcut(
+      AppShortcut.nextTab,
       'Next tab',
       () => _tabController.animateTo(
         (_tabController.index + 1) % _tabController.length,
       ),
     ),
-    KeyBinding.run(LogicalKeyboardKey.keyR, 'Return to mainline', () {
-      if (_pgnWidgetController.inVariation) {
-        _pgnWidgetController.returnToMainline();
-      }
-    }),
-    KeyBinding.run(
-      LogicalKeyboardKey.keyT,
+    ...KeyBinding.forShortcut(
+      AppShortcut.returnToMainline,
+      'Return to mainline',
+      () {
+        if (_pgnWidgetController.inVariation) {
+          _pgnWidgetController.returnToMainline();
+        }
+      },
+    ),
+    ...KeyBinding.forShortcut(
+      AppShortcut.toggleOpeningTree,
       'Toggle opening tree',
       _controller.toggleOpeningTree,
     ),
-    // Play the numbered branch candidate shown in the fork bar.
+    // Play the numbered branch candidate shown in the fork bar. The one
+    // family of keys with no registry entry: "the nth digit" is an index, not
+    // a named action, and the fork bar labels each candidate with its own
+    // number rather than advertising a shortcut in a tooltip.
     for (var i = 0; i < _digitKeys.length; i++)
       KeyBinding(
         _digitKeys[i],
@@ -1091,22 +1121,17 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         () => _pgnWidgetController.selectBranchCandidate(i),
       ),
     // Ctrl+S is the one people reach for; Shift+S stays because it is what the
-    // mode has always answered to. Escape (above) is the way out of it.
-    KeyBinding(
-      LogicalKeyboardKey.keyS,
+    // mode has always answered to. Neither collides with the bare S that steps
+    // to the next game — a chord's modifiers are part of its identity.
+    // Escape (above) is the way out of the mode.
+    ...KeyBinding.forShortcutIf(
+      AppShortcut.solitaire,
       'Toggle solitaire mode',
       _toggleSolitaireMode,
-      control: true,
-    ),
-    KeyBinding(
-      LogicalKeyboardKey.keyS,
-      'Toggle solitaire mode',
-      _toggleSolitaireMode,
-      shift: true,
     ),
     // Jump into the annotation panel's comment field (amend mode only).
-    KeyBinding(
-      LogicalKeyboardKey.keyC,
+    ...KeyBinding.forShortcutIf(
+      AppShortcut.commentMove,
       'Comment current move',
       PgnAnnotationPanel.focusActive,
     ),
@@ -1114,8 +1139,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   /// Solitaire is refused while the opening tree owns the board — the tree is
   /// a view of every game at once and there is no single game to guess through.
-  /// Always consumes the key, so the two bindings that reach it can't fall
-  /// through to a bare-S "search games" while the tree is up.
+  /// Returns true either way: refusing is an answer, not a fall-through to
+  /// some other binding.
   bool _toggleSolitaireMode() {
     if (!_controller.showOpeningTree) _controller.toggleSolitaire();
     return true;

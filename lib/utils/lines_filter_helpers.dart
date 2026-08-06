@@ -1,8 +1,8 @@
 import '../models/repertoire_line.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
-import '../utils/coverage_helpers.dart';
+import 'coverage_helpers.dart';
 import 'package:chess_auto_prep/services/line_metrics_helpers.dart';
-import '../utils/pgn_utils.dart' as pgn_utils;
+import 'pgn_utils.dart' as pgn_utils;
 
 /// Coverage category filter for the lines browser.
 enum CoverageFilter { all, covered, tooShallow, tooDeep, unaccounted }

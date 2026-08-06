@@ -5,7 +5,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:chess_auto_prep/features/coverage/models/coverage_config.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
-import '../../../services/maia_factory.dart';
+import '../../../services/maia/maia_factory.dart';
 import '../../../widgets/lichess_db_selector.dart';
 
 export 'package:chess_auto_prep/features/coverage/models/coverage_config.dart'

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../utils/app_shortcuts.dart';
+
 import '../../models/training_settings.dart';
 import '../shortcut_tooltip.dart';
 
@@ -358,7 +360,7 @@ class TrainingSettingsPanel extends StatelessWidget {
           const SizedBox(height: 12),
           ShortcutTooltip(
             description: 'Toggle auto-advance when learning new lines',
-            shortcut: 'J',
+            shortcut: AppShortcut.autoAdvance,
             child: SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: Text('Manual advance', style: theme.textTheme.titleSmall),

@@ -496,53 +496,8 @@ void main() {
     controller.dispose();
   });
 
-  group('isCorrectUserMove', () {
-    test('matches by UCI against the expected SAN', () {
-      final controller = buildController();
-      expect(
-        controller.isCorrectUserMove(_move(uci: 'e2e4', san: 'e4'), 'e4'),
-        isTrue,
-      );
-      controller.dispose();
-    });
-
-    test('a different legal move is rejected even with a legal UCI', () {
-      final controller = buildController();
-      expect(
-        controller.isCorrectUserMove(_move(uci: 'd2d4', san: 'd4'), 'e4'),
-        isFalse,
-      );
-      controller.dispose();
-    });
-
-    test('falls back to normalized SAN when the UCI cannot be played', () {
-      final controller = buildController();
-      // e2e5 is illegal from the start position, so the FEN comparison
-      // throws and the SAN fallback decides: suffixes and case are ignored.
-      expect(
-        controller.isCorrectUserMove(_move(uci: 'e2e5', san: 'e4!?'), 'e4'),
-        isTrue,
-      );
-      expect(
-        controller.isCorrectUserMove(_move(uci: 'e2e5', san: 'E4+'), 'e4'),
-        isTrue,
-      );
-      expect(
-        controller.isCorrectUserMove(_move(uci: 'e2e5', san: 'd4'), 'e4'),
-        isFalse,
-      );
-      controller.dispose();
-    });
-
-    test('unparsable expected SAN never matches', () {
-      final controller = buildController();
-      expect(
-        controller.isCorrectUserMove(_move(uci: 'e2e4', san: 'Zz9'), 'Zz9'),
-        isFalse,
-      );
-      controller.dispose();
-    });
-  });
+  // isCorrectUserMove moved to move_validation.dart as a plain function and
+  // is covered directly in move_validation_test.dart — no controller needed.
 
   group('drill phase transitions', () {
     test('correct move advances, wrong move records mistake, replay runs, '

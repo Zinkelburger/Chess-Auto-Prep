@@ -33,7 +33,7 @@ import '../services/analysis_games_service.dart';
 import '../services/engine/engine_lifecycle.dart';
 import '../services/engine/stockfish_pool.dart';
 import '../services/engine_weakness_service.dart';
-import '../services/maia_factory.dart';
+import '../services/maia/maia_factory.dart';
 import '../services/unified_analysis_builder.dart';
 import '../theme/app_colors.dart';
 import '../widgets/engine/engine_gate.dart';

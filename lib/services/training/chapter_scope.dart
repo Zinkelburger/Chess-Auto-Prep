@@ -42,7 +42,16 @@ class ChapterScope {
   final bool Function() _sourceIsStudy;
 
   TrainingSettings get settings => _settings();
-  List<RepertoireLine> get lines => _lines();
+
+  /// Trainable lines only.  A course export can carry model games — real
+  /// games included to show what the opening is played for — and being asked
+  /// to reproduce forty moves of somebody else's game is not training, so
+  /// they are filtered out here rather than in the file: browsing and study
+  /// still show them.
+  List<RepertoireLine> get lines => [
+    for (final line in _lines())
+      if (!line.isModelGame) line,
+  ];
 
   /// A study's chapters are its puzzles — nothing to re-group.
   bool get sourceIsStudy => _sourceIsStudy();

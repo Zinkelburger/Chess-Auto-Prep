@@ -211,6 +211,10 @@ class GameDeviationService {
   static _SanTrieNode _buildTrie(List<RepertoireLine> lines) {
     final root = _SanTrieNode();
     for (final line in lines) {
+      // Someone else's game illustrating the repertoire is not the
+      // repertoire: its moves would extend the book far past where your own
+      // preparation actually ends, and hide the deviation.
+      if (line.isModelGame) continue;
       // Lines from a custom root can't be matched by a from-move-1 walk.
       if (line.startPosition.fen != Chess.initial.fen) continue;
       var node = root;

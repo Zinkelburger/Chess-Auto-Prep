@@ -12,15 +12,11 @@ import '../eval/chessdb_api_provider.dart';
 import '../eval/eval_chain.dart';
 import '../eval/sqlite_eval_provider.dart';
 import '../eval_cache.dart';
-import '../probability_service.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
 
 class TreeEvalResolver {
   final EvalCache evalCache = EvalCache.instance;
-  final Map<String, ExplorerResponse?> _dbCache = {};
-  final ProbabilityService _probabilityService = ProbabilityService.instance;
-
   SqliteEvalProvider? _localChessDb;
   CdbDirectEvalProvider? _cdbDirect;
   ChessDbApiProvider? _chessDbApi;
@@ -28,10 +24,6 @@ class TreeEvalResolver {
   late BuildStats stats;
 
   ChessDbApiProvider? get chessDbApiProvider => _chessDbApi;
-
-  void reset() {
-    _dbCache.clear();
-  }
 
   Future<void> initProviders(TreeBuildConfig config) async {
     await teardownProviders();
@@ -100,27 +92,6 @@ class TreeEvalResolver {
       return (outcome.whiteCp!, outcome.depth);
     }
     return null;
-  }
-
-  Future<ExplorerResponse?> getDbData(
-    String fen,
-    TreeBuildConfig config,
-  ) async {
-    final cacheKey = '${config.useMasters ? "m" : "l"}|$fen';
-    if (_dbCache.containsKey(cacheKey)) {
-      stats.dbExplorerHits++;
-      return _dbCache[cacheKey];
-    }
-    stats.dbExplorerMisses++;
-    stats.lichessQueries++;
-    final data = await _probabilityService.getProbabilitiesForFen(
-      fen,
-      speeds: config.speeds,
-      ratings: config.ratingRange,
-      useMasters: config.useMasters,
-    );
-    _dbCache[cacheKey] = data;
-    return data;
   }
 
   /// Persist an eval (white-normalized cp).  Fire-and-forget — the L1

@@ -6,7 +6,7 @@ import '../../../core/pending_handoff.dart' show PgnViewerTab;
 import '../../../screens/settings_screen.dart';
 import '../../../services/tactics/tactics_import_coordinator.dart';
 import '../../../services/tactics/tactics_session_controller.dart';
-import '../../../services/tactics_database.dart';
+import '../../../services/tactics/tactics_database.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../widgets/common/list_search_field.dart';

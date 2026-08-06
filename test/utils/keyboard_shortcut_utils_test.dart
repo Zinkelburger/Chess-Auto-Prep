@@ -1,9 +1,98 @@
+import 'package:chess_auto_prep/utils/app_shortcuts.dart';
 import 'package:chess_auto_prep/utils/keyboard_shortcut_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  group('dead bindings', () {
+    // The bug class this catches: a binding that can never fire, while a
+    // tooltip somewhere keeps advertising its key. It used to be invisible
+    // until a user pressed the key and nothing happened.
+    KeyBinding shadow({bool preempts = false, bool repeats = false}) =>
+        KeyBinding.run(
+          LogicalKeyboardKey.keyR,
+          'Reveal current move',
+          () {},
+          preempts: preempts,
+          repeats: repeats,
+        );
+
+    KeyBinding shadowed({bool repeats = false}) => KeyBinding.run(
+      LogicalKeyboardKey.keyR,
+      'Return to mainline',
+      () {},
+      repeats: repeats,
+    );
+
+    test('an unreachable binding throws, naming both sides', () {
+      expect(
+        () => runKeyBindings([shadow(), shadowed()], LogicalKeyboardKey.keyR),
+        throwsA(
+          isA<FlutterError>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+              contains('Return to mainline'),
+              contains('Reveal current move'),
+              contains('preempts: true'),
+            ),
+          ),
+        ),
+      );
+    });
+
+    test('preempts: true is how deliberate shadowing is spelled', () {
+      expect(
+        runKeyBindings([
+          shadow(preempts: true),
+          shadowed(),
+        ], LogicalKeyboardKey.keyR),
+        KeyEventResult.handled,
+      );
+    });
+
+    test('a binding that can decline never shadows a later one', () {
+      var fallbackRan = false;
+      final result = runKeyBindings([
+        KeyBinding(LogicalKeyboardKey.keyR, 'Declines', () => false),
+        KeyBinding.run(
+          LogicalKeyboardKey.keyR,
+          'Runs',
+          () => fallbackRan = true,
+        ),
+      ], LogicalKeyboardKey.keyR);
+      expect(result, KeyEventResult.handled);
+      expect(fallbackRan, isTrue);
+    });
+
+    test('the same key under different modifiers is a different chord', () {
+      // Bare S steps the queue while Ctrl+S and Shift+S toggle solitaire —
+      // three live bindings on one key, none of them dead.
+      expect(
+        () => runKeyBindings([
+          ...KeyBinding.forShortcut(AppShortcut.nextItem, 'Next game', () {}),
+          ...KeyBinding.forShortcut(
+            AppShortcut.solitaire,
+            'Toggle solitaire',
+            () {},
+          ),
+        ], LogicalKeyboardKey.keyS),
+        returnsNormally,
+      );
+    });
+
+    test('a repeat-ignoring binding leaves repeats to a later one', () {
+      expect(
+        () => runKeyBindings([
+          shadow(),
+          shadowed(repeats: true),
+        ], LogicalKeyboardKey.keyR),
+        returnsNormally,
+      );
+    });
+  });
+
   group('isTextInputFocused', () {
     testWidgets('returns false when no focus', (tester) async {
       await tester.pumpWidget(

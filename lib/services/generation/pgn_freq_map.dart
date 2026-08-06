@@ -1,38 +1,431 @@
-/// PGN frequency map — Dart port of C `pgn_freq.c`.
+/// Position → move statistics harvested from a PGN game database.
 ///
-/// Parses standard PGN files and accumulates per-position move frequencies
-/// keyed by 4-field canonical FEN.  Runs parsing in an isolate so the UI
-/// stays responsive for large databases.
+/// This is the app's model of *human practice*: for every position reached,
+/// which moves were played, how often, how they scored, at what strength, and
+/// how recently.  It is deliberately more than a frequency table — an eval
+/// tells you what is best, this tells you what actually happens, and the two
+/// disagreeing is the most useful signal in opening preparation.
+///
+/// A bounded sample of the strongest games is retained whole (see
+/// [TopGamesReservoir]) so the course exporter can show model games without a
+/// second pass over the source files.
+///
+/// Parsing lives in `pgn_freq_parser.dart`; this file is pure data and is
+/// isolate-transferable.
 library;
 
-import 'dart:async';
-import 'dart:io' as io;
-import 'dart:isolate';
-
-import 'package:dartchess/dartchess.dart';
-import 'package:flutter/foundation.dart';
-
-import '../../utils/file_text_reader.dart';
 import '../eval/eval_canonicalize.dart';
-import 'pgn_freq_cache.dart';
 
-// ── Public data types ────────────────────────────────────────────────────
+const kDefaultStartFen =
+    'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
+// ── Game outcome ─────────────────────────────────────────────────────────
+
+/// The three PGN result tokens that carry information (`*` is "unknown").
+enum GameOutcome {
+  whiteWin,
+  draw,
+  blackWin;
+
+  /// Parse a PGN `[Result]` value; null for `*` and anything unrecognised.
+  static GameOutcome? parse(String? token) => switch (token?.trim()) {
+    '1-0' => GameOutcome.whiteWin,
+    '0-1' => GameOutcome.blackWin,
+    '1/2-1/2' || '½-½' => GameOutcome.draw,
+    _ => null,
+  };
+
+  String get pgnToken => switch (this) {
+    GameOutcome.whiteWin => '1-0',
+    GameOutcome.draw => '1/2-1/2',
+    GameOutcome.blackWin => '0-1',
+  };
+
+  /// Score for one side in [0, 1] — 1 win, ½ draw, 0 loss.
+  double scoreFor({required bool asWhite}) => switch (this) {
+    GameOutcome.draw => 0.5,
+    GameOutcome.whiteWin => asWhite ? 1.0 : 0.0,
+    GameOutcome.blackWin => asWhite ? 0.0 : 1.0,
+  };
+}
+
+// ── Per-move statistics ──────────────────────────────────────────────────
+
+/// One move played from one position, with everything the database knows
+/// about how it went.
+///
+/// Counters are mutable because accumulation is the hot path of a database
+/// scan; treat an instance as immutable once parsing has finished.
 class PgnFreqMove {
   final String uci;
   final String san;
+
+  /// Games in which this move was played.  Always ≥ the sum of the three
+  /// outcome counters — games with a `*` result contribute here only.
   int count;
 
-  PgnFreqMove({required this.uci, required this.san, this.count = 1});
+  int whiteWins;
+  int draws;
+  int blackWins;
+
+  /// Sum of per-game average Elo, over games where both ratings were known.
+  /// Kept as a sum + count so maps can be merged without weighting errors.
+  int eloSum;
+  int eloCount;
+
+  /// Most recent year this move was played (0 when no game carried a date).
+  int lastYear;
+
+  PgnFreqMove({
+    required this.uci,
+    required this.san,
+    this.count = 1,
+    this.whiteWins = 0,
+    this.draws = 0,
+    this.blackWins = 0,
+    this.eloSum = 0,
+    this.eloCount = 0,
+    this.lastYear = 0,
+  });
+
+  /// Games with a known result — the denominator for [scoreFor].
+  int get decidedGames => whiteWins + draws + blackWins;
+
+  /// Score from [asWhite]'s perspective: `(wins + ½·draws) / decided`.
+  /// Null when no game at this move had a recorded result, which is the
+  /// honest answer — 0.5 would look like a measurement.
+  double? scoreFor({required bool asWhite}) {
+    final decided = decidedGames;
+    if (decided == 0) return null;
+    final wins = asWhite ? whiteWins : blackWins;
+    return (wins + 0.5 * draws) / decided;
+  }
+
+  /// Mean rating of the players who chose this move, or null if unrated.
+  int? get averageElo => eloCount == 0 ? null : eloSum ~/ eloCount;
+
+  void record({GameOutcome? outcome, int? averageElo, int? year}) {
+    count++;
+    switch (outcome) {
+      case GameOutcome.whiteWin:
+        whiteWins++;
+      case GameOutcome.draw:
+        draws++;
+      case GameOutcome.blackWin:
+        blackWins++;
+      case null:
+        break;
+    }
+    if (averageElo != null && averageElo > 0) {
+      eloSum += averageElo;
+      eloCount++;
+    }
+    if (year != null && year > lastYear) lastYear = year;
+  }
+
+  void absorb(PgnFreqMove other) {
+    count += other.count;
+    whiteWins += other.whiteWins;
+    draws += other.draws;
+    blackWins += other.blackWins;
+    eloSum += other.eloSum;
+    eloCount += other.eloCount;
+    if (other.lastYear > lastYear) lastYear = other.lastYear;
+  }
 }
+
+// ── Per-position statistics ──────────────────────────────────────────────
 
 class PgnFreqPosition {
   final String fenKey;
+
+  /// How many games reached this position.
   int reachCount = 0;
+
   final List<PgnFreqMove> moves = [];
 
+  /// Indices into [PgnFreqMap.games] for retained games passing through here,
+  /// newest-inserted last.  Bounded by [maxGameRefsPerPosition].
+  final List<int> gameRefs = [];
+
   PgnFreqPosition(this.fenKey);
+
+  /// Cap on retained game references per position.  Model-game selection only
+  /// ever shows a handful, and an unbounded list on a heavily-transposed
+  /// tabiya would dominate the cache file.
+  static const int maxGameRefsPerPosition = 24;
+
+  /// Total games across all recorded moves — the denominator to use when
+  /// [reachCount] is unavailable (legacy caches recorded moves only).
+  int get playedTotal => moves.fold(0, (sum, m) => sum + m.count);
+
+  PgnFreqMove? move(String uci) {
+    for (final m in moves) {
+      if (m.uci == uci) return m;
+    }
+    return null;
+  }
+
+  void addGameRef(int index) {
+    if (gameRefs.length >= maxGameRefsPerPosition) return;
+    if (gameRefs.contains(index)) return;
+    gameRefs.add(index);
+  }
 }
+
+// ── Retained games ───────────────────────────────────────────────────────
+
+/// A whole game kept from the source database, strong enough to be worth
+/// showing as a model game.
+class PgnGameRecord {
+  final String white;
+  final String black;
+  final int whiteElo;
+  final int blackElo;
+  final String event;
+  final String date;
+  final GameOutcome? outcome;
+
+  /// SAN moves, truncated to [maxRetainedPlies].
+  final List<String> movesSan;
+
+  const PgnGameRecord({
+    required this.white,
+    required this.black,
+    required this.whiteElo,
+    required this.blackElo,
+    required this.event,
+    required this.date,
+    required this.outcome,
+    required this.movesSan,
+  });
+
+  /// Games longer than this are truncated: a model game's teaching value is
+  /// in the opening and early middlegame, and the tail is mostly technique.
+  static const int maxRetainedPlies = 120;
+
+  /// Rating strength used for admission and ranking.  Falls back to whichever
+  /// single rating is known, then 0.
+  int get averageElo {
+    if (whiteElo > 0 && blackElo > 0) return (whiteElo + blackElo) ~/ 2;
+    return whiteElo > 0 ? whiteElo : blackElo;
+  }
+
+  int? get year {
+    final match = RegExp(r'(\d{4})').firstMatch(date);
+    if (match == null) return null;
+    return int.tryParse(match.group(1)!);
+  }
+
+  bool get isDecisive =>
+      outcome == GameOutcome.whiteWin || outcome == GameOutcome.blackWin;
+
+  /// True when [asWhite]'s side won.
+  bool wonBy({required bool asWhite}) =>
+      outcome == (asWhite ? GameOutcome.whiteWin : GameOutcome.blackWin);
+
+  /// `Kasparov, G – Karpov, A` with `?`/empty names elided.
+  String get playersLabel {
+    final w = white.isEmpty || white == '?' ? null : white;
+    final b = black.isEmpty || black == '?' ? null : black;
+    if (w == null && b == null) return 'Unknown players';
+    return '${w ?? '?'} – ${b ?? '?'}';
+  }
+}
+
+/// Keeps the highest-rated [capacity] games seen, in O(1) amortized time.
+///
+/// Admission is by [PgnGameRecord.averageElo].  Rather than maintaining a
+/// heap, entries accumulate to twice the capacity and are then sorted and
+/// truncated, which raises [admissionElo] and rejects most later candidates
+/// outright — a database scan spends almost no time here.
+class TopGamesReservoir {
+  TopGamesReservoir({this.capacity = defaultCapacity});
+
+  static const int defaultCapacity = 512;
+
+  final int capacity;
+  final List<PgnGameRecord> _entries = [];
+
+  /// Lowest average Elo currently retained; candidates below it are dropped
+  /// without allocating.  0 until the reservoir has overflowed once.
+  int admissionElo = 0;
+
+  List<PgnGameRecord> get entries => List.unmodifiable(_entries);
+  int get length => _entries.length;
+  bool get isEmpty => _entries.isEmpty;
+
+  /// Offer [game]; returns its index when retained, or null when rejected.
+  ///
+  /// The index is stable only until the next [_compact], so callers that
+  /// store it must re-map through [compactIndices] afterwards.  In practice
+  /// only the parser holds indices, and it re-maps on every compaction.
+  int? offer(PgnGameRecord game) {
+    if (capacity <= 0) return null;
+    if (_entries.length >= capacity && game.averageElo < admissionElo) {
+      return null;
+    }
+    _entries.add(game);
+    return _entries.length - 1;
+  }
+
+  /// True when the reservoir has grown past its compaction watermark.
+  bool get needsCompaction => _entries.length >= capacity * 2;
+
+  /// Sort by strength, truncate to [capacity], and return the old-index →
+  /// new-index mapping (missing keys were evicted).
+  Map<int, int> compactIndices() {
+    final ordered = List.generate(
+      _entries.length,
+      (i) => i,
+    )..sort((a, b) => _entries[b].averageElo.compareTo(_entries[a].averageElo));
+    final kept = ordered.take(capacity).toList();
+    final remap = <int, int>{};
+    final compacted = <PgnGameRecord>[];
+    for (final oldIndex in kept) {
+      remap[oldIndex] = compacted.length;
+      compacted.add(_entries[oldIndex]);
+    }
+    _entries
+      ..clear()
+      ..addAll(compacted);
+    admissionElo = _entries.isEmpty ? 0 : _entries.last.averageElo;
+    return remap;
+  }
+
+  /// Merge [other] in, returning its old-index → new-index mapping so the
+  /// caller can rewrite position game-refs.  Entries that lose the cut are
+  /// absent from the map.
+  Map<int, int> absorb(TopGamesReservoir other) {
+    final offered = <int, int>{};
+    for (var i = 0; i < other._entries.length; i++) {
+      final index = offer(other._entries[i]);
+      if (index != null) offered[i] = index;
+    }
+    if (!needsCompaction) return offered;
+    final remap = compactIndices();
+    return {
+      for (final entry in offered.entries)
+        if (remap.containsKey(entry.value)) entry.key: remap[entry.value]!,
+    };
+  }
+
+  /// Final ordering: strongest first.  Call once parsing is complete.
+  Map<int, int> finalize() => compactIndices();
+
+  void addAllUnchecked(Iterable<PgnGameRecord> games) => _entries.addAll(games);
+}
+
+// ── The map ──────────────────────────────────────────────────────────────
+
+class PgnFreqMap {
+  PgnFreqMap({int gameCapacity = TopGamesReservoir.defaultCapacity})
+    : games = TopGamesReservoir(capacity: gameCapacity);
+
+  final Map<String, PgnFreqPosition> _positions = {};
+
+  /// Strongest games retained whole, for model-game selection.
+  final TopGamesReservoir games;
+
+  int totalGames = 0;
+
+  int get positionCount => _positions.length;
+
+  /// Exposed for disk cache serialization.
+  Iterable<MapEntry<String, PgnFreqPosition>> get positions =>
+      _positions.entries;
+
+  PgnFreqPosition? get(String fen) => _positions[canonicalizeFen4(fen)];
+
+  PgnFreqPosition getOrCreate(String fenKey) =>
+      _positions.putIfAbsent(fenKey, () => PgnFreqPosition(fenKey));
+
+  /// Record one occurrence of [uci] at [fenKey], with whatever game context
+  /// the source PGN provided.
+  void recordMove(
+    String fenKey,
+    String uci,
+    String san, {
+    GameOutcome? outcome,
+    int? averageElo,
+    int? year,
+  }) {
+    final pos = getOrCreate(fenKey);
+    final existing = pos.move(uci);
+    if (existing != null) {
+      existing.record(outcome: outcome, averageElo: averageElo, year: year);
+      return;
+    }
+    pos.moves.add(
+      PgnFreqMove(uci: uci, san: san, count: 0)
+        ..record(outcome: outcome, averageElo: averageElo, year: year),
+    );
+  }
+
+  void recordReach(String fenKey) => getOrCreate(fenKey).reachCount++;
+
+  /// Moves clearing both a minimum game count and a minimum share of play.
+  List<PgnFreqMove> filteredMoves(
+    PgnFreqPosition pos, {
+    required int minGames,
+    required double minProb,
+  }) {
+    final total = pos.playedTotal;
+    if (total == 0) return const [];
+    return [
+      for (final m in pos.moves)
+        if (m.count >= minGames && m.count / total >= minProb) m,
+    ];
+  }
+
+  /// Merge [other] into this map, summing counters and folding its retained
+  /// games into this reservoir (rewriting position game-refs to match).
+  void merge(PgnFreqMap other) {
+    totalGames += other.totalGames;
+    final remap = games.absorb(other.games);
+
+    for (final entry in other._positions.entries) {
+      final src = entry.value;
+      final dst = getOrCreate(entry.key);
+      dst.reachCount += src.reachCount;
+      for (final srcMove in src.moves) {
+        final dstMove = dst.move(srcMove.uci);
+        if (dstMove != null) {
+          dstMove.absorb(srcMove);
+        } else {
+          dst.moves.add(
+            PgnFreqMove(uci: srcMove.uci, san: srcMove.san, count: 0)
+              ..absorb(srcMove),
+          );
+        }
+      }
+      for (final oldIndex in src.gameRefs) {
+        final newIndex = remap[oldIndex];
+        if (newIndex != null) dst.addGameRef(newIndex);
+      }
+    }
+  }
+
+  /// Rewrite every position's game-refs through [remap], dropping evicted
+  /// entries.  Called after the reservoir compacts.
+  void remapGameRefs(Map<int, int> remap) {
+    for (final pos in _positions.values) {
+      if (pos.gameRefs.isEmpty) continue;
+      final rewritten = [
+        for (final old in pos.gameRefs)
+          if (remap.containsKey(old)) remap[old]!,
+      ];
+      pos.gameRefs
+        ..clear()
+        ..addAll(rewritten);
+    }
+  }
+
+  PgnFreqStats get stats =>
+      PgnFreqStats(positions: positionCount, totalGames: totalGames);
+}
+
+// ── Parse configuration and outcome ──────────────────────────────────────
 
 class PgnFreqConfig {
   final String? startFen;
@@ -40,11 +433,23 @@ class PgnFreqConfig {
   final int maxPly;
   final int minElo;
 
+  /// How many whole games to retain for model-game selection.  0 disables
+  /// retention entirely (a pure frequency scan, the cheapest mode).
+  final int retainGames;
+
+  /// Rating floor for retention, separate from [minElo] so that raising the
+  /// bar for what counts as a *model* game does not shrink the frequency
+  /// sample the repertoire is built from.  Games with no rating at all are
+  /// still retained — the reservoir ranks them last on its own.
+  final int retainMinElo;
+
   const PgnFreqConfig({
     this.startFen,
     this.startMoves,
     this.maxPly = 0,
     this.minElo = 0,
+    this.retainGames = TopGamesReservoir.defaultCapacity,
+    this.retainMinElo = 0,
   });
 }
 
@@ -55,6 +460,7 @@ class PgnFreqStats {
   final int skippedPrefix;
   final int parseErrors;
   final int fileReadErrors;
+  final int retainedGames;
 
   const PgnFreqStats({
     this.positions = 0,
@@ -63,606 +469,6 @@ class PgnFreqStats {
     this.skippedPrefix = 0,
     this.parseErrors = 0,
     this.fileReadErrors = 0,
+    this.retainedGames = 0,
   });
-}
-
-// ── PgnFreqMap ───────────────────────────────────────────────────────────
-
-const kDefaultStartFen =
-    'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-
-class PgnFreqMap {
-  final Map<String, PgnFreqPosition> _positions = {};
-  int totalGames = 0;
-
-  int get positionCount => _positions.length;
-
-  /// Exposed for disk cache serialization.
-  Iterable<MapEntry<String, PgnFreqPosition>> get positions =>
-      _positions.entries;
-
-  PgnFreqPosition? get(String fen) {
-    final key = canonicalizeFen4(fen);
-    return _positions[key];
-  }
-
-  PgnFreqPosition getOrCreate(String fenKey) {
-    return _positions.putIfAbsent(fenKey, () => PgnFreqPosition(fenKey));
-  }
-
-  void recordMove(String fenKey, String uci, String san) {
-    final pos = getOrCreate(fenKey);
-    for (final m in pos.moves) {
-      if (m.uci == uci) {
-        m.count++;
-        return;
-      }
-    }
-    pos.moves.add(PgnFreqMove(uci: uci, san: san));
-  }
-
-  void recordReach(String fenKey) {
-    getOrCreate(fenKey).reachCount++;
-  }
-
-  /// Filter moves by minimum game count AND minimum probability.
-  List<PgnFreqMove> filteredMoves(
-    PgnFreqPosition pos, {
-    required int minGames,
-    required double minProb,
-  }) {
-    int total = 0;
-    for (final m in pos.moves) {
-      total += m.count;
-    }
-    if (total == 0) return const [];
-
-    final result = <PgnFreqMove>[];
-    for (final m in pos.moves) {
-      if (m.count < minGames) continue;
-      if (m.count / total < minProb) continue;
-      result.add(m);
-    }
-    return result;
-  }
-
-  /// Merge another map into this one (sum counts).
-  void merge(PgnFreqMap other) {
-    totalGames += other.totalGames;
-    for (final entry in other._positions.entries) {
-      final src = entry.value;
-      final dst = getOrCreate(entry.key);
-      dst.reachCount += src.reachCount;
-      for (final srcMove in src.moves) {
-        bool found = false;
-        for (final dstMove in dst.moves) {
-          if (dstMove.uci == srcMove.uci) {
-            dstMove.count += srcMove.count;
-            found = true;
-            break;
-          }
-        }
-        if (!found) {
-          dst.moves.add(
-            PgnFreqMove(
-              uci: srcMove.uci,
-              san: srcMove.san,
-              count: srcMove.count,
-            ),
-          );
-        }
-      }
-    }
-  }
-
-  PgnFreqStats get stats =>
-      PgnFreqStats(positions: positionCount, totalGames: totalGames);
-}
-
-// ── Isolate-based PGN file parsing ───────────────────────────────────────
-
-/// Parse one or more PGN files into a [PgnFreqMap] in a background isolate.
-///
-/// [onProgress] reports (gamesProcessed, currentFile) periodically.
-/// [useDiskCache] loads/saves `<path>.freq.cache` when file metadata matches.
-Future<(PgnFreqMap, PgnFreqStats)> parsePgnFiles({
-  required List<String> paths,
-  required PgnFreqConfig config,
-  void Function(int gamesProcessed, String currentFile)? onProgress,
-  bool useDiskCache = true,
-}) async {
-  final resultPort = ReceivePort();
-  final progressPort = ReceivePort();
-  final errorPort = ReceivePort();
-
-  StreamSubscription? progressSub;
-  if (onProgress != null) {
-    progressSub = progressPort.listen((msg) {
-      if (msg is List && msg.length == 2) {
-        onProgress(msg[0] as int, msg[1] as String);
-      }
-    });
-  }
-
-  try {
-    await Isolate.spawn(
-      _parseIsolateEntry,
-      _ParseRequest(
-        paths: paths,
-        config: config,
-        useDiskCache: useDiskCache,
-        resultPort: resultPort.sendPort,
-        progressPort: progressPort.sendPort,
-      ),
-      onError: errorPort.sendPort,
-    );
-
-    // Race the result against an uncaught isolate error so a crashed
-    // isolate surfaces as an exception instead of hanging this await.
-    final completer = Completer<_ParseResult>();
-    resultPort.listen((msg) {
-      if (!completer.isCompleted) completer.complete(msg as _ParseResult);
-    });
-    errorPort.listen((msg) {
-      final desc = (msg is List && msg.isNotEmpty) ? msg.first : msg;
-      if (!completer.isCompleted) {
-        completer.completeError(StateError('PGN parsing failed: $desc'));
-      }
-    });
-
-    final result = await completer.future;
-    return (result.map, result.stats);
-  } finally {
-    await progressSub?.cancel();
-    resultPort.close();
-    progressPort.close();
-    errorPort.close();
-  }
-}
-
-// ── Isolate internals ────────────────────────────────────────────────────
-
-class _ParseRequest {
-  final List<String> paths;
-  final PgnFreqConfig config;
-  final bool useDiskCache;
-  final SendPort resultPort;
-  final SendPort progressPort;
-
-  _ParseRequest({
-    required this.paths,
-    required this.config,
-    required this.useDiskCache,
-    required this.resultPort,
-    required this.progressPort,
-  });
-}
-
-class _ParseResult {
-  final PgnFreqMap map;
-  final PgnFreqStats stats;
-  _ParseResult(this.map, this.stats);
-}
-
-void _parseIsolateEntry(_ParseRequest req) {
-  final map = PgnFreqMap();
-  int skippedElo = 0;
-  int skippedPrefix = 0;
-  int parseErrors = 0;
-  int fileReadErrors = 0;
-  int totalParsed = 0;
-  final parseWarnings = _ParseWarningLogger();
-
-  final targetKey = _buildTrackingTarget(req.config);
-
-  for (final path in req.paths) {
-    try {
-      final file = io.File(path);
-      final stat = file.statSync();
-      final manifest = buildPgnFreqManifest(
-        path: path,
-        stat: stat,
-        config: req.config,
-      );
-      final cachePath = pgnFreqCachePath(path);
-
-      PgnFreqMap? fileMap;
-      if (req.useDiskCache) {
-        fileMap = loadPgnFreqCache(cachePath, manifest);
-        if (fileMap != null) {
-          map.merge(fileMap);
-          totalParsed += fileMap.totalGames;
-          req.progressPort.send([totalParsed, path]);
-          continue;
-        }
-      }
-
-      fileMap = PgnFreqMap();
-      final decoded = decodeTextBytesDetailed(file.readAsBytesSync());
-      if (decoded.usedLatin1Fallback) {
-        debugPrint(
-          '[PgnFreqMap] Warning: read $path as Latin-1 (not valid UTF-8)',
-        );
-      }
-      final games = _splitPgnGames(decoded.text);
-
-      for (int gi = 0; gi < games.length; gi++) {
-        final game = games[gi];
-
-        if (req.config.minElo > 0) {
-          final wElo = _parseEloTag(game.headers, 'WhiteElo');
-          final bElo = _parseEloTag(game.headers, 'BlackElo');
-          if (wElo > 0 &&
-              bElo > 0 &&
-              wElo < req.config.minElo &&
-              bElo < req.config.minElo) {
-            skippedElo++;
-            continue;
-          }
-        }
-
-        final result = _processGameMovetext(
-          map: fileMap,
-          movetext: game.movetext,
-          targetKey: targetKey,
-          maxPly: req.config.maxPly,
-          gameIndex: gi + 1,
-          headers: game.headers,
-          warnings: parseWarnings,
-        );
-
-        switch (result) {
-          case _GameResult.ok:
-            totalParsed++;
-            fileMap.totalGames++;
-          case _GameResult.prefixSkip:
-            skippedPrefix++;
-          case _GameResult.error:
-            parseErrors++;
-        }
-
-        if (gi % 100 == 0) {
-          req.progressPort.send([totalParsed, path]);
-        }
-      }
-
-      map.merge(fileMap);
-
-      if (req.useDiskCache && fileMap.totalGames > 0) {
-        if (!savePgnFreqCache(fileMap, cachePath, manifest)) {
-          debugPrint(
-            '[PgnFreqMap] Warning: could not save frequency cache to $cachePath',
-          );
-        }
-      }
-    } catch (e) {
-      fileReadErrors++;
-      debugPrint('[PgnFreqMap] Error reading/parsing $path: $e');
-    }
-    req.progressPort.send([totalParsed, path]);
-  }
-
-  parseWarnings.logSummaryIfNeeded();
-
-  req.resultPort.send(
-    _ParseResult(
-      map,
-      PgnFreqStats(
-        positions: map.positionCount,
-        totalGames: totalParsed,
-        skippedElo: skippedElo,
-        skippedPrefix: skippedPrefix,
-        parseErrors: parseErrors,
-        fileReadErrors: fileReadErrors,
-      ),
-    ),
-  );
-}
-
-// ── PGN file splitting ───────────────────────────────────────────────────
-
-class _PgnGame {
-  final Map<String, String> headers;
-  final String movetext;
-  _PgnGame({required this.headers, required this.movetext});
-}
-
-List<_PgnGame> _splitPgnGames(String pgn) {
-  final games = <_PgnGame>[];
-  final lines = pgn.split('\n');
-  var headers = <String, String>{};
-  final movetext = StringBuffer();
-  bool inMovetext = false;
-
-  for (final line in lines) {
-    final trimmed = line.trim();
-
-    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-      if (inMovetext && movetext.isNotEmpty) {
-        games.add(_PgnGame(headers: headers, movetext: movetext.toString()));
-        headers = <String, String>{};
-        movetext.clear();
-        inMovetext = false;
-      }
-      final match = RegExp(r'^\[(\w+)\s+"(.*)"\]$').firstMatch(trimmed);
-      if (match != null) {
-        headers[match.group(1)!] = match.group(2)!;
-      }
-    } else if (trimmed.isEmpty) {
-      if (headers.isNotEmpty && !inMovetext) {
-        inMovetext = true;
-      } else if (inMovetext && movetext.isNotEmpty) {
-        games.add(_PgnGame(headers: headers, movetext: movetext.toString()));
-        headers = <String, String>{};
-        movetext.clear();
-        inMovetext = false;
-      }
-    } else {
-      inMovetext = true;
-      if (movetext.isNotEmpty) movetext.write(' ');
-      movetext.write(trimmed);
-    }
-  }
-
-  if (movetext.isNotEmpty) {
-    games.add(_PgnGame(headers: headers, movetext: movetext.toString()));
-  }
-
-  return games;
-}
-
-int _parseEloTag(Map<String, String> headers, String tag) {
-  final value = headers[tag];
-  if (value == null || value.isEmpty || value == '?') return 0;
-  return int.tryParse(value) ?? 0;
-}
-
-// ── Movetext processing ──────────────────────────────────────────────────
-
-enum _GameResult { ok, prefixSkip, error }
-
-List<String> _parsePrefixMoves(String moves) {
-  return moves
-      .split(RegExp(r'\s+'))
-      .where((tok) => !_isMoveNumber(tok) && !_isResult(tok) && tok.isNotEmpty)
-      .toList();
-}
-
-bool _isMoveNumber(String tok) {
-  if (tok.isEmpty) return true;
-  final cleaned = tok.replaceAll('.', '');
-  return cleaned.isNotEmpty && int.tryParse(cleaned) != null;
-}
-
-bool _isResult(String tok) {
-  return tok == '1-0' || tok == '0-1' || tok == '1/2-1/2' || tok == '*';
-}
-
-/// Extracts a SAN move from a PGN token (handles "1.e4", "12.Nf3", "1...c5").
-String? _tokenToSan(String tok) {
-  if (tok.isEmpty) return null;
-
-  int i = 0;
-  while (i < tok.length && tok.codeUnitAt(i) >= 48 && tok.codeUnitAt(i) <= 57) {
-    i++;
-  }
-  if (i > 0) {
-    if (i >= tok.length) return null;
-    if (tok[i] != '.') return tok;
-    while (i < tok.length && tok[i] == '.') {
-      i++;
-    }
-    if (i >= tok.length) return null;
-    return tok.substring(i);
-  }
-
-  return tok;
-}
-
-/// Tokenize PGN movetext, skipping comments and variations.
-List<String> _tokenizeMovetext(String movetext) {
-  final tokens = <String>[];
-  int i = 0;
-  final len = movetext.length;
-
-  while (i < len) {
-    final ch = movetext[i];
-
-    if (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n') {
-      i++;
-      continue;
-    }
-
-    if (ch == '{') {
-      i++;
-      while (i < len && movetext[i] != '}') {
-        i++;
-      }
-      if (i < len) i++;
-      continue;
-    }
-
-    if (ch == '(') {
-      int depth = 1;
-      i++;
-      while (i < len && depth > 0) {
-        if (movetext[i] == '(') {
-          depth++;
-        } else if (movetext[i] == ')') {
-          depth--;
-        }
-        i++;
-      }
-      continue;
-    }
-
-    if (ch == '\$') {
-      i++;
-      while (i < len &&
-          movetext.codeUnitAt(i) >= 48 &&
-          movetext.codeUnitAt(i) <= 57) {
-        i++;
-      }
-      continue;
-    }
-
-    final start = i;
-    while (i < len &&
-        movetext[i] != ' ' &&
-        movetext[i] != '\t' &&
-        movetext[i] != '\r' &&
-        movetext[i] != '\n' &&
-        movetext[i] != '{' &&
-        movetext[i] != '(') {
-      i++;
-    }
-    tokens.add(movetext.substring(start, i));
-  }
-  return tokens;
-}
-
-/// Parse a SAN move against a live position; null if unparseable/illegal.
-Move? _parseSanMove(Position position, String san) {
-  try {
-    return position.parseSan(san);
-  } catch (_) {
-    return null;
-  }
-}
-
-bool _fenKeysEqual(String fenA, String fenB) {
-  return canonicalizeFen4(fenA) == canonicalizeFen4(fenB);
-}
-
-/// Build the 4-field FEN key games must reach before frequency tracking.
-/// Returns null when no prefix filter is configured.
-String? _buildTrackingTarget(PgnFreqConfig cfg) {
-  final prefixMoves = (cfg.startMoves != null && cfg.startMoves!.isNotEmpty)
-      ? _parsePrefixMoves(cfg.startMoves!)
-      : <String>[];
-
-  final wantFen =
-      cfg.startFen != null &&
-      cfg.startFen!.isNotEmpty &&
-      !_fenKeysEqual(cfg.startFen!, kDefaultStartFen);
-
-  if (prefixMoves.isEmpty && !wantFen) return null;
-
-  Position position;
-  try {
-    position = Chess.fromSetup(
-      Setup.parseFen(wantFen ? cfg.startFen! : kDefaultStartFen),
-    );
-  } catch (_) {
-    return null;
-  }
-
-  for (final san in prefixMoves) {
-    final move = _parseSanMove(position, san);
-    if (move == null) return null;
-    position = position.play(move);
-  }
-
-  return canonicalizeFen4(position.fen);
-}
-
-class _ParseWarningLogger {
-  static const int maxDetailed = 10;
-  int logged = 0;
-  int suppressed = 0;
-
-  void logMoveFailure({
-    required int gameIndex,
-    required Map<String, String> headers,
-    required String failingSan,
-    required String fen,
-    required String reason,
-  }) {
-    if (logged >= maxDetailed) {
-      suppressed++;
-      return;
-    }
-    logged++;
-    final white = headers['White'] ?? '?';
-    final black = headers['Black'] ?? '?';
-    final event = headers['Event'] ?? '?';
-    final date = headers['Date'] ?? '?';
-    debugPrint(
-      '[PgnFreqMap] Warning: $reason SAN "$failingSan" at FEN $fen '
-      '(game #$gameIndex: White=$white, Black=$black, Event=$event, Date=$date)',
-    );
-  }
-
-  void logSummaryIfNeeded() {
-    if (suppressed <= 0) return;
-    debugPrint(
-      '[PgnFreqMap] Warning: suppressed $suppressed additional parse warnings '
-      '(first $maxDetailed shown)',
-    );
-  }
-}
-
-_GameResult _processGameMovetext({
-  required PgnFreqMap map,
-  required String movetext,
-  required String? targetKey,
-  required int maxPly,
-  required int gameIndex,
-  required Map<String, String> headers,
-  required _ParseWarningLogger warnings,
-}) {
-  // One live position threaded through the game; fenKey always mirrors it.
-  Position position = Chess.initial;
-  var fenKey = canonicalizeFen4(position.fen);
-  var tracking = targetKey == null;
-  var plyTracked = 0;
-
-  if (targetKey != null && fenKey == targetKey) {
-    tracking = true;
-    map.recordReach(targetKey);
-  }
-
-  final tokens = _tokenizeMovetext(movetext);
-
-  for (final tok in tokens) {
-    final san = _tokenToSan(tok);
-    if (san == null) continue;
-    if (_isResult(san)) break;
-
-    // parseSan only yields legal moves, so this covers illegal moves too.
-    final move = _parseSanMove(position, san);
-    if (move == null) {
-      warnings.logMoveFailure(
-        gameIndex: gameIndex,
-        headers: headers,
-        failingSan: san,
-        fen: position.fen,
-        reason: 'cannot parse move',
-      );
-      return _GameResult.error;
-    }
-
-    if (!tracking) {
-      position = position.play(move);
-      fenKey = canonicalizeFen4(position.fen);
-
-      if (fenKey == targetKey) {
-        tracking = true;
-        map.recordReach(fenKey);
-      }
-      continue;
-    }
-
-    if (maxPly > 0 && plyTracked >= maxPly) break;
-
-    map.recordMove(fenKey, move.uci, san);
-
-    position = position.play(move);
-    fenKey = canonicalizeFen4(position.fen);
-
-    map.recordReach(fenKey);
-    plyTracked++;
-  }
-
-  return tracking ? _GameResult.ok : _GameResult.prefixSkip;
 }

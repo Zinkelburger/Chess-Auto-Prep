@@ -6,11 +6,14 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../utils/app_shortcuts.dart';
+
 import '../models/pgn_filter_models.dart';
 import '../theme/app_colors.dart';
 import 'labeled_toggle.dart';
 import 'shortcut_tooltip.dart';
 import 'game_nav_item.dart';
+import 'game_number_field.dart';
 import 'game_search_dialog.dart';
 
 export '../models/pgn_filter_models.dart' show GameSortMode;
@@ -106,7 +109,7 @@ class GameNavBar extends StatelessWidget {
           spacing: 4,
           runSpacing: 4,
           children: [
-            _buildGameCounterDropdown(context),
+            _buildGameCounter(context),
             _buildSolitaireControls(context),
           ],
         ),
@@ -116,7 +119,7 @@ class GameNavBar extends StatelessWidget {
           children: [
             ShortcutTooltip(
               description: 'Previous game',
-              shortcut: '↑',
+              shortcut: AppShortcut.previousItem,
               child: TextButton.icon(
                 onPressed: currentIndex > 0 ? onPrev : null,
                 icon: const Icon(Icons.skip_previous, size: 20),
@@ -126,7 +129,7 @@ class GameNavBar extends StatelessWidget {
             const SizedBox(width: 16),
             ShortcutTooltip(
               description: 'Next game',
-              shortcut: '↓',
+              shortcut: AppShortcut.nextItem,
               child: TextButton.icon(
                 onPressed: currentIndex < games.length - 1 ? onNext : null,
                 icon: const Icon(Icons.skip_next, size: 20),
@@ -155,7 +158,7 @@ class GameNavBar extends StatelessWidget {
                 : countdown > 0
                 ? 'Available in ${countdown}s'
                 : 'Available on your turn',
-            shortcut: 'R',
+            shortcut: AppShortcut.revealMove,
             child: ActionChip(
               onPressed: canReveal ? onReveal : null,
               avatar: Icon(
@@ -184,7 +187,7 @@ class GameNavBar extends StatelessWidget {
         ),
         ShortcutIconButton(
           description: 'Fullscreen',
-          shortcut: 'Ctrl+F',
+          shortcut: AppShortcut.fullScreen,
           onPressed: games.isNotEmpty ? onToggleFullScreen : null,
           icon: const Icon(
             Icons.fullscreen,
@@ -196,7 +199,7 @@ class GameNavBar extends StatelessWidget {
         const SizedBox(width: 4),
         ShortcutTooltip(
           description: 'Exit solitaire',
-          shortcut: 'Esc',
+          shortcut: AppShortcut.leave,
           child: ActionChip(
             onPressed: onExitSolitaire,
             avatar: const Icon(Icons.close, size: 16),
@@ -226,7 +229,7 @@ class GameNavBar extends StatelessWidget {
                 _buildSortDropdown(),
               ],
             ),
-            _buildGameCounterDropdown(context),
+            _buildGameCounter(context),
             _buildAutoPlayControls(),
           ],
         ),
@@ -236,7 +239,7 @@ class GameNavBar extends StatelessWidget {
           children: [
             ShortcutTooltip(
               description: 'Previous game',
-              shortcut: '↑',
+              shortcut: AppShortcut.previousItem,
               child: TextButton.icon(
                 onPressed: currentIndex > 0 ? onPrev : null,
                 icon: const Icon(Icons.skip_previous, size: 20),
@@ -246,7 +249,7 @@ class GameNavBar extends StatelessWidget {
             const SizedBox(width: 16),
             ShortcutTooltip(
               description: 'Amend game',
-              shortcut: 'A',
+              shortcut: AppShortcut.amendGame,
               child: IconButton(
                 onPressed: onToggleEditMode,
                 icon: Icon(
@@ -267,7 +270,7 @@ class GameNavBar extends StatelessWidget {
             const SizedBox(width: 16),
             ShortcutTooltip(
               description: 'Next game',
-              shortcut: '↓',
+              shortcut: AppShortcut.nextItem,
               child: TextButton.icon(
                 onPressed: currentIndex < games.length - 1 ? onNext : null,
                 icon: const Icon(Icons.skip_next, size: 20),
@@ -345,9 +348,9 @@ class GameNavBar extends StatelessWidget {
     });
   }
 
-  Widget _buildGameCounterDropdown(BuildContext context) {
+  Widget _buildGameCounter(BuildContext context) {
     // The counter is a position in *this* order, and the order is the sort
-    // dropdown's — say so. "Game 301 / 312" with no ordering named is the one
+    // dropdown's — say so. "Game 301 of 312" with no ordering named is the one
     // number on this bar nobody can interpret.
     final ordering = switch (sortMode) {
       GameSortMode.fileOrder => 'in file order',
@@ -355,37 +358,40 @@ class GameNavBar extends StatelessWidget {
       GameSortMode.ratingDesc => 'by stars, high first',
       GameSortMode.ratingAsc => 'by stars, low first',
     };
-    return Tooltip(
-      message:
-          'Game ${currentIndex + 1} of ${games.length}, $ordering.\n'
-          'Click to jump to another (S)',
-      child: InkWell(
-        borderRadius: BorderRadius.circular(6),
-        onTap: games.isEmpty
-            ? null
-            : () async {
-                final selected = await showDialog<int>(
-                  context: context,
-                  builder: (_) => GameSearchDialog(
-                    games: games,
-                    currentIndex: currentIndex,
-                  ),
-                );
-                if (selected != null) onGoToGame?.call(selected);
-              },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: AppColors.outline),
-          ),
-          child: Text(
-            'Game ${currentIndex + 1} / ${games.length}',
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-          ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GameNumberField(
+          currentIndex: currentIndex,
+          gameCount: games.length,
+          onGoToGame: onGoToGame,
+          tooltip:
+              'Game ${currentIndex + 1} of ${games.length}, $ordering.\n'
+              'Type a game number and press Enter to jump there (G)',
         ),
-      ),
+        const SizedBox(width: 4),
+        ShortcutIconButton(
+          description: 'Search games by player, event or opening',
+          shortcut: AppShortcut.searchGames,
+          onPressed: games.isEmpty ? null : () => _openGameSearch(context),
+          icon: const Icon(
+            Icons.search,
+            size: 20,
+            color: AppColors.onSurfaceSoft,
+          ),
+          visualDensity: VisualDensity.compact,
+        ),
+      ],
     );
+  }
+
+  Future<void> _openGameSearch(BuildContext context) async {
+    final selected = await showDialog<int>(
+      context: context,
+      builder: (_) =>
+          GameSearchDialog(games: games, currentIndex: currentIndex),
+    );
+    if (selected != null) onGoToGame?.call(selected);
   }
 
   Widget _buildAutoPlayControls() {
@@ -394,7 +400,7 @@ class GameNavBar extends StatelessWidget {
       children: [
         ShortcutIconButton(
           description: isAutoPlaying ? 'Pause' : 'Watch game',
-          shortcut: 'Space',
+          shortcut: AppShortcut.autoPlay,
           onPressed: games.isNotEmpty ? onToggleAutoPlay : null,
           icon: Icon(
             isAutoPlaying ? Icons.pause_circle : Icons.play_circle,
@@ -404,7 +410,7 @@ class GameNavBar extends StatelessWidget {
         ),
         ShortcutIconButton(
           description: 'Fullscreen',
-          shortcut: 'Ctrl+F',
+          shortcut: AppShortcut.fullScreen,
           onPressed: games.isNotEmpty ? onToggleFullScreen : null,
           icon: const Icon(
             Icons.fullscreen,
@@ -464,7 +470,7 @@ class GameNavBar extends StatelessWidget {
         ),
         ShortcutTooltip(
           description: 'Auto next game',
-          shortcut: 'W',
+          shortcut: AppShortcut.autoNextGame,
           child: AppSwitch(
             label: 'Auto',
             value: autoNextGame,

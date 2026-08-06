@@ -5,6 +5,7 @@ import 'dart:convert';
 
 import '../models/analysis_player_info.dart';
 import 'chess_api_urls.dart';
+import '../utils/log.dart';
 import 'lichess_api_client.dart';
 import 'pgn_parsing_service.dart';
 import '../utils/atomic_file.dart';
@@ -331,7 +332,16 @@ class AnalysisGamesService {
     try {
       final file = File(await analysisPgnPath(platform, username));
       return await file.exists() ? readTextFile(file) : null;
-    } catch (_) {
+    } catch (e) {
+      // A missing file already returned null above, so reaching here means a
+      // real read failure (permissions, corrupt path). Callers cannot tell the
+      // two apart, so leave a trace — otherwise this surfaces to the user as
+      // an empty game list with no explanation.
+      log.w(
+        'could not read stored games for $username on $platform',
+        name: 'AnalysisGamesService',
+        error: e,
+      );
       return null;
     }
   }
@@ -488,7 +498,15 @@ class AnalysisGamesService {
 
       if (!await file.exists()) return null;
       return json.decode(await file.readAsString()) as List<dynamic>;
-    } catch (_) {
+    } catch (e) {
+      // Same as above: absence is handled, so this is a decode or read
+      // failure. Silently dropping it makes cached evals look merely absent
+      // and triggers a full re-analysis with no hint why.
+      log.w(
+        'could not read cached engine evals for $username',
+        name: 'AnalysisGamesService',
+        error: e,
+      );
       return null;
     }
   }

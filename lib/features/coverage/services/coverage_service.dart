@@ -8,7 +8,7 @@ import '../../../models/opening_tree.dart';
 import '../../../utils/fen_utils.dart';
 import '../../../utils/chess_utils.dart';
 import '../../../services/lichess_api_client.dart';
-import '../../../services/maia_factory.dart';
+import '../../../services/maia/maia_factory.dart';
 
 /// Database types for Lichess Explorer
 enum LichessDatabase { lichess, masters, player }

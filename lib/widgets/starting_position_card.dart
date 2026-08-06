@@ -10,7 +10,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
 import '../constants/chess_constants.dart';
-import '../services/generation/pgn_export.dart';
+import '../utils/movetext_builder.dart';
 import '../theme/app_colors.dart';
 import 'chess_board_widget.dart';
 
@@ -44,7 +44,7 @@ class StartingPositionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final primary = Theme.of(context).colorScheme.primary;
     final movesText = moveSans.isNotEmpty
-        ? movesToPgnMoveText(moveSans)
+        ? buildNumberedMovetext(moveSans)
         : _isStandardStart
         ? 'Initial position — no moves played'
         : 'Repertoire starting position';

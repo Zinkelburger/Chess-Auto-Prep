@@ -81,6 +81,15 @@ abstract final class PgnTextStyles {
     color: depth == 0 ? AppColors.pgnComment : inkAt(depth),
   );
 
+  /// Generated `[%...]` metrics at [depth]. Upright, because they are measured
+  /// data rather than commentary, and a step quieter than the moves they
+  /// describe so a line of them never competes with the movetext.
+  static TextStyle metricsAt(int depth) => TextStyle(
+    fontSize: depth == 0 ? 12.5 : 12,
+    height: 1.5,
+    color: AppColors.onSurfaceMuted,
+  );
+
   /// Root style for a movetext row's RichText at [depth]. Font-family-free by
   /// construction (everything here is proportional), and weight-free so that
   /// prose spans inside a mainline row don't inherit the mainline's semibold.

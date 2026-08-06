@@ -19,8 +19,22 @@ const startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 /// one is a breaking change to files already written; adding one is safe
 /// because `fromJson` defaults every field.
 const expectedKeys = <String>{
-  'annotate_maia_only',
+  // 'annotate_maia_only' was deliberately dropped: it chose between Maia and
+  // the Lichess Explorer as the annotation source, and the Explorer path no
+  // longer exists.  An older build reading a newer tree defaults it to true
+  // (Maia only), which is what the pipeline now always does — so the removal
+  // loses nothing.
+  //
+  // The remaining Lichess Explorer knobs went the same way for the same
+  // reason: 'use_lichess_db', 'use_masters', 'rating_range', 'speeds',
+  // 'min_games' and 'maia_only'.  Nothing in the generation pipeline read any
+  // of them — they were carried through the config, serialized, and ignored.
+  // An older build reading a newer tree defaults each to the value the
+  // pipeline already behaved as if it had, so no resume or preset changes
+  // meaning.
+  'alternative_lines',
   'annotate_move_probabilities',
+  'annotation_detail',
   'batch_eval_lookups',
   'best_first',
   'build_mode',
@@ -42,20 +56,23 @@ const expectedKeys = <String>{
   'local_chessdb_path',
   'maia_elo',
   'maia_min_prob',
-  'maia_only',
   'maia_prior_games',
   'max_depth',
   'max_eval_cp',
   'max_eval_loss_cp',
+  'max_lines_per_chapter',
   'max_nodes',
   'memorability_tolerance_cp',
   'min_acceptable_eval_depth',
   'min_elo',
   'min_eval_cp',
-  'min_games',
+  'min_lines_per_chapter',
   'min_probability',
+  'model_game_count',
+  'model_game_min_elo',
   'novelty_weight',
   'opening_width_plies',
+  'organize_into_chapters',
   'opp_mass_target',
   'opp_max_children',
   'opp_policy_temperature',
@@ -64,18 +81,15 @@ const expectedKeys = <String>{
   'pgn_file_paths',
   'play_as_white',
   'rank_lines_by_importance',
-  'rating_range',
+  'refutation_lines',
   'relative_eval',
   'search_algorithm',
   'selection_mode',
   'setup_moves',
   'setup_tolerance_cp',
-  'speeds',
   'target_line_count',
   'time_budget_minutes',
   'traps_only',
-  'use_lichess_db',
-  'use_masters',
   'verify_depth',
   'verify_final',
 };

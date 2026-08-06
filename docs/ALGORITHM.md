@@ -16,10 +16,11 @@ For each position in the BFS frontier:
 - **Maia (default):** Top-N moves ranked by Maia's predicted human probability. Ships with Flutter, no engine needed. Configured via `EngineSettings.candidateSourceOur`.
 - **Stockfish:** MultiPV top-N moves by engine evaluation. Configured via `EngineSettings.stockfishTopN`.
 
-**Opponent moves (configurable source):**
-- **Maia (default):** Moves weighted by Maia predicted probability. Configured via `EngineSettings.candidateSourceOpp`.
-- **Stockfish:** MultiPV opponent responses.
-- **Lichess DB:** Opponent moves weighted by actual game frequency when DB data is available.
+**Opponent moves:**
+- **Maia:** moves weighted by Maia's predicted probability. This is the source for every build mode except DB Explorer.
+- **PGN database (`BuildMode.dbExplorer`):** moves weighted by actual frequency in the user's own game files, Dirichlet-smoothed with Maia where coverage is thin.
+
+The Lichess Explorer was a third source. It no longer is: `ProbabilityService`'s fetch is mothballed app-wide and returned null unconditionally, so the "Lichess database" option silently fell back to Maia while claiming real frequencies. The dead branch has been removed from the pipeline and the option from the form; `useLichessDb` / `useMasters` / `speeds` / `ratingRange` / `minGames` / `maiaOnly` on `TreeBuildConfig` are inert and kept only for the audit/holes/tricks features that still construct configs with them.
 
 ### 2. Evaluation Resolution (Eval Chain)
 
@@ -227,7 +228,76 @@ Traps are indexed by `TrapIndexService` for O(1) lookup by FEN and per-line quer
 | `setupMoves` | `''` | TreeBuildConfig | Preferred-setup SAN list (consistency bias); empty = off |
 | `setupToleranceCp` | 30 | TreeBuildConfig | Max eval loss for a setup move to be preferred |
 | `selectionMode` | `expectimax` | TreeBuildConfig | `expectimax`, `engineOnly`, `dbWinRateOnly`, `playable`, `trappy` |
-| `maiaElo` | 1500 | EngineSettings | Maia model ELO level |
+| `maiaElo` | 2200 | EngineSettings | Maia model ELO level |
+| `annotationDetail` | `full` | TreeBuildConfig | Per-move PGN annotation level: `none` / `likelihood` / `full` |
+| `organizeIntoChapters` | `true` | TreeBuildConfig | Cut the export into named chapters at branch points |
+| `maxLinesPerChapter` | 40 | TreeBuildConfig | Split a chapter bigger than this at its next branch point |
+| `minLinesPerChapter` | 5 | TreeBuildConfig | Branches below this join the "rare sidelines" chapter |
+| `modelGameCount` | 6 | TreeBuildConfig | Model games appended as a final chapter (needs a PGN database) |
+| `modelGameMinElo` | 2200 | TreeBuildConfig | Rating floor for a model game; unrated games stay eligible |
+| `refutationLines` | `true` | TreeBuildConfig | Show the engine's punishment of a reply that ends a line won |
+| `alternativeLines` | `true` | TreeBuildConfig | Show the engine's answer to a natural move the book leaves out |
+
+### 10. Course Composition (Phase 3.5)
+
+Extraction produces a flat list of root-to-leaf lines ranked by reach
+probability, which is unreadable as study material.  `course/` re-imposes
+structure:
+
+1. **Chapters** are cut at the branch points where the repertoire actually
+   divides, descending until each chapter holds between `minLinesPerChapter`
+   and `maxLinesPerChapter` lines.  Branches too small to justify a chapter
+   are swept into one "rare sidelines" bucket, ordered last.  Chapters are
+   ordered by total reach probability — a course opens with what you will
+   actually face.
+2. **Names** come from the bundled ECO book (`OpeningBookService`), resolved
+   as the *deepest* book position a chapter's prefix passes through, so
+   transpositions name correctly.  Segments shared by every chapter are
+   stripped (the course title already states the opening); collisions are
+   broken with the defining move, e.g. `King's Knight Opening (2...Nc6)`.
+3. **Model games** are database games that follow the *selected* repertoire —
+   every one of our moves is the move the repertoire teaches — ranked by
+   follow depth, then result from our side, then rating, and round-robined
+   across variations so the selection spans chapters rather than repeating
+   one line.  They are appended as a trailing chapter, and marked with
+   `ModelGame*` tags so the trainer and the deviation walker treat them as
+   illustration rather than as lines of your own.
+
+   The candidate pool is the frequency scan's retained games
+   (`TopGamesReservoir`), which admits by rating.  Retention therefore runs
+   deeper than the statistics (`maxPly` would cut a model game off in the
+   opening), applies `modelGameMinElo`, and is sized well above
+   `modelGameCount` — most of a database's strongest games never enter this
+   repertoire at all.  When nothing qualifies the run says so rather than
+   quietly omitting the chapter.
+4. **Refutations** answer the lines that end because the opponent's move left
+   us winning.  The build stops there — there is nothing left to prepare —
+   which leaves the export ending on the mistake with no answer.  For each
+   such position (deduplicated, capped) Stockfish is asked for its principal
+   variation at the verification depth, and the first few moves are written as
+   a sideline on the losing move: `3... Nxe4 (3... Nxe4 4. Nxe4 d5 5. Bxd5)`.
+   The mainline is untouched, so nothing new becomes trainable.
+5. **Refuted alternatives** answer the other question — "why isn't the natural
+   move here?"  The tree cannot: our children all sit inside the eval-loss
+   window, so a refuted move of ours was never a child, and their rejected
+   tries fall below the Maia candidate floor.  So the pass brings its own move
+   source (Maia's policy at that position, or the game database when Maia is
+   unavailable), skips every move the tree already holds, and searches the
+   position after each candidate.  A move is written only when it costs the
+   side that plays it at least `RefutationProber.minLossCp` (150cp) — as an
+   alternative sideline marked `?`/`?!` with a `[%loss]` token, e.g.
+   `1. e4 (1. f3? e5 2. g4 Qh4#)`.  Candidates that turn out to be playable
+   are dropped: claiming a good move is refuted would be worse than silence.
+
+Both engine passes are capped (`maxProbes`, `maxAlternativeSites`,
+`maxAlternativeProbes`), deduplicated by position, and best-effort — a missing
+engine, a missing move source, a cancelled run or a failed search costs
+variations and never the export.
+
+Encoding follows published course exports and this app's own reader
+(`RepertoireService.detectHeaderChapters`): `[White]` names the chapter,
+`[Black]` names the variation, `[Result]` stays `"*"`.  Each line remains its
+own PGN game, so training, browsing and per-line statistics are unchanged.
 
 ## Key Source Files
 
@@ -246,3 +316,6 @@ Traps are indexed by `TrapIndexService` for O(1) lookup by FEN and per-line quer
 - `lib/services/coherence_service.dart` — FP-Growth coherence analysis
 - `lib/features/eval_tree/services/eval_tree_line_metrics.dart` — line quality metrics
 - `lib/core/generated_repertoire.dart` — single derived bundle (tree + FenMap + snapshot + traps)
+- `lib/services/generation/course/` — chapter planning, ECO naming, model-game selection, PGN composition
+- `lib/services/generation/export/` — the single PGN emitter and the per-move annotation model
+- `lib/services/generation/pgn_freq_map.dart` / `pgn_freq_parser.dart` / `pgn_freq_cache.dart` — human-practice statistics from a PGN database

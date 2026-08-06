@@ -1,8 +1,8 @@
 import 'dart:io';
 
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
-import 'package:chess_auto_prep/services/tactics_database.dart';
-import 'package:chess_auto_prep/services/tactics_import_service.dart';
+import 'package:chess_auto_prep/services/tactics/tactics_database.dart';
+import 'package:chess_auto_prep/services/tactics/tactics_import_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../utils/app_shortcuts.dart';
+
 import '../shortcut_tooltip.dart';
 
 import '../../core/repertoire_controller.dart';
@@ -8,7 +10,7 @@ import '../../services/training/training_phase.dart';
 import '../../services/training/training_session_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/pgn_comment_utils.dart' show filterDisplayComment;
-import '../../widgets/chess_board_widget.dart';
+import '../chess_board_widget.dart';
 import 'move_input_widget.dart';
 
 /// Chess board area for the trainer.
@@ -365,7 +367,7 @@ class _NextButtonState extends State<_NextButton>
       animation: _pulseAnimation,
       child: ShortcutTooltip(
         description: 'Next',
-        shortcut: 'Space',
+        shortcut: AppShortcut.toggleSolution,
         child: FilledButton.icon(
           onPressed: widget.onPressed,
           // Self-focus so Space activates "Next" no matter where focus was.

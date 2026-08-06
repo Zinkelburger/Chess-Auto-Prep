@@ -3,7 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../../utils/eval_constants.dart';
+import '../../../utils/chess_utils.dart' show formatPackedEval;
 import '../controllers/eval_tree_controller.dart';
 import '../models/eval_tree_snapshot.dart';
 
@@ -507,11 +507,7 @@ class EvalTreeLayoutEngine {
 
     final evalForUsCp = node.evalForUsCp;
     if (evalForUsCp == null) return null;
-    if (isMateEval(evalForUsCp)) {
-      return evalForUsCp > 0 ? '+M' : '-M';
-    }
-    final pawns = evalForUsCp / 100.0;
-    return '${pawns >= 0 ? "+" : ""}${pawns.toStringAsFixed(1)}';
+    return formatPackedEval(evalForUsCp);
   }
 
   static String? _probabilityLabelForNode(

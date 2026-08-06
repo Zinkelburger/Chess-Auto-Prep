@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/ease_utils.dart' show winProbability;
-import '../../../utils/eval_constants.dart';
+import '../../../utils/chess_utils.dart' show formatPackedEval;
 import '../tree_colors.dart';
 import '../controllers/eval_tree_controller.dart';
 import '../models/eval_tree_snapshot.dart';
@@ -650,10 +650,4 @@ String _formatMovePath(EvalTreeSnapshot snapshot, int nodeId) {
   return buffer.toString().trim();
 }
 
-String _formatEval(int cpForUs) {
-  if (isMateEval(cpForUs)) {
-    return cpForUs > 0 ? '+M' : '-M';
-  }
-  final pawns = cpForUs / 100.0;
-  return '${pawns >= 0 ? '+' : ''}${pawns.toStringAsFixed(2)}';
-}
+String _formatEval(int cpForUs) => formatPackedEval(cpForUs, decimals: 2);

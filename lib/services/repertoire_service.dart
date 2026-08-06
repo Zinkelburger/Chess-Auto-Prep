@@ -168,6 +168,7 @@ class RepertoireService {
             headers: Map<String, String>.from(game.headers),
             importance: importance,
             chapter: chapter,
+            isModelGame: isModelGameHeaders(game.headers),
           ),
         );
       } catch (e) {
@@ -195,6 +196,7 @@ class RepertoireService {
     const ignoredTitles = {'', '?', 'me', 'opponent', 'white', 'black', 'n.n.'};
 
     var titled = 0;
+    var selfDescribed = false;
     final counts = <String, int>{};
     final chapters = <String?>[];
     for (final headers in headersPerGame) {
@@ -207,12 +209,16 @@ class RepertoireService {
         titled++;
         counts[white] = (counts[white] ?? 0) + 1;
       }
+      selfDescribed = selfDescribed || isModelGameHeaders(headers);
     }
 
     // Chapter-style only when titles actually group games: more than one
     // chapter, at least one with multiple games, covering most of the file.
     if (counts.length < 2) return null;
-    if (!counts.values.any((c) => c >= 2)) return null;
+    // ModelGame* tags only exist in this app's own course exports, so a file
+    // carrying them needs no guessing — and a small course can legitimately
+    // hold one line and one model game.
+    if (!selfDescribed && !counts.values.any((c) => c >= 2)) return null;
     if (titled * 2 < headersPerGame.length) return null;
     return chapters;
   }

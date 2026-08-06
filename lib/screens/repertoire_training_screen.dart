@@ -18,6 +18,7 @@ import '../services/training/training_phase.dart';
 import '../services/training/training_session_controller.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
+import '../utils/app_shortcuts.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_breadcrumb_trail.dart';
 import '../widgets/app_mode_menu_button.dart';
@@ -279,30 +280,36 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   /// Trainer shortcuts, dispatched through [handleKeyBindings] (never while
   /// typing a move).
   List<KeyBinding> get _keyBindings => [
-    KeyBinding.run(
-      LogicalKeyboardKey.slash,
+    ...KeyBinding.forShortcut(
+      AppShortcut.focusMoveInput,
       'Focus move input',
       () => _moveInputKey.currentState?.focus(),
     ),
-    KeyBinding.run(LogicalKeyboardKey.keyJ, 'Toggle manual advance', () {
-      final settings = _training.settings;
-      settings.learnRequiresClick = !settings.learnRequiresClick;
-      settings.save();
-      setState(() {});
-    }),
-    KeyBinding(LogicalKeyboardKey.keyS, 'Skip to next line', () {
+    ...KeyBinding.forShortcut(
+      AppShortcut.autoAdvance,
+      'Toggle manual advance',
+      () {
+        final settings = _training.settings;
+        settings.learnRequiresClick = !settings.learnRequiresClick;
+        settings.save();
+        setState(() {});
+      },
+    ),
+    // The queue here is the lines being drilled, so "skip to the next one"
+    // is the app-wide next-item pair rather than a screen-local S.
+    ...KeyBinding.forShortcutIf(AppShortcut.nextItem, 'Skip to next line', () {
       if (_training.currentLine == null) return false;
       _training.skipLine();
       return true;
     }),
-    KeyBinding(LogicalKeyboardKey.keyR, 'Restart line', () {
+    ...KeyBinding.forShortcutIf(AppShortcut.restartLine, 'Restart line', () {
       if (_training.currentLine == null) return false;
       _training.restartLine();
       return true;
     }),
     // The app-wide Escape contract: leave what you are in. Here that is the
     // line being drilled — back to the browser, same as "Back to list".
-    KeyBinding(LogicalKeyboardKey.escape, 'Leave this line', () {
+    ...KeyBinding.forShortcutIf(AppShortcut.leave, 'Leave this line', () {
       if (_training.currentLine == null) return false;
       _training.stopSession();
       return true;

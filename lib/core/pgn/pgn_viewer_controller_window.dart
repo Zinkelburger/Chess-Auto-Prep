@@ -6,19 +6,22 @@ part of '../pgn_viewer_controller.dart';
 /// Window/fullscreen and perspective/orientation operations for
 /// [PgnViewerController]. State shared with the rest of the controller is
 /// declared abstract here and implemented by the class; fields owned solely
-/// by this group live in this mixin. Depends `on` [_SolitaireOps] because
-/// perspective/flip changes restart an active solitaire session.
-mixin _WindowOps on ChangeNotifier, _SolitaireOps {
+/// by this group live in this mixin.
+mixin _WindowOps on ChangeNotifier {
   // Implemented by PgnViewerController.
   bool Function() get isActive;
   VoidCallback? get onReclaimFocus;
   List<PgnGameEntry> get allGames;
+  List<PgnGameEntry> get filteredGames;
   int get currentGameIndex;
   abstract Perspective perspective;
-  // Refines the read-only view from [_SolitaireOps] with a setter.
-  @override
   abstract bool boardFlipped;
   Future<void> persistMetadata();
+
+  // Perspective and flip changes re-seat an active solitaire session, since
+  // the side being guessed for is derived from board orientation.
+  bool get isSolitaireMode;
+  void restartSolitaireForCurrentOrientation();
 
   bool isFullScreen = false;
 
@@ -62,7 +65,7 @@ mixin _WindowOps on ChangeNotifier, _SolitaireOps {
     notifyListeners();
     persistPerspective();
     orientBoardForCurrentGame();
-    if (isSolitaireMode) _restartSolitaireForCurrentOrientation();
+    if (isSolitaireMode) restartSolitaireForCurrentOrientation();
     onReclaimFocus?.call();
   }
 
@@ -93,7 +96,7 @@ mixin _WindowOps on ChangeNotifier, _SolitaireOps {
   void toggleBoardFlipped() {
     boardFlipped = !boardFlipped;
     notifyListeners();
-    if (isSolitaireMode) _restartSolitaireForCurrentOrientation();
+    if (isSolitaireMode) restartSolitaireForCurrentOrientation();
   }
 
   Future<void> toggleFullScreen() async {

@@ -12,7 +12,6 @@
 library;
 
 import '../../models/build_tree_node.dart';
-import '../../utils/fen_utils.dart';
 import '../../utils/findability.dart';
 import 'eca_calculator.dart';
 import 'fen_map.dart';
@@ -155,28 +154,17 @@ List<String> extractSnapshotLines({
   }
 
   final rootFen = prefix.isEmpty ? tree.root.fen : repertoireStartFen;
-  final rootWhiteToMove = isWhiteToMove(rootFen);
-  final entries = <String>[];
-  for (int i = 0; i < extractedLines.length; i++) {
-    final line = extractedLines[i];
-    entries.add(
-      buildRepertoirePgnEntry(
-        moves: [...prefix, ...line.movesSan],
+  return [
+    for (var i = 0; i < extractedLines.length; i++)
+      writeRepertoireLine(
+        movesSan: [...prefix, ...extractedLines[i].movesSan],
         title: 'Generated Line ${i + 1}',
-        cumulativeProb: line.probability,
-        finalEvalCp: line.leafEvalCp ?? 0,
+        line: extractedLines[i],
         isWhiteRepertoire: config.playAsWhite,
         rootFen: rootFen,
-        rootWhiteToMove: rootWhiteToMove,
-        pruneReason: line.leafPruneReason,
-        pruneEvalCp: line.leafPruneEvalCp,
-        lineAnnotations: line.moveAnnotations,
-        prefixMoveCount: prefix.length,
+        detail: config.annotationDetail,
+        annotationOffset: prefix.length,
         rankByImportance: config.rankLinesByImportance,
-        annotateMoveProbabilities: config.annotateMoveProbabilities,
-        annotateMaiaOnly: config.annotateMaiaOnly,
       ),
-    );
-  }
-  return entries;
+  ];
 }

@@ -142,6 +142,9 @@ List<RepertoireLine> matchingBookLines(
 ) {
   final prefix = prefixSans.map(normalizeSan).toList();
   bool matches(RepertoireLine line) {
+    // Model games are illustration, not book — showing one as "your book"
+    // next to the game you played would be answering with someone else's.
+    if (line.isModelGame) return false;
     if (line.startPosition.fen != Chess.initial.fen) return false;
     if (line.moves.length < prefix.length) return false;
     for (var i = 0; i < prefix.length; i++) {

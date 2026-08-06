@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../../constants/engine_defaults.dart';
-import '../../features/coverage/services/coverage_service.dart';
 import '../../models/eval_database_settings.dart';
 import '../../models/pgn_source.dart';
 import '../../services/eval/cdbdirect_eval_provider.dart';
@@ -12,8 +11,6 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/app_messages.dart';
 import '../labeled_toggle.dart';
-import '../lichess_db_info_icon.dart';
-import '../lichess_db_selector.dart';
 import '../pgn_sources_panel.dart';
 import 'engine_resources_section.dart';
 import 'eval_sources_section.dart';
@@ -96,7 +93,10 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
     _maxEvalCtrl.dispose();
     _maiaEloCtrl.dispose();
     _oppPolicyTempCtrl.dispose();
-    _lichessMinGamesCtrl.dispose();
+    _maxLinesPerChapterCtrl.dispose();
+    _minLinesPerChapterCtrl.dispose();
+    _modelGameCountCtrl.dispose();
+    _modelGameMinEloCtrl.dispose();
     _dbMinGamesCtrl.dispose();
     _dbMinProbCtrl.dispose();
     _minEloCtrl.dispose();

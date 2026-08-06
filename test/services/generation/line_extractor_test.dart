@@ -309,19 +309,83 @@ void main() {
       expect(e5Line.coverageUnits[1].value, closeTo(0.55 * 1.2, 1e-9));
     });
 
-    test('exportPgn produces valid PGN text', () {
+    test('annotates our moves with eval and naturalness', () {
       final t = StandardTree();
       t.e4.isRepertoireMove = true;
+      t.e4.myEase = 0.82;
       t.e4e5nf3.isRepertoireMove = true;
       t.e4c5nf3.isRepertoireMove = true;
 
       final extractor = LineExtractor(config: _config());
       final lines = extractor.extract(t.toTree());
-      final pgn = extractor.exportPgn(lines, repertoireName: 'Test');
 
-      expect(pgn, contains('[Event'));
-      expect(pgn, contains('1. e4'));
-      expect(pgn, contains('*'));
+      final first = lines.first.moveAnnotations.first;
+      expect(first.myEase, closeTo(0.82, 1e-9));
+      expect(first.evalCp, isNotNull);
+      expect(first.likelihood, isNull, reason: 'we choose our own moves');
+    });
+
+    group('choice points', () {
+      // The alternatives pass asks "what else would a human play here?", so
+      // what it needs is the *position* and what the tree already knows about
+      // it — not the branch the line happened to take.
+      test('record every position the line passes through', () {
+        final t = StandardTree();
+        t.e4.isRepertoireMove = true;
+        t.e4e5nf3.isRepertoireMove = true;
+        t.e4c5nf3.isRepertoireMove = true;
+
+        final lines = LineExtractor(config: _config()).extract(t.toTree());
+        final line = lines.first;
+
+        expect(line.choices, hasLength(line.movesSan.length));
+        expect(line.choices.map((c) => c.moveIndex), [0, 1, 2]);
+        expect(line.choices.first.fenBefore, _startFen);
+        expect(line.choices.map((c) => c.isOurMove), [true, false, true]);
+      });
+
+      test('carry the moves the tree already holds at that position', () {
+        final t = StandardTree();
+        t.e4.isRepertoireMove = true;
+        t.e4e5nf3.isRepertoireMove = true;
+        t.e4c5nf3.isRepertoireMove = true;
+
+        final lines = LineExtractor(config: _config()).extract(t.toTree());
+
+        // Both of our root candidates, not just the one that was selected —
+        // an engine-approved alternative needs no refutation either.
+        expect(lines.first.choices.first.knownUcis, ['e2e4', 'd2d4']);
+      });
+
+      test('our best is the highest eval for us, theirs the lowest', () {
+        final t = StandardTree();
+        t.e4.isRepertoireMove = true;
+        t.e4e5nf3.isRepertoireMove = true;
+        t.e4c5nf3.isRepertoireMove = true;
+
+        final lines = LineExtractor(config: _config()).extract(t.toTree());
+        final line = lines.firstWhere((l) => l.movesSan[1] == 'e5');
+
+        // Our move: e4 (+25 for us) beats d4 (+30 for us)? No — d4 is better
+        // by this tree's numbers, and the site records what is *available*.
+        expect(line.choices[0].bestEvalCpForUs, 30);
+        // Their move: e5 leaves us +35, c5 leaves us +45, so their best try
+        // is e5 — the bar an alternative has to fall below.
+        expect(line.choices[1].bestEvalCpForUs, 35);
+      });
+
+      test('an unevaluated position offers nothing to compare against', () {
+        final t = StandardTree();
+        t.e4.isRepertoireMove = true;
+        t.e4e5nf3.isRepertoireMove = true;
+        t.e4c5nf3.isRepertoireMove = true;
+        t.e4.engineEvalCp = null;
+        t.d4.engineEvalCp = null;
+
+        final lines = LineExtractor(config: _config()).extract(t.toTree());
+
+        expect(lines.first.choices.first.bestEvalCpForUs, isNull);
+      });
     });
   });
 }

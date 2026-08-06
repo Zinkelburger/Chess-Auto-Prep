@@ -1,10 +1,20 @@
+/// Writing generated repertoire lines to disk.
+///
+/// Text formatting lives in `export/pgn_game_writer.dart`; this file is the
+/// batching layer plus the one flat (chapterless) line format, used by the
+/// mid-run snapshot export where no opening book is available.
+library;
+
 import 'dart:io';
 
-import '../../models/build_tree_node.dart';
-import '../../utils/movetext_builder.dart';
+import '../../constants/chess_constants.dart';
+import '../../utils/fen_utils.dart';
+import 'export/move_annotation.dart';
+import 'export/pgn_game_writer.dart';
 import 'line_extractor.dart';
 
-/// Buffers PGN game entries and appends them to a file in batches.
+/// Buffers PGN game entries and appends them to a file in batches, so a
+/// hundred-line export is a handful of writes rather than a hundred.
 class PgnBatchWriter {
   final StringBuffer _buffer = StringBuffer();
   int _lineCount = 0;
@@ -15,7 +25,7 @@ class PgnBatchWriter {
 
   void queue(String pgn) {
     _buffer.writeln();
-    _buffer.writeln(pgn);
+    _buffer.write(pgn);
     _lineCount++;
   }
 
@@ -34,105 +44,42 @@ class PgnBatchWriter {
   }
 }
 
-String buildRepertoirePgnEntry({
-  required List<String> moves,
+/// One repertoire line as a standalone, chapterless PGN game.
+///
+/// This is the fallback shape: the course exporter produces chapter-tagged
+/// games instead (see `course/course_composer.dart`).  Kept for the snapshot
+/// export, which runs as a pure function over a serialized tree and has no
+/// opening book to name chapters with.
+String writeRepertoireLine({
+  required List<String> movesSan,
   required String title,
-  required double cumulativeProb,
-  required int finalEvalCp,
+  required ExtractedLine line,
   required bool isWhiteRepertoire,
   required String rootFen,
-  required bool rootWhiteToMove,
-  PruneReason? pruneReason,
-  int? pruneEvalCp,
-  List<MoveProbabilityAnnotation> lineAnnotations = const [],
-  int prefixMoveCount = 0,
+  required MoveAnnotationDetail detail,
+  int annotationOffset = 0,
+  int startMoveNumber = 1,
   bool rankByImportance = true,
-  bool annotateMoveProbabilities = true,
-  bool annotateMaiaOnly = true,
 }) {
-  final date = DateTime.now().toIso8601String().split('T').first;
-  final whiteName = isWhiteRepertoire ? 'Repertoire' : 'Opponent';
-  final blackName = isWhiteRepertoire ? 'Opponent' : 'Repertoire';
-
-  final line = movesToPgnMoveText(
-    moves,
-    rootWhiteToMove: rootWhiteToMove,
-    prefixMoveCount: prefixMoveCount,
-    lineAnnotations: lineAnnotations,
-    annotateMoveProbabilities: annotateMoveProbabilities,
-    annotateMaiaOnly: annotateMaiaOnly,
-  );
-
-  final annotation = StringBuffer()
-    ..write(
-      '{CumProb ${(cumulativeProb * 100).toStringAsFixed(3)}%'
-      ', Eval $finalEvalCp cp',
-    );
-  if (pruneReason == PruneReason.evalTooHigh && pruneEvalCp != null) {
-    annotation.write(
-      ', Already winning (${pruneEvalCp >= 0 ? "+" : ""}${(pruneEvalCp / 100).toStringAsFixed(1)})',
-    );
-  }
-  if (rankByImportance) {
-    annotation.write(
-      ', [%cumProb ${(cumulativeProb * 100).toStringAsFixed(3)}%]',
-    );
-  }
-  annotation.write('}');
-
-  const standardStartpos =
-      'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-  final needsFenHeader = rootFen.isNotEmpty && rootFen != standardStartpos;
-
-  final tags = [
-    '[Event "$title"]',
-    '[Date "$date"]',
-    '[White "$whiteName"]',
-    '[Black "$blackName"]',
-    '[Result "*"]',
-    '[Annotator "AutoGenerate"]',
-    if (rankByImportance)
-      '[CumProb "${(cumulativeProb * 100).toStringAsFixed(3)}%"]',
-    if (needsFenHeader) '[FEN "$rootFen"]',
-    if (needsFenHeader) '[SetUp "1"]',
-  ];
-
-  return [...tags, '', '$annotation', '$line *'].join('\n');
-}
-
-/// Numbered movetext for a generated line, with optional per-move
-/// probability annotations. Numbering starts at move 1 with the side given
-/// by [rootWhiteToMove]; serialization delegates to the shared
-/// [buildNumberedMovetext].
-String movesToPgnMoveText(
-  List<String> moves, {
-  bool rootWhiteToMove = true,
-  int prefixMoveCount = 0,
-  List<MoveProbabilityAnnotation> lineAnnotations = const [],
-  bool annotateMoveProbabilities = true,
-  bool annotateMaiaOnly = true,
-}) {
-  if (moves.isEmpty) return '';
-  return buildNumberedMovetext(
-    moves,
-    whiteToMoveFirst: rootWhiteToMove,
-    suffix: (i) {
-      if (!annotateMoveProbabilities || i < prefixMoveCount) return null;
-      final annIdx = i - prefixMoveCount;
-      if (annIdx >= lineAnnotations.length) return null;
-      final ann = lineAnnotations[annIdx];
-      final sb = StringBuffer();
-      if (ann.probability != null) {
-        final prob = ann.probability!;
-        final tag = ann.fromLichess && !annotateMaiaOnly
-            ? '[%humanFrequency ${prob.toStringAsFixed(3)}]'
-            : '[%maiaProbability ${prob.toStringAsFixed(3)}]';
-        sb.write(' {$tag}');
-      }
-      if (ann.engineInjected) {
-        sb.write(' {engine-injected}');
-      }
-      return sb.toString();
-    },
+  final probability = '${(line.probability * 100).toStringAsFixed(3)}%';
+  return writePgnGame(
+    PgnGameSpec(
+      headers: {
+        'Event': title,
+        'White': isWhiteRepertoire ? 'Repertoire' : 'Opponent',
+        'Black': isWhiteRepertoire ? 'Opponent' : 'Repertoire',
+        'Result': '*',
+        'Annotator': 'Chess Auto Prep',
+        if (rankByImportance) 'CumProb': probability,
+      },
+      movesSan: movesSan,
+      annotations: line.moveAnnotations,
+      annotationOffset: annotationOffset,
+      startFen: rootFen.isEmpty ? kStandardStartFen : rootFen,
+      rootWhiteToMove: isWhiteToMove(rootFen),
+      startMoveNumber: startMoveNumber,
+      leadingComment: rankByImportance ? '[%cumProb $probability]' : null,
+    ),
+    detail: detail,
   );
 }

@@ -28,7 +28,7 @@ import '../../../services/generation/eca_calculator.dart';
 import '../../../services/generation/fen_map.dart';
 import '../../../services/generation/generation_config.dart';
 import '../../../services/generation/tree_ease.dart';
-import '../../../services/maia_factory.dart';
+import '../../../services/maia/maia_factory.dart';
 import '../../../services/tree_build_service.dart';
 import '../../../services/eval/eval_move_helpers.dart';
 import '../../../utils/chess_utils.dart' as chess_utils;
@@ -500,7 +500,6 @@ class HoleHuntService {
         minProbability: 0.02,
         evalDepth: config.trapEvalDepth,
         maiaElo: config.maiaElo,
-        useLichessDb: config.useLichessInTraps,
         ourMultipv: 4,
         oppMaxChildren: 4,
         oppMassTarget: 0.80,

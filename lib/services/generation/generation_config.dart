@@ -3,6 +3,9 @@ library;
 
 import '../../constants/engine_defaults.dart';
 import '../../utils/system_info.dart';
+import 'export/move_annotation.dart';
+
+export 'export/move_annotation.dart' show MoveAnnotationDetail;
 
 // ── Selection mode ──────────────────────────────────────────────────────
 
@@ -200,17 +203,17 @@ class TreeBuildConfig {
   final int maxEvalCp;
   final bool relativeEval;
 
-  // ── Lichess API ──
-  final bool useLichessDb;
-  final bool useMasters;
-  final String ratingRange;
-  final String speeds;
-  final int minGames;
+  // The Lichess Explorer knobs that used to live here (useLichessDb,
+  // useMasters, ratingRange, speeds, minGames, maiaOnly) are gone. The
+  // Explorer fetch path is mothballed app-wide (`ProbabilityService` returns
+  // null), so they were a no-op that silently fell back to Maia while the
+  // form claimed real game frequencies were in use. Real human-practice data
+  // reaches the tree through [BuildMode.dbExplorer] and a scanned PGN
+  // database instead.
 
   // ── Maia ──
   final int maiaElo;
   final double maiaMinProb;
-  final bool maiaOnly;
 
   /// Temperature reshaping the opponent Maia policy before truncation:
   /// p → p^(1/T), renormalized over the full policy.  T > 1 flattens the
@@ -238,12 +241,47 @@ class TreeBuildConfig {
   /// Sort extracted lines by cumulative probability (most likely first).
   final bool rankLinesByImportance;
 
-  /// Annotate opponent moves with move-likelihood comments in PGN.
-  final bool annotateMoveProbabilities;
+  /// How much per-move detail the exported PGN carries.  The pipeline
+  /// computes eval, ease, naturalness and practical scores for every node
+  /// anyway; this decides how much of it reaches the file.
+  final MoveAnnotationDetail annotationDetail;
 
-  /// When annotating: use Maia only. When false, prefer Lichess human
-  /// frequencies from the build and fall back to Maia.
-  final bool annotateMaiaOnly;
+  // ── Course layout ──
+  /// Group the exported lines into named chapters (one PGN game each) instead
+  /// of writing a flat list.  Chapters are cut at the branch points where the
+  /// repertoire actually divides and named from the bundled ECO book, which
+  /// is what turns a search result into something a person can study.
+  final bool organizeIntoChapters;
+
+  /// Split a chapter whose line count exceeds this, descending to the next
+  /// branch point.  Chessable-sized chapters are a few dozen lines.
+  final int maxLinesPerChapter;
+
+  /// Merge sibling chapters below this size back into their parent, so a
+  /// rare sideline does not become a chapter of its own.
+  final int minLinesPerChapter;
+
+  /// Model games appended as trailing chapters — real games by strong
+  /// players that follow the repertoire out of the opening.  Requires a game
+  /// database (DB Explorer); 0 disables.
+  final int modelGameCount;
+
+  /// Rating floor for a game to qualify as a model game.  Separate from
+  /// [minElo], which governs the whole frequency scan: a repertoire built
+  /// from club games should still illustrate itself with master play.
+  final int modelGameMinElo;
+
+  /// After an opponent move leaves us winning, the build stops — there is
+  /// nothing left to prepare.  With this on, the engine is asked how the
+  /// position is actually won and the answer is written as a variation on
+  /// that move, so the export shows why the move loses instead of ending.
+  final bool refutationLines;
+
+  /// Along every exported line, ask what a human would play that the book
+  /// leaves out — the natural move we pass over, the try the opponent should
+  /// avoid — and write the engine's answer to it as a variation.  Costs one
+  /// engine search per candidate, so it runs after the build and is capped.
+  final bool alternativeLines;
 
   // ── Expectimax / repertoire selection ──
   final SelectionMode selectionMode;
@@ -297,20 +335,20 @@ class TreeBuildConfig {
     this.minEvalCp = 0,
     this.maxEvalCp = 200,
     this.relativeEval = true,
-    this.useLichessDb = false,
-    this.useMasters = false,
-    this.ratingRange = '2000,2200,2500',
-    this.speeds = 'blitz,rapid,classical',
-    this.minGames = 10,
     this.maiaElo = 2200,
     this.maiaMinProb = 0.05,
-    this.maiaOnly = true,
     this.oppPolicyTemperature = 1.0,
     this.targetLineCount = 100,
     this.trapsOnly = false,
     this.rankLinesByImportance = true,
-    this.annotateMoveProbabilities = true,
-    this.annotateMaiaOnly = true,
+    this.annotationDetail = MoveAnnotationDetail.full,
+    this.organizeIntoChapters = true,
+    this.maxLinesPerChapter = 40,
+    this.minLinesPerChapter = 5,
+    this.modelGameCount = 6,
+    this.modelGameMinElo = 2200,
+    this.refutationLines = true,
+    this.alternativeLines = true,
     this.selectionMode = SelectionMode.expectimax,
     this.leafConfidence = 1.0,
     this.noveltyWeight = 0,
@@ -368,22 +406,22 @@ class TreeBuildConfig {
       minEvalCp: (json['min_eval_cp'] as num?)?.toInt() ?? 0,
       maxEvalCp: (json['max_eval_cp'] as num?)?.toInt() ?? 200,
       relativeEval: json['relative_eval'] as bool? ?? true,
-      useLichessDb: json['use_lichess_db'] as bool? ?? false,
-      useMasters: json['use_masters'] as bool? ?? false,
-      ratingRange: json['rating_range'] as String? ?? '2000,2200,2500',
-      speeds: json['speeds'] as String? ?? 'blitz,rapid,classical',
-      minGames: (json['min_games'] as num?)?.toInt() ?? 10,
       maiaElo: (json['maia_elo'] as num?)?.toInt() ?? 2200,
       maiaMinProb: (json['maia_min_prob'] as num?)?.toDouble() ?? 0.05,
-      maiaOnly: json['maia_only'] as bool? ?? true,
       oppPolicyTemperature:
           (json['opp_policy_temperature'] as num?)?.toDouble() ?? 1.0,
       targetLineCount: (json['target_line_count'] as num?)?.toInt() ?? 100,
       trapsOnly: json['traps_only'] as bool? ?? false,
       rankLinesByImportance: json['rank_lines_by_importance'] as bool? ?? true,
-      annotateMoveProbabilities:
-          json['annotate_move_probabilities'] as bool? ?? true,
-      annotateMaiaOnly: json['annotate_maia_only'] as bool? ?? true,
+      annotationDetail: _parseAnnotationDetail(json),
+      organizeIntoChapters: json['organize_into_chapters'] as bool? ?? true,
+      maxLinesPerChapter:
+          (json['max_lines_per_chapter'] as num?)?.toInt() ?? 40,
+      minLinesPerChapter: (json['min_lines_per_chapter'] as num?)?.toInt() ?? 5,
+      modelGameCount: (json['model_game_count'] as num?)?.toInt() ?? 6,
+      modelGameMinElo: (json['model_game_min_elo'] as num?)?.toInt() ?? 2200,
+      refutationLines: json['refutation_lines'] as bool? ?? true,
+      alternativeLines: json['alternative_lines'] as bool? ?? true,
       selectionMode: _parseSelectionMode(json['selection_mode'] as String?),
       leafConfidence: (json['leaf_confidence'] as num?)?.toDouble() ?? 1.0,
       noveltyWeight: (json['novelty_weight'] as num?)?.toInt() ?? 0,
@@ -446,11 +484,8 @@ class TreeBuildConfig {
     if (buildMode == BuildMode.dbExplorer && pgnFilePaths.isNotEmpty) {
       parts.add('${pgnFilePaths.length} PGN');
     }
-    if (maiaOnly || buildMode == BuildMode.maiaDbExplore) {
-      parts.add('Maia $maiaElo');
-    } else if (useLichessDb) {
-      parts.add(useMasters ? 'Masters' : 'Lichess');
-    }
+    parts.add('Maia $maiaElo');
+    if (organizeIntoChapters) parts.add('chapters');
     return parts.join(' · ');
   }
 
@@ -465,6 +500,15 @@ class TreeBuildConfig {
   /// Minimum depth required from external eval sources.
   int get effectiveMinEvalDepth =>
       minAcceptableEvalDepth > 0 ? minAcceptableEvalDepth : evalDepth;
+
+  /// Whole games the frequency scan keeps, to choose model games from.
+  ///
+  /// Far larger than [modelGameCount] on purpose: retention ranks by rating,
+  /// but selection needs games that *follow this repertoire*, and most of a
+  /// database's strongest games never enter the opening at all.  0 when model
+  /// games are off, which makes the scan skip retention entirely.
+  int get retainedGameCount =>
+      modelGameCount <= 0 ? 0 : (modelGameCount * 256).clamp(512, 4096);
 
   // ── Fast Expectimax priority-scaled pruning ──
   //
@@ -612,20 +656,23 @@ class TreeBuildConfig {
     'min_eval_cp': minEvalCp,
     'max_eval_cp': maxEvalCp,
     'relative_eval': relativeEval,
-    'use_lichess_db': useLichessDb,
-    'use_masters': useMasters,
-    'rating_range': ratingRange,
-    'speeds': speeds,
-    'min_games': minGames,
     'maia_elo': maiaElo,
     'maia_min_prob': maiaMinProb,
-    'maia_only': maiaOnly,
     'opp_policy_temperature': oppPolicyTemperature,
     'target_line_count': targetLineCount,
     'traps_only': trapsOnly,
     'rank_lines_by_importance': rankLinesByImportance,
-    'annotate_move_probabilities': annotateMoveProbabilities,
-    'annotate_maia_only': annotateMaiaOnly,
+    'annotation_detail': annotationDetail.name,
+    // Legacy key so a build of the app predating [annotationDetail] can still
+    // read this tree's metadata without losing the setting entirely.
+    'annotate_move_probabilities': annotationDetail.emitsAnything,
+    'organize_into_chapters': organizeIntoChapters,
+    'max_lines_per_chapter': maxLinesPerChapter,
+    'min_lines_per_chapter': minLinesPerChapter,
+    'model_game_count': modelGameCount,
+    'model_game_min_elo': modelGameMinElo,
+    'refutation_lines': refutationLines,
+    'alternative_lines': alternativeLines,
     'selection_mode': selectionMode.name,
     'leaf_confidence': leafConfidence,
     'novelty_weight': noveltyWeight,
@@ -674,20 +721,20 @@ class TreeBuildConfig {
     int? minEvalCp,
     int? maxEvalCp,
     bool? relativeEval,
-    bool? useLichessDb,
-    bool? useMasters,
-    String? ratingRange,
-    String? speeds,
-    int? minGames,
     int? maiaElo,
     double? maiaMinProb,
-    bool? maiaOnly,
     double? oppPolicyTemperature,
     int? targetLineCount,
     bool? trapsOnly,
     bool? rankLinesByImportance,
-    bool? annotateMoveProbabilities,
-    bool? annotateMaiaOnly,
+    MoveAnnotationDetail? annotationDetail,
+    bool? organizeIntoChapters,
+    int? maxLinesPerChapter,
+    int? minLinesPerChapter,
+    int? modelGameCount,
+    int? modelGameMinElo,
+    bool? refutationLines,
+    bool? alternativeLines,
     SelectionMode? selectionMode,
     double? leafConfidence,
     int? noveltyWeight,
@@ -736,22 +783,21 @@ class TreeBuildConfig {
       minEvalCp: minEvalCp ?? this.minEvalCp,
       maxEvalCp: maxEvalCp ?? this.maxEvalCp,
       relativeEval: relativeEval ?? this.relativeEval,
-      useLichessDb: useLichessDb ?? this.useLichessDb,
-      useMasters: useMasters ?? this.useMasters,
-      ratingRange: ratingRange ?? this.ratingRange,
-      speeds: speeds ?? this.speeds,
-      minGames: minGames ?? this.minGames,
       maiaElo: maiaElo ?? this.maiaElo,
       maiaMinProb: maiaMinProb ?? this.maiaMinProb,
-      maiaOnly: maiaOnly ?? this.maiaOnly,
       oppPolicyTemperature: oppPolicyTemperature ?? this.oppPolicyTemperature,
       targetLineCount: targetLineCount ?? this.targetLineCount,
       trapsOnly: trapsOnly ?? this.trapsOnly,
       rankLinesByImportance:
           rankLinesByImportance ?? this.rankLinesByImportance,
-      annotateMoveProbabilities:
-          annotateMoveProbabilities ?? this.annotateMoveProbabilities,
-      annotateMaiaOnly: annotateMaiaOnly ?? this.annotateMaiaOnly,
+      annotationDetail: annotationDetail ?? this.annotationDetail,
+      organizeIntoChapters: organizeIntoChapters ?? this.organizeIntoChapters,
+      maxLinesPerChapter: maxLinesPerChapter ?? this.maxLinesPerChapter,
+      minLinesPerChapter: minLinesPerChapter ?? this.minLinesPerChapter,
+      modelGameCount: modelGameCount ?? this.modelGameCount,
+      modelGameMinElo: modelGameMinElo ?? this.modelGameMinElo,
+      refutationLines: refutationLines ?? this.refutationLines,
+      alternativeLines: alternativeLines ?? this.alternativeLines,
       selectionMode: selectionMode ?? this.selectionMode,
       leafConfidence: leafConfidence ?? this.leafConfidence,
       noveltyWeight: noveltyWeight ?? this.noveltyWeight,
@@ -787,6 +833,18 @@ SearchAlgorithm _parseSearchAlgorithm(String? value, {bool? legacyBestFirst}) {
   // Configs written before the algorithm enum carry only best_first.
   if (legacyBestFirst == false) return SearchAlgorithm.pure;
   return SearchAlgorithm.fast;
+}
+
+/// Read the annotation level, falling back to the boolean pair this enum
+/// replaced so presets and paused builds written before the change still load.
+MoveAnnotationDetail _parseAnnotationDetail(Map<String, dynamic> json) {
+  final name = json['annotation_detail'] as String?;
+  if (name != null) return MoveAnnotationDetail.parse(name);
+  final legacy = json['annotate_move_probabilities'] as bool?;
+  if (legacy != null) {
+    return MoveAnnotationDetail.fromLegacyFlags(annotate: legacy);
+  }
+  return MoveAnnotationDetail.full;
 }
 
 SelectionMode _parseSelectionMode(String? value) {

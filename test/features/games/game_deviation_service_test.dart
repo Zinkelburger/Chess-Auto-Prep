@@ -67,6 +67,35 @@ void main() {
     expect(report.chapterName, 'Main');
   });
 
+  test('a model game in the file is not part of the book', () async {
+    // A course export: two real lines, plus a model game whose moves run far
+    // past where the preparation actually stops.
+    await writeChapter('Main.pgn', '''
+$mainChapter
+[Event "QGD"]
+[White "3. Model games"]
+[Black "Kasparov, G – Karpov, A"]
+[Result "*"]
+[ModelGameWhite "Kasparov, G"]
+[ModelGameBlack "Karpov, A"]
+[ModelGameResult "1-0"]
+
+1. d4 d5 2. c4 e6 3. Nc3 Nf6 4. Bg5 Be7 5. e3 O-O *
+''');
+    await settings.setPaths(white: true, paths: [tempDir.path]);
+
+    // 4... Be7 is in the model game but not in the repertoire, which ends at
+    // 4. Bg5 — the deviation must be reported there, not swallowed.
+    final report = await service.analyzeGame(
+      gameSans: ['d4', 'd5', 'c4', 'e6', 'Nc3', 'Nf6', 'Bg5', 'Be7'],
+      meWhite: true,
+    );
+
+    expect(report!.inBook, isFalse);
+    expect(report.bookEnded, isTrue);
+    expect(report.matchedPlies, 7);
+  });
+
   test('reports the opponent leaving book', () async {
     await writeChapter('Main.pgn', mainChapter);
     await settings.setPaths(white: true, paths: [tempDir.path]);

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:chess_auto_prep/models/build_tree_node.dart';
 import 'package:chess_auto_prep/theme/app_colors.dart';
 import 'package:chess_auto_prep/theme/app_text_styles.dart';
-import 'package:chess_auto_prep/utils/eval_constants.dart';
+import 'package:chess_auto_prep/utils/chess_utils.dart' show formatPackedEval;
 import 'package:chess_auto_prep/utils/fen_utils.dart';
 
 const _rowHeight = 24.0;
@@ -270,7 +270,7 @@ class _CompactTreeRow extends StatelessWidget {
               if (showEval) ...[
                 const SizedBox(width: 6),
                 Text(
-                  _formatEval(evalCp),
+                  formatPackedEval(evalCp),
                   style: AppTextStyles.monoDense.copyWith(
                     fontSize: 11,
                     color: AppColors.cpEval(evalCp),
@@ -314,13 +314,5 @@ class _CompactTreeRow extends StatelessWidget {
       return '$moveNum. ${node.moveSan}';
     }
     return '$moveNum...${node.moveSan}';
-  }
-
-  String _formatEval(int cpForUs) {
-    if (isMateEval(cpForUs)) {
-      return cpForUs > 0 ? '+M' : '-M';
-    }
-    final pawns = cpForUs / 100.0;
-    return '${pawns >= 0 ? '+' : ''}${pawns.toStringAsFixed(1)}';
   }
 }

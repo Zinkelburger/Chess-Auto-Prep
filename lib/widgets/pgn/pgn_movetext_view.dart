@@ -31,6 +31,7 @@ import '../../utils/pgn_comment_utils.dart'
         CommentToken,
         CommentProse,
         CommentMove,
+        MoveMetrics,
         RichSegment,
         RichSegmentType,
         kSanCorePattern;
@@ -225,6 +226,15 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
     }
 
     void emitComment(String raw, {Position? anchorPos, int anchorPly = 0}) {
+      // Measured facts first, on their own row: a generated line annotates
+      // every move, and interleaving that with prose would bury both.
+      final metrics = _metricsSpans(raw);
+      if (metrics.isNotEmpty) {
+        emitFullWidthRow(
+          RichText(text: TextSpan(children: List.of(metrics))),
+          vertical: 2,
+        );
+      }
       final rendered = _renderComment(
         view,
         raw,

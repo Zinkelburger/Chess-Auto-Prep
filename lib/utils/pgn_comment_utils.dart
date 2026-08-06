@@ -8,8 +8,13 @@ import 'dart:ui' show Color;
 
 import 'package:dartchess/dartchess.dart';
 
+import '../services/generation/export/move_annotation.dart'
+    show MoveLikelihoodSource;
 import '../theme/app_colors.dart';
 import 'movetext_builder.dart';
+
+export '../services/generation/export/move_annotation.dart'
+    show MoveLikelihoodSource;
 
 // ---------------------------------------------------------------------------
 // NAG (Numeric Annotation Glyph) constants and helpers
@@ -316,6 +321,170 @@ String setPvInComment(String comment, List<String> pv) {
   if (trimmed.isEmpty) return token;
   return '$trimmed $token';
 }
+
+// ---------------------------------------------------------------------------
+// Generated move metrics
+// ---------------------------------------------------------------------------
+
+/// What a generated repertoire says about one move, read back out of its
+/// `[%...]` tokens.
+///
+/// The generator writes these (see `generation/export/move_annotation.dart`);
+/// every viewer in the app strips them as engine noise, which left an
+/// annotated export looking like bare movetext.  [labels] turns whatever is
+/// present into plain English for display — nothing invented, nothing implied
+/// by a missing token.
+class MoveMetrics {
+  /// Engine eval after the move, in centipawns from the mover's own book
+  /// perspective (the generator writes it from the repertoire owner's side).
+  final int? evalCp;
+
+  /// Mate distance, when the eval is a mate score instead of centipawns.
+  final int? evalMate;
+
+  /// The move is far enough ahead of every alternative to be forced.
+  final bool isOnlyMove;
+
+  /// How naturally a human finds *our* move here, in [0, 1].
+  final double? myEase;
+
+  /// How easily the opponent finds a good move here, in [0, 1].
+  final double? opponentEase;
+
+  /// Score our side achieved from here in real games, in [0, 1].
+  final double? practicalScore;
+
+  final int? gameCount;
+  final int? lastPlayedYear;
+
+  /// Probability the opponent plays this move, in [0, 1], and where the
+  /// number came from.
+  final double? likelihood;
+  final MoveLikelihoodSource? likelihoodSource;
+
+  /// What a refuted alternative costs the side that plays it, in centipawns.
+  final int? lossCp;
+
+  const MoveMetrics({
+    this.evalCp,
+    this.evalMate,
+    this.isOnlyMove = false,
+    this.myEase,
+    this.opponentEase,
+    this.practicalScore,
+    this.gameCount,
+    this.lastPlayedYear,
+    this.likelihood,
+    this.likelihoodSource,
+    this.lossCp,
+  });
+
+  static const none = MoveMetrics();
+
+  bool get isEmpty => labels.isEmpty;
+
+  /// Parse every recognised token in [comment]; unknown tokens and prose are
+  /// ignored, so this is safe to run over any comment from any source.
+  static MoveMetrics parse(String comment) {
+    if (!comment.contains('[%')) return none;
+
+    int? evalCp;
+    int? evalMate;
+    var isOnlyMove = false;
+    double? myEase;
+    double? opponentEase;
+    double? practicalScore;
+    int? gameCount;
+    int? lastPlayedYear;
+    double? likelihood;
+    MoveLikelihoodSource? likelihoodSource;
+    int? lossCp;
+
+    for (final match in _metricTokenRe.allMatches(comment)) {
+      final name = match.group(1)!;
+      final raw = match.group(2)!.trim();
+      switch (name) {
+        case 'eval':
+          final parsed = parseEvalComment('[%eval $raw]');
+          evalCp = parsed?.cp;
+          evalMate = parsed?.mate;
+        case 'onlyMove':
+          isOnlyMove = true;
+        case 'myEase':
+          myEase = double.tryParse(raw);
+        case 'ease':
+          opponentEase = double.tryParse(raw);
+        case 'score':
+          final percent = double.tryParse(raw.replaceAll('%', ''));
+          if (percent != null) practicalScore = percent / 100.0;
+        case 'games':
+          gameCount = int.tryParse(raw);
+        case 'lastPlayed':
+          lastPlayedYear = int.tryParse(raw);
+        case 'maiaProbability':
+          likelihood = double.tryParse(raw);
+          likelihoodSource = MoveLikelihoodSource.maia;
+        case 'humanFrequency':
+          likelihood = double.tryParse(raw);
+          likelihoodSource = MoveLikelihoodSource.gameDatabase;
+        case 'engineReply':
+          likelihood = double.tryParse(raw);
+          likelihoodSource = MoveLikelihoodSource.engine;
+        case 'loss':
+          final pawns = double.tryParse(raw);
+          if (pawns != null) lossCp = (pawns * 100).round();
+      }
+    }
+
+    return MoveMetrics(
+      evalCp: evalCp,
+      evalMate: evalMate,
+      isOnlyMove: isOnlyMove,
+      myEase: myEase,
+      opponentEase: opponentEase,
+      practicalScore: practicalScore,
+      gameCount: gameCount,
+      lastPlayedYear: lastPlayedYear,
+      likelihood: likelihood,
+      likelihoodSource: likelihoodSource,
+      lossCp: lossCp,
+    );
+  }
+
+  /// One short phrase per fact present, in reading order: what the engine
+  /// thinks, how likely the move is, how it has actually gone for humans.
+  List<String> get labels => [
+    if (evalMate != null) 'mate in ${evalMate!.abs()}',
+    if (evalMate == null && evalCp != null) 'eval ${_signedPawns(evalCp!)}',
+    if (lossCp != null) 'costs ${(lossCp! / 100).toStringAsFixed(2)}',
+    if (isOnlyMove) 'only move',
+    if (likelihood != null && likelihoodSource != null)
+      switch (likelihoodSource!) {
+        MoveLikelihoodSource.maia => '${_percent(likelihood!)} likely',
+        MoveLikelihoodSource.gameDatabase => 'played ${_percent(likelihood!)}',
+        MoveLikelihoodSource.engine => 'engine reply',
+      },
+    if (gameCount != null && gameCount! > 0) '$gameCount games',
+    if (practicalScore != null) 'you score ${_percent(practicalScore!)}',
+    if (myEase != null) 'natural for you ${_percent(myEase!)}',
+    if (opponentEase != null) 'easy for them ${_percent(opponentEase!)}',
+    if (lastPlayedYear != null && lastPlayedYear! > 0)
+      'last played $lastPlayedYear',
+  ];
+
+  /// The whole thing on one line, or empty when the comment held no metrics.
+  String get summary => labels.join(' · ');
+
+  static String _percent(double fraction) => '${(fraction * 100).round()}%';
+
+  static String _signedPawns(int centipawns) {
+    final pawns = (centipawns / 100).toStringAsFixed(2);
+    return centipawns > 0 ? '+$pawns' : pawns;
+  }
+}
+
+/// `[%name value]` — the shape every generated annotation token takes.
+final _metricTokenRe = RegExp(r'\[%(\w+)\s*([^\]]*)\]');
 
 // ---------------------------------------------------------------------------
 // Display comment filtering

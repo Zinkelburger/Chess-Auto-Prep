@@ -8,10 +8,14 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+import 'bottom_pane_controller.dart';
 
-enum BottomPaneTab { findings, jobs, lines }
+export 'bottom_pane_controller.dart' show BottomPaneController, BottomPaneTab;
 
 class BottomPane extends StatefulWidget {
+  /// Open/closed state and active tab, owned by the screen.
+  final BottomPaneController controller;
+
   final Widget findingsContent;
   final Widget jobsContent;
   final Widget linesContent;
@@ -27,6 +31,7 @@ class BottomPane extends StatefulWidget {
 
   const BottomPane({
     super.key,
+    required this.controller,
     required this.findingsContent,
     required this.jobsContent,
     required this.linesContent,
@@ -42,64 +47,65 @@ class BottomPane extends StatefulWidget {
 
 class BottomPaneState extends State<BottomPane>
     with SingleTickerProviderStateMixin {
-  static const double _minHeight = 120.0;
-  static const double _maxFraction = 0.60;
-  static const double _defaultFraction = 0.60;
   static const double _dragHandleHeight = 6.0;
   static const double _tabBarHeight = 32.0;
 
   late final TabController _tabController;
 
-  bool _collapsed = true;
-
-  /// Height stored as a fraction of screen height so it scales with
-  /// window resize (e.g. minimized -> fullscreen).
-  double _heightFraction = _defaultFraction;
-
-  bool get isCollapsed => _collapsed;
-  BottomPaneTab get activeTab => BottomPaneTab.values[_tabController.index];
+  BottomPaneController get _controller => widget.controller;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(
+      length: 3,
+      vsync: this,
+      initialIndex: _controller.activeTab.index,
+    );
+    _controller.addListener(_onControllerChanged);
   }
 
   @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  void open(BottomPaneTab tab) {
-    setState(() {
-      _collapsed = false;
-      _tabController.animateTo(tab.index);
-    });
-  }
-
-  void close() {
-    setState(() => _collapsed = true);
-  }
-
-  void toggle([BottomPaneTab? tab]) {
-    if (_collapsed) {
-      open(tab ?? BottomPaneTab.values[_tabController.index]);
-    } else if (tab != null && _tabController.index != tab.index) {
-      _tabController.animateTo(tab.index);
-    } else {
-      close();
+  void didUpdateWidget(covariant BottomPane oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onControllerChanged);
+      widget.controller.addListener(_onControllerChanged);
     }
   }
 
   @override
+  void dispose() {
+    _controller.removeListener(_onControllerChanged);
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  /// Mirror the controller's tab onto the TabController, which owns the
+  /// indicator animation, then rebuild for collapsed/height changes.
+  void _onControllerChanged() {
+    if (!mounted) return;
+    final index = _controller.activeTab.index;
+    if (_tabController.index != index) _tabController.animateTo(index);
+    setState(() {});
+  }
+
+  void _closeFromChrome() {
+    _controller.close();
+    widget.onClose?.call();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (_collapsed) return const SizedBox.shrink();
+    if (_controller.isCollapsed) return const SizedBox.shrink();
 
     final screenHeight = MediaQuery.of(context).size.height;
-    final maxHeight = screenHeight * _maxFraction;
-    final desiredHeight = screenHeight * _heightFraction;
-    final clampedHeight = desiredHeight.clamp(_minHeight, maxHeight);
+    final maxHeight = screenHeight * BottomPaneController.maxHeightFraction;
+    final desiredHeight = screenHeight * _controller.heightFraction;
+    final clampedHeight = desiredHeight.clamp(
+      BottomPaneController.minHeightPx,
+      maxHeight,
+    );
 
     return SizedBox(
       height: clampedHeight,
@@ -127,21 +133,18 @@ class BottomPaneState extends State<BottomPane>
     final screenHeight = MediaQuery.of(context).size.height;
     return GestureDetector(
       onVerticalDragUpdate: (details) {
-        setState(() {
-          final currentPx = screenHeight * _heightFraction;
-          final newPx = (currentPx - details.delta.dy).clamp(
-            _minHeight,
-            maxHeight,
-          );
-          _heightFraction = screenHeight > 0
+        final currentPx = screenHeight * _controller.heightFraction;
+        final newPx = (currentPx - details.delta.dy).clamp(
+          BottomPaneController.minHeightPx,
+          maxHeight,
+        );
+        _controller.setHeightFraction(
+          screenHeight > 0
               ? newPx / screenHeight
-              : _defaultFraction;
-        });
+              : BottomPaneController.defaultHeightFraction,
+        );
       },
-      onDoubleTap: () {
-        close();
-        widget.onClose?.call();
-      },
+      onDoubleTap: _closeFromChrome,
       child: MouseRegion(
         cursor: SystemMouseCursors.resizeRow,
         child: Container(
@@ -180,6 +183,7 @@ class BottomPaneState extends State<BottomPane>
           Expanded(
             child: TabBar(
               controller: _tabController,
+              onTap: (i) => _controller.open(BottomPaneTab.values[i]),
               isScrollable: true,
               tabAlignment: TabAlignment.start,
               labelPadding: const EdgeInsets.symmetric(horizontal: 12),
@@ -199,10 +203,7 @@ class BottomPaneState extends State<BottomPane>
           ),
           IconButton(
             icon: const Icon(Icons.close, size: 14),
-            onPressed: () {
-              close();
-              widget.onClose?.call();
-            },
+            onPressed: _closeFromChrome,
             tooltip: 'Collapse (Esc)',
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,

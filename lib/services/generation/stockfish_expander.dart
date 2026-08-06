@@ -46,21 +46,6 @@ class StockfishExpander extends NodeExpander {
     // from MultiPV line 0, avoiding an extra single-PV call).
     if (evalWindowPrune(node, config)) return;
 
-    // Lichess enrichment for SAN + win rates at our-move nodes.
-    // Matches C: queried when `!maia_only` (Lichess is the opponent
-    // source, so the explorer data is available anyway).
-    ExplorerResponse? lichess;
-    if (!config.maiaOnly) {
-      lichess = await run.evalResolver.getDbData(node.fen, config);
-    }
-
-    if (lichess != null) {
-      final totalW = lichess.moves.fold(0, (s, m) => s + m.white);
-      final totalB = lichess.moves.fold(0, (s, m) => s + m.black);
-      final totalD = lichess.moves.fold(0, (s, m) => s + m.draws);
-      node.setLichessStats(totalW, totalB, totalD);
-    }
-
     // Filter candidates by eval loss (direction depends on STM).  Fast
     // halves the window at cold nodes; the root and the wide-opening band
     // keep the full window.
@@ -79,20 +64,7 @@ class StockfishExpander extends NodeExpander {
       final childFen = playUciMove(node.fen, line.moveUci);
       if (childFen == null) continue;
 
-      // Get SAN from Lichess data or compute it
-      String san = line.moveUci;
-      if (lichess != null) {
-        final lichessMove = lichess.moves
-            .where((m) => m.uci == line.moveUci)
-            .firstOrNull;
-        if (lichessMove != null) {
-          san = lichessMove.san;
-        }
-      }
-      if (san == line.moveUci) {
-        san = uciToSan(node.fen, line.moveUci);
-      }
-
+      final san = uciToSan(node.fen, line.moveUci);
       final childIsWhite = isWhiteToMove(childFen);
       final childEvalStm = whiteToMove ? -line.effectiveCp : line.effectiveCp;
 
@@ -112,16 +84,6 @@ class StockfishExpander extends NodeExpander {
         childIsWhite ? childEvalStm : -childEvalStm,
         config.evalDepth,
       );
-
-      // Enrich with Lichess stats
-      if (lichess != null) {
-        final lm = lichess.moves
-            .where((m) => m.uci == line.moveUci)
-            .firstOrNull;
-        if (lm != null) {
-          child.setLichessStats(lm.white, lm.black, lm.draws);
-        }
-      }
 
       // Line 0 only: stash engine's preferred opponent reply on the child
       // (opponent-to-move position after our best move).

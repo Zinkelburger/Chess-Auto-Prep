@@ -18,8 +18,8 @@ import '../services/generation/generation_config.dart';
 import '../services/on_the_fly_expectimax_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
-import '../utils/chess_utils.dart' show formatEvalDisplay, uciToSan;
-import '../utils/eval_constants.dart';
+import '../utils/chess_utils.dart'
+    show formatEvalDisplay, formatPackedEval, uciToSan;
 import 'analysis/analysis_panels_dialog.dart';
 import 'engine/expectimax_panel_host.dart';
 import 'engine/unified_engine_pane.dart';
@@ -325,11 +325,7 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
     );
   }
 
-  static String _formatExEval(int cp) {
-    if (isMateEval(cp)) return cp > 0 ? '# ' : '-# ';
-    final sign = cp >= 0 ? '+' : '';
-    return '$sign${(cp / 100).toStringAsFixed(2)}';
-  }
+  static String _formatExEval(int cp) => formatPackedEval(cp, decimals: 2);
 
   Widget _buildEnginePane() {
     return UnifiedEnginePane(

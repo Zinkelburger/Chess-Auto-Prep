@@ -17,14 +17,21 @@ import 'package:path/path.dart' as p;
 
 import '../models/build_tree_node.dart';
 import '../services/coherence_service.dart';
+import '../utils/log.dart';
 import '../services/engine/engine_lifecycle.dart';
 import '../services/engine/stockfish_pool.dart';
+import '../services/generation/course/chapter_titles.dart';
+import '../services/generation/course/course_composer.dart';
+import '../services/generation/course/model_game_selector.dart';
+import '../services/generation/course/opening_namer.dart';
+import '../services/generation/course/refutation_prober.dart';
 import '../services/generation/eca_calculator.dart';
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import '../services/generation/line_extractor.dart';
 import '../services/generation/line_pruner.dart';
 import '../services/generation/pgn_export.dart';
+import '../services/opening_book_service.dart';
 import '../services/generation/repertoire_selector.dart';
 import '../services/generation/repertoire_verifier.dart';
 import '../services/generation/run_debug_dump.dart';
@@ -138,6 +145,20 @@ class GenerationSessionController extends ChangeNotifier
 
   /// Non-null when the most recent run failed.
   String? lastError;
+
+  /// Chapter structure of the most recent export, for the run summary and
+  /// for anything that wants to show what the course looks like.
+  List<ChapterOutline> lastCourseOutline = const [];
+
+  /// Why the last run produced no model games, or empty when it produced some
+  /// (or was not asked for any).
+  String lastModelGameNote = '';
+
+  /// Losing replies the last run showed the punishment for.
+  int lastRefutationCount = 0;
+
+  /// Positions where the last run showed a refuted move the book leaves out.
+  int lastAlternativeCount = 0;
 
   final PgnBatchWriter _pgnWriter = PgnBatchWriter();
   Stopwatch _pipelineSw = Stopwatch();
@@ -258,6 +279,10 @@ class GenerationSessionController extends ChangeNotifier
     _finishNowRequested = false;
     lastError = null;
     lastRunSummary = '';
+    lastCourseOutline = const [];
+    lastModelGameNote = '';
+    lastRefutationCount = 0;
+    lastAlternativeCount = 0;
     lastConfig = config;
     _resetProgress();
     activeConfig = config;
@@ -589,50 +614,209 @@ class GenerationSessionController extends ChangeNotifier
     );
   }
 
-  /// Write each line out as a PGN entry, flushing in batches so a long export
-  /// does not hold everything in memory, then hand the batch to the caller.
+  /// Compose the extracted lines into a course — chapters cut at branch
+  /// points, named from the ECO book, with model games appended — and write
+  /// it out, flushing in batches so a long export does not sit in memory.
   Future<void> _exportLinesPhase(
     BuildTree tree,
     _ExtractedLines extracted,
     GenerationRequest request,
     List<String> prefix,
   ) async {
-    final config = request.config;
     final filePath = request.repertoireFilePath;
-    final rootFen = prefix.isEmpty ? tree.root.fen : request.repertoireStartFen;
-    final rootWhiteToMove = isWhiteToMove(rootFen);
+    final refutations = await _refutationPhase(extracted, request.config);
+    final alternatives = await _alternativePhase(extracted, request.config);
+    final course = await _composeCourse(
+      tree,
+      extracted,
+      request,
+      prefix,
+      refutations,
+      alternatives,
+    );
+    lastCourseOutline = course.outline;
 
     final saved = <GeneratedLineExport>[];
-    for (int i = 0; i < extracted.lines.length; i++) {
-      final line = extracted.lines[i];
-      final title = 'Generated Line ${i + 1}';
-      final fullMoves = [...prefix, ...line.movesSan];
-      final pgn = buildRepertoirePgnEntry(
-        moves: fullMoves,
-        title: title,
-        cumulativeProb: line.probability,
-        finalEvalCp: line.leafEvalCp ?? 0,
-        isWhiteRepertoire: config.playAsWhite,
-        rootFen: rootFen,
-        rootWhiteToMove: rootWhiteToMove,
-        pruneReason: line.leafPruneReason,
-        pruneEvalCp: line.leafPruneEvalCp,
-        lineAnnotations: line.moveAnnotations,
-        prefixMoveCount: prefix.length,
-        rankByImportance: config.rankLinesByImportance,
-        annotateMoveProbabilities: config.annotateMoveProbabilities,
-        annotateMaiaOnly: config.annotateMaiaOnly,
-      );
-      _pgnWriter.queue(pgn);
+    for (final entry in course.entries) {
+      _pgnWriter.queue(entry.pgn);
       if (_pgnWriter.lineCount >= _pgnFlushEveryLines) {
         await _pgnWriter.flush(filePath);
       }
-      saved.add(GeneratedLineExport(moves: fullMoves, title: title, pgn: pgn));
+      saved.add(
+        GeneratedLineExport(
+          moves: entry.movesSan,
+          title: entry.variationName,
+          pgn: entry.pgn,
+        ),
+      );
     }
     await _pgnWriter.flush(filePath);
     if (saved.isNotEmpty) {
       request.onLinesSaved(saved);
     }
+  }
+
+  /// Build the course document.  Everything optional here degrades rather
+  /// than fails: a missing opening book means move-based chapter names, and
+  /// a build with no game database simply has no model games.
+  /// Ask the engine how the replies that end a line in a won position are
+  /// actually punished, so those lines stop dead on the opponent's mistake.
+  ///
+  /// Best-effort like verification: no engine, a cancelled run, or a failed
+  /// search costs the variations, never the export.
+  Future<RefutationMap> _refutationPhase(
+    _ExtractedLines extracted,
+    TreeBuildConfig config,
+  ) async {
+    lastRefutationCount = 0;
+    if (!config.refutationLines || !config.needsStockfish || _cancelRequested) {
+      return const {};
+    }
+
+    final prober = RefutationProber(config: config);
+    final targets = prober.targets(extracted.lines);
+    if (targets.isEmpty) return const {};
+
+    try {
+      if (StockfishPool.instance.workerCount == 0) {
+        await StockfishPool.instance.prepareForTreeBuild(
+          config.resolvedEngineThreads,
+        );
+      }
+      final refutations = await prober.probe(
+        extracted.lines,
+        isCancelled: () => _cancelRequested,
+        onProgress: (done, total) => _setStatus(
+          'Phase 3.5: Showing how losing replies are punished '
+          '($done of $total)...',
+          GenerationPhase.extractingLines,
+        ),
+      );
+      lastRefutationCount = refutations.length;
+      return refutations;
+    } catch (e) {
+      debugPrint('Refutation pass failed: $e');
+      return const {};
+    }
+  }
+
+  /// Ask what a human would play at each position the export passes through
+  /// that the book leaves out, and why it is left out.
+  ///
+  /// Best-effort like [_refutationPhase]: this pass costs variations when it
+  /// fails, never the export.
+  Future<AlternativeMap> _alternativePhase(
+    _ExtractedLines extracted,
+    TreeBuildConfig config,
+  ) async {
+    lastAlternativeCount = 0;
+    if (!config.alternativeLines ||
+        !config.needsStockfish ||
+        _cancelRequested) {
+      return const {};
+    }
+
+    final prober = RefutationProber(
+      config: config,
+      freqMap: buildService.lastGameDatabase,
+    );
+    if (prober.alternativeSites(extracted.lines).isEmpty) return const {};
+
+    try {
+      if (StockfishPool.instance.workerCount == 0) {
+        await StockfishPool.instance.prepareForTreeBuild(
+          config.resolvedEngineThreads,
+        );
+      }
+      final alternatives = await prober.probeAlternatives(
+        extracted.lines,
+        isCancelled: () => _cancelRequested,
+        onProgress: (done, total) => _setStatus(
+          'Phase 3.6: Checking the moves the book leaves out '
+          '($done of $total positions)...',
+          GenerationPhase.extractingLines,
+        ),
+      );
+      lastAlternativeCount = alternatives.length;
+      return alternatives;
+    } catch (e) {
+      debugPrint('Alternatives pass failed: $e');
+      return const {};
+    }
+  }
+
+  Future<ComposedCourse> _composeCourse(
+    BuildTree tree,
+    _ExtractedLines extracted,
+    GenerationRequest request,
+    List<String> prefix,
+    RefutationMap refutations,
+    AlternativeMap alternatives,
+  ) async {
+    final config = request.config;
+    final rootFen = prefix.isEmpty ? tree.root.fen : request.repertoireStartFen;
+
+    final namer = CourseNamer(
+      namer: await _loadOpeningNamer(rootFen),
+      rootWhiteToMove: isWhiteToMove(rootFen),
+      startMoveNumber: fullMoveNumber(rootFen),
+      repertoirePrefix: prefix,
+      playAsWhite: config.playAsWhite,
+    );
+
+    return CourseComposer(
+      config: config,
+      namer: namer,
+      repertoireStartFen: rootFen,
+      repertoirePrefix: prefix,
+      repertoireName: p.basenameWithoutExtension(request.repertoireFilePath),
+    ).compose(
+      lines: extracted.lines,
+      modelGames: _selectModelGames(tree, config),
+      refutations: refutations,
+      alternatives: alternatives,
+    );
+  }
+
+  Future<OpeningNamer> _loadOpeningNamer(String rootFen) async {
+    try {
+      return OpeningNamer(
+        book: await OpeningBookService.instance.load(),
+        startFen: rootFen,
+      );
+    } catch (e) {
+      debugPrint('[GenerationController] Opening book unavailable: $e');
+      return OpeningNamer.unavailable(startFen: rootFen);
+    }
+  }
+
+  /// Model games, with [lastModelGameNote] set to why there are none — an
+  /// empty trailing section is otherwise indistinguishable from the feature
+  /// being off, and "nothing in your database follows this repertoire" is
+  /// something the user can act on.
+  List<ModelGame> _selectModelGames(BuildTree tree, TreeBuildConfig config) {
+    lastModelGameNote = '';
+    if (config.modelGameCount <= 0) return const [];
+
+    final database = buildService.lastGameDatabase;
+    if (database == null || database.games.isEmpty) {
+      lastModelGameNote =
+          ' No model games: this build had no game database to draw them from.';
+      return const [];
+    }
+
+    final games = ModelGameSelector(playAsWhite: config.playAsWhite).select(
+      database,
+      tree,
+      limit: config.modelGameCount,
+      fenMap: _current?.fenMap,
+    );
+    if (games.isEmpty) {
+      lastModelGameNote =
+          ' No model games: none of the ${database.games.length} strongest '
+          'games in the database follow this repertoire.';
+    }
+    return games;
   }
 
   /// Write the side artifacts: serialized tree, run debug dump, trap index,
@@ -688,8 +872,15 @@ class GenerationSessionController extends ChangeNotifier
             findabilityPRef: pRefForElo(config.maiaElo),
           ).extract(tree);
       await TrapExtractor.saveToFile(trapLines, filePath);
-    } catch (_) {
-      // Trap extraction is best-effort
+    } catch (e) {
+      // Best-effort: a failure here costs the trap list, not the build. Logged
+      // because the symptom — a finished repertoire with no traps — is
+      // otherwise indistinguishable from a position that genuinely has none.
+      log.w(
+        'trap extraction failed for $filePath',
+        name: 'GenerationSession',
+        error: e,
+      );
     }
 
     // A budget/finish-now stop leaves the tree resumable: keep the partial
@@ -720,13 +911,38 @@ class GenerationSessionController extends ChangeNotifier
     lastRunSummary =
         'Complete in $elapsedLabel: ${tree.totalNodes} nodes, '
         '${analysis.selectedCount} repertoire moves, '
-        '${extracted.lines.length} lines$pruneNote.${extracted.trapsOnlyNote}';
+        '${extracted.lines.length} lines$pruneNote'
+        '${_courseNote()}.${extracted.trapsOnlyNote}$lastModelGameNote';
     if (finishedEarly && config.verifyFinal && config.needsStockfish) {
       lastRunSummary =
           '$lastRunSummary '
           'Verification skipped (finished early).';
     }
     _setStatus(lastRunSummary, GenerationPhase.extractingLines);
+  }
+
+  /// ` in 7 chapters plus 6 model games`, or empty when the export was flat.
+  String _courseNote() {
+    if (lastCourseOutline.isEmpty) return '';
+    final chapters = lastCourseOutline
+        .where((c) => c.kind == ChapterKind.lines)
+        .length;
+    final games = lastCourseOutline
+        .where((c) => c.kind == ChapterKind.modelGames)
+        .fold(0, (sum, c) => sum + c.entryCount);
+    if (chapters < 2 &&
+        games == 0 &&
+        lastRefutationCount == 0 &&
+        lastAlternativeCount == 0) {
+      return '';
+    }
+    return [
+      if (chapters >= 2) ' in $chapters chapters',
+      if (games > 0) '${chapters >= 2 ? ' plus' : ' with'} $games model games',
+      if (lastRefutationCount > 0) ', $lastRefutationCount punished replies',
+      if (lastAlternativeCount > 0)
+        ', $lastAlternativeCount refuted alternatives',
+    ].join();
   }
 
   /// SAN prefix (from the repertoire root) that exported lines must carry.

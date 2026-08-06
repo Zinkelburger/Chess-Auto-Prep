@@ -6,6 +6,7 @@ import 'dart:isolate';
 import 'package:dartchess/dartchess.dart' hide File;
 
 import '../constants/chess_constants.dart';
+import '../utils/log.dart';
 import '../models/opening_tree.dart';
 import '../models/position_analysis.dart';
 import '../utils/atomic_file.dart';
@@ -392,7 +393,15 @@ class UnifiedAnalysisBuilder {
         acc.fenToGameIndices[key] = (value as List<dynamic>).cast<int>();
       });
       return acc;
-    } catch (_) {
+    } catch (e) {
+      // A corrupt cache is recoverable — the caller rebuilds — but it should
+      // not be invisible, or a cache that fails to decode every time reads as
+      // "analysis is just slow".
+      log.w(
+        'discarding unreadable analysis cache',
+        name: 'UnifiedAnalysisBuilder',
+        error: e,
+      );
       return null;
     }
   }

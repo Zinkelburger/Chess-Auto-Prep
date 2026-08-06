@@ -3,8 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
+import '../../utils/app_shortcuts.dart';
 import '../../models/tactics_position.dart';
-import '../../services/tactics_engine.dart';
+import '../../services/tactics/tactics_engine.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/chess_utils.dart' show fenAfterMoves, sanToUci;
@@ -270,7 +271,7 @@ class _TacticsTrainingPanelState extends State<TacticsTrainingPanel> {
                 description: widget.showSolution
                     ? 'Hide solution'
                     : 'Show solution',
-                shortcut: 'Space',
+                shortcut: AppShortcut.toggleSolution,
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -289,7 +290,7 @@ class _TacticsTrainingPanelState extends State<TacticsTrainingPanel> {
                       description: 'Analyze',
                       // V only: A is the a-file, and the move box is always
                       // hot while solving, so an A binding can never fire.
-                      shortcut: 'V',
+                      shortcut: AppShortcut.analyzePosition,
                       child: SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
@@ -320,7 +321,7 @@ class _TacticsTrainingPanelState extends State<TacticsTrainingPanel> {
                 description: widget.onPreviousPosition != null
                     ? 'Previous position'
                     : 'Already at the first position',
-                shortcut: '← or P',
+                shortcut: AppShortcut.previousItem,
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -334,7 +335,7 @@ class _TacticsTrainingPanelState extends State<TacticsTrainingPanel> {
             Expanded(
               child: shortcutTooltip(
                 description: _nextDescription,
-                shortcut: '→ or S',
+                shortcut: AppShortcut.nextItem,
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -349,7 +350,7 @@ class _TacticsTrainingPanelState extends State<TacticsTrainingPanel> {
         const SizedBox(height: 16),
         ShortcutTooltip(
           description: 'Toggle auto-advance to next position',
-          shortcut: 'J',
+          shortcut: AppShortcut.autoAdvance,
           child: AppSwitch(
             label: 'Auto-advance to next position',
             value: widget.autoAdvance,

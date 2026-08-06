@@ -1,7 +1,7 @@
 /// FEN list widget – left panel of the Player Analysis screen.
 /// Displays positions with statistics, filtered by minimum games and sorted.
 /// Selection steps through the ranked list via the Prev/Next header buttons
-/// or a [ListNavController] (↓/↑ forwarded by the host screen).
+/// or a [ListNavController] (previous/next forwarded by the host screen).
 library;
 
 import 'dart:async';
@@ -268,7 +268,7 @@ class _FenListWidgetState extends State<FenListWidget>
   }
 
   /// Previous/Next stepping over the displayed list with a "k of n" readout.
-  /// The keyboard equivalents (↓/↑) come in from the host screen through
+  /// The keyboard equivalents come in from the host screen through
   /// [ListNavController].
   Widget _buildNavRow(List<PositionStats> positions) {
     final selectedIndex = positions.indexWhere((s) => s.fen == _selectedFen);

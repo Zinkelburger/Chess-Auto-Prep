@@ -1,14 +1,16 @@
 /// Shared Previous/Next stepping for the app's ranked lists (weak positions,
 /// hole/trick findings). One controller shape and one header row so every
 /// list answers to the same keys — the app-wide convention is **←/→ move
-/// through a game, ↓/↑ step the active list**. Letter keys are deliberately
-/// not used for list navigation: N and most candidates are SAN characters
-/// (N is the knight), so arrows are the only advertised bindings.
+/// through a game, [AppShortcut.previousItem]/[AppShortcut.nextItem] step
+/// whatever queue is in front of you**. That pair is P/S plus ↑/↓; the labels
+/// on the buttons come from the registry, so they cannot drift from the keys
+/// the screens actually bind.
 library;
 
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+import '../../utils/app_shortcuts.dart';
 import '../shortcut_tooltip.dart';
 
 /// A list whose selection can be stepped from outside.
@@ -17,7 +19,8 @@ abstract interface class ListNavTarget {
   void stepPrevious();
 }
 
-/// Forwards the host screen's ↓/↑ shortcuts to whichever list is attached.
+/// Forwards the host screen's previous/next shortcuts to whichever list is
+/// attached.
 /// The screen's Focus owns all key events, so a Focus inside the list would
 /// never see them — same attach pattern as `PgnViewerWidgetController`.
 class ListNavController {
@@ -66,7 +69,7 @@ class ListNavRow extends StatelessWidget {
         children: [
           _button(
             description: 'Previous $itemLabel',
-            shortcut: '↑',
+            shortcut: AppShortcut.previousItem,
             icon: Icons.skip_previous,
             label: 'Prev',
             onPressed: canPrevious ? onPrevious : null,
@@ -74,7 +77,7 @@ class ListNavRow extends StatelessWidget {
           const SizedBox(width: 4),
           _button(
             description: 'Next $itemLabel',
-            shortcut: '↓',
+            shortcut: AppShortcut.nextItem,
             icon: Icons.skip_next,
             label: 'Next',
             onPressed: canNext ? onNext : null,
@@ -99,7 +102,7 @@ class ListNavRow extends StatelessWidget {
 
   Widget _button({
     required String description,
-    required String shortcut,
+    required AppShortcut shortcut,
     required IconData icon,
     required String label,
     required VoidCallback? onPressed,

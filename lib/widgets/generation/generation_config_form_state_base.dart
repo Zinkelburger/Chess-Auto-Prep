@@ -74,7 +74,6 @@ abstract class _GenerationConfigFormStateBase
   );
   final TextEditingController _minEloCtrl = TextEditingController(text: '0');
 
-  LichessDatabase? _lichessDbOverride;
   bool _relativeEval = true;
   bool _preferNovelties = false;
 
@@ -82,14 +81,23 @@ abstract class _GenerationConfigFormStateBase
     text: '100',
   );
   bool _rankLinesByImportance = true;
-  bool _annotateMoveProbabilities = true;
-  bool _annotateMaiaOnly = true;
+  MoveAnnotationDetail _annotationDetail = MoveAnnotationDetail.full;
 
-  final TextEditingController _lichessMinGamesCtrl = TextEditingController(
-    text: '10',
+  bool _organizeIntoChapters = true;
+  final TextEditingController _maxLinesPerChapterCtrl = TextEditingController(
+    text: '40',
   );
-  final Set<String> _lichessSpeeds = {'blitz', 'rapid', 'classical'};
-  final Set<String> _lichessRatings = {'2000', '2200', '2500'};
+  final TextEditingController _minLinesPerChapterCtrl = TextEditingController(
+    text: '5',
+  );
+  final TextEditingController _modelGameCountCtrl = TextEditingController(
+    text: '6',
+  );
+  final TextEditingController _modelGameMinEloCtrl = TextEditingController(
+    text: '2200',
+  );
+  bool _refutationLines = true;
+  bool _alternativeLines = true;
 
   SelectionMode _selectionMode = SelectionMode.expectimax;
   BuildMode _buildMode = BuildMode.stockfishExpectimax;

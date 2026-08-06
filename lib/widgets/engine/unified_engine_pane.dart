@@ -12,7 +12,7 @@ import '../../services/analysis_service.dart';
 import '../../services/engine/engine_lifecycle.dart';
 import '../../services/eval_cache.dart';
 import 'engine_gate.dart';
-import '../../services/maia_factory.dart';
+import '../../services/maia/maia_factory.dart';
 import '../../services/probability_service.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../theme/app_colors.dart';

@@ -6,6 +6,8 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 
+import 'eval_constants.dart' show cpToMate;
+
 /// Convert a UCI move string (e.g. `e2e4`) to SAN notation given [fen].
 ///
 /// Returns `null` when [fen] is unparsable or [uci] is not a legal move in it.
@@ -230,12 +232,35 @@ String roleChar(Role role) => switch (role) {
 /// Uses one decimal place for centipawns and `#N` for mate scores.
 /// Returns `'--'` when both values are null.
 String formatEvalDisplay({int? scoreCp, int? scoreMate}) {
-  if (scoreMate != null) return '#$scoreMate';
-  if (scoreCp != null) {
-    final v = scoreCp / 100.0;
-    return v >= 0 ? '+${v.toStringAsFixed(1)}' : v.toStringAsFixed(1);
-  }
+  if (scoreMate != null) return _formatMate(scoreMate);
+  if (scoreCp != null) return formatPackedEval(scoreCp);
   return '--';
+}
+
+/// Format a *packed* centipawn value — one where a forced mate has already
+/// been folded into the integer by [mateToCp] — for display.
+///
+/// This is the counterpart to [formatEvalDisplay] for the many call sites that
+/// carry a single `cpForUs` int rather than a separate cp/mate pair (tree
+/// nodes, expectimax lines, coverage suggestions). Mates render as `#N` /
+/// `-#N`, matching [formatEvalDisplay], so the same position reads the same
+/// way in every pane.
+///
+/// [decimals] controls centipawn precision only; panes that compare
+/// near-identical expected evals (expectimax, the analysis dock) pass 2.
+String formatPackedEval(int cp, {int decimals = 1}) {
+  final mate = cpToMate(cp);
+  if (mate != null) return _formatMate(mate);
+  final v = cp / 100.0;
+  return v >= 0
+      ? '+${v.toStringAsFixed(decimals)}'
+      : v.toStringAsFixed(decimals);
+}
+
+/// `#3`, `-#3`, or a bare `#`/`-#` when the distance is unknown.
+String _formatMate(int mate) {
+  if (mate == 0) return '#';
+  return mate > 0 ? '#$mate' : '-#${mate.abs()}';
 }
 
 /// Convert a UCI principal-variation list to SAN move strings.

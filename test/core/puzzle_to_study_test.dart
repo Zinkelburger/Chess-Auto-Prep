@@ -10,7 +10,7 @@ import 'package:chess_auto_prep/models/tactics_position.dart';
 import 'package:chess_auto_prep/models/tactics_session_settings.dart';
 import 'package:chess_auto_prep/services/repertoire_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
-import 'package:chess_auto_prep/services/tactics_pgn_codec.dart';
+import 'package:chess_auto_prep/services/tactics/tactics_pgn_codec.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';

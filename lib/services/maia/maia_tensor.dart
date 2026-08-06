@@ -3,8 +3,8 @@ import 'dart:typed_data';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/services.dart';
 
-import '../utils/fen_utils.dart';
-import '../utils/chess_utils.dart' show toStandardUci;
+import '../../utils/fen_utils.dart';
+import '../../utils/chess_utils.dart' show toStandardUci;
 import 'package:chess_auto_prep/utils/log.dart';
 
 /// Maia-3 tensor preprocessing.

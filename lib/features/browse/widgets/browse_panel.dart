@@ -11,6 +11,7 @@ import '../../../services/coherence_service.dart';
 import 'package:chess_auto_prep/models/trap_line_info.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
 import 'package:chess_auto_prep/features/browse/services/candidate_service.dart';
+import '../../../utils/app_shortcuts.dart';
 import '../../../widgets/layout/empty_state_placeholder.dart';
 import 'candidate_row.dart';
 import 'expanded_trap_list.dart';
@@ -282,7 +283,7 @@ class _BrowsePanelState extends State<BrowsePanel> {
             const Spacer(),
             ShortcutTooltip(
               description: 'Undo last add',
-              shortcut: 'Ctrl+Z',
+              shortcut: AppShortcut.undo,
               child: TextButton.icon(
                 onPressed: widget.onUndo,
                 icon: const Icon(Icons.undo, size: 14),

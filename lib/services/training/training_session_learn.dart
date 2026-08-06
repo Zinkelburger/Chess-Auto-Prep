@@ -8,9 +8,9 @@ part of 'training_session_controller.dart';
 /// [TrainingSessionController]. Shared fields and cross-phase helpers are
 /// provided by the host class ([_MoveDisplayMixin], [_MoveValidationMixin],
 /// and the drill/line-management methods).
-mixin _LearnPhaseMixin
-    on ChangeNotifier, _MoveDisplayMixin, _MoveValidationMixin {
+mixin _LearnPhaseMixin on ChangeNotifier {
   // Shared state provided by the host class.
+  RepertoireLine? get currentLine;
   int get currentMoveIndex;
   set currentMoveIndex(int value);
   int get currentLineLength;
@@ -81,7 +81,8 @@ mixin _LearnPhaseMixin
 
     final annotation = currentLine!.comments[currentMoveIndex.toString()];
     final isUserMove = _isUserMove(currentMoveIndex);
-    final display = _buildMoveDisplay(
+    final display = buildMoveDisplay(
+      currentLine,
       currentMoveIndex,
       isOpponent: !isUserMove,
     );
@@ -140,7 +141,11 @@ mixin _LearnPhaseMixin
     if (currentLine == null) return;
     final generation = _lineGeneration;
     final expectedSan = currentLine!.moves[currentMoveIndex];
-    final isCorrect = isCorrectUserMove(move, expectedSan);
+    final isCorrect = validation.isCorrectUserMove(
+      session.position,
+      move,
+      expectedSan,
+    );
 
     if (isCorrect) {
       session.playMove(expectedSan);

@@ -12,8 +12,8 @@
 library;
 
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
-import 'package:chess_auto_prep/services/maia_factory.dart';
-import 'package:chess_auto_prep/services/maia_service.dart';
+import 'package:chess_auto_prep/services/maia/maia_factory.dart';
+import 'package:chess_auto_prep/services/maia/maia_service.dart';
 
 class FakeStockfishPool extends StockfishPool {
   FakeStockfishPool({this.workers = 1}) : super.fresh();

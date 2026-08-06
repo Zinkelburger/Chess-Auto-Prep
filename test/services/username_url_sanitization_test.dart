@@ -8,7 +8,7 @@ import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
 /// URL now routes through the pure builders in `lib/services/chess_api_urls.dart`
 /// ([lichessUserGamesUrl], [chesscomArchivesUrl]), so these tests exercise the
 /// REAL code path (no mirroring). Call sites:
-///   * lib/services/tactics_import_service.dart  (Lichess games, Chess.com archives)
+///   * lib/services/tactics/tactics_import_service.dart  (Lichess games, Chess.com archives)
 ///   * lib/services/analysis_games_service.dart  (Lichess games, Chess.com archives)
 ///   * lib/services/games_library/games_library_service.dart (Lichess games)
 ///

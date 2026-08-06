@@ -11,9 +11,21 @@ library;
 /// `mate < 0` → `-(kMateCpBase - mate.abs())` (losing, large negative).
 const int kMateCpBase = 10000;
 
-/// Centipawn threshold beyond which a score is treated as forced mate
+/// Largest mate distance the packing round-trips, in moves.
+///
+/// Bounds how far below [kMateCpBase] a packed mate can land, which is what
+/// makes [kMateCpThreshold] separable from ordinary evals: a real position is
+/// never worth 90 pawns, so anything at or above the threshold is a mate.
+const int kMaxMateDistance = 1000;
+
+/// Centipawn threshold at or beyond which a score is treated as forced mate
 /// for display purposes (`#` or `-#`).
-const int kMateCpThreshold = kMateCpBase;
+///
+/// Must sit *below* [kMateCpBase], because [mateToCp] packs mate-in-N as
+/// `kMateCpBase - N` — a mate-in-3 is 9997, not 10000. Setting the threshold
+/// to [kMateCpBase] made every packed mate compare as a normal eval and render
+/// as `+100.0`; the mate branch at every display site was unreachable.
+const int kMateCpThreshold = kMateCpBase - kMaxMateDistance;
 
 /// Centipawn value beyond which sigmoid functions saturate to 0/1.
 /// Prevents exp() overflow on extreme scores.
@@ -58,6 +70,22 @@ int effectiveCpFromScores({int? scoreCp, int? scoreMate}) {
 
 /// Whether [cp] represents a forced-mate eval for display purposes.
 bool isMateEval(int cp) => cp.abs() >= kMateCpThreshold;
+
+/// Recover mate-in-N from a packed centipawn value — the inverse of
+/// [mateToCp]. Returns null when [cp] is an ordinary evaluation.
+///
+/// Sign follows the score: positive means we deliver mate, negative means we
+/// get mated.
+int? cpToMate(int cp) {
+  if (!isMateEval(cp)) return null;
+  final distance = kMateCpBase - cp.abs();
+  // Saturated sentinels (kWorstEvalCp / kBestEvalCp) pack past the base and
+  // carry no usable distance; report them as mate-in-0, i.e. "mate, unknown
+  // distance", which formats as a bare `#`.
+  return cp > 0
+      ? distance.clamp(0, kMaxMateDistance)
+      : -distance.clamp(0, kMaxMateDistance);
+}
 
 /// Moves under this probability are noise for probability-weighted
 /// aggregates (ease regret, local CPL): they contribute almost nothing to

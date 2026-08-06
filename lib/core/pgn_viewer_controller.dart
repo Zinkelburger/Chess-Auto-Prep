@@ -11,8 +11,8 @@ import 'pgn/pgn_collection_helpers.dart';
 export 'pgn/pgn_collection_helpers.dart';
 import 'pgn/pgn_fen_index.dart';
 import 'pgn/slice_persistence.dart';
-import 'pgn/solitaire_controller.dart';
 import 'pgn/viewer_opening_tree.dart';
+import 'pgn/viewer_solitaire_session.dart';
 import '../models/opening_tree.dart';
 import '../models/pgn_filter_models.dart';
 import '../models/pgn_game_entry.dart';
@@ -20,15 +20,15 @@ export '../models/pgn_game_entry.dart';
 import '../services/default_pgn_service.dart';
 import '../services/game_analysis_controller.dart';
 import '../services/opening_book_service.dart';
-import '../services/solitaire_trophy_service.dart';
 import '../services/storage/storage_factory.dart';
 import 'pgn/pgn_viewer_handle.dart';
+import 'pgn/solitaire_controller.dart';
+export 'pgn/solitaire_controller.dart' show SolitaireController, SolitaireGuess;
 import '../utils/pgn_date_utils.dart';
 import '../utils/safe_change_notifier.dart';
 
 part 'pgn/pgn_viewer_controller_metadata.dart';
 part 'pgn/pgn_viewer_controller_slices.dart';
-part 'pgn/pgn_viewer_controller_solitaire.dart';
 part 'pgn/pgn_viewer_controller_window.dart';
 
 /// Board perspective mode persisted as [StudyPerspective] header on first game.
@@ -60,15 +60,10 @@ class Perspective {
 ///
 /// Cohesive member groups live in same-library part files as private mixins:
 /// slice operations ([_SliceOps]), metadata/comment persistence
-/// ([_MetadataOps]), solitaire mode ([_SolitaireOps]), and window/perspective
+/// ([_MetadataOps]) and window/perspective
 /// handling ([_WindowOps]).
 class PgnViewerController extends ChangeNotifier
-    with
-        SafeChangeNotifier,
-        _SliceOps,
-        _MetadataOps,
-        _SolitaireOps,
-        _WindowOps {
+    with SafeChangeNotifier, _SliceOps, _MetadataOps, _WindowOps {
   PgnViewerController({
     required this.pgnWidgetController,
     required this.analysisController,
@@ -77,7 +72,6 @@ class PgnViewerController extends ChangeNotifier
     this.onReclaimFocus,
   });
 
-  @override
   final PgnViewerHandle pgnWidgetController;
   final GameAnalysisController analysisController;
   @override
@@ -145,7 +139,6 @@ class PgnViewerController extends ChangeNotifier
 
   @override
   int currentGameIndex = 0;
-  @override
   Position currentPosition = Chess.initial;
   @override
   bool boardFlipped = false;
@@ -175,6 +168,35 @@ class PgnViewerController extends ChangeNotifier
   int get treeBuildTotal => _viewerTree.treeBuildTotal;
   List<String> get treeCurrentMoveSequence =>
       _viewerTree.treeCurrentMoveSequence;
+
+  /// Solitaire ("guess the move") mode. The session owns the guessing rules
+  /// and the board glue; the delegating members below keep the controller's
+  /// public API unchanged for the screens.
+  late final ViewerSolitaireSession _solitaireSession = ViewerSolitaireSession(
+    handle: pgnWidgetController,
+    hasGames: () => filteredGames.isNotEmpty,
+    hasFilePath: () => filePath != null,
+    userPlaysWhite: () => !boardFlipped,
+    currentPosition: () => currentPosition,
+    stopAutoPlay: stopAutoPlay,
+    onChanged: notifyListeners,
+  );
+
+  SolitaireController get solitaire => _solitaireSession.controller;
+  @override
+  bool get isSolitaireMode => _solitaireSession.isActive;
+  int get totalTrophyCount => _solitaireSession.totalTrophyCount;
+  void noteTrophiesEarned(int count) =>
+      _solitaireSession.noteTrophiesEarned(count);
+  void toggleSolitaire() => _solitaireSession.toggle();
+  Future<void> loadSolitaireSettings() => _solitaireSession.loadSettings();
+  Future<void> setSolitaireRevealDelay(int seconds) =>
+      _solitaireSession.setRevealDelay(seconds);
+  void revealCurrentMove() => _solitaireSession.revealCurrentMove();
+
+  @override
+  void restartSolitaireForCurrentOrientation() =>
+      _solitaireSession.restartForCurrentOrientation();
 
   @override
   late final PgnFenIndex _fenIndex = PgnFenIndex(
@@ -226,8 +248,7 @@ class PgnViewerController extends ChangeNotifier
   @override
   void dispose() {
     _autoPlay.dispose();
-    solitaire.removeListener(_onSolitaireChanged);
-    solitaire.dispose();
+    _solitaireSession.dispose();
     persistDebounce?.cancel();
     super.dispose();
   }
@@ -525,14 +546,7 @@ class PgnViewerController extends ChangeNotifier
     await analysisController.tryLoadFromPgn(game.pgnText);
     if (!isActive()) return;
     if (isSolitaireMode) {
-      schedulePostFrame?.call(() {
-        pgnWidgetController.goToMainLineIndex(0);
-        solitaire.onGameChanged(
-          mainLineLength: pgnWidgetController.mainLineLength,
-          userPlaysWhite: !boardFlipped,
-          whiteToMoveAtStart: currentPosition.turn == Side.white,
-        );
-      });
+      schedulePostFrame?.call(_solitaireSession.restartForCurrentOrientation);
     }
     notifyListeners();
     onReclaimFocus?.call();
@@ -573,7 +587,6 @@ class PgnViewerController extends ChangeNotifier
 
   void startAutoPlay() => _autoPlay.start();
 
-  @override
   void stopAutoPlay() => _autoPlay.stop();
 
   void setAutoPlaySpeed(double val) => _autoPlay.setSpeed(val);
@@ -746,7 +759,7 @@ class PgnViewerController extends ChangeNotifier
     if (showOpeningTree) {
       _viewerTree.onMoveSelected(san);
     } else if (isSolitaireMode) {
-      _handleSolitaireMove(san);
+      _solitaireSession.handleBoardMove(san);
     } else {
       stopAutoPlay();
       pgnWidgetController.addEphemeralMove(san);

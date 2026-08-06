@@ -26,7 +26,7 @@ import '../utils/eval_constants.dart';
 import '../utils/pgn_comment_utils.dart';
 import 'engine/stockfish_pool.dart';
 import 'eval_cache.dart';
-import 'maia_factory.dart';
+import 'maia/maia_factory.dart';
 import '../utils/safe_change_notifier.dart';
 
 // ---------------------------------------------------------------------------

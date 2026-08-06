@@ -14,11 +14,10 @@ import '../../services/coherence_service.dart';
 import '../../services/expectimax_line_service.dart';
 import '../../services/on_the_fly_expectimax_service.dart';
 import '../../services/generation/eca_calculator.dart';
-import '../../utils/eval_constants.dart';
 import '../../services/generation/fen_map.dart';
 import '../../services/generation/generation_config.dart';
 import '../../theme/app_colors.dart';
-import '../../utils/chess_utils.dart' show fenAfterMoves;
+import '../../utils/chess_utils.dart' show fenAfterMoves, formatPackedEval;
 import '../analysis/expectimax_settings_dialog.dart';
 import '../clickable_move_line.dart';
 import 'floating_board_preview.dart';
@@ -617,7 +616,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
                   fontFamily: 'monospace',
-                  color: _evalColor(line.expectedEvalCp),
+                  color: AppColors.cpEval(line.expectedEvalCp),
                 ),
               ),
             ),
@@ -743,13 +742,5 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
     );
   }
 
-  static String _formatEval(int cp) {
-    if (isMateEval(cp)) return cp > 0 ? '#' : '-#';
-    final sign = cp >= 0 ? '+' : '';
-    return '$sign${(cp / 100).toStringAsFixed(2)}';
-  }
-
-  static Color _evalColor(int cp) {
-    return AppColors.cpEval(cp);
-  }
+  static String _formatEval(int cp) => formatPackedEval(cp, decimals: 2);
 }

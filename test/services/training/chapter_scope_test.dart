@@ -9,15 +9,17 @@ import 'package:flutter_test/flutter_test.dart';
 /// inline in TrainingSessionController. It reads its inputs through suppliers
 /// so the owner can swap `settings`/`lines` wholesale without desyncing it.
 
-RepertoireLine line(String name, {String? chapter}) => RepertoireLine(
-  id: name,
-  name: name,
-  moves: const ['e4'],
-  color: 'white',
-  startPosition: Chess.initial,
-  fullPgn: '',
-  chapter: chapter,
-);
+RepertoireLine line(String name, {String? chapter, bool isModelGame = false}) =>
+    RepertoireLine(
+      id: name,
+      name: name,
+      moves: const ['e4'],
+      color: 'white',
+      startPosition: Chess.initial,
+      fullPgn: '',
+      chapter: chapter,
+      isModelGame: isModelGame,
+    );
 
 /// Scope over a mutable settings/lines pair the test can reassign, mirroring
 /// how the controller replaces both when a new file loads.
@@ -125,6 +127,29 @@ void main() {
     test('hasUngroupedLines is false when there are no chapters at all', () {
       settings.chapterGrouping = ChapterGroupingMode.auto;
       final s = scopeOver(settings, [line('a'), line('b')]).scope;
+      expect(s.hasUngroupedLines, isFalse);
+    });
+  });
+
+  group('model games', () {
+    test('are not trainable lines and get no chapter of their own', () {
+      settings.chapterGrouping = ChapterGroupingMode.auto;
+      final s = scopeOver(settings, [
+        line('a', chapter: 'Open Sicilian'),
+        line('Kasparov – Karpov', chapter: 'Model games', isModelGame: true),
+      ]).scope;
+
+      expect(s.lines.map((l) => l.name), ['a']);
+      expect(s.scopedLines.map((l) => l.name), ['a']);
+      expect(s.names, ['Open Sicilian']);
+    });
+
+    test('their absence does not make the rest look ungrouped', () {
+      settings.chapterGrouping = ChapterGroupingMode.auto;
+      final s = scopeOver(settings, [
+        line('a', chapter: 'Open Sicilian'),
+        line('Kasparov – Karpov', chapter: 'Model games', isModelGame: true),
+      ]).scope;
       expect(s.hasUngroupedLines, isFalse);
     });
   });

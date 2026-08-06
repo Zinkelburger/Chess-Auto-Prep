@@ -5,7 +5,7 @@ import '../constants/ui_breakpoints.dart';
 import '../core/app_state.dart';
 import '../services/tactics/tactics_import_coordinator.dart';
 import '../services/tactics/tactics_session_controller.dart';
-import '../services/tactics_database.dart';
+import '../services/tactics/tactics_database.dart';
 import '../theme/app_colors.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/app_mode_menu_button.dart';

@@ -3,9 +3,9 @@ import 'dart:math';
 
 import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
-import '../models/tactics_position.dart';
-import '../models/tactics_session_settings.dart';
-import 'storage/storage_factory.dart';
+import '../../models/tactics_position.dart';
+import '../../models/tactics_session_settings.dart';
+import '../storage/storage_factory.dart';
 import 'tactics_pgn_codec.dart';
 import 'package:chess_auto_prep/utils/log.dart';
 import 'package:chess_auto_prep/utils/safe_change_notifier.dart';

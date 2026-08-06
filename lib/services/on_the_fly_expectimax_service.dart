@@ -24,7 +24,7 @@ import 'generation/eca_calculator.dart';
 import 'generation/fen_map.dart';
 import 'generation/generation_config.dart';
 import 'generation/tree_my_ease.dart';
-import 'maia_factory.dart';
+import 'maia/maia_factory.dart';
 import 'tree_build_service.dart';
 import '../utils/safe_change_notifier.dart';
 
@@ -709,7 +709,6 @@ class OnTheFlyExpectimaxService extends ChangeNotifier with SafeChangeNotifier {
       maiaElo: _settings.maiaElo,
       enableCdbDirect: dbSettings.enableCdbDirect,
       cdbDirectPath: dbSettings.cdbDirectPath,
-      useLichessDb: true,
       ourMultipv: _settings.expectimaxOurMultipv,
       oppMaxChildren: _settings.expectimaxOppMaxChildren,
       oppMassTarget: _settings.expectimaxOppMassTarget,
