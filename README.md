@@ -36,10 +36,71 @@ cd Chess-Auto-Prep
 flutter pub get
 ```
 
-3. Run the app
+3. Fetch the binary assets (required — see [Binary assets](#binary-assets))
+```bash
+python3 tools/fetch_assets.py
+```
+
+4. Run the app
 ```bash
 flutter run
 ```
+
+## Binary assets
+
+The Stockfish engines and the Maia model are **not tracked in git**. They total
+~275 MB, which previously made a clone of this repo take hours; they are
+fetched on demand instead.
+
+```bash
+python3 tools/fetch_assets.py           # fetch anything missing (~275 MB, once)
+python3 tools/fetch_assets.py --check   # verify presence; non-zero exit if missing
+python3 tools/fetch_assets.py --force   # re-download and overwrite
+```
+
+The script is stdlib-only (no pip install), idempotent, and records upstream
+checksums in `tools/assets.lock.json` — commit that file when versions change.
+
+> **This is a build prerequisite, not just a dev convenience.** `pubspec.yaml`
+> bundles `assets/executables/` and `assets/maia3_simplified.onnx` into the
+> Flutter root bundle, and `lib/services/engine/process_connection.dart` loads
+> them from there at runtime. They must be present *before* `flutter build`
+> runs, including in CI. Add `python3 tools/fetch_assets.py --check` to your
+> pipeline ahead of the build step to fail fast with a clear message.
+
+### Upgrading Stockfish
+
+Pinned to `sf_18` in `tools/fetch_assets.py`. Tracking "latest" would make builds
+non-reproducible and let an upstream release break the app with no commit to
+point at. To upgrade: bump `STOCKFISH_TAG`, run with `--force`, verify the app
+still starts, and commit the regenerated `assets.lock.json` alongside.
+
+The pinned builds are **CPU-baseline** (`stockfish-ubuntu-x86-64` etc.). Faster
+`-avx2` / `-bmi2` variants exist, but a binary built for an instruction set the
+user's CPU lacks dies with `SIGILL` at startup, so baseline is the right default
+for a shipped app.
+
+> **Open decision (macOS):** the app has a single `stockfish-macos` slot, so it
+> gets the x86-64 build, which runs on Apple Silicon only via Rosetta 2 — not
+> always installed, and being wound down by Apple. The native
+> `stockfish-macos-m1-apple-silicon` build is far faster but will not run on
+> Intel Macs. Shipping both requires teaching `process_connection.dart` to pick
+> per-architecture.
+
+### Regenerating the Maia model
+
+`assets/maia3_simplified.onnx` has **no upstream equivalent to download**.
+Upstream [CSSLab/maia3](https://github.com/CSSLab/maia3) publishes PyTorch
+checkpoints on Hugging Face (`UofTCSSLab/Maia3-{3M,5M,23M,79M}`, see
+`maia3/model_registry.py`) and ships no ONNX at all. Our file is a local
+`torch.onnx.export` + [onnx-simplifier](https://github.com/daquexian/onnx-simplifier)
+artifact, so the script pulls it from this project's own GitHub release
+(`assets-v1`) rather than from upstream.
+
+**The export procedure is not currently checked in.** Until it is, the release
+asset is the only source of truth — do not delete it. If you re-export, add the
+script under `tools/` and record which checkpoint and opset it used, so the model
+stops being an unreproducible binary.
 
 ### Local ChessDB (1 TB TerarkDB dump, Linux)
 

@@ -1,0 +1,20 @@
+{
+  "stockfish-linux": {
+    "output_bytes": 75845831,
+    "output_sha256": "380eb8fd31694b811acb81d9050c2e80536e9fdffae56c39c048639b3d843cbc",
+    "source_sha256": "5c6f38b02a4da5f3ffe763f27da6c3e743eebefd92b50cb3661623b96696adff",
+    "url": "https://github.com/official-stockfish/Stockfish/releases/download/sf_18/stockfish-ubuntu-x86-64.tar"
+  },
+  "stockfish-macos": {
+    "output_bytes": 75869397,
+    "output_sha256": "d4f7a39cf00ec1174411002da351cfe70f487eeb38d50fbaf5c9bfcbd55a73c6",
+    "source_sha256": "e7d7a2bca13915419d41ac6cb8cedb123dd2ba1c39a22c574df7a2aa3f526592",
+    "url": "https://github.com/official-stockfish/Stockfish/releases/download/sf_18/stockfish-macos-x86-64.tar"
+  },
+  "stockfish-windows": {
+    "output_bytes": 76229305,
+    "output_sha256": "6c3df0fa7756e410b2c206e478f9637ed9fe3be442cc68b7ea07c7889b0f960c",
+    "source_sha256": "40cc975817e7eee270b03f354810d20956df565420d320f6dd37d454dc81a139",
+    "url": "https://github.com/official-stockfish/Stockfish/releases/download/sf_18/stockfish-windows-x86-64.zip"
+  }
+}
