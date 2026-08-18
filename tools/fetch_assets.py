@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch the large binary assets that are deliberately not tracked in git.
+"""Fetch the Stockfish engine binaries, which are not tracked in git.
 
 These files are bundled by `pubspec.yaml` and loaded from the Flutter root
 bundle at runtime, so they must exist *before* `flutter build` runs -- not
@@ -22,7 +22,6 @@ import hashlib
 import io
 import json
 import os
-import shutil
 import sys
 import tarfile
 import tempfile
@@ -63,40 +62,24 @@ STOCKFISH_ASSETS = {
     "stockfish-windows.exe": "stockfish-windows-x86-64.zip",
 }
 
-# --- Maia ------------------------------------------------------------------
-#
-# Upstream (github.com/CSSLab/maia3) ships PyTorch checkpoints on Hugging Face
-# and publishes no ONNX at all -- `maia3_simplified.onnx` is a locally exported
-# + simplified artifact with no upstream equivalent to download. It is served
-# from this project's own GitHub release instead. See "Regenerating the Maia
-# model" in README.md for the export procedure.
-MAIA_RELEASE_TAG = "assets-v1"
-MAIA_ASSET = "maia3_simplified.onnx"
-MAIA_URL = (
-    "https://github.com/Zinkelburger/Chess-Auto-Prep/releases/download/"
-    f"{MAIA_RELEASE_TAG}/{MAIA_ASSET}"
-)
+# Maia is NOT fetched. `assets/maia3_simplified.onnx` is a local torch.onnx.export
+# artifact with no upstream equivalent -- CSSLab/maia3 publishes PyTorch
+# checkpoints on Hugging Face and ships no ONNX at all -- so there is nothing to
+# download and no release asset behind it. It stays tracked in git, and is the
+# only copy that exists. See "Regenerating the Maia model" in README.md.
 
 TARGETS = {
     "stockfish-linux": {
         "dest": "assets/executables/stockfish-linux.gz",
-        "kind": "stockfish",
         "url": f"{STOCKFISH_BASE}/{STOCKFISH_ASSETS['stockfish-linux']}",
     },
     "stockfish-macos": {
         "dest": "assets/executables/stockfish-macos.gz",
-        "kind": "stockfish",
         "url": f"{STOCKFISH_BASE}/{STOCKFISH_ASSETS['stockfish-macos']}",
     },
     "stockfish-windows": {
         "dest": "assets/executables/stockfish-windows.exe.gz",
-        "kind": "stockfish",
         "url": f"{STOCKFISH_BASE}/{STOCKFISH_ASSETS['stockfish-windows.exe']}",
-    },
-    "maia": {
-        "dest": f"assets/{MAIA_ASSET}",
-        "kind": "raw",
-        "url": MAIA_URL,
     },
 }
 
@@ -226,11 +209,7 @@ def fetch(name: str, spec: dict, lock: dict, force: bool) -> bool:
                 "re-run with --force to accept."
             )
 
-        if spec["kind"] == "stockfish":
-            write_gz(extract_stockfish_binary(tmp), dest)
-        else:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(tmp, dest)
+        write_gz(extract_stockfish_binary(tmp), dest)
 
         lock[name] = {
             "url": spec["url"],

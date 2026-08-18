@@ -48,12 +48,11 @@ flutter run
 
 ## Binary assets
 
-The Stockfish engines and the Maia model are **not tracked in git**. They total
-~275 MB, which previously made a clone of this repo take hours; they are
-fetched on demand instead.
+The three Stockfish engines (~217 MB) are **not tracked in git** — they are
+fetched from the pinned upstream release on demand.
 
 ```bash
-python3 tools/fetch_assets.py           # fetch anything missing (~275 MB, once)
+python3 tools/fetch_assets.py           # fetch anything missing (~217 MB, once)
 python3 tools/fetch_assets.py --check   # verify presence; non-zero exit if missing
 python3 tools/fetch_assets.py --force   # re-download and overwrite
 ```
@@ -61,10 +60,14 @@ python3 tools/fetch_assets.py --force   # re-download and overwrite
 The script is stdlib-only (no pip install), idempotent, and records upstream
 checksums in `tools/assets.lock.json` — commit that file when versions change.
 
+`assets/maia3_simplified.onnx` (46 MB) **is** tracked, and deliberately so: it
+is a local export with no upstream to fetch from, so git is the only copy that
+exists. See [Regenerating the Maia model](#regenerating-the-maia-model).
+
 > **This is a build prerequisite, not just a dev convenience.** `pubspec.yaml`
 > bundles `assets/executables/` and `assets/maia3_simplified.onnx` into the
 > Flutter root bundle, and `lib/services/engine/process_connection.dart` loads
-> them from there at runtime. They must be present *before* `flutter build`
+> them from there at runtime. Stockfish must be present *before* `flutter build`
 > runs, including in CI. Add `python3 tools/fetch_assets.py --check` to your
 > pipeline ahead of the build step to fail fast with a clear message.
 
@@ -94,13 +97,13 @@ Upstream [CSSLab/maia3](https://github.com/CSSLab/maia3) publishes PyTorch
 checkpoints on Hugging Face (`UofTCSSLab/Maia3-{3M,5M,23M,79M}`, see
 `maia3/model_registry.py`) and ships no ONNX at all. Our file is a local
 `torch.onnx.export` + [onnx-simplifier](https://github.com/daquexian/onnx-simplifier)
-artifact, so the script pulls it from this project's own GitHub release
-(`assets-v1`) rather than from upstream.
+artifact. There is nothing to download, which is why it stays in git while
+Stockfish does not.
 
-**The export procedure is not currently checked in.** Until it is, the release
-asset is the only source of truth — do not delete it. If you re-export, add the
-script under `tools/` and record which checkpoint and opset it used, so the model
-stops being an unreproducible binary.
+**The export procedure is not currently checked in.** Until it is, the committed
+file is the only source of truth — do not delete it, and do not strip it in a
+history rewrite. If you re-export, add the script under `tools/` and record which
+checkpoint and opset it used, so the model stops being an unreproducible binary.
 
 ### Local ChessDB (1 TB TerarkDB dump, Linux)
 
