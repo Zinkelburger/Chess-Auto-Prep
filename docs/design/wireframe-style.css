@@ -1,0 +1,69 @@
+/* Chess Auto Prep — "wireframe" visual style
+   The look used on the design pages (docs/design/example-*.html) and on the
+   TWIC site (python/twic-position-finder/frontend/src/layouts/Base.astro).
+   Light palette on :root, dark under prefers-color-scheme / [data-theme]. */
+
+:root{
+  --bg:#f5f6f8;        /* page ground, slight blue-grey bias */
+  --panel:#ffffff;     /* cards, frames */
+  --ink:#1d2229;       /* primary text */
+  --muted:#5f6a78;     /* secondary text, captions */
+  --line:#cfd5de;      /* 1px borders */
+  --wire:#e9edf2;      /* filled boxes, chips, bars, inputs */
+  --wire-ink:#3b4552;  /* text inside wire boxes; also the "ink" button */
+  --board-a:#d9dee6; --board-b:#aab4c2;      /* board squares (wireframe) */
+  --accent:#b8651a;    --accent-bg:#fbeedd;   /* warm amber: emphasis, notes */
+  --new:#2f6f4e;       --new-bg:#e2f1e8;      /* added / positive */
+  --gone:#9a3d3d;      --gone-bg:#f7e2e2;     /* removed / danger */
+  --pick:#245c9e;      --pick-bg:#dfeaf7;     /* selected / current */
+  --radius:8px; --radius-sm:6px;
+  --font-body:"Source Sans 3",system-ui,sans-serif;
+  --font-mono:"Source Code Pro",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#171a1f; --panel:#1f242b; --ink:#e6e9ee; --muted:#9aa4b2; --line:#39414c;
+  --wire:#262c35; --wire-ink:#c8d0da; --board-a:#3a4250; --board-b:#242a33;
+  --accent:#e0913f; --accent-bg:#3a2a18; --new:#6cc79a; --new-bg:#1c332a;
+  --gone:#e08585; --gone-bg:#3a2020; --pick:#7fb0ea; --pick-bg:#1e2f44;
+}}
+:root[data-theme="dark"]{
+  --bg:#171a1f; --panel:#1f242b; --ink:#e6e9ee; --muted:#9aa4b2; --line:#39414c;
+  --wire:#262c35; --wire-ink:#c8d0da; --board-a:#3a4250; --board-b:#242a33;
+  --accent:#e0913f; --accent-bg:#3a2a18; --new:#6cc79a; --new-bg:#1c332a;
+  --gone:#e08585; --gone-bg:#3a2020; --pick:#7fb0ea; --pick-bg:#1e2f44;
+}
+
+/* Type scale */
+body{font-family:var(--font-body);font-size:16px;line-height:1.5;color:var(--ink);background:var(--bg)}
+h1{font-size:30px;margin:0 0 6px;text-wrap:balance;font-weight:700}
+h2{font-size:22px;margin:56px 0 4px;font-weight:700}
+h2 small{font-weight:400;color:var(--muted);font-size:15px;margin-left:8px}
+h3{font-size:16px;margin:28px 0 6px;font-weight:600}
+.lede,.sub{color:var(--muted);max-width:68ch}
+.eyebrow{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+
+/* Frames & panes (the boxes) */
+.frame{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;font-family:var(--font-mono);font-size:11.5px;color:var(--wire-ink)}
+.bar{height:36px;display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid var(--line);background:var(--wire)}
+.pane{border:1px dashed var(--line);margin:6px;border-radius:var(--radius-sm);padding:8px;display:flex;flex-direction:column;gap:6px;min-width:0;position:relative}
+.pane.new{border-color:var(--new)}
+.q{border:1px solid var(--line);border-radius:var(--radius-sm);padding:8px;background:var(--panel)}
+.footer{height:26px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px;padding:0 10px;color:var(--muted);background:var(--wire)}
+
+/* Buttons & chips */
+.btn{border:1px solid var(--line);border-radius:5px;padding:2px 8px;background:var(--panel);white-space:nowrap}
+.btn.primary{background:var(--wire-ink);color:var(--panel);border-color:var(--wire-ink)}
+.btn.new{border-color:var(--new);color:var(--new);background:var(--new-bg)}
+.btn.gone{border-color:var(--gone);color:var(--gone);background:var(--gone-bg)}
+.chip{display:inline-block;padding:0 6px;border-radius:9px;background:var(--wire);font-size:10.5px}
+.chip.acc{background:var(--accent-bg);color:var(--accent)}
+.chip.pick{background:var(--pick-bg);color:var(--pick);font-weight:600}
+.chip.new{background:var(--new-bg);color:var(--new)}
+.note{font-size:10px;color:var(--accent);background:var(--accent-bg);padding:1px 6px;border-radius:4px}
+
+/* Tables of candidates: tabular numerals, hairline rows */
+.cand{display:grid;gap:6px;align-items:center;padding:3px 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+.cand.sel{background:var(--pick-bg)}
+.slider{height:6px;background:var(--wire);border-radius:3px;position:relative}
+.slider i{position:absolute;left:0;top:0;height:6px;background:var(--pick);border-radius:3px}
+.slider b{position:absolute;top:-4px;width:14px;height:14px;border-radius:7px;background:var(--panel);border:2px solid var(--pick);margin-left:-7px}

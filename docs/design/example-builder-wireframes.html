@@ -1,0 +1,210 @@
+<title>Repertoire Builder Wireframes</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#f5f6f8; --panel:#ffffff; --ink:#1d2229; --muted:#5f6a78; --line:#cfd5de;
+  --wire:#e9edf2; --wire-ink:#3b4552; --board-a:#d9dee6; --board-b:#aab4c2;
+  --accent:#b8651a; --accent-bg:#fbeedd; --new:#2f6f4e; --new-bg:#e2f1e8; --gone:#9a3d3d; --gone-bg:#f7e2e2;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#171a1f; --panel:#1f242b; --ink:#e6e9ee; --muted:#9aa4b2; --line:#39414c;
+  --wire:#262c35; --wire-ink:#c8d0da; --board-a:#3a4250; --board-b:#242a33;
+  --accent:#e0913f; --accent-bg:#3a2a18; --new:#6cc79a; --new-bg:#1c332a; --gone:#e08585; --gone-bg:#3a2020;
+}}
+:root[data-theme="dark"]{
+  --bg:#171a1f; --panel:#1f242b; --ink:#e6e9ee; --muted:#9aa4b2; --line:#39414c;
+  --wire:#262c35; --wire-ink:#c8d0da; --board-a:#3a4250; --board-b:#242a33;
+  --accent:#e0913f; --accent-bg:#3a2a18; --new:#6cc79a; --new-bg:#1c332a; --gone:#e08585; --gone-bg:#3a2020;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Source Sans 3",system-ui,sans-serif;font-size:16px;line-height:1.5}
+main{max-width:1080px;margin:0 auto;padding:40px 24px 80px}
+h1{font-size:30px;margin:0 0 6px;text-wrap:balance}
+.lede{color:var(--muted);max-width:66ch;margin:0 0 28px}
+h2{font-size:22px;margin:56px 0 4px}
+h2 small{font-weight:400;color:var(--muted);font-size:15px;margin-left:8px}
+.sub{color:var(--muted);margin:0 0 14px;max-width:70ch}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin:0 0 8px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:14px;height:14px;border-radius:3px;border:1px solid var(--line)}
+/* wire frame */
+.frame{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;font-family:"Source Code Pro",ui-monospace,monospace;font-size:11.5px;color:var(--wire-ink)}
+.bar{height:36px;display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid var(--line);background:var(--wire)}
+.bar .sp{flex:1}
+.btn{border:1px solid var(--line);border-radius:5px;padding:2px 8px;background:var(--panel);white-space:nowrap}
+.btn.primary{background:var(--wire-ink);color:var(--panel);border-color:var(--wire-ink)}
+.btn.new{border-color:var(--new);color:var(--new);background:var(--new-bg)}
+.btn.gone{border-color:var(--gone);color:var(--gone);background:var(--gone-bg);text-decoration:line-through}
+.body{display:grid;height:520px}
+.pane{border:1px dashed var(--line);margin:6px;border-radius:6px;padding:8px;display:flex;flex-direction:column;gap:6px;min-width:0;overflow:hidden;position:relative}
+.pane h4{margin:0;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.pane.new{border-color:var(--new)}
+.pane.gone{border-color:var(--gone);opacity:.75}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);padding-bottom:4px}
+.tab{padding:1px 7px;border-radius:4px 4px 0 0;color:var(--muted)}
+.tab.on{background:var(--wire);color:var(--wire-ink);font-weight:600}
+.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.line{height:10px;border-radius:2px;background:var(--wire)}
+.line.w40{width:40%}.line.w60{width:60%}.line.w80{width:80%}.line.w95{width:95%}
+.board{aspect-ratio:1;background:
+  linear-gradient(45deg,var(--board-b) 25%,transparent 25%,transparent 75%,var(--board-b) 75%),
+  linear-gradient(45deg,var(--board-b) 25%,var(--board-a) 25%,var(--board-a) 75%,var(--board-b) 75%);
+  background-size:25% 25%;background-position:0 0,12.5% 12.5%;border-radius:4px;width:100%;max-width:100%}
+.evalbar{width:10px;border-radius:3px;background:linear-gradient(to bottom,var(--board-a) 55%,var(--wire-ink) 55%)}
+.moves{font-size:11px;line-height:1.7;color:var(--wire-ink)}
+.chip{display:inline-block;padding:0 6px;border-radius:9px;background:var(--wire);font-size:10.5px}
+.chip.acc{background:var(--accent-bg);color:var(--accent)}
+.note{position:absolute;right:6px;bottom:6px;font-size:10px;color:var(--accent);background:var(--accent-bg);padding:1px 6px;border-radius:4px}
+.footer{height:26px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px;padding:0 10px;color:var(--muted);background:var(--wire)}
+ul.pts{margin:14px 0 0;padding-left:20px;max-width:72ch}
+ul.pts li{margin:4px 0}
+.pro{color:var(--new)} .con{color:var(--gone)}
+.compare{width:100%;border-collapse:collapse;margin-top:48px;font-size:14.5px}
+.compare th,.compare td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+.compare th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.wrap{overflow-x:auto}
+</style>
+<main>
+<h1>Repertoire Builder — layout sketches</h1>
+<p class="lede">Boxes only. Where the buttons live and what shares the screen at once — not colours or copy. Green outlines are new/moved things; red are things that go away. Each frame is a wide desktop window; the compact layout would stack the same panes.</p>
+<div class="legend"><span><i class="sw" style="background:var(--new-bg);border-color:var(--new)"></i>new / moved</span><span><i class="sw" style="background:var(--gone-bg);border-color:var(--gone)"></i>removed</span><span><i class="sw" style="background:var(--wire)"></i>existing</span></div>
+
+<!-- ─────────────── CURRENT ─────────────── -->
+<h2>0. Today <small>for reference — everything at once</small></h2>
+<p class="sub">Eight surfaces compete: board, engine bar, expectimax bar, PGN editor, nav strip, side panel (Lines/Tree with the database hidden inside Tree), a bottom pane that repeats Lines, a status bar.</p>
+<div class="wrap"><div class="frame">
+  <div class="bar"><span>Repertoire Builder ▸ <b>French</b> ▸ Advance ▾</span><span class="sp"></span><span class="btn gone">Generate ▾</span><span class="btn gone">▶ Run</span><span class="btn primary">Train</span><span class="btn">⋮</span><span class="btn">Mode ▾</span></div>
+  <div class="body" style="grid-template-columns:38% 1fr 26%">
+    <div class="pane"><h4>Board</h4><div class="board"></div><div class="row"><span class="chip">trap tour bar</span><span class="chip">finding bar</span></div></div>
+    <div class="pane"><h4>Tools column</h4>
+      <div class="row"><span class="btn">Engine ◯</span><span>depth 18 · +0.3 e4 …</span><span class="btn">Expectimax ◯</span></div>
+      <div class="row"><span class="btn">Add PGN ▾</span><span class="btn">⟳</span><span class="btn">⧉ panels</span></div>
+      <div class="moves">1.e4 e6 2.d4 d5 3.e5 c5 4.c3 Nc6 5.Nf3 Qb6 …<br><span class="chip">comment</span></div>
+      <div class="line w60"></div><div class="line w80"></div>
+      <div class="row" style="margin-top:auto"><span class="btn">⏮</span><span class="btn">‹</span><span class="btn">›</span><span class="btn">+ line</span><span class="btn">flip</span><span class="btn">size ▾</span></div>
+    </div>
+    <div class="pane"><h4>Side panel</h4>
+      <div class="tabs"><span class="tab on">Lines (42)</span><span class="tab">Tree</span></div>
+      <div class="row"><span class="btn">search</span><span class="chip">Current pos</span><span class="chip">Hard</span><span class="chip">Traps</span><span class="chip">Low coh.</span></div>
+      <div class="row"><span>Coverage:</span><span class="chip">All</span><span class="chip">Covered</span><span class="chip">Shallow</span><span class="chip">Deep</span><span class="chip">Unacc.</span></div>
+      <div class="row"><span class="chip">Next gap</span><span class="chip">Biggest gap</span></div>
+      <div class="row"><b>Line</b><span>Ease</span><span>Coher.</span><span>Traps</span><span>Cov.</span></div>
+      <div class="line w95"></div><div class="line w95"></div><div class="line w80"></div>
+      <span class="note">DB is a book icon inside Tree</span>
+    </div>
+  </div>
+  <div class="footer"><span class="chip">Findings 3</span><span class="chip">Jobs</span><span class="chip" style="text-decoration:line-through">Lines 42</span><span class="sp"></span><span>status bar: Auditing… · 3 findings</span></div>
+</div></div>
+
+<!-- ─────────────── OPTION A ─────────────── -->
+<h2>A. Chessable-style <small>chapters → variations → moves</small></h2>
+<p class="sub">The course model. Left column is <em>what's in the repertoire</em>; centre is <em>the position</em>; right is <em>evidence about the position</em> (engine, database). Generate and Audit are peers on the toolbar and open as a drawer over the right column, never a bottom log.</p>
+<div class="wrap"><div class="frame">
+  <div class="bar"><span><b>French</b> ▾</span><span class="btn new">+ Add lines ▾</span><span class="btn new">Audit</span><span class="sp"></span><span class="btn primary">Train</span><span class="btn">⋮</span><span class="btn">Mode ▾</span></div>
+  <div class="body" style="grid-template-columns:24% 1fr 30%">
+    <div class="pane new"><h4>Chapters &amp; variations</h4>
+      <div class="row"><span class="btn">search lines</span><span class="chip">at this position ✓</span></div>
+      <div><b>▾ Advance (18)</b></div>
+      <div class="moves" style="padding-left:10px">Main line · Qb6 · 6.a3 …<br>…5.Nf3 Bd7 6.Be2<br>…5.Nf3 Nh6 <span class="chip acc">gap</span></div>
+      <div><b>▸ Tarrasch (12)</b></div><div><b>▸ Exchange (7)</b></div>
+      <div class="row" style="margin-top:auto"><span class="btn">+ chapter</span><span class="chip">metrics ▾</span></div>
+      <span class="note">one line = one game in the PGN</span>
+    </div>
+    <div class="pane"><h4>Position</h4>
+      <div class="row" style="align-items:stretch"><div class="evalbar new"></div><div class="board" style="width:56%"></div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px"><div class="moves">1.e4 e6 2.d4 d5 3.e5 c5<br>4.c3 Nc6 5.Nf3 <b>Qb6</b><br><span class="chip">comment…</span></div><div class="line w80"></div><div class="line w60"></div></div>
+      </div>
+      <div class="row" style="margin-top:auto"><span class="btn">⏮</span><span class="btn">‹</span><span class="btn">›</span><span class="btn">flip</span><span class="sp"></span><span class="chip">annotate</span></div>
+    </div>
+    <div class="pane new"><h4>Analysis</h4>
+      <div class="tabs"><span class="tab on">Engine</span><span class="tab">Database</span><span class="tab">Findings 3</span></div>
+      <div class="row"><span class="btn">Stockfish ●</span><span>d18</span><span class="chip">+ Expectimax</span></div>
+      <div class="moves">+0.31 6.a3 c4 7.Nbd2 …<br>+0.28 6.Be2 cxd4 7.cxd4 …<br>+0.10 6.Bd3 …</div>
+      <div class="line w95"></div>
+      <div class="row"><span>Database tab: Lichess ▾ / Masters / ChessDB — moves, %, games</span></div>
+      <span class="note">Generate/Audit config opens as a drawer here</span>
+    </div>
+  </div>
+  <div class="footer"><span>Building… 43% <span class="chip">pause</span></span><span class="sp"></span><span>Jobs ▸</span></div>
+</div></div>
+<ul class="pts">
+  <li><span class="pro">+</span> The variations list is the "see all games in the PGN" view, always visible, grouped by chapter, one click to load a line.</li>
+  <li><span class="pro">+</span> Engine and database become peers in one panel; findings sit beside them so audit results are read in the same place you check moves.</li>
+  <li><span class="pro">+</span> Metrics (ease, coherence, coverage) leave the list and become an on-demand overlay ("metrics ▾") — no dashboard by default.</li>
+  <li><span class="con">−</span> Biggest change: three real columns need width; below ~1100 px the analysis panel becomes a tab of the centre column.</li>
+</ul>
+
+<!-- ─────────────── OPTION B ─────────────── -->
+<h2>B. Lichess-analysis-style <small>board left, one tabbed workbench right</small></h2>
+<p class="sub">Two columns, like lichess.org/analysis. Everything that isn't the board lives in one tabbed panel: Moves, Lines, Database, Engine. Generate/Audit are buttons; their setup is a modal; results land in the Lines and Findings tabs.</p>
+<div class="wrap"><div class="frame">
+  <div class="bar"><span><b>French</b> ▸ Advance ▾</span><span class="sp"></span><span class="btn new">+ Add lines ▾</span><span class="btn new">Audit</span><span class="btn primary">Train</span><span class="btn">⋮</span><span class="btn">Mode ▾</span></div>
+  <div class="body" style="grid-template-columns:52% 1fr">
+    <div class="pane"><h4>Board</h4>
+      <div class="row" style="align-items:stretch"><div class="evalbar new"></div><div class="board" style="width:80%"></div></div>
+      <div class="row"><span class="btn">⏮</span><span class="btn">‹</span><span class="btn">›</span><span class="btn">⏭</span><span class="btn">flip</span><span class="sp"></span><span class="btn">Engine ●</span><span>+0.31 d18</span></div>
+      <div class="moves">1.e4 e6 2.d4 d5 3.e5 c5 4.c3 Nc6 5.Nf3 <b>Qb6</b> <span class="chip">…</span></div>
+    </div>
+    <div class="pane new"><h4>Workbench</h4>
+      <div class="tabs"><span class="tab">Moves</span><span class="tab on">Lines 42</span><span class="tab">Database</span><span class="tab">Engine</span><span class="tab">Findings 3</span></div>
+      <div class="row"><span class="btn">search</span><span class="chip">at this position ✓</span><span class="chip">metrics ▾</span></div>
+      <div><b>Advance</b></div>
+      <div class="moves" style="padding-left:8px">Main line · 6.a3<br>…Bd7 6.Be2 <span class="chip acc">shallow</span><br>…Nh6 <span class="chip acc">gap</span></div>
+      <div><b>Tarrasch</b></div><div class="line w80"></div><div class="line w60"></div>
+      <span class="note">Lines = every game in the PGN, by chapter</span>
+    </div>
+  </div>
+  <div class="footer"><span>Building… 43% <span class="chip">pause</span></span><span class="sp"></span><span>Jobs ▸</span></div>
+</div></div>
+<ul class="pts">
+  <li><span class="pro">+</span> Simplest possible screen: one thing to look at beside the board. Familiar to anyone who uses lichess analysis.</li>
+  <li><span class="pro">+</span> Small windows work without a separate compact layout — the tabs already are the compact layout.</li>
+  <li><span class="con">−</span> You can't see moves <em>and</em> lines <em>and</em> engine at once; you tab. Power users will feel that.</li>
+</ul>
+
+<!-- ─────────────── OPTION C ─────────────── -->
+<h2>C. Keep the shape, cut the clutter <small>least change</small></h2>
+<p class="sub">Same three zones as today. Remove duplicates, promote the database, hide metrics until asked, and give Generate/Audit a real home instead of a "Jobs" log.</p>
+<div class="wrap"><div class="frame">
+  <div class="bar"><span>French ▸ <b>Advance</b> ▾</span><span class="btn new">+ Add lines ▾</span><span class="btn new">Audit</span><span class="sp"></span><span class="btn primary">Train</span><span class="btn">⋮</span><span class="btn">Mode ▾</span></div>
+  <div class="body" style="grid-template-columns:38% 1fr 28%">
+    <div class="pane"><h4>Board</h4><div class="row" style="align-items:stretch"><div class="evalbar new"></div><div class="board" style="width:88%"></div></div>
+      <div class="row"><span class="btn">⏮</span><span class="btn">‹</span><span class="btn">›</span><span class="btn">flip</span></div></div>
+    <div class="pane"><h4>Moves &amp; engine</h4>
+      <div class="row"><span class="btn">Engine ●</span><span>+0.31 d18</span><span class="chip">expectimax ▾</span></div>
+      <div class="moves">1.e4 e6 2.d4 d5 3.e5 c5 4.c3 Nc6 5.Nf3 <b>Qb6</b><br><span class="chip">comment…</span></div>
+      <div class="line w60"></div><div class="line w80"></div>
+      <div class="row gone" style="margin-top:auto"><span class="btn gone">Add PGN ▾</span><span class="btn gone">⧉ panels</span><span class="btn gone">size ▾</span></div>
+    </div>
+    <div class="pane"><h4>Side panel</h4>
+      <div class="tabs"><span class="tab on">Lines 42</span><span class="tab">Tree</span><span class="tab" style="color:var(--new)">Database</span><span class="tab">Findings 3</span></div>
+      <div class="row"><span class="btn">search</span><span class="chip">at this position ✓</span><span class="chip">metrics ▾</span></div>
+      <div class="moves">Main line · 6.a3<br>…Bd7 6.Be2<br>…Nh6 <span class="chip acc">gap</span></div>
+      <div class="line w95"></div><div class="line w80"></div>
+      <span class="note">Database = its own tab, not a toggle in Tree</span>
+    </div>
+  </div>
+  <div class="footer"><span class="chip gone" style="text-decoration:line-through">Lines tab</span><span class="chip">Findings 3</span><span class="chip">Jobs</span><span class="sp"></span><span>Building… 43%</span></div>
+</div></div>
+<ul class="pts">
+  <li><span class="pro">+</span> Smallest diff; nothing the current code can't do. Two of these (Add lines ▾, no bottom Lines tab) are already in the working tree.</li>
+  <li><span class="con">−</span> Still three zones plus a bottom pane; Generate/Audit setup still lives at the bottom unless we also do the drawer from A.</li>
+</ul>
+
+<h2>Common to all three</h2>
+<ul class="pts">
+  <li><b>Toolbar:</b> repertoire/chapter switcher · <b>Add lines ▾</b> (Generate with engine…, Build by playing, From my games…, Import PGN…, Paste PGN…) · <b>Audit</b> · Train · ⋮.</li>
+  <li><b>Lines list</b> is plain by default: name + moves, grouped by chapter, "at this position" filter on. Ease/coherence/coverage/traps under a single <em>metrics ▾</em> toggle.</li>
+  <li><b>Eval bar</b> next to the board (new, tiny), engine PV lines under/near the moves.</li>
+  <li><b>Database</b> (Lichess / Masters / ChessDB) is a first-class tab, not a hidden toggle.</li>
+  <li><b>Findings</b> are shown where lines are, and marked on the lines they hit — not only in a bottom pane.</li>
+</ul>
+
+<div class="wrap"><table class="compare">
+<tr><th>Question</th><th>A · Chessable</th><th>B · Lichess</th><th>C · Decluttered</th></tr>
+<tr><td>What you see at once</td><td>lines · board+moves · engine/DB</td><td>board+moves · one tab</td><td>board · moves+engine · one tab</td></tr>
+<tr><td>Where Generate/Audit setup opens</td><td>drawer over right column</td><td>modal</td><td>bottom pane (or drawer)</td></tr>
+<tr><td>Small windows</td><td>right column folds into centre tabs</td><td>already tabs</td><td>existing compact layout</td></tr>
+<tr><td>Effort</td><td>large</td><td>medium–large</td><td>small</td></tr>
+</table></div>
+</main>

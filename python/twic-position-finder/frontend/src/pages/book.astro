@@ -172,7 +172,7 @@ import Base from '../layouts/Base.astro';
     text-align: center;
     padding: 32px 20px;
     background: var(--bg-card);
-    border: 1px solid rgba(224, 82, 82, 0.35);
+    border: 1px solid var(--danger);
     border-radius: 12px;
     color: var(--danger);
     font-size: 0.9rem;
@@ -245,7 +245,7 @@ import Base from '../layouts/Base.astro';
   }
 
   .day-btn:hover:not(:disabled):not(.day-btn-outside):not(.day-btn-blocked):not(.day-btn-unavailable) {
-    border-color: rgba(78, 122, 30, 0.55);
+    border-color: rgba(var(--accent-rgb), 0.55);
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
   }
@@ -257,22 +257,22 @@ import Base from '../layouts/Base.astro';
 
   .day-btn.selected {
     border-color: var(--accent);
-    background: rgba(78, 122, 30, 0.2);
-    color: #e8f4d4;
-    box-shadow: 0 0 0 1px rgba(78, 122, 30, 0.35);
+    background: rgba(var(--accent-rgb), 0.2);
+    color: var(--text);
+    box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.35);
   }
 
   .day-btn.today:not(.selected):not(.day-btn-outside):not(.day-btn-blocked):not(.day-btn-unavailable) {
-    border-color: rgba(78, 122, 30, 0.45);
+    border-color: rgba(var(--accent-rgb), 0.45);
   }
 
   .day-btn-outside,
   .day-btn-blocked,
   .day-btn-unavailable {
-    background: #141820;
-    border-color: #3a4058;
+    background: var(--bg-input);
+    border-color: var(--border);
     border-style: dashed;
-    color: #7a8299;
+    color: var(--text-dim);
   }
 
   .day-btn-outside,
@@ -288,7 +288,7 @@ import Base from '../layouts/Base.astro';
   .day-btn-outside .day-btn-status,
   .day-btn-blocked .day-btn-status,
   .day-btn-unavailable .day-btn-status {
-    color: #9aa3bc;
+    color: var(--text-dim);
     font-weight: 600;
   }
 
@@ -327,22 +327,22 @@ import Base from '../layouts/Base.astro';
 
   .day-btn-outside .day-btn-status::after {
     content: 'Outside';
-    color: #9aa3bc;
+    color: var(--text-dim);
   }
 
   .day-btn-blocked .day-btn-status::after {
     content: 'Blocked';
-    color: #b89090;
+    color: var(--danger);
   }
 
   .day-btn-unavailable .day-btn-status::after {
     content: 'Unavailable';
-    color: #9aa3bc;
+    color: var(--text-dim);
   }
 
   .day-btn.has-slots:not(.day-btn-outside):not(.day-btn-blocked):not(.day-btn-unavailable) .day-btn-status::after {
     content: 'Open';
-    color: #9bc96a;
+    color: var(--ok);
   }
 
   .times-section {
@@ -398,8 +398,8 @@ import Base from '../layouts/Base.astro';
   .time-pill:hover {
     transform: translateY(-1px);
     border-color: var(--accent);
-    background: rgba(78, 122, 30, 0.12);
-    color: #c8e8a0;
+    background: rgba(var(--accent-rgb), 0.12);
+    color: var(--accent);
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
   }
 
@@ -412,9 +412,9 @@ import Base from '../layouts/Base.astro';
 
   .time-pill.selected {
     border-color: var(--accent);
-    background: rgba(78, 122, 30, 0.2);
-    color: #e8f4d4;
-    box-shadow: 0 0 0 1px rgba(78, 122, 30, 0.35);
+    background: rgba(var(--accent-rgb), 0.2);
+    color: var(--text);
+    box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.35);
   }
 
   .book-inline {
@@ -447,15 +447,15 @@ import Base from '../layouts/Base.astro';
   .book-btn:disabled {
     opacity: 1;
     cursor: not-allowed;
-    background: #2a3044;
-    border-color: #3a4058;
-    color: #8b93a8;
+    background: var(--bg-input);
+    border-color: var(--border);
+    color: var(--text-dim);
   }
 
   .book-btn-icon:disabled {
-    background: #141820;
-    border-color: #3a4058;
-    color: #6b7389;
+    background: var(--bg-input);
+    border-color: var(--border);
+    color: var(--text-dim);
   }
 
   .book-btn-icon {
@@ -470,7 +470,7 @@ import Base from '../layouts/Base.astro';
   .book-btn-icon:hover:not(:disabled) {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(78, 122, 30, 0.08);
+    background: rgba(var(--accent-rgb), 0.08);
   }
 
   .book-btn-ghost {
@@ -487,7 +487,7 @@ import Base from '../layouts/Base.astro';
 
   .book-btn-primary {
     background: var(--accent);
-    color: #f0f4e8;
+    color: var(--text);
     padding: 14px 20px;
     border: none;
   }
@@ -507,9 +507,9 @@ import Base from '../layouts/Base.astro';
 
   .slot-summary {
     font-size: 0.88rem;
-    color: #c8e8a0;
-    background: rgba(78, 122, 30, 0.12);
-    border: 1px solid rgba(78, 122, 30, 0.28);
+    color: var(--accent);
+    background: rgba(var(--accent-rgb), 0.12);
+    border: 1px solid rgba(var(--accent-rgb), 0.28);
     border-radius: 10px;
     padding: 12px 14px;
     margin-bottom: 20px;
@@ -556,7 +556,7 @@ import Base from '../layouts/Base.astro';
 
   .field input::placeholder,
   .field textarea::placeholder {
-    color: #5a6078;
+    color: var(--text-dim);
   }
 
   .field select {
@@ -569,7 +569,7 @@ import Base from '../layouts/Base.astro';
   }
 
   .field select:invalid {
-    color: #5a6078;
+    color: var(--text-dim);
   }
 
   .field textarea { resize: vertical; min-height: 88px; }
