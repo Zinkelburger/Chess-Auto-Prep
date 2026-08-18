@@ -2,6 +2,8 @@
 /// Similar to openingtree.com's interface
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
@@ -248,9 +250,11 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                       onPressed: currentNode.parent == null
                           ? null
                           : () {
-                              Clipboard.setData(
-                                ClipboardData(
-                                  text: _movetext(currentNode.getMovePath()),
+                              unawaited(
+                                Clipboard.setData(
+                                  ClipboardData(
+                                    text: _movetext(currentNode.getMovePath()),
+                                  ),
                                 ),
                               );
                               showAppSnackBar(context, AppMessages.movesCopied);

@@ -6,7 +6,6 @@ library;
 
 import '../../models/build_tree_node.dart';
 import '../../utils/eval_constants.dart';
-import '../eval/eval_canonicalize.dart';
 import 'eca_calculator.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
@@ -49,11 +48,7 @@ class RepertoireSelector {
     final resolved = resolveTransposition(node, fenMap);
     if (resolved.children.isEmpty) return 0;
 
-    // Cycle guard: a transposition that re-enters a position already on the
-    // current path would otherwise recurse forever (the ply guard can't stop
-    // a redirect back to a shallower canonical). See REFACTOR_PLAN §1.3.
-    final key = canonicalizeFen4(resolved.fen);
-    if (!identical(resolved, node) && visited.contains(key)) return 0;
+    if (isTranspositionCycle(node, resolved, visited)) return 0;
 
     // Eval-window guard (skip root)
     if (node.ply > 0 && node.hasEngineEval) {
@@ -64,7 +59,7 @@ class RepertoireSelector {
     final isOurMove = node.isWhiteToMove == config.playAsWhite;
     int count = 0;
 
-    visited.add(key);
+    final key = enterFenPath(resolved, visited);
     if (isOurMove) {
       final winner = _pickOurMove(resolved);
       if (winner != null) {
@@ -79,7 +74,7 @@ class RepertoireSelector {
         count += _selectRecursive(child, visited);
       }
     }
-    visited.remove(key);
+    leaveFenPath(key, visited);
 
     return count;
   }

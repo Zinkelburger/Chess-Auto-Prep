@@ -29,6 +29,11 @@ void main() {
     expect(finalFen(const ['Nf6']), isNull);
   });
 
+  test('ChessBase Z0 passes so later White moves still replay', () {
+    final fen = finalFen(const ['d4', 'Z0', 'Nf3']);
+    expect(fen, startsWith('rnbqkbnr/pppppppp/8/8/3P4/5N2/PPP1PPPP/RNBQKB1R'));
+  });
+
   test('the batch form keeps one entry per game, in order', () {
     final fens = finalFensBatch(const [
       ['e4'],

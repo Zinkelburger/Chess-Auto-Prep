@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -92,13 +94,15 @@ class _TacticsImportPanelState extends _TacticsImportPanelStateBase
     );
     // Restore the user's last-used session settings into the shared controller
     // (save: false — this *is* what was saved).
-    TacticsSessionSettings.load().then((saved) {
-      if (!mounted) return;
-      context.read<TacticsSessionController>().setSessionSettings(
-        saved,
-        save: false,
-      );
-    });
+    unawaited(
+      TacticsSessionSettings.load().then((saved) {
+        if (!mounted) return;
+        context.read<TacticsSessionController>().setSessionSettings(
+          saved,
+          save: false,
+        );
+      }),
+    );
   }
 
   @override

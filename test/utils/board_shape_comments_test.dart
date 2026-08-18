@@ -3,8 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/utils/board_shape_comments.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
     show filterDisplayComment;
-import 'package:chess_auto_prep/widgets/chess_board_widget.dart'
-    show AnnotationBrush, BoardAnnotation;
+import 'package:chess_auto_prep/models/board_annotation.dart';
 
 void main() {
   group('parseBoardShapes', () {

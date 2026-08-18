@@ -387,6 +387,24 @@ void main() {
       expect(beforeMoveFens[1], contains(' b '));
       expect(finalFen, tree.root.children['e4']!.children['e5']!.fen);
     });
+
+    test('ChessBase Z0 passes the turn without creating a tree node', () {
+      final tree = OpeningTree();
+      walkMainlineIntoTree(
+        tree: tree,
+        game: parse('1. d4 Z0 2. Nf3 *'),
+        userResult: 1.0,
+        maxDepth: 30,
+      );
+
+      final d4 = tree.root.children['d4'];
+      expect(d4, isNotNull);
+      expect(d4!.children.containsKey('--'), isFalse);
+      expect(d4.children.containsKey('Z0'), isFalse);
+      final nf3 = d4.children['Nf3'];
+      expect(nf3, isNotNull);
+      expect(nf3!.fen, contains(' b '));
+    });
   });
 
   group('builder policies end-to-end', () {

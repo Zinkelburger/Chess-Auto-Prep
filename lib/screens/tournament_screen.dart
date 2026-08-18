@@ -2,6 +2,8 @@
 /// prepare the lines that actually matter.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -13,6 +15,9 @@ import '../features/tournament/widgets/prep_report_panel.dart';
 import '../features/tournament/widgets/roster_table.dart';
 import '../features/tournament/widgets/tournament_controls.dart';
 import '../theme/app_colors.dart';
+import '../widgets/app_breadcrumb_trail.dart';
+import '../widgets/app_mode_menu_button.dart';
+import '../widgets/app_settings_button.dart';
 
 class TournamentScreen extends StatefulWidget {
   const TournamentScreen({super.key});
@@ -29,13 +34,13 @@ class _TournamentScreenState extends State<TournamentScreen> {
     super.initState();
     // The directory is a bundled asset; loading it early keeps the first
     // "Resolve accounts" press from stalling.
-    PlayerDirectory.ensureLoaded();
+    unawaited(PlayerDirectory.ensureLoaded());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final session = context.read<TournamentSession>();
-      session.load();
+      unawaited(session.load());
       // The standalone MCP server edits the same file from another process.
-      session.startWatching();
+      unawaited(session.startWatching());
     });
   }
 
@@ -43,31 +48,38 @@ class _TournamentScreenState extends State<TournamentScreen> {
   Widget build(BuildContext context) {
     final session = context.watch<TournamentSession>();
 
-    return Row(
-      children: [
-        SizedBox(
-          width: 380,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _RosterHeader(session: session),
-              const Divider(height: 1),
-              Expanded(
-                child: RosterTable(
-                  roster: session.roster,
-                  simulation: session.simulation,
-                  selectedId: _selectedId,
-                  onSelect: (entry) => setState(() => _selectedId = entry.id),
+    return Scaffold(
+      appBar: AppBar(
+        titleSpacing: 16,
+        title: const AppBarTitleWithTrail(title: Text('Tournament Prep')),
+        actions: const [AppSettingsButton(), AppModeMenuButton()],
+      ),
+      body: Row(
+        children: [
+          SizedBox(
+            width: 380,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _RosterHeader(session: session),
+                const Divider(height: 1),
+                Expanded(
+                  child: RosterTable(
+                    roster: session.roster,
+                    simulation: session.simulation,
+                    selectedId: _selectedId,
+                    onSelect: (entry) => setState(() => _selectedId = entry.id),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        const VerticalDivider(width: 1),
-        Expanded(
-          child: _RightPane(session: session, selectedId: _selectedId),
-        ),
-      ],
+          const VerticalDivider(width: 1),
+          Expanded(
+            child: _RightPane(session: session, selectedId: _selectedId),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -222,7 +234,7 @@ class _SelectedEntrantCard extends StatelessWidget {
                   child: FilledButton.tonal(
                     onPressed: () {
                       session.confirmIdentity(playerId: entry.id);
-                      session.save();
+                      unawaited(session.save());
                     },
                     child: const Text('Confirm this account'),
                   ),
@@ -239,14 +251,14 @@ class _SelectedEntrantCard extends StatelessWidget {
                       ? null
                       : () {
                           session.updateEntry(entry.id, isMe: true);
-                          session.save();
+                          unawaited(session.save());
                         },
                   child: const Text('This is me'),
                 ),
                 OutlinedButton(
                   onPressed: () {
                     session.updateEntry(entry.id, withdrawn: !entry.withdrawn);
-                    session.save();
+                    unawaited(session.save());
                   },
                   child: Text(entry.withdrawn ? 'Reinstate' : 'Mark withdrawn'),
                 ),
@@ -256,7 +268,7 @@ class _SelectedEntrantCard extends StatelessWidget {
                       entry.id,
                       attendanceProb: entry.attendanceProb >= 1.0 ? 0.5 : 1.0,
                     );
-                    session.save();
+                    unawaited(session.save());
                   },
                   child: Text(
                     entry.attendanceProb >= 1.0

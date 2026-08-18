@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/board_preview_controller.dart';
@@ -57,26 +59,28 @@ class LineItemRow extends StatelessWidget {
   });
 
   void _confirmDelete(BuildContext context) {
-    showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Line'),
-        content: Text('Delete "${line.name}"? This cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    ).then((confirmed) {
-      if (confirmed == true) onLineDeleted?.call(line);
-    });
+    unawaited(
+      showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Delete Line'),
+          content: Text('Delete "${line.name}"? This cannot be undone.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      ).then((confirmed) {
+        if (confirmed == true) onLineDeleted?.call(line);
+      }),
+    );
   }
 
   static void showRenameDialog(
@@ -125,7 +129,7 @@ class LineItemRow extends StatelessWidget {
         ],
       ),
     );
-    renameDialog.whenComplete(controller.dispose);
+    unawaited(renameDialog.whenComplete(controller.dispose));
   }
 
   @override

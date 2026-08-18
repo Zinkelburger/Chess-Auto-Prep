@@ -14,6 +14,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../models/analysis/discovery_result.dart';
 import '../../models/engine_settings.dart';
+import 'engine_interrupt.dart';
 import 'eval_worker.dart';
 import 'stockfish_connection_factory.dart';
 import 'package:chess_auto_prep/utils/log.dart';
@@ -47,6 +48,10 @@ class StockfishPool {
   int _threadsPerWorker = 1;
   int get threadsPerWorker => _threadsPerWorker;
 
+  /// Last [ensureWorkers] target. Crash recovery respawns up to this count
+  /// and does not spawn real engines for workers injected in tests.
+  int _targetCount = 0;
+
   // ── Worker lifecycle ────────────────────────────────────────────────────
 
   /// Spawn workers up to [count].  Idempotent — only adds if fewer exist.
@@ -62,9 +67,11 @@ class StockfishPool {
     }
 
     final target = count ?? EngineSettings.instance.workers;
+    _targetCount = target;
     while (_workers.length < target) {
       final w = await _spawnOne(_workers.length);
       if (w == null) break;
+      _watchWorker(w);
       _workers.add(w);
       _free.add(w);
     }
@@ -158,7 +165,7 @@ class StockfishPool {
   /// Return a worker to the free set (or hand it to the next waiter).
   void release(EvalWorker worker) {
     _busy.remove(worker);
-    if (!_workers.contains(worker)) return;
+    if (worker.isDead || !_workers.contains(worker)) return;
     if (_waiters.isNotEmpty) {
       final next = _waiters.removeAt(0);
       _busy.add(worker);
@@ -194,8 +201,8 @@ class StockfishPool {
   ///
   /// Runs up to [workerCount] tasks concurrently.  [task] is handed an
   /// acquired worker — held for the whole call and released automatically —
-  /// plus one item.  Pass [stopWhen] to abort *remaining* items early (e.g.
-  /// on cancellation); items already in flight still run to completion.
+  /// plus one item.  Pass [stopWhen] to abort remaining items *and* UCI-stop
+  /// the in-flight search on that worker instead of waiting for depth.
   Future<void> forEachParallel<T>(
     List<T> items,
     Future<void> Function(EvalWorker worker, T item) task, {
@@ -206,19 +213,52 @@ class StockfishPool {
     var nextIndex = 0;
 
     Future<void> loop() async {
-      final worker = await acquire();
+      final EvalWorker worker;
       try {
-        while (stopWhen == null || !stopWhen()) {
+        worker = await acquire();
+      } catch (e) {
+        if (isEngineInterrupt(e)) return;
+        rethrow;
+      }
+      try {
+        while (true) {
+          if (stopWhen != null && stopWhen()) {
+            worker.stop();
+            return;
+          }
           final idx = nextIndex++;
           if (idx >= items.length) return;
-          await task(worker, items[idx]);
+          final future = task(worker, items[idx]);
+          if (stopWhen == null) {
+            await future;
+          } else {
+            await _awaitUntilStopped(worker, future, stopWhen);
+          }
         }
+      } catch (e) {
+        if (isEngineInterrupt(e)) return;
+        rethrow;
       } finally {
         release(worker);
       }
     }
 
     await Future.wait([for (var i = 0; i < concurrency; i++) loop()]);
+  }
+
+  Future<void> _awaitUntilStopped(
+    EvalWorker worker,
+    Future<void> future,
+    bool Function() stopWhen,
+  ) async {
+    final poller = Timer.periodic(const Duration(milliseconds: 20), (_) {
+      if (stopWhen()) worker.stop();
+    });
+    try {
+      await future;
+    } finally {
+      poller.cancel();
+    }
   }
 
   /// Run MultiPV discovery.  Acquires a worker for the duration.
@@ -269,6 +309,47 @@ class StockfishPool {
     _disposeAllWorkers();
   }
 
+  void _watchWorker(EvalWorker worker) {
+    worker.onDied = () {
+      unawaited(_retireAndReplace(worker));
+    };
+  }
+
+  Future<void> _retireAndReplace(EvalWorker dead) async {
+    if (!_workers.contains(dead)) return;
+    _workers.remove(dead);
+    _busy.remove(dead);
+    _free.remove(dead);
+    try {
+      dead.dispose();
+    } catch (_) {
+      /* already gone */
+    }
+    if (kDebugMode) {
+      log.e('[Pool] Worker died; respawning');
+    }
+    if (_workers.length >= _targetCount) return;
+    final replacement = await _spawnOne(_workers.length);
+    if (replacement == null) return;
+    _watchWorker(replacement);
+    _workers.add(replacement);
+    if (_waiters.isNotEmpty) {
+      final next = _waiters.removeAt(0);
+      _busy.add(replacement);
+      if (!next.isCompleted) next.complete(replacement);
+    } else {
+      _free.add(replacement);
+    }
+  }
+
+  /// Inject a worker that was not spawned by [ensureWorkers] (unit tests).
+  @visibleForTesting
+  void addWorkerForTest(EvalWorker worker) {
+    _watchWorker(worker);
+    _workers.add(worker);
+    _free.add(worker);
+  }
+
   void _disposeAllWorkers() {
     for (final w in _workers) {
       w.dispose();
@@ -276,5 +357,6 @@ class StockfishPool {
     _workers.clear();
     _free.clear();
     _busy.clear();
+    _targetCount = 0;
   }
 }

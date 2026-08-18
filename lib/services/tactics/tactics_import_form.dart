@@ -28,9 +28,10 @@ import 'package:flutter/widgets.dart';
 
 import '../../features/games/services/games_window.dart';
 import '../../models/engine_settings.dart';
+import '../../utils/safe_change_notifier.dart';
 import 'mining_settings.dart';
 
-class TacticsImportForm extends ChangeNotifier {
+class TacticsImportForm extends ChangeNotifier with SafeChangeNotifier {
   TacticsImportForm({
     EngineSettings? engine,
     GamesWindowSettings? windowSettings,
@@ -55,8 +56,6 @@ class TacticsImportForm extends ChangeNotifier {
   /// The shared window (see [GamesWindowSettings]).
   GamesWindow get window => _windowSettings.window;
 
-  bool _disposed = false;
-
   /// Search depth — the shared [MiningSettings.depth], already clamped.
   int get depth => _mining.depth;
 
@@ -78,7 +77,7 @@ class TacticsImportForm extends ChangeNotifier {
   /// Reflect an externally applied window (the home pane's settings dialog)
   /// into the fields, without fighting whichever one the user is typing in.
   void _onWindowChanged() {
-    if (_disposed) return;
+    if (isDisposed) return;
     if (!_gamesFocused && int.tryParse(gamesText.text) != window.games) {
       gamesText.text = '${window.games}';
     }
@@ -100,7 +99,7 @@ class TacticsImportForm extends ChangeNotifier {
   Future<void> loadPrefs() async {
     await _windowSettings.ensureLoaded();
     await _mining.ensureLoaded();
-    if (_disposed) return;
+    if (isDisposed) return;
     gamesText.text = '${window.games}';
     daysText.text = '${window.days}';
     notifyListeners();
@@ -108,7 +107,6 @@ class TacticsImportForm extends ChangeNotifier {
 
   @override
   void dispose() {
-    _disposed = true;
     _windowSettings.removeListener(_onWindowChanged);
     gamesText.dispose();
     daysText.dispose();

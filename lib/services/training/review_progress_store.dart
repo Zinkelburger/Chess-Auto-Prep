@@ -107,7 +107,7 @@ class ReviewProgressStore {
       ),
     ]);
 
-    repertoireService.updateLineReviewHeaders(
+    await repertoireService.updateLineReviewHeaders(
       repertoireId,
       line.id,
       lastReview: updated.lastReviewedUtc,

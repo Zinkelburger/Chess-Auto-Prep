@@ -140,6 +140,16 @@ class PgnViewerController extends ChangeNotifier
   @override
   int currentGameIndex = 0;
   Position currentPosition = Chess.initial;
+
+  /// FEN the next [PgnViewerWidget] mount should park on (tree position after
+  /// a games-at-position click, or the game cursor after leaving the tree).
+  @override
+  String? pgnInitialFen;
+
+  /// Game FEN snapshotted when entering the opening tree, restored when
+  /// leaving via T so the remounted game widget is not at move 1.
+  String? _gameCursorFen;
+
   @override
   bool boardFlipped = false;
 
@@ -153,8 +163,6 @@ class PgnViewerController extends ChangeNotifier
     filteredGames: () => filteredGames,
     allGames: () => allGames,
     fenIndex: () => _fenIndex.value,
-    mainLineIndex: () => pgnWidgetController.mainLineIndex,
-    mainLineLength: () => pgnWidgetController.mainLineLength,
     currentFen: () => currentPosition.fen,
     applyPosition: (pos) => currentPosition = pos,
     onReclaimFocus: () => onReclaimFocus?.call(),
@@ -205,8 +213,7 @@ class PgnViewerController extends ChangeNotifier
   );
 
   void _onFenIndexReady() {
-    notifyListeners();
-    _classifyOpenings();
+    unawaited(_classifyOpenings());
   }
 
   /// Read-only access to the precomputed FEN → game-indices map.
@@ -373,6 +380,8 @@ class PgnViewerController extends ChangeNotifier
     _activeSliceIndices = null;
     sortMode = GameSortMode.fileOrder;
     currentGameIndex = 0;
+    pgnInitialFen = null;
+    _gameCursorFen = null;
     perspective = newPerspective;
     _viewerTree.resetForNewFile();
     notifyListeners();
@@ -385,7 +394,7 @@ class PgnViewerController extends ChangeNotifier
     if (_fenIndex.value == null) {
       _buildFenIndex(); // classification runs via _onFenIndexReady
     } else {
-      _classifyOpenings();
+      unawaited(_classifyOpenings());
     }
   }
 
@@ -443,6 +452,8 @@ class PgnViewerController extends ChangeNotifier
     _activeSliceIndices = null;
     sortMode = GameSortMode.fileOrder;
     currentGameIndex = 0;
+    pgnInitialFen = null;
+    _gameCursorFen = null;
     perspective = newPerspective;
     _viewerTree.resetForNewFile();
     notifyListeners();
@@ -478,6 +489,8 @@ class PgnViewerController extends ChangeNotifier
     protagonistFixedSide = null;
     sortMode = GameSortMode.fileOrder;
     currentGameIndex = 0;
+    pgnInitialFen = null;
+    _gameCursorFen = null;
     perspective = const Perspective();
     currentPosition = Chess.initial;
     boardFlipped = false;
@@ -495,7 +508,9 @@ class PgnViewerController extends ChangeNotifier
           ),
         )
         .toList();
-    _fenIndex.build(gameData, filePath: filePath, gameTotal: allGames.length);
+    unawaited(
+      _fenIndex.build(gameData, filePath: filePath, gameTotal: allGames.length),
+    );
   }
 
   /// Attach ECO / Opening headers (in-memory only) from the bundled lichess
@@ -540,7 +555,7 @@ class PgnViewerController extends ChangeNotifier
     if (filteredGames.isEmpty) return;
     stopAutoPlay();
     analysisController.cancel();
-    currentPosition = Chess.initial;
+    currentPosition = _tryParseFen(pgnInitialFen) ?? Chess.initial;
     orientBoardForCurrentGame();
     final game = filteredGames[currentGameIndex];
     await analysisController.tryLoadFromPgn(game.pgnText);
@@ -554,29 +569,32 @@ class PgnViewerController extends ChangeNotifier
 
   void nextGame() {
     if (filteredGames.isEmpty) return;
+    pgnInitialFen = null;
     currentGameIndex = (currentGameIndex + 1).clamp(
       0,
       filteredGames.length - 1,
     );
     notifyListeners();
-    loadCurrentGame();
+    unawaited(loadCurrentGame());
   }
 
   void prevGame() {
     if (filteredGames.isEmpty) return;
+    pgnInitialFen = null;
     currentGameIndex = (currentGameIndex - 1).clamp(
       0,
       filteredGames.length - 1,
     );
     notifyListeners();
-    loadCurrentGame();
+    unawaited(loadCurrentGame());
   }
 
   void goToGame(int index) {
     if (index < 0 || index >= filteredGames.length) return;
+    pgnInitialFen = null;
     currentGameIndex = index;
     notifyListeners();
-    loadCurrentGame();
+    unawaited(loadCurrentGame());
   }
 
   void toggleAutoPlay() {
@@ -622,8 +640,9 @@ class PgnViewerController extends ChangeNotifier
     notifyListeners();
     applySortMode();
     currentGameIndex = 0;
+    pgnInitialFen = null;
     notifyListeners();
-    loadCurrentGame();
+    unawaited(loadCurrentGame());
   }
 
   /// Reorder newest-first *without* moving the cursor — for arrivals that are
@@ -685,6 +704,15 @@ class PgnViewerController extends ChangeNotifier
 
   void toggleOpeningTree() {
     if (isSolitaireMode) solitaire.stop();
+    if (showOpeningTree) {
+      _viewerTree.toggle();
+      pgnInitialFen = _gameCursorFen;
+      final restored = _tryParseFen(_gameCursorFen);
+      if (restored != null) currentPosition = restored;
+      notifyListeners();
+      return;
+    }
+    _gameCursorFen = currentPosition.fen;
     _viewerTree.toggle();
   }
 
@@ -769,11 +797,15 @@ class PgnViewerController extends ChangeNotifier
   List<int> gamesAtTreePosition() => _viewerTree.gamesAtTreePosition();
 
   void loadGameFromTree(int filteredIndex) {
-    _viewerTree.snapshotCursor();
+    _viewerTree.snapshotCursor(leavingForGame: true);
+    final landingFen = openingTree?.currentNode.fen;
+    pgnInitialFen = landingFen;
+    _gameCursorFen = landingFen;
     _viewerTree.hide();
     currentGameIndex = filteredIndex;
+    currentPosition = _tryParseFen(landingFen) ?? Chess.initial;
     notifyListeners();
-    loadCurrentGame();
+    unawaited(loadCurrentGame());
   }
 
   /// True when a tree position saved by [loadGameFromTree] can be returned to.
@@ -781,7 +813,19 @@ class PgnViewerController extends ChangeNotifier
 
   /// Re-open the opening tree at the position explored before the last
   /// [loadGameFromTree], restoring the tree cursor and the board.
-  Future<void> returnToTreePosition() => _viewerTree.restoreSavedPosition();
+  Future<void> returnToTreePosition() {
+    _gameCursorFen = currentPosition.fen;
+    return _viewerTree.restoreSavedPosition();
+  }
+
+  Position? _tryParseFen(String? fen) {
+    if (fen == null || fen.isEmpty) return null;
+    try {
+      return Chess.fromSetup(Setup.parseFen(fen));
+    } catch (_) {
+      return null;
+    }
+  }
 
   String? defaultExportFileName() {
     if (filePath == null) return null;

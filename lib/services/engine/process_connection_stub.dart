@@ -16,6 +16,9 @@ class ProcessConnection implements EngineConnection {
   Stream<String> get stdout => const Stream.empty();
 
   @override
+  Future<void> get done => Completer<void>().future;
+
+  @override
   Future<void> waitForReady() async {}
 
   @override

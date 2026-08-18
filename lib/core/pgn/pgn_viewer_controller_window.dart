@@ -63,7 +63,7 @@ mixin _WindowOps on ChangeNotifier {
   void setPerspective(Perspective p) {
     perspective = p;
     notifyListeners();
-    persistPerspective();
+    unawaited(persistPerspective());
     orientBoardForCurrentGame();
     if (isSolitaireMode) restartSolitaireForCurrentOrientation();
     onReclaimFocus?.call();

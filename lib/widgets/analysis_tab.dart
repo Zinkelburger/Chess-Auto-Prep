@@ -2,6 +2,8 @@
 /// Engine + expectimax live on the PGN tab ([PgnWithAnalysisPane]).
 library;
 
+import 'dart:async';
+
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -71,7 +73,7 @@ class _AnalysisTabState extends State<AnalysisTab> {
   @override
   void initState() {
     super.initState();
-    _loadPrefs();
+    unawaited(_loadPrefs());
     widget.controller.addListener(_onControllerChanged);
     _rebuildCandidateService();
     _rebuildTrapIndex();
@@ -145,7 +147,7 @@ class _AnalysisTabState extends State<AnalysisTab> {
 
   void _toggleTree() {
     setState(() => _showTree = !_showTree);
-    _savePrefs();
+    unawaited(_savePrefs());
   }
 
   Future<void> _acceptSuggestion(SuggestedLine suggestion) async {

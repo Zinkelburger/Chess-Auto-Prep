@@ -20,26 +20,28 @@ import 'services/eval_cache.dart';
 import 'widgets/escape_to_pop_scope.dart';
 
 void main() {
-  runZonedGuarded(
-    () async {
-      WidgetsFlutterBinding.ensureInitialized();
+  unawaited(
+    runZonedGuarded(
+      () async {
+        WidgetsFlutterBinding.ensureInitialized();
 
-      FlutterError.onError = (FlutterErrorDetails details) {
-        FlutterError.presentError(details);
-        debugPrint('FlutterError: ${details.exceptionAsString()}');
-      };
+        FlutterError.onError = (FlutterErrorDetails details) {
+          FlutterError.presentError(details);
+          debugPrint('FlutterError: ${details.exceptionAsString()}');
+        };
 
-      try {
-        await _initializeApp();
-        runApp(const ChessAutoPrepApp());
-      } catch (error, stackTrace) {
-        debugPrint('Startup failed: $error\n$stackTrace');
-        runApp(StartupErrorApp(error: error, stackTrace: stackTrace));
-      }
-    },
-    (error, stackTrace) {
-      debugPrint('Uncaught async error: $error\n$stackTrace');
-    },
+        try {
+          await _initializeApp();
+          runApp(const ChessAutoPrepApp());
+        } catch (error, stackTrace) {
+          debugPrint('Startup failed: $error\n$stackTrace');
+          runApp(StartupErrorApp(error: error, stackTrace: stackTrace));
+        }
+      },
+      (error, stackTrace) {
+        debugPrint('Uncaught async error: $error\n$stackTrace');
+      },
+    ),
   );
 }
 
@@ -63,7 +65,7 @@ Future<void> _initializeApp() async {
   // DB instead of sticking in the L1 memory map only.
   unawaited(EvalCache.instance.init());
 
-  DefaultPgnService.ensureExtracted();
+  unawaited(DefaultPgnService.ensureExtracted());
 }
 
 /// Shown when startup initialization fails before [ChessAutoPrepApp] can run.
@@ -134,7 +136,7 @@ class ChessAutoPrepApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) {
             final appState = AppState();
-            appState.loadUsernames();
+            unawaited(appState.loadUsernames());
             return appState;
           },
         ),
@@ -222,17 +224,17 @@ class ChessAutoPrepApp extends StatelessWidget {
           ),
           useMaterial3: true,
         ),
-        // GNOME's accessibility bus can enable Flutter's semantics tree on a
-        // running app at any moment, and the semantics pipeline then asserts
-        // every frame on our recognizer-per-span movetext
-        // (flutter/flutter#169214): stuck dialog barriers, dead hover/click
-        // handling until restart. Keep the semantics tree empty — the app has
-        // no screen-reader support to lose. Remove once the upstream bug is
-        // fixed in the pinned Flutter.
-        // EscapeToPopScope sits above the Navigator on purpose — see its doc
-        // for why Flutter's own Escape handling stops at dismissible dialogs.
-        builder: (context, child) =>
-            ExcludeSemantics(child: EscapeToPopScope(child: child!)),
+        // Keep the semantics tree empty unless explicitly enabled —
+        // GNOME's accessibility bus can enable Flutter's semantics tree
+        // and then assert every frame on our recognizer-per-span movetext
+        // (flutter/flutter#169214). Pass --dart-define=ENABLE_SEMANTICS=true
+        // to re-enable when testing a Flutter pin that includes the fix.
+        builder: (context, child) {
+          final wrapped = EscapeToPopScope(child: child!);
+          const enableSemantics = bool.fromEnvironment('ENABLE_SEMANTICS');
+          if (enableSemantics) return wrapped;
+          return ExcludeSemantics(child: wrapped);
+        },
         home: const MainScreen(),
         debugShowCheckedModeBanner: false,
       ),

@@ -18,7 +18,8 @@ import '../../theme/pgn_text_styles.dart';
 import 'comment_editor.dart';
 import 'comment_prose_spans.dart';
 import 'movetext_primitives.dart' show MoveChip;
-import '../../utils/chess_utils.dart' show coordsAtPly;
+import '../../utils/chess_utils.dart'
+    show coordsAtPly, isNullMoveSan, playSanOrNullMove;
 import '../../utils/pgn_comment_utils.dart'
     show
         filterDisplayComment,
@@ -310,10 +311,19 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
         }
       }
 
-      // Skip rendering null-move SAN but still show its comments
-      if (san == '--') {
+      // Skip rendering null-move SAN (ChessBase `--` / `Z0`) but still show
+      // comments and any sidelines that branch after the pass.
+      if (isNullMoveSan(san)) {
         for (final c in moveData.comments ?? const <String>[]) {
           emitComment(c);
+        }
+        final ply = i + 1;
+        final varsHere = view.variationsByPly[ply];
+        if (varsHere != null && varsHere.isNotEmpty) {
+          emitVariationsAtPly(
+            ply,
+            ephemeralOnly: view.revealedPly != null && ply >= view.revealedPly!,
+          );
         }
         if (!isWhiteTurn) moveNumber++;
         isWhiteTurn = !isWhiteTurn;

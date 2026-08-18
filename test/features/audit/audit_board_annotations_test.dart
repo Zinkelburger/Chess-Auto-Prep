@@ -1,7 +1,7 @@
 import 'package:chess_auto_prep/features/audit/models/audit_finding.dart';
 import 'package:chess_auto_prep/features/audit/models/audit_result.dart';
 import 'package:chess_auto_prep/features/audit/services/audit_board_annotations.dart';
-import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
+import 'package:chess_auto_prep/models/board_annotation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';

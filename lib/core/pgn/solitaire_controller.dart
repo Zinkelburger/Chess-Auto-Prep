@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../utils/safe_change_notifier.dart';
+import '../../utils/chess_utils.dart' show isNullMoveSan;
+
 enum SolitaireFeedback { correct, incorrect }
 
 /// A single user-guessed move with all attempts recorded.
@@ -40,7 +43,7 @@ class SolitaireGuess {
 /// Manages solitaire chess mode: the user guesses moves from a loaded PGN game
 /// one at a time. Correct guesses reveal the move; the opponent's reply
 /// auto-plays after a short delay.
-class SolitaireController extends ChangeNotifier {
+class SolitaireController extends ChangeNotifier with SafeChangeNotifier {
   bool _active = false;
   bool get active => _active;
 
@@ -127,15 +130,19 @@ class SolitaireController extends ChangeNotifier {
   VoidCallback? onAdvancePosition;
   VoidCallback? onResetPosition;
 
+  List<String> _mainlineSans = const [];
+
   void start({
     required int mainLineLength,
     required bool userPlaysWhite,
     bool whiteToMoveAtStart = true,
+    List<String> mainlineSans = const [],
   }) {
     _active = true;
     _totalMoves = mainLineLength;
     _userIsWhite = userPlaysWhite;
     _whiteToMoveAtStart = whiteToMoveAtStart;
+    _mainlineSans = mainlineSans;
     _revealedPly = 0;
     _currentAttempts = 0;
     _correctFirstTry = 0;
@@ -147,6 +154,7 @@ class SolitaireController extends ChangeNotifier {
     _pendingWrongAttempts.clear();
     _moveStartTime = null;
     _cancelTimers();
+    _skipNullPlies();
     notifyListeners();
     _maybePlayOpponent();
   }
@@ -165,11 +173,13 @@ class SolitaireController extends ChangeNotifier {
     required int mainLineLength,
     required bool userPlaysWhite,
     bool whiteToMoveAtStart = true,
+    List<String> mainlineSans = const [],
   }) {
     if (!_active) return;
     _totalMoves = mainLineLength;
     _userIsWhite = userPlaysWhite;
     _whiteToMoveAtStart = whiteToMoveAtStart;
+    _mainlineSans = mainlineSans;
     _revealedPly = 0;
     _currentAttempts = 0;
     _correctFirstTry = 0;
@@ -181,6 +191,7 @@ class SolitaireController extends ChangeNotifier {
     _pendingWrongAttempts.clear();
     _moveStartTime = null;
     _cancelTimers();
+    _skipNullPlies();
     notifyListeners();
     _maybePlayOpponent();
   }
@@ -210,6 +221,7 @@ class SolitaireController extends ChangeNotifier {
       _currentAttempts = 0;
       _feedback = SolitaireFeedback.correct;
       _revealedPly++;
+      _skipNullPlies();
       _moveStartTime = null;
       _countdownTimer?.cancel();
       notifyListeners();
@@ -246,6 +258,7 @@ class SolitaireController extends ChangeNotifier {
     _pendingWrongAttempts.clear();
     _currentAttempts = 0;
     _revealedPly++;
+    _skipNullPlies();
     _moveStartTime = null;
     _countdownTimer?.cancel();
     notifyListeners();
@@ -258,6 +271,7 @@ class SolitaireController extends ChangeNotifier {
   /// When it becomes the user's turn, starts the reveal countdown.
   void _maybePlayOpponent() {
     if (!_active) return;
+    _skipNullPlies();
     if (_revealedPly >= _totalMoves) {
       notifyListeners();
       return;
@@ -283,6 +297,16 @@ class SolitaireController extends ChangeNotifier {
     });
   }
 
+  /// ChessBase/Chessable `--` / `Z0` plies are not guessable — skip them so
+  /// the user is never asked to play a pass.
+  void _skipNullPlies() {
+    while (_revealedPly < _totalMoves &&
+        _revealedPly < _mainlineSans.length &&
+        isNullMoveSan(_mainlineSans[_revealedPly])) {
+      _revealedPly++;
+    }
+  }
+
   void _startRevealCountdown() {
     _moveStartTime = DateTime.now();
     _countdownTimer?.cancel();
@@ -302,6 +326,7 @@ class SolitaireController extends ChangeNotifier {
   void _scheduleFeedbackClear() {
     _feedbackTimer?.cancel();
     _feedbackTimer = Timer(const Duration(milliseconds: 1200), () {
+      if (isDisposed) return;
       _feedback = null;
       notifyListeners();
     });
@@ -317,7 +342,10 @@ class SolitaireController extends ChangeNotifier {
       if (userMove == null) return false;
       final userPos = position.play(userMove);
       if (userPos.fen == expectedPos.fen) return true;
-    } catch (_) {}
+    } catch (_) {
+      // Illegal SAN or [Position.play] throw: fall through to a punctuation-
+      // stripped string compare so a checkmate `Qh7#` still matches `Qh7`.
+    }
 
     String normalize(String s) =>
         s.replaceAll(RegExp(r'[+#?!]'), '').trim().toLowerCase();

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dartchess/dartchess.dart' show Chess, Position;
 import 'package:flutter/material.dart';
 
@@ -131,9 +133,11 @@ class _OpeningReviewDetailDialogState extends State<OpeningReviewDetailDialog> {
   @override
   void initState() {
     super.initState();
-    widget.loadLines().then((lines) {
-      if (mounted) setState(() => _bookLines = lines);
-    });
+    unawaited(
+      widget.loadLines().then((lines) {
+        if (mounted) setState(() => _bookLines = lines);
+      }),
+    );
   }
 
   @override

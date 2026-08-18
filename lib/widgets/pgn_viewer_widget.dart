@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dartchess/dartchess.dart';
@@ -5,7 +7,12 @@ import 'package:chess_auto_prep/services/stored_game_lookup.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
 import 'package:chess_auto_prep/utils/pgn_date_utils.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart'
-    show coordsAtPly, plyBeforeMove, recentMoveTrailSquares;
+    show
+        coordsAtPly,
+        isNullMoveSan,
+        playSanOrNullMove,
+        plyBeforeMove,
+        recentMoveTrailSquares;
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/theme/app_colors.dart';
 import 'package:chess_auto_prep/theme/app_text_styles.dart';
@@ -281,11 +288,13 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
       final renderObject = ctx.findRenderObject();
       final scrollable = Scrollable.maybeOf(ctx);
       if (renderObject == null || scrollable == null) return;
-      scrollable.position.ensureVisible(
-        renderObject,
-        alignment: 0.5,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
+      unawaited(
+        scrollable.position.ensureVisible(
+          renderObject,
+          alignment: 0.5,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+        ),
       );
     });
   }
@@ -331,7 +340,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
             !isOwnEdit &&
             _stripHeaders(widget.pgnText ?? '') !=
                 _stripHeaders(oldWidget.pgnText ?? ''))) {
-      _loadGame();
+      unawaited(_loadGame());
     } else if (widget.moveNumber != oldWidget.moveNumber ||
         widget.isWhiteToPlay != oldWidget.isWhiteToPlay) {
       _clearAnalysis();

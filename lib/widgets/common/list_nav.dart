@@ -7,6 +7,8 @@
 /// the screens actually bind.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
@@ -143,10 +145,12 @@ void ensureRowVisible(
     target = rowTop + itemExtent - viewHeight;
   }
   if (target != null) {
-    controller.animateTo(
-      target,
-      duration: const Duration(milliseconds: 150),
-      curve: Curves.easeOut,
+    unawaited(
+      controller.animateTo(
+        target,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+      ),
     );
   }
 }

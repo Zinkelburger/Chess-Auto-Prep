@@ -8,7 +8,8 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
-import '../chess_board_widget.dart' show BoardAnnotation, CompletedMove;
+import '../../models/board_annotation.dart';
+import '../../models/completed_move.dart';
 import '../../features/repertoire/widgets/repertoire_board_pane.dart';
 
 /// Chess board with preview overlay. Generation locking is handled by the

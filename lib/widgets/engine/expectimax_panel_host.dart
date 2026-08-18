@@ -4,6 +4,8 @@
 /// the same default: on-the-fly when the current FEN has no precomputed node.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
@@ -145,7 +147,7 @@ class _ExpectimaxPanelHostState extends State<ExpectimaxPanelHost> {
       // Expectimax being enabled IS the request to run the shared pool —
       // turn it on instead of idling behind a message.  The lifecycle
       // listener re-enters here once the engine reaches idle.
-      EngineLifecycle.instance.toggleOn();
+      unawaited(EngineLifecycle.instance.toggleOn());
       return;
     }
 
@@ -159,13 +161,15 @@ class _ExpectimaxPanelHostState extends State<ExpectimaxPanelHost> {
 
     if (_hasPrecomputedExpectimax(fen)) return;
 
-    _onTheFly.ensureRunning(
-      fen: fen,
-      playAsWhite: widget.controller.isRepertoireWhite,
-      mainTree: widget.tree,
-      mainConfig: widget.treeConfig,
-      mainFenMap: widget.fenMap,
-      maxDepth: _settings.onTheFlyMaxDepth,
+    unawaited(
+      _onTheFly.ensureRunning(
+        fen: fen,
+        playAsWhite: widget.controller.isRepertoireWhite,
+        mainTree: widget.tree,
+        mainConfig: widget.treeConfig,
+        mainFenMap: widget.fenMap,
+        maxDepth: _settings.onTheFlyMaxDepth,
+      ),
     );
   }
 
@@ -210,13 +214,15 @@ class _ExpectimaxPanelHostState extends State<ExpectimaxPanelHost> {
       if (!mounted) return;
     }
     _onTheFly.cancel();
-    _onTheFly.ensureRunning(
-      fen: widget.effectiveFen,
-      playAsWhite: widget.controller.isRepertoireWhite,
-      mainTree: widget.tree,
-      mainConfig: widget.treeConfig,
-      mainFenMap: widget.fenMap,
-      maxDepth: _settings.onTheFlyMaxDepth,
+    unawaited(
+      _onTheFly.ensureRunning(
+        fen: widget.effectiveFen,
+        playAsWhite: widget.controller.isRepertoireWhite,
+        mainTree: widget.tree,
+        mainConfig: widget.treeConfig,
+        mainFenMap: widget.fenMap,
+        maxDepth: _settings.onTheFlyMaxDepth,
+      ),
     );
   }
 

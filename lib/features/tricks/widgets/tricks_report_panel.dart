@@ -6,10 +6,13 @@
 /// dismissal.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../theme/app_colors.dart';
+import '../../../widgets/common/anchor_menu.dart';
 import '../../../widgets/common/list_nav.dart';
 import '../../audit/models/audit_finding.dart';
 import '../../audit/models/audit_result.dart';
@@ -262,7 +265,8 @@ class _TricksReportPanelState extends State<TricksReportPanel>
                         widget.onFindingSelected?.call(finding);
                       },
                       onToggleDismiss: () => _toggleDismiss(finding),
-                      onContextMenu: (pos) => _showDismissMenu(pos, finding),
+                      onContextMenu: (pos) =>
+                          unawaited(_showDismissMenu(pos, finding)),
                     );
                   },
                 ),
@@ -485,17 +489,11 @@ class _TricksReportPanelState extends State<TricksReportPanel>
 
   // ── Dismiss context menu ──────────────────────────────────────────────
 
-  void _showDismissMenu(Offset position, AuditFinding finding) {
+  Future<void> _showDismissMenu(Offset position, AuditFinding finding) async {
     final novelty = _isNovelty(finding);
-    showMenu<String>(
+    final value = await showAnchorMenu<String>(
       context: context,
-      position: RelativeRect.fromLTRB(
-        position.dx,
-        position.dy,
-        position.dx + 1,
-        position.dy + 1,
-      ),
-      popUpAnimationStyle: AnimationStyle.noAnimation,
+      position: position,
       items: [
         PopupMenuItem(
           value: 'dismiss',
@@ -512,15 +510,14 @@ class _TricksReportPanelState extends State<TricksReportPanel>
           ),
         ),
       ],
-    ).then((value) {
-      if (value == null) return;
-      switch (value) {
-        case 'dismiss':
-          _toggleDismiss(finding);
-        case 'kind':
-          _dismissAllOfKind(novelty);
-      }
-    });
+    );
+    if (!mounted || value == null) return;
+    switch (value) {
+      case 'dismiss':
+        _toggleDismiss(finding);
+      case 'kind':
+        _dismissAllOfKind(novelty);
+    }
   }
 
   Widget _buildEmptyState() {

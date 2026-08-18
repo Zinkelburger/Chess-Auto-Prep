@@ -3,6 +3,8 @@
 /// settings) and the end-of-game completion banner.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/pgn_viewer_controller.dart';
@@ -230,7 +232,7 @@ class _SolitaireSettingsButton extends StatelessWidget {
       onSelected: (value) {
         if (value.startsWith('delay_')) {
           final sec = int.parse(value.substring(6));
-          controller.setSolitaireRevealDelay(sec);
+          unawaited(controller.setSolitaireRevealDelay(sec));
         }
         onReclaimFocus();
       },

@@ -8,6 +8,8 @@
 /// one-request-at-a-time rate limit.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -60,7 +62,7 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
   @override
   void initState() {
     super.initState();
-    _loadPrefs();
+    unawaited(_loadPrefs());
   }
 
   @override
@@ -114,7 +116,7 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
 
   void _onFiltersChanged() {
     setState(() {});
-    _savePrefs();
+    unawaited(_savePrefs());
     _requestCurrent();
   }
 

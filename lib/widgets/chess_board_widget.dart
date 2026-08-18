@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart' show kSecondaryButton;
 import 'package:flutter/material.dart';
 import 'package:dartchess/dartchess.dart';
 
+import '../models/board_annotation.dart';
 import '../models/completed_move.dart';
 import '../theme/app_colors.dart';
 import '../utils/chess_utils.dart'
@@ -11,43 +12,6 @@ import '../utils/chess_utils.dart'
 import 'common/piece_image.dart';
 
 export '../models/completed_move.dart' show CompletedMove;
-
-// ── Board annotations (arrows, circles, labels) ─────────────────────────
-
-/// Predefined annotation brushes (color + opacity + stroke width).
-enum AnnotationBrush {
-  green(AppColors.boardArrowGreen, 3.0),
-  red(AppColors.boardArrowRed, 3.0),
-  blue(AppColors.boardArrowBlue, 3.0),
-  yellow(AppColors.boardArrowYellow, 3.0),
-  purple(AppColors.boardArrowPurple, 3.0);
-
-  final Color color;
-  final double strokeWidthFactor;
-  const AnnotationBrush(this.color, this.strokeWidthFactor);
-}
-
-/// A single annotation drawn on the board.
-///
-/// - Arrow: both [orig] and [dest] set, different squares.
-/// - Circle: only [orig] set (or [dest] == [orig]).
-/// - Either may carry an optional [label] rendered at the target square.
-class BoardAnnotation {
-  final String orig;
-  final String? dest;
-  final AnnotationBrush brush;
-  final String? label;
-
-  const BoardAnnotation({
-    required this.orig,
-    this.dest,
-    this.brush = AnnotationBrush.green,
-    this.label,
-  });
-
-  bool get isArrow => dest != null && dest != orig;
-  bool get isCircle => !isArrow;
-}
 
 /// A professional chess board widget that properly scales and handles interaction.
 /// Uses a simple, maintainable approach: CustomPainter for board + SVG widgets for pieces

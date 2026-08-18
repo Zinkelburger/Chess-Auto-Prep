@@ -11,6 +11,8 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 
+import '../../../utils/chess_utils.dart' show playSanOrNullMove;
+
 /// FEN of the position after the last mainline move of each game.
 ///
 /// Null for a game whose moves don't replay from the standard start (a
@@ -28,9 +30,9 @@ String? finalFen(List<String> sans) {
   Position pos = Chess.initial;
   var played = 0;
   for (final san in sans) {
-    final move = pos.parseSan(san);
-    if (move == null) break;
-    pos = pos.play(move);
+    final next = playSanOrNullMove(pos, san);
+    if (next == null) break;
+    pos = next;
     played++;
   }
   if (played == 0) return null;

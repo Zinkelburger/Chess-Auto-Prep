@@ -100,14 +100,10 @@ void main() {
       expect(settings.multiPv, kDefaultMultiPv);
     });
 
-    test('resetToDefaults restores all values', () {
-      settings.depth = 25;
-      settings.multiPv = 5;
-
+    test('resetToDefaults restores expectimaxFastSearch', () {
+      settings.expectimaxFastSearch = !kDefaultExpFastSearch;
       settings.resetToDefaults();
-
-      expect(settings.depth, kDefaultDepth);
-      expect(settings.multiPv, kDefaultMultiPv);
+      expect(settings.expectimaxFastSearch, kDefaultExpFastSearch);
     });
   });
 }

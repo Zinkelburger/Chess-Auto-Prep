@@ -272,7 +272,7 @@ mixin _RepertoireTabContent
       repertoireColor: _controller.isRepertoireWhite ? 'White' : 'Black',
       isEditingExistingLine: _controller.selectedPgnLine != null,
       onLineEdited: (updatedPgn) {
-        _controller.updateSelectedLineContent(updatedPgn);
+        unawaited(_controller.updateSelectedLineContent(updatedPgn));
       },
       onImportPgnFile: _importPgnFromFile,
       onImportPgnPaste: _importPgnFromPaste,

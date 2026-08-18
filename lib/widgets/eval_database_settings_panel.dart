@@ -4,6 +4,8 @@
 /// [SettingsScreen] under the Database section.
 library;
 
+import 'dart:async';
+
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -38,6 +40,7 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
 
   bool? _featureVisible;
   bool _libraryAvailable = false;
+  String? _unavailableReason;
   CdbDirectDirValidation? _dirValidation;
   bool _setupExpanded = false;
 
@@ -45,13 +48,18 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
   void initState() {
     super.initState();
     _settings.addListener(_onSettingsChanged);
-    _bootstrap();
+    unawaited(_bootstrap());
   }
 
   Future<void> _bootstrap() async {
     if (!Platform.isLinux) {
       if (!mounted) return;
-      setState(() => _featureVisible = false);
+      setState(() {
+        _featureVisible = true;
+        _libraryAvailable = false;
+        _unavailableReason =
+            'The local ChessDB dump reader is only available on Linux.';
+      });
       return;
     }
 
@@ -144,7 +152,7 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
                 color: AppColors.warning.withValues(alpha: 0.35),
               ),
             ),
-            child: const Row(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(
@@ -155,156 +163,168 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Native library not found. Run `make setup-cdbdirect` in '
-                    'tree_builder/, then launch with `./run_with_cdbdirect.sh`.',
-                    style: TextStyle(fontSize: 12, color: AppColors.warning),
+                    _unavailableReason ??
+                        'Native library not found. Run `make setup-cdbdirect` in '
+                            'tree_builder/, then launch with `./run_with_cdbdirect.sh`.',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.warning,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
         ],
-        const SizedBox(height: 16),
-        ExpansionTile(
-          initiallyExpanded: _setupExpanded,
-          onExpansionChanged: (v) => setState(() => _setupExpanded = v),
-          title: const Text('Setup Guide', style: TextStyle(fontSize: 14)),
-          children: [
-            _setupStep(
-              '1',
-              'Download (~1 TB, takes hours)',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'rsync (resumable):',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                  const SizedBox(height: 4),
-                  _commandRow(kChessDbRsyncCommand),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      const Text(
-                        'Or Hugging Face:',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                      TextButton.icon(
-                        onPressed: () =>
-                            launchUrl(Uri.parse(_huggingFaceDatasetUrl)),
-                        icon: const Icon(Icons.open_in_new, size: 14),
-                        label: const Text('robertnurnberg/chessdbcn'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            _setupStep(
-              '2',
-              'Point the field below at the data/ directory',
-              child: const Text(
-                'Select the folder that contains CURRENT and .sst files — '
-                'often …/chess-20251115/data after download.',
-                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
-              ),
-            ),
-            _setupStep(
-              '3',
-              'Done',
-              child: const Text(
-                'Enable local ChessDB and run repertoire generation. Eval chain: '
-                'local dump → SQLite slice → ChessDB API → Stockfish.',
-                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Switch(
-              value: _settings.enableCdbDirect,
-              onChanged: _libraryAvailable
-                  ? (v) => _settings.setEnableCdbDirect(v)
-                  : null,
-            ),
-            const Expanded(
-              child: Text(
-                'Local ChessDB (full dump)',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-              ),
-            ),
-            Tooltip(
-              message:
-                  'Download the ChessDB database (~1TB) to use offline '
-                  'evals for 50+ billion positions.\n\n'
-                  'Run:\n$kChessDbRsyncCommand',
-              child: IconButton(
-                icon: const Icon(Icons.download_outlined, size: 18),
-                onPressed: () => _copyCommand(kChessDbRsyncCommand),
-                tooltip: 'Copy download command',
-              ),
-            ),
-          ],
-        ),
-        const Text(
-          'Point this at the data/ directory containing .sst files',
-          style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
-        ),
-        const SizedBox(height: 6),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: TextField(
-                readOnly: true,
-                controller: _pathCtrl,
-                decoration: InputDecoration(
-                  labelText: 'ChessDB data directory',
-                  hintText: '/path/to/chessdb/chess-20251115/data',
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                  suffixIcon: _buildPathStatusIcon(),
+        if (_unavailableReason == null) ...[
+          const SizedBox(height: 16),
+          ExpansionTile(
+            initiallyExpanded: _setupExpanded,
+            onExpansionChanged: (v) => setState(() => _setupExpanded = v),
+            title: const Text('Setup Guide', style: TextStyle(fontSize: 14)),
+            children: [
+              _setupStep(
+                '1',
+                'Download (~1 TB, takes hours)',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'rsync (resumable):',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    const SizedBox(height: 4),
+                    _commandRow(kChessDbRsyncCommand),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        const Text(
+                          'Or Hugging Face:',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        TextButton.icon(
+                          onPressed: () =>
+                              launchUrl(Uri.parse(_huggingFaceDatasetUrl)),
+                          icon: const Icon(Icons.open_in_new, size: 14),
+                          label: const Text('robertnurnberg/chessdbcn'),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-            ),
-            const SizedBox(width: 4),
-            Tooltip(
-              message: 'Browse for data/ folder',
-              child: IconButton(
-                onPressed: _libraryAvailable ? _pickDirectory : null,
-                icon: const Icon(Icons.folder_open),
+              _setupStep(
+                '2',
+                'Point the field below at the data/ directory',
+                child: const Text(
+                  'Select the folder that contains CURRENT and .sst files — '
+                  'often …/chess-20251115/data after download.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.onSurfaceSoft,
+                  ),
+                ),
               ),
-            ),
-            if (_pathCtrl.text.isNotEmpty)
-              IconButton(
-                onPressed: () async {
-                  await _settings.setCdbDirectPath('');
-                  setState(() => _dirValidation = null);
-                },
-                icon: const Icon(Icons.clear),
-                tooltip: 'Clear path',
+              _setupStep(
+                '3',
+                'Done',
+                child: const Text(
+                  'Enable local ChessDB and run repertoire generation. Eval chain: '
+                  'local dump → SQLite slice → ChessDB API → Stockfish.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.onSurfaceSoft,
+                  ),
+                ),
               ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Switch(
+                value: _settings.enableCdbDirect,
+                onChanged: _libraryAvailable
+                    ? (v) => _settings.setEnableCdbDirect(v)
+                    : null,
+              ),
+              const Expanded(
+                child: Text(
+                  'Local ChessDB (full dump)',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                ),
+              ),
+              Tooltip(
+                message:
+                    'Download the ChessDB database (~1TB) to use offline '
+                    'evals for 50+ billion positions.\n\n'
+                    'Run:\n$kChessDbRsyncCommand',
+                child: IconButton(
+                  icon: const Icon(Icons.download_outlined, size: 18),
+                  onPressed: () => _copyCommand(kChessDbRsyncCommand),
+                  tooltip: 'Copy download command',
+                ),
+              ),
+            ],
+          ),
+          const Text(
+            'Point this at the data/ directory containing .sst files',
+            style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: TextField(
+                  readOnly: true,
+                  controller: _pathCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'ChessDB data directory',
+                    hintText: '/path/to/chessdb/chess-20251115/data',
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    suffixIcon: _buildPathStatusIcon(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Tooltip(
+                message: 'Browse for data/ folder',
+                child: IconButton(
+                  onPressed: _libraryAvailable ? _pickDirectory : null,
+                  icon: const Icon(Icons.folder_open),
+                ),
+              ),
+              if (_pathCtrl.text.isNotEmpty)
+                IconButton(
+                  onPressed: () async {
+                    await _settings.setCdbDirectPath('');
+                    setState(() => _dirValidation = null);
+                  },
+                  icon: const Icon(Icons.clear),
+                  tooltip: 'Clear path',
+                ),
+            ],
+          ),
+          if (_dirValidation != null && !_dirValidation!.isValid) ...[
+            const SizedBox(height: 4),
+            Text(
+              _dirValidation!.message,
+              style: const TextStyle(fontSize: 11, color: AppColors.danger),
+            ),
           ],
-        ),
-        if (_dirValidation != null && !_dirValidation!.isValid) ...[
-          const SizedBox(height: 4),
-          Text(
-            _dirValidation!.message,
-            style: const TextStyle(fontSize: 11, color: AppColors.danger),
+          const SizedBox(height: 8),
+          AppSwitch(
+            label: 'HDD read-ahead hint',
+            value: _settings.cdbDirectReadAhead,
+            onChanged: (v) => _settings.setCdbDirectReadAhead(v),
+            enabled: _libraryAvailable && _settings.enableCdbDirect,
+            disabledReason: 'Requires Local ChessDB (full dump) to be enabled.',
           ),
         ],
-        const SizedBox(height: 8),
-        AppSwitch(
-          label: 'HDD read-ahead hint',
-          value: _settings.cdbDirectReadAhead,
-          onChanged: (v) => _settings.setCdbDirectReadAhead(v),
-          enabled: _libraryAvailable && _settings.enableCdbDirect,
-          disabledReason: 'Requires Local ChessDB (full dump) to be enabled.',
-        ),
       ],
     );
   }
@@ -378,42 +398,44 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
   }
 
   void _showInfoDialog(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Offline ChessDB'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'The ChessDB dump is ~1 TB of TerarkDB .sst files on disk. '
-                'No cloud setup — just files and a native reader bundled with '
-                'the app.',
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Download:',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 4),
-              _commandRow(kChessDbRsyncCommand),
-              const SizedBox(height: 8),
-              TextButton.icon(
-                onPressed: () => launchUrl(Uri.parse(_huggingFaceDatasetUrl)),
-                icon: const Icon(Icons.open_in_new, size: 16),
-                label: const Text('Hugging Face mirror'),
-              ),
-            ],
+    unawaited(
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Offline ChessDB'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'The ChessDB dump is ~1 TB of TerarkDB .sst files on disk. '
+                  'No cloud setup — just files and a native reader bundled with '
+                  'the app.',
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Download:',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 4),
+                _commandRow(kChessDbRsyncCommand),
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: () => launchUrl(Uri.parse(_huggingFaceDatasetUrl)),
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  label: const Text('Hugging Face mirror'),
+                ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close'),
-          ),
-        ],
       ),
     );
   }

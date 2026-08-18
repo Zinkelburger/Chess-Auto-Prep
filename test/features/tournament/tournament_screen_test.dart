@@ -5,6 +5,7 @@
 /// would ship looking fine. These pump the real widget tree.
 library;
 
+import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/features/tournament/models/roster_entry.dart';
 import 'package:chess_auto_prep/features/tournament/services/player_directory.dart';
 import 'package:chess_auto_prep/features/tournament/services/tournament_session.dart';
@@ -12,6 +13,7 @@ import 'package:chess_auto_prep/screens/tournament_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 Roster _roster({bool withMe = true}) => Roster(
   eventName: 'Spring Open',
@@ -55,9 +57,12 @@ Future<TournamentSession> pumpScreen(
   if (roster != null) session.setRoster(roster);
 
   await tester.pumpWidget(
-    ChangeNotifierProvider<TournamentSession>.value(
-      value: session,
-      child: const MaterialApp(home: Scaffold(body: TournamentScreen())),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<AppState>(create: (_) => AppState()),
+        ChangeNotifierProvider<TournamentSession>.value(value: session),
+      ],
+      child: const MaterialApp(home: TournamentScreen()),
     ),
   );
   await tester.pumpAndSettle();
@@ -67,7 +72,10 @@ Future<TournamentSession> pumpScreen(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() => PlayerDirectory.ensureLoaded());
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    PlayerDirectory.ensureLoaded();
+  });
 
   testWidgets('builds with an empty roster and explains what to do', (
     tester,
@@ -173,5 +181,16 @@ void main() {
     await pumpScreen(tester, roster: _roster());
 
     expect(find.textContaining('No prep run yet'), findsOneWidget);
+  });
+
+  testWidgets('app bar keeps settings and mode switching reachable', (
+    tester,
+  ) async {
+    _useDesktopSurface(tester);
+    await pumpScreen(tester);
+
+    expect(find.text('Tournament Prep'), findsOneWidget);
+    expect(find.byTooltip('App settings'), findsOneWidget);
+    expect(find.byTooltip('Switch mode'), findsOneWidget);
   });
 }

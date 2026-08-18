@@ -21,7 +21,8 @@ import '../services/games_repertoire/draft_repertoire_writer.dart';
 import '../services/opening_tree_builder.dart';
 import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';
-import '../utils/chess_utils.dart' show recentMoveTrailSquares;
+import '../utils/chess_utils.dart'
+    show recentMoveTrailSquares, playSanOrNullMove;
 import '../utils/fen_utils.dart';
 import '../utils/movetext_builder.dart';
 import '../utils/san_token_utils.dart';
@@ -158,9 +159,9 @@ class RepertoireController
       pos = Chess.initial;
     }
     for (final san in rootMoveSans) {
-      final move = pos.parseSan(san);
-      if (move == null) break;
-      pos = pos.play(move);
+      final next = playSanOrNullMove(pos, san);
+      if (next == null) break;
+      pos = next;
     }
     return pos.fen;
   }

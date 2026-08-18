@@ -64,6 +64,7 @@ class GeneratedRepertoire {
     TreeBuildConfig? config,
   }) {
     final fenMap = FenMap()..populate(tree.root);
+    fenMap.freeze();
     final snapshot = EvalTreeSnapshotAdapter.fromBuildTree(
       tree,
       playAsWhite: playAsWhite,

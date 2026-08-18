@@ -4,6 +4,8 @@
 /// summary stats, and classified move list with clickable best lines.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/solitaire_trophy.dart';
@@ -166,17 +168,21 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
       // no-ops when the row is already visible on that side.
       const duration = Duration(milliseconds: 180);
       const curve = Curves.easeOutCubic;
-      scrollable.position.ensureVisible(
-        renderObject,
-        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
-        duration: duration,
-        curve: curve,
+      unawaited(
+        scrollable.position.ensureVisible(
+          renderObject,
+          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+          duration: duration,
+          curve: curve,
+        ),
       );
-      scrollable.position.ensureVisible(
-        renderObject,
-        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtStart,
-        duration: duration,
-        curve: curve,
+      unawaited(
+        scrollable.position.ensureVisible(
+          renderObject,
+          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+          duration: duration,
+          curve: curve,
+        ),
       );
     });
   }
@@ -190,15 +196,18 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
   void _startAnalysis() {
     if (widget.gamePgnText == null) return;
     if (!EngineGate.ensureAvailable(context)) return;
-    widget.analysisController.analyzeGame(
-      widget.gamePgnText!,
-      onAnnotatedMovetext: widget.onAnnotatedMovetext != null
-          ? (annotated) => widget.onAnnotatedMovetext!(annotated)
-          : null,
-      onComplete: () {
-        if (!mounted) return;
-        widget.onAnalysisComplete?.call();
-      },
+    unawaited(
+      widget.analysisController.analyzeGame(
+        widget.gamePgnText!,
+        onAnnotatedMovetext: widget.onAnnotatedMovetext != null
+            ? (annotated) => widget.onAnnotatedMovetext!(annotated)
+            : null,
+        onComplete: () {
+          if (!mounted) return;
+          final cb = widget.onAnalysisComplete;
+          if (cb != null) unawaited(cb());
+        },
+      ),
     );
   }
 

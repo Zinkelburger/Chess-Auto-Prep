@@ -5,6 +5,8 @@
 /// of partial and complete audit results.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/audit_finding.dart';
@@ -65,7 +67,7 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
       saveProgress(oldRepertoireFilePath);
       currentJob?.updateStatus(JobStatus.cancelled);
       currentJob = null;
-      EngineLifecycle.instance.exitGeneration();
+      unawaited(EngineLifecycle.instance.exitGeneration());
       _isAuditing = false;
       _isPaused = false;
     }
@@ -102,7 +104,7 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
     saveProgress(repertoireFilePath);
     currentJob?.updateStatus(JobStatus.cancelled);
     currentJob = null;
-    EngineLifecycle.instance.exitGeneration();
+    unawaited(EngineLifecycle.instance.exitGeneration());
     _isAuditing = false;
     _isPaused = false;
     notifyListeners();
@@ -125,11 +127,13 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
       leafNodesChecked: _result?.leafNodesChecked ?? 0,
       elapsed: _result?.elapsed ?? Duration.zero,
     );
-    AuditPersistence.instance.saveProgress(
-      repertoireFilePath,
-      partialResult,
-      config,
-      _service.checkedFens,
+    unawaited(
+      AuditPersistence.instance.saveProgress(
+        repertoireFilePath,
+        partialResult,
+        config,
+        _service.checkedFens,
+      ),
     );
   }
 
@@ -194,10 +198,12 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
     _result = auditResult;
     _liveFindings = [];
     if (_lastConfig != null) {
-      AuditPersistence.instance.saveComplete(
-        repertoireFilePath,
-        auditResult,
-        _lastConfig!,
+      unawaited(
+        AuditPersistence.instance.saveComplete(
+          repertoireFilePath,
+          auditResult,
+          _lastConfig!,
+        ),
       );
     }
     notifyListeners();
@@ -205,10 +211,12 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
 
   void onResultChanged(AuditResult updatedResult, String? repertoireFilePath) {
     _result = updatedResult;
-    AuditPersistence.instance.saveResult(
-      repertoireFilePath,
-      updatedResult,
-      config: _lastConfig,
+    unawaited(
+      AuditPersistence.instance.saveResult(
+        repertoireFilePath,
+        updatedResult,
+        config: _lastConfig,
+      ),
     );
     notifyListeners();
   }
@@ -300,7 +308,7 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
       _isAuditing = false;
       currentJob?.updateStatus(JobStatus.completed);
       currentJob = null;
-      AuditPersistence.instance.saveComplete(
+      await AuditPersistence.instance.saveComplete(
         repertoireFilePath,
         auditResult,
         config,
@@ -312,7 +320,9 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
       currentJob = null;
       notifyListeners();
     } finally {
-      if (config.useStockfish) EngineLifecycle.instance.exitGeneration();
+      if (config.useStockfish) {
+        await EngineLifecycle.instance.exitGeneration();
+      }
     }
   }
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'dart:isolate';
 
 import 'package:flutter/material.dart';
@@ -331,7 +333,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
       return;
     }
     if (_dismissed) return;
-    _reloadFromFile(autoLoad: true);
+    unawaited(_reloadFromFile(autoLoad: true));
   }
 
   Future<void> _reloadFromFile({bool autoLoad = false}) async {

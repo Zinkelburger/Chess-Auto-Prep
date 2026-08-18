@@ -26,7 +26,7 @@ mixin _EngineWeaknessMixin on _AnalysisScreenStateBase {
       if (!mounted) return;
     }
 
-    _runWeaknessAnalysis(config);
+    unawaited(_runWeaknessAnalysis(config));
   }
 
   Future<void> _runWeaknessAnalysis(EngineWeaknessConfig config) async {
@@ -80,7 +80,7 @@ mixin _EngineWeaknessMixin on _AnalysisScreenStateBase {
       });
 
       _mergeEvalsIntoAnalysis();
-      _saveEngineEvals();
+      await _saveEngineEvals();
     } catch (e) {
       if (mounted && _currentPlayer == player) {
         setState(() => _evalRunning = false);

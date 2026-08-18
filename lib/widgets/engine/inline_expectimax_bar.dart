@@ -6,6 +6,8 @@
 /// pane's own header.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
@@ -70,7 +72,7 @@ class _InlineExpectimaxBarState extends State<InlineExpectimaxBar> {
   /// otherwise silently block on-the-fly compute.
   static void _ensureEngineOn() {
     if (EngineLifecycle.instance.state == EngineState.off) {
-      EngineLifecycle.instance.toggleOn();
+      unawaited(EngineLifecycle.instance.toggleOn());
     }
   }
 

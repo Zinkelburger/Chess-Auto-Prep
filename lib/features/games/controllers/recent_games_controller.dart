@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -147,7 +149,7 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
   /// later notifications. Safe to call from a listener on every tick.
   void ensureLoaded() {
     if (_hasLoadedOnce || _loading || !hasAnyUsername) return;
-    refresh();
+    unawaited(refresh());
   }
 
   /// Load the window's games. Concurrent callers share one load: the second
@@ -183,7 +185,7 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
       notifyListeners();
       return;
     }
-    refresh();
+    unawaited(refresh());
   }
 
   /// The active window's slice of [_allGames]. Mirrors [applySelection]'s

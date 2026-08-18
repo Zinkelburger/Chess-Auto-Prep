@@ -3,6 +3,8 @@
 /// primary action gated on position validity.
 library;
 
+import 'dart:async';
+
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -199,7 +201,9 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
                     icon: const Icon(Icons.copy, size: 16),
                     tooltip: 'Copy FEN',
                     onPressed: () {
-                      Clipboard.setData(ClipboardData(text: _editor.fen));
+                      unawaited(
+                        Clipboard.setData(ClipboardData(text: _editor.fen)),
+                      );
                       showAppSnackBar(context, 'FEN copied.');
                     },
                   ),

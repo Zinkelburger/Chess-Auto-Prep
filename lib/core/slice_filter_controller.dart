@@ -11,8 +11,10 @@ import 'package:flutter/widgets.dart';
 
 import '../models/pgn_filter_models.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
+import '../utils/chess_utils.dart' show playSanOrNullMove;
 import '../utils/fen_utils.dart';
 import '../utils/san_token_utils.dart';
+import '../utils/safe_change_notifier.dart';
 
 // ── Position parsing ─────────────────────────────────────────────────────────
 
@@ -53,13 +55,13 @@ PositionParseResult _parseSanSequence(String input) {
   Position pos = Chess.initial;
   for (int i = 0; i < tokens.length; i++) {
     try {
-      final move = pos.parseSan(tokens[i]);
-      if (move == null) {
+      final next = playSanOrNullMove(pos, tokens[i]);
+      if (next == null) {
         return PositionParseResult.err(
           "Could not parse move ${i + 1}: '${tokens[i]}'",
         );
       }
-      pos = pos.play(move);
+      pos = next;
     } catch (e) {
       return PositionParseResult.err("Invalid move ${i + 1}: '${tokens[i]}'");
     }
@@ -126,7 +128,7 @@ class HeaderFilterRow {
 
 final _sanTokenPattern = RegExp(r'^[a-hKQRBNO0-9x+#=]+$');
 
-class SliceFilterController extends ChangeNotifier {
+class SliceFilterController extends ChangeNotifier with SafeChangeNotifier {
   SliceFilterController({SliceConfig? initialConfig}) {
     _applyConfig(initialConfig);
     // Live-parse: typed input becomes an active filter as soon as it parses.

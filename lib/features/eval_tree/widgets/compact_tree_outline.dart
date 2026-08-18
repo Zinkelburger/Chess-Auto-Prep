@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/models/build_tree_node.dart';
@@ -143,10 +145,12 @@ class _CompactTreeOutlineState extends State<CompactTreeOutline> {
     final viewport = _scrollController.position.viewportDimension;
     final target = (index * _rowHeight) - (viewport / 2) + (_rowHeight / 2);
     final maxScroll = _scrollController.position.maxScrollExtent;
-    _scrollController.animateTo(
-      target.clamp(0.0, maxScroll),
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOut,
+    unawaited(
+      _scrollController.animateTo(
+        target.clamp(0.0, maxScroll),
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      ),
     );
   }
 

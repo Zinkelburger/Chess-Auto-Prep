@@ -6,6 +6,8 @@
 /// match chapter indices).
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/study_controller.dart';
@@ -86,19 +88,18 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
         target = bottom - _scroll.position.viewportDimension;
       }
       if (target != null) {
-        _scroll.animateTo(
-          target.clamp(0, _scroll.position.maxScrollExtent),
-          duration: const Duration(milliseconds: 150),
-          curve: Curves.easeOut,
+        unawaited(
+          _scroll.animateTo(
+            target.clamp(0, _scroll.position.maxScrollExtent),
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOut,
+          ),
         );
       }
     });
   }
 
   void _onReorder(int oldRow, int newRow) {
-    // ReorderableListView reports the slot *before* removal; the controller
-    // wants the final position.
-    if (newRow > oldRow) newRow -= 1;
     widget.study.reorderChapter(oldRow, newRow);
   }
 
@@ -184,7 +185,9 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
                   itemExtent: _rowHeight,
                   itemCount: visible.length,
                   buildDefaultDragHandles: false,
-                  onReorder: _onReorder,
+                  // onReorderItem, unlike the deprecated onReorder, already
+                  // accounts for the dragged row being lifted out of the list.
+                  onReorderItem: _onReorder,
                   itemBuilder: (context, row) => _buildRow(
                     row,
                     key: ObjectKey(chapters[row]),

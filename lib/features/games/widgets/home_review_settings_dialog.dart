@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../models/engine_settings.dart';
@@ -95,8 +97,10 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
     }
     final depth = int.tryParse(_depth.text.trim());
     if (depth != null) {
-      MiningSettings.instance.setDepth(
-        depth.clamp(MiningSettings.minDepth, MiningSettings.maxDepth),
+      unawaited(
+        MiningSettings.instance.setDepth(
+          depth.clamp(MiningSettings.minDepth, MiningSettings.maxDepth),
+        ),
       );
     }
     // Auto-start is edited on the strip, not here — pass it through untouched.

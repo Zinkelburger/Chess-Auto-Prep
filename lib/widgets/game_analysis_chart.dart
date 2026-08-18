@@ -5,6 +5,8 @@
 /// blunders with colored dots. Clicking a point navigates to that move.
 library;
 
+import 'dart:async';
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
@@ -84,10 +86,12 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
       _scrollController.position.maxScrollExtent,
     );
 
-    _scrollController.animateTo(
-      target,
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOut,
+    unawaited(
+      _scrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      ),
     );
   }
 

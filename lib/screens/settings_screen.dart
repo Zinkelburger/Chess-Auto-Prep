@@ -19,6 +19,8 @@
 /// even if another UI surface mutates [EngineSettings] concurrently.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -57,53 +59,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onPressed: () => Navigator.pop(context),
             ),
           ),
-          // Capped column, not full width: settings rows read as
-          // label-then-control pairs, and a 2000px-wide row separates the
-          // two ends of that pair by the whole screen.
-          body: Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 760),
-              // Bordered cards already separate the sections; the extra
-              // dividers between them were lines drawn next to lines.
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                children: [
-                  Text(
-                    'Settings for this machine. Search depth, number of lines, '
-                    'expectimax tuning and panel visibility live on the gear '
-                    '(⚙) next to each analysis panel instead, where you can '
-                    'see what they change.',
-                    style: AppTextStyles.caption,
+          // The ListView is the body so it gets the scaffold's bounded
+          // height and actually scrolls. Wrapping it in Align first gave it
+          // unbounded height: it grew to fit every section, the scaffold
+          // clipped the overflow, and everything below the fold (engine,
+          // database, agent bridge) was unreachable.
+          body: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+            children: [
+              Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 760),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Settings for this machine. Search depth, number of lines, '
+                        'expectimax tuning and panel visibility live on the gear '
+                        '(⚙) next to each analysis panel instead, where you can '
+                        'see what they change.',
+                        style: AppTextStyles.caption,
+                      ),
+
+                      // ── Who you are ──────────────────────────────
+                      const ChessUsernamesSection(),
+                      const LichessLoginSection(),
+
+                      // ── My repertoires ───────────────────────────
+                      const MyRepertoiresSection(),
+
+                      // ── Engine ───────────────────────────────────
+                      _buildEngineSection(cores),
+
+                      // ── Database ─────────────────────────────────
+                      Builder(
+                        builder: (context) {
+                          context.watch<EvalDatabaseSettings>();
+                          return _buildDatabaseSection();
+                        },
+                      ),
+
+                      // ── Agent bridge ─────────────────────────────
+                      const AgentBridgeSection(),
+
+                      // ── Reset ────────────────────────────────────
+                      const SizedBox(height: 24),
+                      _buildResetButton(),
+                    ],
                   ),
-
-                  // ── Who you are ──────────────────────────────
-                  const ChessUsernamesSection(),
-                  const LichessLoginSection(),
-
-                  // ── My repertoires ───────────────────────────
-                  const MyRepertoiresSection(),
-
-                  // ── Engine ───────────────────────────────────
-                  _buildEngineSection(cores),
-
-                  // ── Database ─────────────────────────────────
-                  Builder(
-                    builder: (context) {
-                      context.watch<EvalDatabaseSettings>();
-                      return _buildDatabaseSection();
-                    },
-                  ),
-
-                  // ── Agent bridge ─────────────────────────────
-                  const AgentBridgeSection(),
-
-                  // ── Reset ────────────────────────────────────
-                  const SizedBox(height: 24),
-                  _buildResetButton(),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
         );
       },
@@ -187,28 +194,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
         icon: const Icon(Icons.restore, size: 16),
         label: const Text('Reset All to Defaults'),
         onPressed: () {
-          showDialog(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Reset Settings'),
-              content: const Text(
-                'Reset all engine, analysis, and database settings to '
-                'factory defaults?',
+          unawaited(
+            showDialog(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Reset Settings'),
+                content: const Text(
+                  'Reset all engine, analysis, and database settings to '
+                  'factory defaults?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      _engine.resetToDefaults();
+                      await EvalDatabaseSettings.instance.resetToDefaults();
+                      if (ctx.mounted) Navigator.pop(ctx);
+                    },
+                    child: const Text('Reset'),
+                  ),
+                ],
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Cancel'),
-                ),
-                TextButton(
-                  onPressed: () async {
-                    _engine.resetToDefaults();
-                    await EvalDatabaseSettings.instance.resetToDefaults();
-                    if (ctx.mounted) Navigator.pop(ctx);
-                  },
-                  child: const Text('Reset'),
-                ),
-              ],
             ),
           );
         },

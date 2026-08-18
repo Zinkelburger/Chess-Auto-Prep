@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../models/eval_tree_snapshot.dart';
+import '../../../utils/safe_change_notifier.dart';
 
 enum EvalTreeMetricDisplayMode { cpl, eval }
 
-class EvalTreeController extends ChangeNotifier {
+class EvalTreeController extends ChangeNotifier with SafeChangeNotifier {
   EvalTreeSnapshot? _snapshot;
   int? _selectedNodeId;
   int _visiblePly = 1;

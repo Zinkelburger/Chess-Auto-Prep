@@ -114,7 +114,7 @@ class TrainingSettingsPanel extends StatelessWidget {
                 final n = int.tryParse(value);
                 if (n != null && n >= 1 && n <= 10) {
                   settings.correctStreakThreshold = n;
-                  settings.save();
+                  settings.saveSoon();
                   onSettingsChanged();
                 }
               },
@@ -142,14 +142,14 @@ class TrainingSettingsPanel extends StatelessWidget {
               onChanged: (value) {
                 if (value.trim().isEmpty) {
                   settings.trainingDepth = null;
-                  settings.save();
+                  settings.saveSoon();
                   onSettingsChanged();
                   return;
                 }
                 final n = int.tryParse(value);
                 if (n != null && n >= 1 && n <= 200) {
                   settings.trainingDepth = n;
-                  settings.save();
+                  settings.saveSoon();
                   onSettingsChanged();
                 }
               },
@@ -178,7 +178,7 @@ class TrainingSettingsPanel extends StatelessWidget {
             onChanged: (value) {
               if (value == null) return;
               settings.reviewOrder = value;
-              settings.save();
+              settings.saveSoon();
               onQueueSettingsChanged();
               onSettingsChanged();
             },
@@ -212,7 +212,7 @@ class TrainingSettingsPanel extends StatelessWidget {
             onChanged: (value) {
               if (value == null) return;
               settings.chapterGrouping = value;
-              settings.save();
+              settings.saveSoon();
               onChapterSettingsChanged?.call();
               onSettingsChanged();
             },
@@ -243,7 +243,7 @@ class TrainingSettingsPanel extends StatelessWidget {
                   onChanged: (value) {
                     if (value.isEmpty) return;
                     settings.chapterDelimiter = value;
-                    settings.save();
+                    settings.saveSoon();
                     onChapterSettingsChanged?.call();
                     onSettingsChanged();
                   },
@@ -273,7 +273,7 @@ class TrainingSettingsPanel extends StatelessWidget {
             value: settings.wrongMoveReplay,
             onChanged: (v) {
               settings.wrongMoveReplay = v;
-              settings.save();
+              settings.saveSoon();
               onSettingsChanged();
             },
           ),
@@ -291,7 +291,7 @@ class TrainingSettingsPanel extends StatelessWidget {
             value: settings.showRatingButtons,
             onChanged: (v) {
               settings.showRatingButtons = v;
-              settings.save();
+              settings.saveSoon();
               onSettingsChanged();
             },
           ),
@@ -309,7 +309,7 @@ class TrainingSettingsPanel extends StatelessWidget {
             value: settings.skipToFirstComment,
             onChanged: (v) {
               settings.skipToFirstComment = v;
-              settings.save();
+              settings.saveSoon();
               onSettingsChanged();
             },
           ),
@@ -330,7 +330,7 @@ class TrainingSettingsPanel extends StatelessWidget {
               label: '${settings.introSpeedMs}ms',
               onChanged: (v) {
                 settings.introSpeedMs = v.round();
-                settings.save();
+                settings.saveSoon();
                 onSettingsChanged();
               },
             ),
@@ -351,7 +351,7 @@ class TrainingSettingsPanel extends StatelessWidget {
             label: '${settings.moveSpeedMs}ms',
             onChanged: (v) {
               settings.moveSpeedMs = v.round();
-              settings.save();
+              settings.saveSoon();
               onSettingsChanged();
             },
           ),
@@ -371,7 +371,7 @@ class TrainingSettingsPanel extends StatelessWidget {
               value: settings.learnRequiresClick,
               onChanged: (v) {
                 settings.learnRequiresClick = v;
-                settings.save();
+                settings.saveSoon();
                 onSettingsChanged();
               },
             ),
@@ -403,7 +403,7 @@ class TrainingSettingsPanel extends StatelessWidget {
                   final n = int.tryParse(value);
                   if (n != null && n >= 1 && n <= 15) {
                     settings.learnDelaySec = n;
-                    settings.save();
+                    settings.saveSoon();
                     onSettingsChanged();
                   }
                 },

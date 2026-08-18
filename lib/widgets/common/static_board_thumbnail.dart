@@ -1,6 +1,8 @@
 /// Cheap, non-interactive board previews for list rows.
 library;
 
+import 'dart:async';
+
 import 'dart:ui' as ui;
 
 import 'package:dartchess/dartchess.dart';
@@ -49,9 +51,11 @@ class _StaticBoardThumbnailState extends State<StaticBoardThumbnail> {
     super.initState();
     _parse();
     if (!_PieceSprites.isLoaded) {
-      _PieceSprites.ensureLoaded().then((_) {
-        if (mounted) setState(() {});
-      });
+      unawaited(
+        _PieceSprites.ensureLoaded().then((_) {
+          if (mounted) setState(() {});
+        }),
+      );
     }
   }
 

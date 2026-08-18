@@ -5,6 +5,8 @@
 /// deliberately three separate dialogs, not modes of one.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../models/engine_settings.dart';
@@ -67,7 +69,7 @@ class _AnalysisPanelsBody extends StatelessWidget {
                 // Explicitly enabling expectimax overrides the persisted
                 // engine kill switch — compute can't run without Stockfish.
                 if (v && EngineLifecycle.instance.state == EngineState.off) {
-                  EngineLifecycle.instance.toggleOn();
+                  unawaited(EngineLifecycle.instance.toggleOn());
                 }
               },
             ),

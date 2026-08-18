@@ -60,9 +60,13 @@ mixin _PgnViewerLineActions on _PgnViewerWidgetStateBase {
       '"Puzzle starts here" to train just that part of the line.';
 
   void _showMoveContextMenu(int moveIndex, Offset globalPosition) {
+    unawaited(_runMoveContextMenu(moveIndex, globalPosition));
+  }
+
+  Future<void> _runMoveContextMenu(int moveIndex, Offset globalPosition) async {
     final line = _moveHistory.sublist(0, moveIndex + 1);
 
-    showMenu<String>(
+    final action = await showMenu<String>(
       context: context,
       position: _menuPosition(globalPosition),
       popUpAnimationStyle: AnimationStyle.noAnimation,
@@ -81,15 +85,16 @@ mixin _PgnViewerLineActions on _PgnViewerWidgetStateBase {
           _menuItem('comment', Icons.comment_outlined, 'Comment'),
         ],
       ],
-    ).then((action) {
-      if (action == 'copy_line') {
-        _copyLinePgn(line);
-      } else if (action == 'add_to_study') {
-        _addLineToStudy(line);
-      } else if (action == 'comment') {
+    );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case 'copy_line':
+        await _copyLinePgn(line);
+      case 'add_to_study':
+        await _addLineToStudy(line);
+      case 'comment':
         _startEditingComment(moveIndex);
-      }
-    });
+    }
   }
 
   void _showVariationContextMenu(
@@ -97,10 +102,18 @@ mixin _PgnViewerLineActions on _PgnViewerWidgetStateBase {
     int branchPly,
     Offset globalPosition,
   ) {
+    unawaited(_runVariationContextMenu(node, branchPly, globalPosition));
+  }
+
+  Future<void> _runVariationContextMenu(
+    MoveNode node,
+    int branchPly,
+    Offset globalPosition,
+  ) async {
     final line = _lineToVariationNode(node, branchPly);
     if (line == null) return;
 
-    showMenu<String>(
+    final action = await showMenu<String>(
       context: context,
       position: _menuPosition(globalPosition),
       popUpAnimationStyle: AnimationStyle.noAnimation,
@@ -123,17 +136,18 @@ mixin _PgnViewerLineActions on _PgnViewerWidgetStateBase {
           _menuItem('clear_all', Icons.clear_all, 'Clear all analysis'),
         ],
       ],
-    ).then((action) {
-      if (action == 'copy_line') {
-        _copyLinePgn(line);
-      } else if (action == 'add_to_study') {
-        _addLineToStudy(line);
-      } else if (action == 'delete') {
+    );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case 'copy_line':
+        await _copyLinePgn(line);
+      case 'add_to_study':
+        await _addLineToStudy(line);
+      case 'delete':
         _deleteAnalysisNode(node.id);
-      } else if (action == 'clear_all') {
+      case 'clear_all':
         _clearAnalysis();
-      }
-    });
+    }
   }
 
   // ── Copy line / add line to study ──

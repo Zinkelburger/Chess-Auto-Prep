@@ -4,6 +4,8 @@
 /// in screens that need a repertoire before they can function (Builder, Trainer).
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:file_picker/file_picker.dart';
@@ -55,7 +57,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
   @override
   void initState() {
     super.initState();
-    _loadRepertoires();
+    unawaited(_loadRepertoires());
   }
 
   Future<void> _loadRepertoires() async {
@@ -717,15 +719,13 @@ class PickedPgnImport {
 
 Future<PickedPgnImport?> pickPgnImport() async {
   try {
-    final picked = await FilePicker.pickFiles(
+    final picked = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: ['pgn', 'txt'],
-      withData: false,
-      withReadStream: false,
     );
-    if (picked == null || picked.files.isEmpty) return null;
+    if (picked == null) return null;
 
-    final path = picked.files.single.path;
+    final path = picked.path;
     if (path == null) return null;
 
     final content = await StorageFactory.instance.readFile(path);
@@ -734,7 +734,7 @@ Future<PickedPgnImport?> pickPgnImport() async {
     }
 
     final count = pgn.countPgnGames(content);
-    final name = picked.files.single.name;
+    final name = picked.name;
     if (count == 0) {
       return PickedPgnImport(error: 'No lines found in $name.', fileName: name);
     }

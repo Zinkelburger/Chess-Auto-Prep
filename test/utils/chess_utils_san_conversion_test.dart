@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/utils/chess_utils.dart';
+import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Covers the SAN/UCI conversion contracts that `utils/chess_move_utils.dart`
@@ -105,6 +106,30 @@ void main() {
 
     test('empty input yields empty output', () {
       expect(uciPvToSan(startFen, const []), isEmpty);
+    });
+  });
+
+  group('null-move SAN (ChessBase Z0 / --)', () {
+    test('isNullMoveSan recognises ChessBase, SCID, and UCI spellings', () {
+      expect(isNullMoveSan('--'), isTrue);
+      expect(isNullMoveSan('Z0'), isTrue);
+      expect(isNullMoveSan('0000'), isTrue);
+      expect(isNullMoveSan('@@@@'), isTrue);
+      expect(isNullMoveSan('e4'), isFalse);
+      expect(isNullMoveSan('Nf3'), isFalse);
+    });
+
+    test('playSanOrNullMove passes the turn so White can play again', () {
+      final afterD4 = playSanOrNullMove(Chess.initial, 'd4')!;
+      expect(afterD4.turn, Side.black);
+
+      final afterPass = playSanOrNullMove(afterD4, 'Z0')!;
+      expect(afterPass.turn, Side.white);
+      expect(afterPass.board, afterD4.board);
+
+      final afterNf3 = playSanOrNullMove(afterPass, 'Nf3');
+      expect(afterNf3, isNotNull);
+      expect(afterNf3!.fen.split(' ')[0], contains('N'));
     });
   });
 }

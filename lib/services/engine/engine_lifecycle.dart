@@ -195,7 +195,11 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _persistToggle(bool on) async {
+  void _persistToggle(bool on) {
+    unawaited(_writeToggle(on));
+  }
+
+  Future<void> _writeToggle(bool on) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_toggleKey, on);

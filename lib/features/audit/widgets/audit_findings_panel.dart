@@ -8,12 +8,15 @@
 /// lower-probability ones surface automatically.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../theme/app_colors.dart';
 import '../../../utils/app_shortcuts.dart';
 import '../../../utils/keyboard_shortcut_utils.dart';
+import '../../../widgets/common/anchor_menu.dart';
 import '../models/audit_finding.dart';
 import '../models/audit_result.dart';
 import '../services/audit_persistence.dart';
@@ -237,16 +240,20 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
     final viewEnd = viewStart + _scrollController.position.viewportDimension;
 
     if (offset < viewStart) {
-      _scrollController.animateTo(
-        offset,
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOut,
+      unawaited(
+        _scrollController.animateTo(
+          offset,
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+        ),
       );
     } else if (offset + itemHeight > viewEnd) {
-      _scrollController.animateTo(
-        offset + itemHeight - viewEnd + viewStart,
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOut,
+      unawaited(
+        _scrollController.animateTo(
+          offset + itemHeight - viewEnd + viewStart,
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+        ),
       );
     }
   }
@@ -424,7 +431,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
                 });
               },
               onContextMenu: (finding, pos) =>
-                  _showDismissMenu(context, pos, finding),
+                  unawaited(_showDismissMenu(context, pos, finding)),
             ),
           ),
           AuditDismissedSection(
@@ -440,23 +447,17 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
 
   // ── Dismiss context menu ──────────────────────────────────────────────
 
-  void _showDismissMenu(
+  Future<void> _showDismissMenu(
     BuildContext context,
     Offset position,
     AuditFinding finding,
-  ) {
+  ) async {
     final plyLabel = finding.movePath.isEmpty
         ? 'root'
         : 'move ${(finding.movePath.length + 1) ~/ 2}';
-    showMenu<String>(
+    final value = await showAnchorMenu<String>(
       context: context,
-      position: RelativeRect.fromLTRB(
-        position.dx,
-        position.dy,
-        position.dx + 1,
-        position.dy + 1,
-      ),
-      popUpAnimationStyle: AnimationStyle.noAnimation,
+      position: position,
       items: [
         PopupMenuItem(
           value: 'dismiss',
@@ -487,22 +488,21 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
           ),
         ),
       ],
-    ).then((value) {
-      if (value == null) return;
-      switch (value) {
-        case 'dismiss':
-          setState(() {
-            _dismissFinding(finding);
-            _recomputeVisible();
-          });
-        case 'similar':
-          _dismissSimilar(finding);
-        case 'depth':
-          _dismissAtDepth(finding);
-        case 'type':
-          _dismissAllOfType(finding.type);
-      }
-    });
+    );
+    if (!mounted || value == null) return;
+    switch (value) {
+      case 'dismiss':
+        setState(() {
+          _dismissFinding(finding);
+          _recomputeVisible();
+        });
+      case 'similar':
+        _dismissSimilar(finding);
+      case 'depth':
+        _dismissAtDepth(finding);
+      case 'type':
+        _dismissAllOfType(finding.type);
+    }
   }
 
   String _typeLabel(AuditFindingType type) {

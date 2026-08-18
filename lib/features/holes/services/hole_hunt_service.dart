@@ -293,7 +293,11 @@ class HoleHuntService {
 
       final bestWhiteCp = discovery.lines.first.effectiveCp;
       final bestAttackerCp = toAttacker(bestWhiteCp);
-      _evalCache.putEvalCpWhite(node.fen, bestWhiteCp, config.discoveryDepth);
+      _evalCache.putEvalCpWhiteSoon(
+        node.fen,
+        bestWhiteCp,
+        config.discoveryDepth,
+      );
 
       for (final line in discovery.lines) {
         final san = chess_utils.uciToSanOrNull(node.fen, line.moveUci);
@@ -361,7 +365,11 @@ class HoleHuntService {
         node.fen,
         discovery.lines.first.moveUci,
       );
-      _evalCache.putEvalCpWhite(node.fen, bestWhiteCp, config.discoveryDepth);
+      _evalCache.putEvalCpWhiteSoon(
+        node.fen,
+        bestWhiteCp,
+        config.discoveryDepth,
+      );
 
       int ownerLossOf(int whiteCp) =>
           isWhiteRepertoire ? bestWhiteCp - whiteCp : whiteCp - bestWhiteCp;
@@ -402,7 +410,7 @@ class HoleHuntService {
         final verifiedWhiteCp = childIsWhiteTurn
             ? (verify.scoreCp ?? 0)
             : -(verify.scoreCp ?? 0);
-        _evalCache.putEvalCpWhite(
+        _evalCache.putEvalCpWhiteSoon(
           childFen,
           verifiedWhiteCp,
           config.verifyDepth,

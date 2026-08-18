@@ -1,6 +1,8 @@
 /// Interactive browse panel — one-click add to repertoire.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
@@ -70,7 +72,7 @@ class _BrowsePanelState extends State<BrowsePanel> {
   @override
   void initState() {
     super.initState();
-    _loadCandidates();
+    unawaited(_loadCandidates());
   }
 
   @override
@@ -79,7 +81,7 @@ class _BrowsePanelState extends State<BrowsePanel> {
     if (widget.fen != old.fen ||
         widget.pathFromRoot != old.pathFromRoot ||
         widget.currentMoves != old.currentMoves) {
-      _loadCandidates();
+      unawaited(_loadCandidates());
     }
   }
 

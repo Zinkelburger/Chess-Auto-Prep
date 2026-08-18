@@ -10,6 +10,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
 import '../utils/fen_utils.dart' show expandFen;
+import '../utils/safe_change_notifier.dart';
 
 /// The palette tool currently in hand.
 sealed class EditorTool {
@@ -27,7 +28,7 @@ class EraserTool extends EditorTool {
   const EraserTool();
 }
 
-class BoardEditorController extends ChangeNotifier {
+class BoardEditorController extends ChangeNotifier with SafeChangeNotifier {
   BoardEditorController({String? initialFen}) {
     if (initialFen == null || !loadFen(initialFen)) {
       setStartPosition();

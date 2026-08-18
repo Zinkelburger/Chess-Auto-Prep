@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'tactics_position.dart';
@@ -154,6 +156,8 @@ class TacticsSessionSettings {
           : (storedMaxAge <= 0 ? null : storedMaxAge),
     );
   }
+
+  void saveSoon() => unawaited(save());
 
   Future<void> save() async {
     final prefs = await SharedPreferences.getInstance();

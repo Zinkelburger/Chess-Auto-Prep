@@ -4,7 +4,15 @@
 /// tree-mode navigation logic, driving the board through injected callbacks.
 /// `PgnViewerController` keeps its public tree getters/methods and delegates
 /// here, so existing call-sites are unchanged.
+///
+/// Cursor ownership: the merged opening tree is its own exploration surface,
+/// not the current game's move list. Re-entering (T, or app-bar back after a
+/// games-at-position click) restores this cursor onto the board. Syncing from
+/// the remounted game would jump to the starting position, because showing the
+/// tree unmounts [PgnViewerWidget].
 library;
+
+import 'dart:async';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
@@ -23,8 +31,6 @@ class ViewerOpeningTree {
     required this.filteredGames,
     required this.allGames,
     required this.fenIndex,
-    required this.mainLineIndex,
-    required this.mainLineLength,
     required this.currentFen,
     required this.applyPosition,
     this.onReclaimFocus,
@@ -45,11 +51,7 @@ class ViewerOpeningTree {
   /// Precomputed FEN → allGames-indices map, or null while building.
   final Map<String, List<int>>? Function() fenIndex;
 
-  /// Board mainline cursor index / length (to sync the tree to the board).
-  final int Function() mainLineIndex;
-  final int Function() mainLineLength;
-
-  /// Current board FEN (used as a sync fallback).
+  /// Current board FEN (used as a sync fallback on first open).
   final String Function() currentFen;
 
   /// Push a board position derived from the tree cursor.
@@ -66,9 +68,14 @@ class ViewerOpeningTree {
   int _generation = 0;
   List<String> treeCurrentMoveSequence = [];
 
-  /// Tree cursor saved when a game is opened from the games-at-position list,
-  /// so the user can jump back to the position they were exploring.
+  /// Tree cursor saved when leaving the tree (toggle off, or opening a game
+  /// from the games-at-position list). Re-entering walks this sequence instead
+  /// of syncing from the remounted game, which would jump to the start.
   List<String>? _savedMoveSequence;
+
+  /// True when the last leave was a click on a game at this position. The
+  /// app-bar back button is only offered in that case; T always restores.
+  bool _leftForGame = false;
 
   static const _maxCacheEntries = 500;
   final Map<String, List<int>> _positionGameCache = {};
@@ -79,6 +86,7 @@ class ViewerOpeningTree {
     showOpeningTree = false;
     treeCurrentMoveSequence = [];
     _savedMoveSequence = null;
+    _leftForGame = false;
   }
 
   /// Drop the built tree (e.g. after re-slicing); a rebuild follows if shown.
@@ -86,40 +94,30 @@ class ViewerOpeningTree {
   void clearTree() {
     openingTree = null;
     _savedMoveSequence = null;
+    _leftForGame = false;
   }
 
-  /// Whether a return position saved by [snapshotCursor] is available.
-  bool get hasSavedPosition => _savedMoveSequence != null;
+  /// Whether the app-bar can offer "back to the tree" after a game click.
+  bool get hasSavedPosition => _leftForGame && _savedMoveSequence != null;
 
-  /// Remember the current tree cursor before leaving the tree for a game.
-  void snapshotCursor() {
+  /// Remember the current tree cursor before leaving the tree.
+  ///
+  /// [leavingForGame] marks a games-at-position click so the app-bar back
+  /// button appears while that game is on screen.
+  void snapshotCursor({bool leavingForGame = false}) {
     if (openingTree == null) return;
     _savedMoveSequence = List.of(treeCurrentMoveSequence);
+    if (leavingForGame) _leftForGame = true;
   }
 
-  void clearSavedPosition() => _savedMoveSequence = null;
+  void clearSavedPosition() {
+    _savedMoveSequence = null;
+    _leftForGame = false;
+  }
 
   /// Re-open the tree at the position saved by [snapshotCursor], restoring
   /// both the tree cursor and the board. Rebuilds the tree first if needed.
-  Future<void> restoreSavedPosition() async {
-    final seq = _savedMoveSequence;
-    if (seq == null) return;
-    _savedMoveSequence = null;
-    showOpeningTree = true;
-    onChanged();
-    if (openingTree == null) {
-      await rebuild();
-      if (!isActive() || openingTree == null) return;
-    }
-    openingTree!.reset();
-    for (final move in seq) {
-      if (!openingTree!.makeMove(move)) break;
-    }
-    treeCurrentMoveSequence = openingTree!.currentNode.getMovePath();
-    _updatePositionFromTree();
-    onChanged();
-    onReclaimFocus?.call();
-  }
+  Future<void> restoreSavedPosition() => enter();
 
   /// Hide the tree without notifying (the caller drives the follow-up reload).
   void hide() => showOpeningTree = false;
@@ -128,13 +126,29 @@ class ViewerOpeningTree {
   void clearCache() => _positionGameCache.clear();
 
   void toggle() {
-    showOpeningTree = !showOpeningTree;
-    onChanged();
-    if (showOpeningTree && openingTree == null && filteredGames().isNotEmpty) {
-      rebuild();
-    } else if (showOpeningTree && openingTree != null) {
-      _syncToCurrentPosition();
+    if (showOpeningTree) {
+      snapshotCursor();
+      showOpeningTree = false;
+      onChanged();
+      onReclaimFocus?.call();
+      return;
     }
+    unawaited(enter());
+  }
+
+  /// Show the tree and put the board on the saved tree cursor (or, on first
+  /// open, on the current game FEN).
+  Future<void> enter() async {
+    showOpeningTree = true;
+    _leftForGame = false;
+    onChanged();
+    if (openingTree == null) {
+      if (filteredGames().isNotEmpty) await rebuild();
+      onReclaimFocus?.call();
+      return;
+    }
+    _restoreCursorOntoBoard(preferSaved: true);
+    onChanged();
     onReclaimFocus?.call();
   }
 
@@ -173,7 +187,7 @@ class ViewerOpeningTree {
       openingTree = tree;
       buildingTree = false;
       treeBuildProcessed = treeBuildTotal;
-      _syncToCurrentPosition();
+      _restoreCursorOntoBoard(preferSaved: false);
       onChanged();
     } catch (e) {
       if (!isActive() || generation != _generation) return;
@@ -234,15 +248,39 @@ class ViewerOpeningTree {
     onChanged();
   }
 
+  /// Put the tree (and board) back on a SAN cursor. [preferSaved] is true when
+  /// re-entering the tree (the snapshot is the place we left). Rebuilds while
+  /// the tree is already shown walk the live cursor instead — a stale snapshot
+  /// from the last hide must not yank the user back mid-exploration.
+  void _restoreCursorOntoBoard({required bool preferSaved}) {
+    final saved = _savedMoveSequence;
+    final seq = (preferSaved && saved != null && saved.isNotEmpty)
+        ? saved
+        : treeCurrentMoveSequence;
+    if (seq.isNotEmpty) {
+      _walkTo(seq);
+      _updatePositionFromTree();
+      return;
+    }
+    _syncToCurrentPosition();
+  }
+
+  void _walkTo(List<String> seq) {
+    final tree = openingTree;
+    if (tree == null) return;
+    tree.reset();
+    for (final move in seq) {
+      if (!tree.makeMove(move)) break;
+    }
+    treeCurrentMoveSequence = tree.currentNode.getMovePath();
+  }
+
   /// Sync the opening tree cursor to the current board position via FEN
-  /// lookup in the aggregate tree.
+  /// lookup in the aggregate tree. Used on first open, when there is no
+  /// saved tree cursor to restore.
   void _syncToCurrentPosition() {
     if (openingTree == null) return;
     openingTree!.reset();
-    if (mainLineLength() == 0) {
-      treeCurrentMoveSequence = [];
-      return;
-    }
     if (openingTree!.navigateToFen(currentFen())) {
       treeCurrentMoveSequence = openingTree!.currentNode.getMovePath();
     } else {

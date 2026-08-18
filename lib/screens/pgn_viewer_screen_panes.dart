@@ -218,16 +218,10 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
         ),
         if (_controller.filteredGames.isNotEmpty)
           GameNavBar(
-            games: _controller.filteredGames
-                .map(
-                  (g) => GameNavItem(
-                    label: g.label,
-                    studyRating: g.studyRating,
-                    studySummary: g.studySummary,
-                    headers: g.headers,
-                  ),
-                )
-                .toList(),
+            games: [
+              for (final g in _controller.filteredGames)
+                GameNavItem.fromEntry(g),
+            ],
             currentIndex: _controller.currentGameIndex,
             currentRating: _controller
                 .filteredGames[_controller.currentGameIndex]
@@ -455,6 +449,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
             key: ValueKey('game_${_controller.currentGameIndex}'),
             pgnText: game.pgnText,
             controller: _pgnWidgetController,
+            initialFen: _controller.pgnInitialFen,
             // Through the screen, not straight to the controller: it remembers
             // where the game's cursor is so leaving the Line tab can put the
             // board back (see [_onGamePosition]).

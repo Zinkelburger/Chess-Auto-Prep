@@ -368,20 +368,22 @@ class AnalysisService {
       futures.add(_workerLoop(i, generation));
     }
 
-    Future.wait(futures).then((_) {
-      if (_generation == generation) {
-        _workerCurrentMoves.clear();
-        _publishUi(() {
-          poolStatus.value = PoolStatus(
-            phase: 'complete',
-            totalMoves: _moveQueue.length,
-            completedMoves: results.value.length,
-            activeWorkers: _pool.workerCount,
-            hashPerWorkerMb: kPoolHashPerWorkerMb,
-          );
-        });
-      }
-    });
+    unawaited(
+      Future.wait(futures).then((_) {
+        if (_generation == generation) {
+          _workerCurrentMoves.clear();
+          _publishUi(() {
+            poolStatus.value = PoolStatus(
+              phase: 'complete',
+              totalMoves: _moveQueue.length,
+              completedMoves: results.value.length,
+              activeWorkers: _pool.workerCount,
+              hashPerWorkerMb: kPoolHashPerWorkerMb,
+            );
+          });
+        }
+      }),
+    );
   }
 
   Future<void> _workerLoop(int workerIndex, int generation) async {

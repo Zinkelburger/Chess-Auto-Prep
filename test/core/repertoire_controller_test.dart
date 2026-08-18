@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' as io;
 
 import 'package:dartchess/dartchess.dart';
@@ -561,5 +562,55 @@ void main() {
         assertNavigationInvariants(controller);
       },
     );
+  });
+
+  group('loadRepertoire epoch', () {
+    test('a superseded load does not overwrite the later repertoire', () async {
+      final dir = io.Directory.systemTemp.createTempSync('rep_load');
+      addTearDown(() {
+        if (dir.existsSync()) dir.deleteSync(recursive: true);
+      });
+
+      final a = io.File('${dir.path}/a.pgn')
+        ..writeAsStringSync(
+          '// Color: White\n\n[Event "A"]\n[Result "*"]\n\n1. e4 *\n',
+        );
+      final b = io.File('${dir.path}/b.pgn')
+        ..writeAsStringSync(
+          '// Color: White\n\n[Event "B"]\n[Result "*"]\n\n1. d4 *\n',
+        );
+
+      final gate = Completer<void>();
+      final firstReached = Completer<void>();
+      final controller = RepertoireController();
+      controller.debugAfterRepertoireRead = () async {
+        if (!firstReached.isCompleted) firstReached.complete();
+        await gate.future;
+      };
+
+      final first = controller.setRepertoire(
+        RepertoireMetadata(
+          filePath: a.path,
+          name: 'A',
+          lastModified: DateTime.now(),
+        ),
+      );
+      await firstReached.future.timeout(const Duration(seconds: 5));
+      controller.debugAfterRepertoireRead = null;
+
+      await controller.setRepertoire(
+        RepertoireMetadata(
+          filePath: b.path,
+          name: 'B',
+          lastModified: DateTime.now(),
+        ),
+      );
+      gate.complete();
+      await first;
+
+      expect(controller.currentRepertoire?.filePath, b.path);
+      expect(controller.repertoirePgn, contains('1. d4'));
+      expect(controller.repertoirePgn, isNot(contains('1. e4')));
+    });
   });
 }

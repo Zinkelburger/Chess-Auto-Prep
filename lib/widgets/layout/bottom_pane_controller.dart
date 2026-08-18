@@ -12,9 +12,11 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import '../../utils/safe_change_notifier.dart';
+
 enum BottomPaneTab { findings, jobs, lines }
 
-class BottomPaneController extends ChangeNotifier {
+class BottomPaneController extends ChangeNotifier with SafeChangeNotifier {
   /// Height as a fraction of screen height, so the pane keeps its proportion
   /// when the window resizes (minimised → fullscreen).
   static const double defaultHeightFraction = 0.60;

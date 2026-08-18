@@ -64,9 +64,6 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pgn', 'txt'],
-        allowMultiple: true,
-        withData: false,
-        withReadStream: false,
       );
       if (result == null || result.files.isEmpty) return;
 
@@ -79,6 +76,7 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
         names.add(file.name);
       }
       if (contents.isEmpty) return;
+      if (!mounted) return;
 
       final pgns = contents.join('\n\n');
       final headerPairs = _extractHeaderPairs(pgns);
@@ -99,6 +97,7 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
         _matchSummary = _computeMatchSummary();
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => _error = 'Could not read files: $e');
     }
   }

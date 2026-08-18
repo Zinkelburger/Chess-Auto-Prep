@@ -17,6 +17,7 @@ import 'package:dartchess/dartchess.dart';
 
 import '../models/opening_tree.dart';
 import '../models/pgn_filter_models.dart' show splitPlayerNames;
+import '../utils/chess_utils.dart' show isNullMoveSan, playSanOrNullMove;
 
 /// Common player name patterns used in repertoire files.
 const List<String> repertoirePlayerPatterns = [
@@ -228,6 +229,14 @@ void walkMainlineIntoTree({
 
     try {
       final moveSan = nodeData.san;
+      if (isNullMoveSan(moveSan)) {
+        // Pass the turn without a tree node so later same-side moves stay
+        // legal and `--` does not pollute opening stats.
+        final next = playSanOrNullMove(position, moveSan);
+        if (next == null) break;
+        position = next;
+        continue;
+      }
 
       // Parse SAN into a Move object for the engine.
       final move = position.parseSan(moveSan);

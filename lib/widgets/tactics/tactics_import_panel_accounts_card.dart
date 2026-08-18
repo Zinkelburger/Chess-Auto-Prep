@@ -119,7 +119,7 @@ mixin _TacticsImportPanelAccountsCard on _TacticsImportPanelStateBase {
                         onChanged: (value) {
                           final games = int.tryParse(value);
                           if (games != null && games > 0) {
-                            _form.setWindowGames(games);
+                            unawaited(_form.setWindowGames(games));
                           }
                         },
                       ),
@@ -166,7 +166,7 @@ mixin _TacticsImportPanelAccountsCard on _TacticsImportPanelStateBase {
                         onChanged: (value) {
                           final days = int.tryParse(value);
                           if (days != null && days > 0) {
-                            _form.setWindowDays(days);
+                            unawaited(_form.setWindowDays(days));
                           }
                         },
                       ),

@@ -9,9 +9,7 @@ mixin _HoleHuntMixin on _AnalysisScreenStateBase {
     final player = _currentPlayer;
     if (player == null || _openingTree == null || _isHunting) return;
     if (!EngineGate.ensureAvailable(context)) return;
-    // The hunt shares the generation engine state; refuse to overlap with a
-    // running generation rather than contend for the same workers.
-    if (EngineLifecycle.instance.state == EngineState.generating) {
+    if (GenerationLease.isBusy) {
       _showError(
         'Another engine job is running — '
         'wait for it to finish first.',
@@ -29,7 +27,7 @@ mixin _HoleHuntMixin on _AnalysisScreenStateBase {
     );
     if (config == null || !mounted) return;
 
-    _runHoleHunt(config);
+    unawaited(_runHoleHunt(config));
   }
 
   Future<void> _runHoleHunt(HoleHuntConfig config) async {
@@ -56,42 +54,34 @@ mixin _HoleHuntMixin on _AnalysisScreenStateBase {
       player.platform,
       player.username,
     );
-    final pgnModifiedAtStart = await _fileModifiedOrNull(pgnPath);
+    final pgnModifiedAtStart = await fileModifiedOrNull(pgnPath);
 
-    var enteredGeneration = false;
     try {
-      await EngineLifecycle.instance.enterGeneration(1);
-      enteredGeneration = true;
-      await StockfishPool.instance.ensureWorkers(1);
-
-      final result = await _holeService.hunt(
-        tree: tree,
-        isWhiteRepertoire: isWhite,
-        config: config,
-        onProgress: (p) {
-          // Cancellation only takes effect at loop boundaries, so callbacks
-          // can still fire after the user switched players.
-          if (mounted && _currentPlayer == player) {
-            setState(() => _holesProgress = p);
-          }
-        },
-        onFinding: (f) {
-          if (mounted && _currentPlayer == player) {
-            setState(() => _holesLive = [..._holesLive, f]);
-          }
-        },
-      );
+      final result = await GenerationLease.run(() {
+        return _holeService.hunt(
+          tree: tree,
+          isWhiteRepertoire: isWhite,
+          config: config,
+          onProgress: (p) {
+            if (mounted && _currentPlayer == player) {
+              setState(() => _holesProgress = p);
+            }
+          },
+          onFinding: (f) {
+            if (mounted && _currentPlayer == player) {
+              setState(() => _holesLive = [..._holesLive, f]);
+            }
+          },
+        );
+      });
 
       // Persist to the player the hunt was started for, even if the user
       // switched players meanwhile (partial reports included) — but not if
       // the games were replaced mid-hunt.
-      final pgnModifiedNow = await _fileModifiedOrNull(pgnPath);
-      final gamesUnchanged =
-          pgnModifiedAtStart != null &&
-          pgnModifiedNow != null &&
-          pgnModifiedNow.isAtSameMomentAs(pgnModifiedAtStart);
+      final pgnModifiedNow = await fileModifiedOrNull(pgnPath);
+      final gamesUnchanged = sameMtime(pgnModifiedAtStart, pgnModifiedNow);
       if (gamesUnchanged) {
-        HoleHuntPersistence.instance.save(
+        await HoleHuntPersistence.instance.save(
           await _gamesService.holesReportPath(
             player.platform,
             player.username,
@@ -115,19 +105,10 @@ mixin _HoleHuntMixin on _AnalysisScreenStateBase {
     } catch (e) {
       if (mounted) _showError('Hole hunt failed: $e');
     } finally {
-      if (enteredGeneration) EngineLifecycle.instance.exitGeneration();
       _isHunting = false;
       _huntCancelled = false;
       _holesProgress = null;
       if (mounted) setState(() {});
-    }
-  }
-
-  static Future<DateTime?> _fileModifiedOrNull(String path) async {
-    try {
-      return await File(path).lastModified();
-    } catch (_) {
-      return null;
     }
   }
 

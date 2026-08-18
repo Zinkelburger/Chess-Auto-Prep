@@ -6,6 +6,8 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import '../utils/safe_change_notifier.dart';
+
 class NavigationEntry {
   final int tabIndex;
   final String fen;
@@ -20,7 +22,7 @@ class NavigationEntry {
   });
 }
 
-class NavigationStack extends ChangeNotifier {
+class NavigationStack extends ChangeNotifier with SafeChangeNotifier {
   final List<NavigationEntry> _entries = [];
   static const int _maxEntries = 8;
 

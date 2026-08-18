@@ -7,7 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_colors.dart';
+import '../utils/app_shortcuts.dart';
 import 'game_nav_item.dart';
+import 'shortcut_tooltip.dart';
 
 const _visibleRows = 10;
 const _dialogWidth = 380.0;
@@ -168,6 +170,61 @@ List<_SearchResult> _computeResults(List<_GameEntry> entries, String query) {
   return results;
 }
 
+/// Opens [GameSearchDialog] and returns the chosen 0-based index, or null
+/// if dismissed. Empty lists do not open a dialog.
+Future<int?> showGameSearchDialog({
+  required BuildContext context,
+  required List<GameNavItem> games,
+  required int currentIndex,
+}) {
+  if (games.isEmpty) return Future.value(null);
+  final safeIndex = currentIndex.clamp(0, games.length - 1);
+  return showDialog<int>(
+    context: context,
+    builder: (_) => GameSearchDialog(games: games, currentIndex: safeIndex),
+  );
+}
+
+/// Labeled search control next to [GameNumberField].
+///
+/// Number jump and text search stay two controls on purpose: the counter is
+/// "where am I / go to N", and this button is "find by player, event, or
+/// opening". Merging them into one field hides the current position while
+/// you type and makes "12" mean both game 12 and a text query.
+class GameSearchButton extends StatelessWidget {
+  static const _minSize = Size(88, 40);
+
+  final VoidCallback? onPressed;
+  final AppShortcut? shortcut;
+
+  const GameSearchButton({super.key, required this.onPressed, this.shortcut});
+
+  @override
+  Widget build(BuildContext context) {
+    final button = OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: const Icon(Icons.search, size: 20),
+      label: const Text('Search'),
+      style: OutlinedButton.styleFrom(
+        minimumSize: _minSize,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        tapTargetSize: MaterialTapTargetSize.padded,
+        visualDensity: VisualDensity.standard,
+      ),
+    );
+    const description = 'Search games by player, event or opening';
+    final shortcut = this.shortcut;
+    if (shortcut == null) {
+      return Tooltip(message: description, child: button);
+    }
+    return ShortcutTooltip(
+      description: description,
+      shortcut: shortcut,
+      child: button,
+    );
+  }
+}
+
 class GameSearchDialog extends StatefulWidget {
   final List<GameNavItem> games;
   final int currentIndex;
@@ -289,11 +346,11 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                       )
                       .clamp(_resultRowHeight, _visibleRows * _resultRowHeight),
                   child: results.isEmpty
-                      ? Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
+                      ? const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
                           child: Text(
                             'No matches',
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppColors.onSurfaceMuted,
                               fontSize: 13,
                             ),

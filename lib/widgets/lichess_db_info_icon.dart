@@ -82,7 +82,7 @@ class _InfoPopupOverlayState extends State<_InfoPopupOverlay> {
 
     try {
       final url = await lichess.startOAuthFlow();
-      LichessAuthService.openUrl(url);
+      await LichessAuthService.openUrl(url);
       final success = await lichess.waitForCallback();
       if (mounted && success) {
         widget.onDismiss();

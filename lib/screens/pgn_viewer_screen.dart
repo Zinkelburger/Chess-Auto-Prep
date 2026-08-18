@@ -11,6 +11,7 @@
 /// flow in `pgn_viewer_screen_repertoire.dart`.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'package:dartchess/dartchess.dart' show Position;
 import 'package:file_picker/file_picker.dart';
@@ -43,6 +44,7 @@ import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
 import '../utils/app_shortcuts.dart';
 import '../utils/keyboard_shortcut_utils.dart';
+import '../widgets/shortcut_tooltip.dart';
 import '../widgets/app_breadcrumb_trail.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/app_settings_button.dart';
@@ -117,6 +119,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// can be told from any other [AppState] change (see [_onAppStateChanged]).
   bool _isCurrentMode = false;
 
+  /// Cached so [dispose] does not [BuildContext.read] after unmount.
+  AppState? _appState;
+
   @override
   void initState() {
     super.initState();
@@ -150,12 +155,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       final gamePosition = _gamePanePosition;
       if (gamePosition != null) _controller.onPositionChanged(gamePosition);
     });
-    _controller.loadRecentFiles();
-    _controller.loadCollections();
-    _controller.loadSolitaireSettings();
+    unawaited(_controller.loadRecentFiles());
+    unawaited(_controller.loadCollections());
+    unawaited(_controller.loadSolitaireSettings());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final appState = context.read<AppState>();
+        _appState = appState;
         appState.addListener(_onAppStateChanged);
         _isCurrentMode = appState.currentMode == AppMode.pgnViewer;
         // The screen may have been created by the very mode switch that set
@@ -178,7 +184,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   void _onAppStateChanged() {
-    final appState = context.read<AppState>();
+    final appState = _appState;
+    if (appState == null) return;
     final isCurrent = appState.currentMode == AppMode.pgnViewer;
     final arrived = isCurrent && !_isCurrentMode;
     _isCurrentMode = isCurrent;
@@ -195,7 +202,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   bool _consumePendingViewerFile(AppState appState) {
     final handoff = appState.takeHandoff<OpenPgnViewer>();
     if (handoff == null) return false;
-    _openFromHandoff(handoff);
+    unawaited(_openFromHandoff(handoff));
     return true;
   }
 
@@ -344,10 +351,12 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (_analysisController.isAnalyzing) return;
     if (_analysisController.evals.isNotEmpty) return;
     if (!EngineGate.ensureAvailable(context)) return;
-    _analysisController.analyzeGame(
-      _controller.filteredGames[_controller.currentGameIndex].pgnText,
-      onAnnotatedMovetext: _controller.persistMoveComments,
-      onComplete: _detectTrophies,
+    unawaited(
+      _analysisController.analyzeGame(
+        _controller.filteredGames[_controller.currentGameIndex].pgnText,
+        onAnnotatedMovetext: _controller.persistMoveComments,
+        onComplete: _detectTrophies,
+      ),
     );
   }
 
@@ -391,6 +400,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   void dispose() {
+    _appState?.removeListener(_onAppStateChanged);
     windowManager.removeListener(this);
     MyRepertoireSettings.instance.removeListener(
       _onRepertoireDesignationsChanged,
@@ -401,11 +411,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _analysisController.dispose();
     _tabController.dispose();
     _focusNode.dispose();
-    try {
-      context.read<AppState>().removeListener(_onAppStateChanged);
-    } catch (_) {
-      /* provider may already be disposed */
-    }
     super.dispose();
   }
 
@@ -427,13 +432,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   @override
   Future<void> _pickFile() async {
     _singleGameFocus = false;
-    final result = await FilePicker.pickFiles(
+    final file = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: ['pgn', 'txt'],
       initialDirectory: _controller.pickFileInitialDirectory(),
     );
-    if (result == null || result.files.single.path == null) return;
-    await _loadFile(result.files.single.path!);
+    if (file == null || file.path == null) return;
+    await _loadFile(file.path!);
   }
 
   @override
@@ -504,23 +509,25 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   void _openSliceDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => PgnSliceDialog(
-        allGames: _controller.allGames
-            .map((g) => (headers: g.headers, pgnText: g.pgnText))
-            .toList(),
-        currentFen: normalizeFen(_controller.currentPosition.fen),
-        initialConfig: _controller.activeSliceConfig.isEmpty
-            ? null
-            : _controller.activeSliceConfig,
-        fenIndex: _controller.fenIndex,
-        presets: _controller.slicePresets,
-        onApply: (indices, config) {
-          _controller.applySlice(indices, config);
-        },
-      ),
-    ).then((_) => _reclaimFocus());
+    unawaited(
+      showDialog(
+        context: context,
+        builder: (ctx) => PgnSliceDialog(
+          allGames: _controller.allGames
+              .map((g) => (headers: g.headers, pgnText: g.pgnText))
+              .toList(),
+          currentFen: normalizeFen(_controller.currentPosition.fen),
+          initialConfig: _controller.activeSliceConfig.isEmpty
+              ? null
+              : _controller.activeSliceConfig,
+          fenIndex: _controller.fenIndex,
+          presets: _controller.slicePresets,
+          onApply: (indices, config) {
+            _controller.applySlice(indices, config);
+          },
+        ),
+      ).then((_) => _reclaimFocus()),
+    );
   }
 
   /// Trophies found in the game currently loaded, shown as a banner and
@@ -555,7 +562,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _deviationKey = key;
     _deviationReport = null;
     if (key == null) return;
-    _computeDeviation(key);
+    unawaited(_computeDeviation(key));
   }
 
   /// Settings → My repertoires changed: the banner may now be wrong (or
@@ -717,13 +724,15 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   void _showTrophyCabinet() {
-    showDialog(
-      context: context,
-      builder: (_) => const SolitaireTrophyCabinet(),
-    ).then((_) {
-      _controller.loadSolitaireSettings();
-      _reclaimFocus();
-    });
+    unawaited(
+      showDialog(
+        context: context,
+        builder: (_) => const SolitaireTrophyCabinet(),
+      ).then((_) {
+        unawaited(_controller.loadSolitaireSettings());
+        _reclaimFocus();
+      }),
+    );
   }
 
   @override
@@ -906,22 +915,21 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   Future<void> _openGameSearch() async {
+    if (_controller.showOpeningTree) {
+      await openTreePositionGameSearch(
+        context: context,
+        controller: _controller,
+      );
+      _reclaimFocus();
+      return;
+    }
     if (_controller.filteredGames.isEmpty) return;
-    final selected = await showDialog<int>(
+    final selected = await showGameSearchDialog(
       context: context,
-      builder: (_) => GameSearchDialog(
-        games: _controller.filteredGames
-            .map(
-              (g) => GameNavItem(
-                label: g.label,
-                studyRating: g.studyRating,
-                studySummary: g.studySummary,
-                headers: g.headers,
-              ),
-            )
-            .toList(),
-        currentIndex: _controller.currentGameIndex,
-      ),
+      games: [
+        for (final g in _controller.filteredGames) GameNavItem.fromEntry(g),
+      ],
+      currentIndex: _controller.currentGameIndex,
     );
     if (selected != null) _controller.goToGame(selected);
     _reclaimFocus();
@@ -1057,7 +1065,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     ),
     // Search moved off S when S became "next game": one key, one meaning,
     // app-wide. `/` is the search key everywhere it is free, and it is free
-    // here because the viewer has no move box for it to focus.
+    // here because the viewer has no move box for it to focus. While the
+    // opening tree is up the nav bar is gone, so `/` searches the games at
+    // the current tree position instead of the whole file.
     ...KeyBinding.forShortcut(
       AppShortcut.searchGames,
       'Search games',
@@ -1083,7 +1093,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         } else if (_editMode) {
           _toggleEditMode();
         } else if (_controller.isFullScreen) {
-          _controller.exitFullScreen();
+          unawaited(_controller.exitFullScreen());
         } else {
           _pgnWidgetController.clearEphemeralMoves();
         }

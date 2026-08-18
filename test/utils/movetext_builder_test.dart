@@ -66,5 +66,15 @@ void main() {
         '1. e4 e5',
       );
     });
+
+    test(
+      'omits ChessBase null moves but keeps White numbering after a pass',
+      () {
+        expect(
+          buildNumberedMovetext(['d4', '--', 'Nf3', 'Z0', 'e3']),
+          '1. d4 2. Nf3 3. e3',
+        );
+      },
+    );
   });
 }

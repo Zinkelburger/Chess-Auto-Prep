@@ -39,6 +39,7 @@ import '../utils/chess_utils.dart' show playUciMove, uciToSan;
 import '../utils/fen_utils.dart';
 import 'engine/stockfish_pool.dart';
 import 'engine/engine_lifecycle.dart';
+import 'engine/engine_interrupt.dart';
 import 'eval/chessdb_api_provider.dart';
 import 'generation/build_run.dart';
 import 'generation/fen_map.dart';
@@ -136,6 +137,7 @@ class TreeBuildService {
   /// unwind promptly.
   void stopBuild() {
     _run?.cancel.requestStop();
+    _pool.stopAll();
     if (_isPaused) {
       _isPaused = false;
       _pauseCompleter?.complete();
@@ -331,6 +333,12 @@ class TreeBuildService {
       _log('Stats: ${jsonEncode(_stats.toJson())}');
 
       return tree;
+    } on Object catch (e) {
+      if (run.isCancelled && isEngineInterrupt(e)) {
+        tree.buildComplete = false;
+        return tree;
+      }
+      rethrow;
     } finally {
       _isBuilding = false;
       run.stopwatch.stop();

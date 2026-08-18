@@ -1,6 +1,8 @@
 /// The ranked study list produced by a prep run.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -131,7 +133,7 @@ class PrepReportPanel extends StatelessWidget {
   }
 
   void _copy(BuildContext context, String text, String message) {
-    Clipboard.setData(ClipboardData(text: text));
+    unawaited(Clipboard.setData(ClipboardData(text: text)));
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));

@@ -5,18 +5,12 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
 import '../interactive_pgn_editor.dart';
-
-void _copyToClipboard(BuildContext context, String text, String message) {
-  Clipboard.setData(ClipboardData(text: text));
-  showAppSnackBar(context, message);
-}
 
 class EditMainZone extends StatelessWidget {
   const EditMainZone({
@@ -87,7 +81,8 @@ class EditMainZone extends StatelessWidget {
       onDirty: onDirty,
       onCopyToClipboard:
           onCopyToClipboard ??
-          (text, message) => _copyToClipboard(context, text, message),
+          (text, message) =>
+              copyToClipboard(context, text, successMessage: message),
       onViewInLines: onViewInLines,
       trapIndex: trapIndex,
       boardPreview: boardPreview,

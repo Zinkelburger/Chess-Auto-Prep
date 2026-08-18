@@ -16,3 +16,6 @@ linter:
     - avoid_unnecessary_containers
     - sized_box_for_whitespace
     - use_key_in_widget_constructors
+    - unawaited_futures
+    - discarded_futures
+    - use_build_context_synchronously

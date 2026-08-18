@@ -1,6 +1,7 @@
 /// Unified Engine Pane - Single table combining Stockfish, Maia, and Probability
 library;
 
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -143,7 +144,7 @@ class _UnifiedEnginePaneState extends _UnifiedEnginePaneStateBase
     if (_isActive) {
       _analysis.beginEnginePaneAnalysis(widget.fen);
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _startInitialAnalysis();
+        unawaited(_startInitialAnalysis());
       });
     }
   }

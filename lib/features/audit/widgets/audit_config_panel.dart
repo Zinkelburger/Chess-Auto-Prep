@@ -4,6 +4,8 @@
 /// back to the screen via callbacks.
 library;
 
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
@@ -111,7 +113,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
     _service.cancel();
     if (mounted) setState(() => _isAuditing = false);
     widget.onAuditingChanged(false);
-    EngineLifecycle.instance.exitGeneration();
+    unawaited(EngineLifecycle.instance.exitGeneration());
   }
 
   AuditConfig _buildConfig() {
@@ -134,9 +136,6 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pgn', 'txt'],
-      allowMultiple: true,
-      withData: false,
-      withReadStream: false,
     );
     if (result == null || result.files.isEmpty) return;
     if (!mounted) return;
@@ -198,7 +197,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
       if (mounted) setState(() => _isAuditing = false);
     } finally {
       onAuditingChangedCb(false);
-      EngineLifecycle.instance.exitGeneration();
+      await EngineLifecycle.instance.exitGeneration();
     }
   }
 

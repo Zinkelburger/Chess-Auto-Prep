@@ -189,6 +189,6 @@ mixin _TacticsBrowseActions on _TacticsControlPanelStateBase, _TacticsPlayback {
     if (current == null) return;
     final index = _database.positions.indexWhere((p) => p.fen == current.fen);
     if (index < 0) return;
-    _showEditDialog(index);
+    unawaited(_showEditDialog(index));
   }
 }

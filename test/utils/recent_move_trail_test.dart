@@ -48,10 +48,17 @@ void main() {
       expect(recentMoveTrailSquares(Chess.initial, sans), {'e4', 'd5', 'd8'});
     });
 
-    test('null-move placeholders are skipped, unparsable SAN stops replay', () {
-      expect(recentMoveTrailSquares(Chess.initial, const ['--', 'e4']), {
-        'e2',
-        'e4',
+    test('null-move tokens pass the turn without marking squares', () {
+      // `--` from the start is White passing, so e4 is no longer legal.
+      expect(
+        recentMoveTrailSquares(Chess.initial, const ['--', 'e4']),
+        isEmpty,
+      );
+      expect(recentMoveTrailSquares(Chess.initial, const ['d4', '--', 'Nf3']), {
+        'd2',
+        'd4',
+        'g1',
+        'f3',
       });
       expect(
         recentMoveTrailSquares(Chess.initial, const ['e4', 'Qxh8', 'e5']),

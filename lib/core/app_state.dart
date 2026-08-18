@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dartchess/dartchess.dart';
@@ -28,6 +30,20 @@ extension AppModeLabel on AppMode {
     AppMode.pgnViewer => 'PGN Viewer',
     AppMode.study => 'Study',
     AppMode.tournament => 'Tournament Prep',
+  };
+}
+
+extension AppModeEngine on AppMode {
+  /// Modes whose [IndexedStack] child keeps an interactive engine pane alive.
+  /// Leaving these for a lighter mode suspends Stockfish; entering them
+  /// resumes it if the user still wants the engine.
+  bool get usesInteractiveEngine => switch (this) {
+    AppMode.tactics ||
+    AppMode.positionAnalysis ||
+    AppMode.repertoire ||
+    AppMode.pgnViewer ||
+    AppMode.study => true,
+    AppMode.repertoireTrainer || AppMode.tournament => false,
   };
 }
 
@@ -244,25 +260,25 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
 
   void setLichessUsername(String? username) {
     _lichessUsername = username;
-    _saveLichessUsername(username);
+    unawaited(_saveLichessUsername(username));
     notifyListeners();
   }
 
   void setChesscomUsername(String? username) {
     _chesscomUsername = username;
-    _saveChesscomUsername(username);
+    unawaited(_saveChesscomUsername(username));
     notifyListeners();
   }
 
   void setLichessLastFetch(DateTime? date) {
     _lichessLastFetch = date;
-    _saveLastFetch('lichess_last_fetch_ms', date);
+    unawaited(_saveLastFetch('lichess_last_fetch_ms', date));
     notifyListeners();
   }
 
   void setChesscomLastFetch(DateTime? date) {
     _chesscomLastFetch = date;
-    _saveLastFetch('chesscom_last_fetch_ms', date);
+    unawaited(_saveLastFetch('chesscom_last_fetch_ms', date));
     notifyListeners();
   }
 

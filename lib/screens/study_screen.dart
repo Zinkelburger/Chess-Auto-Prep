@@ -15,6 +15,7 @@ import 'package:provider/provider.dart';
 import '../constants/ui_breakpoints.dart';
 import '../core/app_state.dart';
 import '../core/study_controller.dart';
+import '../models/board_annotation.dart';
 import '../models/move_tree.dart' show TreePath;
 import '../services/repertoire_service.dart';
 import '../services/study_import/study_import_controller.dart';
@@ -69,7 +70,7 @@ class _StudyScreenState extends State<StudyScreen> {
     super.initState();
     _study = context.read<StudyController>();
     _study.addListener(_onStudyChanged);
-    _study.refreshStudyList();
+    unawaited(_study.refreshStudyList());
     _seenImportGeneration = _import.resultGeneration;
     _import.addListener(_onImportResult);
 
@@ -829,7 +830,7 @@ class _StudyScreenState extends State<StudyScreen> {
                 return KeyEventResult.ignored;
               },
               onFocusChange: (focused) {
-                if (!focused) _commitNameEdit();
+                if (!focused) unawaited(_commitNameEdit());
               },
               child: TextField(
                 controller: _nameEditController,
@@ -888,13 +889,13 @@ class _StudyScreenState extends State<StudyScreen> {
           onSelected: (action) {
             switch (action) {
               case 'importUrl':
-                _importFromUrl();
+                unawaited(_importFromUrl());
               case 'import':
-                _importPgn();
+                unawaited(_importPgn());
               case 'export':
-                _exportPgn();
+                unawaited(_exportPgn());
               case 'delete':
-                _deleteCurrentStudy();
+                unawaited(_deleteCurrentStudy());
             }
           },
           itemBuilder: (_) => [
@@ -1051,15 +1052,15 @@ class _StudyScreenState extends State<StudyScreen> {
                   onSelected: (action) {
                     switch (action) {
                       case 'manage':
-                        _manageChapters();
+                        unawaited(_manageChapters());
                       case 'add_from_position':
-                        _addChapter(fromPosition: true);
+                        unawaited(_addChapter(fromPosition: true));
                       case 'set_position':
-                        _editChapterPosition();
+                        unawaited(_editChapterPosition());
                       case 'rename':
-                        _renameChapterAt(_study.chapterIndex);
+                        unawaited(_renameChapterAt(_study.chapterIndex));
                       case 'delete':
-                        _deleteChapterAt(_study.chapterIndex);
+                        unawaited(_deleteChapterAt(_study.chapterIndex));
                     }
                   },
                   // "Train this chapter" used to sit here as well as in the app
@@ -1109,7 +1110,7 @@ class _StudyScreenState extends State<StudyScreen> {
               onPromote: _study.promote,
               onMakeMainLine: _study.makeMainLine,
               onCopyToClipboard: (text, message) {
-                Clipboard.setData(ClipboardData(text: text));
+                unawaited(Clipboard.setData(ClipboardData(text: text)));
                 showAppSnackBar(context, message);
               },
             ),

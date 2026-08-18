@@ -180,7 +180,7 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
     // Load the form's shared settings and reset the board
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        _form.loadPrefs();
+        unawaited(_form.loadPrefs());
         _resetBoardToStart();
       }
     });
@@ -204,7 +204,7 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
     });
 
     // Auto-load positions on startup
-    _loadPositions();
+    unawaited(_loadPositions());
 
     // Pre-warm Stockfish pool + Maia so imports start instantly — but off the
     // startup frame burst. The 45MB Maia ONNX parse is synchronous FFI;
@@ -474,7 +474,7 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
                       ? _editCurrentTactic
                       : null,
                   onSetRating: (rating) {
-                    _session.setRating(rating);
+                    unawaited(_session.setRating(rating));
                     setState(() {});
                   },
                   solutionSanMoves: solutionSan,

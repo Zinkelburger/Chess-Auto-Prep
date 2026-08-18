@@ -217,7 +217,7 @@ class LichessAuthService extends ChangeNotifier with SafeChangeNotifier {
           ..statusCode = 200
           ..headers.contentType = ContentType.html
           ..write(_callbackHtml(code != null && error == null));
-        request.response.close();
+        unawaited(request.response.close());
 
         if (kDebugMode) {
           log.e(

@@ -165,10 +165,12 @@ mixin _GenerationConfigAdvanced
               onTap: () {
                 final target = section.anchor.currentContext;
                 if (target == null) return;
-                Scrollable.ensureVisible(
-                  target,
-                  duration: const Duration(milliseconds: 220),
-                  alignment: 0.02,
+                unawaited(
+                  Scrollable.ensureVisible(
+                    target,
+                    duration: const Duration(milliseconds: 220),
+                    alignment: 0.02,
+                  ),
                 );
               },
             ),

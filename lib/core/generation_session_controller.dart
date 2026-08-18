@@ -19,6 +19,7 @@ import '../models/build_tree_node.dart';
 import '../services/coherence_service.dart';
 import '../utils/log.dart';
 import '../services/engine/engine_lifecycle.dart';
+import '../services/engine/engine_interrupt.dart';
 import '../services/engine/stockfish_pool.dart';
 import '../services/generation/course/chapter_titles.dart';
 import '../services/generation/course/course_composer.dart';
@@ -259,7 +260,13 @@ class GenerationSessionController extends ChangeNotifier
       _cancelRequested = true;
       lastRunSummary = e.message;
     } catch (e) {
-      await _recordFailure(config, filePath, e);
+      if (_cancelRequested && isEngineInterrupt(e)) {
+        lastRunSummary = lastRunSummary.isNotEmpty
+            ? lastRunSummary
+            : 'Build cancelled.';
+      } else {
+        await _recordFailure(config, filePath, e);
+      }
     } finally {
       await _endRun(engineEntered: engineEntered, filePath: filePath);
     }
@@ -1050,7 +1057,7 @@ class GenerationSessionController extends ChangeNotifier
     _isPaused = true;
     _pipelineSw.stop();
     currentJob?.updateStatus(JobStatus.paused);
-    savePartialTree();
+    unawaited(savePartialTree());
     // Hand the engine back so analysis works everywhere while paused.
     unawaited(EngineLifecycle.instance.pauseGeneration());
     _flushProgressNotify();
@@ -1085,7 +1092,7 @@ class GenerationSessionController extends ChangeNotifier
     _cancelRequested = true;
     // A discard throws the tree away, so there is no point saving it here —
     // the unwind deletes the partial file instead.
-    if (!_discardRequested) savePartialTree();
+    if (!_discardRequested) unawaited(savePartialTree());
     if (_isPaused) {
       _isPaused = false;
       _pipelineSw.start();

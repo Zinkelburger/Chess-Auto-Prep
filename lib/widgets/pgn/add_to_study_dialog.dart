@@ -3,6 +3,8 @@
 /// offers creating a new one with that name.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../models/repertoire_metadata.dart';
@@ -52,7 +54,7 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
   void initState() {
     super.initState();
     _chapterCtrl = TextEditingController(text: widget.initialChapterName);
-    _loadStudies();
+    unawaited(_loadStudies());
   }
 
   Future<void> _loadStudies() async {

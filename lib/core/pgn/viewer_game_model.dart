@@ -16,6 +16,7 @@ import '../../models/move_tree.dart';
 import '../../services/pgn_parsing_service.dart' show startPositionFromGame;
 import '../../utils/fen_utils.dart';
 import '../../utils/pgn_comment_utils.dart' show joinComments, toggleQualityNag;
+import '../../utils/chess_utils.dart' show playSanOrNullMove;
 import 'pgn_variation_extractor.dart';
 
 /// What [ViewerGameModel.addMove] did with the move.
@@ -87,11 +88,9 @@ class ViewerGameModel {
     if (moveIndex < 0 || moveIndex > moveHistory.length) return false;
     Position pos = startPosition;
     for (int i = 0; i < moveIndex; i++) {
-      final san = moveHistory[i].san;
-      if (san == '--') continue;
-      final move = pos.parseSan(san);
-      if (move == null) break;
-      pos = pos.play(move);
+      final next = playSanOrNullMove(pos, moveHistory[i].san);
+      if (next == null) break;
+      pos = next;
     }
     mainLineIndex = moveIndex;
     currentPosition = pos;
@@ -107,11 +106,9 @@ class ViewerGameModel {
     Position pos = startPosition;
     if (normalizeFen(pos.fen) == target) return 0;
     for (int i = 0; i < moveHistory.length; i++) {
-      final san = moveHistory[i].san;
-      if (san == '--') continue;
-      final move = pos.parseSan(san);
-      if (move == null) break;
-      pos = pos.play(move);
+      final next = playSanOrNullMove(pos, moveHistory[i].san);
+      if (next == null) break;
+      pos = next;
       if (normalizeFen(pos.fen) == target) return i + 1;
     }
     return null;
@@ -127,17 +124,14 @@ class ViewerGameModel {
 
     Position pos = startPosition;
     for (int i = 0; i < branchPly; i++) {
-      final san = moveHistory[i].san;
-      if (san == '--') continue;
-      final move = pos.parseSan(san);
-      if (move == null) break;
-      pos = pos.play(move);
+      final next = playSanOrNullMove(pos, moveHistory[i].san);
+      if (next == null) break;
+      pos = next;
     }
     for (final node in path) {
-      if (node.san == '--') continue;
-      final move = pos.parseSan(node.san);
-      if (move == null) break;
-      pos = pos.play(move);
+      final next = playSanOrNullMove(pos, node.san);
+      if (next == null) break;
+      pos = next;
     }
 
     mainLineIndex = branchPly;
@@ -285,12 +279,12 @@ class ViewerGameModel {
       Position pos = startPosition;
       var reached = true;
       for (int i = 0; i < ply; i++) {
-        final m = pos.parseSan(moveHistory[i].san);
-        if (m == null) {
+        final next = playSanOrNullMove(pos, moveHistory[i].san);
+        if (next == null) {
           reached = false;
           break;
         }
-        pos = pos.play(m);
+        pos = next;
       }
       if (!reached) return;
 

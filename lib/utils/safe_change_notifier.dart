@@ -10,6 +10,10 @@ import 'package:flutter/foundation.dart';
 mixin SafeChangeNotifier on ChangeNotifier {
   bool _disposed = false;
 
+  /// True after [dispose]. Async completions use this to skip work, not
+  /// just to swallow [notifyListeners].
+  bool get isDisposed => _disposed;
+
   @override
   void dispose() {
     _disposed = true;

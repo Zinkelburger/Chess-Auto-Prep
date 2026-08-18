@@ -339,9 +339,9 @@ String fenAfterMoves(String startFen, List<String> sanMoves, int upToIndex) {
   try {
     Position pos = Chess.fromSetup(Setup.parseFen(startFen));
     for (int i = 0; i <= upToIndex && i < sanMoves.length; i++) {
-      final move = pos.parseSan(sanMoves[i]);
-      if (move == null) break;
-      pos = pos.play(move);
+      final next = playSanOrNullMove(pos, sanMoves[i]);
+      if (next == null) break;
+      pos = next;
     }
     return pos.fen;
   } catch (_) {
@@ -355,13 +355,44 @@ Set<String> uciHighlightSquares(String uci) {
   return {uci.substring(0, 2), uci.substring(2, 4)};
 }
 
+/// ChessBase `--`, SCID `Z0`, UCI `0000`, and the `@@@@` alias: this side
+/// passes without touching the board. dartchess rewrites the last three to
+/// `--` when parsing PGN; keep the aliases so a leaked token still passes
+/// instead of aborting the line.
+///
+/// ChessBase documents the idea as a "null move" (they export `--`; older
+/// databases and Chessable Lifetime Repertoires often write `Z0`).
+bool isNullMoveSan(String san) =>
+    san == '--' || san == 'Z0' || san == '0000' || san == '@@@@';
+
+/// Play [san] from [pos]. A null-move token passes the turn without changing
+/// the board, so `1. d4 Z0 2. Nf3` stays legal (Black passed). Returns null
+/// when [san] is not a null move and is not legal in [pos].
+Position? playSanOrNullMove(Position pos, String san) {
+  if (isNullMoveSan(san)) {
+    return pos.copyWith(
+      turn: pos.turn.opposite,
+      fullmoves: pos.turn == Side.black ? pos.fullmoves + 1 : pos.fullmoves,
+      halfmoves: pos.halfmoves + 1,
+      epSquare: null,
+    );
+  }
+  final move = pos.parseSan(san);
+  if (move == null) return null;
+  try {
+    return pos.play(move);
+  } catch (_) {
+    return null;
+  }
+}
+
 /// From/to squares of the last [lastN] half-moves of [sans] played from
 /// [start] — the Chessable-style trail that keeps each side's most recent
 /// move subtly marked on the board.
 ///
 /// Castling is reported on the king's visual destination (e1→g1), not
-/// dartchess's king→rook encoding. `--` null-move placeholders are skipped;
-/// replay stops at the first unparsable SAN.
+/// dartchess's king→rook encoding. Null-move tokens pass the turn without
+/// marking squares; replay stops at the first unparsable SAN.
 Set<String> recentMoveTrailSquares(
   Position start,
   List<String> sans, {
@@ -371,7 +402,12 @@ Set<String> recentMoveTrailSquares(
   // Flat from,to pairs, trimmed so only the newest [lastN] moves remain.
   final trail = <String>[];
   for (final san in sans) {
-    if (san == '--') continue;
+    if (isNullMoveSan(san)) {
+      final next = playSanOrNullMove(pos, san);
+      if (next == null) break;
+      pos = next;
+      continue;
+    }
     final move = pos.parseSan(san);
     if (move == null) break;
     if (move is NormalMove) {

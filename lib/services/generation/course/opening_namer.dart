@@ -8,6 +8,7 @@ library;
 import 'package:dartchess/dartchess.dart';
 
 import '../../../utils/fen_utils.dart';
+import '../../../utils/chess_utils.dart' show playSanOrNullMove;
 import '../../opening_book_service.dart';
 
 /// An ECO code and opening name, e.g. `B36` / `Sicilian Defense: Accelerated
@@ -76,14 +77,9 @@ class OpeningNamer {
 
     consider(0);
     for (var ply = 0; ply < movesSan.length; ply++) {
-      final Move? move;
-      try {
-        move = position.parseSan(movesSan[ply]);
-      } catch (_) {
-        break;
-      }
-      if (move == null) break;
-      position = position.play(move);
+      final next = playSanOrNullMove(position, movesSan[ply]);
+      if (next == null) break;
+      position = next;
       consider(ply + 1);
     }
 

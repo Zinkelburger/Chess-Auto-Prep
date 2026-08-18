@@ -198,7 +198,7 @@ class TrickHuntService {
         discoveriesRun++;
         if (discovery.lines.isEmpty) continue;
 
-        _evalCache.putEvalCpWhite(
+        _evalCache.putEvalCpWhiteSoon(
           target.fen,
           discovery.lines.first.effectiveCp,
           config.discoveryDepth,

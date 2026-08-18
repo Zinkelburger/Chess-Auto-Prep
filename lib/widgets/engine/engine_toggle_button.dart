@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -47,9 +49,9 @@ class EngineToggleButton extends StatelessWidget {
               ? null
               : () {
                   if (isOn) {
-                    lifecycle.toggleOff();
+                    unawaited(lifecycle.toggleOff());
                   } else {
-                    lifecycle.toggleOn();
+                    unawaited(lifecycle.toggleOn());
                   }
                 },
           visualDensity: VisualDensity.compact,

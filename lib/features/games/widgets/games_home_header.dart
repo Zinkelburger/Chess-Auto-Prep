@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
@@ -185,7 +187,7 @@ class _MyBooksRowState extends State<MyBooksRow> {
   @override
   void initState() {
     super.initState();
-    _settings.ensureLoaded();
+    unawaited(_settings.ensureLoaded());
   }
 
   static String _summary(List<String> paths) {

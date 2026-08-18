@@ -86,13 +86,15 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     final tree = _controller.openingTree;
     if (tree == null) return;
     _openBottomPane(BottomPaneTab.findings);
-    _auditController.launchResume(
-      snapshot: snap,
-      tree: tree,
-      isWhiteRepertoire: _controller.isRepertoireWhite,
-      jobManager: _jobManager,
-      repertoireLabel: _controller.currentRepertoire?.name,
-      repertoireFilePath: _repertoireFilePath,
+    unawaited(
+      _auditController.launchResume(
+        snapshot: snap,
+        tree: tree,
+        isWhiteRepertoire: _controller.isRepertoireWhite,
+        jobManager: _jobManager,
+        repertoireLabel: _controller.currentRepertoire?.name,
+        repertoireFilePath: _repertoireFilePath,
+      ),
     );
   }
 
@@ -156,9 +158,11 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
       // A finished build's own trap index is consistent with the tree it just
       // built, so it wins; a repertoire loaded from disk has no bundle in
       // memory and falls back to the sidecar file.
-      _trapSession.adoptFromBuild(
-        ctrl.current?.traps,
-        fallbackFilePath: _controller.currentRepertoire?.filePath,
+      unawaited(
+        _trapSession.adoptFromBuild(
+          ctrl.current?.traps,
+          fallbackFilePath: _controller.currentRepertoire?.filePath,
+        ),
       );
       if (actions.justFinished) _showLinesSurface();
     }
@@ -348,9 +352,11 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
   void _runCoherence() {
     if (_controller.repertoireLines.length < 5) return;
     final cs = _generationController.coherenceService;
-    cs.compute(
-      lines: _controller.repertoireLines,
-      playAsWhite: _controller.isRepertoireWhite,
+    unawaited(
+      cs.compute(
+        lines: _controller.repertoireLines,
+        playAsWhite: _controller.isRepertoireWhite,
+      ),
     );
     // Remove first: _runCoherence fires on every generation notify, and
     // duplicate registrations would stack up between coherence updates.
@@ -372,15 +378,13 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
 
   Future<void> _importPgnFromFile() async {
     try {
-      final result = await FilePicker.pickFiles(
+      final file = await FilePicker.pickFile(
         type: FileType.custom,
         allowedExtensions: ['pgn', 'txt'],
-        withData: false,
-        withReadStream: false,
       );
-      if (result == null || result.files.isEmpty || !mounted) return;
+      if (file == null || !mounted) return;
 
-      final path = result.files.single.path;
+      final path = file.path;
       if (path == null) return;
 
       final content = await StorageFactory.instance.readFile(path);

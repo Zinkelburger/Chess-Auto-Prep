@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
@@ -66,11 +68,13 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
     if (widget.initialConfig != null) {
       _applyInitialConfig(widget.initialConfig!);
     }
-    CdbDirectEvalProvider.probeAvailability().then((available) {
-      if (!mounted) return;
-      setState(() => _cdbDirectAvailable = available);
-    });
-    _reloadPresets();
+    unawaited(
+      CdbDirectEvalProvider.probeAvailability().then((available) {
+        if (!mounted) return;
+        setState(() => _cdbDirectAvailable = available);
+      }),
+    );
+    unawaited(_reloadPresets());
   }
 
   @override

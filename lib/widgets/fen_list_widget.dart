@@ -474,7 +474,9 @@ class _FenListWidgetState extends State<FenListWidget>
           padding: EdgeInsets.zero,
           tooltip: 'Copy FEN',
           onPressed: () {
-            Clipboard.setData(ClipboardData(text: expandFen(stats.fen)));
+            unawaited(
+              Clipboard.setData(ClipboardData(text: expandFen(stats.fen))),
+            );
             showAppSnackBar(context, AppMessages.fenCopied);
           },
         ),

@@ -88,7 +88,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     _training.addListener(_onTrainingChanged);
     _training.setRepertoire(widget.repertoire);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initialize();
+      unawaited(_initialize());
     });
   }
 
@@ -291,7 +291,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       () {
         final settings = _training.settings;
         settings.learnRequiresClick = !settings.learnRequiresClick;
-        settings.save();
+        settings.saveSoon();
         setState(() {});
       },
     ),
@@ -370,12 +370,12 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
 
   void _onRepertoireSelected(RepertoireMetadata repertoire) {
     _training.setRepertoire(repertoire);
-    _training.loadRepertoire();
+    unawaited(_training.loadRepertoire());
   }
 
   void _onStudySelected(RepertoireMetadata study) {
     _training.setStudySource(study);
-    _training.loadRepertoire();
+    unawaited(_training.loadRepertoire());
   }
 
   /// Board on the left, panel on the right — the same frame in every state,
@@ -705,7 +705,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
             queueLabel: 'left in this run',
             onAutoNextChanged: (v) {
               setState(() => _training.settings.autoNext = v);
-              _training.settings.save();
+              _training.settings.saveSoon();
             },
           ),
         ],
@@ -755,28 +755,30 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   /// Read-only book view of a line: board + annotated movetext, with
   /// train/edit handoffs. Never touches training or review state.
   void _previewLine(RepertoireLine line) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => LinePreviewDialog(
-        line: line,
-        editLabel: _training.sourceIsStudy
-            ? 'Edit in Study'
-            : 'Edit in Builder',
-        onEdit: () {
-          Navigator.of(dialogContext).pop();
-          if (_training.sourceIsStudy) {
-            _openInStudy();
-          } else if (_training.repertoire != null) {
-            context.read<AppState>().switchToBuilder(
-              repertoirePath: _training.repertoire!.filePath,
-              lineId: line.id,
-            );
-          }
-        },
-        onTrain: () {
-          Navigator.of(dialogContext).pop();
-          _training.startLine(line);
-        },
+    unawaited(
+      showDialog<void>(
+        context: context,
+        builder: (dialogContext) => LinePreviewDialog(
+          line: line,
+          editLabel: _training.sourceIsStudy
+              ? 'Edit in Study'
+              : 'Edit in Builder',
+          onEdit: () {
+            Navigator.of(dialogContext).pop();
+            if (_training.sourceIsStudy) {
+              _openInStudy();
+            } else if (_training.repertoire != null) {
+              context.read<AppState>().switchToBuilder(
+                repertoirePath: _training.repertoire!.filePath,
+                lineId: line.id,
+              );
+            }
+          },
+          onTrain: () {
+            Navigator.of(dialogContext).pop();
+            _training.startLine(line);
+          },
+        ),
       ),
     );
   }

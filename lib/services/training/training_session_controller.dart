@@ -16,6 +16,7 @@ import '../../models/repertoire_review_entry.dart'
 import '../../models/completed_move.dart';
 import '../../models/training_settings.dart';
 import '../../utils/pgn_comment_utils.dart' show filterDisplayComment;
+import '../../utils/chess_utils.dart' show isNullMoveSan, playSanOrNullMove;
 import '../../utils/safe_change_notifier.dart';
 import '../asked_questions_store.dart';
 import '../generation/tree_my_ease.dart' show computeLinePlayability;
@@ -659,14 +660,16 @@ class TrainingSessionController extends ChangeNotifier
     notifyListeners();
     onLineStarted?.call();
 
-    Future.microtask(() async {
-      if (!await _playIntroMoves()) return;
-      if (phase == TrainingPhase.learning) {
-        await advanceLearnPhase();
-      } else {
-        await advanceDrillPhase();
-      }
-    });
+    unawaited(
+      Future.microtask(() async {
+        if (!await _playIntroMoves()) return;
+        if (phase == TrainingPhase.learning) {
+          await advanceLearnPhase();
+        } else {
+          await advanceDrillPhase();
+        }
+      }),
+    );
   }
 
   /// First move index (within the effective line length) whose comment has
@@ -699,7 +702,7 @@ class TrainingSessionController extends ChangeNotifier
       if (generation != _lineGeneration) return false;
 
       final san = currentLine!.moves[i];
-      if (session.position.parseSan(san) == null) {
+      if (playSanOrNullMove(session.position, san) == null) {
         error = 'Invalid move in line: $san';
         playingIntro = false;
         notifyListeners();
@@ -776,6 +779,7 @@ class TrainingSessionController extends ChangeNotifier
 
   bool _isUserMove(int moveIndex) {
     if (currentLine == null) return false;
+    if (isNullMoveSan(currentLine!.moves[moveIndex])) return false;
     final startIsWhite = currentLine!.startPosition.turn == Side.white;
     final isWhiteMove = startIsWhite
         ? (moveIndex % 2 == 0)
@@ -813,8 +817,7 @@ class TrainingSessionController extends ChangeNotifier
   void _playOpponentMove(int moveIndex) {
     if (currentLine == null) return;
     final san = currentLine!.moves[moveIndex];
-    final move = session.position.parseSan(san);
-    if (move == null) {
+    if (playSanOrNullMove(session.position, san) == null) {
       error = 'Could not play opponent move $san';
       notifyListeners();
       return;
@@ -1068,14 +1071,16 @@ class TrainingSessionController extends ChangeNotifier
     opponentWaitingForAck = false;
     currentAnnotation = null;
     notifyListeners();
-    Future.microtask(() {
-      if (phase == TrainingPhase.learning) {
-        currentMoveIndex++;
-        advanceLearnPhase();
-      } else {
-        currentMoveIndex++;
-        advanceDrillPhase();
-      }
-    });
+    unawaited(
+      Future.microtask(() {
+        if (phase == TrainingPhase.learning) {
+          currentMoveIndex++;
+          unawaited(advanceLearnPhase());
+        } else {
+          currentMoveIndex++;
+          unawaited(advanceDrillPhase());
+        }
+      }),
+    );
   }
 }

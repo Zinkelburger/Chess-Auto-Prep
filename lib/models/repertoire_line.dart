@@ -4,6 +4,7 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 
+import '../utils/chess_utils.dart' show isNullMoveSan, playSanOrNullMove;
 import '../utils/pgn_comment_utils.dart' show filterDisplayComment;
 import '../utils/training_markers.dart' show hasPuzzleStart, hasPuzzleEnd;
 
@@ -77,13 +78,12 @@ class RepertoireLine {
     final leadupMoves = <String>[];
 
     for (int i = 0; i < moveIndex; i++) {
-      final move = position.parseSan(moves[i]);
-      if (move != null) {
-        leadupMoves.add(moves[i]);
-        position = position.play(move);
-      } else {
+      final next = playSanOrNullMove(position, moves[i]);
+      if (next == null) {
         throw StateError('Invalid move in repertoire: ${moves[i]}');
       }
+      if (!isNullMoveSan(moves[i])) leadupMoves.add(moves[i]);
+      position = next;
     }
 
     final correctMove = moves[moveIndex];

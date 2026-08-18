@@ -1,6 +1,8 @@
 /// Side-by-side Stockfish + expectimax under the PGN editor.
 library;
 
+import 'dart:async';
+
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
@@ -126,7 +128,7 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
     if (EngineLifecycle.instance.state == EngineState.off) {
       // Expectimax pane visible = shared pool wanted — turn it on; the
       // lifecycle listener re-enters here once the engine reaches idle.
-      EngineLifecycle.instance.toggleOn();
+      unawaited(EngineLifecycle.instance.toggleOn());
       return;
     }
 
@@ -140,13 +142,15 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
 
     if (_hasPrecomputedExpectimax(fen)) return;
 
-    _onTheFly.ensureRunning(
-      fen: widget.controller.fen,
-      playAsWhite: widget.controller.isRepertoireWhite,
-      mainTree: widget.tree,
-      mainConfig: widget.treeConfig,
-      mainFenMap: widget.fenMap,
-      maxDepth: _settings.onTheFlyMaxDepth,
+    unawaited(
+      _onTheFly.ensureRunning(
+        fen: widget.controller.fen,
+        playAsWhite: widget.controller.isRepertoireWhite,
+        mainTree: widget.tree,
+        mainConfig: widget.treeConfig,
+        mainFenMap: widget.fenMap,
+        maxDepth: _settings.onTheFlyMaxDepth,
+      ),
     );
   }
 

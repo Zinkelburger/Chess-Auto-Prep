@@ -162,6 +162,12 @@ class EvalCache {
     }
   }
 
+  /// Fire-and-forget [putEvalCpWhite] for search pipelines that must not
+  /// stall on SQLite.
+  void putEvalCpWhiteSoon(String fen, int cpWhite, int depth) {
+    unawaited(putEvalCpWhite(fen, cpWhite, depth));
+  }
+
   /// Total cached entries (in the DB, not the L1 mirror).
   Future<int> count() async {
     await init();

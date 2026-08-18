@@ -29,6 +29,7 @@ library;
 import 'package:dartchess/dartchess.dart';
 
 import '../../utils/movetext_builder.dart';
+import '../../utils/chess_utils.dart' show isNullMoveSan, playSanOrNullMove;
 import '../../models/tactics_position.dart';
 import '../../models/tactics_session_settings.dart';
 import '../pgn_parsing_service.dart'
@@ -257,6 +258,14 @@ bool _sameLine(List<String> a, List<String> b) {
       String? note = game.comments.isNotEmpty ? game.comments.join(' ') : null;
 
       for (final nodeData in game.moves.mainline()) {
+        if (isNullMoveSan(nodeData.san)) {
+          final next = playSanOrNullMove(pos, nodeData.san);
+          if (next == null) {
+            throw FormatException('illegal move ${nodeData.san}');
+          }
+          pos = next;
+          continue;
+        }
         final move = pos.parseSan(nodeData.san);
         if (move == null) {
           throw FormatException('illegal move ${nodeData.san}');
@@ -370,6 +379,14 @@ void _expandVariations({
         final ply = line.plies[t];
         if (cardFen == null && t >= line.deviation && pos.turn == solverSide) {
           cardFen = pos.fen;
+        }
+        if (isNullMoveSan(ply.san)) {
+          final next = playSanOrNullMove(pos, ply.san);
+          if (next == null) {
+            throw FormatException('illegal move ${ply.san}');
+          }
+          pos = next;
+          continue;
         }
         final move = pos.parseSan(ply.san);
         if (move == null) {

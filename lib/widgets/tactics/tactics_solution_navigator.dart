@@ -2,6 +2,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../models/tactics_position.dart';
+import '../../utils/chess_utils.dart' show playSanOrNullMove;
 import '../pgn_viewer_widget.dart';
 
 /// Owns the "Show Solution" navigation state for the tactics Tactic tab:
@@ -136,9 +137,9 @@ class TacticsSolutionNavigator {
       Position pos = Chess.fromSetup(Setup.parseFen(tactic.fen));
       final san = _sanCache;
       for (int i = 0; i <= index && i < san.length; i++) {
-        final move = pos.parseSan(san[i]);
-        if (move == null) break;
-        pos = pos.play(move);
+        final next = playSanOrNullMove(pos, san[i]);
+        if (next == null) break;
+        pos = next;
       }
       setBoardPosition(pos);
     } catch (e) {

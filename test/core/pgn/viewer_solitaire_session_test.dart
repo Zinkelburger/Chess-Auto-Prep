@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chess_auto_prep/core/pgn/pgn_viewer_handle.dart';
+import 'package:chess_auto_prep/core/pgn/solitaire_controller.dart';
 import 'package:chess_auto_prep/core/pgn/viewer_solitaire_session.dart';
 
 /// Characterization tests for [ViewerSolitaireSession].
@@ -251,4 +252,20 @@ void main() {
     f.session.toggle();
     expect(f.session.dispose, returnsNormally);
   });
+
+  test(
+    'after a correct guess, skips a Black null ply to the next White move',
+    () {
+      final c = SolitaireController();
+      addTearDown(c.dispose);
+      c.start(
+        mainLineLength: 3,
+        userPlaysWhite: true,
+        mainlineSans: const ['d4', '--', 'Nf3'],
+      );
+      expect(c.revealedPly, 0);
+      expect(c.handleMove('d4', Chess.initial, 'd4'), isTrue);
+      expect(c.revealedPly, 2);
+    },
+  );
 }

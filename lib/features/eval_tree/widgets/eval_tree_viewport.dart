@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
@@ -282,8 +284,8 @@ class _FadingNodeChipState extends State<_FadingNodeChip>
         if (status == AnimationStatus.completed) {
           widget.onComplete();
         }
-      })
-      ..forward();
+      });
+    unawaited(_controller.forward());
   }
 
   @override

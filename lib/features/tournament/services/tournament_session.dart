@@ -316,7 +316,7 @@ class TournamentSession extends ChangeNotifier with SafeChangeNotifier {
   @override
   void dispose() {
     _watchDebounce?.cancel();
-    _watch?.cancel();
+    unawaited(_watch?.cancel());
     super.dispose();
   }
 

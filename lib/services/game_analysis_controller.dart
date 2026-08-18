@@ -20,7 +20,8 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/engine_settings.dart';
-import '../utils/chess_utils.dart' show uciPvToSan, uciToSan, toStandardUci;
+import '../utils/chess_utils.dart'
+    show uciPvToSan, uciToSan, toStandardUci, isNullMoveSan, playSanOrNullMove;
 import '../utils/ease_utils.dart' show winningChanceFromCp;
 import '../utils/eval_constants.dart';
 import '../utils/pgn_comment_utils.dart';
@@ -146,8 +147,16 @@ parseCachedEvals(String pgnText) {
   final results = <MoveEval>[];
   int missingCount = 0;
 
+  var realPlies = 0;
   for (int i = 0; i < mainline.length; i++) {
     final moveData = mainline[i];
+    if (isNullMoveSan(moveData.san)) {
+      final next = playSanOrNullMove(pos, moveData.san);
+      if (next == null) break;
+      pos = next;
+      continue;
+    }
+    realPlies++;
     final fenBefore = pos.fen;
     final move = pos.parseSan(moveData.san);
     if (move == null) break;
@@ -217,7 +226,7 @@ parseCachedEvals(String pgnText) {
     );
   }
 
-  if (results.length < mainline.length - 2) return null;
+  if (results.length < realPlies - 2) return null;
 
   final startWinChance = cpToWinningChance(0, null);
   double prevWinChance = startWinChance;
@@ -381,9 +390,18 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
               bool isWhiteToMove,
               PgnNodeData moveData,
               String moveUci,
+              int ply,
             })
           >[];
+      var plyIndex = 0;
       for (final moveData in mainline) {
+        if (isNullMoveSan(moveData.san)) {
+          final next = playSanOrNullMove(pos, moveData.san);
+          if (next == null) break;
+          pos = next;
+          plyIndex++;
+          continue;
+        }
         final fenBefore = pos.fen;
         final move = pos.parseSan(moveData.san);
         if (move == null) break;
@@ -399,7 +417,9 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
           isWhiteToMove: pos.turn == Side.white,
           moveData: moveData,
           moveUci: uci,
+          ply: plyIndex + 1,
         ));
+        plyIndex++;
       }
 
       // A game ending in mate or stalemate has no position left to search
@@ -481,7 +501,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
           final p = batch[j];
           final result = results[j];
           final globalIdx = batchStart + j;
-          final ply = globalIdx + 1;
+          final ply = p.ply;
 
           final isTerminal =
               globalIdx == positions.length - 1 &&
@@ -623,12 +643,10 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
   }) {
     final cp = result.scoreCp;
     if (cp == null || result.scoreMate != null) return;
-    unawaited(
-      EvalCache.instance.putEvalCpWhite(
-        fen,
-        sideToMoveIsWhite ? cp : -cp,
-        depth,
-      ),
+    EvalCache.instance.putEvalCpWhiteSoon(
+      fen,
+      sideToMoveIsWhite ? cp : -cp,
+      depth,
     );
   }
 

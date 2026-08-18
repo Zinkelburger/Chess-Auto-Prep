@@ -732,9 +732,28 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
+  String? lastWriteError;
+
   Future<void> _enqueueWrite(Future<void> Function() operation) {
     final next = _pendingWrite.then((_) => operation());
-    _pendingWrite = next.catchError((_) {});
+    _pendingWrite = next.then(
+      (_) {
+        if (lastWriteError != null) {
+          lastWriteError = null;
+          notifyListeners();
+        }
+      },
+      onError: (Object e, StackTrace st) {
+        lastWriteError = '$e';
+        log.e(
+          'Tactics database write failed',
+          name: 'TacticsDatabase',
+          error: e,
+          stackTrace: st,
+        );
+        notifyListeners();
+      },
+    );
     return next;
   }
 }

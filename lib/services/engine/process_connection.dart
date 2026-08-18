@@ -14,6 +14,7 @@ class ProcessConnection implements EngineConnection {
       StreamController<String>.broadcast();
   StreamSubscription? _processSubscription;
   bool _isDisposed = false;
+  final Completer<void> _done = Completer<void>();
 
   /// Cached resolved path — avoids repeated file-existence checks and
   /// platform-channel calls for every worker spawn.
@@ -105,7 +106,19 @@ class ProcessConnection implements EngineConnection {
           });
 
       // Drain stderr to prevent buffer fill-up that can stall the process.
-      _process!.stderr.drain<void>();
+      unawaited(_process!.stderr.drain<void>());
+
+      unawaited(
+        _process!.exitCode.then((code) {
+          if (_isDisposed) return;
+          if (!_done.isCompleted) _done.complete();
+          if (!_stdoutController.isClosed) {
+            _stdoutController.addError(
+              StateError('Stockfish process exited ($code)'),
+            );
+          }
+        }),
+      );
     } catch (e) {
       log.e('Error starting Stockfish process: $e');
       rethrow;
@@ -114,6 +127,9 @@ class ProcessConnection implements EngineConnection {
 
   @override
   Stream<String> get stdout => _stdoutController.stream;
+
+  @override
+  Future<void> get done => _done.future;
 
   @override
   Future<void> waitForReady() async {
@@ -153,7 +169,7 @@ class ProcessConnection implements EngineConnection {
   void dispose() {
     if (_isDisposed) return; // idempotent
     _isDisposed = true;
-    _processSubscription?.cancel();
+    unawaited(_processSubscription?.cancel());
 
     final proc = _process;
     _process = null;
@@ -178,6 +194,6 @@ class ProcessConnection implements EngineConnection {
         });
       }
     }
-    _stdoutController.close();
+    unawaited(_stdoutController.close());
   }
 }

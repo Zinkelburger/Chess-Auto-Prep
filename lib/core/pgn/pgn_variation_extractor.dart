@@ -8,6 +8,7 @@ library;
 import 'package:dartchess/dartchess.dart';
 
 import '../../models/move_tree.dart';
+import '../../utils/chess_utils.dart' show playSanOrNullMove;
 
 /// Walk the parsed PGN mainline and extract sideline variations at each ply.
 ///
@@ -38,12 +39,11 @@ Map<int, List<MoveNode>> extractPgnVariations(PgnGame game, Position startPos) {
       }
     }
 
-    // Advance position along mainline (skip null moves)
-    if (mainChild.data.san != '--') {
-      final move = pos.parseSan(mainChild.data.san);
-      if (move == null) break;
-      pos = pos.play(move);
-    }
+    // Advance along the mainline. Null moves (ChessBase `--` / `Z0`) pass
+    // the turn without changing the board so later same-side moves stay legal.
+    final next = playSanOrNullMove(pos, mainChild.data.san);
+    if (next == null) break;
+    pos = next;
     ply++;
     node = mainChild;
   }
@@ -57,19 +57,8 @@ MoveNode? _convertPgnSubtree(
   Position posBeforeMove,
 ) {
   final san = pgnNode.data.san;
-
-  Position posAfter;
-  if (san == '--') {
-    posAfter = posBeforeMove;
-  } else {
-    final move = posBeforeMove.parseSan(san);
-    if (move == null) return null;
-    try {
-      posAfter = posBeforeMove.play(move);
-    } catch (_) {
-      return null;
-    }
-  }
+  final posAfter = playSanOrNullMove(posBeforeMove, san);
+  if (posAfter == null) return null;
 
   // [MoveNode] holds a single comment string, so everything the PGN attached
   // to this move is joined into it rather than dropped: all of `comments` (a

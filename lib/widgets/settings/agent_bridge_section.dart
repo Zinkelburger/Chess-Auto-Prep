@@ -5,6 +5,8 @@
 /// tournament prep through the stdio shim in `tools/mcp/`.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -30,7 +32,7 @@ class _AgentBridgeSectionState extends State<AgentBridgeSection> {
 
   @override
   void dispose() {
-    _server?.stop();
+    unawaited(_server?.stop());
     super.dispose();
   }
 
@@ -164,7 +166,7 @@ class _CommandBox extends StatelessWidget {
             icon: const Icon(Icons.copy, size: 16),
             tooltip: 'Copy command',
             onPressed: () {
-              Clipboard.setData(ClipboardData(text: text));
+              unawaited(Clipboard.setData(ClipboardData(text: text)));
               ScaffoldMessenger.of(
                 context,
               ).showSnackBar(const SnackBar(content: Text('Command copied.')));

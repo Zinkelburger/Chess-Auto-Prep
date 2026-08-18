@@ -35,5 +35,27 @@ void main() {
       final vars = _extract('1. e4 e5 (1... c5 \$1 \$14) *');
       expect(vars[1]!.single.nags, const [1, 14]);
     });
+
+    test('Chessable Z0 null moves keep the rest of the sideline', () {
+      // Lifetime Repertoires intro chapters: a dummy first move, then the
+      // intended White setup with Black passing via Z0 between each ply.
+      const pgn =
+          '1. Z0 ({Welcome} 1. d4 {We intend to play} Z0 2. Nf3 {and} '
+          'Z0 3. e3 {next.}) *';
+      final vars = _extract(pgn);
+      final d4 = vars[0]!.single;
+      expect(d4.san, 'd4');
+      expect(d4.comment, contains('We intend to play'));
+      expect(d4.children.single.san, '--');
+      expect(d4.children.single.children.single.san, 'Nf3');
+      final e3 =
+          d4.children.single.children.single.children.single.children.single;
+      expect(e3.san, 'e3');
+      expect(e3.comment, contains('next.'));
+      expect(
+        e3.fen.split(' ')[0],
+        'rnbqkbnr/pppppppp/8/8/3P4/4PN2/PPP2PPP/RNBQKB1R',
+      );
+    });
   });
 }

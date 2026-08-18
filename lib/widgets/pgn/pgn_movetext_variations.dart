@@ -106,32 +106,37 @@ void _walkVariation(
   required List<_VarRow> out,
   required Set<int> expandedBranches,
 }) {
-  // Null-move nodes carry only a comment.
-  if (node.san == '--') {
+  final isNullMove = isNullMoveSan(node.san);
+
+  // Null-move nodes pass the turn: show any comment, hide the SAN, then
+  // keep walking so `1. d4 Z0 2. Nf3` does not stop at the pass.
+  if (isNullMove) {
     if (node.comment != null && node.comment!.isNotEmpty) {
       row.addAll(_variationCommentSpans(view, node.comment!, depth));
     }
-    return;
-  }
+  } else {
+    if (isWhiteTurn) {
+      row.add(
+        TextSpan(
+          text: '$moveNumber. ',
+          style: PgnTextStyles.moveNumberAt(depth),
+        ),
+      );
+    } else if (isFirstOfRow) {
+      row.add(
+        TextSpan(
+          text: '$moveNumber... ',
+          style: PgnTextStyles.moveNumberAt(depth),
+        ),
+      );
+    }
 
-  if (isWhiteTurn) {
-    row.add(
-      TextSpan(text: '$moveNumber. ', style: PgnTextStyles.moveNumberAt(depth)),
-    );
-  } else if (isFirstOfRow) {
-    row.add(
-      TextSpan(
-        text: '$moveNumber... ',
-        style: PgnTextStyles.moveNumberAt(depth),
-      ),
-    );
-  }
+    row.add(_variationMoveSpan(view, node, depth, branchPly));
+    row.add(const TextSpan(text: ' '));
 
-  row.add(_variationMoveSpan(view, node, depth, branchPly));
-  row.add(const TextSpan(text: ' '));
-
-  if (node.comment != null && node.comment!.isNotEmpty) {
-    row.addAll(_variationCommentSpans(view, node.comment!, depth));
+    if (node.comment != null && node.comment!.isNotEmpty) {
+      row.addAll(_variationCommentSpans(view, node.comment!, depth));
+    }
   }
 
   if (node.children.isEmpty) return;
@@ -145,7 +150,7 @@ void _walkVariation(
       node.children.first,
       moveNumber: nextMoveNumber,
       isWhiteTurn: nextIsWhite,
-      isFirstOfRow: false,
+      isFirstOfRow: isNullMove ? isFirstOfRow : false,
       depth: depth,
       branchPly: branchPly,
       row: row,

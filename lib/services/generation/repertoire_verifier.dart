@@ -257,7 +257,7 @@ class RepertoireVerifier {
     void walk(BuildTreeNode node) {
       final resolved = resolveTransposition(node, fenMap);
       if (resolved.children.isEmpty) return;
-      if (!visited.add(canonicalizeFen(resolved.fen))) return;
+      if (!enterPositionOnce(resolved, visited)) return;
 
       final isOurMove = resolved.isWhiteToMove == config.playAsWhite;
       if (isOurMove) {

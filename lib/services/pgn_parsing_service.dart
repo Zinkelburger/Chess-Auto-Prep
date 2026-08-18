@@ -17,6 +17,7 @@ import 'dart:isolate';
 import 'package:dartchess/dartchess.dart';
 
 import '../models/pgn_filter_models.dart';
+import '../utils/chess_utils.dart' show isNullMoveSan, playSanOrNullMove;
 import '../utils/fen_utils.dart';
 
 export '../models/pgn_filter_models.dart';
@@ -200,15 +201,67 @@ bool gamePassesThroughFen(
 
     if (normalizeFen(pos.fen) == targetFen) return true;
     for (final moveData in mainline) {
-      final move = pos.parseSan(moveData.san);
-      if (move == null) break;
-      pos = pos.play(move);
+      final next = playSanOrNullMove(pos, moveData.san);
+      if (next == null) break;
+      pos = next;
       if (normalizeFen(pos.fen) == targetFen) return true;
     }
   } catch (_) {
     // Best-effort; failure here is non-fatal and intentionally ignored.
   }
   return false;
+}
+
+/// Mainline SAN after [targetFen] is reached. Comments and variations are
+/// already stripped by the PGN parser. Empty if the FEN is never hit, or
+/// if the game ends at that position.
+///
+/// Caps at [maxPlies] so a list row never materialises a whole long game.
+/// Isolate-safe.
+List<String> mainlineSansAfterFen(
+  Map<String, String> headers,
+  String pgnText,
+  String targetFen, {
+  int maxPlies = 40,
+}) {
+  try {
+    final game = PgnGame.parsePgn(pgnText);
+    final mainline = game.moves.mainline().toList();
+
+    final setupFlag = headers['SetUp'] ?? headers['Setup'] ?? '';
+    final fenHeader = headers['FEN'] ?? '';
+    Position pos;
+    if (setupFlag == '1' && fenHeader.isNotEmpty) {
+      pos = Chess.fromSetup(Setup.parseFen(expandFen(fenHeader)));
+    } else {
+      pos = Chess.initial;
+    }
+
+    final target = normalizeFen(targetFen);
+    var i = 0;
+    if (normalizeFen(pos.fen) != target) {
+      var found = false;
+      for (; i < mainline.length; i++) {
+        final next = playSanOrNullMove(pos, mainline[i].san);
+        if (next == null) break;
+        pos = next;
+        if (normalizeFen(pos.fen) == target) {
+          found = true;
+          i++;
+          break;
+        }
+      }
+      if (!found) return const [];
+    }
+
+    final remaining = <String>[];
+    for (var j = i; j < mainline.length && remaining.length < maxPlies; j++) {
+      remaining.add(mainline[j].san);
+    }
+    return remaining;
+  } catch (_) {
+    return const [];
+  }
 }
 
 /// Extracts the `// Color:` comment from the top of a repertoire PGN.
@@ -332,7 +385,11 @@ bool gameMatchesSequence(
   if (groups.isEmpty) return true;
   try {
     final game = PgnGame.parsePgn(pgnText);
-    final moves = game.moves.mainline().map((n) => n.san).toList();
+    final moves = game.moves
+        .mainline()
+        .map((n) => n.san)
+        .where((s) => !isNullMoveSan(s))
+        .toList();
     return _matchGroupsAt(moves, groups, 0, 0, maxGap);
   } catch (_) {
     return false;
@@ -365,9 +422,9 @@ String? parseTargetFen(String? input) {
   try {
     Position pos = Chess.initial;
     for (final t in tokens) {
-      final move = pos.parseSan(t);
-      if (move == null) return null;
-      pos = pos.play(move);
+      final next = playSanOrNullMove(pos, t);
+      if (next == null) return null;
+      pos = next;
     }
     return normalizeFen(pos.fen);
   } catch (_) {
@@ -421,9 +478,9 @@ Map<String, List<int>> buildFenIndex(
 
       record(normalizeFen(pos.fen), i);
       for (final moveData in mainline) {
-        final move = pos.parseSan(moveData.san);
-        if (move == null) break;
-        pos = pos.play(move);
+        final next = playSanOrNullMove(pos, moveData.san);
+        if (next == null) break;
+        pos = next;
         record(normalizeFen(pos.fen), i);
       }
     } catch (_) {

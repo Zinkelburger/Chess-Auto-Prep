@@ -28,6 +28,8 @@
 /// guarding an in-flight job (the download progress dialogs) still blocks it.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -63,7 +65,7 @@ class EscapeToPopScope extends StatelessWidget {
     if (navigator == null || !navigator.canPop()) {
       return KeyEventResult.ignored;
     }
-    navigator.maybePop();
+    unawaited(navigator.maybePop());
     return KeyEventResult.handled;
   }
 }

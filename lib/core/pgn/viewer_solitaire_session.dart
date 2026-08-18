@@ -126,6 +126,7 @@ class ViewerSolitaireSession {
       mainLineLength: handle.mainLineLength,
       userPlaysWhite: userPlaysWhite(),
       whiteToMoveAtStart: currentPosition().turn == Side.white,
+      mainlineSans: handle.mainLineMoves,
     );
     controller.removeListener(_onControllerChanged);
     controller.addListener(_onControllerChanged);
@@ -140,6 +141,7 @@ class ViewerSolitaireSession {
       mainLineLength: handle.mainLineLength,
       userPlaysWhite: userPlaysWhite(),
       whiteToMoveAtStart: currentPosition().turn == Side.white,
+      mainlineSans: handle.mainLineMoves,
     );
   }
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// What kind of content the trainer drills.
@@ -211,6 +213,8 @@ class TrainingSettings {
       chapterDelimiter: prefs.getString(_keyChapterDelimiter) ?? '#',
     );
   }
+
+  void saveSoon() => unawaited(save());
 
   Future<void> save() async {
     final prefs = await SharedPreferences.getInstance();

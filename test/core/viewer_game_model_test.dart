@@ -91,5 +91,32 @@ void main() {
         expect(m.currentPosition.fen, m.analysisPath.single.fen);
       },
     );
+
+    test('ChessBase Z0 intro line is navigable through the passes', () {
+      const pgn =
+          '1. Z0 ({Welcome} 1. d4 {We intend to play} Z0 2. Nf3 {and} '
+          'Z0 3. e3 {next.}) *';
+      final m = _loaded(pgn);
+      expect(m.moveHistory.single.san, '--');
+
+      final e3 = m
+          .variationsByPly[0]!
+          .single
+          .children
+          .single
+          .children
+          .single
+          .children
+          .single
+          .children
+          .single;
+      expect(e3.san, 'e3');
+      expect(m.goToAnalysisNode(e3, 0), isTrue);
+      expect(
+        m.currentPosition.fen.split(' ')[0],
+        'rnbqkbnr/pppppppp/8/8/3P4/4PN2/PPP2PPP/RNBQKB1R',
+      );
+      expect(m.currentPosition.turn, Side.black);
+    });
   });
 }

@@ -5,6 +5,8 @@
 /// [EditContextLayoutPrefs].
 library;
 
+import 'dart:async';
+
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -97,7 +99,7 @@ class _EditContextZoneState extends State<EditContextZone> {
     super.initState();
     _selectedViews = _resolveInitialSelection();
     widget.selectedViewsNotifier?.addListener(_onExternalViewsChanged);
-    _loadLayout();
+    unawaited(_loadLayout());
   }
 
   Future<void> _loadLayout() async {
@@ -178,12 +180,12 @@ class _EditContextZoneState extends State<EditContextZone> {
       }
     });
     _notifySelection();
-    _persistLayout();
+    unawaited(_persistLayout());
   }
 
   void _setLayout(EditContextLayout layout) {
     setState(() => _layout = layout.syncVisible(_selectedViews));
-    _persistLayout();
+    unawaited(_persistLayout());
   }
 
   void _placeView(EditContextView view, int columnIndex) {
@@ -281,35 +283,37 @@ class _EditContextZoneState extends State<EditContextZone> {
       _toggleView(spec.view, true);
     }
     final colCount = _layout.columns.length;
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: Text('Place "${spec.label}" in…'),
-              subtitle: const Text('Long-press chips for this menu'),
-            ),
-            for (var i = 0; i < colCount; i++)
+    unawaited(
+      showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        builder: (ctx) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
               ListTile(
-                leading: const Icon(Icons.view_column, size: 20),
-                title: Text('Column ${i + 1}'),
+                title: Text('Place "${spec.label}" in…'),
+                subtitle: const Text('Long-press chips for this menu'),
+              ),
+              for (var i = 0; i < colCount; i++)
+                ListTile(
+                  leading: const Icon(Icons.view_column, size: 20),
+                  title: Text('Column ${i + 1}'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _placeView(spec.view, i);
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.add, size: 20),
+                title: const Text('New column'),
                 onTap: () {
                   Navigator.pop(ctx);
-                  _placeView(spec.view, i);
+                  _placeView(spec.view, colCount);
                 },
               ),
-            ListTile(
-              leading: const Icon(Icons.add, size: 20),
-              title: const Text('New column'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _placeView(spec.view, colCount);
-              },
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

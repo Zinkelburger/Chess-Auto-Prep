@@ -1,6 +1,8 @@
 /// Engine settings model for configuring analysis parameters
 library;
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/engine_defaults.dart';
@@ -11,112 +13,102 @@ import '../utils/safe_change_notifier.dart';
 class EngineSettings with ChangeNotifier, SafeChangeNotifier {
   static const _prefix = 'engine_settings.';
 
+  void _assignIfChanged<T>(T current, T next, void Function(T) assign) {
+    if (current == next) return;
+    assign(next);
+    _persist();
+    notifyListeners();
+  }
+
+  void _assignInRange<T extends num>(
+    T current,
+    T next,
+    T min,
+    T max,
+    void Function(T) assign,
+  ) {
+    if (next < min || next > max) return;
+    _assignIfChanged(current, next, assign);
+  }
+
   // ── Stockfish settings ────────────────────────────────────────────────
 
   /// Number of parallel Stockfish workers (each: 1 thread, 128 MB hash).
   /// Defaults to half the logical cores, minimum 1.
   int _workers = (getLogicalCores() ~/ 2).clamp(1, getLogicalCores());
   int get workers => _workers;
-  set workers(int value) {
-    final clamped = value.clamp(1, systemCores);
-    if (clamped != _workers) {
-      _workers = clamped;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set workers(int value) => _assignIfChanged(
+    _workers,
+    value.clamp(1, systemCores),
+    (v) => _workers = v,
+  );
 
   int _depth = kDefaultDepth;
   int get depth => _depth;
-  set depth(int value) {
-    if (value != _depth && value >= kMinDepth && value <= kMaxDepth) {
-      _depth = value;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set depth(int value) =>
+      _assignInRange(_depth, value, kMinDepth, kMaxDepth, (v) => _depth = v);
 
   int _multiPv = kDefaultMultiPv;
   int get multiPv => _multiPv;
-  set multiPv(int value) {
-    if (value != _multiPv && value >= kMinMultiPv && value <= kMaxMultiPv) {
-      _multiPv = value;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set multiPv(int value) => _assignInRange(
+    _multiPv,
+    value,
+    kMinMultiPv,
+    kMaxMultiPv,
+    (v) => _multiPv = v,
+  );
 
   /// Threads for the inline (PGN) engine worker.  Uses a single Stockfish
   /// process so more threads = faster search on one position.
   int _inlineThreads = kDefaultInlineThreads;
   int get inlineThreads => _inlineThreads;
-  set inlineThreads(int value) {
-    final clamped = value.clamp(1, systemCores);
-    if (clamped != _inlineThreads) {
-      _inlineThreads = clamped;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set inlineThreads(int value) => _assignIfChanged(
+    _inlineThreads,
+    value.clamp(1, systemCores),
+    (v) => _inlineThreads = v,
+  );
 
   /// Maximum total moves to display in the analysis table.
   /// Stockfish MultiPV lines fill guaranteed slots; remaining slots are
   /// filled by the highest-probability Maia + DB candidates.
   int _maxAnalysisMoves = kDefaultMaxAnalysisMoves;
   int get maxAnalysisMoves => _maxAnalysisMoves;
-  set maxAnalysisMoves(int value) {
-    if (value != _maxAnalysisMoves &&
-        value >= kMinMaxAnalysisMoves &&
-        value <= kMaxMaxAnalysisMoves) {
-      _maxAnalysisMoves = value;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set maxAnalysisMoves(int value) => _assignInRange(
+    _maxAnalysisMoves,
+    value,
+    kMinMaxAnalysisMoves,
+    kMaxMaxAnalysisMoves,
+    (v) => _maxAnalysisMoves = v,
+  );
 
   /// Text rows each engine row gives its principal variation. Above 1 the
   /// continuation wraps instead of being cut off at the pane edge.
   int _pvRows = kDefaultPvRows;
   int get pvRows => _pvRows;
-  set pvRows(int value) {
-    if (value != _pvRows && value >= kMinPvRows && value <= kMaxPvRows) {
-      _pvRows = value;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set pvRows(int value) => _assignInRange(
+    _pvRows,
+    value,
+    kMinPvRows,
+    kMaxPvRows,
+    (v) => _pvRows = v,
+  );
 
   // ── Panel visibility toggles ──────────────────────────────────────────
 
   bool _showStockfish = kDefaultShowStockfish;
   bool get showStockfish => _showStockfish;
-  set showStockfish(bool value) {
-    if (value != _showStockfish) {
-      _showStockfish = value;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set showStockfish(bool value) =>
+      _assignIfChanged(_showStockfish, value, (v) => _showStockfish = v);
 
   bool _showMaia = kDefaultShowMaia;
   bool get showMaia => _showMaia;
-  set showMaia(bool value) {
-    if (value != _showMaia) {
-      _showMaia = value;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set showMaia(bool value) =>
+      _assignIfChanged(_showMaia, value, (v) => _showMaia = v);
 
   bool _showProbability = kDefaultShowProbability;
   bool get showProbability => _showProbability;
-  set showProbability(bool value) {
-    if (value != _showProbability) {
-      _showProbability = value;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set showProbability(bool value) =>
+      _assignIfChanged(_showProbability, value, (v) => _showProbability = v);
 
   // ── Column focus (tap header in engine table to dim) ────────────────────
 
@@ -150,23 +142,16 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
 
   bool _showEngineDock = kDefaultShowEngineDock;
   bool get showEngineDock => _showEngineDock;
-  set showEngineDock(bool value) {
-    if (value != _showEngineDock) {
-      _showEngineDock = value;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set showEngineDock(bool value) =>
+      _assignIfChanged(_showEngineDock, value, (v) => _showEngineDock = v);
 
   bool _showExpectimaxDock = kDefaultShowExpectimaxDock;
   bool get showExpectimaxDock => _showExpectimaxDock;
-  set showExpectimaxDock(bool value) {
-    if (value != _showExpectimaxDock) {
-      _showExpectimaxDock = value;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set showExpectimaxDock(bool value) => _assignIfChanged(
+    _showExpectimaxDock,
+    value,
+    (v) => _showExpectimaxDock = v,
+  );
 
   // ── Opponent probability source (engine table + line odds) ─────────────
 
@@ -174,13 +159,12 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
       OpponentProbabilityMode.maiaLichessFallback;
   OpponentProbabilityMode get opponentProbabilityMode =>
       _opponentProbabilityMode;
-  set opponentProbabilityMode(OpponentProbabilityMode value) {
-    if (value != _opponentProbabilityMode) {
-      _opponentProbabilityMode = value;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set opponentProbabilityMode(OpponentProbabilityMode value) =>
+      _assignIfChanged(
+        _opponentProbabilityMode,
+        value,
+        (v) => _opponentProbabilityMode = v,
+      );
 
   bool get fetchMaiaForOpponent =>
       _opponentProbabilityMode == OpponentProbabilityMode.maia ||
@@ -194,12 +178,8 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
   String _explorerDatabase = kDefaultExplorerDatabase;
   String get explorerDatabase => _explorerDatabase;
   set explorerDatabase(String value) {
-    if (value != _explorerDatabase &&
-        (value == 'lichess' || value == 'masters')) {
-      _explorerDatabase = value;
-      _persist();
-      notifyListeners();
-    }
+    if (value != 'lichess' && value != 'masters') return;
+    _assignIfChanged(_explorerDatabase, value, (v) => _explorerDatabase = v);
   }
 
   bool get explorerUseMasters => _explorerDatabase == 'masters';
@@ -207,21 +187,15 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
   String _explorerSpeeds = kDefaultExplorerSpeeds;
   String get explorerSpeeds => _explorerSpeeds;
   set explorerSpeeds(String value) {
-    if (value != _explorerSpeeds && value.isNotEmpty) {
-      _explorerSpeeds = value;
-      _persist();
-      notifyListeners();
-    }
+    if (value.isEmpty) return;
+    _assignIfChanged(_explorerSpeeds, value, (v) => _explorerSpeeds = v);
   }
 
   String _explorerRatings = kDefaultExplorerRatings;
   String get explorerRatings => _explorerRatings;
   set explorerRatings(String value) {
-    if (value != _explorerRatings && value.isNotEmpty) {
-      _explorerRatings = value;
-      _persist();
-      notifyListeners();
-    }
+    if (value.isEmpty) return;
+    _assignIfChanged(_explorerRatings, value, (v) => _explorerRatings = v);
   }
 
   Set<String> get explorerSpeedSet => _explorerSpeeds
@@ -250,157 +224,135 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
 
   String _probabilityStartMoves = '';
   String get probabilityStartMoves => _probabilityStartMoves;
-  set probabilityStartMoves(String value) {
-    if (value != _probabilityStartMoves) {
-      _probabilityStartMoves = value;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set probabilityStartMoves(String value) => _assignIfChanged(
+    _probabilityStartMoves,
+    value,
+    (v) => _probabilityStartMoves = v,
+  );
 
   // ── Maia ELO setting ──────────────────────────────────────────────────
 
   int _maiaElo = kDefaultMaiaElo;
   int get maiaElo => _maiaElo;
-  set maiaElo(int value) {
-    if (value != _maiaElo && value >= kMinMaiaElo && value <= kMaxMaiaElo) {
-      _maiaElo = value;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set maiaElo(int value) => _assignInRange(
+    _maiaElo,
+    value,
+    kMinMaiaElo,
+    kMaxMaiaElo,
+    (v) => _maiaElo = v,
+  );
 
   // ── Candidate source settings ──────────────────────────────────────────
 
   CandidateSource _candidateSourceOur = CandidateSource.maia;
   CandidateSource get candidateSourceOur => _candidateSourceOur;
-  set candidateSourceOur(CandidateSource value) {
-    if (value != _candidateSourceOur) {
-      _candidateSourceOur = value;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set candidateSourceOur(CandidateSource value) => _assignIfChanged(
+    _candidateSourceOur,
+    value,
+    (v) => _candidateSourceOur = v,
+  );
 
   CandidateSource _candidateSourceOpp = CandidateSource.maia;
   CandidateSource get candidateSourceOpp => _candidateSourceOpp;
-  set candidateSourceOpp(CandidateSource value) {
-    if (value != _candidateSourceOpp) {
-      _candidateSourceOpp = value;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set candidateSourceOpp(CandidateSource value) => _assignIfChanged(
+    _candidateSourceOpp,
+    value,
+    (v) => _candidateSourceOpp = v,
+  );
 
   /// When using Stockfish for candidate generation, how many top moves.
   int _stockfishTopN = kDefaultStockfishTopN;
   int get stockfishTopN => _stockfishTopN;
-  set stockfishTopN(int value) {
-    if (value != _stockfishTopN &&
-        value >= kMinStockfishTopN &&
-        value <= kMaxStockfishTopN) {
-      _stockfishTopN = value;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set stockfishTopN(int value) => _assignInRange(
+    _stockfishTopN,
+    value,
+    kMinStockfishTopN,
+    kMaxStockfishTopN,
+    (v) => _stockfishTopN = v,
+  );
 
   /// Max BFS depth for on-the-fly expectimax (plies from current position).
   int _onTheFlyMaxDepth = kDefaultOnTheFlyMaxDepth;
   int get onTheFlyMaxDepth => _onTheFlyMaxDepth;
-  set onTheFlyMaxDepth(int value) {
-    if (value != _onTheFlyMaxDepth &&
-        value >= kMinOnTheFlyMaxDepth &&
-        value <= kMaxOnTheFlyMaxDepth) {
-      _onTheFlyMaxDepth = value;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set onTheFlyMaxDepth(int value) => _assignInRange(
+    _onTheFlyMaxDepth,
+    value,
+    kMinOnTheFlyMaxDepth,
+    kMaxOnTheFlyMaxDepth,
+    (v) => _onTheFlyMaxDepth = v,
+  );
 
   // ── Expectimax tree build settings ────────────────────────────────────
 
   int _expectimaxOurMultipv = kDefaultExpOurMultipv;
   int get expectimaxOurMultipv => _expectimaxOurMultipv;
-  set expectimaxOurMultipv(int v) {
-    if (v != _expectimaxOurMultipv &&
-        v >= kMinExpOurMultipv &&
-        v <= kMaxExpOurMultipv) {
-      _expectimaxOurMultipv = v;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set expectimaxOurMultipv(int v) => _assignInRange(
+    _expectimaxOurMultipv,
+    v,
+    kMinExpOurMultipv,
+    kMaxExpOurMultipv,
+    (n) => _expectimaxOurMultipv = n,
+  );
 
   int _expectimaxOppMaxChildren = kDefaultExpOppMaxChildren;
   int get expectimaxOppMaxChildren => _expectimaxOppMaxChildren;
-  set expectimaxOppMaxChildren(int v) {
-    if (v != _expectimaxOppMaxChildren &&
-        v >= kMinExpOppMaxChildren &&
-        v <= kMaxExpOppMaxChildren) {
-      _expectimaxOppMaxChildren = v;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set expectimaxOppMaxChildren(int v) => _assignInRange(
+    _expectimaxOppMaxChildren,
+    v,
+    kMinExpOppMaxChildren,
+    kMaxExpOppMaxChildren,
+    (n) => _expectimaxOppMaxChildren = n,
+  );
 
   double _expectimaxOppMassTarget = kDefaultExpOppMassTarget;
   double get expectimaxOppMassTarget => _expectimaxOppMassTarget;
-  set expectimaxOppMassTarget(double v) {
-    if (v != _expectimaxOppMassTarget &&
-        v >= kMinExpOppMassTarget &&
-        v <= kMaxExpOppMassTarget) {
-      _expectimaxOppMassTarget = v;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set expectimaxOppMassTarget(double v) => _assignInRange(
+    _expectimaxOppMassTarget,
+    v,
+    kMinExpOppMassTarget,
+    kMaxExpOppMassTarget,
+    (n) => _expectimaxOppMassTarget = n,
+  );
 
   double _expectimaxMinProb = kDefaultExpMinProb;
   double get expectimaxMinProb => _expectimaxMinProb;
-  set expectimaxMinProb(double v) {
-    if (v != _expectimaxMinProb && v >= kMinExpMinProb && v <= kMaxExpMinProb) {
-      _expectimaxMinProb = v;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set expectimaxMinProb(double v) => _assignInRange(
+    _expectimaxMinProb,
+    v,
+    kMinExpMinProb,
+    kMaxExpMinProb,
+    (n) => _expectimaxMinProb = n,
+  );
 
   int _expectimaxMaxEvalLoss = kDefaultExpMaxEvalLoss;
   int get expectimaxMaxEvalLoss => _expectimaxMaxEvalLoss;
-  set expectimaxMaxEvalLoss(int v) {
-    if (v != _expectimaxMaxEvalLoss &&
-        v >= kMinExpMaxEvalLoss &&
-        v <= kMaxExpMaxEvalLoss) {
-      _expectimaxMaxEvalLoss = v;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set expectimaxMaxEvalLoss(int v) => _assignInRange(
+    _expectimaxMaxEvalLoss,
+    v,
+    kMinExpMaxEvalLoss,
+    kMaxExpMaxEvalLoss,
+    (n) => _expectimaxMaxEvalLoss = n,
+  );
 
   int _expectimaxEvalDepth = kDefaultExpEvalDepth;
   int get expectimaxEvalDepth => _expectimaxEvalDepth;
-  set expectimaxEvalDepth(int v) {
-    if (v != _expectimaxEvalDepth &&
-        v >= kMinExpEvalDepth &&
-        v <= kMaxExpEvalDepth) {
-      _expectimaxEvalDepth = v;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set expectimaxEvalDepth(int v) => _assignInRange(
+    _expectimaxEvalDepth,
+    v,
+    kMinExpEvalDepth,
+    kMaxExpEvalDepth,
+    (n) => _expectimaxEvalDepth = v,
+  );
 
   /// Fast search (best-first + priority pruning) vs Pure search for
   /// on-the-fly expectimax — the same choice the Generate form offers.
   bool _expectimaxFastSearch = kDefaultExpFastSearch;
   bool get expectimaxFastSearch => _expectimaxFastSearch;
-  set expectimaxFastSearch(bool v) {
-    if (v != _expectimaxFastSearch) {
-      _expectimaxFastSearch = v;
-      _persist();
-      notifyListeners();
-    }
-  }
+  set expectimaxFastSearch(bool v) => _assignIfChanged(
+    _expectimaxFastSearch,
+    v,
+    (n) => _expectimaxFastSearch = n,
+  );
 
   // ── Singleton + system detection ─────────────────────────────────────
 
@@ -557,7 +509,11 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
     }
   }
 
-  Future<void> _persist() async {
+  void _persist() {
+    unawaited(_writePrefs());
+  }
+
+  Future<void> _writePrefs() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('${_prefix}workers', _workers);
@@ -644,6 +600,7 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
     _expectimaxMinProb = kDefaultExpMinProb;
     _expectimaxMaxEvalLoss = kDefaultExpMaxEvalLoss;
     _expectimaxEvalDepth = kDefaultExpEvalDepth;
+    _expectimaxFastSearch = kDefaultExpFastSearch;
     _mutedAnalysisColumns.clear();
     _persist();
     notifyListeners();

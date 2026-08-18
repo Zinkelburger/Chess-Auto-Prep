@@ -68,6 +68,9 @@ class MockMaiaEvaluator implements MaiaEvaluator {
 /// Noop engine connection whose stdout never emits.
 class _DummyConnection implements EngineConnection {
   @override
+  Future<void> get done => Completer<void>().future;
+
+  @override
   Stream<String> get stdout => const Stream.empty();
   @override
   Future<void> waitForReady() async {}

@@ -104,13 +104,9 @@ List<Position>? _buildPrefixPositions(PgnMovetextView view) {
   final positions = <Position>[start];
   Position pos = start;
   for (final data in view.moveHistory) {
-    if (data.san == '--') {
-      positions.add(pos);
-      continue;
-    }
-    final move = pos.parseSan(data.san);
-    if (move == null) break;
-    pos = pos.play(move);
+    final next = playSanOrNullMove(pos, data.san);
+    if (next == null) break;
+    pos = next;
     positions.add(pos);
   }
   _prefixCache[view.moveHistory] = _PrefixCacheEntry(

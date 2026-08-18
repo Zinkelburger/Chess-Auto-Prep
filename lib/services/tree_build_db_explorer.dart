@@ -191,6 +191,12 @@ extension TreeBuildServiceDbExplorer on TreeBuildService {
       _log('Stats: ${jsonEncode(_stats.toJson())}');
 
       return tree;
+    } on Object catch (e) {
+      if (run.isCancelled && isEngineInterrupt(e)) {
+        tree.buildComplete = false;
+        return tree;
+      }
+      rethrow;
     } finally {
       _isBuilding = false;
       run.stopwatch.stop();

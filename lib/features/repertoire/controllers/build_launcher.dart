@@ -135,7 +135,7 @@ class BuildLauncher {
       boardFlipped: !repertoire.isRepertoireWhite,
     );
     if (config == null || !context.mounted) return;
-    settings.applyFrom(config);
+    await settings.applyFrom(config);
     showLinesSurface();
     await session.start(
       config,
@@ -152,7 +152,7 @@ class BuildLauncher {
       atRoot: true, // start-from choice is meaningless mid-session
     );
     if (config == null || !context.mounted) return;
-    settings.applyFrom(config);
+    await settings.applyFrom(config);
     session.updateConfig(config);
   }
 }

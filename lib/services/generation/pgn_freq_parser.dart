@@ -17,6 +17,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../utils/file_text_reader.dart';
+import '../../utils/chess_utils.dart' show isNullMoveSan, playSanOrNullMove;
 import '../eval/eval_canonicalize.dart';
 import 'pgn_freq_cache.dart';
 import 'pgn_freq_map.dart';
@@ -316,6 +317,37 @@ _GameScan _scanGame({
     if (!counting && !retaining) break;
 
     // parseSan only yields legal moves, so this covers illegal moves too.
+    // Null-move tokens (ChessBase `--` / `Z0`) pass the turn without a
+    // recorded repertoire move so later same-side SAN stays legal.
+    if (isNullMoveSan(san)) {
+      final next = playSanOrNullMove(position, san);
+      if (next == null) {
+        if (!counting) break;
+        warnings.logMoveFailure(
+          gameIndex: gameIndex,
+          headers: game.headers,
+          failingSan: san,
+          fen: position.fen,
+          reason: 'cannot parse move',
+        );
+        return _GameScan.error;
+      }
+      position = next;
+      fenKey = canonicalizeFen4(position.fen);
+      if (!tracking) {
+        if (fenKey == targetKey) {
+          tracking = true;
+          map.recordReach(fenKey);
+          visitedKeys.add(fenKey);
+        }
+        continue;
+      }
+      if (counting) map.recordReach(fenKey);
+      plyTracked++;
+      if (counting && plyTracked <= kGameRefMaxPly) visitedKeys.add(fenKey);
+      continue;
+    }
+
     final move = _parseSanMove(position, san);
     if (move == null) {
       // Past the counted window nothing is at stake but the tail of a model
@@ -567,9 +599,9 @@ String? buildTrackingTarget(PgnFreqConfig config) {
   }
 
   for (final san in prefixMoves) {
-    final move = _parseSanMove(position, san);
-    if (move == null) return null;
-    position = position.play(move);
+    final next = playSanOrNullMove(position, san);
+    if (next == null) return null;
+    position = next;
   }
   return canonicalizeFen4(position.fen);
 }

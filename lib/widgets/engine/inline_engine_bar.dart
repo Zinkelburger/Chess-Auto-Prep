@@ -132,7 +132,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
       setState(() => _isSearching = false);
     } else {
       setState(() {});
-      if (_engineEnabled && widget.isActive) _runDiscovery();
+      if (_engineEnabled && widget.isActive) unawaited(_runDiscovery());
     }
   }
 
@@ -148,7 +148,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
 
     if (widget.fen != oldWidget.fen ||
         (!oldWidget.isActive && widget.isActive)) {
-      _runDiscovery();
+      unawaited(_runDiscovery());
     }
   }
 
@@ -182,7 +182,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     }
     _lastAnalyzedFen = null;
     if (_engineEnabled && widget.isActive) {
-      _runDiscovery();
+      unawaited(_runDiscovery());
     }
   }
 
@@ -217,7 +217,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
       }
     });
     if (_engineEnabled && widget.isActive) {
-      _runDiscovery();
+      unawaited(_runDiscovery());
     }
   }
 
@@ -309,7 +309,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     final best = result.lines.first;
     final cp = best.scoreCp;
     if (cp == null) return;
-    EvalCache.instance.putEvalCpWhite(fen, cp, best.depth);
+    EvalCache.instance.putEvalCpWhiteSoon(fen, cp, best.depth);
   }
 
   @override

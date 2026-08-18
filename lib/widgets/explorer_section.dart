@@ -4,6 +4,8 @@
 /// OpeningTreeWidget, in a collapsible section with a header toggle.
 library;
 
+import 'dart:async';
+
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -63,7 +65,7 @@ class _ExplorerSectionState extends State<ExplorerSection> {
   @override
   void initState() {
     super.initState();
-    _loadPrefs();
+    unawaited(_loadPrefs());
     widget.controller.addListener(_onControllerChanged);
     _rebuildCandidateService();
     _rebuildTrapIndex();
@@ -209,7 +211,7 @@ class _ExplorerSectionState extends State<ExplorerSection> {
     return InkWell(
       onTap: () {
         setState(() => _expanded = !_expanded);
-        _savePrefs();
+        unawaited(_savePrefs());
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -233,7 +235,7 @@ class _ExplorerSectionState extends State<ExplorerSection> {
                 value: _showTree,
                 onChanged: (v) {
                   setState(() => _showTree = v);
-                  _savePrefs();
+                  unawaited(_savePrefs());
                 },
               ),
           ],

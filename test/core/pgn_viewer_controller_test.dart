@@ -79,6 +79,31 @@ void main() {
       expect(c.currentGameIndex, 1);
     });
 
+    test('loadGameFromTree selects that game and leaves tree mode', () {
+      final c = _makeController();
+      _seed(c, [_game(), _game()]);
+
+      c.loadGameFromTree(1);
+
+      expect(c.currentGameIndex, 1);
+      expect(c.showOpeningTree, isFalse);
+    });
+
+    test(
+      'nextGame clears a tree-landing FEN so the next game starts at move 1',
+      () {
+        final c = _makeController();
+        _seed(c, [_game(), _game()]);
+        c.pgnInitialFen =
+            'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+
+        c.nextGame();
+
+        expect(c.pgnInitialFen, isNull);
+        expect(c.currentGameIndex, 1);
+      },
+    );
+
     test('navigation is a no-op when there are no games', () {
       final c = _makeController();
       expect(c.filteredGames, isEmpty);

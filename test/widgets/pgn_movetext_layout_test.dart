@@ -236,4 +236,27 @@ void main() {
 
     expect(find.text('dxc4', findRichText: true), findsOneWidget);
   });
+
+  testWidgets(
+    'Chessable Z0 null moves do not truncate the Colle intro sideline',
+    (tester) async {
+      await pumpPgn(
+        tester,
+        '1. Z0 ({Welcome to this course} 1. d4 {We intend to play} '
+        'Z0 2. Nf3 {and} Z0 3. e3 {next.}) *',
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('d4'), findsWidgets);
+      expect(find.text('Nf3'), findsWidgets);
+      expect(find.text('e3'), findsWidgets);
+      expect(
+        find.textContaining('We intend to play', findRichText: true),
+        findsOneWidget,
+      );
+      expect(find.textContaining('next.', findRichText: true), findsOneWidget);
+      expect(find.text('Z0'), findsNothing);
+      expect(find.text('--'), findsNothing);
+    },
+  );
 }

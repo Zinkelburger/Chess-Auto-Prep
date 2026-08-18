@@ -24,14 +24,14 @@ mixin _MetadataOps on ChangeNotifier {
     final game = filteredGames[currentGameIndex];
     game.studyRating = stars;
     notifyListeners();
-    persistMetadata();
+    unawaited(persistMetadata());
     onReclaimFocus?.call();
   }
 
   Future<void> persistMetadata() async {
     persistDebounce?.cancel();
     persistDebounce = Timer(const Duration(milliseconds: 300), () {
-      doPersistMetadata();
+      unawaited(doPersistMetadata());
     });
   }
 
@@ -55,7 +55,7 @@ mixin _MetadataOps on ChangeNotifier {
         filePath!,
         '${result.join('\n\n')}\n',
       );
-      _fenIndex.persist(filePath: filePath, gameTotal: allGames.length);
+      await _fenIndex.persist(filePath: filePath, gameTotal: allGames.length);
     } catch (e) {
       debugPrint('Failed to persist metadata: $e');
     }
@@ -76,6 +76,6 @@ mixin _MetadataOps on ChangeNotifier {
     final headerPart = game.pgnText.substring(0, headerEnd.end);
     game.pgnText = '$headerPart\n$updatedPgnMovetext\n';
 
-    persistMetadata();
+    unawaited(persistMetadata());
   }
 }

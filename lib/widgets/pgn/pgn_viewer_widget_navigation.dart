@@ -75,18 +75,22 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
       final ply = _mainLineIndex;
       final atSolitaireFrontier =
           widget.revealedPly != null && ply >= widget.revealedPly!;
-      if (!atSolitaireFrontier &&
-          ply < _moveHistory.length &&
-          _moveHistory[ply].san != '--') {
+      var nextPly = ply;
+      while (nextPly < _moveHistory.length &&
+          isNullMoveSan(_moveHistory[nextPly].san)) {
+        nextPly++;
+      }
+      if (!atSolitaireFrontier && nextPly < _moveHistory.length) {
         candidates.add((
-          san: _moveHistory[ply].san,
+          san: _moveHistory[nextPly].san,
           color: AppColors.pgnMove,
-          onTap: () => _goToMainLineMove(ply + 1),
+          onTap: () => _goToMainLineMove(nextPly + 1),
           emphasized: true,
         ));
       }
-      for (final root in _variationsByPly[ply] ?? const <MoveNode>[]) {
-        if (root.san == '--') continue;
+      for (final root in _playableNodes(
+        _variationsByPly[ply] ?? const <MoveNode>[],
+      )) {
         if (atSolitaireFrontier && !root.isEphemeral) continue;
         candidates.add((
           san: root.san,
@@ -99,8 +103,7 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
       }
     } else if (_analysisPath.isNotEmpty) {
       // Inside a variation: the children of the current node.
-      for (final child in _analysisPath.last.children) {
-        if (child.san == '--') continue;
+      for (final child in _playableNodes(_analysisPath.last.children)) {
         candidates.add((
           san: child.san,
           color: child.isEphemeral
@@ -112,6 +115,18 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
       }
     }
     return candidates;
+  }
+
+  /// Null-move nodes aren't playable chips; walk through them to the first
+  /// real SAN so a ChessBase `Z0` pass still offers `Nf3`.
+  Iterable<MoveNode> _playableNodes(Iterable<MoveNode> nodes) sync* {
+    for (final n in nodes) {
+      if (isNullMoveSan(n.san)) {
+        yield* _playableNodes(n.children);
+      } else {
+        yield n;
+      }
+    }
   }
 
   /// The moves that continue from the current position, as tappable chips.
@@ -308,11 +323,9 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
     } else {
       pos = _startPosition;
       for (int i = 0; i < _inlineBaseIndex; i++) {
-        final san = _moveHistory[i].san;
-        if (san == '--') continue;
-        final m = pos.parseSan(san);
-        if (m == null) break;
-        pos = pos.play(m);
+        final next = playSanOrNullMove(pos, _moveHistory[i].san);
+        if (next == null) break;
+        pos = next;
       }
     }
     int played = 0;

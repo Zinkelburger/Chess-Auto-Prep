@@ -9,6 +9,7 @@ library;
 import 'package:dartchess/dartchess.dart';
 
 import '../constants/chess_constants.dart';
+import '../utils/chess_utils.dart' show playSanOrNullMove;
 import '../utils/pgn_comment_utils.dart' show toggleQualityNag;
 import 'move_tree_node_view.dart';
 
@@ -305,9 +306,9 @@ class MoveTree {
     final parentFen = fenAt(parentPath);
     final pos = _positionFromFen(parentFen);
     if (pos == null) return null;
-    final move = pos.parseSan(san);
-    if (move == null) return null;
-    final newPos = pos.play(move);
+    final next = playSanOrNullMove(pos, san);
+    if (next == null) return null;
+    final newPos = next;
 
     final siblings = parentPath.isEmpty ? roots : nodeAt(parentPath)?.children;
     if (siblings == null) return null;
@@ -400,9 +401,9 @@ class MoveTree {
     var siblings = tree.roots;
 
     for (final san in moves) {
-      final move = pos.parseSan(san);
-      if (move == null) break;
-      pos = pos.play(move);
+      final next = playSanOrNullMove(pos, san);
+      if (next == null) break;
+      pos = next;
       final node = MoveNode(san: san, fen: pos.fen);
       siblings.add(node);
       siblings = node.children;
@@ -461,9 +462,8 @@ class MoveTree {
     final result = <MoveNode>[];
     for (final node in nodes) {
       final san = node.data.san;
-      final move = parentPosition.parseSan(san);
-      if (move == null) continue;
-      final afterPos = parentPosition.play(move);
+      final afterPos = playSanOrNullMove(parentPosition, san);
+      if (afterPos == null) continue;
       final comment = node.data.comments?.join(' ');
       final nags = node.data.nags?.toList();
       result.add(

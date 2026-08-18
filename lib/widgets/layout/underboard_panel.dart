@@ -4,6 +4,8 @@
 /// Resizable via drag handle, collapsible via tab click or keyboard shortcut.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -62,7 +64,7 @@ class UnderboardPanelState extends State<UnderboardPanel>
       initialIndex: widget.requestedTab?.index ?? 0,
     );
     _tabController.addListener(_onTabChanged);
-    _loadHeight();
+    unawaited(_loadHeight());
   }
 
   @override
@@ -147,7 +149,7 @@ class UnderboardPanelState extends State<UnderboardPanel>
       },
       onVerticalDragEnd: (_) {
         _resizing = false;
-        _saveHeight();
+        unawaited(_saveHeight());
       },
       onDoubleTap: toggle,
       child: Container(

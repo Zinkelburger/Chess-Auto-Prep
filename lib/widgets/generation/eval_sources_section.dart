@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -58,7 +60,7 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
   @override
   void initState() {
     super.initState();
-    _refreshChessDbQuotaDisplay();
+    unawaited(_refreshChessDbQuotaDisplay());
   }
 
   @override
@@ -109,14 +111,14 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
   }
 
   Future<void> _pickLocalChessDbFile() async {
-    final result = await FilePicker.pickFiles(
+    final file = await FilePicker.pickFile(
       dialogTitle: 'Select ChessDB SQLite file',
       type: FileType.custom,
       allowedExtensions: ['db'],
       lockParentWindow: true,
     );
-    if (result == null || result.files.single.path == null) return;
-    final path = result.files.single.path!;
+    if (file == null || file.path == null) return;
+    final path = file.path!;
     final valid = await validateChessDbEvalFile(path);
     if (!mounted) return;
     _update(() {

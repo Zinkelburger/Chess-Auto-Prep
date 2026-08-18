@@ -10,8 +10,7 @@
 /// the stored comment without disturbing the surrounding text.
 library;
 
-import '../widgets/chess_board_widget.dart'
-    show AnnotationBrush, BoardAnnotation;
+import '../models/board_annotation.dart';
 
 final _cslRe = RegExp(r'\[%csl\s+([^\]]*)\]');
 final _calRe = RegExp(r'\[%cal\s+([^\]]*)\]');

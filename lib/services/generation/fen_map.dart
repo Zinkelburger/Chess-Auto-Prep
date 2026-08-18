@@ -15,8 +15,23 @@ String canonicalizeFen(String fen) => canonicalizeFen4(fen);
 class FenMap {
   final Map<String, BuildTreeNode> _canonical = {};
   final Map<String, List<BuildTreeNode>> _equivalents = {};
+  bool _frozen = false;
 
   String _key(String fen) => canonicalizeFen(fen);
+
+  void _assertMutable() {
+    if (_frozen) {
+      throw StateError(
+        'FenMap is frozen — GeneratedRepertoire treats it as immutable',
+      );
+    }
+  }
+
+  /// Prevent further mutation. Called once the generated bundle is published
+  /// so views cannot desync the transposition table.
+  void freeze() => _frozen = true;
+
+  bool get isFrozen => _frozen;
 
   /// Look up the canonical (first-expanded) node for a FEN.
   BuildTreeNode? getCanonical(String fen) => _canonical[_key(fen)];
@@ -26,6 +41,7 @@ class FenMap {
   /// Register a node as the canonical expansion for its FEN.
   /// No-op if the FEN is already registered.
   void putCanonical(String fen, BuildTreeNode node) {
+    _assertMutable();
     _canonical.putIfAbsent(_key(fen), () => node);
   }
 
@@ -34,6 +50,7 @@ class FenMap {
   /// node (e.g. [populate] running again over a partially built tree) does
   /// not grow the equivalence list.
   void addTransposition(String fen, BuildTreeNode node) {
+    _assertMutable();
     final list = _equivalents[_key(fen)] ??= [];
     for (final existing in list) {
       if (identical(existing, node)) return;
@@ -61,6 +78,7 @@ class FenMap {
   /// leaves.  Idempotent: safe to call repeatedly on a growing tree (the
   /// on-the-fly service re-populates during progressive deepening).
   void populate(BuildTreeNode node) {
+    _assertMutable();
     if (node.fen.isNotEmpty) {
       final canonical = getCanonical(node.fen);
       if (canonical == null) {
@@ -75,6 +93,7 @@ class FenMap {
   }
 
   void clear() {
+    _assertMutable();
     _canonical.clear();
     _equivalents.clear();
   }
@@ -90,3 +109,30 @@ BuildTreeNode resolveTransposition(BuildTreeNode node, FenMap? fenMap) {
   }
   return node;
 }
+
+/// Path-scoped cycle: following a transposition leaf onto a FEN already on
+/// [visited] would recurse forever. Selector and line extractor share this
+/// check — do not invent a third.
+bool isTranspositionCycle(
+  BuildTreeNode node,
+  BuildTreeNode resolved,
+  Set<String> visited,
+) {
+  if (identical(resolved, node)) return false;
+  return visited.contains(canonicalizeFen4(resolved.fen));
+}
+
+/// Record [resolved] on the current path. Pair with [leaveFenPath] after
+/// the recursive work (path-scoped walks). The verifier uses
+/// [enterPositionOnce] instead — each FEN is verified at most once.
+String enterFenPath(BuildTreeNode resolved, Set<String> visited) {
+  final key = canonicalizeFen4(resolved.fen);
+  visited.add(key);
+  return key;
+}
+
+void leaveFenPath(String key, Set<String> visited) => visited.remove(key);
+
+/// Global visit: true the first time this canonical FEN is seen.
+bool enterPositionOnce(BuildTreeNode resolved, Set<String> visited) =>
+    visited.add(canonicalizeFen4(resolved.fen));

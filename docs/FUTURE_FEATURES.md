@@ -20,8 +20,8 @@ Consolidated list of planned or incomplete capabilities (from `tree_builder/TODO
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Worker crash recovery | **Not started** | No `onCrash` handler on pool workers; crashed worker can stay busy forever |
-| App backgrounding (`paused` / `inactive`) | **Partial** | Only `detached` calls `EngineLifecycle().toggleOff()` in `MainScreen` |
+| Worker crash recovery | **Done** | Dead workers fail in-flight evals, leave the pool, and respawn up to the last `ensureWorkers` target. `EngineConnection.done` signals unexpected process exit. |
+| App backgrounding (`paused` / `hidden`) | **Done** | `MainScreen` suspends on `paused`/`hidden`/`detached` (skips transient `inactive`); resumes on `resumed` when the current mode uses an interactive engine |
 | Analysis output debouncing (~200 ms) | **Not started** | Spec throttling for UI updates not wired |
 | Document / tab visibility awareness | **Not started** | Engine runs when user is not on engine-relevant panels |
 | Default 1 worker for interactive analysis | **Deferred** | Still uses full `EngineSettings.workers` for interactive |

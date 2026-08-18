@@ -1,6 +1,8 @@
 /// PGN editor with a resizable analysis dock (Engine / Expectimax tabs).
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -100,7 +102,7 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
   @override
   void initState() {
     super.initState();
-    _loadPrefs();
+    unawaited(_loadPrefs());
   }
 
   Future<void> _loadPrefs() async {
@@ -175,7 +177,7 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
                         final next = dockHeight + dy;
                         _analysisFraction = (next / total).clamp(0.22, 0.65);
                       });
-                      _savePrefs();
+                      unawaited(_savePrefs());
                     },
                   ),
                   SizedBox(height: pgnHeight, child: _buildPgnEditor()),
@@ -215,7 +217,7 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
             TextButton.icon(
               onPressed: () {
                 setState(() => _showDock = !_showDock);
-                _savePrefs();
+                unawaited(_savePrefs());
               },
               icon: Icon(
                 _showDock ? Icons.expand_more : Icons.expand_less,

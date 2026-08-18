@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/app_colors.dart';
 
@@ -84,4 +87,17 @@ void showAppSnackBar(
           : null,
     ),
   );
+}
+
+/// Copy [text] and optionally show [successMessage]. Fire-and-forget so
+/// button handlers stay synchronous.
+void copyToClipboard(
+  BuildContext context,
+  String text, {
+  String? successMessage,
+}) {
+  unawaited(Clipboard.setData(ClipboardData(text: text)));
+  if (successMessage != null) {
+    showAppSnackBar(context, successMessage);
+  }
 }

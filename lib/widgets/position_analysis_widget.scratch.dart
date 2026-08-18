@@ -144,29 +144,31 @@ mixin _ScratchAnalysisMixin on _PositionAnalysisWidgetStateBase {
   }
 
   void _confirmClearScratch() {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Clear Analysis'),
-        content: const Text(
-          'Discard all moves in the Analysis tab? This cannot be undone.',
+    unawaited(
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Clear Analysis'),
+          content: const Text(
+            'Discard all moves in the Analysis tab? This cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                setState(() {
+                  _scratchTree = MoveTree();
+                  _scratchCursor = TreePath.empty;
+                });
+              },
+              child: const Text('Clear'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              setState(() {
-                _scratchTree = MoveTree();
-                _scratchCursor = TreePath.empty;
-              });
-            },
-            child: const Text('Clear'),
-          ),
-        ],
       ),
     );
   }

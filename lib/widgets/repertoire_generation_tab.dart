@@ -62,7 +62,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   @override
   void initState() {
     super.initState();
-    _checkForPartialTree();
+    unawaited(_checkForPartialTree());
   }
 
   @override
@@ -78,7 +78,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     final newPath = widget.currentRepertoire?.filePath;
     if (oldPath != newPath) {
       _savedPartialTree = null;
-      _checkForPartialTree();
+      unawaited(_checkForPartialTree());
     }
   }
 
@@ -128,7 +128,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     if (autoStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && !widget.generationController.isGenerating) {
-          _startTreeBuild();
+          unawaited(_startTreeBuild());
         }
       });
     }
@@ -244,7 +244,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     );
     unawaited(
       ctrl.startBuild(request).whenComplete(() {
-        if (mounted) _checkForPartialTree();
+        if (mounted) unawaited(_checkForPartialTree());
       }),
     );
   }
@@ -424,7 +424,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
               ),
               OutlinedButton.icon(
                 onPressed: () {
-                  _deletePartialTree();
+                  unawaited(_deletePartialTree());
                   setState(() => _savedPartialTree = null);
                 },
                 style: OutlinedButton.styleFrom(

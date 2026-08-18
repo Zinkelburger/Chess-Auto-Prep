@@ -39,7 +39,10 @@ mixin _AppBarBuildersMixin
           ? IconButton(
               onPressed: _controller.returnToTreePosition,
               icon: const Icon(Icons.arrow_back),
-              tooltip: 'Back to opening-tree position',
+              tooltip: actionTooltip(
+                'Back to opening-tree position',
+                shortcut: AppShortcut.toggleOpeningTree,
+              ),
             )
           : null,
       title: AppBarTitleWithTrail(
@@ -75,7 +78,10 @@ mixin _AppBarBuildersMixin
                     ? Theme.of(context).colorScheme.primary
                     : null,
               ),
-              tooltip: 'Opening tree (T)',
+              tooltip: actionTooltip(
+                'Opening tree',
+                shortcut: AppShortcut.toggleOpeningTree,
+              ),
             ),
             IconButton(
               onPressed: _toggleEditMode,
@@ -143,9 +149,9 @@ mixin _AppBarBuildersMixin
               tooltip: 'More actions',
               onSelected: (value) {
                 if (value == 'generate_repertoire') {
-                  _generateRepertoireFromGames();
+                  unawaited(_generateRepertoireFromGames());
                 } else if (value == 'save_as_study') {
-                  _saveSliceAsStudy();
+                  unawaited(_saveSliceAsStudy());
                 } else if (value == 'trophies') {
                   _showTrophyCabinet();
                 } else if (value == 'slice') {
@@ -234,14 +240,14 @@ mixin _AppBarBuildersMixin
       tooltip: 'Open PGN — recent files, browse, or paste',
       onSelected: (value) {
         if (value == 'browse') {
-          _pickFile();
+          unawaited(_pickFile());
         } else if (value == 'paste') {
-          _pastePgn();
+          unawaited(_pastePgn());
         } else if (value == 'close') {
           _closeFile();
         } else if (value.startsWith('recent:')) {
           _singleGameFocus = false;
-          _loadFile(value.substring('recent:'.length));
+          unawaited(_loadFile(value.substring('recent:'.length)));
         }
       },
       onCanceled: _reclaimFocus,

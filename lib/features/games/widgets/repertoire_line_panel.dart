@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dartchess/dartchess.dart' show Position;
 import 'package:flutter/material.dart';
 
@@ -100,7 +102,7 @@ class _RepertoireLinePanelState extends State<RepertoireLinePanel> {
     super.initState();
     _meWhite = widget.initialMeWhite ?? true;
     _settings.addListener(_onDesignationsChanged);
-    _settings.ensureLoaded().then((_) => _run());
+    unawaited(_settings.ensureLoaded().then((_) => _run()));
   }
 
   @override
@@ -111,7 +113,7 @@ class _RepertoireLinePanelState extends State<RepertoireLinePanel> {
         oldWidget.gameLabel != widget.gameLabel) {
       if (widget.initialMeWhite != null) _meWhite = widget.initialMeWhite!;
       _closeLine();
-      _run();
+      unawaited(_run());
     }
   }
 
@@ -125,7 +127,7 @@ class _RepertoireLinePanelState extends State<RepertoireLinePanel> {
   /// verdict for it, without a second trip through the menu.
   void _onDesignationsChanged() {
     _service.invalidateCache();
-    _run();
+    unawaited(_run());
   }
 
   Future<void> _run() async {
@@ -139,14 +141,15 @@ class _RepertoireLinePanelState extends State<RepertoireLinePanel> {
     setState(() => _reports = reports);
     // One book, one deviation: open it without making the user click twice.
     final only = reports.length == 1 ? reports.entries.first : null;
-    if (only != null && !only.value.inBook) _openLine(only.key, only.value);
+    if (only != null && !only.value.inBook)
+      unawaited(_openLine(only.key, only.value));
   }
 
   void _setColour(bool meWhite) {
     if (_meWhite == meWhite) return;
     setState(() => _meWhite = meWhite);
     _closeLine();
-    _run();
+    unawaited(_run());
   }
 
   void _closeLine() {

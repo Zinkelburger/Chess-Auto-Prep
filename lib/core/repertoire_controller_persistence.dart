@@ -36,6 +36,13 @@ mixin _RepertoirePersistence on ChangeNotifier {
   void _navigateToRootPosition();
   String _movesToPgnMoveText(List<String> moves);
 
+  int _loadGeneration = 0;
+
+  /// Test hook: invoked after the PGN bytes are read, before tree mutation,
+  /// so overlapping loads can be sequenced.
+  @visibleForTesting
+  Future<void> Function()? debugAfterRepertoireRead;
+
   // ── Repertoire lifecycle ─────────────────────────────────────────
 
   /// Sets a new repertoire and triggers loading.
@@ -94,8 +101,12 @@ mixin _RepertoirePersistence on ChangeNotifier {
   }
 
   /// (Re)loads the PGN content for the current repertoire.
+  ///
+  /// Overlapping calls are epoch-guarded: a superseded load bails before
+  /// writing [_tree] / [_repertoirePgn], matching [StudyController.openStudy].
   Future<void> loadRepertoire() async {
     if (_currentRepertoire == null) return;
+    final generation = ++_loadGeneration;
     writer.clearUndoStack();
     _loadError = null;
     _setLoading(true);
@@ -105,15 +116,21 @@ mixin _RepertoirePersistence on ChangeNotifier {
       final storage = StorageFactory.instance;
 
       if (await storage.fileExists(filePath)) {
-        _repertoirePgn = await storage.readFile(filePath);
+        final pgnText = await storage.readFile(filePath);
+        await debugAfterRepertoireRead?.call();
+        if (generation != _loadGeneration) return;
 
+        _repertoirePgn = pgnText;
         _tree = MoveTree();
         _path = TreePath.empty;
 
-        await _buildOpeningTree();
-        await _parseRepertoireLines();
+        await _buildOpeningTree(generation);
+        if (generation != _loadGeneration) return;
+        await _parseRepertoireLines(generation);
+        if (generation != _loadGeneration) return;
         _navigateToRootPosition();
       } else {
+        if (generation != _loadGeneration) return;
         _repertoirePgn = null;
         _openingTree = null;
         _repertoireLines = [];
@@ -121,6 +138,7 @@ mixin _RepertoirePersistence on ChangeNotifier {
         _path = TreePath.empty;
       }
     } catch (e) {
+      if (generation != _loadGeneration) return;
       _loadError = 'Failed to load repertoire: $e';
       debugPrint(_loadError);
       _repertoirePgn = null;
@@ -129,12 +147,14 @@ mixin _RepertoirePersistence on ChangeNotifier {
       _tree = MoveTree();
       _path = TreePath.empty;
     } finally {
-      _setLoading(false);
+      if (generation == _loadGeneration) {
+        _setLoading(false);
+      }
     }
   }
 
   /// Parses repertoire lines for PGN browser.
-  Future<void> _parseRepertoireLines() async {
+  Future<void> _parseRepertoireLines([int? generation]) async {
     if (_repertoirePgn == null || _repertoirePgn!.isEmpty) {
       _repertoireLines = [];
       return;
@@ -147,6 +167,7 @@ mixin _RepertoirePersistence on ChangeNotifier {
         pgn: pgnContent,
         color: color,
       ));
+      if (generation != null && generation != _loadGeneration) return;
       debugPrint(
         'Parsed ${_repertoireLines.length} repertoire lines for PGN browser',
       );
@@ -157,7 +178,7 @@ mixin _RepertoirePersistence on ChangeNotifier {
   }
 
   /// Builds an opening tree from the current repertoire PGN.
-  Future<void> _buildOpeningTree() async {
+  Future<void> _buildOpeningTree([int? generation]) async {
     if (_repertoirePgn == null || _repertoirePgn!.isEmpty) {
       _openingTree = OpeningTree();
       return;
@@ -177,11 +198,7 @@ mixin _RepertoirePersistence on ChangeNotifier {
         }
       }
 
-      _rootMoves = rootMoves ?? '';
-
-      _needsColorSelection = repertoireColor == null;
       final isWhiteRepertoire = repertoireColor != 'Black';
-      _isRepertoireWhite = isWhiteRepertoire;
 
       final processedGames = <String>[];
 
@@ -210,17 +227,26 @@ mixin _RepertoirePersistence on ChangeNotifier {
 
       if (processedGames.isEmpty) {
         debugPrint('No games processed for tree building');
+        if (generation != null && generation != _loadGeneration) return;
+        _rootMoves = rootMoves ?? '';
+        _needsColorSelection = repertoireColor == null;
+        _isRepertoireWhite = isWhiteRepertoire;
         _openingTree = OpeningTree();
         return;
       }
 
-      _openingTree = await OpeningTreeBuilder.buildTree(
+      final tree = await OpeningTreeBuilder.buildTree(
         pgnList: processedGames,
         username: '',
         userIsWhite: isWhiteRepertoire,
         maxDepth: kOpeningTreeMaxDepth,
         strictPlayerMatching: false,
       );
+      if (generation != null && generation != _loadGeneration) return;
+      _rootMoves = rootMoves ?? '';
+      _needsColorSelection = repertoireColor == null;
+      _isRepertoireWhite = isWhiteRepertoire;
+      _openingTree = tree;
 
       debugPrint(
         'Built opening tree with ${_openingTree?.totalGames} total games',

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -98,7 +100,7 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
   void _onRepertoireSettingsChanged() {
     final controller = _controller;
     if (controller != null && controller.hasLoadedOnce) {
-      controller.recomputeDeviations();
+      unawaited(controller.recomputeDeviations());
     }
   }
 
@@ -111,14 +113,14 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
     if (!controller.hasLoadedOnce || controller.isLoading) return;
     if (!controller.filters.autoRun || _autoRunAttempted) return;
     _autoRunAttempted = true;
-    runner.start();
+    unawaited(runner.start());
   }
 
   void _startReview() {
     // The review is an engine pass — refuse while tree generation holds
     // Stockfish, with the same message every other engine consumer shows.
     if (!EngineGate.ensureAvailable(context)) return;
-    _runner?.start();
+    unawaited(_runner?.start());
   }
 
   /// Open one game in the PGN viewer, on the tab that answers the question the
@@ -176,9 +178,11 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
   }
 
   void _openSettings() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
+    unawaited(
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
+    );
   }
 
   /// Step two of the loop: play the puzzles the review found. The button is

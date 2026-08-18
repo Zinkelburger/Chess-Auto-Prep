@@ -6,6 +6,8 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import '../../utils/safe_change_notifier.dart';
+
 // ── Job status ──────────────────────────────────────────────────────
 
 enum JobStatus { queued, running, paused, completed, cancelled, failed }
@@ -39,7 +41,7 @@ class JobProgress {
 
 // ── Job definition ──────────────────────────────────────────────────
 
-class RepertoireJob extends ChangeNotifier {
+class RepertoireJob extends ChangeNotifier with SafeChangeNotifier {
   final String id;
   final JobType type;
   final String label;
@@ -107,7 +109,7 @@ class RepertoireJob extends ChangeNotifier {
 
 // ── Job manager (singleton) ─────────────────────────────────────────
 
-class JobManager extends ChangeNotifier {
+class JobManager extends ChangeNotifier with SafeChangeNotifier {
   JobManager._();
   static final instance = JobManager._();
 

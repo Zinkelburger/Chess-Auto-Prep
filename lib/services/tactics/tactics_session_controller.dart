@@ -1,6 +1,8 @@
 /// Session state, move validation, and training statistics for tactics puzzles.
 library;
 
+import 'dart:async';
+
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
@@ -110,7 +112,7 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
   void setSessionSettings(TacticsSessionSettings settings, {bool save = true}) {
     if (settings == sessionSettings) return;
     sessionSettings = settings;
-    if (save) settings.save();
+    if (save) settings.saveSoon();
     notifyListeners();
   }
 
@@ -571,11 +573,13 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
     if (!attemptRecorded) {
       attemptRecorded = true;
       _recordOutcome(SessionPuzzleOutcome.correct);
-      database
-          .recordAttempt(currentPosition!, TacticsResult.correct, timeTaken)
-          .then((_) {
-            if (isMounted()) refreshCurrentPosition();
-          });
+      unawaited(
+        database
+            .recordAttempt(currentPosition!, TacticsResult.correct, timeTaken)
+            .then((_) {
+              if (isMounted()) refreshCurrentPosition();
+            }),
+      );
     }
 
     if (autoAdvance) {
@@ -603,11 +607,13 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
     if (!attemptRecorded && currentPosition != null) {
       attemptRecorded = true;
       _recordOutcome(SessionPuzzleOutcome.incorrect);
-      database
-          .recordAttempt(currentPosition!, TacticsResult.incorrect, timeTaken)
-          .then((_) {
-            if (isMounted()) refreshCurrentPosition();
-          });
+      unawaited(
+        database
+            .recordAttempt(currentPosition!, TacticsResult.incorrect, timeTaken)
+            .then((_) {
+              if (isMounted()) refreshCurrentPosition();
+            }),
+      );
     }
 
     // Dwell on the wrong position long enough to actually see what was

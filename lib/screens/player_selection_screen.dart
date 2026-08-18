@@ -7,6 +7,8 @@ library;
 /// and lets the user select one, re-download, or delete.
 /// Pops with the chosen [AnalysisPlayerInfo].
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -45,7 +47,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
   @override
   void initState() {
     super.initState();
-    _loadCachedPlayers();
+    unawaited(_loadCachedPlayers());
   }
 
   Future<void> _loadCachedPlayers() async {
@@ -288,11 +290,11 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
                 onSelected: (value) {
                   switch (value) {
                     case 'delete':
-                      _deletePlayer(player);
+                      unawaited(_deletePlayer(player));
                     case 'redownload':
-                      _redownloadPlayer(player);
+                      unawaited(_redownloadPlayer(player));
                     case 'redownload_custom':
-                      _redownloadPlayerCustom(player);
+                      unawaited(_redownloadPlayerCustom(player));
                   }
                 },
                 itemBuilder: (_) => [
@@ -496,21 +498,23 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     final progress = ValueNotifier<String>('Downloading games…');
 
     // Show a non-dismissible progress dialog.
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => PopScope(
-        canPop: false,
-        child: AlertDialog(
-          content: ValueListenableBuilder<String>(
-            valueListenable: progress,
-            builder: (_, message, __) => Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const CircularProgressIndicator(),
-                const SizedBox(height: 16),
-                Text(message, textAlign: TextAlign.center),
-              ],
+    unawaited(
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            content: ValueListenableBuilder<String>(
+              valueListenable: progress,
+              builder: (_, message, __) => Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(message, textAlign: TextAlign.center),
+                ],
+              ),
             ),
           ),
         ),

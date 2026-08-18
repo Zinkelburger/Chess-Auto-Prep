@@ -39,7 +39,7 @@ Future<(int?, int, int)> evalAfterMoveCached(
         ? (result.scoreCp ?? 0)
         : -(result.scoreCp ?? 0);
 
-    cache.putEvalCpWhite(newFen, whiteCp, depth);
+    cache.putEvalCpWhiteSoon(newFen, whiteCp, depth);
 
     return (whiteCp, 0, 1);
   } catch (e) {

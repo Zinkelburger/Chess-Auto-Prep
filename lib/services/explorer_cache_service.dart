@@ -12,6 +12,8 @@
 /// Failures are never cached — a retry re-fetches.
 library;
 
+import 'dart:async';
+
 import '../models/explorer_response.dart';
 import '../utils/fen_utils.dart';
 import 'lichess_api_client.dart';
@@ -110,7 +112,7 @@ class ExplorerCacheService {
           // Block body, not `=> _inFlight.remove(key)`: remove() returns this
           // very future, and whenComplete awaits a returned future — the arrow
           // form deadlocks every fetch against itself.
-          _inFlight.remove(key);
+          unawaited(_inFlight.remove(key));
         });
 
     _inFlight[key] = future;

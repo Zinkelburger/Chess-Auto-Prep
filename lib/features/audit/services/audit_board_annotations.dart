@@ -4,8 +4,7 @@ library;
 import 'package:dartchess/dartchess.dart';
 
 import '../../../utils/log.dart';
-import '../../../widgets/chess_board_widget.dart'
-    show AnnotationBrush, BoardAnnotation;
+import '../../../models/board_annotation.dart';
 import '../models/audit_finding.dart';
 import '../models/audit_result.dart';
 

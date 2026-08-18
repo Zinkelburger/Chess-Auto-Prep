@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
 import '../utils/fen_utils.dart';
+import '../utils/chess_utils.dart' show playSanOrNullMove;
 import '../utils/san_token_utils.dart';
 
 class OpeningBookEntry {
@@ -56,12 +57,12 @@ Map<String, OpeningBookEntry> buildOpeningBookFromTsv(
       Position pos = Chess.initial;
       var ok = true;
       for (final san in tokens) {
-        final move = pos.parseSan(san);
-        if (move == null) {
+        final next = playSanOrNullMove(pos, san);
+        if (next == null) {
           ok = false;
           break;
         }
-        pos = pos.play(move);
+        pos = next;
       }
       if (!ok) continue;
 

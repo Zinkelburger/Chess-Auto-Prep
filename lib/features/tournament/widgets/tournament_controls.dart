@@ -1,7 +1,10 @@
 /// Import, simulate, and run prep. The workflow reads top to bottom.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import '../../../theme/app_colors.dart';
 import '../models/roster_entry.dart';
@@ -33,9 +36,11 @@ class _TournamentControlsState extends State<TournamentControls> {
   @override
   void initState() {
     super.initState();
-    TournamentSession.availableRepertoires().then((paths) {
-      if (mounted) setState(() => _repertoires = paths);
-    });
+    unawaited(
+      TournamentSession.availableRepertoires().then((paths) {
+        if (mounted) setState(() => _repertoires = paths);
+      }),
+    );
   }
 
   @override
@@ -294,7 +299,7 @@ class _TournamentControlsState extends State<TournamentControls> {
               DropdownMenuItem<String?>(
                 value: path,
                 child: Text(
-                  path.split('/').last,
+                  p.basename(path),
                   style: const TextStyle(fontSize: 12),
                   overflow: TextOverflow.ellipsis,
                 ),

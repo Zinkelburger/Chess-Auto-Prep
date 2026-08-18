@@ -11,6 +11,7 @@ import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
 import '../models/move_tree.dart';
 import 'move_navigation.dart';
@@ -143,7 +144,7 @@ class StudyController extends ChangeNotifier
     await flushSave();
     final content = await StorageFactory.instance.readFile(path);
     if (generation != _docGeneration) return; // superseded by a newer open
-    final name = path.split('/').last.replaceAll(RegExp(r'\.pgn$'), '');
+    final name = p.basenameWithoutExtension(path);
     // fromPgn runs PgnGame.parsePgn + a full move replay for every chapter —
     // off the UI isolate so opening a large study doesn't freeze the frame.
     final text = content ?? '';

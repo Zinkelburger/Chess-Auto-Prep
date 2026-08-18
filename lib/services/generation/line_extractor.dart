@@ -9,7 +9,6 @@
 library;
 
 import '../../models/build_tree_node.dart';
-import '../eval/eval_canonicalize.dart';
 import 'export/move_annotation.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
@@ -166,16 +165,13 @@ class LineExtractor {
 
     // Cycle guard: if following a transposition link re-enters a position
     // already on the current path, stop expanding and emit the line so far.
-    // Without this, a transposition that loops back produces infinite lines.
-    final key = canonicalizeFen4(resolved.fen);
-    final isTransposed = !identical(resolved, node);
-    final cycle = isTransposed && visited.contains(key);
+    final cycle = isTranspositionCycle(node, resolved, visited);
 
     final isOurMove = node.isWhiteToMove == config.playAsWhite;
     var pushedAny = false;
 
     if (!cycle) {
-      visited.add(key);
+      final key = enterFenPath(resolved, visited);
       if (isOurMove) {
         final selected = resolved.children
             .where((c) => c.isRepertoireMove)
@@ -242,7 +238,7 @@ class LineExtractor {
           );
         }
       }
-      visited.remove(key);
+      leaveFenPath(key, visited);
     }
 
     if (pushedAny || movesSan.isEmpty) return;

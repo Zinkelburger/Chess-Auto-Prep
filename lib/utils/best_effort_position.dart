@@ -9,6 +9,7 @@ library;
 import 'package:dartchess/dartchess.dart';
 
 import 'fen_utils.dart';
+import 'chess_utils.dart' show isNullMoveSan, playSanOrNullMove;
 import 'san_token_utils.dart';
 
 /// Attempt to build a renderable [Position] from [input].
@@ -86,6 +87,7 @@ List<String> _tokenize(String group) => cleanSanTokens(group);
 
 /// Try to play [san] as a legal move from [pos].
 Position? _tryLegalMove(Position pos, String san) {
+  if (isNullMoveSan(san)) return playSanOrNullMove(pos, san);
   try {
     final move = pos.parseSan(san);
     if (move == null) return null;

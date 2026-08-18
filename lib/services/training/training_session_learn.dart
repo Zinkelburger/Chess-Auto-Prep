@@ -63,16 +63,17 @@ mixin _LearnPhaseMixin on ChangeNotifier {
       currentPairUser = null;
       waitingForUser = false;
       notifyListeners();
-      Future.microtask(() async {
-        if (!await _playIntroMoves()) return;
-        await advanceDrillPhase();
-      });
+      unawaited(
+        Future.microtask(() async {
+          if (!await _playIntroMoves()) return;
+          await advanceDrillPhase();
+        }),
+      );
       return;
     }
 
     final san = currentLine!.moves[currentMoveIndex];
-    final move = session.position.parseSan(san);
-    if (move == null) {
+    if (playSanOrNullMove(session.position, san) == null) {
       error = 'Invalid move in line: $san';
       notifyListeners();
       return;

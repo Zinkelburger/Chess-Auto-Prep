@@ -179,7 +179,7 @@ class _GameNumberFieldState extends State<GameNumberField> {
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 6,
-                vertical: 6,
+                vertical: 10,
               ),
               border: border(AppColors.outline),
               enabledBorder: border(AppColors.outline),

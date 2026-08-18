@@ -14,6 +14,7 @@ import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
     show qualityNagSuffix, toggleQualityNag;
+import 'package:chess_auto_prep/utils/chess_utils.dart' show isNullMoveSan;
 import 'package:chess_auto_prep/utils/training_markers.dart';
 import 'package:chess_auto_prep/widgets/pgn/movetext_primitives.dart'
     show MoveChip;
@@ -313,6 +314,10 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   // ── Context menu ──────────────────────────────────────────────────
 
   void _showContextMenu(TreePath path, Offset globalPosition) {
+    unawaited(_runContextMenu(path, globalPosition));
+  }
+
+  Future<void> _runContextMenu(TreePath path, Offset globalPosition) async {
     _contextMenuPath = path;
     setState(() => _contextMenuOpen = true);
 
@@ -328,7 +333,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       Offset.zero & overlay.size,
     );
 
-    showMenu<String>(
+    final value = await showMenu<String>(
       context: context,
       position: position,
       popUpAnimationStyle: AnimationStyle.noAnimation,
@@ -416,39 +421,30 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           ),
         ),
       ],
-    ).then((value) {
-      setState(() => _contextMenuOpen = false);
-      if (value == null) return;
-      switch (value) {
-        case 'comment':
-          _startEditingComment(path);
-          break;
-        case 'puzzle_start':
-          _togglePuzzleMarker(path, start: true);
-          break;
-        case 'puzzle_end':
-          _togglePuzzleMarker(path, start: false);
-          break;
-        case 'promote':
-          _promoteVariation();
-          break;
-        case 'mainline':
-          _makeMainLine();
-          break;
-        case 'duplicate':
-          _duplicateLine();
-          break;
-        case 'copy':
-          _copyPgnFromHere();
-          break;
-        case 'viewlines':
-          widget.onViewInLines?.call();
-          break;
-        case 'delete':
-          _deleteFromHere();
-          break;
-      }
-    });
+    );
+    if (!mounted) return;
+    setState(() => _contextMenuOpen = false);
+    if (value == null) return;
+    switch (value) {
+      case 'comment':
+        _startEditingComment(path);
+      case 'puzzle_start':
+        _togglePuzzleMarker(path, start: true);
+      case 'puzzle_end':
+        _togglePuzzleMarker(path, start: false);
+      case 'promote':
+        _promoteVariation();
+      case 'mainline':
+        _makeMainLine();
+      case 'duplicate':
+        _duplicateLine();
+      case 'copy':
+        _copyPgnFromHere();
+      case 'viewlines':
+        widget.onViewInLines?.call();
+      case 'delete':
+        _deleteFromHere();
+    }
   }
 
   // ── Build ─────────────────────────────────────────────────────────
@@ -709,7 +705,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
       // Null moves ('--') anchor comments to a position; show the comment but
       // never the SAN itself (matches the PGN viewer).
-      if (main.san != '--') {
+      if (!isNullMoveSan(main.san)) {
         if (isWhite) {
           appendNumber(moveNumber, true, depth);
         } else if (isFirstMove || renumber) {
@@ -729,7 +725,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           final variant = siblings[i];
           final variantPath = parentPath.child(i);
 
-          if (variant.san != '--') {
+          if (!isNullMoveSan(variant.san)) {
             appendNumber(moveNumber, isWhite, depth + 1);
             appendMove(variant, variantPath, depth + 1);
           }

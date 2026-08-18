@@ -7,6 +7,8 @@
 /// plain file path with no further changes.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/repertoire_metadata.dart';
@@ -48,7 +50,7 @@ class _ChapterListBodyState extends State<ChapterListBody> {
   @override
   void initState() {
     super.initState();
-    _loadChapters();
+    unawaited(_loadChapters());
   }
 
   Future<void> _loadChapters() async {

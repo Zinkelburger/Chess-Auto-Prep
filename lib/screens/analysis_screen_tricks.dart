@@ -17,9 +17,7 @@ mixin _TrickHuntMixin on _AnalysisScreenStateBase {
       );
       return;
     }
-    // The hunt shares the generation engine state; refuse to overlap with a
-    // running generation rather than contend for the same workers.
-    if (EngineLifecycle.instance.state == EngineState.generating) {
+    if (GenerationLease.isBusy) {
       _showError(
         'Another engine job is running — '
         'wait for it to finish first.',
@@ -37,7 +35,7 @@ mixin _TrickHuntMixin on _AnalysisScreenStateBase {
     );
     if (config == null || !mounted) return;
 
-    _runTrickHunt(config);
+    unawaited(_runTrickHunt(config));
   }
 
   Future<void> _runTrickHunt(TrickHuntConfig config) async {
@@ -64,42 +62,34 @@ mixin _TrickHuntMixin on _AnalysisScreenStateBase {
       player.platform,
       player.username,
     );
-    final pgnModifiedAtStart = await _trickFileModifiedOrNull(pgnPath);
+    final pgnModifiedAtStart = await fileModifiedOrNull(pgnPath);
 
-    var enteredGeneration = false;
     try {
-      await EngineLifecycle.instance.enterGeneration(1);
-      enteredGeneration = true;
-      await StockfishPool.instance.ensureWorkers(1);
-
-      final result = await _trickService.hunt(
-        tree: tree,
-        playerIsWhite: isWhite,
-        config: config,
-        onProgress: (p) {
-          // Cancellation only takes effect at loop boundaries, so callbacks
-          // can still fire after the user switched players.
-          if (mounted && _currentPlayer == player) {
-            setState(() => _tricksProgress = p);
-          }
-        },
-        onFinding: (f) {
-          if (mounted && _currentPlayer == player) {
-            setState(() => _tricksLive = [..._tricksLive, f]);
-          }
-        },
-      );
+      final result = await GenerationLease.run(() {
+        return _trickService.hunt(
+          tree: tree,
+          playerIsWhite: isWhite,
+          config: config,
+          onProgress: (p) {
+            if (mounted && _currentPlayer == player) {
+              setState(() => _tricksProgress = p);
+            }
+          },
+          onFinding: (f) {
+            if (mounted && _currentPlayer == player) {
+              setState(() => _tricksLive = [..._tricksLive, f]);
+            }
+          },
+        );
+      });
 
       // Persist to the player the hunt was started for, even if the user
       // switched players meanwhile (partial reports included) — but not if
       // the games were replaced mid-hunt.
-      final pgnModifiedNow = await _trickFileModifiedOrNull(pgnPath);
-      final gamesUnchanged =
-          pgnModifiedAtStart != null &&
-          pgnModifiedNow != null &&
-          pgnModifiedNow.isAtSameMomentAs(pgnModifiedAtStart);
+      final pgnModifiedNow = await fileModifiedOrNull(pgnPath);
+      final gamesUnchanged = sameMtime(pgnModifiedAtStart, pgnModifiedNow);
       if (gamesUnchanged) {
-        TrickHuntPersistence.instance.save(
+        await TrickHuntPersistence.instance.save(
           await _gamesService.tricksReportPath(
             player.platform,
             player.username,
@@ -123,19 +113,10 @@ mixin _TrickHuntMixin on _AnalysisScreenStateBase {
     } catch (e) {
       if (mounted) _showError('Trick hunt failed: $e');
     } finally {
-      if (enteredGeneration) EngineLifecycle.instance.exitGeneration();
       _isTrickHunting = false;
       _trickHuntCancelled = false;
       _tricksProgress = null;
       if (mounted) setState(() {});
-    }
-  }
-
-  static Future<DateTime?> _trickFileModifiedOrNull(String path) async {
-    try {
-      return await File(path).lastModified();
-    } catch (_) {
-      return null;
     }
   }
 

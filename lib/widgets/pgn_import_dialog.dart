@@ -81,24 +81,24 @@ class _PgnImportDialogState extends State<_PgnImportDialog> {
 
   Future<void> _pickFile() async {
     try {
-      final result = await FilePicker.pickFiles(
+      final file = await FilePicker.pickFile(
         type: FileType.custom,
         allowedExtensions: ['pgn', 'txt'],
-        withData: false,
-        withReadStream: false,
       );
 
-      if (result == null || result.files.isEmpty) return;
+      if (file == null) return;
 
-      final path = result.files.single.path;
+      final path = file.path;
       if (path == null) return;
 
       final content = await StorageFactory.instance.readFile(path);
+      if (!mounted) return;
       if (content == null) return;
       _controller.text = content;
-      setState(() => _fileName = result.files.single.name);
+      setState(() => _fileName = file.name);
       _recount();
     } catch (e) {
+      if (!mounted) return;
       setState(() => _error = 'Could not read file: $e');
     }
   }

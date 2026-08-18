@@ -1,5 +1,8 @@
+import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
+import 'package:chess_auto_prep/utils/chess_utils.dart';
+import 'package:chess_auto_prep/utils/fen_utils.dart';
 
 void main() {
   group('splitPgnIntoGames', () {
@@ -360,6 +363,113 @@ void main() {
 
     test('passes through clean strings', () {
       expect(stripBom('hello'), 'hello');
+    });
+  });
+
+  group('mainlineSansAfterFen', () {
+    const startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+
+    String fenAfter(List<String> sans) {
+      Position pos = Chess.initial;
+      for (final san in sans) {
+        final move = pos.parseSan(san);
+        if (move == null) {
+          throw StateError('illegal SAN $san');
+        }
+        pos = pos.play(move);
+      }
+      return pos.fen;
+    }
+
+    test('returns the full mainline from the starting position', () {
+      expect(
+        mainlineSansAfterFen(const {}, '1. e4 e5 2. Nf3 Nc6 *', startFen),
+        ['e4', 'e5', 'Nf3', 'Nc6'],
+      );
+    });
+
+    test('returns remaining SAN after a mid-game FEN, without comments', () {
+      const pgn = '1. e4 {best} e5 {reply} 2. Nf3 (2. d4) Nc6 *';
+      expect(mainlineSansAfterFen(const {}, pgn, fenAfter(['e4'])), [
+        'e5',
+        'Nf3',
+        'Nc6',
+      ]);
+    });
+
+    test('returns empty when the FEN is never reached', () {
+      expect(
+        mainlineSansAfterFen(const {}, '1. e4 e5 *', 'not-a-fen'),
+        isEmpty,
+      );
+    });
+
+    test('caps remaining plies', () {
+      expect(
+        mainlineSansAfterFen(
+          const {},
+          '1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 *',
+          startFen,
+          maxPlies: 3,
+        ),
+        ['e4', 'e5', 'Nf3'],
+      );
+    });
+  });
+
+  group('ChessBase / Chessable null moves (Z0 / --)', () {
+    const colle = '1. d4 Z0 2. Nf3 Z0 3. e3 *';
+
+    String fenAfter(List<String> sans) {
+      Position pos = Chess.initial;
+      for (final san in sans) {
+        pos = playSanOrNullMove(pos, san)!;
+      }
+      return pos.fen;
+    }
+
+    test('parseTargetFen replays Z0 as a pass', () {
+      final fen = parseTargetFen('d4 Z0 Nf3');
+      expect(fen, normalizeFen(fenAfter(['d4', '--', 'Nf3'])));
+    });
+
+    test('gamePassesThroughFen reaches positions after a Z0 pass', () {
+      expect(
+        gamePassesThroughFen(const {}, colle, normalizeFen(fenAfter(['d4']))),
+        isTrue,
+      );
+      expect(
+        gamePassesThroughFen(
+          const {},
+          colle,
+          normalizeFen(fenAfter(['d4', '--', 'Nf3'])),
+        ),
+        isTrue,
+      );
+    });
+
+    test('buildFenIndex records positions after null-move passes', () {
+      final index = buildFenIndex([(headers: const {}, pgnText: colle)]);
+      expect(index[normalizeFen(fenAfter(['d4', '--', 'Nf3']))], [0]);
+    });
+
+    test('mainlineSansAfterFen keeps going past Z0', () {
+      expect(mainlineSansAfterFen(const {}, colle, Chess.initial.fen), [
+        'd4',
+        '--',
+        'Nf3',
+        '--',
+        'e3',
+      ]);
+    });
+
+    test('gameMatchesSequence ignores Z0 tokens in the mainline', () {
+      expect(
+        gameMatchesSequence(colle, [
+          ['d4', 'Nf3', 'e3'],
+        ], 4),
+        isTrue,
+      );
     });
   });
 }

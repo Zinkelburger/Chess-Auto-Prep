@@ -2,9 +2,10 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
+import '../../../models/board_annotation.dart';
+import '../../../models/completed_move.dart';
 import '../../../theme/app_colors.dart';
-import '../../../widgets/chess_board_widget.dart'
-    show BoardAnnotation, ChessBoardWidget, CompletedMove;
+import '../../../widgets/chess_board_widget.dart' show ChessBoardWidget;
 
 /// Chess board with optional preview overlay.
 ///

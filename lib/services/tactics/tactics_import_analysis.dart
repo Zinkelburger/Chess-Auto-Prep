@@ -67,7 +67,7 @@ class _OpeningEvalCache {
     } catch (_) {
       // Don't let a failed search (engine hiccup, cancellation) poison the
       // position for every later game in the run.
-      _byFen.remove(fen);
+      _byFen.remove(fen); // ignore: unawaited_futures
       rethrow;
     }
   }

@@ -98,7 +98,7 @@ class TreeEvalResolver {
   /// mirror inside [EvalCache] is updated synchronously, so subsequent
   /// reads hit immediately without awaiting the DB write.
   void cacheEvalWhite(String fen, int whiteCp, int depth) {
-    unawaited(evalCache.putEvalCpWhite(fen, whiteCp, depth));
+    evalCache.putEvalCpWhiteSoon(fen, whiteCp, depth);
   }
 
   /// Ensure eval on [node]. Returns true when an eval was resolved.

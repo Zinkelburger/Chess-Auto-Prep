@@ -5,6 +5,8 @@
 /// config, and remove button. Supports adding via file picker or compact paste.
 library;
 
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
@@ -77,9 +79,6 @@ class PgnSourcesPanelState extends State<PgnSourcesPanel> {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pgn', 'txt'],
-        allowMultiple: true,
-        withData: false,
-        withReadStream: false,
       );
       if (result == null || result.files.isEmpty) return;
 
@@ -90,6 +89,7 @@ class PgnSourcesPanelState extends State<PgnSourcesPanel> {
         if (_sources.any((s) => s.filePath == path)) continue;
 
         final content = await StorageFactory.instance.readFile(path);
+        if (!mounted) return;
         final gameCount = content != null ? pgn.countPgnGames(content) : 0;
 
         final source = PgnSource(
@@ -112,15 +112,18 @@ class PgnSourcesPanelState extends State<PgnSourcesPanel> {
   }
 
   void _showPasteDialog() {
-    showDialog<PgnSource>(
-      context: context,
-      builder: (ctx) => _CompactPasteDialog(),
-    ).then((source) {
-      if (source != null) {
-        setState(() => _sources.add(source));
-        _notify();
-      }
-    });
+    unawaited(
+      showDialog<PgnSource>(
+        context: context,
+        builder: (ctx) => _CompactPasteDialog(),
+      ).then((source) {
+        if (!mounted) return;
+        if (source != null) {
+          setState(() => _sources.add(source));
+          _notify();
+        }
+      }),
+    );
   }
 
   void _removeSource(int index) {

@@ -14,12 +14,31 @@ import 'package:flutter/material.dart';
 import '../../core/pgn_viewer_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
+import '../../utils/app_shortcuts.dart';
+import '../shortcut_tooltip.dart';
+import '../game_nav_item.dart';
+import '../game_search_dialog.dart';
+import '../layout/edit_context_split_handle.dart';
 import '../opening_tree_widget.dart';
+import 'pgn_tree_games_list.dart';
 
-class PgnOpeningTreePanel extends StatelessWidget {
+class PgnOpeningTreePanel extends StatefulWidget {
   final PgnViewerController controller;
 
   const PgnOpeningTreePanel({super.key, required this.controller});
+
+  static const minTreeHeight = 80.0;
+  static const minGamesHeight = 180.0;
+
+  @override
+  State<PgnOpeningTreePanel> createState() => _PgnOpeningTreePanelState();
+}
+
+class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
+  /// Fraction of the pane given to the tree above the games list.
+  double _splitRatio = 0.55;
+
+  PgnViewerController get controller => widget.controller;
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +54,10 @@ class PgnOpeningTreePanel extends StatelessWidget {
               IconButton(
                 icon: const Icon(Icons.arrow_back, size: 20),
                 onPressed: controller.toggleOpeningTree,
-                tooltip: 'Back to Game/Analysis (T)',
+                tooltip: actionTooltip(
+                  'Back to Game/Analysis',
+                  shortcut: AppShortcut.toggleOpeningTree,
+                ),
                 visualDensity: VisualDensity.compact,
               ),
               const SizedBox(width: 4),
@@ -119,109 +141,96 @@ class PgnOpeningTreePanel extends StatelessWidget {
               ),
             ),
           )
-        else ...[
-          Expanded(
-            child: OpeningTreeWidget(
-              tree: controller.openingTree!,
-              onMoveSelected: controller.onTreeMoveSelected,
-              onGoBack: controller.onTreeGoBack,
-              onGoForward: controller.onTreeGoForward,
-              currentMoveSequence: controller.treeCurrentMoveSequence,
-              wdlPerspective: controller.wdlPerspective,
-            ),
-          ),
-          _TreeGamesList(controller: controller),
-        ],
+        else
+          Expanded(child: _buildTreeAndGames()),
       ],
     );
   }
-}
 
-class _TreeGamesList extends StatelessWidget {
-  final PgnViewerController controller;
+  Widget _buildTreeAndGames() {
+    final tree = OpeningTreeWidget(
+      tree: controller.openingTree!,
+      onMoveSelected: controller.onTreeMoveSelected,
+      onGoBack: controller.onTreeGoBack,
+      onGoForward: controller.onTreeGoForward,
+      currentMoveSequence: controller.treeCurrentMoveSequence,
+      wdlPerspective: controller.wdlPerspective,
+    );
+    final matching = controller.gamesAtTreePosition();
+    if (matching.isEmpty) return tree;
 
-  const _TreeGamesList({required this.controller});
-
-  @override
-  Widget build(BuildContext context) {
-    final matchingIndices = controller.gamesAtTreePosition();
-    if (matchingIndices.isEmpty) return const SizedBox.shrink();
-    return Container(
-      constraints: const BoxConstraints(maxHeight: 180),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.outline)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-            child: Text(
-              '${matchingIndices.length} game${matchingIndices.length == 1 ? '' : 's'} at this position',
-              style: AppTextStyles.caption.copyWith(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: AppColors.onSurfaceSoft,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const handleHeight = 8.0;
+        final available = math.max(0.0, constraints.maxHeight - handleHeight);
+        return Column(
+          children: [
+            SizedBox(height: _treeHeightFor(available), child: tree),
+            Tooltip(
+              message: 'Drag to show more games',
+              waitDuration: const Duration(milliseconds: 500),
+              child: EditContextSplitHandle(
+                axis: EditContextSplitAxis.vertical,
+                onDrag: (dy) {
+                  if (available <= 0) return;
+                  setState(() {
+                    _splitRatio = (_splitRatio + dy / available).clamp(
+                      0.2,
+                      0.85,
+                    );
+                  });
+                },
               ),
             ),
-          ),
-          SizedBox(
-            // Fixed row height + a capped visible-row count lets the list
-            // build lazily. At the root position every filtered game matches,
-            // and `shrinkWrap: true` used to build a row for each one just to
-            // measure a list that only ever shows ~5 in its 180px box.
-            height: math.min(matchingIndices.length, 5) * 26.0 + 4,
-            child: ListView.builder(
-              itemExtent: 26,
-              padding: const EdgeInsets.only(bottom: 4),
-              itemCount: matchingIndices.length,
-              itemBuilder: (context, idx) {
-                final gi = matchingIndices[idx];
-                final game = controller.filteredGames[gi];
-                return InkWell(
-                  onTap: () => controller.loadGameFromTree(gi),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 5,
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.play_arrow,
-                          size: 14,
-                          color: AppColors.info,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            game.label,
-                            style: const TextStyle(fontSize: 11),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (game.studyRating > 0) ...[
-                          const Icon(
-                            Icons.star,
-                            size: 12,
-                            color: AppColors.starAccent,
-                          ),
-                          Text(
-                            '${game.studyRating}',
-                            style: const TextStyle(fontSize: 10),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                );
-              },
+            Expanded(
+              child: PgnTreeGamesList(
+                games: [for (final i in matching) controller.filteredGames[i]],
+                currentFen: controller.openingTree!.currentNode.fen,
+                currentIndex: matching.indexOf(controller.currentGameIndex),
+                onGameSelected: (i) => controller.loadGameFromTree(matching[i]),
+                onSearch: () => openTreePositionGameSearch(
+                  context: context,
+                  controller: controller,
+                ),
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        );
+      },
     );
   }
+
+  double _treeHeightFor(double available) {
+    const minTree = PgnOpeningTreePanel.minTreeHeight;
+    const minGames = PgnOpeningTreePanel.minGamesHeight;
+    if (available <= minTree + minGames) {
+      return available * _splitRatio;
+    }
+    return (available * _splitRatio)
+        .clamp(minTree, available - minGames)
+        .toDouble();
+  }
+}
+
+/// Opens the nav-bar search dialog scoped to games that reach the tree's
+/// current position. Returns true if a game was loaded.
+Future<bool> openTreePositionGameSearch({
+  required BuildContext context,
+  required PgnViewerController controller,
+}) async {
+  final matching = controller.gamesAtTreePosition();
+  if (matching.isEmpty) return false;
+  final games = [
+    for (final i in matching)
+      GameNavItem.fromEntry(controller.filteredGames[i]),
+  ];
+  final current = matching.indexOf(controller.currentGameIndex);
+  final selected = await showGameSearchDialog(
+    context: context,
+    games: games,
+    currentIndex: current < 0 ? 0 : current,
+  );
+  if (selected == null) return false;
+  controller.loadGameFromTree(matching[selected]);
+  return true;
 }

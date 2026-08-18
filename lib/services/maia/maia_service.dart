@@ -67,7 +67,12 @@ class MaiaService {
     }
 
     final result = await _evaluateOnnx(fen, elo);
-    MaiaCache.instance.put(fen, elo, result.policy, result.winProbability);
+    await MaiaCache.instance.put(
+      fen,
+      elo,
+      result.policy,
+      result.winProbability,
+    );
     return result;
   }
 

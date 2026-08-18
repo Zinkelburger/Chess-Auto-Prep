@@ -1,0 +1,106 @@
+
+====================================================================================================
+SKELETON: L2 only
+  1.d4 Nf6 2.c4 c5 3.d5 b5 4.cxb5 a6 5.bxa6 e6
+
+--- 1.d4 Nf6 2.Nf3   (expected: c5)   Maia-W next: n/a
+move      cdb  loss  maia%  xfer  reach  struct  exmax   sources
+d5          0     0  35.7%     -   0.00    0.44      0   cdb,maia,sf
+e6         -1     1  12.7%    10   0.00    0.71     -0   cdb,maia,sf,xfer
+g6         -1     1  28.2%     -   0.00    0.34     -0   cdb,maia,sf
+b6         -1     1   3.0%     -   0.00    0.59     -1   cdb,maia,sf
+c6         -4     4   1.1%     -   0.00    0.42     -1   cdb,sf
+c5        -10    10   6.8%     4   0.00    0.65     -1   cdb,maia,xfer <==
+h6        -12    12   0.4%     -   0.00    0.38     -9   cdb,sf
+d6        -13    13  10.5%     -   0.00    0.43     -5   cdb,maia
+a6        -14    14   0.1%     9   0.00    0.62     -9   sf,xfer
+a5        -21    21   0.0%     -   0.00    0.43    -17   sf
+b5        -27    27   0.4%     8   0.00    0.54    -19   xfer
+  picks: engine-only: d5✗  |  expectimax-lite(<=40): d5✗  |  transfer(<=40): c5✓  |  reach(<=40): d5✗  |  struct(<=40): e6✗  |  reach+struct+xfer(<=40): e6✗
+
+--- 1.d4 Nf6 2.Nf3 c5 3.d5   (expected: b5)   Maia-W next: n/a
+move      cdb  loss  maia%  xfer  reach  struct  exmax   sources
+b5        -11     0  31.4%     4   0.00    0.62     -5   cdb,maia,sf,xfer <==
+e6        -11     0  14.6%     6   0.00    0.66      3   cdb,maia,sf,xfer
+g6        -17     6  21.3%     -   0.00    0.38    -12   cdb,maia,sf
+d6        -18     7  29.5%     -   0.00    0.44    -12   cdb,maia,sf
+a6        -55    44   0.3%     5   0.00    0.65    -21   cdb,sf,xfer
+h6        -76    65   0.1%     -   0.00    0.43    -72   cdb,sf
+Na6      -108    97   0.1%     -   0.00    0.52    -81   cdb,sf
+Qa5+     -113   102   0.3%     -   0.00    0.56    -63   sf
+b6       -113   102   0.8%     -   0.00    0.66   -106   cdb
+  picks: engine-only: b5✓  |  expectimax-lite(<=40): e6✗  |  transfer(<=40): b5✓  |  reach(<=40): b5✓  |  struct(<=40): e6✗  |  reach+struct+xfer(<=40): e6✗
+
+--- 1.d4 Nf6 2.Nf3 c5 3.c4   (expected: cxd4)   Maia-W next: n/a
+move      cdb  loss  maia%  xfer  reach  struct  exmax   sources
+cxd4        0     0  62.4%     -   0.00    0.62      0   cdb,maia,sf <==
+d5         -1     1   6.1%     -   0.00    0.50      1   cdb,maia,sf
+e6        -11    11  11.0%     8   0.00    0.58     -3   cdb,maia,sf,xfer
+g6        -17    17  13.1%     -   0.00    0.36     -6   cdb,maia,sf
+a6        -24    24   0.1%     7   0.00    0.65     -9   cdb,sf,xfer
+d6        -52    52   1.8%     -   0.00    0.37    -19   cdb,sf
+h6        -76    76   0.1%     -   0.00    0.44    -39   cdb,sf
+b6       -107   107   2.4%     -   0.00    0.64    -51   cdb
+Na6      -108   108   0.1%     -   0.00    0.59    -65   sf
+b5       -133   133   0.8%     4   0.00    0.76    -61   xfer
+  picks: engine-only: cxd4✓  |  expectimax-lite(<=40): d5✗  |  transfer(<=40): a6✗  |  reach(<=40): cxd4✓  |  struct(<=40): a6✗  |  reach+struct+xfer(<=40): a6✗
+
+--- 1.d4 Nf6 2.Bf4   (expected: c5)   Maia-W next: n/a
+move      cdb  loss  maia%  xfer  reach  struct  exmax   sources
+c5          0     0   9.9%     4   0.00    0.67      2   cdb,maia,xfer <==
+g6         -1     1  22.4%     -   0.00    0.43     -1   cdb,maia,sf
+e6         -1     1  14.9%    10   0.00    0.75     -0   cdb,maia,sf,xfer
+d5         -1     1  28.3%     -   0.00    0.40      0   cdb,maia,sf
+b6         -1     1   1.9%     -   0.00    0.55     -1   cdb,sf
+c6         -1     1   1.4%     -   0.00    0.52     -0   cdb,sf
+d6         -1     1  17.7%     -   0.00    0.39     -0   cdb,maia
+h6        -11    11   0.5%     -   0.00    0.44     -9   cdb,sf
+a6        -15    15   0.1%     9   0.00    0.71    -12   sf,xfer
+Nh5       -16    16   0.8%     -   0.00    0.50      2   sf
+b5        -19    19   0.1%     8   0.00    0.54    -18   xfer
+  picks: engine-only: c5✓  |  expectimax-lite(<=40): Nh5✗  |  transfer(<=40): c5✓  |  reach(<=40): c5✓  |  struct(<=40): e6✗  |  reach+struct+xfer(<=40): e6✗
+
+--- 1.d4 Nf6 2.Bf4 c5 3.e3   (expected: Qb6)   Maia-W next: n/a
+move      cdb  loss  maia%  xfer  reach  struct  exmax   sources
+d5          0     0  11.0%     -   0.00    0.54      0   cdb,maia,sf
+e6         -1     1   9.1%    10   0.00    0.74     -1   cdb,maia,sf,xfer
+Qb6        -1     1  24.8%     -   0.00    0.59     22   cdb,maia,sf <==
+g6         -1     1  11.2%     -   0.00    0.51     -1   cdb,maia,sf
+cxd4       -2     2  27.6%     -   0.00    0.62      6   cdb,maia,sf
+d6         -8     8   2.2%     -   0.00    0.44     -3   cdb,sf
+a6        -15    15   0.2%     9   0.00    0.72    -13   cdb,sf,xfer
+Nd5       -19    19   2.6%     -   0.00    0.73    -14   cdb,sf
+Nc6       -76    76   6.7%     -   0.00    0.73     -7   maia
+b5       -117   117   0.1%     8   0.00    0.56    -66   xfer
+  picks: engine-only: d5✗  |  expectimax-lite(<=40): Qb6✓  |  transfer(<=40): a6✗  |  reach(<=40): d5✗  |  struct(<=40): e6✗  |  reach+struct+xfer(<=40): e6✗
+
+--- 1.d4 Nf6 2.e3   (expected: c5)   Maia-W next: n/a
+move      cdb  loss  maia%  xfer  reach  struct  exmax   sources
+e6          0     0  13.4%    10   0.00    0.74      1   cdb,maia,sf,xfer
+b6          0     0   3.4%     -   0.00    0.50      0   cdb,maia,sf
+d5          0     0  41.8%     -   0.00    0.42      1   cdb,maia,sf
+a6         -1     1   0.1%     9   0.00    0.74      0   cdb,sf,xfer
+g6         -1     1  22.4%     -   0.00    0.46      0   cdb,maia,sf
+h6         -2     2   0.1%     -   0.00    0.44     -2   cdb,sf
+d6         -2     2   9.3%     -   0.00    0.40     -1   cdb,maia,sf
+c6         -3     3   0.9%     -   0.00    0.38     -3   sf
+c5         -3     3   6.7%     4   0.00    0.71     -0   cdb,maia,xfer <==
+b5       -160   160   0.0%     8   0.00    0.61   -147   xfer
+  picks: engine-only: e6✗  |  expectimax-lite(<=40): d5✗  |  transfer(<=40): c5✓  |  reach(<=40): e6✗  |  struct(<=40): e6✗  |  reach+struct+xfer(<=40): e6✗
+
+--- 1.d4 Nf6 2.c4 c5 3.Nf3 cxd4 4.Qxd4   (expected: Nc6)   Maia-W next: n/a
+move      cdb  loss  maia%  xfer  reach  struct  exmax   sources
+Nc6         1     0  79.5%     -   0.00    0.49      5   cdb,maia,sf <==
+e6          0     1   3.5%    10   0.00    0.63      7   cdb,maia,sf,xfer
+g6          0     1  12.8%     -   0.00    0.30      5   cdb,maia,sf
+d6         -1     2   2.4%     -   0.00    0.44      4   cdb,sf
+a6         -1     2   0.3%     9   0.00    0.59      4   cdb,sf,xfer
+d5         -1     2   0.7%     -   0.00    0.32     62   cdb
+h6        -11    12   0.1%     -   0.00    0.35      3   cdb,sf
+b6        -15    16   0.5%     -   0.00    0.57     -2   cdb,sf
+a5        -17    18   0.0%     -   0.00    0.56     -8   sf
+b5       -142   143   0.0%     6   0.00    0.62   -123   xfer
+  picks: engine-only: Nc6✓  |  expectimax-lite(<=40): d5✗  |  transfer(<=40): a6✗  |  reach(<=40): Nc6✓  |  struct(<=40): e6✗  |  reach+struct+xfer(<=40): e6✗
+
+====================================================================================================
+SKELETON: L1+L2

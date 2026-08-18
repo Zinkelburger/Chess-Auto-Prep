@@ -6,6 +6,7 @@ import 'package:dartchess/dartchess.dart';
 import '../features/coverage/services/coverage_suggestion_service.dart';
 import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';
+import '../utils/chess_utils.dart' show playSanOrNullMove;
 import 'repertoire_controller.dart';
 
 /// Snapshot captured before a single browse/suggestion add for undo.
@@ -157,9 +158,9 @@ class RepertoireWriter {
       pos = Chess.initial;
     }
     for (final san in moves) {
-      final move = pos.parseSan(san);
-      if (move == null) break;
-      pos = pos.play(move);
+      final next = playSanOrNullMove(pos, san);
+      if (next == null) break;
+      pos = next;
     }
     return pos.fen;
   }

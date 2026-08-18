@@ -67,7 +67,7 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
     _trySaveCurrentToCache();
     _analysis.beginEnginePaneAnalysis(widget.fen);
     _initialAnalysisStarted = false;
-    _startInitialAnalysis();
+    unawaited(_startInitialAnalysis());
   }
 
   // ── Analysis Pipeline ─────────────────────────────────────────────────
@@ -149,10 +149,12 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
       );
 
       // ── Start evaluation phase ──
-      _analysis.startEvaluation(
-        baseFen: widget.fen,
-        moveUcis: candidates,
-        evalDepth: _settings.depth,
+      unawaited(
+        _analysis.startEvaluation(
+          baseFen: widget.fen,
+          moveUcis: candidates,
+          evalDepth: _settings.depth,
+        ),
       );
 
       _scheduleSetState();
@@ -286,7 +288,7 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
     final best = discovery.lines.first;
     final cp = best.scoreCp;
     if (cp == null) return;
-    EvalCache.instance.putEvalCpWhite(fen, cp, best.depth);
+    EvalCache.instance.putEvalCpWhiteSoon(fen, cp, best.depth);
   }
 
   void _onPoolStatusChanged() {

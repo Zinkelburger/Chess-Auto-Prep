@@ -101,6 +101,7 @@ const _kGenRebuildInterval = Duration(milliseconds: 250);
 abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
     with TickerProviderStateMixin {
   late final RepertoireController _controller;
+  AppState? _appState;
   final GenerationSessionController _generationController =
       GenerationSessionController();
   final GlobalKey<RepertoireGenerationTabState> _generationTabKey =
@@ -200,7 +201,7 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
     if (_isCompactLayout) {
       _toolsTabController.animateTo(1);
     } else {
-      _layout.setLinesPanelCollapsed(false);
+      unawaited(_layout.setLinesPanelCollapsed(false));
       _sidePanelTabController.animateTo(0);
     }
   }
@@ -284,18 +285,18 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     _toolsTabController = TabController(length: 3, vsync: this);
     _sidePanelTabController = TabController(length: 2, vsync: this);
     _layout.addListener(_onLayoutChanged);
-    _layout.load();
+    unawaited(_layout.load());
     _controller = RepertoireController();
     _controller.addListener(_onRepertoireChanged);
     _buildSession = BuildByPlayingController(repertoire: _controller);
     _buildSession.addListener(_onBuildSessionChanged);
-    BuildByPlayingSettings.instance.loadFromPrefs();
+    unawaited(BuildByPlayingSettings.instance.loadFromPrefs());
     _buildLauncher = BuildLauncher(
       repertoire: _controller,
       draft: _draftController,
       session: _buildSession,
       generation: _generationController,
-      appState: () => context.read<AppState>(),
+      appState: () => _appState ?? context.read<AppState>(),
       showLinesSurface: _showLinesSurface,
     );
     _generationController.addListener(_onGenerationChanged);
@@ -307,6 +308,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final appState = context.read<AppState>();
+      _appState = appState;
       appState.addListener(_onAppStateChanged);
 
       if (appState.hasPending<OpenBuilder>()) {
@@ -316,7 +318,8 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
   }
 
   void _onAppStateChanged() {
-    final appState = context.read<AppState>();
+    final appState = _appState;
+    if (appState == null) return;
     if (appState.currentMode != AppMode.repertoire) return;
     _reclaimFocus();
 
@@ -326,22 +329,24 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     // Load the requested repertoire if different from current
     final currentPath = _controller.currentRepertoire?.filePath;
     if (currentPath != handoff.repertoirePath) {
-      _controller.setRepertoire(
-        RepertoireMetadata(
-          filePath: handoff.repertoirePath,
-          name: p.basenameWithoutExtension(handoff.repertoirePath),
-          lastModified: DateTime.now(),
+      unawaited(
+        _controller.setRepertoire(
+          RepertoireMetadata(
+            filePath: handoff.repertoirePath,
+            name: p.basenameWithoutExtension(handoff.repertoirePath),
+            lastModified: DateTime.now(),
+          ),
         ),
       );
     }
     if (handoff.lineId != null) {
-      _openLineAfterLoad(handoff.lineId!);
+      unawaited(_openLineAfterLoad(handoff.lineId!));
     }
     if (handoff.moveSequence != null) {
-      _openMovesAfterLoad(handoff.moveSequence!);
+      unawaited(_openMovesAfterLoad(handoff.moveSequence!));
     }
     if (handoff.generationPgnPaths != null) {
-      _seedGenerationAfterLoad(handoff.generationPgnPaths!);
+      unawaited(_seedGenerationAfterLoad(handoff.generationPgnPaths!));
     }
   }
 
@@ -406,21 +411,21 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
           // A tour from the previous repertoire's traps makes no sense here.
           _trapSession.endTourForRepertoireSwitch();
           EngineSettings.instance.probabilityStartMoves = _controller.rootMoves;
-          _trapSession.loadFromFile(currentId);
+          unawaited(_trapSession.loadFromFile(currentId));
           newRepertoireId = currentId;
         }
 
         if (_controller.needsColorSelection) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _showColorSelectionDialog();
+            if (mounted) unawaited(_showColorSelectionDialog());
           });
         }
       }
     });
 
     if (newRepertoireId != null) {
-      _auditController.tryRestore(newRepertoireId!);
-      _loadChapters();
+      unawaited(_auditController.tryRestore(newRepertoireId!));
+      unawaited(_loadChapters());
     }
   }
 
@@ -490,15 +495,8 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     _controller.removeListener(_onRepertoireChanged);
     _controller.dispose();
 
-    try {
-      context.read<AppState>().removeListener(_onAppStateChanged);
-    } catch (e) {
-      log.w(
-        'dispose listener cleanup failed',
-        name: 'RepertoireScreen',
-        error: e,
-      );
-    }
+    _appState?.removeListener(_onAppStateChanged);
+    _appState = null;
 
     super.dispose();
   }

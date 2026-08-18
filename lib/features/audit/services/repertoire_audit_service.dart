@@ -295,7 +295,7 @@ class RepertoireAuditService {
       final bestMoveSan = _uciToSan(node.fen, bestLine.moveUci);
 
       // Cache the position eval from the best line.
-      _evalCache.putEvalCpWhite(node.fen, bestCp, config.evalDepth);
+      _evalCache.putEvalCpWhiteSoon(node.fen, bestCp, config.evalDepth);
 
       // Check each repertoire move at this position.
       for (final repMoveEntry in node.children.entries) {
@@ -327,7 +327,7 @@ class RepertoireAuditService {
         // Cache the resulting position's eval for generation reuse.
         if (repCp != null) {
           final childFen = repMoveEntry.value.fen;
-          _evalCache.putEvalCpWhite(childFen, repCp, config.evalDepth);
+          _evalCache.putEvalCpWhiteSoon(childFen, repCp, config.evalDepth);
         }
 
         if (repCp == null) continue;

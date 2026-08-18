@@ -17,6 +17,7 @@ mixin _SliceOps on ChangeNotifier {
   abstract SliceConfig activeSliceConfig;
   abstract int currentGameIndex;
   abstract bool isLoading;
+  abstract String? pgnInitialFen;
   Map<String, List<int>>? get fenIndex;
   ViewerOpeningTree get _viewerTree;
   bool get showOpeningTree;
@@ -75,6 +76,7 @@ mixin _SliceOps on ChangeNotifier {
     activeSliceConfig = config;
     _activeSliceIndices = List<int>.from(indices);
     currentGameIndex = 0;
+    pgnInitialFen = null;
     pendingSliceRestore = SliceRestoreInfo(
       filteredCount: filteredGames.length,
       totalCount: allGames.length,
@@ -97,11 +99,12 @@ mixin _SliceOps on ChangeNotifier {
     hasActiveFilters = filteredGames.length != allGames.length;
     activeSliceConfig = config;
     currentGameIndex = 0;
+    pgnInitialFen = null;
     _viewerTree.clearTree();
     notifyListeners();
-    persistSliceConfig(config);
-    if (showOpeningTree) _viewerTree.rebuild();
-    loadCurrentGame();
+    unawaited(persistSliceConfig(config));
+    if (showOpeningTree) unawaited(_viewerTree.rebuild());
+    unawaited(loadCurrentGame());
   }
 
   void resetFilters() {
@@ -114,12 +117,13 @@ mixin _SliceOps on ChangeNotifier {
     activeSliceConfig = const SliceConfig.empty();
     _activeSliceIndices = null;
     currentGameIndex = 0;
+    pgnInitialFen = null;
     _viewerTree.clearTree();
     notifyListeners();
-    clearSavedSlice();
+    unawaited(clearSavedSlice());
     applySortMode();
-    if (showOpeningTree) _viewerTree.rebuild();
-    loadCurrentGame();
+    if (showOpeningTree) unawaited(_viewerTree.rebuild());
+    unawaited(loadCurrentGame());
   }
 
   Future<void> removeSliceChip(int chipIndex) async {

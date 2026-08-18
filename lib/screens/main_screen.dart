@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -51,6 +53,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   AppState? _appState;
   AppMode? _lastMode;
 
+  /// True while the window is paused, hidden, or detaching. Mode switches
+  /// must not resume Stockfish until the app is in the foreground again.
+  bool _appBackgrounded = false;
+
   @override
   void initState() {
     super.initState();
@@ -69,18 +75,21 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     if (appState == null) return;
     final currentMode = appState.currentMode;
     final previousMode = _lastMode;
-
-    // Suspend/resume, not toggleOff/toggleOn: leaving the tab frees the
-    // engine but must not overwrite the user's persisted engine preference.
-    if (previousMode == AppMode.repertoire &&
-        currentMode != AppMode.repertoire) {
-      EngineLifecycle.instance.suspend();
-    } else if (previousMode != AppMode.repertoire &&
-        currentMode == AppMode.repertoire) {
-      EngineLifecycle.instance.resume();
-    }
-
     _lastMode = currentMode;
+    if (_appBackgrounded) return;
+    _syncEngineToMode(previousMode, currentMode);
+  }
+
+  /// Suspend/resume, not toggleOff/toggleOn: leaving an engine pane frees
+  /// the workers but must not overwrite the user's persisted preference.
+  void _syncEngineToMode(AppMode? previous, AppMode current) {
+    final wasHeavy = previous?.usesInteractiveEngine ?? false;
+    final isHeavy = current.usesInteractiveEngine;
+    if (wasHeavy && !isHeavy) {
+      unawaited(EngineLifecycle.instance.suspend());
+    } else if (!wasHeavy && isHeavy) {
+      unawaited(EngineLifecycle.instance.resume());
+    }
   }
 
   @override
@@ -92,10 +101,26 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.detached) {
-      // Kill engine processes on app close without persisting "off" —
-      // otherwise every clean exit disabled the engine for the next launch.
-      EngineLifecycle.instance.suspend();
+    switch (state) {
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.detached:
+        // Kill engine processes on background/close without persisting "off"
+        // — otherwise every clean exit disabled the engine for the next launch.
+        // Skip [inactive]: alt-tab and dialogs fire it without meaning the
+        // user left the app.
+        if (_appBackgrounded) return;
+        _appBackgrounded = true;
+        unawaited(EngineLifecycle.instance.suspend());
+      case AppLifecycleState.resumed:
+        if (!_appBackgrounded) return;
+        _appBackgrounded = false;
+        final mode = _lastMode;
+        if (mode != null && mode.usesInteractiveEngine) {
+          unawaited(EngineLifecycle.instance.resume());
+        }
+      case AppLifecycleState.inactive:
+        break;
     }
   }
 

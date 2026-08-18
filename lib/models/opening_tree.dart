@@ -6,6 +6,7 @@ import 'dart:collection';
 
 import 'package:dartchess/dartchess.dart';
 import '../constants/chess_constants.dart';
+import '../utils/chess_utils.dart' show isNullMoveSan, playSanOrNullMove;
 import '../utils/fen_utils.dart';
 
 /// How win/draw/loss stats should be colored when displayed.
@@ -412,9 +413,9 @@ class OpeningTree {
   bool doesMoveTranspose(String fen, String san) {
     try {
       final position = Chess.fromSetup(Setup.parseFen(fen));
-      final move = position.parseSan(san);
-      if (move == null) return false;
-      return fenToNodes.containsKey(normalizeFen(position.play(move).fen));
+      final next = playSanOrNullMove(position, san);
+      if (next == null) return false;
+      return fenToNodes.containsKey(normalizeFen(next.fen));
     } catch (_) {
       // Best-effort; an unparsable position simply isn't a transposition.
       return false;
@@ -460,6 +461,12 @@ class OpeningTree {
     node.updateStats(0.5);
 
     for (final san in moves) {
+      if (isNullMoveSan(san)) {
+        final next = playSanOrNullMove(position, san);
+        if (next == null) break;
+        position = next;
+        continue;
+      }
       final move = position.parseSan(san);
       if (move == null) break;
       position = position.play(move);

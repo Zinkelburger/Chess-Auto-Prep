@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../models/repertoire_metadata.dart';
@@ -73,7 +75,7 @@ class _MyRepertoiresPanelState extends State<MyRepertoiresPanel> {
   void initState() {
     super.initState();
     _settings.addListener(_onDesignationsChanged);
-    _settings.ensureLoaded().then((_) => _refreshColorCheck());
+    unawaited(_settings.ensureLoaded().then((_) => _refreshColorCheck()));
   }
 
   @override

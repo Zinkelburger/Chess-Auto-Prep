@@ -62,7 +62,7 @@ mixin _RepertoireLayout
         if (_isCompactLayout) {
           _toolsTabController.animateTo(_toolsTabController.index == 1 ? 0 : 1);
         } else {
-          _layout.toggleLinesPanelCollapsed();
+          unawaited(_layout.toggleLinesPanelCollapsed());
         }
       },
       onCollapseBottomPane: () {

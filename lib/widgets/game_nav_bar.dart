@@ -369,27 +369,20 @@ class GameNavBar extends StatelessWidget {
               'Game ${currentIndex + 1} of ${games.length}, $ordering.\n'
               'Type a game number and press Enter to jump there (G)',
         ),
-        const SizedBox(width: 4),
-        ShortcutIconButton(
-          description: 'Search games by player, event or opening',
+        const SizedBox(width: 8),
+        GameSearchButton(
           shortcut: AppShortcut.searchGames,
           onPressed: games.isEmpty ? null : () => _openGameSearch(context),
-          icon: const Icon(
-            Icons.search,
-            size: 20,
-            color: AppColors.onSurfaceSoft,
-          ),
-          visualDensity: VisualDensity.compact,
         ),
       ],
     );
   }
 
   Future<void> _openGameSearch(BuildContext context) async {
-    final selected = await showDialog<int>(
+    final selected = await showGameSearchDialog(
       context: context,
-      builder: (_) =>
-          GameSearchDialog(games: games, currentIndex: currentIndex),
+      games: games,
+      currentIndex: currentIndex,
     );
     if (selected != null) onGoToGame?.call(selected);
   }

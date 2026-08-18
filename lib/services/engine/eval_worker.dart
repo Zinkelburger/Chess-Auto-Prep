@@ -47,6 +47,14 @@ class EvalWorker {
   final EngineConnection engine;
   late final StreamSubscription _sub;
 
+  /// Called once when the underlying process dies unexpectedly.
+  /// Not invoked on [dispose].
+  void Function()? onDied;
+
+  bool _dead = false;
+  bool _disposed = false;
+  bool get isDead => _dead;
+
   /// Searches launched via [evaluateFen] across all workers, resettable.
   /// Diagnostic only — read by benchmarks to compare mining strategies.
   static int searchCount = 0;
@@ -83,13 +91,27 @@ class EvalWorker {
       _onOutput,
       onError: (Object error) {
         if (kDebugMode) log.e('[EvalWorker] Engine stream error: $error');
-        _evalCompleter?.completeError(error);
-        _evalCompleter = null;
-        _discoveryCompleter?.completeError(error);
-        _discoveryCompleter = null;
-        _failReadyQueue(error);
+        _handleDeath(error);
       },
+      onDone: () => _handleDeath(),
     );
+    unawaited(engine.done.then((_) => _handleDeath()));
+  }
+
+  void _handleDeath([Object? error]) {
+    if (_dead || _disposed) return;
+    _dead = true;
+    final err = error ?? StateError('Stockfish process exited');
+    if (_evalCompleter != null && !_evalCompleter!.isCompleted) {
+      _evalCompleter!.completeError(err);
+    }
+    _evalCompleter = null;
+    if (_discoveryCompleter != null && !_discoveryCompleter!.isCompleted) {
+      _discoveryCompleter!.completeError(err);
+    }
+    _discoveryCompleter = null;
+    _failReadyQueue(err);
+    onDied?.call();
   }
 
   /// Send `isready` and wait for the matching `readyok`.
@@ -342,9 +364,12 @@ class EvalWorker {
   }
 
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    onDied = null;
     stop();
     _failReadyQueue(StateError('Worker disposed'));
-    _sub.cancel();
+    unawaited(_sub.cancel());
     try {
       engine.sendCommand('quit');
     } catch (_) {

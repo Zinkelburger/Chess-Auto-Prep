@@ -28,10 +28,10 @@ import '../models/analysis_player_info.dart';
 import '../models/engine_weakness_result.dart';
 import '../models/position_analysis.dart';
 import '../utils/fen_utils.dart';
+import '../utils/file_mtime.dart';
 import '../models/opening_tree.dart';
 import '../services/analysis_games_service.dart';
-import '../services/engine/engine_lifecycle.dart';
-import '../services/engine/stockfish_pool.dart';
+import '../services/engine/generation_lease.dart';
 import '../services/engine_weakness_service.dart';
 import '../services/maia/maia_factory.dart';
 import '../services/unified_analysis_builder.dart';
@@ -133,17 +133,19 @@ abstract class _AnalysisScreenStateBase extends State<AnalysisScreen> {
   Future<bool> _redownloadGames(int monthsBack);
 
   void _showError(String message) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Error'),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK'),
-          ),
-        ],
+    unawaited(
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Error'),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -156,7 +158,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _currentPlayer == null) {
-        _showPlayerSelection();
+        unawaited(_showPlayerSelection());
       }
     });
   }
@@ -594,21 +596,23 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
 
     final progress = ValueNotifier<String>('Downloading games…');
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => PopScope(
-        canPop: false,
-        child: AlertDialog(
-          content: ValueListenableBuilder<String>(
-            valueListenable: progress,
-            builder: (_, message, __) => Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const CircularProgressIndicator(),
-                const SizedBox(height: 16),
-                Text(message, textAlign: TextAlign.center),
-              ],
+    unawaited(
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            content: ValueListenableBuilder<String>(
+              valueListenable: progress,
+              builder: (_, message, __) => Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(message, textAlign: TextAlign.center),
+                ],
+              ),
             ),
           ),
         ),
@@ -681,7 +685,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
       _openingTree = isWhite ? _whiteTree : _blackTree;
     });
     if (_positionAnalysis == null && !_isAnalyzing) {
-      _analyzeBothColors();
+      unawaited(_analyzeBothColors());
     } else {
       _mergeEvalsIntoAnalysis();
     }

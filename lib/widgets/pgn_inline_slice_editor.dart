@@ -108,22 +108,24 @@ class _InlineSliceEditorState extends State<InlineSliceEditor> {
     final generation = ++_computeGeneration;
     setState(() => _computing = true);
 
-    pgn
-        .computeSliceMatches(
-          games: widget.allGames,
-          targetFen: _filters.positionFen,
-          filters: _filters.rawHeaderFilters,
-          seqGroups: _filters.sequenceGroups,
-          seqGap: _filters.sequenceGap,
-          fenIndex: widget.fenIndex,
-        )
-        .then((indices) {
-          if (!mounted || generation != _computeGeneration) return;
-          setState(() {
-            _matchedIndices = indices;
-            _computing = false;
-          });
-        });
+    unawaited(
+      pgn
+          .computeSliceMatches(
+            games: widget.allGames,
+            targetFen: _filters.positionFen,
+            filters: _filters.rawHeaderFilters,
+            seqGroups: _filters.sequenceGroups,
+            seqGap: _filters.sequenceGap,
+            fenIndex: widget.fenIndex,
+          )
+          .then((indices) {
+            if (!mounted || generation != _computeGeneration) return;
+            setState(() {
+              _matchedIndices = indices;
+              _computing = false;
+            });
+          }),
+    );
   }
 
   void _applySlice() {

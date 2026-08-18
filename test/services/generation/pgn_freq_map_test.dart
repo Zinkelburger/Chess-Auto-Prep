@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:chess_auto_prep/services/eval/eval_canonicalize.dart';
 import 'package:chess_auto_prep/services/generation/pgn_freq_map.dart';
 import 'package:chess_auto_prep/services/generation/pgn_freq_parser.dart';
+import 'package:chess_auto_prep/utils/chess_utils.dart';
 import 'package:dartchess/dartchess.dart' hide File;
 import 'package:flutter_test/flutter_test.dart';
 
@@ -151,6 +152,35 @@ void main() {
       );
       expect(afterNf3, isNotNull);
       expect(afterNf3!.reachCount, 1);
+    });
+
+    test('ChessBase Z0 passes without recording a repertoire move', () async {
+      final path = writePgn('''
+[White "A"]
+[Black "B"]
+
+1. d4 Z0 2. Nf3 *
+''');
+
+      final (map, stats) = await parsePgnFiles(
+        paths: [path],
+        config: const PgnFreqConfig(),
+        useDiskCache: false,
+      );
+
+      expect(stats.totalGames, 1);
+      expect(stats.parseErrors, 0);
+
+      final afterD4 = Chess.initial.play(Move.parse('d2d4')!);
+      expect(
+        map.get(afterD4.fen)!.moves.map((m) => m.san),
+        isNot(contains('--')),
+      );
+
+      final afterPass = playSanOrNullMove(afterD4, '--')!;
+      final nf3 = map.get(afterPass.fen);
+      expect(nf3, isNotNull);
+      expect(nf3!.moves.single.san, 'Nf3');
     });
 
     test('startMoves prefix skips games that never reach it', () async {

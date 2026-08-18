@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -82,7 +84,7 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
     _monthsController = TextEditingController(text: _months.toString());
     _maxGamesController = TextEditingController(text: _maxGames.toString());
 
-    _loadPrefs();
+    unawaited(_loadPrefs());
   }
 
   static const _keyMode = 'analysis_download.mode';
@@ -168,7 +170,7 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
       return;
     }
 
-    _savePrefs();
+    unawaited(_savePrefs());
 
     Navigator.of(context).pop(
       AnalysisPlayerInfo(

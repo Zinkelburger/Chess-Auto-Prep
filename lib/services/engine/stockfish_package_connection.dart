@@ -7,15 +7,29 @@ class StockfishPackageConnection implements EngineConnection {
   final StreamController<String> _stdoutController =
       StreamController<String>.broadcast();
   late final StreamSubscription _subscription;
+  final Completer<void> _done = Completer<void>();
+  bool _disposed = false;
 
   StockfishPackageConnection() : _engine = Stockfish() {
     _subscription = _engine.stdout.listen((line) {
       _stdoutController.add(line);
     });
+    _engine.state.addListener(_onEngineState);
+  }
+
+  void _onEngineState() {
+    if (_disposed) return;
+    final state = _engine.state.value;
+    if (state == StockfishState.error || state == StockfishState.disposed) {
+      if (!_done.isCompleted) _done.complete();
+    }
   }
 
   @override
   Stream<String> get stdout => _stdoutController.stream;
+
+  @override
+  Future<void> get done => _done.future;
 
   @override
   Future<void> waitForReady() async {
@@ -60,8 +74,11 @@ class StockfishPackageConnection implements EngineConnection {
 
   @override
   void dispose() {
-    _subscription.cancel();
+    if (_disposed) return;
+    _disposed = true;
+    _engine.state.removeListener(_onEngineState);
+    unawaited(_subscription.cancel());
     _engine.dispose();
-    _stdoutController.close();
+    unawaited(_stdoutController.close());
   }
 }

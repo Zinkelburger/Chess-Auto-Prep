@@ -7,6 +7,8 @@
 /// when the session completes.
 library;
 
+import 'dart:async';
+
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
@@ -243,7 +245,7 @@ class _BuildSessionPaneState extends State<BuildSessionPane> {
           onTap: enabled
               ? () {
                   _endHover();
-                  _session.commitMove(candidate.san);
+                  unawaited(_session.commitMove(candidate.san));
                 }
               : () {},
           onHover: enabled ? () => _hoverCandidate(candidate) : () {},

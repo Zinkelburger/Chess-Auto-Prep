@@ -210,6 +210,29 @@ void main() {
   );
 
   test(
+    'suspend then resume restores idle when the user wants the engine',
+    () async {
+      await lifecycle.toggleOn();
+      expect(lifecycle.state, EngineState.idle);
+
+      await lifecycle.suspend();
+      expect(lifecycle.state, EngineState.off);
+
+      await lifecycle.resume();
+      expect(lifecycle.state, EngineState.idle);
+    },
+  );
+
+  test('resume stays off after the user toggled the engine off', () async {
+    await lifecycle.toggleOn();
+    await lifecycle.toggleOff();
+    expect(lifecycle.state, EngineState.off);
+
+    await lifecycle.resume();
+    expect(lifecycle.state, EngineState.off);
+  });
+
+  test(
     'full state machine cycle: off → on → analyze → complete → off',
     () async {
       expect(lifecycle.state, EngineState.off);

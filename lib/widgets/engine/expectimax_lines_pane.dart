@@ -4,6 +4,8 @@
 /// SAN continuation. Backed by precomputed tree data instead of live Stockfish.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../models/build_tree_node.dart';
@@ -82,7 +84,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
     // Manual listener: _recompute rebuilds expectimax lines when settings change.
     _settings.addListener(_scheduleRecompute);
     _dbSettings.addListener(_onDbSettingsChanged);
-    _dbSettings.load();
+    unawaited(_dbSettings.load());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _recompute();
     });

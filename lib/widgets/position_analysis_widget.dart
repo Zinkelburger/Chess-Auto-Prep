@@ -20,6 +20,8 @@
 /// to a study chapter.
 library;
 
+import 'dart:async';
+
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -35,6 +37,7 @@ import '../features/holes/services/hole_hunt_service.dart';
 import '../features/holes/widgets/holes_report_panel.dart';
 import '../features/tricks/services/trick_hunt_service.dart';
 import '../features/tricks/widgets/tricks_report_panel.dart';
+import '../models/board_annotation.dart';
 import '../models/move_tree.dart';
 import '../models/position_analysis.dart';
 import '../models/opening_tree.dart';
