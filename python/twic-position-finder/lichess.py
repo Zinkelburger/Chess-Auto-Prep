@@ -121,3 +121,20 @@ def analysis_url_from_fen(fen: str) -> str:
     """Generate a Lichess analysis URL from a FEN (no auth required)."""
     fen_path = fen.replace(" ", "_")
     return f"{LICHESS_API_BASE}/analysis/{fen_path}"
+
+
+def view_lichess_url(game: dict) -> str | None:
+    """URL to open this game on Lichess.
+
+    Prefers a previously imported game URL (same as the weekly emails).
+    Otherwise builds an analysis board from the PGN — no import required.
+    """
+    from urllib.parse import quote
+
+    existing = game.get("lichess_url")
+    if existing:
+        return existing
+    pgn = (game.get("pgn_text") or "").strip()
+    if not pgn:
+        return None
+    return f"{LICHESS_API_BASE}/analysis/pgn/{quote(pgn, safe='')}"

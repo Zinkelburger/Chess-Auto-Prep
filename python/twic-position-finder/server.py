@@ -17,11 +17,11 @@ from slowapi.errors import RateLimitExceeded
 
 from models import (
     get_db, create_user, verify_user, get_user_by_auth, get_user_by_email,
-    add_subscription, get_subscriptions, delete_subscription,
-    deactivate_subscription, validate_fen, rotate_auth_token, revoke_auth_token,
-    count_user_subscriptions, create_email_token, consume_email_token,
-    cleanup_expired_email_tokens, highest_twic_number, record_notification,
-    parse_fen_list,
+    add_subscription, get_subscriptions, get_matched_games, update_subscription,
+    delete_subscription, deactivate_subscription, validate_fen, rotate_auth_token,
+    revoke_auth_token, count_user_subscriptions, create_email_token,
+    consume_email_token, cleanup_expired_email_tokens, highest_twic_number,
+    record_notification, parse_fen_list,
 )
 from email_sender import send_verification_email, send_login_email
 from booking import router as booking_router, init_booking_db
@@ -50,7 +50,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-API-Key"],
 )
 
@@ -124,6 +124,45 @@ def verify_turnstile(token: str, ip: str | None = None) -> bool:
         return False
 
 
+# ── Shared subscription validation / matching ─────────────────────────
+
+
+def _require_subscription_filters(req) -> None:
+    if not req.fen and not req.player and not req.white and not req.black and not req.eco:
+        raise HTTPException(400, "At least one filter (FEN, player, ECO) is required.")
+
+
+def _validate_request_fens(fen_field: str | list[str] | None) -> None:
+    if isinstance(fen_field, list):
+        fens = [s.strip() for s in fen_field if isinstance(s, str) and s.strip()]
+    else:
+        fens = parse_fen_list(fen_field)
+    for i, fen in enumerate(fens):
+        try:
+            validate_fen(fen)
+        except ValueError:
+            label = f" #{i + 1}" if len(fens) > 1 else ""
+            raise HTTPException(400, f"Invalid FEN position{label}. Please check the format.")
+
+
+def _match_latest_issue(conn, sub: dict) -> None:
+    """Match a subscription against the latest TWIC issue (no email)."""
+    try:
+        from weekly import match_subscription
+        latest = highest_twic_number(conn)
+        if not latest:
+            return
+        matches = match_subscription(conn, sub, latest)
+        for g in matches:
+            record_notification(conn, sub["id"], g["id"], latest)
+        conn.commit()
+        log.info("Sub #%d matched %d game(s) in TWIC #%d",
+                 sub["id"], len(matches), latest)
+    except Exception as e:
+        log.warning("Failed to run immediate match for sub #%s: %s",
+                    sub.get("id"), e)
+
+
 # ── Subscribe (landing page form) ────────────────────────────────────
 
 
@@ -159,15 +198,8 @@ def subscribe(req: SubscribeRequest, request: Request, conn=Depends(db)):
     if TURNSTILE_SECRET and not verify_turnstile(req.cf_turnstile_token, _client_ip(request)):
         raise HTTPException(400, "CAPTCHA verification failed. Please try again.")
 
-    if not req.fen and not req.player and not req.white and not req.black and not req.eco:
-        raise HTTPException(400, "At least one filter (FEN, player, ECO) is required.")
-
-    for i, fen in enumerate(parse_fen_list(req.fen)):
-        try:
-            validate_fen(fen)
-        except ValueError:
-            label = f" #{i + 1}" if len(parse_fen_list(req.fen)) > 1 else ""
-            raise HTTPException(400, f"Invalid FEN position{label}. Please check the format.")
+    _require_subscription_filters(req)
+    _validate_request_fens(req.fen)
 
     existing = get_user_by_email(conn, req.email)
 
@@ -322,15 +354,8 @@ def create_subscription(req: SubscriptionCreate, user=Depends(auth_user),
                         conn=Depends(db)):
     if count_user_subscriptions(conn, user["id"]) >= MAX_SUBSCRIPTIONS:
         raise HTTPException(400, f"Maximum of {MAX_SUBSCRIPTIONS} active subscriptions reached")
-    if not req.fen and not req.player and not req.white and not req.black and not req.eco:
-        raise HTTPException(400, "At least one filter (FEN, player, ECO) is required")
-
-    for i, fen in enumerate(parse_fen_list(req.fen)):
-        try:
-            validate_fen(fen)
-        except ValueError:
-            label = f" #{i + 1}" if len(parse_fen_list(req.fen)) > 1 else ""
-            raise HTTPException(400, f"Invalid FEN position{label}. Please check the format.")
+    _require_subscription_filters(req)
+    _validate_request_fens(req.fen)
 
     sub = add_subscription(
         conn, user["id"],
@@ -341,21 +366,27 @@ def create_subscription(req: SubscriptionCreate, user=Depends(auth_user),
         time_control=req.time_control, result=req.result,
         event=req.event,
     )
+    _match_latest_issue(conn, sub)
+    return {"subscription": sub}
 
-    # Immediately match against the latest TWIC issue (no email)
-    try:
-        from weekly import match_subscription
-        latest = highest_twic_number(conn)
-        if latest:
-            matches = match_subscription(conn, sub, latest)
-            for g in matches:
-                record_notification(conn, sub["id"], g["id"], latest)
-            conn.commit()
-            log.info("New sub #%d matched %d game(s) in TWIC #%d",
-                     sub["id"], len(matches), latest)
-    except Exception as e:
-        log.warning("Failed to run immediate match for new sub: %s", e)
 
+@app.put("/api/subscriptions/{sub_id}")
+def replace_subscription(sub_id: int, req: SubscriptionCreate,
+                         user=Depends(auth_user), conn=Depends(db)):
+    _require_subscription_filters(req)
+    _validate_request_fens(req.fen)
+    sub = update_subscription(
+        conn, sub_id, user["id"],
+        label=req.label, fen=req.fen, player=req.player,
+        white=req.white, black=req.black,
+        exclude_site=req.exclude_site, site=req.site,
+        min_elo=req.min_elo, max_elo=req.max_elo, eco=req.eco,
+        time_control=req.time_control, result=req.result,
+        event=req.event,
+    )
+    if not sub:
+        raise HTTPException(404, "Subscription not found")
+    _match_latest_issue(conn, sub)
     return {"subscription": sub}
 
 
@@ -367,38 +398,59 @@ def remove_subscription(sub_id: int, user=Depends(auth_user), conn=Depends(db)):
     return {"status": "deleted"}
 
 
-@app.get("/api/subscriptions/{sub_id}/pgn")
-def download_subscription_pgn(sub_id: int, user=Depends(auth_user), conn=Depends(db)):
-    sub = conn.execute(
-        "SELECT * FROM subscriptions WHERE id = ? AND user_id = ?",
-        (sub_id, user["id"]),
-    ).fetchone()
-    if not sub:
+@app.get("/api/subscriptions/{sub_id}/games")
+def list_subscription_games(sub_id: int, twic: int,
+                            user=Depends(auth_user), conn=Depends(db)):
+    from lichess import view_lichess_url
+
+    games = get_matched_games(conn, sub_id, user["id"], twic)
+    if games is None:
         raise HTTPException(404, "Subscription not found")
 
-    # Get the latest TWIC week for this subscription
-    latest_week = conn.execute(
-        "SELECT MAX(twic_number) as tw FROM notifications_sent WHERE subscription_id = ?",
-        (sub_id,),
+    out = []
+    for g in games:
+        out.append({
+            "id": g["id"],
+            "white": g.get("white"),
+            "black": g.get("black"),
+            "white_elo": g.get("white_elo"),
+            "black_elo": g.get("black_elo"),
+            "result": g.get("result"),
+            "event": g.get("event"),
+            "site": g.get("site"),
+            "date": g.get("date"),
+            "eco": g.get("eco"),
+            "opening": g.get("opening"),
+            "lichess_url": view_lichess_url(g),
+        })
+    return {"twic": twic, "games": out}
+
+
+@app.get("/api/subscriptions/{sub_id}/pgn")
+def download_subscription_pgn(sub_id: int, twic: int | None = None,
+                              user=Depends(auth_user), conn=Depends(db)):
+    if twic is None:
+        latest_week = conn.execute(
+            "SELECT MAX(twic_number) as tw FROM notifications_sent "
+            "WHERE subscription_id = ?",
+            (sub_id,),
+        ).fetchone()
+        if not latest_week or not latest_week["tw"]:
+            raise HTTPException(404, "No matched games found for this subscription")
+        twic = latest_week["tw"]
+
+    games = get_matched_games(conn, sub_id, user["id"], twic)
+    if games is None:
+        raise HTTPException(404, "Subscription not found")
+    if not games:
+        raise HTTPException(404, "No matched games found for this subscription")
+
+    pgn_content = "\n\n".join(g["pgn_text"] for g in games if g.get("pgn_text"))
+    sub = conn.execute(
+        "SELECT label FROM subscriptions WHERE id = ?", (sub_id,),
     ).fetchone()
-    if not latest_week or not latest_week["tw"]:
-        raise HTTPException(404, "No matched games found for this subscription")
-
-    twic_num = latest_week["tw"]
-    rows = conn.execute(
-        """SELECT g.pgn_text FROM games g
-           JOIN notifications_sent n ON n.game_id = g.id
-           WHERE n.subscription_id = ? AND n.twic_number = ?
-           ORDER BY COALESCE(g.white_elo, 0) + COALESCE(g.black_elo, 0) DESC""",
-        (sub_id, twic_num),
-    ).fetchall()
-
-    if not rows:
-        raise HTTPException(404, "No matched games found for this subscription")
-
-    pgn_content = "\n\n".join(r["pgn_text"] for r in rows if r["pgn_text"])
-    label = sub["label"] or f"subscription_{sub_id}"
-    filename = f"{label.replace(' ', '_')}_twic{twic_num}.pgn"
+    label = (sub["label"] if sub else None) or f"subscription_{sub_id}"
+    filename = f"{label.replace(' ', '_')}_twic{twic}.pgn"
 
     return Response(
         content=pgn_content,

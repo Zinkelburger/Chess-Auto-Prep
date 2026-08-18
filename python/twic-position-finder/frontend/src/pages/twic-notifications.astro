@@ -1,658 +1,71 @@
 ---
 import Base from '../layouts/Base.astro';
+import AlertOptions from '../components/AlertOptions.astro';
 ---
 <Base title="TWIC Notifications">
-  <h1>TWIC Notifications</h1>
-  <p class="subtitle">Get notified when games from
-    <a href="https://theweekinchess.com/" target="_blank" style="color:var(--accent); text-decoration:none;">The Week in Chess</a>
-    match your filters. Emails are sent every Tuesday morning.
-  </p>
+  <header class="page-header">
+    <div>
+      <h1>TWIC Notifications</h1>
+      <p class="lede">
+        Get an email every Tuesday when
+        <a href="https://theweekinchess.com/" target="_blank" rel="noopener">The Week in Chess</a>
+        publishes games that match your filters.
+      </p>
+    </div>
+  </header>
 
   <section class="card">
-    <div id="subscribe-alert" style="display:none;"></div>
+    <h2>Create an alert</h2>
+    <div id="subscribe-alert" hidden></div>
     <form id="subscribe-form">
       <div class="form-row">
-        <label for="sub-email">Email address</label>
-        <input type="email" id="sub-email" name="email" required />
+        <label for="sub-email">Email</label>
+        <input type="email" id="sub-email" name="email" required autocomplete="email" />
       </div>
       <div class="form-row">
-        <label for="sub-label">Label</label>
-        <input type="text" id="sub-label" />
+        <label for="sub-label">Label <span class="optional">optional</span></label>
+        <input type="text" id="sub-label" placeholder="e.g. Najdorf, Carlsen with Black" />
       </div>
 
-      <!-- Dynamic filters section -->
       <div class="filters-section">
         <div class="filters-header">
           <span class="filters-title">Filters</span>
-          <span class="filters-hint">At least one required</span>
+          <span class="filters-hint">At least one of FEN, player, or ECO</span>
         </div>
         <div id="filters-container"></div>
         <div class="add-filter-wrap">
-          <button type="button" class="btn btn-outline btn-sm" id="add-filter-btn">+ Add filter</button>
-          <div id="filter-menu" class="filter-menu" style="display:none;"></div>
+          <button type="button" class="btn btn-outline btn-sm" id="add-filter-btn">Add filter</button>
+          <div id="filter-menu" class="filter-menu" hidden></div>
         </div>
       </div>
 
-      <div class="form-row">
-        <label>Time Control</label>
-        <div style="display:flex; gap:16px; flex-wrap:wrap;">
-          <label class="checkbox-label"><input type="checkbox" id="tc-classical" checked /><span>Classical</span></label>
-          <label class="checkbox-label"><input type="checkbox" id="tc-rapid" /><span>Rapid</span></label>
-          <label class="checkbox-label"><input type="checkbox" id="tc-blitz" /><span>Blitz</span></label>
-        </div>
-      </div>
-
-      <div class="form-row">
-        <label>Result</label>
-        <div style="display:flex; gap:16px; flex-wrap:wrap;">
-          <label class="checkbox-label"><input type="checkbox" id="res-white" checked /><span>1-0</span></label>
-          <label class="checkbox-label"><input type="checkbox" id="res-black" checked /><span>0-1</span></label>
-          <label class="checkbox-label"><input type="checkbox" id="res-draw" checked /><span>½-½</span></label>
-        </div>
-      </div>
-
-      <div class="form-row" style="display:flex; align-items:end; padding-bottom:2px;">
-        <label class="checkbox-label">
-          <input type="checkbox" id="sub-exclude-chess-com" checked />
-          <span>Exclude online games (i.e. chess.com)</span>
-        </label>
-      </div>
+      <AlertOptions idPrefix="sub" excludeId="sub-exclude-online" />
 
       {import.meta.env.PUBLIC_TURNSTILE_SITE_KEY && (
-        <div class="cf-turnstile" data-sitekey={import.meta.env.PUBLIC_TURNSTILE_SITE_KEY} data-appearance="interaction-only" style="margin-bottom:16px;"></div>
+        <div class="cf-turnstile" data-sitekey={import.meta.env.PUBLIC_TURNSTILE_SITE_KEY} data-appearance="interaction-only"></div>
       )}
 
       <button type="submit" class="btn btn-primary" id="submit-btn">Subscribe</button>
     </form>
+  </section>
 
-    <div style="margin-top:20px; padding-top:16px; border-top:1px solid var(--border);">
-      <p style="color:var(--text-dim); font-size:0.85rem; margin-bottom:10px;">
-        Already subscribed? Get a link to manage your subscriptions.
-      </p>
-      <form id="login-form" style="display:flex; gap:10px; align-items:end;">
-        <div style="flex:1;">
-          <input type="email" id="login-email" required />
-        </div>
-        <button type="submit" class="btn btn-outline btn-sm">Send Login Link</button>
-      </form>
-      <div id="login-alert" style="display:none; margin-top:10px;"></div>
-    </div>
+  <section class="card">
+    <h2>Already subscribed?</h2>
+    <p class="card-lead">We’ll email you a link to manage your alerts.</p>
+    <form id="login-form" class="inline-form">
+      <div class="form-row grow">
+        <label for="login-email">Email</label>
+        <input type="email" id="login-email" required autocomplete="email" />
+      </div>
+      <button type="submit" class="btn btn-outline">Send login link</button>
+    </form>
+    <div id="login-alert" hidden></div>
   </section>
 </Base>
 
 <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 
 <script>
-  const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000';
-
-  interface FilterDef {
-    key: string;
-    label: string;
-    inputType: string;
-    inputMode?: string;
-    pattern?: string;
-    mono?: boolean;
-    repeatable?: boolean;
-    hasAutocomplete?: { jsonUrl: string; statusId: string; matchesId: string; acLabel: string };
-    hasBoardPreview?: boolean;
-    hasEcoPicker?: boolean;
-    tooltip?: string;
-  }
-
-  const FILTER_DEFS: FilterDef[] = [
-    { key: 'fen', label: 'FEN', inputType: 'text', mono: true, hasBoardPreview: true, repeatable: true },
-    { key: 'player', label: 'Player name', inputType: 'text', hasAutocomplete: { jsonUrl: '/players.json', statusId: 'player-status', matchesId: 'player-matches', acLabel: 'player' } },
-    { key: 'eco', label: 'ECO Code', inputType: 'text', hasEcoPicker: true },
-    { key: 'min_elo', label: 'Minimum Elo', inputType: 'text', inputMode: 'numeric', pattern: '[0-9]*', tooltip: 'At least one player must be at or above this rating' },
-    { key: 'max_elo', label: 'Maximum Elo', inputType: 'text', inputMode: 'numeric', pattern: '[0-9]*', tooltip: 'Both players must be at or below this rating' },
-    { key: 'event', label: 'Event name', inputType: 'text', hasAutocomplete: { jsonUrl: '/events.json', statusId: 'event-status', matchesId: 'event-matches', acLabel: 'event' } },
-  ];
-
-  const activeFilters: Set<string> = new Set();
-  let fenCounter = 0;
-  const container = document.getElementById('filters-container')!;
-  const addBtn = document.getElementById('add-filter-btn')!;
-  const filterMenu = document.getElementById('filter-menu')!;
-
-  function buildFilterRow(def: FilterDef, instanceId?: string): HTMLElement {
-    const rowKey = instanceId || def.key;
-    const row = document.createElement('div');
-    row.className = 'filter-row';
-    row.dataset.filterKey = rowKey;
-
-    const body = document.createElement('div');
-    body.className = 'filter-body';
-
-    const inputSuffix = instanceId ? instanceId.replace('_', '-') : def.key.replace('_', '-');
-    const lbl = document.createElement('label');
-    lbl.setAttribute('for', `sub-${inputSuffix}`);
-    if (def.tooltip) {
-      lbl.innerHTML = `${def.label} <span class="tooltip-trigger" title="${def.tooltip}">?</span>`;
-    } else {
-      lbl.textContent = def.label;
-    }
-    body.appendChild(lbl);
-
-    const inputWrap = document.createElement('div');
-    inputWrap.style.position = 'relative';
-
-    const input = document.createElement('input');
-    input.type = def.inputType;
-    input.id = `sub-${inputSuffix}`;
-    if (def.mono) input.className = 'mono';
-    if (def.inputMode) input.inputMode = def.inputMode;
-    if (def.pattern) input.pattern = def.pattern;
-    input.autocomplete = 'off';
-    if (def.repeatable) input.dataset.filterType = def.key;
-    inputWrap.appendChild(input);
-
-    if (def.hasAutocomplete) {
-      const status = document.createElement('span');
-      status.id = def.hasAutocomplete.statusId;
-      status.style.cssText = 'position:absolute; right:10px; top:50%; transform:translateY(-50%); font-size:1.1rem; display:none;';
-      inputWrap.appendChild(status);
-    }
-
-    body.appendChild(inputWrap);
-
-    if (def.hasAutocomplete) {
-      const matches = document.createElement('div');
-      matches.id = def.hasAutocomplete.matchesId;
-      matches.style.cssText = 'display:none; margin-top:6px; font-size:0.85rem; color:var(--text-dim); max-height:120px; overflow-y:auto;';
-      body.appendChild(matches);
-    }
-
-    if (def.hasBoardPreview) {
-      const board = document.createElement('div');
-      board.id = `fen-board-${inputSuffix}`;
-      board.className = 'board-preview';
-      body.appendChild(board);
-      const err = document.createElement('div');
-      err.id = `fen-error-${inputSuffix}`;
-      err.className = 'board-invalid';
-      body.appendChild(err);
-    }
-
-    if (def.hasEcoPicker) {
-      const browseBtn = document.createElement('button');
-      browseBtn.type = 'button';
-      browseBtn.className = 'eco-trigger-btn';
-      browseBtn.textContent = 'Browse openings...';
-      browseBtn.addEventListener('click', () => openEcoModal(input));
-      body.appendChild(browseBtn);
-    }
-
-    row.appendChild(body);
-
-    const removeBtn = document.createElement('button');
-    removeBtn.type = 'button';
-    removeBtn.className = 'filter-remove';
-    removeBtn.innerHTML = '&times;';
-    removeBtn.title = 'Remove filter';
-    removeBtn.addEventListener('click', () => removeFilter(rowKey));
-    row.appendChild(removeBtn);
-
-    return row;
-  }
-
-  function addFilter(key: string) {
-    const def = FILTER_DEFS.find(d => d.key === key);
-    if (!def) return;
-
-    let instanceId: string | undefined;
-    if (def.repeatable) {
-      instanceId = `${key}-${fenCounter++}`;
-    } else {
-      if (activeFilters.has(key)) return;
-    }
-    const rowKey = instanceId || key;
-    activeFilters.add(rowKey);
-
-    const row = buildFilterRow(def, instanceId);
-    container.appendChild(row);
-
-    if (def.hasBoardPreview && instanceId) {
-      const inputSuffix = instanceId.replace('_', '-');
-      const fenInput = document.getElementById(`sub-${inputSuffix}`) as HTMLInputElement;
-      const fenBoard = document.getElementById(`fen-board-${inputSuffix}`)!;
-      const fenError = document.getElementById(`fen-error-${inputSuffix}`)!;
-      fenInput.addEventListener('input', () => (window as any).renderBoardPreview(fenInput.value, fenBoard, fenError));
-    }
-
-    if (def.hasAutocomplete) {
-      setupAutocomplete(
-        def.hasAutocomplete.jsonUrl,
-        `sub-${key.replace('_', '-')}`,
-        def.hasAutocomplete.statusId,
-        def.hasAutocomplete.matchesId,
-        def.hasAutocomplete.acLabel,
-      );
-    }
-
-    updateMenuState();
-    hideMenu();
-  }
-
-  function removeFilter(rowKey: string) {
-    activeFilters.delete(rowKey);
-    const row = container.querySelector(`[data-filter-key="${rowKey}"]`);
-    if (row) row.remove();
-    updateMenuState();
-  }
-
-  function updateMenuState() {
-    filterMenu.innerHTML = '';
-    let anyAvailable = false;
-    for (const def of FILTER_DEFS) {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'filter-menu-item';
-      btn.textContent = def.label;
-      if (!def.repeatable && activeFilters.has(def.key)) {
-        btn.disabled = true;
-      } else {
-        anyAvailable = true;
-        btn.addEventListener('click', () => addFilter(def.key));
-      }
-      filterMenu.appendChild(btn);
-    }
-    addBtn.style.display = anyAvailable ? '' : 'none';
-  }
-
-  function showMenu() { filterMenu.style.display = 'block'; }
-  function hideMenu() { filterMenu.style.display = 'none'; }
-
-  addBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (filterMenu.style.display === 'none') {
-      updateMenuState();
-      showMenu();
-    } else {
-      hideMenu();
-    }
-  });
-
-  document.addEventListener('click', (e) => {
-    if (!(e.target as Element).closest('.add-filter-wrap')) hideMenu();
-  });
-
-  // Add FEN by default
-  addFilter('fen');
-
-  // ── Form submission ──────────────────────────────────────────────────
-
-  document.getElementById('subscribe-form')!.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const alertEl = document.getElementById('subscribe-alert')!;
-    const submitBtn = document.getElementById('submit-btn') as HTMLButtonElement;
-
-    const safeVal = (id: string) => {
-      const el = document.getElementById(id) as HTMLInputElement | null;
-      return el ? el.value.trim() || undefined : undefined;
-    };
-    const safeNumVal = (id: string) => {
-      const el = document.getElementById(id) as HTMLInputElement | null;
-      if (!el) return undefined;
-      const v = el.value.trim();
-      return v ? parseInt(v) : undefined;
-    };
-
-    let turnstileResponse = '';
-    try { turnstileResponse = (window as any).turnstile?.getResponse() || ''; } catch { }
-    const excludeChessCom = (document.getElementById('sub-exclude-chess-com') as HTMLInputElement).checked;
-
-    const tcParts: string[] = [];
-    if ((document.getElementById('tc-classical') as HTMLInputElement).checked) tcParts.push('classical');
-    if ((document.getElementById('tc-rapid') as HTMLInputElement).checked) tcParts.push('rapid');
-    if ((document.getElementById('tc-blitz') as HTMLInputElement).checked) tcParts.push('blitz');
-    const timeControl = tcParts.length > 0 && tcParts.length < 3 ? tcParts.join(',') : undefined;
-
-    const resParts: string[] = [];
-    if ((document.getElementById('res-white') as HTMLInputElement).checked) resParts.push('1-0');
-    if ((document.getElementById('res-black') as HTMLInputElement).checked) resParts.push('0-1');
-    if ((document.getElementById('res-draw') as HTMLInputElement).checked) resParts.push('1/2-1/2');
-    const result = resParts.length > 0 && resParts.length < 3 ? resParts.join(',') : undefined;
-
-    const fenInputs = container.querySelectorAll<HTMLInputElement>('input[data-filter-type="fen"]');
-    const fenValues = Array.from(fenInputs).map(el => el.value.trim()).filter(Boolean);
-
-    const body: Record<string, unknown> = {
-      email: (document.getElementById('sub-email') as HTMLInputElement).value.trim(),
-      cf_turnstile_token: turnstileResponse,
-      label: safeVal('sub-label') || '',
-      fen: fenValues.length > 0 ? fenValues : undefined,
-      player: safeVal('sub-player'),
-      eco: safeVal('sub-eco'),
-      min_elo: safeNumVal('sub-min-elo'),
-      max_elo: safeNumVal('sub-max-elo'),
-      time_control: timeControl,
-      result: result,
-      event: safeVal('sub-event'),
-      exclude_site: excludeChessCom ? 'chess.com' : undefined,
-    };
-
-    console.log('[TWIC Subscribe] Submitting to', `${API}/api/subscribe`);
-    console.log('[TWIC Subscribe] Payload:', JSON.stringify(body, null, 2));
-
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Submitting...';
-
-    try {
-      const res = await fetch(`${API}/api/subscribe`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      console.log('[TWIC Subscribe] Response:', res.status, data);
-      alertEl.style.display = 'block';
-      if (res.ok) {
-        alertEl.className = 'alert alert-success';
-        alertEl.textContent = data.message;
-        (document.getElementById('subscribe-form') as HTMLFormElement).reset();
-        activeFilters.clear();
-        fenCounter = 0;
-        container.innerHTML = '';
-        addFilter('fen');
-        try { (window as any).turnstile?.reset(); } catch { }
-      } else {
-        alertEl.className = 'alert alert-error';
-        alertEl.textContent = data.detail || 'Something went wrong';
-        try { (window as any).turnstile?.reset(); } catch { }
-      }
-    } catch (err) {
-      console.error('[TWIC Subscribe] Network error:', err);
-      alertEl.style.display = 'block';
-      alertEl.className = 'alert alert-error';
-      alertEl.textContent = 'Could not reach the server.';
-    } finally {
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'Subscribe';
-    }
-  });
-
-  // ── Autocomplete ──────────────────────────────────────────────────────
-
-  function setupAutocomplete(
-    jsonUrl: string,
-    inputId: string,
-    statusId: string,
-    matchesId: string,
-    label: string,
-    minChars = 2,
-  ) {
-    let dataset: string[] = [];
-    fetch(jsonUrl).then(r => r.json()).then((d: string[]) => { dataset = d; }).catch(() => {});
-
-    let timer: ReturnType<typeof setTimeout>;
-    const input = document.getElementById(inputId) as HTMLInputElement;
-    const status = document.getElementById(statusId)!;
-    const matchBox = document.getElementById(matchesId)!;
-
-    function matchesQuery(entry: string, words: string[]): boolean {
-      const lower = entry.toLowerCase();
-      return words.every(w => lower.includes(w));
-    }
-
-    input.addEventListener('input', () => {
-      clearTimeout(timer);
-      const raw = input.value.trim();
-      if (!raw || raw.length < minChars || !dataset.length) {
-        status.style.display = 'none';
-        matchBox.style.display = 'none';
-        return;
-      }
-      timer = setTimeout(() => {
-        const words = raw.toLowerCase().split(/[\s,]+/).filter(w => w.length > 0);
-        const matches = dataset.filter(e => matchesQuery(e, words));
-        status.style.display = 'inline';
-        if (matches.length > 0) {
-          status.textContent = '✓';
-          status.style.color = '#4caf50';
-          status.title = `Matches ${matches.length} ${label}(s) in TWIC`;
-          matchBox.style.display = 'block';
-          matchBox.innerHTML = matches.slice(0, 10)
-            .map(e => `<div style="padding:2px 0; cursor:pointer;" class="ac-item">✓ ${e}</div>`)
-            .join('')
-            + (matches.length > 10 ? `<div style="padding:2px 0; font-style:italic;">…and ${matches.length - 10} more</div>` : '');
-          matchBox.querySelectorAll('.ac-item').forEach(el => {
-            el.addEventListener('click', () => {
-              input.value = el.textContent!.replace(/^✓\s*/, '');
-              input.dispatchEvent(new Event('input'));
-            });
-          });
-        } else {
-          status.textContent = '✗';
-          status.style.color = '#f44336';
-          status.title = `No matching ${label}s in TWIC data`;
-          matchBox.style.display = 'block';
-          if (label === 'player' && words.length > 1) {
-            const longest = words.reduce((a, b) => a.length >= b.length ? a : b);
-            const fallback = dataset.filter(e => e.toLowerCase().includes(longest));
-            if (fallback.length > 0) {
-              matchBox.innerHTML =
-                `<div style="color:#f44336; margin-bottom:6px;">No exact match — TWIC often abbreviates first names. Try just "<strong>${longest}</strong>":</div>`
-                + fallback.slice(0, 8).map(e => `<div style="padding:2px 0; cursor:pointer;" class="ac-item">✓ ${e}</div>`).join('')
-                + (fallback.length > 8 ? `<div style="padding:2px 0; font-style:italic;">…and ${fallback.length - 8} more</div>` : '');
-              matchBox.querySelectorAll('.ac-item').forEach(el => {
-                el.addEventListener('click', () => {
-                  input.value = el.textContent!.replace(/^✓\s*/, '');
-                  input.dispatchEvent(new Event('input'));
-                });
-              });
-            } else {
-              matchBox.innerHTML = '<div style="color:#f44336;">No matching players in TWIC data</div>';
-            }
-          } else {
-            matchBox.innerHTML = `<div style="color:#f44336;">No matching ${label}s in TWIC data</div>`;
-          }
-        }
-      }, 300);
-    });
-  }
-
-  // ── Login form ──────────────────────────────────────────────────────
-
-  document.getElementById('login-form')!.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const email = (document.getElementById('login-email') as HTMLInputElement).value;
-    const alertEl = document.getElementById('login-alert')!;
-    try {
-      const res = await fetch(`${API}/api/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      const data = await res.json();
-      alertEl.style.display = 'block';
-      if (res.ok) {
-        alertEl.className = 'alert alert-success';
-        alertEl.textContent = data.message;
-      } else {
-        alertEl.className = 'alert alert-error';
-        alertEl.textContent = data.detail || 'Something went wrong';
-      }
-    } catch {
-      alertEl.style.display = 'block';
-      alertEl.className = 'alert alert-error';
-      alertEl.textContent = 'Could not reach the server.';
-    }
-  });
-
-  // ── ECO Picker Modal ──────────────────────────────────────────────
-
-  let ecoData: [string, string, string, string][] = [];
-  let ecoLoaded = false;
-
-  async function loadEcoData() {
-    if (ecoLoaded) return;
-    try {
-      const res = await fetch('/eco.json');
-      ecoData = await res.json();
-      ecoLoaded = true;
-    } catch { /* silently fail */ }
-  }
-
-  loadEcoData();
-
-  function fuzzyMatch(entry: [string, string, string, string], query: string): boolean {
-    const [code, name] = entry;
-    const words = query.toLowerCase().split(/\s+/).filter(w => w.length > 0);
-    const haystack = `${code} ${name}`.toLowerCase();
-    return words.every(w => haystack.includes(w));
-  }
-
-  function lichessAnalysisUrl(pgn: string): string {
-    return `https://lichess.org/analysis/pgn/${encodeURIComponent(pgn)}`;
-  }
-
-  function openEcoModal(targetInput: HTMLInputElement) {
-    loadEcoData();
-
-    const backdrop = document.createElement('div');
-    backdrop.className = 'eco-modal-backdrop';
-
-    const modal = document.createElement('div');
-    modal.className = 'eco-modal';
-
-    modal.innerHTML = `
-      <div class="eco-modal-header">
-        <h3>Select ECO Opening</h3>
-        <button class="eco-modal-close" type="button">&times;</button>
-      </div>
-      <div class="eco-modal-search">
-        <input type="text" placeholder="Search by code or name... e.g. B90, Sicilian, Najdorf" autocomplete="off" />
-        <div class="eco-search-hint">Type to filter 3,300+ openings. Click to select, then confirm.</div>
-      </div>
-      <div class="eco-modal-list"></div>
-      <div class="eco-modal-footer">
-        <span class="eco-selected-count"></span>
-        <div style="display:flex; gap:8px;">
-          <button type="button" class="btn btn-outline btn-sm eco-modal-cancel">Cancel</button>
-          <button type="button" class="btn btn-primary btn-sm eco-modal-confirm">Select</button>
-        </div>
-      </div>
-    `;
-
-    backdrop.appendChild(modal);
-    document.body.appendChild(backdrop);
-
-    const searchInput = modal.querySelector('.eco-modal-search input') as HTMLInputElement;
-    const listEl = modal.querySelector('.eco-modal-list')!;
-    const countEl = modal.querySelector('.eco-selected-count')!;
-    const closeBtn = modal.querySelector('.eco-modal-close')!;
-    const cancelBtn = modal.querySelector('.eco-modal-cancel')!;
-    const confirmBtn = modal.querySelector('.eco-modal-confirm')!;
-
-    let selectedCode = targetInput.value.trim().toUpperCase();
-
-    function close() { backdrop.remove(); }
-
-    closeBtn.addEventListener('click', close);
-    cancelBtn.addEventListener('click', close);
-    backdrop.addEventListener('click', (e) => {
-      if (e.target === backdrop) close();
-    });
-    document.addEventListener('keydown', function escHandler(e) {
-      if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escHandler); }
-    });
-
-    confirmBtn.addEventListener('click', () => {
-      if (selectedCode) {
-        targetInput.value = selectedCode;
-        targetInput.dispatchEvent(new Event('input'));
-      }
-      close();
-    });
-
-    function renderList(query: string) {
-      const filtered = query
-        ? ecoData.filter(e => fuzzyMatch(e, query)).slice(0, 100)
-        : ecoData.slice(0, 100);
-
-      if (filtered.length === 0) {
-        listEl.innerHTML = '<div class="eco-no-results">No openings match your search</div>';
-        return;
-      }
-
-      listEl.innerHTML = '';
-      const frag = document.createDocumentFragment();
-      for (const [code, name, pgn, fen] of filtered) {
-        const item = document.createElement('div');
-        item.className = 'eco-item' + (code === selectedCode ? ' selected' : '');
-
-        const mainRow = document.createElement('div');
-        mainRow.className = 'eco-item-main';
-        mainRow.innerHTML = `
-          <span class="eco-item-toggle">&#9654;</span>
-          <span class="eco-item-code">${code}</span>
-          <span class="eco-item-name">${name}</span>
-          <span class="eco-item-check">&#10003;</span>
-        `;
-
-        const details = document.createElement('div');
-        details.className = 'eco-item-details';
-        details.innerHTML = `
-          <div class="eco-item-moves">${pgn}</div>
-          <div class="eco-item-board"></div>
-          <a href="${lichessAnalysisUrl(pgn)}" target="_blank" rel="noopener" class="eco-lichess-btn">
-            Analyze on Lichess &#8599;
-          </a>
-        `;
-
-        item.appendChild(mainRow);
-        item.appendChild(details);
-
-        const toggle = mainRow.querySelector('.eco-item-toggle')!;
-
-        function expandCollapse() {
-          const expanded = item.classList.toggle('expanded');
-          if (expanded) {
-            toggle.innerHTML = '&#9660;';
-            const boardEl = details.querySelector('.eco-item-board') as HTMLElement;
-            if (!boardEl.hasChildNodes()) {
-              (window as any).renderBoardPreview(fen, boardEl, null);
-              boardEl.style.display = 'grid';
-            }
-          } else {
-            toggle.innerHTML = '&#9654;';
-          }
-        }
-
-        mainRow.addEventListener('click', () => {
-          selectedCode = code;
-          listEl.querySelectorAll('.eco-item.selected').forEach(el => el.classList.remove('selected'));
-          item.classList.add('selected');
-          updateCount();
-          expandCollapse();
-        });
-
-        frag.appendChild(item);
-      }
-      listEl.appendChild(frag);
-
-      const total = query ? ecoData.filter(e => fuzzyMatch(e, query)).length : ecoData.length;
-      if (total > 100) {
-        const more = document.createElement('div');
-        more.className = 'eco-no-results';
-        more.textContent = `Showing 100 of ${total} results — refine your search`;
-        listEl.appendChild(more);
-      }
-    }
-
-    function updateCount() {
-      countEl.textContent = selectedCode ? `Selected: ${selectedCode}` : '';
-    }
-
-    let searchTimer: ReturnType<typeof setTimeout>;
-    searchInput.addEventListener('input', () => {
-      clearTimeout(searchTimer);
-      searchTimer = setTimeout(() => renderList(searchInput.value.trim()), 150);
-    });
-
-    renderList('');
-    updateCount();
-    setTimeout(() => searchInput.focus(), 50);
-  }
-
+  import { initSubscribePage } from '../lib/subscribe-page';
+  initSubscribePage();
 </script>

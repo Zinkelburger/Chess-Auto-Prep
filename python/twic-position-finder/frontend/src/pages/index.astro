@@ -31,17 +31,17 @@ import Base from '../layouts/Base.astro';
 <style>
   .hero {
     text-align: center;
-    padding: 48px 0 40px;
+    padding: 56px 0 36px;
   }
 
   .hero h1 {
-    font-size: 2.6rem;
+    font-size: 2.4rem;
     letter-spacing: -0.03em;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
   }
 
   .hero .subtitle {
-    font-size: 1.15rem;
+    font-size: 1.1rem;
     margin-bottom: 0;
   }
 
@@ -64,16 +64,17 @@ import Base from '../layouts/Base.astro';
     flex-direction: column;
     background: var(--bg-card);
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: var(--radius);
     padding: 28px 24px;
     text-decoration: none;
     color: var(--text);
-    transition: border-color 0.2s, transform 0.15s;
+    transition: border-color 0.2s, transform 0.15s, box-shadow 0.2s;
   }
 
   .feature-card:hover {
     border-color: var(--accent);
     transform: translateY(-2px);
+    box-shadow: var(--shadow);
   }
 
   .feature-icon {

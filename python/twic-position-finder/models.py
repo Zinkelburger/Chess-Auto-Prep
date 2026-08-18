@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 
 CREATE TABLE IF NOT EXISTS notifications_sent (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    subscription_id INTEGER REFERENCES subscriptions(id),
+    subscription_id INTEGER REFERENCES subscriptions(id) ON DELETE CASCADE,
     game_id         INTEGER REFERENCES games(id),
     twic_number     INTEGER,
     sent_at         REAL,
@@ -443,13 +443,91 @@ def get_subscriptions(db: sqlite3.Connection, user_id: int) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def get_matched_games(db: sqlite3.Connection, sub_id: int, user_id: int,
+                      twic_number: int) -> list[dict] | None:
+    """Games matched to an owned subscription in one TWIC issue.
+
+    Returns ``None`` if the subscription is missing or not owned.
+    """
+    owned = db.execute(
+        "SELECT id FROM subscriptions WHERE id = ? AND user_id = ?",
+        (sub_id, user_id),
+    ).fetchone()
+    if not owned:
+        return None
+    rows = db.execute(
+        """SELECT g.id, g.white, g.black, g.white_elo, g.black_elo, g.result,
+                  g.event, g.site, g.date, g.eco, g.opening, g.lichess_url,
+                  g.pgn_text
+           FROM games g
+           JOIN notifications_sent n ON n.game_id = g.id
+           WHERE n.subscription_id = ? AND n.twic_number = ?
+           ORDER BY COALESCE(g.white_elo, 0) + COALESCE(g.black_elo, 0) DESC""",
+        (sub_id, twic_number),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def update_subscription(db: sqlite3.Connection, sub_id: int, user_id: int, *,
+                        label: str = "", fen: str | None = None,
+                        player: str | None = None, white: str | None = None,
+                        black: str | None = None, exclude_site: str | None = None,
+                        site: str | None = None, min_elo: int | None = None,
+                        max_elo: int | None = None, eco: str | None = None,
+                        time_control: str | None = None,
+                        result: str | None = None,
+                        event: str | None = None) -> dict | None:
+    """Replace filter fields on an owned subscription. Returns the row, or None."""
+    owned = db.execute(
+        "SELECT id FROM subscriptions WHERE id = ? AND user_id = ?",
+        (sub_id, user_id),
+    ).fetchone()
+    if not owned:
+        return None
+    zobrist = _compute_sub_zobrist(fen)
+    db.execute(
+        """UPDATE subscriptions SET
+              label=?, fen=?, zobrist_hash=?, player=?, white=?, black=?,
+              exclude_site=?, site=?, min_elo=?, max_elo=?, eco=?,
+              time_control=?, result=?, event=?
+           WHERE id=? AND user_id=?""",
+        (label, fen, zobrist, player, white, black,
+         exclude_site, site, min_elo, max_elo, eco,
+         time_control, result, event, sub_id, user_id),
+    )
+    db.commit()
+    return dict(db.execute("SELECT * FROM subscriptions WHERE id = ?",
+                           (sub_id,)).fetchone())
+
+
 def delete_subscription(db: sqlite3.Connection, sub_id: int, user_id: int) -> bool:
-    cur = db.execute(
+    """Hard-delete a subscription the user owns.
+
+    Child ``notifications_sent`` rows are removed first. Existing databases
+    were created without ``ON DELETE CASCADE``, so a bare DELETE of a
+    subscription that has already matched games raises IntegrityError and
+    surfaces in the UI as "Failed to delete subscription."
+    """
+    owned = db.execute(
+        "SELECT id FROM subscriptions WHERE id = ? AND user_id = ?",
+        (sub_id, user_id),
+    ).fetchone()
+    if not owned:
+        return False
+    db.execute(
+        "DELETE FROM notifications_sent WHERE subscription_id = ?",
+        (sub_id,),
+    )
+    db.execute(
+        "UPDATE email_tokens SET subscription_id = NULL WHERE subscription_id = ?",
+        (sub_id,),
+    )
+    db.execute(
         "DELETE FROM subscriptions WHERE id = ? AND user_id = ?",
         (sub_id, user_id),
     )
     db.commit()
-    return cur.rowcount > 0
+    return True
 
 
 def get_all_active_subscriptions(db: sqlite3.Connection) -> list[dict]:

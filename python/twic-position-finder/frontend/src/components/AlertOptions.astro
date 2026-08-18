@@ -1,0 +1,49 @@
+---
+interface Props {
+  idPrefix: string;
+  excludeId: string;
+}
+const { idPrefix, excludeId } = Astro.props;
+---
+<div class="form-row">
+  <span class="field-label">Time control</span>
+  <div class="choice-row">
+    <label class="choice">
+      <input type="checkbox" id={`${idPrefix}-tc-classical`} checked />
+      <span>Classical</span>
+    </label>
+    <label class="choice">
+      <input type="checkbox" id={`${idPrefix}-tc-rapid`} />
+      <span>Rapid</span>
+    </label>
+    <label class="choice">
+      <input type="checkbox" id={`${idPrefix}-tc-blitz`} />
+      <span>Blitz</span>
+    </label>
+  </div>
+</div>
+
+<div class="form-row">
+  <span class="field-label">Result</span>
+  <div class="choice-row">
+    <label class="choice">
+      <input type="checkbox" id={`${idPrefix}-res-white`} checked />
+      <span>1–0</span>
+    </label>
+    <label class="choice">
+      <input type="checkbox" id={`${idPrefix}-res-black`} checked />
+      <span>0–1</span>
+    </label>
+    <label class="choice">
+      <input type="checkbox" id={`${idPrefix}-res-draw`} checked />
+      <span>½–½</span>
+    </label>
+  </div>
+</div>
+
+<div class="form-row">
+  <label class="checkbox-label">
+    <input type="checkbox" id={excludeId} checked />
+    <span>Exclude online games (chess.com)</span>
+  </label>
+</div>

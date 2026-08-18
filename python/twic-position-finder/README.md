@@ -77,16 +77,19 @@ python server.py
 # or: uvicorn server:app --host 0.0.0.0 --port 8000
 ```
 
-API endpoints:
-- `POST /api/register` — sign up with email
-- `GET /api/verify?token=...` — verify email
-- `POST /api/login` — request login link
-- `GET /api/subscriptions?token=...` — list subscriptions
-- `POST /api/subscriptions?token=...` — create subscription
-- `DELETE /api/subscriptions/{id}?token=...` — delete subscription
-- `GET /api/query?fen=...&player=...` — query games
-- `GET /api/tree?fen=...` — opening explorer
-- `GET /api/stats` — database stats
+API endpoints (Bearer token unless noted):
+- `POST /api/subscribe` — create an alert (email + CAPTCHA; sends verify or login mail)
+- `POST /api/verify` — consume email verification token
+- `POST /api/login` — request a dashboard login link
+- `POST /api/exchange-token` — swap a one-time login token for a session token
+- `GET /api/me` — current user
+- `GET /api/subscriptions` — list alerts
+- `POST /api/subscriptions` — create an alert
+- `PUT /api/subscriptions/{id}` — update an alert
+- `DELETE /api/subscriptions/{id}` — delete an alert (also removes matched-game rows)
+- `GET /api/subscriptions/{id}/games?twic=` — matched games for an issue (with Lichess links)
+- `GET /api/subscriptions/{id}/pgn?twic=` — download matched PGN for an issue
+- `POST /api/logout` — revoke the session token
 
 ### Frontend (Astro)
 
