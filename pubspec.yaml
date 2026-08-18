@@ -68,8 +68,6 @@ flutter:
     - assets/executables/
     - assets/pgn_collections/
     - assets/data/openings/
-    - assets/data/uscf_chesscom_map.json
-    - assets/data/chesscom_titled.json
 
 flutter_launcher_icons:
   android: true

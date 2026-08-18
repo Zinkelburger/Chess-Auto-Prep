@@ -67,12 +67,11 @@ class _EngineWeaknessConfigDialogState
 
   /// Freshness is what people almost always want when they re-run this, so
   /// the fetch is opted *out* of, not into — but only where there is a source
-  /// to fetch from. Imported game-sets have none, and leaving it on there
+  /// to fetch from. PGN-file imports have none, and leaving it on there
   /// would abort the run in [_redownloadGames].
   late bool _redownload = _canRedownload;
 
-  bool get _canRedownload =>
-      widget.playerInfo != null && !widget.playerInfo!.isImported;
+  bool get _canRedownload => widget.playerInfo?.canRedownload ?? false;
 
   @override
   void initState() {

@@ -9,6 +9,5 @@ void main() {
     expect(AppMode.pgnViewer.usesInteractiveEngine, isTrue);
     expect(AppMode.study.usesInteractiveEngine, isTrue);
     expect(AppMode.repertoireTrainer.usesInteractiveEngine, isFalse);
-    expect(AppMode.tournament.usesInteractiveEngine, isFalse);
   });
 }

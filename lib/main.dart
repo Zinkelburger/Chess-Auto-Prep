@@ -8,7 +8,6 @@ import 'core/app_history.dart';
 import 'core/app_state.dart';
 import 'core/study_controller.dart';
 import 'models/engine_settings.dart';
-import 'features/tournament/services/tournament_session.dart';
 import 'models/eval_database_settings.dart';
 import 'screens/main_screen.dart';
 import 'theme/app_colors.dart';
@@ -164,12 +163,6 @@ class ChessAutoPrepApp extends StatelessWidget {
         // the study screen edits.
         ChangeNotifierProvider<StudyController>(
           create: (_) => StudyController(),
-        ),
-        // App-scoped so the Tournament screen and the MCP bridge mutate the
-        // same roster — an agent resolving an account and the user looking at
-        // the table must never be looking at two different fields.
-        ChangeNotifierProvider<TournamentSession>(
-          create: (_) => TournamentSession(),
         ),
       ],
       child: MaterialApp(

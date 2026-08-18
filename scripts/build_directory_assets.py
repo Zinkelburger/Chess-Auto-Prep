@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
-Build the app-bundled player directory assets.
+Build the compact player directory used by the chess_prep MCP server.
 
 Reads the research output in scripts/data/ and scripts/chesscom_titled_analysis/
-and emits two compact JSON assets consumed by lib/features/tournament/services/
-player_directory.dart:
+and emits two compact JSON files consumed by tools/mcp/chess_prep/directory.py:
 
-  assets/data/uscf_chesscom_map.json   USCF ID -> chess.com username + evidence
-  assets/data/chesscom_titled.json     chess.com username -> title
+  tools/mcp/chess_prep/data/uscf_chesscom_map.json   USCF ID -> chess.com username + evidence
+  tools/mcp/chess_prep/data/chesscom_titled.json     chess.com username -> title
 
 Re-run this after extending the mapping with build_player_map.py, then commit
 the regenerated assets.
@@ -22,7 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "scripts" / "data"
 TITLED = ROOT / "scripts" / "chesscom_titled_analysis" / "data"
-OUT = ROOT / "assets" / "data"
+OUT = ROOT / "tools" / "mcp" / "chess_prep" / "data"
 
 # Confidence levels we are willing to ship. "ambiguous"/"unmappable" rows carry
 # no username and would only add weight to the asset.

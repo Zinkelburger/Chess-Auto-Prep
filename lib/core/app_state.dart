@@ -16,7 +16,6 @@ enum AppMode {
   repertoireTrainer,
   pgnViewer,
   study,
-  tournament,
 }
 
 extension AppModeLabel on AppMode {
@@ -29,7 +28,6 @@ extension AppModeLabel on AppMode {
     AppMode.repertoireTrainer => 'Repertoire Trainer',
     AppMode.pgnViewer => 'PGN Viewer',
     AppMode.study => 'Study',
-    AppMode.tournament => 'Tournament Prep',
   };
 }
 
@@ -43,7 +41,7 @@ extension AppModeEngine on AppMode {
     AppMode.repertoire ||
     AppMode.pgnViewer ||
     AppMode.study => true,
-    AppMode.repertoireTrainer || AppMode.tournament => false,
+    AppMode.repertoireTrainer => false,
   };
 }
 

@@ -1,9 +1,8 @@
 """USCF → chess.com directory lookup, and the name normalization it needs.
 
-Port of `lib/features/tournament/services/player_directory.dart` and
-`player_name.dart`. The two must agree: the app and this server resolve the
-same roster, and a name key that differs between them would silently produce
-different identities on either side.
+Names are normalized to a key ("smith|john") so "Smith, John", "John Smith"
+and "JOHN  SMITH" all land on the same row; ambiguous names return every
+candidate rather than a pick.
 """
 
 from __future__ import annotations
@@ -152,8 +151,8 @@ class PlayerDirectory:
 
     @classmethod
     def load(cls) -> "PlayerDirectory":
-        """Prefer the bundled asset so the app and this server agree; fall
-        back to the raw research output when the asset is missing."""
+        """Prefer the compact bundled directory; fall back to the raw
+        research output when it has not been regenerated yet."""
         titles = cls._load_titles()
 
         if ASSET_MAP.exists():

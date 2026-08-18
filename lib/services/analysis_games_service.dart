@@ -202,6 +202,62 @@ class AnalysisGamesService {
     return response.body;
   }
 
+  /// Download games for one account on either platform.
+  Future<String> downloadAccountGames(
+    PlayerAccount account, {
+    int maxGames = 100,
+    int? monthsBack,
+    void Function(String)? onProgress,
+  }) {
+    return account.platform == 'lichess'
+        ? downloadLichessGames(
+            account.username,
+            maxGames: maxGames,
+            monthsBack: monthsBack,
+            onProgress: onProgress,
+          )
+        : downloadChesscomGames(
+            account.username,
+            maxGames: maxGames,
+            monthsBack: monthsBack,
+            onProgress: onProgress,
+          );
+  }
+
+  /// Download (or re-download) everything [player] is sourced from: the one
+  /// live account for a plain download, or every account of an opponent
+  /// built from an opponent list, concatenated into one PGN. Throws
+  /// [StateError] for a PGN-file import, which has no source.
+  ///
+  /// [maxGames] applies per account, so a two-account opponent may return up
+  /// to twice as many games — the cap is about API cost, not corpus size.
+  Future<String> downloadGamesFor(
+    AnalysisPlayerInfo player, {
+    int? maxGames,
+    int? monthsBack,
+    void Function(String)? onProgress,
+  }) async {
+    if (!player.canRedownload) {
+      throw StateError('${player.username} has no source to download from.');
+    }
+    final accounts = player.accounts.isNotEmpty
+        ? player.accounts
+        : [PlayerAccount(player.platform, player.username)];
+
+    final parts = <String>[];
+    for (final account in accounts) {
+      final prefix = accounts.length > 1 ? '${account.username}: ' : '';
+      final pgns = await downloadAccountGames(
+        account,
+        maxGames: maxGames ?? player.maxGames,
+        monthsBack: monthsBack,
+        onProgress: (m) => onProgress?.call('$prefix$m'),
+      );
+      if (pgns.trim().isNotEmpty) parts.add(pgns.trim());
+    }
+    return parts.join('\n\n');
+  }
+
   // ── Persistence ────────────────────────────────────────────────────
 
   /// Save downloaded PGN + metadata. Also **clears** any stale cached analysis
@@ -212,6 +268,8 @@ class AnalysisGamesService {
     required String username,
     required int maxGames,
     int? monthsBack,
+    List<PlayerAccount> accounts = const [],
+    String? group,
   }) async {
     final directory = await _getAnalysisDirectory();
     final key = AnalysisPlayerInfo(
@@ -234,6 +292,8 @@ class AnalysisGamesService {
       monthsBack: monthsBack,
       downloadedAt: DateTime.now(),
       gameCount: gameCount,
+      accounts: accounts,
+      group: group,
     );
     await writeTextFileAtomically(
       File(p.join(directory.path, '$key.json')),

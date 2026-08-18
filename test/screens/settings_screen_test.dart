@@ -1,11 +1,10 @@
 /// Settings is a long page of cards. The body must be a bounded ListView —
 /// wrapping it in Align first made the list grow to fit every section, the
-/// scaffold clipped the overflow, and engine / database / agent-bridge were
+/// scaffold clipped the overflow, and engine / database / reset were
 /// unreachable.
 library;
 
 import 'package:chess_auto_prep/core/app_state.dart';
-import 'package:chess_auto_prep/features/tournament/services/tournament_session.dart';
 import 'package:chess_auto_prep/models/eval_database_settings.dart';
 import 'package:chess_auto_prep/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
@@ -18,7 +17,7 @@ void main() {
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  testWidgets('a short window can still scroll to engine and agent bridge', (
+  testWidgets('a short window can still scroll to the reset button', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(800, 360);
@@ -32,9 +31,6 @@ void main() {
           ChangeNotifierProvider<EvalDatabaseSettings>.value(
             value: EvalDatabaseSettings.instance,
           ),
-          ChangeNotifierProvider<TournamentSession>(
-            create: (_) => TournamentSession(),
-          ),
         ],
         child: const MaterialApp(home: SettingsScreen()),
       ),
@@ -44,11 +40,10 @@ void main() {
     expect(find.text('Your chess usernames'), findsOneWidget);
 
     await tester.scrollUntilVisible(
-      find.text('Agent bridge (MCP)'),
+      find.text('Reset All to Defaults'),
       240,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.text('Agent bridge (MCP)'), findsOneWidget);
     expect(find.text('Reset All to Defaults'), findsOneWidget);
   });
 }

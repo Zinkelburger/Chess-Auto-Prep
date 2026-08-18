@@ -1,22 +1,14 @@
 """Tool registry for the standalone prep server.
 
-## What lives here and what does not
+Identity / pairing tools need no chess engine and no running app — just the
+shipped directory, the US Chess API, and a roster file. Opening-tree tools
+(`pgn_open`, `pgn_position`, `pgn_walk`, `pgn_eval`, `pgn_audit`) sit beside
+them and need `python-chess` (and Stockfish for eval/audit).
 
-These tools need no chess engine, no opening tree, and no running app — just
-the shipped directory, the US Chess API, and a roster file. That is deliberate:
-identity resolution is the part an agent is actually good at (reading an
-organizer's page, searching for profiles, judging whether two records describe
-the same person), and it should not require the GUI to be open.
-
-Anything needing an `OpeningTree`, Stockfish, Maia or the eval cache stays in
-the Flutter app and is reached through `chess_prep_mcp.mjs`. The two halves
-meet at the roster file.
-
-## The trust rule
-
-An agent proposes; a human confirms. `identity_propose` records an account with
-its evidence but leaves it non-actionable, so a hallucinated username can send
-prep at the wrong person — visible and recoverable — but never silently.
+The hand-off to the app for a tournament is a file: `opponents_export` writes
+an opponent list that Player Analysis imports. Opening-tree tools query a PGN
+in place so an agent can ask what a Colle (or any) repertoire plays against a
+given line, including transpositions.
 """
 
 from __future__ import annotations
@@ -33,7 +25,9 @@ from .roster import (
     roster_to_csv,
     save_roster,
 )
-from .paths import roster_path
+from .opponents import opponents_document, write_opponents
+from .paths import opponents_path, roster_path
+from .swiss import SimulationConfig, simulate
 
 
 class ToolError(Exception):
@@ -185,7 +179,7 @@ class Registry:
             "— paste the organizer's page contents directly. Handles US Chess "
             "event pages, where FIDE ID precedes USCF ID (both 7-9 digits) and "
             "only the header row disambiguates them. Replaces any roster "
-            "currently saved, and the Flutter app picks it up live.",
+            "currently saved.",
             _obj(
                 {
                     "text": _s("The raw entry list."),
@@ -325,6 +319,63 @@ class Registry:
             _obj({}),
             self._roster_export,
         )
+
+        self._add(
+            "pairing_simulate",
+            "Monte Carlo the whole event and return P(face) for every entrant "
+            "in your section, split by the colour you would hold and by "
+            "round. Does not predict the pairing sheet — it samples the event "
+            "thousands of times so withdrawals, attendance doubts, byes and "
+            "withholds (constraint_add) are absorbed rather than breaking it. "
+            "Needs one entrant marked is_me (roster_update). Round 1 is "
+            "near-deterministic; rounds 4+ diffuse toward the players near "
+            "your rating, which is the honest answer.",
+            _obj(
+                {
+                    "trials": _i("Simulated events. Default 2000."),
+                    "seed": _i("RNG seed, for reproducibility."),
+                    "draw_rate": _n("Draw rate between equals. Default 0.30."),
+                    "unrated_rating": _i(
+                        "Rating assumed for unrated entrants. Default: field median."
+                    ),
+                    "min_prob": _n(
+                        "Omit opponents below this P(face) from the list. Default 0."
+                    ),
+                }
+            ),
+            self._pairing_simulate,
+        )
+
+        self._add(
+            "opponents_export",
+            "Write the opponent list the app's Player Analysis imports: one "
+            "row per entrant with a usable account — name, chess.com and/or "
+            "lichess username, rating, and P(face) if pairing_simulate has "
+            "run. Only CONFIRMED identities are included; proposals are "
+            "listed under `skipped` so the user can see what a confirmation "
+            "would unlock. In the app: Player Analysis → Import opponents → "
+            "pick the file (the path is returned).",
+            _obj(
+                {
+                    "path": _s(
+                        "Where to write. Default: opponents.json next to the roster."
+                    ),
+                    "min_prob": _n(
+                        "Skip opponents below this P(face). Default 0 (everyone "
+                        "with an account). Requires pairing_simulate first."
+                    ),
+                    "include_unconfirmed": _b(
+                        "Also export agent proposals the user has NOT confirmed. "
+                        "Off by default — see the trust rule."
+                    ),
+                }
+            ),
+            self._opponents_export,
+        )
+
+        from .opening import register_opening_tools
+
+        register_opening_tools(self)
 
     # ── Handlers ───────────────────────────────────────────────────────────
 
@@ -630,6 +681,78 @@ class Registry:
 
     def _roster_export(self, args: dict) -> dict:
         return {"format": "roster_csv", "content": roster_to_csv(load_roster())}
+
+    def _pairing_simulate(self, args: dict) -> dict:
+        roster = load_roster()
+        if not roster.entries:
+            raise ToolError("No roster loaded. Call roster_import first.")
+        if roster.me is None:
+            raise ToolError(
+                "Nobody is marked as you. Call roster_update with is_me: true "
+                "on your own entry first."
+            )
+        config = SimulationConfig(
+            trials=int(args.get("trials") or 2000),
+            seed=int(args.get("seed") or 20260806),
+            draw_rate=float(args.get("draw_rate") or 0.30),
+            unrated_rating=(
+                int(args["unrated_rating"])
+                if args.get("unrated_rating") is not None
+                else None
+            ),
+        )
+        result = simulate(roster, config)
+        min_prob = float(args.get("min_prob") or 0.0)
+
+        # Persist P(face) onto the roster so opponents_export can carry it
+        # without the caller re-running the simulation.
+        by_id = {o.player_id: o for o in result.opponents}
+        for entry in roster.entries:
+            o = by_id.get(entry.id)
+            entry.pairing = o.to_dict() if o else None
+        save_roster(roster)
+
+        opponents = []
+        for o in result.opponents:
+            if o.prob_any < min_prob:
+                continue
+            entry = roster.find(o.player_id)
+            row = o.to_dict()
+            row["name"] = entry.name if entry else o.player_id
+            if entry and entry.rating is not None:
+                row["rating"] = entry.rating
+            row["has_account"] = bool(entry and entry.is_actionable)
+            opponents.append(row)
+
+        out = result.to_dict()
+        out["opponents"] = opponents
+        out["omitted_below_min_prob"] = len(result.opponents) - len(opponents)
+        out["next_step"] = (
+            "Call opponents_export to write the list Player Analysis imports."
+        )
+        return out
+
+    def _opponents_export(self, args: dict) -> dict:
+        roster = load_roster()
+        if not roster.entries:
+            raise ToolError("No roster loaded. Call roster_import first.")
+        min_prob = float(args.get("min_prob") or 0.0)
+        include_unconfirmed = bool(args.get("include_unconfirmed", False))
+        doc, skipped = opponents_document(
+            roster, min_prob=min_prob, include_unconfirmed=include_unconfirmed
+        )
+        target = args.get("path")
+        path = write_opponents(doc, target or opponents_path())
+        return {
+            "path": str(path),
+            "opponents": len(doc["opponents"]),
+            "skipped": skipped,
+            "next_step": (
+                "In the app: Player Analysis → Import opponents → choose "
+                f"{path}. Each opponent becomes one player entry with games "
+                "from every listed account."
+            ),
+        }
 
 
 __all__ = ["Registry", "ToolError", "Roster", "RosterEntry"]

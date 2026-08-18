@@ -527,7 +527,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
         ? ' · downloaded ${p.downloadTimeAgo}'
         : '';
     final base =
-        '${p.gameCount} games · ${p.platformDisplayName} (${p.username})'
+        '${p.gameCount} games · ${p.platformDisplayName} (${p.displayName})'
         ' · ${p.rangeDescription}$dl';
     if (!_isAnalyzing) return base;
     if (_analysisTotal > 0) {
@@ -589,8 +589,8 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
   Future<bool> _redownloadGames(int monthsBack) async {
     final player = _currentPlayer;
     if (player == null) return false;
-    // Imported game-sets have no source to re-download from.
-    if (player.isImported) return false;
+    // PGN-file imports have no source to re-download from.
+    if (!player.canRedownload) return false;
 
     _cancelEvalAnalysis();
 
@@ -620,28 +620,16 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     );
 
     try {
-      final String pgns;
-
-      if (player.platform == 'chesscom') {
-        pgns = await _gamesService.downloadChesscomGames(
-          player.username,
-          maxGames: player.maxGames,
-          monthsBack: monthsBack,
-          onProgress: (msg) => progress.value = msg,
-        );
-      } else {
-        pgns = await _gamesService.downloadLichessGames(
-          player.username,
-          maxGames: player.maxGames,
-          monthsBack: monthsBack,
-          onProgress: (msg) => progress.value = msg,
-        );
-      }
+      final pgns = await _gamesService.downloadGamesFor(
+        player,
+        monthsBack: monthsBack,
+        onProgress: (msg) => progress.value = msg,
+      );
 
       if (pgns.isEmpty) {
         if (mounted) {
           Navigator.of(context).pop();
-          _showError('No games found for ${player.username}.');
+          _showError('No games found for ${player.displayName}.');
         }
         return false;
       }
@@ -654,6 +642,8 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
         username: player.username,
         maxGames: player.maxGames,
         monthsBack: monthsBack,
+        accounts: player.accounts,
+        group: player.group,
       );
 
       if (mounted) Navigator.of(context).pop();

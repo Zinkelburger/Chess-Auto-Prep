@@ -1,8 +1,9 @@
-"""The shared roster: model, entry-list parser, and disk persistence.
+"""The roster: model, entry-list parser, and disk persistence.
 
-Wire-compatible with `lib/features/tournament/models/roster_entry.dart` — the
-JSON this writes is what the Flutter app loads, so field names are the Dart
-ones and must not drift.
+The roster is this server's own working state (an entry list plus whatever
+identities and pairing odds have been attached to it). The app never reads
+it; the hand-off to the app is the opponent list written by
+`opponents_export`.
 
 The parser carries the same real-world traps the Dart one does, learned from
 an actual US Chess event page: FIDE ID sits *before* USCF ID and both are 7-9
@@ -129,6 +130,9 @@ class RosterEntry:
     attendance_prob: float = 1.0
     half_point_byes: list[int] = field(default_factory=list)
     withdrawn: bool = False
+    #: Output of the last `pairing_simulate`, or None: P(face) split by colour
+    #: and round. Kept on the entry so an export can carry it.
+    pairing: dict[str, Any] | None = None
 
     def to_dict(self) -> dict:
         out: dict[str, Any] = {"id": self.id, "name": self.name}
@@ -150,6 +154,8 @@ class RosterEntry:
             out["half_point_byes"] = sorted(self.half_point_byes)
         if self.withdrawn:
             out["withdrawn"] = True
+        if self.pairing:
+            out["pairing"] = self.pairing
         return out
 
     @classmethod
@@ -166,6 +172,7 @@ class RosterEntry:
             attendance_prob=float(data.get("attendance_prob", 1.0)),
             half_point_byes=list(data.get("half_point_byes", [])),
             withdrawn=bool(data.get("withdrawn", False)),
+            pairing=data.get("pairing"),
         )
 
     @property
@@ -251,8 +258,7 @@ def load_roster() -> Roster:
 
 
 def save_roster(roster: Roster) -> Path:
-    """Write atomically — the app may be watching this file and must never
-    observe a half-written one."""
+    """Write atomically, so a crash mid-write cannot leave a half roster."""
     path = roster_path()
     path.parent.mkdir(parents=True, exist_ok=True)
 

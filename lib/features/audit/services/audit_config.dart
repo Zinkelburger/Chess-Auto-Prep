@@ -65,8 +65,8 @@ class AuditConfig {
 
   /// Which color [clashUsername] must have played for a game to count.
   /// Null falls back to the repertoire's own color, which is correct for a
-  /// book written from our side and wrong for an opponent archive — so
-  /// tournament prep always sets it explicitly.
+  /// book written from our side and wrong for an opponent archive — so an
+  /// opponent clash must set it explicitly.
   final bool? clashUserIsWhite;
 
   const AuditConfig({

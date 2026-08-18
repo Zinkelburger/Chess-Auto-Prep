@@ -1,9 +1,7 @@
-"""Standalone MCP server for Chess Auto Prep tournament identity work.
+"""Local MCP server: tournament identity/pairing, plus PGN opening-tree query.
 
-Runs with no Flutter app: directory lookup, US Chess API, entry-list parsing
-and identity proposals all operate on data files. Chess computation (clash,
-prep, engine work) stays in the app and is reached through
-`tools/mcp/chess_prep_mcp.mjs`.
+Identity tools are zero-dependency. Opening-tree tools (`pgn_open` and friends)
+need python-chess (`pip install -r tools/mcp/requirements.txt`).
 """
 
 from .server import Server, main

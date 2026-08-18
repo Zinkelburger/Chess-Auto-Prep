@@ -30,8 +30,22 @@ from chess_prep.directory import (  # noqa: E402
     parse_player_name,
     player_name_key,
 )
-from chess_prep.roster import parse_entry_list, roster_to_csv  # noqa: E402
+from chess_prep.opponents import FORMAT, opponents_document  # noqa: E402
+from chess_prep.roster import (  # noqa: E402
+    Roster,
+    RosterEntry,
+    parse_entry_list,
+    roster_to_csv,
+)
 from chess_prep.server import Server  # noqa: E402
+from chess_prep.swiss import (  # noqa: E402
+    PairingConstraint,
+    SimulationConfig,
+    SwissPairer,
+    SwissRules,
+    SwissSeed,
+    simulate,
+)
 from chess_prep.tools import Registry, ToolError  # noqa: E402
 
 # A real US Chess event page: FIDE ID before USCF ID (both 7-9 digits), FIDE
@@ -241,9 +255,7 @@ class Tools(TempRosterCase):
         saved = json.loads(Path(result["saved_to"]).read_text())
         self.assertEqual(len(saved["entries"]), 6)
 
-    def test_saved_roster_uses_the_dart_wire_format(self):
-        # The Flutter app reads this file verbatim; these key names are the
-        # contract between the two halves.
+    def test_saved_roster_round_trips(self):
         self.call("roster_import", text=REAL_ENTRY_LIST, my_uscf_id="16009740")
         saved = json.loads(Path(os.environ["CHESS_PREP_ROSTER"]).read_text())
 
@@ -385,6 +397,271 @@ class Tools(TempRosterCase):
     def test_coverage_report_needs_ids(self):
         with self.assertRaises(ToolError):
             self.call("uscf_coverage_report")
+
+
+# ── Swiss pairing ───────────────────────────────────────────────────────────
+
+
+def _seeds(count: int, base: int = 2000, step: int = 50) -> list[SwissSeed]:
+    """Seeds rated base, base-step, … so the rating order is unambiguous."""
+    return [SwissSeed(id=f"p{i + 1}", rating=base - i * step) for i in range(count)]
+
+
+def _all_white_win(sheet) -> dict[str, float]:
+    return {p.white_id: 1.0 for p in sheet.pairings}
+
+
+class SwissPairing(unittest.TestCase):
+    def test_round_one_splits_the_field_in_half_and_pairs_across(self):
+        sheet = SwissPairer(_seeds(8)).next_round()
+        self.assertEqual(len(sheet.pairings), 4)
+        by_board = {p.board: {p.white_id, p.black_id} for p in sheet.pairings}
+        self.assertEqual(by_board[1], {"p1", "p5"})
+        self.assertEqual(by_board[2], {"p2", "p6"})
+        self.assertEqual(by_board[3], {"p3", "p7"})
+        self.assertEqual(by_board[4], {"p4", "p8"})
+
+    def test_round_one_alternates_colors_down_the_boards(self):
+        sheet = SwissPairer(_seeds(8)).next_round()
+        self.assertEqual([p.white_id for p in sheet.pairings], ["p1", "p6", "p3", "p8"])
+
+    def test_odd_field_gives_a_full_point_bye_to_the_lowest_rated(self):
+        sheet = SwissPairer(_seeds(7)).next_round()
+        self.assertEqual(len(sheet.pairings), 3)
+        (bye,) = sheet.byes
+        self.assertEqual((bye.player_id, bye.points, bye.requested), ("p7", 1.0, False))
+
+    def test_never_repeats_a_pairing(self):
+        pairer = SwissPairer(_seeds(16), SwissRules(rounds=5))
+        seen: set[str] = set()
+        for rnd in range(1, 6):
+            sheet = pairer.next_round()
+            for p in sheet.pairings:
+                key = "|".join(sorted([p.white_id, p.black_id]))
+                self.assertNotIn(key, seen, f"repeat pairing {key} in round {rnd}")
+                seen.add(key)
+            pairer.record_results(sheet, _all_white_win(sheet))
+
+    def test_pairs_within_score_groups(self):
+        pairer = SwissPairer(_seeds(8))
+        r1 = pairer.next_round()
+        pairer.record_results(r1, _all_white_win(r1))
+        winners = {p.white_id for p in r1.pairings}
+        for p in pairer.next_round().pairings:
+            both_won = p.white_id in winners and p.black_id in winners
+            both_lost = p.white_id not in winners and p.black_id not in winners
+            self.assertTrue(both_won or both_lost, f"{p} crosses score groups")
+
+    def test_equalizes_colors(self):
+        pairer = SwissPairer(_seeds(8))
+        for _ in range(4):
+            sheet = pairer.next_round()
+            pairer.record_results(sheet, {p.white_id: 0.5 for p in sheet.pairings})
+        for s in pairer.standings():
+            self.assertLessEqual(abs(s.color_balance), 1, s.player_id)
+
+    def test_honors_a_withhold(self):
+        rules = SwissRules(constraints=(PairingConstraint("p1", "p5", "siblings"),))
+        sheet = SwissPairer(_seeds(8), rules).next_round()
+        p1 = sheet.for_player("p1")
+        self.assertIsNotNone(p1)
+        self.assertNotEqual(p1.opponent_of("p1"), "p5")
+        self.assertFalse(p1.forced)
+        self.assertEqual(sheet.forced_count, 0)
+
+    def test_marks_a_pairing_forced_when_no_legal_alternative_exists(self):
+        pairer = SwissPairer(_seeds(2))
+        r1 = pairer.next_round()
+        pairer.record_results(r1, {r1.pairings[0].white_id: 0.5})
+        (p,) = pairer.next_round().pairings
+        self.assertTrue(p.forced)
+
+    def test_respects_a_requested_half_point_bye(self):
+        pairer = SwissPairer(
+            [
+                SwissSeed("p1", 2000, frozenset({1})),
+                SwissSeed("p2", 1900),
+                SwissSeed("p3", 1800),
+            ]
+        )
+        sheet = pairer.next_round()
+        self.assertIsNone(sheet.for_player("p1"))
+        bye = next(b for b in sheet.byes if b.player_id == "p1")
+        self.assertEqual((bye.points, bye.requested), (0.5, True))
+        pairer.record_results(sheet, _all_white_win(sheet))
+        self.assertEqual(pairer.score_of("p1"), 0.5)
+
+    def test_no_player_gets_two_full_point_byes(self):
+        pairer = SwissPairer(_seeds(5))
+        byes: list[str] = []
+        for _ in range(4):
+            sheet = pairer.next_round()
+            byes.extend(b.player_id for b in sheet.byes if not b.requested)
+            pairer.record_results(sheet, _all_white_win(sheet))
+        self.assertEqual(len(set(byes)), len(byes), byes)
+
+    def test_accelerated_pairs_the_top_quarter_against_the_second(self):
+        rules = SwissRules(accelerated=True, accelerated_rounds=2)
+        sheet = SwissPairer(_seeds(16), rules).next_round()
+        self.assertEqual(sheet.for_player("p1").opponent_of("p1"), "p5")
+        self.assertEqual(sheet.for_player("p9").opponent_of("p9"), "p13")
+
+    def test_is_deterministic(self):
+        def run() -> list[str]:
+            pairer = SwissPairer(_seeds(12))
+            out = []
+            for _ in range(4):
+                sheet = pairer.next_round()
+                out.extend(f"{p.white_id}-{p.black_id}" for p in sheet.pairings)
+                pairer.record_results(sheet, _all_white_win(sheet))
+            return out
+
+        self.assertEqual(run(), run())
+
+
+def _field(count: int, me_index: int = 0, rounds: int = 5, **kw) -> Roster:
+    return Roster(
+        event_name="Test Open",
+        rounds=rounds,
+        entries=[
+            RosterEntry(
+                id=f"p{i + 1}",
+                name=f"Player {i + 1}",
+                rating=2000 - i * 50,
+                is_me=i == me_index,
+            )
+            for i in range(count)
+        ],
+        **kw,
+    )
+
+
+_FAST = SimulationConfig(trials=300)
+
+
+class Simulation(unittest.TestCase):
+    def test_round_one_is_near_certain(self):
+        result = simulate(_field(16), _FAST)
+        p9 = next(o for o in result.opponents if o.player_id == "p9")
+        self.assertEqual(p9.prob_by_round[0], 1.0)
+        self.assertEqual(p9.most_likely_round, 1)
+
+    def test_later_rounds_diffuse(self):
+        result = simulate(_field(16), _FAST)
+        r1 = sum(1 for o in result.opponents if o.prob_by_round[0] > 0)
+        r4 = sum(1 for o in result.opponents if o.prob_by_round[3] > 0)
+        self.assertEqual(r1, 1)
+        self.assertGreater(r4, 2)
+
+    def test_pairing_mass_equals_rounds_played(self):
+        result = simulate(_field(20), _FAST)
+        mass = sum(sum(o.prob_by_round) for o in result.opponents)
+        self.assertAlmostEqual(mass + result.bye_prob * 0, 5.0, delta=0.05)
+        for o in result.opponents:
+            self.assertLessEqual(o.prob_any, 1.0)
+            self.assertAlmostEqual(o.prob_as_white + o.prob_as_black, sum(o.prob_by_round), places=6)
+
+    def test_withhold_removes_that_opponent(self):
+        roster = _field(16, constraints=[{"a": "p1", "b": "p9", "reason": "siblings"}])
+        result = simulate(roster, _FAST)
+        self.assertNotIn("p9", {o.player_id for o in result.opponents})
+
+    def test_withdrawn_players_are_never_faced(self):
+        roster = _field(16)
+        roster.entries[8].withdrawn = True
+        result = simulate(roster, _FAST)
+        self.assertNotIn("p9", {o.player_id for o in result.opponents})
+
+    def test_attendance_probability_scales_exposure(self):
+        roster = _field(16)
+        roster.entries[8].attendance_prob = 0.5
+        result = simulate(roster, _FAST)
+        p9 = next(o for o in result.opponents if o.player_id == "p9")
+        self.assertGreater(p9.prob_by_round[0], 0.35)
+        self.assertLess(p9.prob_by_round[0], 0.65)
+
+    def test_sections_are_independent(self):
+        roster = _field(16)
+        for i, e in enumerate(roster.entries):
+            e.section = "Open" if i < 8 else "U1800"
+        result = simulate(roster, _FAST)
+        self.assertTrue(all(int(o.player_id[1:]) <= 8 for o in result.opponents))
+
+    def test_no_reference_player_is_reported(self):
+        roster = _field(8)
+        roster.entries[0].is_me = False
+        result = simulate(roster, _FAST)
+        self.assertEqual(result.opponents, [])
+        self.assertTrue(result.notes)
+
+    def test_reproducible_for_a_seed(self):
+        a = simulate(_field(12), SimulationConfig(trials=200, seed=1)).to_dict()
+        b = simulate(_field(12), SimulationConfig(trials=200, seed=1)).to_dict()
+        c = simulate(_field(12), SimulationConfig(trials=200, seed=2)).to_dict()
+        self.assertEqual(a, b)
+        self.assertNotEqual(a, c)
+
+
+class PairingTools(TempRosterCase):
+    def _load_field(self) -> None:
+        self.call("roster_import", text=REAL_ENTRY_LIST, my_uscf_id="16009740")
+
+    def test_simulate_needs_a_reference_player(self):
+        self.call("roster_import", text=REAL_ENTRY_LIST)
+        with self.assertRaises(ToolError):
+            self.call("pairing_simulate", trials=50)
+
+    def test_simulate_returns_named_opponents_and_persists(self):
+        self._load_field()
+        result = self.call("pairing_simulate", trials=100)
+        self.assertGreater(len(result["opponents"]), 0)
+        self.assertIn("name", result["opponents"][0])
+        saved = json.loads(Path(os.environ["CHESS_PREP_ROSTER"]).read_text())
+        with_pairing = [e for e in saved["entries"] if e.get("pairing")]
+        self.assertEqual(len(with_pairing), len(result["opponents"]))
+
+    def test_export_only_includes_confirmed_accounts(self):
+        self._load_field()
+        self.call("roster_resolve")  # andrewb is me; alpha/beta not on the list
+        self.call(
+            "identity_propose",
+            player_id="30379415",
+            chesscom_username="owen_a",
+            evidence="profile says so",
+        )
+        out = self.call("opponents_export")
+        doc = json.loads(Path(out["path"]).read_text())
+        self.assertEqual(doc["format"], FORMAT)
+        self.assertEqual(doc["opponents"], [])
+        self.assertTrue(any("not confirmed" in s["reason"] for s in out["skipped"]))
+
+        self.call("identity_confirm", player_id="30379415")
+        out = self.call("opponents_export")
+        doc = json.loads(Path(out["path"]).read_text())
+        self.assertEqual([o["name"] for o in doc["opponents"]], ["Anatra, Owen Chance"])
+        self.assertEqual(doc["opponents"][0]["chesscom"], "owen_a")
+        self.assertNotIn("Andrew Bernal", [o["name"] for o in doc["opponents"]])
+
+    def test_export_carries_pairing_probability_and_sorts_by_it(self):
+        self._load_field()
+        for pid, user in (("30379415", "owen_a"), ("33132698", "jf")):
+            self.call("identity_confirm", player_id=pid, chesscom_username=user)
+        self.call("pairing_simulate", trials=100)
+        out = self.call("opponents_export", path=str(Path(self._dir.name) / "o.json"))
+        doc = json.loads(Path(out["path"]).read_text())
+        probs = [o["pairing_prob"] for o in doc["opponents"]]
+        self.assertEqual(len(probs), 2)
+        self.assertEqual(probs, sorted(probs, reverse=True))
+        self.assertTrue(all(0 <= p <= 1 for p in probs))
+
+    def test_export_document_skips_me_and_withdrawn(self):
+        roster = _field(4)
+        for e in roster.entries:
+            e.identity = {"chesscom_username": e.id, "confidence": "exact", "source": "manual"}
+        roster.entries[3].withdrawn = True
+        doc, skipped = opponents_document(roster)
+        self.assertEqual([o["name"] for o in doc["opponents"]], ["Player 2", "Player 3"])
+        self.assertEqual(skipped, [])
 
 
 class Protocol(TempRosterCase):
