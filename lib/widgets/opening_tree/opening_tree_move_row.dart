@@ -85,7 +85,7 @@ class OpeningTreeMoveRow extends StatelessWidget {
                 SizedBox(
                   width: 60,
                   child: Text(
-                    entry.move,
+                    entry.viaTransposition ? '${entry.move}≈' : entry.move,
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
@@ -96,8 +96,10 @@ class OpeningTreeMoveRow extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '${entry.gamesPlayed} games (${playedPercent.toStringAsFixed(1)}%)'
-                    '${reachEstimate != null ? ' • ${reachEstimate!.percentLabel}% reached' : ''}',
+                    entry.viaTransposition
+                        ? '${entry.gamesPlayed} games (transp.)'
+                        : '${entry.gamesPlayed} games (${playedPercent.toStringAsFixed(1)}%)'
+                              '${reachEstimate != null ? ' • ${reachEstimate!.percentLabel}% reached' : ''}',
                     style: const TextStyle(
                       fontSize: 12,
                       color: AppColors.onSurfaceSoft,

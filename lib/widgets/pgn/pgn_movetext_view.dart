@@ -1,7 +1,7 @@
 /// Movetext rendering for the PGN viewer.
 ///
 /// Renders the mainline + sideline variations + inline/prose comments as a
-/// flowing `Wrap` of `RichText`, plus the inline comment editor
+/// flowing `Wrap` of `Text.rich` / `RichText`, plus the inline comment editor
 /// (right-click → Comment). Extracted from `pgn_viewer_widget.dart`
 /// as a pure leaf view: it takes the move history, the per-ply variation tree,
 /// the current navigation/edit state, and callbacks — it owns no state of its

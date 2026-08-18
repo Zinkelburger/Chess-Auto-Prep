@@ -270,8 +270,8 @@ InlineSpan _variationMoveSpan(
 Widget _variationRowWidget(_VarRow row, ValueChanged<int> onToggleBranch) {
   final Widget content = row.isStub
       ? _foldStub(row, onToggleBranch)
-      : RichText(
-          text: TextSpan(
+      : Text.rich(
+          TextSpan(
             style: PgnTextStyles.rowRootAt(row.depth),
             children: row.spans,
           ),

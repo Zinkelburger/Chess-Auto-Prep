@@ -129,9 +129,12 @@ void main() {
       test('syncs to partial path when move not in tree', () {
         final success = tree.syncToMoveHistory(['e4', 'e5', 'Nf3', 'Nc6']);
         expect(success, isFalse);
-        // Should stop at Nf3 (last valid move)
+        // Nc6 is legal but not in the tree: cursor walks off-book so
+        // transposing-in continuations can still be listed.
         expect(tree.currentNode.move, equals('Nf3'));
-        expect(tree.currentDepth, equals(3));
+        expect(tree.currentDepth, equals(4));
+        expect(tree.inBook, isFalse);
+        expect(tree.currentMovePath, equals(['e4', 'e5', 'Nf3', 'Nc6']));
       });
 
       test('stops at first invalid move', () {
@@ -251,6 +254,18 @@ void main() {
         expect(node.wins, equals(0));
         expect(node.draws, equals(0));
         expect(node.losses, equals(1));
+      });
+
+      test('updateStats(null) counts frequency without a fake draw', () {
+        final node = OpeningTreeNode(move: 'e4', fen: 'test');
+        node.updateStats(null);
+
+        expect(node.gamesPlayed, equals(1));
+        expect(node.wins, equals(0));
+        expect(node.draws, equals(0));
+        expect(node.losses, equals(0));
+        expect(node.hasWdl, isFalse);
+        expect(node.winRate, equals(0.0));
       });
 
       test('sortedChildren returns in descending games order', () {
@@ -377,6 +392,54 @@ void main() {
         expect(transTree.makeMove('Bd3'), isTrue);
         expect(transTree.currentNode.move, equals('Bd3'));
         expect(transTree.currentNode.getMovePath(), equals(['a1', 'x', 'Bd3']));
+      });
+    });
+
+    group('one-ply transpositions', () {
+      // Database: 1.d4 Nf6 2.e3 c5. Query: 1.d4 c5 2.e3 — Nf6 should appear
+      // because it lands on the same position.
+      late OpeningTree book;
+
+      setUp(() {
+        book = OpeningTree()..appendLine(['d4', 'Nf6', 'e3', 'c5']);
+      });
+
+      test('lists Nf6 after 1.d4 c5 2.e3 as a transposing-in move', () {
+        expect(book.syncToMoveHistory(['d4', 'c5', 'e3']), isFalse);
+        expect(book.inBook, isFalse);
+        expect(book.currentMovePath, equals(['d4', 'c5', 'e3']));
+
+        final nf6 = book.continuations.where((g) => g.move == 'Nf6');
+        expect(nf6, isNotEmpty);
+        expect(nf6.first.viaTransposition, isTrue);
+      });
+
+      test('makeMove on the transposing SAN snaps into book', () {
+        book.syncToMoveHistory(['d4', 'c5', 'e3']);
+        expect(book.makeMove('Nf6'), isTrue);
+        expect(book.inBook, isTrue);
+        expect(book.currentMovePath, equals(['d4', 'c5', 'e3', 'Nf6']));
+        expect(
+          book.currentNode.getMovePath(),
+          equals(['d4', 'Nf6', 'e3', 'c5']),
+        );
+      });
+
+      test('sync of the full transposed line lands in book', () {
+        expect(book.syncToMoveHistory(['d4', 'c5', 'e3', 'Nf6']), isTrue);
+        expect(book.inBook, isTrue);
+        expect(
+          normalizeFen(book.currentFen),
+          normalizeFen(book.currentNode.fen),
+        );
+      });
+
+      test('does not invent a transposing move that leaves book', () {
+        book.syncToMoveHistory(['d4']);
+        final sans = book.continuations.map((g) => g.move).toSet();
+        expect(sans, contains('Nf6'));
+        expect(sans, isNot(contains('c5')));
+        expect(book.makeMove('c5'), isFalse);
       });
     });
 

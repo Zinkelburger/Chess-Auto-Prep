@@ -73,12 +73,11 @@ part 'pgn_viewer_screen_app_bar.dart';
 part 'pgn_viewer_screen_panes.dart';
 part 'pgn_viewer_screen_repertoire.dart';
 
-/// Side-panel tab indices, shared by the tab bar, the handoff and the
-/// keyboard routing (an `animateTo(1)` that means "Analysis" breaks the day a
-/// tab is inserted before it — which is what happened when Line arrived).
+/// Side-panel tab indices. Game is always 0. Line is only present when
+/// reviewing one of your games from the Games/tactics handoff; Analysis
+/// sits at 1 otherwise. Named getters (not constants) so an `animateTo(1)`
+/// cannot silently mean the wrong tab.
 const int _kGameTab = 0;
-const int _kLineTab = 1;
-const int _kAnalysisTab = 2;
 
 class PgnViewerScreen extends StatefulWidget {
   const PgnViewerScreen({super.key});
@@ -106,14 +105,32 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   @override
   late final GameAnalysisController _analysisController;
   @override
-  late final TabController _tabController;
+  late TabController _tabController;
   final FocusNode _focusNode = FocusNode(debugLabel: 'PgnViewerScreen');
 
   @override
   bool _editMode = false;
 
+  bool _singleGameFocusValue = false;
+
   @override
-  bool _singleGameFocus = false;
+  bool get _singleGameFocus => _singleGameFocusValue;
+
+  /// Line tab is only for reviewing one of your games from Games/tactics.
+  @override
+  bool get _lineTabVisible => _singleGameFocusValue;
+
+  int get _lineTabIndex => _lineTabVisible ? 1 : -1;
+
+  int get _analysisTabIndex => _lineTabVisible ? 2 : 1;
+
+  @override
+  set _singleGameFocus(bool value) {
+    if (_singleGameFocusValue == value) return;
+    _singleGameFocusValue = value;
+    _rebuildTabController();
+    if (mounted) setState(() {});
+  }
 
   /// Whether the PGN Viewer is the app's visible mode, so that arriving here
   /// can be told from any other [AppState] change (see [_onAppStateChanged]).
@@ -125,9 +142,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   @override
   void initState() {
     super.initState();
-    // Game · Line · Analysis — the three questions you can ask about the game
-    // on the board, all on the same board (see [_buildSidePanel]).
-    _tabController = TabController(length: 3, vsync: this);
+    // Game · Analysis by default. Line is added only for a Games/tactics
+    // handoff (see [_lineTabVisible]).
+    _tabController = TabController(length: 2, vsync: this);
     _pgnWidgetController = PgnViewerWidgetController();
     _lineWidgetController = PgnViewerWidgetController();
     _analysisController = GameAnalysisController();
@@ -146,15 +163,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     // Leaving the Line tab hands the board back to the game: the tab you are
     // reading owns the board, so flipping between them is a comparison of the
     // same position rather than two viewers fighting over one board.
-    _tabController.addListener(() {
-      if (!mounted || _tabController.indexIsChanging) return;
-      if (_tabController.index == _kLineTab) {
-        if (!_lineTabVisited) setState(() => _lineTabVisited = true);
-        return;
-      }
-      final gamePosition = _gamePanePosition;
-      if (gamePosition != null) _controller.onPositionChanged(gamePosition);
-    });
+    _tabController.addListener(_onSideTabChanged);
     unawaited(_controller.loadRecentFiles());
     unawaited(_controller.loadCollections());
     unawaited(_controller.loadSolitaireSettings());
@@ -294,7 +303,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       case PgnViewerTab.line:
         _showLineTab();
       case PgnViewerTab.analysis:
-        _tabController.animateTo(_kAnalysisTab);
+        _tabController.animateTo(_analysisTabIndex);
     }
     if (handoff.autoAnalyze) _startAutoAnalysisForCurrentGame();
   }
@@ -347,7 +356,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// button, including persistence and trophy detection.
   void _startAutoAnalysisForCurrentGame() {
     if (_controller.filteredGames.isEmpty) return;
-    _tabController.animateTo(_kAnalysisTab);
+    _tabController.animateTo(_analysisTabIndex);
     if (_analysisController.isAnalyzing) return;
     if (_analysisController.evals.isNotEmpty) return;
     if (!EngineGate.ensureAvailable(context)) return;
@@ -396,6 +405,34 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   void _onAnalysisUpdate() {
     if (mounted) setState(() {});
+  }
+
+  void _onSideTabChanged() {
+    if (!mounted || _tabController.indexIsChanging) return;
+    if (_tabController.index == _lineTabIndex) {
+      if (!_lineTabVisited) setState(() => _lineTabVisited = true);
+      return;
+    }
+    final gamePosition = _gamePanePosition;
+    if (gamePosition != null) _controller.onPositionChanged(gamePosition);
+  }
+
+  void _rebuildTabController() {
+    final want = _lineTabVisible ? 3 : 2;
+    if (_tabController.length == want) return;
+    final old = _tabController;
+    final oldIndex = old.index;
+    final newIndex = want == 3
+        ? (oldIndex >= 1 ? 2 : 0)
+        : (oldIndex >= 2 ? 1 : 0);
+    old.removeListener(_onSideTabChanged);
+    _tabController = TabController(
+      length: want,
+      vsync: this,
+      initialIndex: newIndex.clamp(0, want - 1),
+    );
+    _tabController.addListener(_onSideTabChanged);
+    old.dispose();
   }
 
   @override
@@ -662,9 +699,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// Show the book line beside the game: the Line tab, not a dialog.
   @override
   void _showLineTab() {
-    if (_controller.isSolitaireMode) return;
+    if (_controller.isSolitaireMode || !_lineTabVisible) return;
     if (!_lineTabVisited) setState(() => _lineTabVisited = true);
-    _tabController.animateTo(_kLineTab);
+    _tabController.animateTo(_lineTabIndex);
   }
 
   /// A book-line move was selected on the Line tab — put it on the main board.
@@ -672,7 +709,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// between Game and Line a comparison rather than two separate viewers.
   @override
   void _showLinePosition(Position position) {
-    if (_tabController.index != _kLineTab) return;
+    if (_tabController.index != _lineTabIndex) return;
     _controller.onPositionChanged(position);
   }
 
@@ -950,7 +987,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// Whether the Line tab is the one on screen (and so owns the board and the
   /// arrow keys).
   bool get _onLineTab =>
-      !_controller.isSolitaireMode && _tabController.index == _kLineTab;
+      !_controller.isSolitaireMode && _tabController.index == _lineTabIndex;
 
   /// The viewer's keyboard shortcuts, dispatched through [handleKeyBindings]
   /// (never while typing). Order matters: the solitaire block shadows keys

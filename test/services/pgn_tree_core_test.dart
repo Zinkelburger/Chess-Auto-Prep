@@ -405,6 +405,61 @@ void main() {
       expect(nf3, isNotNull);
       expect(nf3!.fen, contains(' b '));
     });
+
+    test('promotes a Chessable dummy intro onto the mainline', () {
+      final tree = OpeningTree();
+      walkMainlineIntoTree(
+        tree: tree,
+        game: parse(
+          '1. Z0 ({Welcome} 1. d4 {we intend to play} Z0 2. Nf3 '
+          '{and} Z0 3. e3 {next.}) *',
+        ),
+        userResult: null,
+        maxDepth: 30,
+      );
+
+      expect(tree.root.children.containsKey('--'), isFalse);
+      expect(tree.root.children.containsKey('Z0'), isFalse);
+      expect(tree.root.draws, 0);
+      expect(tree.root.hasWdl, isFalse);
+      final d4 = tree.root.children['d4'];
+      expect(d4, isNotNull);
+      expect(d4!.children['Nf3']!.children['e3'], isNotNull);
+    });
+
+    test('includeVariations folds RAVs in as extra lines', () {
+      final tree = OpeningTree();
+      walkMainlineIntoTree(
+        tree: tree,
+        game: parse('1. e4 e5 (1... c5 2. Nf3) 2. Nc3 *'),
+        userResult: null,
+        maxDepth: 30,
+        includeVariations: true,
+      );
+
+      final e4 = tree.root.children['e4']!;
+      expect(tree.root.gamesPlayed, 2);
+      expect(e4.gamesPlayed, 2);
+      expect(e4.children['e5']!.gamesPlayed, 1);
+      expect(e4.children['c5']!.gamesPlayed, 1);
+      expect(e4.children['c5']!.children['Nf3'], isNotNull);
+      expect(e4.children['e5']!.children['Nc3'], isNotNull);
+      expect(e4.hasWdl, isFalse);
+    });
+
+    test('scored games stay on the mainline even when RAVs exist', () {
+      final tree = OpeningTree();
+      walkMainlineIntoTree(
+        tree: tree,
+        game: parse('1. e4 e5 (1... c5) 2. Nf3 *'),
+        userResult: 1.0,
+        maxDepth: 30,
+      );
+
+      expect(tree.root.gamesPlayed, 1);
+      expect(tree.root.wins, 1);
+      expect(tree.root.children['e4']!.children.containsKey('c5'), isFalse);
+    });
   });
 
   group('builder policies end-to-end', () {
@@ -437,6 +492,26 @@ void main() {
         expect(tree.root.wins, 1);
       },
     );
+
+    test('OpeningTreeBuilder folds course RAVs and skips fake draws', () async {
+      const pgn =
+          '[White "Quickstarter Guide"]\n'
+          '[Black "Colle - 3...c6 #1"]\n'
+          '[Result "*"]\n'
+          '\n'
+          '1. d4 Nf6 (1... d5 2. Nf3) 2. Nf3 *';
+      final tree = await OpeningTreeBuilder.buildTree(
+        pgnList: [pgn],
+        username: '',
+        userIsWhite: null,
+        strictPlayerMatching: false,
+      );
+      expect(tree.root.hasWdl, isFalse);
+      expect(tree.root.gamesPlayed, 2);
+      final d4 = tree.root.children['d4']!;
+      expect(d4.children['Nf6'], isNotNull);
+      expect(d4.children['d5'], isNotNull);
+    });
 
     test('UnifiedAnalysisBuilder defaults ambiguous games to the filter', () {
       final (_, treeAsWhite) = UnifiedAnalysisBuilder.build(

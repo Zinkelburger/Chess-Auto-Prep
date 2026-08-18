@@ -17,6 +17,7 @@ import '../../services/pgn_parsing_service.dart' show startPositionFromGame;
 import '../../utils/fen_utils.dart';
 import '../../utils/pgn_comment_utils.dart' show joinComments, toggleQualityNag;
 import '../../utils/chess_utils.dart' show playSanOrNullMove;
+import 'pgn_dummy_mainline.dart';
 import 'pgn_variation_extractor.dart';
 
 /// What [ViewerGameModel.addMove] did with the move.
@@ -67,6 +68,7 @@ class ViewerGameModel {
   /// Adopt a freshly parsed game: mainline spine, start position, and the
   /// PGN's own sidelines. Resets the cursor to the start.
   void load(PgnGame parsed) {
+    promoteNullMoveDummyMainline(parsed.moves);
     game = parsed;
     moveHistory = parsed.moves.mainline().toList();
     startPosition = startPositionFromGame(parsed);

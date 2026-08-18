@@ -111,20 +111,27 @@ class OpeningTreeNode {
 
   void _invalidateSortCache() => _sortedChildrenCache = null;
 
+  /// Whether any of the counted games have a real result (not just `*`).
+  bool get hasWdl => wins + losses + draws > 0;
+
   /// Update statistics with a game result.
   /// Result should be from the player's perspective (1.0 = win, 0.5 = draw, 0.0 = loss).
+  /// Pass null for unfinished / course lines (`*`) so they count toward
+  /// frequency without painting a fake 50% draw bar.
   ///
   /// **Important:** Directly mutating [gamesPlayed], [wins], [losses], or
   /// [draws] bypasses cache invalidation. Always use this method or call
   /// [_invalidateSortCache] on the parent after manual mutation.
-  void updateStats(double result) {
+  void updateStats(double? result) {
     gamesPlayed++;
-    if (result >= 0.9) {
-      wins++;
-    } else if (result <= 0.1) {
-      losses++;
-    } else {
-      draws++;
+    if (result != null) {
+      if (result >= 0.9) {
+        wins++;
+      } else if (result <= 0.1) {
+        losses++;
+      } else {
+        draws++;
+      }
     }
     parent?._invalidateSortCache();
   }
@@ -237,7 +244,17 @@ class PositionGroup {
   /// The nodes sharing this position. Never empty.
   final List<OpeningTreeNode> nodes;
 
-  PositionGroup(this.nodes) : assert(nodes.isNotEmpty);
+  /// SAN to display for this group when it differs from [primaryNode.move]
+  /// — used for one-ply transpositions, where the destination was reached
+  /// by a different move in the database.
+  final String? displayMove;
+
+  /// True when this continuation was not actually played from the parent
+  /// FEN, but is a legal move that lands on a FEN the tree already has.
+  final bool viaTransposition;
+
+  PositionGroup(this.nodes, {this.displayMove, this.viaTransposition = false})
+    : assert(nodes.isNotEmpty);
 
   /// The node reached by the most games — the representative concrete path
   /// used where a single node is required (navigation cursor, move-path
@@ -250,13 +267,17 @@ class PositionGroup {
 
   /// SAN of the move leading here. Continuation groups built by [children]
   /// share one SAN; for an arbitrary position group this is the primary
-  /// node's last move.
-  String get move => primaryNode.move;
+  /// node's last move. One-ply transpositions pass [displayMove] so the
+  /// row shows the SAN from *this* position, not the database's move order.
+  String get move => displayMove ?? primaryNode.move;
 
   int get gamesPlayed => nodes.fold(0, (sum, n) => sum + n.gamesPlayed);
   int get wins => nodes.fold(0, (sum, n) => sum + n.wins);
   int get losses => nodes.fold(0, (sum, n) => sum + n.losses);
   int get draws => nodes.fold(0, (sum, n) => sum + n.draws);
+
+  /// Whether any path into this group has a scored result.
+  bool get hasWdl => wins + losses + draws > 0;
 
   /// Win rate across all paths (user perspective, like
   /// [OpeningTreeNode.winRate]).
@@ -308,6 +329,14 @@ class OpeningTree {
   /// FEN to node mapping for quick lookup
   final Map<String, List<OpeningTreeNode>> fenToNodes;
 
+  /// SAN path the cursor actually walked (click order / board history),
+  /// which can differ from [currentNode.getMovePath] after a transposition.
+  List<String> _walkedSans = [];
+
+  /// Set when the cursor is at a legal position the tree never reached.
+  /// Continuations from here are one-ply transpositions into known FENs.
+  String? _offBookFen;
+
   OpeningTree({
     OpeningTreeNode? root,
     Map<String, List<OpeningTreeNode>>? fenToNodes,
@@ -316,43 +345,131 @@ class OpeningTree {
     final rootNode = root ?? OpeningTreeNode(move: '', fen: kStandardStartFen);
     this.root = rootNode;
     currentNode = rootNode;
+    indexNode(rootNode);
+  }
+
+  /// FEN the cursor is sitting on — the off-book board when the walked
+  /// path left the database, otherwise [currentNode.fen].
+  String get currentFen => _offBookFen ?? currentNode.fen;
+
+  /// Whether [currentFen] occurs in the tree (any move order).
+  bool get inBook {
+    final nodes = fenToNodes[normalizeFen(currentFen)];
+    return nodes != null && nodes.isNotEmpty;
+  }
+
+  /// SAN path shown in the header: the walk that produced [currentFen].
+  List<String> get currentMovePath => List<String>.of(_walkedSans);
+
+  bool get canGoBack => _walkedSans.isNotEmpty;
+
+  String get currentMovePathString {
+    final moves = _walkedSans;
+    if (moves.isEmpty) return 'Starting position';
+    final buffer = StringBuffer();
+    for (int i = 0; i < moves.length; i++) {
+      if (i % 2 == 0) buffer.write('${(i ~/ 2) + 1}.');
+      buffer.write(moves[i]);
+      buffer.write(' ');
+    }
+    return buffer.toString().trim();
+  }
+
+  /// Continuations from [currentFen]: moves actually played there, plus
+  /// legal moves that land on a FEN the tree already has (one-ply
+  /// transpositions). So after 1.d4 c5 2.e3, ...Nf6 appears if the
+  /// database only has 1.d4 Nf6 2.e3 c5.
+  List<PositionGroup> get continuations => continuationsAt(currentFen);
+
+  /// See [continuations].
+  List<PositionGroup> continuationsAt(String fen) {
+    final key = normalizeFen(fen);
+    final nodes = fenToNodes[key];
+    final bySan = <String, PositionGroup>{};
+    if (nodes != null && nodes.isNotEmpty) {
+      for (final child in PositionGroup(nodes).children) {
+        bySan[child.move] = child;
+      }
+    }
+    for (final dest in _legalSanDestinations(fen)) {
+      if (bySan.containsKey(dest.san)) continue;
+      final destNodes = fenToNodes[normalizeFen(dest.fen)];
+      if (destNodes == null || destNodes.isEmpty) continue;
+      bySan[dest.san] = PositionGroup(
+        destNodes,
+        displayMove: dest.san,
+        viaTransposition: true,
+      );
+    }
+    return bySan.values.toList()
+      ..sort((a, b) => b.gamesPlayed.compareTo(a.gamesPlayed));
   }
 
   /// Navigate to a child node by move.
   ///
   /// Transposition-aware: if the current path never continued with [move]
   /// but another path reaching the same position did, the cursor jumps to
-  /// that path's child instead of failing.
+  /// that path's child. If [move] itself was never played from here but
+  /// lands on a known FEN (one-ply transposition), the cursor snaps there.
   bool makeMove(String move) {
-    final direct = currentNode.children[move];
-    if (direct != null) {
-      currentNode = direct;
-      return true;
-    }
-    final transpositions =
-        fenToNodes[normalizeFen(currentNode.fen)] ?? const <OpeningTreeNode>[];
-    for (final node in transpositions) {
-      final child = node.children[move];
-      if (child != null) {
-        currentNode = child;
+    if (_offBookFen == null) {
+      final direct = currentNode.children[move];
+      if (direct != null) {
+        currentNode = direct;
+        _walkedSans.add(move);
         return true;
       }
+      final transpositions =
+          fenToNodes[normalizeFen(currentNode.fen)] ??
+          const <OpeningTreeNode>[];
+      for (final node in transpositions) {
+        final child = node.children[move];
+        if (child != null) {
+          currentNode = child;
+          _walkedSans.add(move);
+          return true;
+        }
+      }
     }
-    return false;
+    return _snapToPlayedFen(currentFen, move);
   }
 
-  /// Navigate back to parent node
-  bool goBack() {
-    if (currentNode.parent != null) {
-      currentNode = currentNode.parent!;
+  bool _snapToPlayedFen(String fromFen, String san) {
+    try {
+      final position = Chess.fromSetup(Setup.parseFen(fromFen));
+      final next = playSanOrNullMove(position, san);
+      if (next == null) return false;
+      final destNodes = fenToNodes[normalizeFen(next.fen)];
+      if (destNodes == null || destNodes.isEmpty) return false;
+      currentNode = PositionGroup(destNodes).primaryNode;
+      _offBookFen = null;
+      _walkedSans.add(san);
       return true;
+    } catch (_) {
+      return false;
     }
-    return false;
+  }
+
+  /// Navigate back along the walked path (the user's move order, not
+  /// necessarily [currentNode.parent]'s book path).
+  bool goBack() {
+    if (_walkedSans.isEmpty) {
+      if (currentNode.parent != null) {
+        currentNode = currentNode.parent!;
+        return true;
+      }
+      return false;
+    }
+    final prefix = _walkedSans.sublist(0, _walkedSans.length - 1);
+    syncToMoveHistory(prefix);
+    return true;
   }
 
   /// Reset to root position
   void reset() {
     currentNode = root;
+    _walkedSans = [];
+    _offBookFen = null;
   }
 
   /// Navigate to a position by FEN. When several paths (transpositions)
@@ -361,6 +478,8 @@ class OpeningTree {
     final nodes = fenToNodes[normalizeFen(fen)];
     if (nodes == null || nodes.isEmpty) return false;
     currentNode = PositionGroup(nodes).primaryNode;
+    _offBookFen = null;
+    _walkedSans = currentNode.getMovePath();
     return true;
   }
 
@@ -372,8 +491,12 @@ class OpeningTree {
     return PositionGroup(indexed.contains(node) ? indexed : [node, ...indexed]);
   }
 
-  /// Transposition-aware view of the current position.
-  PositionGroup get currentGroup => groupFor(currentNode);
+  /// Transposition-aware view of the current position (FEN, not path).
+  PositionGroup get currentGroup {
+    final indexed = fenToNodes[normalizeFen(currentFen)];
+    if (indexed != null && indexed.isNotEmpty) return PositionGroup(indexed);
+    return PositionGroup([OpeningTreeNode(move: '', fen: currentFen)]);
+  }
 
   /// Add a FEN to node mapping (idempotent — a node is indexed once even
   /// when re-visited by later games, so [PositionGroup] sums stay correct).
@@ -386,8 +509,8 @@ class OpeningTree {
   /// Get total number of games in the tree (games at root)
   int get totalGames => root.gamesPlayed;
 
-  /// Get current depth in the tree
-  int get currentDepth => currentNode.getMovePath().length;
+  /// Get current depth in the tree (walked plies, including off-book).
+  int get currentDepth => _walkedSans.length;
 
   /// Whether [san] is already a child of any node at [fen].
   bool hasMove(String fen, String san) {
@@ -458,7 +581,7 @@ class OpeningTree {
       node = root;
     }
 
-    node.updateStats(0.5);
+    node.updateStats(null);
 
     for (final san in moves) {
       if (isNullMoveSan(san)) {
@@ -471,28 +594,71 @@ class OpeningTree {
       if (move == null) break;
       position = position.play(move);
       node = node.getOrCreateChild(san, position.fen);
-      node.updateStats(0.5);
+      node.updateStats(null);
       indexNode(node);
     }
   }
 
-  /// Sync the tree state to match a specific list of moves (SANs)
-  /// Returns true if the full path was found in the tree
+  /// Walk [moves] from the root by playing them on the board, snapping the
+  /// cursor to the tree whenever the resulting FEN is known.
+  ///
+  /// Unlike a SAN-prefix walk, this follows transpositions: 1.d4 c5 2.e3 Nf6
+  /// lands on the same node as 1.d4 Nf6 2.e3 c5. Intermediate positions that
+  /// are not in the tree leave the cursor off-book (so [continuations] can
+  /// still offer one-ply transpositions) without aborting the rest of the
+  /// line. Returns true when every move was legal *and* the final FEN is in
+  /// the tree. An illegal SAN stops at the last legal ply.
   bool syncToMoveHistory(List<String> moves) {
-    reset(); // Start at root
+    reset();
+    if (moves.isEmpty) return true;
 
-    for (final move in moves) {
-      // Try to make the move
-      final success = makeMove(move);
+    Position position;
+    try {
+      position = Chess.fromSetup(Setup.parseFen(root.fen));
+    } catch (_) {
+      return false;
+    }
 
-      // If the move doesn't exist in the tree, we stop.
-      // We remain at the last known node, which is usually exactly what we want
-      // (showing the user they have left the "book" moves).
-      if (!success) {
+    OpeningTreeNode lastOnBook = root;
+    for (final san in moves) {
+      final next = playSanOrNullMove(position, san);
+      if (next == null) {
+        currentNode = lastOnBook;
         return false;
       }
+      position = next;
+      _walkedSans.add(san);
+
+      final destNodes = fenToNodes[normalizeFen(position.fen)];
+      if (destNodes != null && destNodes.isNotEmpty) {
+        lastOnBook = PositionGroup(destNodes).primaryNode;
+        currentNode = lastOnBook;
+        _offBookFen = null;
+        continue;
+      }
+
+      // SAN fallback: trees built with hand-written FENs (or a different
+      // EP-square convention) still walk by child key when the dartchess
+      // dest FEN misses the index.
+      OpeningTreeNode? child = lastOnBook.children[san];
+      if (child == null) {
+        for (final node
+            in fenToNodes[normalizeFen(lastOnBook.fen)] ??
+                const <OpeningTreeNode>[]) {
+          child = node.children[san];
+          if (child != null) break;
+        }
+      }
+      if (child != null) {
+        lastOnBook = child;
+        currentNode = child;
+        _offBookFen = null;
+      } else {
+        currentNode = lastOnBook;
+        _offBookFen = position.fen;
+      }
     }
-    return true;
+    return inBook;
   }
 
   // ── Serialisation for isolate transfer ──────────────────────────────
@@ -592,5 +758,38 @@ class OpeningTree {
     }
 
     return OpeningTree(root: builtNodes[0], fenToNodes: fenToNodes);
+  }
+}
+
+/// Legal SAN moves from [fen] with the FEN they produce. Promotions emit
+/// four entries. Returns an empty list if [fen] is unparsable.
+List<({String san, String fen})> _legalSanDestinations(String fen) {
+  try {
+    final position = Chess.fromSetup(Setup.parseFen(fen));
+    final out = <({String san, String fen})>[];
+    for (final fromSq in position.legalMoves.keys) {
+      final targets = position.legalMoves[fromSq];
+      if (targets == null) continue;
+      final piece = position.board.pieceAt(fromSq);
+      for (final toSq in targets.squares) {
+        final isPromotion =
+            piece?.role == Role.pawn &&
+            ((piece!.color == Side.white && toSq ~/ 8 == 7) ||
+                (piece.color == Side.black && toSq ~/ 8 == 0));
+        final promotionRoles = isPromotion
+            ? const [Role.queen, Role.knight, Role.rook, Role.bishop]
+            : const [null];
+        for (final promo in promotionRoles) {
+          final move = NormalMove(from: fromSq, to: toSq, promotion: promo);
+          try {
+            final (next, san) = position.makeSan(move);
+            out.add((san: san, fen: next.fen));
+          } catch (_) {}
+        }
+      }
+    }
+    return out;
+  } catch (_) {
+    return const [];
   }
 }

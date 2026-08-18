@@ -30,16 +30,14 @@ import 'move_display.dart';
 export 'move_display.dart' show MoveDisplayInfo;
 import 'move_validation.dart' as validation;
 import 'chapter_scope.dart';
+import 'learn_phase.dart';
+import 'replay_phase.dart';
 import 'review_progress_store.dart';
 import 'training_phase.dart';
 
-part 'training_session_learn.dart';
-part 'training_session_replay.dart';
-
 /// Manages repertoire training session state: phases, line queue, move validation,
 /// progress persistence, and session statistics.
-class TrainingSessionController extends ChangeNotifier
-    with SafeChangeNotifier, _LearnPhaseMixin, _ReplayPhaseMixin {
+class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   final RepertoireService repertoireService;
   final RepertoireReviewService reviewService;
 
@@ -55,7 +53,16 @@ class TrainingSessionController extends ChangeNotifier
        reviewService = reviewService ?? RepertoireReviewService(),
        askedQuestions = askedQuestions ?? AskedQuestionsStore() {
     session.addListener(_onSessionChanged);
+    learn = LearnPhase(this);
+    replay = ReplayPhase(this);
   }
+
+  /// New-line walkthrough (acknowledge / quiz). The controller still exposes
+  /// the same methods the trainer UI binds to; they delegate here.
+  late final LearnPhase learn;
+
+  /// Missed-move replay after a drill with mistakes.
+  late final ReplayPhase replay;
 
   final RepertoireController session = RepertoireController();
 
@@ -134,7 +141,6 @@ class TrainingSessionController extends ChangeNotifier
 
   bool learnWaitingForAck = false;
   bool learnQuizzing = false;
-  Timer? _learnTimer;
 
   /// True when opponent move has a comment and we're waiting for Next click.
   bool opponentWaitingForAck = false;
@@ -195,12 +201,28 @@ class TrainingSessionController extends ChangeNotifier
   String get repertoireId => repertoire?.filePath ?? '';
   int get effectiveLineLength => currentLineLength;
 
+  /// Bumped when a new line starts; collaborators abort stale async pacing.
+  int get lineGeneration => _lineGeneration;
+
+  Future<void> advanceLearnPhase() => learn.advance();
+  void learnAcknowledged() => learn.acknowledged();
+  Future<void> handleLearnQuizMove(CompletedMove move) =>
+      learn.handleQuizMove(move);
+  void startReplayPhase() => replay.start();
+  Future<void> handleReplayMove(CompletedMove move) => replay.handleMove(move);
+  void setupReplayPosition() => replay.setupPosition();
+  void completeLine() => _finishLine();
+
+  /// Lets phase collaborators notify without calling the protected
+  /// [ChangeNotifier.notifyListeners] from another library.
+  void emitChange() => notifyListeners();
+
   void _onSessionChanged() => notifyListeners();
 
   @override
   void dispose() {
     _lineGeneration++;
-    _learnTimer?.cancel();
+    learn.cancelPending();
     session.removeListener(_onSessionChanged);
     session.dispose();
     super.dispose();
@@ -604,7 +626,7 @@ class TrainingSessionController extends ChangeNotifier
         intent ??
         (_isLineNew(line) ? TrainingIntent.learn : TrainingIntent.review);
     runComplete = false;
-    _learnTimer?.cancel();
+    learn.cancelPending();
 
     if (line.startPosition.fen != Chess.initial.fen) {
       session.setPositionFromFen(line.startPosition.fen);
@@ -662,7 +684,7 @@ class TrainingSessionController extends ChangeNotifier
 
     unawaited(
       Future.microtask(() async {
-        if (!await _playIntroMoves()) return;
+        if (!await playIntroMoves()) return;
         if (phase == TrainingPhase.learning) {
           await advanceLearnPhase();
         } else {
@@ -689,7 +711,7 @@ class TrainingSessionController extends ChangeNotifier
   /// Auto-plays the moves before [trainingStartIndex] so the user watches the
   /// line take shape instead of drilling rote opening moves. Returns false if
   /// a new line (or dispose) interrupted playback.
-  Future<bool> _playIntroMoves() async {
+  Future<bool> playIntroMoves() async {
     if (trainingStartIndex <= 0 || currentLine == null) return true;
     final generation = _lineGeneration;
 
@@ -709,7 +731,7 @@ class TrainingSessionController extends ChangeNotifier
         return false;
       }
       session.playMove(san);
-      final isUser = _isUserMove(i);
+      final isUser = isUserMove(i);
       final display = buildMoveDisplay(currentLine, i, isOpponent: !isUser);
       if (isUser) {
         currentPairUser = display;
@@ -740,7 +762,7 @@ class TrainingSessionController extends ChangeNotifier
   /// next line starts immediately.
   void skipLine() {
     if (currentLine == null) return;
-    _learnTimer?.cancel();
+    learn.cancelPending();
     rebuildQueueAndAdvance();
   }
 
@@ -754,7 +776,7 @@ class TrainingSessionController extends ChangeNotifier
   /// Leave the active line and return to the line browser. Nothing is rated
   /// or persisted; the queue is refreshed.
   void stopSession() {
-    _learnTimer?.cancel();
+    learn.cancelPending();
     _lineGeneration++;
     runComplete = false;
     currentLine = null;
@@ -777,7 +799,7 @@ class TrainingSessionController extends ChangeNotifier
   // DRILL PHASE
   // ---------------------------------------------------------------------------
 
-  bool _isUserMove(int moveIndex) {
+  bool isUserMove(int moveIndex) {
     if (currentLine == null) return false;
     if (isNullMoveSan(currentLine!.moves[moveIndex])) return false;
     final startIsWhite = currentLine!.startPosition.turn == Side.white;
@@ -793,7 +815,7 @@ class TrainingSessionController extends ChangeNotifier
     final limit = effectiveLineLength;
 
     while (currentMoveIndex < limit) {
-      if (_isUserMove(currentMoveIndex)) {
+      if (isUserMove(currentMoveIndex)) {
         _prepareDrillMove();
         return;
       } else {
@@ -927,7 +949,6 @@ class TrainingSessionController extends ChangeNotifier
   /// Enter the finished phase.  In spaced mode the results panel asks for a
   /// rating; in linear mode the completion is recorded here (pass/fail, no
   /// scheduling) and the panel offers Next.
-  @override
   void _finishLine() {
     phase = TrainingPhase.finished;
     waitingForUser = false;

@@ -43,12 +43,18 @@ class _ListSearchFieldState extends State<ListSearchField> {
   void _clear() {
     _controller.clear();
     widget.onChanged('');
+    if (!mounted) return;
     setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     final hasText = _controller.text.isNotEmpty;
+    final theme = Theme.of(context);
+    OutlineInputBorder border(Color color) => OutlineInputBorder(
+      borderRadius: BorderRadius.circular(6),
+      borderSide: BorderSide(color: color),
+    );
     return TextField(
       controller: _controller,
       autofocus: widget.autofocus,
@@ -60,30 +66,49 @@ class _ListSearchFieldState extends State<ListSearchField> {
       onChanged: (value) {
         widget.onChanged(value);
         // Only to swap the trailing clear button in and out.
+        if (!mounted) return;
         setState(() {});
       },
       decoration: InputDecoration(
         hintText: widget.hintText,
-        hintStyle: const TextStyle(fontSize: 13, color: AppColors.onSurfaceDim),
-        prefixIcon: const Icon(Icons.search, size: 18),
-        prefixIconConstraints: const BoxConstraints(minWidth: 36),
+        hintStyle: const TextStyle(fontSize: 12, color: AppColors.onSurfaceDim),
+        prefixIcon: const Icon(
+          Icons.search,
+          size: 16,
+          color: AppColors.onSurfaceMuted,
+        ),
+        prefixIconConstraints: const BoxConstraints(
+          minWidth: 32,
+          minHeight: 28,
+          maxHeight: 32,
+        ),
         // Fixed suffix box: the field must not resize as you type.
         suffixIcon: SizedBox(
-          width: 36,
+          width: 28,
           child: hasText
               ? IconButton(
-                  icon: const Icon(Icons.close, size: 16),
+                  icon: const Icon(Icons.close, size: 14),
                   tooltip: 'Clear search',
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
                   onPressed: _clear,
                 )
               : const SizedBox.shrink(),
         ),
-        suffixIconConstraints: const BoxConstraints(minWidth: 36),
+        suffixIconConstraints: const BoxConstraints(
+          minWidth: 28,
+          minHeight: 28,
+          maxHeight: 32,
+        ),
         isDense: true,
-        contentPadding: const EdgeInsets.symmetric(vertical: 10),
-        border: const OutlineInputBorder(),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        border: border(AppColors.outline),
+        enabledBorder: border(AppColors.outline),
+        focusedBorder: border(theme.colorScheme.primary),
       ),
     );
   }

@@ -471,5 +471,28 @@ void main() {
         isTrue,
       );
     });
+
+    test('gamePassesThroughFen finds a position that lives only in a RAV', () {
+      const pgn = '1. e4 e5 (1... c5 2. Nf3) 2. Nf3 *';
+      final afterC5 = normalizeFen(fenAfter(['e4', 'c5']));
+      expect(gamePassesThroughFen(const {}, pgn, afterC5), isTrue);
+      expect(buildFenIndex([(headers: const {}, pgnText: pgn)])[afterC5], [0]);
+      expect(mainlineSansAfterFen(const {}, pgn, afterC5), ['Nf3']);
+    });
+
+    test('promoted Chessable intro is indexed on the lesson moves', () {
+      const intro =
+          '1. Z0 ({Welcome} 1. d4 {We intend to play} Z0 2. Nf3 {and} '
+          'Z0 3. e3 {next.}) *';
+      final afterD4 = normalizeFen(fenAfter(['d4']));
+      expect(gamePassesThroughFen(const {}, intro, afterD4), isTrue);
+      expect(mainlineSansAfterFen(const {}, intro, Chess.initial.fen), [
+        'd4',
+        '--',
+        'Nf3',
+        '--',
+        'e3',
+      ]);
+    });
   });
 }

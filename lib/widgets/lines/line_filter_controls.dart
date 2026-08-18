@@ -110,38 +110,46 @@ class LineFilterControls extends StatelessWidget {
         ),
         prefixIcon: const Icon(
           Icons.search,
-          size: 18,
+          size: 16,
           color: AppColors.onSurfaceMuted,
+        ),
+        prefixIconConstraints: const BoxConstraints(
+          minWidth: 32,
+          minHeight: 28,
+          maxHeight: 32,
         ),
         suffixIcon: searchController.text.isNotEmpty
             ? IconButton(
                 icon: const Icon(
                   Icons.clear,
-                  size: 18,
+                  size: 14,
                   color: AppColors.onSurfaceMuted,
                 ),
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                 onPressed: searchController.clear,
               )
             : null,
+        suffixIconConstraints: const BoxConstraints(
+          minWidth: 28,
+          minHeight: 28,
+          maxHeight: 32,
+        ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(6),
           borderSide: const BorderSide(color: AppColors.outline),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(6),
           borderSide: const BorderSide(color: AppColors.outline),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(6),
           borderSide: const BorderSide(color: AppColors.info),
         ),
-        filled: true,
-        fillColor: AppColors.surfaceInset,
         isDense: true,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 10,
-        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       ),
       style: const TextStyle(fontSize: 13),
     );

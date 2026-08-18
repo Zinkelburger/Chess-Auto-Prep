@@ -72,12 +72,12 @@ abstract final class PgnTextStyles {
     color: _numberInks[_clamp(depth)],
   );
 
-  /// Comment prose at [depth]. Italic; inherits the depth's ink so a sideline's
-  /// annotation recedes with the sideline.
+  /// Comment prose at [depth]. Upright — book chapters are mostly comments,
+  /// and italicizing the whole pane makes the moves harder to scan. Depth
+  /// still recedes via ink and size.
   static TextStyle commentAt(int depth) => TextStyle(
     fontSize: depth == 0 ? 14 : 13,
     height: 1.5,
-    fontStyle: FontStyle.italic,
     color: depth == 0 ? AppColors.pgnComment : inkAt(depth),
   );
 
@@ -142,14 +142,12 @@ abstract final class PgnTextStyles {
   static const commentQuote = TextStyle(
     fontSize: 13.5,
     height: 1.5,
-    fontStyle: FontStyle.italic,
     color: Color(0xDDF2F2F2),
   );
 
   static const commentBracket = TextStyle(
     fontSize: 13.5,
     height: 1.4,
-    fontStyle: FontStyle.italic,
     color: AppColors.pgnComment,
   );
 

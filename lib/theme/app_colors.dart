@@ -257,7 +257,7 @@ abstract final class AppColors {
   /// Fill of the current ephemeral node pill.
   static const pgnEphemeralBg = Color(0xFF42607D);
 
-  /// Move comments — a shade under mainline ink; italic + own row do the rest.
+  /// Move comments — a shade under mainline ink; own-row layout does the rest.
   static const pgnComment = Color(0xDDFFFFFF);
 
   /// Near-black fill for bordered comment blocks on [surface].

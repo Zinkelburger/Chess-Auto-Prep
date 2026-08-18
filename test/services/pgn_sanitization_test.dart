@@ -514,7 +514,19 @@ void main() {
       // An index >= gameCount would crash consumers; deserialize returns null.
       expect(
         deserializeFenIndex(
-          'FENIDX1 2 10 20\nsomefen\t5\n',
+          'FENIDX2 2 10 20\nsomefen\t5\n',
+          expectedGameCount: 2,
+          expectedFileSize: 10,
+          expectedModifiedMs: 20,
+        ),
+        isNull,
+      );
+    });
+
+    test('rejects a FENIDX1 blob so variation-aware indexes rebuild', () {
+      expect(
+        deserializeFenIndex(
+          'FENIDX1 2 10 20\nsomefen\t0\n',
           expectedGameCount: 2,
           expectedFileSize: 10,
           expectedModifiedMs: 20,

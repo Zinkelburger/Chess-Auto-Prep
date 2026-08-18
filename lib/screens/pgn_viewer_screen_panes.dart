@@ -24,6 +24,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
   void _openInBuilder(DeviationReport report);
   void _showLineTab();
   bool get _lineTabVisited;
+  bool get _lineTabVisible;
   void _showLinePosition(Position position);
   void _onGamePosition(Position position);
   bool? _myColorIn(Map<String, String> headers);
@@ -133,7 +134,10 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
     final deviation = _deviationReport;
     return Column(
       children: [
-        if (deviation != null && !deviation.inBook && showTabs)
+        if (deviation != null &&
+            !deviation.inBook &&
+            showTabs &&
+            _lineTabVisible)
           _DeviationBanner(report: deviation, onShowLine: _showLineTab),
         if (showTabs)
           Row(
@@ -143,27 +147,25 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
                   controller: _tabController,
                   tabs: [
                     const Tab(text: 'Game'),
-                    // The book line this game left. Always present, even when
-                    // the game is in book or isn't mine — a tab that comes and
-                    // goes is a tab you can't learn the position of.
-                    Tab(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text('Line'),
-                          if (deviation != null && !deviation.inBook) ...[
-                            const SizedBox(width: 5),
-                            Icon(
-                              Icons.circle,
-                              size: 7,
-                              color: deviation.bookEnded
-                                  ? AppColors.onSurfaceMuted
-                                  : AppColors.warning,
-                            ),
+                    if (_lineTabVisible)
+                      Tab(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('Line'),
+                            if (deviation != null && !deviation.inBook) ...[
+                              const SizedBox(width: 5),
+                              Icon(
+                                Icons.circle,
+                                size: 7,
+                                color: deviation.bookEnded
+                                    ? AppColors.onSurfaceMuted
+                                    : AppColors.warning,
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
-                    ),
                     Tab(
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -193,7 +195,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
                   controller: _tabController,
                   children: [
                     _buildGameTab(),
-                    _buildLineTab(),
+                    if (_lineTabVisible) _buildLineTab(),
                     GameAnalysisTab(
                       analysisController: _analysisController,
                       pgnController: _pgnWidgetController,

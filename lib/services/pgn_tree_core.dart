@@ -2,21 +2,24 @@
 ///
 /// [OpeningTreeBuilder] and [UnifiedAnalysisBuilder] both parse PGN games,
 /// decide which colour the user played, score the game from the user's
-/// perspective, and walk the mainline into an [OpeningTree]. That logic lives
+/// perspective, and walk moves into an [OpeningTree]. That logic lives
 /// here so the two builders cannot drift apart.
 ///
 /// Intentional per-builder differences are parameterized rather than
 /// duplicated:
 /// - what to do with a game whose user-colour cannot be determined
 ///   ([UnattributableGamePolicy]);
-/// - the start position of the mainline walk
-///   ([walkMainlineIntoTree]'s `startPosition`).
+/// - the start position of the walk
+///   ([walkMainlineIntoTree]'s `startPosition`);
+/// - whether RAVs are folded in ([walkMainlineIntoTree]'s
+///   `includeVariations` — true for course/repertoire `*` games).
 library;
 
 import 'package:dartchess/dartchess.dart';
 
 import '../models/opening_tree.dart';
 import '../models/pgn_filter_models.dart' show splitPlayerNames;
+import '../core/pgn/pgn_dummy_mainline.dart';
 import '../utils/chess_utils.dart' show isNullMoveSan, playSanOrNullMove;
 
 /// Common player name patterns used in repertoire files.
@@ -195,62 +198,77 @@ double resultForUser(String result, bool userIsWhite) {
   return 0.5; // Draws or '*'
 }
 
-/// Walk [game]'s mainline into [tree], updating node stats with [userResult].
+/// Walk [game] into [tree], updating node stats with [userResult].
 ///
 /// Starts from [startPosition] (defaults to the standard initial position)
 /// but always grows the tree from `tree.root`. The walk stops at [maxDepth]
-/// plies, on the first unparseable/illegal move, or at the end of the
-/// mainline.
+/// plies, on the first unparseable/illegal move, or at the end of the line.
 ///
-/// [onPositionBeforeMove] is invoked with the position *before* each mainline
-/// move is applied (only for plies actually visited, i.e. within [maxDepth]).
-/// [onWalkComplete] is invoked once with the final position reached, whatever
-/// caused the walk to stop.
+/// When [includeVariations] is false (the default), only the mainline is
+/// walked — right for scored player games, whose RAVs are analysis notes.
+/// When true, every RAV is a separate line: ancestor frequency is incremented
+/// once per path so sibling percentages still sum to 100%. Use that for
+/// course / repertoire PGNs (`Result *`), where the variations *are* the
+/// book. Chessable intro dummies (`1. Z0 (1. d4 …)`) are promoted to the
+/// mainline first.
+///
+/// [onPositionBeforeMove] / [onWalkComplete] fire only on the mainline walk.
 void walkMainlineIntoTree({
   required OpeningTree tree,
   required PgnGame<PgnNodeData> game,
-  required double userResult,
+  double? userResult,
   required int maxDepth,
   Position? startPosition,
+  bool includeVariations = false,
   void Function(Position positionBeforeMove)? onPositionBeforeMove,
   void Function(Position finalPosition)? onWalkComplete,
 }) {
-  Position position = startPosition ?? Chess.initial;
+  promoteNullMoveDummyMainline(game.moves);
+
+  final position = startPosition ?? Chess.initial;
+  tree.root.updateStats(userResult);
+
+  if (includeVariations) {
+    _walkVariationsIntoTree(
+      tree: tree,
+      pgnNode: game.moves,
+      pos: position,
+      treeNode: tree.root,
+      depth: 0,
+      maxDepth: maxDepth,
+      userResult: userResult,
+    );
+    return;
+  }
+
   var currentNode = tree.root;
-
-  // Update root stats.
-  currentNode.updateStats(userResult);
-
-  int depth = 0;
+  var currentPos = position;
+  var depth = 0;
   for (final nodeData in game.moves.mainline()) {
     if (depth >= maxDepth) break;
 
-    onPositionBeforeMove?.call(position);
+    onPositionBeforeMove?.call(currentPos);
 
     try {
       final moveSan = nodeData.san;
       if (isNullMoveSan(moveSan)) {
         // Pass the turn without a tree node so later same-side moves stay
         // legal and `--` does not pollute opening stats.
-        final next = playSanOrNullMove(position, moveSan);
+        final next = playSanOrNullMove(currentPos, moveSan);
         if (next == null) break;
-        position = next;
+        currentPos = next;
         continue;
       }
 
-      // Parse SAN into a Move object for the engine.
-      final move = position.parseSan(moveSan);
+      final move = currentPos.parseSan(moveSan);
       if (move == null) break;
 
-      // Apply move.
-      position = position.play(move);
+      currentPos = currentPos.play(move);
 
-      // Tree building.
-      final childNode = currentNode.getOrCreateChild(moveSan, position.fen);
+      final childNode = currentNode.getOrCreateChild(moveSan, currentPos.fen);
       childNode.updateStats(userResult);
       tree.indexNode(childNode);
 
-      // Advance.
       currentNode = childNode;
       depth++;
     } catch (_) {
@@ -258,5 +276,68 @@ void walkMainlineIntoTree({
     }
   }
 
-  onWalkComplete?.call(position);
+  onWalkComplete?.call(currentPos);
+}
+
+void _walkVariationsIntoTree({
+  required OpeningTree tree,
+  required PgnNode<PgnNodeData> pgnNode,
+  required Position pos,
+  required OpeningTreeNode treeNode,
+  required int depth,
+  required int maxDepth,
+  required double? userResult,
+}) {
+  if (pgnNode.children.isEmpty || depth >= maxDepth) return;
+
+  for (var i = 0; i < pgnNode.children.length; i++) {
+    final child = pgnNode.children[i];
+    try {
+      final san = child.data.san;
+      if (isNullMoveSan(san)) {
+        final next = playSanOrNullMove(pos, san);
+        if (next == null) continue;
+        if (i > 0) _incrementPathStats(treeNode, userResult);
+        _walkVariationsIntoTree(
+          tree: tree,
+          pgnNode: child,
+          pos: next,
+          treeNode: treeNode,
+          depth: depth,
+          maxDepth: maxDepth,
+          userResult: userResult,
+        );
+        continue;
+      }
+
+      final move = pos.parseSan(san);
+      if (move == null) continue;
+      final next = pos.play(move);
+      if (i > 0) _incrementPathStats(treeNode, userResult);
+      final childNode = treeNode.getOrCreateChild(san, next.fen);
+      childNode.updateStats(userResult);
+      tree.indexNode(childNode);
+      _walkVariationsIntoTree(
+        tree: tree,
+        pgnNode: child,
+        pos: next,
+        treeNode: childNode,
+        depth: depth + 1,
+        maxDepth: maxDepth,
+        userResult: userResult,
+      );
+    } catch (_) {
+      continue;
+    }
+  }
+}
+
+/// Add one more line through [node] and every ancestor, so a sideline's
+/// frequency is counted on the shared prefix as well as on the branch.
+void _incrementPathStats(OpeningTreeNode node, double? userResult) {
+  OpeningTreeNode? n = node;
+  while (n != null) {
+    n.updateStats(userResult);
+    n = n.parent;
+  }
 }

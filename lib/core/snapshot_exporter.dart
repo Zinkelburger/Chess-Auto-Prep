@@ -1,61 +1,98 @@
-part of 'generation_session_controller.dart';
+/// Snapshot export — write the lines found so far to a **new** repertoire
+/// file while the generation run continues.
+///
+/// Owned by [GenerationSessionController]. Unverified exports serialize the
+/// tree and run every phase in a background isolate so exploration keeps
+/// going. Verified exports pause the shared engine pool for the check, then
+/// resume.
+library;
 
-/// Snapshot export — writing the lines found so far to a **new** repertoire
-/// file while the run continues.  Split out of [GenerationSessionController]
-/// by pure code motion.  `on _GenerationProgress` gives it the observable
-/// progress fields (phase/depth) it reads; the remaining run state is
-/// supplied by the controller through abstract accessors.
-mixin _SnapshotExport on _GenerationProgress {
-  bool _snapshotExporting = false;
+import 'dart:isolate';
+
+import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
+
+import '../services/engine/stockfish_pool.dart';
+import '../services/generation/eca_calculator.dart';
+import '../services/generation/fen_map.dart';
+import '../services/generation/generation_config.dart';
+import '../services/generation/repertoire_verifier.dart';
+import '../services/generation/snapshot_export.dart';
+import '../services/generation/tree_serialization.dart';
+import '../services/storage/storage_factory.dart';
+import '../services/tree_build_service.dart';
+import 'generation_progress.dart';
+import 'generation_session_types.dart';
+
+class SnapshotExporter {
+  SnapshotExporter({
+    required void Function() notify,
+    required bool Function() isGenerating,
+    required bool Function() isPaused,
+    required bool Function() cancelRequested,
+    required GenerationRequest? Function() activeRequest,
+    required TreeBuildConfig? Function() activeConfig,
+    required List<String> Function() startMoveSequence,
+    required TreeBuildService Function() buildService,
+    required GenerationProgress Function() progress,
+  }) : _notify = notify,
+       _isGenerating = isGenerating,
+       _isPaused = isPaused,
+       _cancelRequested = cancelRequested,
+       _activeRequest = activeRequest,
+       _activeConfig = activeConfig,
+       _startMoveSequence = startMoveSequence,
+       _buildService = buildService,
+       _progress = progress;
+
+  final void Function() _notify;
+  final bool Function() _isGenerating;
+  final bool Function() _isPaused;
+  final bool Function() _cancelRequested;
+  final GenerationRequest? Function() _activeRequest;
+  final TreeBuildConfig? Function() _activeConfig;
+  final List<String> Function() _startMoveSequence;
+  final TreeBuildService Function() _buildService;
+  final GenerationProgress Function() _progress;
+
+  bool _exporting = false;
 
   /// Live status of an in-flight snapshot export, shown in the Jobs panel.
   /// Null when no snapshot is running.
-  String? snapshotStatus;
+  String? status;
 
-  bool get isSnapshotExporting => _snapshotExporting;
-
-  // Shared run state owned by the controller.
-  bool get _cancelRequested;
-  GenerationRequest? get _activeRequest;
-  List<String> get _startMoveSequence;
-  TreeBuildService get buildService;
-
-  // ── Snapshot export (lines-so-far while the run continues) ──────────
+  bool get isExporting => _exporting;
 
   /// Suggested repertoire name for a snapshot export at the current depth.
-  String snapshotNameSuggestion() {
-    final path = _activeRequest?.repertoireFilePath;
+  String nameSuggestion() {
+    final path = _activeRequest()?.repertoireFilePath;
+    final depth = _progress().depth;
     final base = (path == null || path.isEmpty)
         ? 'Generated'
         : p.basenameWithoutExtension(path);
-    return '$base d$progressDepth snapshot';
+    return '$base d$depth snapshot';
   }
 
   /// Export the lines the build has found so far to a **new** repertoire
   /// file named [repertoireName], without ending the run.
   ///
-  /// Unverified exports serialize the tree and run every phase in a
-  /// background isolate — the build keeps exploring throughout.  When
-  /// [verify] is set (and the config uses Stockfish), exploration pauses
-  /// while the engine re-checks the snapshot's chosen moves (the pool is
-  /// shared with the build), then resumes automatically.
-  ///
   /// Returns (success, user-facing message).
-  Future<(bool, String)> exportSnapshot({
+  Future<(bool, String)> export({
     required String repertoireName,
     required bool verify,
   }) async {
-    if (!_isGenerating ||
-        _cancelRequested ||
-        progressPhase != GenerationPhase.buildingTree) {
+    final progress = _progress();
+    if (!_isGenerating() ||
+        _cancelRequested() ||
+        progress.phase != GenerationPhase.buildingTree) {
       return (false, 'No active build to export from.');
     }
-    if (_snapshotExporting) {
+    if (_exporting) {
       return (false, 'A snapshot export is already running.');
     }
-    final request = _activeRequest;
-    final config = activeConfig;
-    final tree = buildService.currentTree;
+    final request = _activeRequest();
+    final config = _activeConfig();
+    final tree = _buildService().currentTree;
     if (request == null || config == null || tree == null) {
       return (false, 'Build state unavailable — try again in a moment.');
     }
@@ -68,14 +105,15 @@ mixin _SnapshotExport on _GenerationProgress {
       return (false, 'A repertoire named "$name" already exists.');
     }
 
-    final depth = progressDepth;
+    final depth = progress.depth;
     final doVerify = verify && config.needsStockfish;
     // Verification shares the engine pool with the build, so exploration
-    // pauses for its duration.  Unverified exports never touch the run.
-    final pausedForVerify = doVerify && !_isPaused;
+    // pauses for its duration. Unverified exports never touch the run.
+    final pausedForVerify = doVerify && !_isPaused();
+    final buildService = _buildService();
 
-    _snapshotExporting = true;
-    _setSnapshotStatus('Snapshot: preparing (depth $depth)…');
+    _exporting = true;
+    _setStatus('Snapshot: preparing (depth $depth)…');
     try {
       if (pausedForVerify) buildService.pauseBuild();
 
@@ -84,12 +122,12 @@ mixin _SnapshotExport on _GenerationProgress {
       final exportRequest = SnapshotExportRequest(
         treeJson: serializeTree(tree),
         configJson: Map<String, dynamic>.from(config.toJson()),
-        prefix: List<String>.from(_startMoveSequence),
+        prefix: List<String>.from(_startMoveSequence()),
         repertoireStartFen: request.repertoireStartFen,
         stopAfterSelection: doVerify,
       );
 
-      _setSnapshotStatus('Snapshot: computing lines (depth $depth)…');
+      _setStatus('Snapshot: computing lines (depth $depth)…');
       final result = await Isolate.run(() => runSnapshotExport(exportRequest));
 
       var pgnEntries = result.pgnEntries;
@@ -100,7 +138,7 @@ mixin _SnapshotExport on _GenerationProgress {
         final ecaCalc = ExpectimaxCalculator(config: config, fenMap: fenMap);
         var verified = false;
         try {
-          _setSnapshotStatus(
+          _setStatus(
             'Snapshot: verifying (depth ${config.resolvedVerifyDepth})…',
           );
           if (StockfishPool.instance.workerCount == 0) {
@@ -113,8 +151,8 @@ mixin _SnapshotExport on _GenerationProgress {
             snapTree,
             fenMap: fenMap,
             ecaCalc: ecaCalc,
-            isCancelled: () => _cancelRequested,
-            onStatus: (s) => _setSnapshotStatus('Snapshot: $s'),
+            isCancelled: _cancelRequested,
+            onStatus: (s) => _setStatus('Snapshot: $s'),
           );
           verified = report.completed;
         } catch (e) {
@@ -123,13 +161,13 @@ mixin _SnapshotExport on _GenerationProgress {
         }
         // Engine is free again — resume exploration before the extraction
         // walk, which only reads the snapshot copy.
-        if (pausedForVerify && !_isPaused) buildService.resumeBuild();
-        _setSnapshotStatus('Snapshot: extracting lines…');
+        if (pausedForVerify && !_isPaused()) buildService.resumeBuild();
+        _setStatus('Snapshot: extracting lines…');
         pgnEntries = extractSnapshotLines(
           tree: snapTree,
           config: config,
           fenMap: fenMap,
-          prefix: List<String>.from(_startMoveSequence),
+          prefix: List<String>.from(_startMoveSequence()),
           repertoireStartFen: request.repertoireStartFen,
         );
         verifyNote = verified
@@ -164,15 +202,15 @@ mixin _SnapshotExport on _GenerationProgress {
       debugPrint('[Snapshot] export failed: $e');
       return (false, 'Snapshot export failed: $e');
     } finally {
-      if (pausedForVerify && !_isPaused) buildService.resumeBuild();
-      _snapshotExporting = false;
-      snapshotStatus = null;
-      notifyListeners();
+      if (pausedForVerify && !_isPaused()) buildService.resumeBuild();
+      _exporting = false;
+      status = null;
+      _notify();
     }
   }
 
-  void _setSnapshotStatus(String status) {
-    snapshotStatus = status;
-    notifyListeners();
+  void _setStatus(String next) {
+    status = next;
+    _notify();
   }
 }

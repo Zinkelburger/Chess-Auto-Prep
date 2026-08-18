@@ -36,7 +36,6 @@ import '../services/opening_book_service.dart';
 import '../services/generation/repertoire_selector.dart';
 import '../services/generation/repertoire_verifier.dart';
 import '../services/generation/run_debug_dump.dart';
-import '../services/generation/snapshot_export.dart';
 import '../services/generation/trap_extractor.dart';
 import '../services/generation/tree_build_progress.dart';
 import '../services/generation/tree_ease.dart';
@@ -50,63 +49,41 @@ import '../utils/fen_utils.dart';
 import '../utils/findability.dart';
 import 'generated_repertoire.dart';
 import '../utils/safe_change_notifier.dart';
+import 'generation_progress.dart';
 import 'generation_session_types.dart';
+import 'snapshot_exporter.dart';
 
+export 'generation_progress.dart';
 export 'generation_session_types.dart'
-    show GeneratedLineExport, GenerationRequest;
-
-part 'generation_session_progress.dart';
-part 'generation_session_snapshot.dart';
-
-/// What Phase 2 produces: the scored tree's derived structures plus the
-/// counts the run summary and debug dump report.
-///
-/// Exists so the phase methods hand each other a named result instead of
-/// sharing a dozen locals inside one long pipeline method.
-class _TreeAnalysis {
-  final FenMap fenMap;
-  final ExpectimaxCalculator ecaCalc;
-  final int easeCount;
-  final int ecaCount;
-
-  /// Repertoire moves marked by the selector.  Mutable because Phase 2.5
-  /// verification may demote moves and revise the count.
-  int selectedCount;
-
-  _TreeAnalysis({
-    required this.fenMap,
-    required this.ecaCalc,
-    required this.easeCount,
-    required this.ecaCount,
-    required this.selectedCount,
-  });
-}
-
-/// What Phase 3 produces: the lines to export, plus what was dropped getting
-/// there so the summary can explain the shortfall.
-class _ExtractedLines {
-  /// Lines surviving the trap filter, similarity pruning, and ranking.
-  final List<ExtractedLine> lines;
-
-  /// How many lines existed before similarity pruning.
-  final int rawCount;
-
-  /// Sentence fragment appended to the run summary when "only traps" ran.
-  final String trapsOnlyNote;
-
-  const _ExtractedLines({
-    required this.lines,
-    required this.rawCount,
-    required this.trapsOnlyNote,
-  });
-
-  bool get wasPruned => lines.length < rawCount;
-}
+    show GeneratedLineExport, GenerationRequest, TreeAnalysis, ExtractedLines;
+export 'snapshot_exporter.dart';
 
 class GenerationSessionController extends ChangeNotifier
-    with SafeChangeNotifier, _GenerationProgress, _SnapshotExport {
+    with SafeChangeNotifier {
   final TreeBuildService buildService = TreeBuildService();
   final CoherenceService coherenceService = CoherenceService();
+
+  /// Live BFS / phase stats. The Jobs panel reads this; the pipeline writes it.
+  late final GenerationProgress progress = GenerationProgress(
+    notify: notifyListeners,
+    job: () => currentJob,
+    isRunning: () => _isGenerating,
+    isPaused: () => _isPaused,
+    elapsed: () => _pipelineSw,
+  );
+
+  /// Mid-run export of lines found so far, without ending the build.
+  late final SnapshotExporter snapshots = SnapshotExporter(
+    notify: notifyListeners,
+    isGenerating: () => _isGenerating,
+    isPaused: () => _isPaused,
+    cancelRequested: () => _cancelRequested,
+    activeRequest: () => _activeRequest,
+    activeConfig: () => activeConfig,
+    startMoveSequence: () => _startMoveSequence,
+    buildService: () => buildService,
+    progress: () => progress,
+  );
 
   static const int _pgnFlushEveryLines = 10;
 
@@ -139,6 +116,10 @@ class GenerationSessionController extends ChangeNotifier
   /// Config of the most recent run (kept after the run ends so the config
   /// form can restore the user's settings when it remounts).
   TreeBuildConfig? lastConfig;
+
+  /// Config of the run in flight. Null when idle. Snapshot export and the
+  /// Jobs panel read this; [lastConfig] is the same object after the run ends.
+  TreeBuildConfig? activeConfig;
 
   /// Human-readable outcome of the most recent run (complete / cancelled /
   /// failed message).  Cleared when a new run starts.
@@ -178,7 +159,55 @@ class GenerationSessionController extends ChangeNotifier
       _isGenerating &&
       !_isPaused &&
       !_cancelRequested &&
-      progressPhase.isPausable;
+      progress.phase.isPausable;
+
+  bool get isSnapshotExporting => snapshots.isExporting;
+  String? get snapshotStatus => snapshots.status;
+  String snapshotNameSuggestion() => snapshots.nameSuggestion();
+  Future<(bool, String)> exportSnapshot({
+    required String repertoireName,
+    required bool verify,
+  }) => snapshots.export(repertoireName: repertoireName, verify: verify);
+
+  String get progressStatus => progress.status;
+  GenerationPhase get progressPhase => progress.phase;
+
+  /// Test and overlay helper — forwards to [progress.update].
+  void updateProgress({
+    int? nodes,
+    int? depth,
+    int? maxPlyConfig,
+    int? unexploredAtDepth,
+    int? totalAtDepth,
+    int? lines,
+    double? nodesPerMinute,
+    int? elapsedMs,
+  }) => progress.update(
+    nodes: nodes,
+    depth: depth,
+    maxPlyConfig: maxPlyConfig,
+    unexploredAtDepth: unexploredAtDepth,
+    totalAtDepth: totalAtDepth,
+    lines: lines,
+    nodesPerMinute: nodesPerMinute,
+    elapsedMs: elapsedMs,
+  );
+
+  int get progressNodes => progress.nodes;
+  int get progressDepth => progress.depth;
+  int get progressMaxPlyConfig => progress.maxPlyConfig;
+  int get progressUnexploredAtDepth => progress.unexploredAtDepth;
+  int get progressTotalAtDepth => progress.totalAtDepth;
+  int get progressLines => progress.lines;
+  double? get progressNodesPerMinute => progress.nodesPerMinute;
+  double? get progressEtaSec => progress.etaDepthSec;
+  int get progressElapsedMs => progress.elapsedMs;
+  bool get progressBestFirst => progress.bestFirst;
+  int get progressFrontier => progress.frontier;
+  double? get progressPriorityFraction => progress.priorityFraction;
+  int? get progressRunEtaSec => progress.runEtaSec;
+  List<int> get progressDepthTotals => progress.depthTotals;
+  List<int> get progressDepthExplored => progress.depthExplored;
 
   /// The current generated repertoire bundle, or null when none is loaded.
   GeneratedRepertoire? get current => _current;
@@ -291,13 +320,13 @@ class GenerationSessionController extends ChangeNotifier
     lastRefutationCount = 0;
     lastAlternativeCount = 0;
     lastConfig = config;
-    _resetProgress();
+    progress.reset();
     activeConfig = config;
-    progressMaxPlyConfig = config.maxPly;
-    progressBestFirst = config.bestFirst;
+    progress.maxPlyConfig = config.maxPly;
+    progress.bestFirst = config.bestFirst;
     _pgnWriter.clear();
     _pipelineSw = Stopwatch()..start();
-    _startElapsedTicker();
+    progress.startElapsedTicker();
 
     _repertoireFilePath = request.repertoireFilePath;
     _startMoveSequence = List.unmodifiable(prefix);
@@ -313,7 +342,7 @@ class GenerationSessionController extends ChangeNotifier
       ..updateStatus(JobStatus.running);
 
     _seedResumeProgress(existingTree, config);
-    _setStatus(
+    progress.setStatus(
       existingTree != null
           ? 'Phase 1: Resuming build...'
           : 'Phase 1: Building tree...',
@@ -337,7 +366,7 @@ class GenerationSessionController extends ChangeNotifier
     }
     // Release any dangling pause gate so nothing awaits it forever.
     buildService.resumeBuild();
-    _stopElapsedTicker();
+    progress.stopElapsedTicker();
     _pipelineSw.stop();
     _finishNowRequested = false;
     final job = currentJob;
@@ -368,8 +397,9 @@ class GenerationSessionController extends ChangeNotifier
     _cancelRequested = false;
     _discardRequested = false;
     _activeRequest = null;
-    _resetProgress();
-    _flushProgressNotify();
+    activeConfig = null;
+    progress.reset();
+    progress.flushNotify();
   }
 
   /// Flush whatever was queued, dump diagnostics, and fail the job tile.
@@ -420,15 +450,15 @@ class GenerationSessionController extends ChangeNotifier
         startMoves: prefix.isEmpty ? null : prefix.join(' '),
         isCancelled: () => _cancelRequested,
         finishNow: () => _finishNowRequested,
-        onStatusChanged: _setStatus,
-        onProgress: _handleBuildProgress,
+        onStatusChanged: progress.setStatus,
+        onProgress: progress.handleBuildProgress,
       );
     } else {
       final skipBuild =
           existingTree != null && existingTree.maxPlyReached >= config.maxPly;
       if (skipBuild) {
         tree = existingTree;
-        _setStatus(
+        progress.setStatus(
           'Tree already at depth ${existingTree.maxPlyReached}, '
           'skipping build...',
           GenerationPhase.buildingTree,
@@ -439,7 +469,7 @@ class GenerationSessionController extends ChangeNotifier
           isCancelled: () => _cancelRequested,
           finishNow: () => _finishNowRequested,
           existingTree: existingTree,
-          onProgress: _handleBuildProgress,
+          onProgress: progress.handleBuildProgress,
         );
       }
     }
@@ -455,7 +485,7 @@ class GenerationSessionController extends ChangeNotifier
     final finishedEarly = _finishNowRequested;
     if (finishedEarly) {
       _finishNowRequested = false;
-      _setStatus(
+      progress.setStatus(
         'Finishing early with ${tree.totalNodes} nodes...',
         GenerationPhase.computingEase,
       );
@@ -474,11 +504,14 @@ class GenerationSessionController extends ChangeNotifier
 
   /// Score the tree and mark the repertoire moves.  Purely synchronous — no
   /// pause gate applies here (see [canPause]).
-  _TreeAnalysis _analyzeTreePhase(BuildTree tree, TreeBuildConfig config) {
-    _setStatus('Phase 2: Computing ease...', GenerationPhase.computingEase);
+  TreeAnalysis _analyzeTreePhase(BuildTree tree, TreeBuildConfig config) {
+    progress.setStatus(
+      'Phase 2: Computing ease...',
+      GenerationPhase.computingEase,
+    );
     final easeCount = calculateTreeEase(tree);
 
-    _setStatus(
+    progress.setStatus(
       'Phase 2: Computing expectimax...',
       GenerationPhase.computingExpectimax,
     );
@@ -489,7 +522,7 @@ class GenerationSessionController extends ChangeNotifier
     ecaCalc.calculateCplValues(tree.root);
     calculateMyEase(tree, playAsWhite: config.playAsWhite);
 
-    _setStatus(
+    progress.setStatus(
       'Phase 2: Selecting repertoire...',
       GenerationPhase.selectingRepertoire,
     );
@@ -499,7 +532,7 @@ class GenerationSessionController extends ChangeNotifier
       fenMap: fenMap,
     );
 
-    return _TreeAnalysis(
+    return TreeAnalysis(
       fenMap: fenMap,
       ecaCalc: ecaCalc,
       easeCount: easeCount,
@@ -511,14 +544,14 @@ class GenerationSessionController extends ChangeNotifier
   // ── Phase 2.5: deep verification (opt-out) ───────────────────────────
 
   /// Re-check the selected moves at a deeper search depth, revising
-  /// [_TreeAnalysis.selectedCount] in place when the verifier demotes moves.
+  /// [TreeAnalysis.selectedCount] in place when the verifier demotes moves.
   ///
   /// Skipped when the user finished early: they asked for lines from what is
   /// already built, not another engine pass.  Engine failures here are
   /// non-fatal — the build-time evals still stand.
   Future<void> _verifyPhase(
     BuildTree tree,
-    _TreeAnalysis analysis,
+    TreeAnalysis analysis,
     TreeBuildConfig config, {
     required bool finishedEarly,
   }) async {
@@ -529,7 +562,7 @@ class GenerationSessionController extends ChangeNotifier
       return;
     }
 
-    _setStatus(
+    progress.setStatus(
       'Phase 2.5: Verifying repertoire '
       '(depth ${config.resolvedVerifyDepth})...',
       GenerationPhase.verifying,
@@ -547,7 +580,7 @@ class GenerationSessionController extends ChangeNotifier
         ecaCalc: analysis.ecaCalc,
         isCancelled: () => _cancelRequested,
         pauseGate: buildService.waitIfPaused,
-        onStatus: (s) => _setStatus(s, GenerationPhase.verifying),
+        onStatus: (s) => progress.setStatus(s, GenerationPhase.verifying),
       );
       if (report.selectedCount >= 0) {
         analysis.selectedCount = report.selectedCount;
@@ -555,7 +588,7 @@ class GenerationSessionController extends ChangeNotifier
       for (final d in report.demotions) {
         debugPrint('Verification demotion @ ${d.fen}: $d');
       }
-      _setStatus(report.summary, GenerationPhase.verifying);
+      progress.setStatus(report.summary, GenerationPhase.verifying);
     } catch (e) {
       // Verification is best-effort on engine failures; the build-time
       // evals still stand.
@@ -567,12 +600,15 @@ class GenerationSessionController extends ChangeNotifier
 
   /// Walk the selected tree into concrete lines, then apply the "only traps"
   /// filter, similarity pruning, and importance ranking in that order.
-  _ExtractedLines _extractLinesPhase(
+  ExtractedLines _extractLinesPhase(
     BuildTree tree,
-    _TreeAnalysis analysis,
+    TreeAnalysis analysis,
     TreeBuildConfig config,
   ) {
-    _setStatus('Phase 3: Extracting lines...', GenerationPhase.extractingLines);
+    progress.setStatus(
+      'Phase 3: Extracting lines...',
+      GenerationPhase.extractingLines,
+    );
     final extractor = LineExtractor(config: config, fenMap: analysis.fenMap);
     var lines = extractor.extract(tree);
 
@@ -591,7 +627,7 @@ class GenerationSessionController extends ChangeNotifier
           ? ' No traps found — nothing exported.'
           : ' Traps only: ${lines.length} of $beforeTraps lines '
                 'run through a trap.';
-      _setStatus(
+      progress.setStatus(
         'Phase 3: keeping trap lines only '
         '(${lines.length} of $beforeTraps)...',
         GenerationPhase.extractingLines,
@@ -602,7 +638,7 @@ class GenerationSessionController extends ChangeNotifier
     if (config.targetLineCount > 0) {
       lines = LinePruner.prune(lines, targetCount: config.targetLineCount);
       if (lines.length < rawCount) {
-        _setStatus(
+        progress.setStatus(
           'Phase 3: kept ${lines.length} of $rawCount lines '
           '(similarity pruning)...',
           GenerationPhase.extractingLines,
@@ -612,9 +648,9 @@ class GenerationSessionController extends ChangeNotifier
     if (config.rankLinesByImportance) {
       lines.sort((a, b) => b.probability.compareTo(a.probability));
     }
-    updateProgress(lines: lines.length);
+    progress.update(lines: lines.length);
 
-    return _ExtractedLines(
+    return ExtractedLines(
       lines: lines,
       rawCount: rawCount,
       trapsOnlyNote: trapsOnlyNote,
@@ -626,7 +662,7 @@ class GenerationSessionController extends ChangeNotifier
   /// it out, flushing in batches so a long export does not sit in memory.
   Future<void> _exportLinesPhase(
     BuildTree tree,
-    _ExtractedLines extracted,
+    ExtractedLines extracted,
     GenerationRequest request,
     List<String> prefix,
   ) async {
@@ -672,7 +708,7 @@ class GenerationSessionController extends ChangeNotifier
   /// Best-effort like verification: no engine, a cancelled run, or a failed
   /// search costs the variations, never the export.
   Future<RefutationMap> _refutationPhase(
-    _ExtractedLines extracted,
+    ExtractedLines extracted,
     TreeBuildConfig config,
   ) async {
     lastRefutationCount = 0;
@@ -693,7 +729,7 @@ class GenerationSessionController extends ChangeNotifier
       final refutations = await prober.probe(
         extracted.lines,
         isCancelled: () => _cancelRequested,
-        onProgress: (done, total) => _setStatus(
+        onProgress: (done, total) => progress.setStatus(
           'Phase 3.5: Showing how losing replies are punished '
           '($done of $total)...',
           GenerationPhase.extractingLines,
@@ -713,7 +749,7 @@ class GenerationSessionController extends ChangeNotifier
   /// Best-effort like [_refutationPhase]: this pass costs variations when it
   /// fails, never the export.
   Future<AlternativeMap> _alternativePhase(
-    _ExtractedLines extracted,
+    ExtractedLines extracted,
     TreeBuildConfig config,
   ) async {
     lastAlternativeCount = 0;
@@ -738,7 +774,7 @@ class GenerationSessionController extends ChangeNotifier
       final alternatives = await prober.probeAlternatives(
         extracted.lines,
         isCancelled: () => _cancelRequested,
-        onProgress: (done, total) => _setStatus(
+        onProgress: (done, total) => progress.setStatus(
           'Phase 3.6: Checking the moves the book leaves out '
           '($done of $total positions)...',
           GenerationPhase.extractingLines,
@@ -754,7 +790,7 @@ class GenerationSessionController extends ChangeNotifier
 
   Future<ComposedCourse> _composeCourse(
     BuildTree tree,
-    _ExtractedLines extracted,
+    ExtractedLines extracted,
     GenerationRequest request,
     List<String> prefix,
     RefutationMap refutations,
@@ -832,8 +868,8 @@ class GenerationSessionController extends ChangeNotifier
   /// by a failure to write diagnostics.
   Future<void> _persistArtifactsPhase(
     BuildTree tree,
-    _TreeAnalysis analysis,
-    _ExtractedLines extracted,
+    TreeAnalysis analysis,
+    ExtractedLines extracted,
     TreeBuildConfig config,
     String filePath,
   ) async {
@@ -904,8 +940,8 @@ class GenerationSessionController extends ChangeNotifier
   /// Compose the one-sentence outcome shown on the job tile and status line.
   void _publishSummary(
     BuildTree tree,
-    _TreeAnalysis analysis,
-    _ExtractedLines extracted,
+    TreeAnalysis analysis,
+    ExtractedLines extracted,
     TreeBuildConfig config, {
     required bool finishedEarly,
   }) {
@@ -925,7 +961,7 @@ class GenerationSessionController extends ChangeNotifier
           '$lastRunSummary '
           'Verification skipped (finished early).';
     }
-    _setStatus(lastRunSummary, GenerationPhase.extractingLines);
+    progress.setStatus(lastRunSummary, GenerationPhase.extractingLines);
   }
 
   /// ` in 7 chapters plus 6 model games`, or empty when the export was flat.
@@ -977,7 +1013,7 @@ class GenerationSessionController extends ChangeNotifier
   /// Seed depth-layer counters so a resumed build doesn't show
   /// "0 / 0 explored" while BFS replays existing nodes toward the frontier.
   void _seedResumeProgress(BuildTree? existingTree, TreeBuildConfig config) {
-    progressNodes = existingTree?.totalNodes ?? 0;
+    progress.nodes = existingTree?.totalNodes ?? 0;
     if (existingTree == null) return;
     final frontierPly = TreeBuildService.minFrontierPly(existingTree.root);
     final seedPly =
@@ -988,9 +1024,9 @@ class GenerationSessionController extends ChangeNotifier
       existingTree.root,
       seedPly,
     );
-    if (frontierPly != null) progressDepth = frontierPly;
-    progressTotalAtDepth = layer.$1;
-    progressUnexploredAtDepth = layer.$2;
+    if (frontierPly != null) progress.depth = frontierPly;
+    progress.totalAtDepth = layer.$1;
+    progress.unexploredAtDepth = layer.$2;
   }
 
   Future<void> _writeFailureDump(TreeBuildConfig config, Object error) async {
@@ -1060,7 +1096,7 @@ class GenerationSessionController extends ChangeNotifier
     unawaited(savePartialTree());
     // Hand the engine back so analysis works everywhere while paused.
     unawaited(EngineLifecycle.instance.pauseGeneration());
-    _flushProgressNotify();
+    progress.flushNotify();
   }
 
   void resumeBuild() {
@@ -1068,7 +1104,7 @@ class GenerationSessionController extends ChangeNotifier
     _isPaused = false;
     _pipelineSw.start();
     currentJob?.updateStatus(JobStatus.running);
-    _flushProgressNotify();
+    progress.flushNotify();
     final cfg = activeConfig;
     if (cfg != null && cfg.needsStockfish) {
       // Re-take the engine (cancels interactive analysis, restores the
@@ -1098,8 +1134,8 @@ class GenerationSessionController extends ChangeNotifier
       _pipelineSw.start();
     }
     buildService.stopBuild();
-    progressStatus = _discardRequested ? 'Discarding…' : 'Cancelling…';
-    _flushProgressNotify();
+    progress.status = _discardRequested ? 'Discarding…' : 'Cancelling…';
+    progress.flushNotify();
   }
 
   /// Throw the build away entirely: stop the run and delete the partial tree
@@ -1166,8 +1202,7 @@ class GenerationSessionController extends ChangeNotifier
 
   @override
   void dispose() {
-    _notifyTimer?.cancel();
-    _stopElapsedTicker();
+    progress.dispose();
     buildService.stopBuild();
     coherenceService.dispose();
     super.dispose();

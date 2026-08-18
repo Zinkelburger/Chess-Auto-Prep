@@ -15,6 +15,10 @@ import '../theme/app_colors.dart';
 /// grows.
 const _fieldWidth = 56.0;
 
+/// Shared height for the **Game N of Total** box and the Search button
+/// beside it, so the pair aligns in the nav bar and the opening-tree list.
+const kGameNavControlHeight = 32.0;
+
 class GameNumberField extends StatefulWidget {
   /// Focuses the most recently mounted box and selects its number, so a
   /// keyboard shortcut can land straight on "type the number you want".
@@ -165,6 +169,7 @@ class _GameNumberFieldState extends State<GameNumberField> {
         const SizedBox(width: 6),
         SizedBox(
           width: _fieldWidth,
+          height: kGameNavControlHeight,
           child: TextField(
             controller: _controller,
             focusNode: _focusNode,
@@ -177,10 +182,7 @@ class _GameNumberFieldState extends State<GameNumberField> {
             style: labelStyle,
             decoration: InputDecoration(
               isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 6,
-                vertical: 10,
-              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 6),
               border: border(AppColors.outline),
               enabledBorder: border(AppColors.outline),
               disabledBorder: border(AppColors.outline),

@@ -16,6 +16,7 @@ import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart';
 
+import '../core/pgn/pgn_dummy_mainline.dart';
 import '../models/pgn_filter_models.dart';
 import '../utils/chess_utils.dart' show isNullMoveSan, playSanOrNullMove;
 import '../utils/fen_utils.dart';
@@ -166,55 +167,95 @@ int countPgnGamesFast(String pgnContent) {
 /// Uses the `[FEN]` / `[SetUp]` headers when present, otherwise returns
 /// [Chess.initial].
 Position startPositionFromGame(PgnGame game) {
-  final setup = game.headers['SetUp'] ?? game.headers['Setup'] ?? '';
-  final fen = game.headers['FEN'] ?? '';
-  if (setup == '1' && fen.isNotEmpty) {
-    try {
-      return Chess.fromSetup(Setup.parseFen(expandFen(fen)));
-    } catch (_) {
-      // Best-effort; failure here is non-fatal and intentionally ignored.
-    }
+  try {
+    return _positionFromHeaders(game.headers);
+  } catch (_) {
+    return Chess.initial;
+  }
+}
+
+PgnGame _parsePgnForReplay(String pgnText) {
+  final game = PgnGame.parsePgn(pgnText);
+  promoteNullMoveDummyMainline(game.moves);
+  return game;
+}
+
+/// Throws when `[SetUp]` is `1` and `[FEN]` is unparsable — replay helpers
+/// catch that and skip the game. [startPositionFromGame] falls back to the
+/// initial position instead.
+Position _positionFromHeaders(Map<String, String> headers) {
+  final setupFlag = headers['SetUp'] ?? headers['Setup'] ?? '';
+  final fenHeader = headers['FEN'] ?? '';
+  if (setupFlag == '1' && fenHeader.isNotEmpty) {
+    return Chess.fromSetup(Setup.parseFen(expandFen(fenHeader)));
   }
   return Chess.initial;
 }
 
+/// DFS over the parsed tree, mainline children first. [visit] returning
+/// false stops the walk. Iterative so a hostile 500-deep RAV nest cannot
+/// blow the stack.
+void _forEachPgnNode(
+  PgnNode<PgnNodeData> root,
+  Position start,
+  bool Function(Position pos, PgnNode<PgnNodeData> node) visit,
+) {
+  if (!visit(start, root)) return;
+  final stack = <({PgnNode<PgnNodeData> node, Position pos})>[
+    (node: root, pos: start),
+  ];
+  while (stack.isNotEmpty) {
+    final cur = stack.removeLast();
+    final kids = cur.node.children;
+    for (var i = kids.length - 1; i >= 0; i--) {
+      final next = playSanOrNullMove(cur.pos, kids[i].data.san);
+      if (next == null) continue;
+      if (!visit(next, kids[i])) return;
+      stack.add((node: kids[i], pos: next));
+    }
+  }
+}
+
+List<String> _child0Sans(PgnNode<PgnNodeData> node, {required int maxPlies}) {
+  final remaining = <String>[];
+  var n = node;
+  while (n.children.isNotEmpty && remaining.length < maxPlies) {
+    final child = n.children.first;
+    remaining.add(child.data.san);
+    n = child;
+  }
+  return remaining;
+}
+
 /// Whether [pgnText] contains a position matching [targetFen] (normalized).
 ///
-/// Isolate-safe.
+/// Walks the mainline and RAVs, so a course chapter that only reaches the
+/// position in a sideline still matches. Isolate-safe.
 bool gamePassesThroughFen(
   Map<String, String> headers,
   String pgnText,
   String targetFen,
 ) {
   try {
-    final game = PgnGame.parsePgn(pgnText);
-    final mainline = game.moves.mainline().toList();
-
-    final setupFlag = headers['SetUp'] ?? headers['Setup'] ?? '';
-    final fenHeader = headers['FEN'] ?? '';
-    Position pos;
-    if (setupFlag == '1' && fenHeader.isNotEmpty) {
-      pos = Chess.fromSetup(Setup.parseFen(expandFen(fenHeader)));
-    } else {
-      pos = Chess.initial;
-    }
-
-    if (normalizeFen(pos.fen) == targetFen) return true;
-    for (final moveData in mainline) {
-      final next = playSanOrNullMove(pos, moveData.san);
-      if (next == null) break;
-      pos = next;
-      if (normalizeFen(pos.fen) == targetFen) return true;
-    }
+    final game = _parsePgnForReplay(pgnText);
+    var found = false;
+    _forEachPgnNode(game.moves, _positionFromHeaders(headers), (pos, _) {
+      if (normalizeFen(pos.fen) == targetFen) {
+        found = true;
+        return false;
+      }
+      return true;
+    });
+    return found;
   } catch (_) {
     // Best-effort; failure here is non-fatal and intentionally ignored.
   }
   return false;
 }
 
-/// Mainline SAN after [targetFen] is reached. Comments and variations are
-/// already stripped by the PGN parser. Empty if the FEN is never hit, or
-/// if the game ends at that position.
+/// SAN after [targetFen] is reached, along the line that found it (the
+/// mainline of that variation, or the game mainline when the hit is there).
+/// Empty if the FEN is never hit, or if the line ends at that position.
 ///
 /// Caps at [maxPlies] so a list row never materialises a whole long game.
 /// Isolate-safe.
@@ -225,40 +266,15 @@ List<String> mainlineSansAfterFen(
   int maxPlies = 40,
 }) {
   try {
-    final game = PgnGame.parsePgn(pgnText);
-    final mainline = game.moves.mainline().toList();
-
-    final setupFlag = headers['SetUp'] ?? headers['Setup'] ?? '';
-    final fenHeader = headers['FEN'] ?? '';
-    Position pos;
-    if (setupFlag == '1' && fenHeader.isNotEmpty) {
-      pos = Chess.fromSetup(Setup.parseFen(expandFen(fenHeader)));
-    } else {
-      pos = Chess.initial;
-    }
-
+    final game = _parsePgnForReplay(pgnText);
     final target = normalizeFen(targetFen);
-    var i = 0;
-    if (normalizeFen(pos.fen) != target) {
-      var found = false;
-      for (; i < mainline.length; i++) {
-        final next = playSanOrNullMove(pos, mainline[i].san);
-        if (next == null) break;
-        pos = next;
-        if (normalizeFen(pos.fen) == target) {
-          found = true;
-          i++;
-          break;
-        }
-      }
-      if (!found) return const [];
-    }
-
-    final remaining = <String>[];
-    for (var j = i; j < mainline.length && remaining.length < maxPlies; j++) {
-      remaining.add(mainline[j].san);
-    }
-    return remaining;
+    List<String>? remaining;
+    _forEachPgnNode(game.moves, _positionFromHeaders(headers), (pos, node) {
+      if (normalizeFen(pos.fen) != target) return true;
+      remaining = _child0Sans(node, maxPlies: maxPlies);
+      return false;
+    });
+    return remaining ?? const [];
   } catch (_) {
     return const [];
   }
@@ -384,7 +400,7 @@ bool gameMatchesSequence(
 ) {
   if (groups.isEmpty) return true;
   try {
-    final game = PgnGame.parsePgn(pgnText);
+    final game = _parsePgnForReplay(pgnText);
     final moves = game.moves
         .mainline()
         .map((n) => n.san)
@@ -440,11 +456,9 @@ String? parseTargetFen(String? input) {
 
 /// Build an inverted index mapping normalized FEN → sorted game indices.
 ///
-/// Replays each game's **mainline only** and records every position reached,
-/// so that position-filter lookups become O(1) instead of O(games × moves).
-/// Positions reachable only through RAVs (variations) are intentionally
-/// excluded for consistency with [gamePassesThroughFen] which also only
-/// traverses the mainline.
+/// Replays each game's mainline **and RAVs** and records every position
+/// reached, so opening-tree "games at this position" and position-slice
+/// filters see course sidelines, not just each chapter's mainline.
 ///
 /// Isolate-safe: no instance state captured.
 Map<String, List<int>> buildFenIndex(
@@ -463,26 +477,14 @@ Map<String, List<int>> buildFenIndex(
 
   for (int i = 0; i < games.length; i++) {
     try {
-      final game = PgnGame.parsePgn(games[i].pgnText);
-      final mainline = game.moves.mainline().toList();
-      final headers = games[i].headers;
-
-      final setupFlag = headers['SetUp'] ?? headers['Setup'] ?? '';
-      final fenHeader = headers['FEN'] ?? '';
-      Position pos;
-      if (setupFlag == '1' && fenHeader.isNotEmpty) {
-        pos = Chess.fromSetup(Setup.parseFen(expandFen(fenHeader)));
-      } else {
-        pos = Chess.initial;
-      }
-
-      record(normalizeFen(pos.fen), i);
-      for (final moveData in mainline) {
-        final next = playSanOrNullMove(pos, moveData.san);
-        if (next == null) break;
-        pos = next;
+      final game = _parsePgnForReplay(games[i].pgnText);
+      _forEachPgnNode(game.moves, _positionFromHeaders(games[i].headers), (
+        pos,
+        _,
+      ) {
         record(normalizeFen(pos.fen), i);
-      }
+        return true;
+      });
     } catch (_) {
       // Best-effort; failure here is non-fatal and intentionally ignored.
     }
@@ -628,10 +630,11 @@ bool _passesNonPositionFilters(
 
 /// Serialize a FEN index for disk storage.
 ///
-/// Format header: `FENIDX1 <gameCount> <fileSize> <modifiedMs>`, then
+/// Format header: `FENIDX2 <gameCount> <fileSize> <modifiedMs>`, then
 /// one `FEN\tidx,idx,...` per entry.  [fileSize] and [modifiedMs] are the
 /// PGN file's byte-size and last-modified epoch-ms at build time, used for
-/// staleness detection on load.
+/// staleness detection on load. v2 indexes RAVs as well as the mainline;
+/// `FENIDX1` blobs are rejected so they rebuild.
 String serializeFenIndex(
   Map<String, List<int>> index, {
   required int gameCount,
@@ -639,7 +642,7 @@ String serializeFenIndex(
   required int modifiedMs,
 }) {
   final buf = StringBuffer();
-  buf.writeln('FENIDX1 $gameCount $fileSize $modifiedMs');
+  buf.writeln('FENIDX2 $gameCount $fileSize $modifiedMs');
   for (final entry in index.entries) {
     buf.write(entry.key);
     buf.write('\t');
@@ -662,13 +665,13 @@ Map<String, List<int>>? deserializeFenIndex(
   final header = data.substring(0, firstNl).trim().split(' ');
   if (header.length < 2) return null;
 
-  if (header[0] == 'FENIDX1') {
+  if (header[0] == 'FENIDX2') {
     if (header.length != 4) return null;
     if (int.tryParse(header[1]) != expectedGameCount) return null;
     if (int.tryParse(header[2]) != expectedFileSize) return null;
     if (int.tryParse(header[3]) != expectedModifiedMs) return null;
   } else {
-    // v1 or unknown format — force rebuild.
+    // v1 (mainline-only) or unknown format — force rebuild.
     return null;
   }
 

@@ -177,7 +177,7 @@ class OpeningTreeBuilder {
     // 1. Safe Header Access
     final white = game.headers['White'] ?? '';
     final black = game.headers['Black'] ?? '';
-    final result = game.headers['Result'] ?? '*';
+    final result = (game.headers['Result'] ?? '*').trim();
 
     // 2. Identify User. Games whose colour can't be determined are skipped.
     final isUserWhiteInGame = resolveUserColor(
@@ -190,16 +190,22 @@ class OpeningTreeBuilder {
     );
     if (isUserWhiteInGame == null) return;
 
-    // 3. Calculate Result
-    final userResult = resultForUser(result, isUserWhiteInGame);
+    // 3. Score. Course / unfinished games (`*`) count toward frequency
+    // without a fake 50% draw bar on the opening tree.
+    final userResult = (result.isEmpty || result == '*')
+        ? null
+        : resultForUser(result, isUserWhiteInGame);
 
-    // 4. Traverse Moves using mainline() iterator (always from the standard
-    // initial position — this builder ignores any [FEN] start header).
+    // 4. Walk the game. Course / repertoire lines (`*`) fold RAVs into the
+    // tree so the viewer Tree tab shows every book continuation, not just
+    // each chapter's mainline. Scored player games stay mainline-only —
+    // their variations are analysis notes, not extra games.
     walkMainlineIntoTree(
       tree: tree,
       game: game,
       userResult: userResult,
       maxDepth: maxDepth,
+      includeVariations: userResult == null,
     );
   }
 }

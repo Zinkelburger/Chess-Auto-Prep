@@ -1,9 +1,5 @@
-/// Study mode — general chess study: annotated move trees with variations
-/// and comments, multiple chapters per study file, engine analysis, and a
-/// board editor for custom starting positions.
-///
-/// Assembly of existing parts: [StudyController] (state) + board +
-/// [InteractivePgnEditor] (move tree view) + [InlineEngineBar] (engine).
+/// Study mode — composition root: [StudyController] plus board, PGN editor,
+/// chapter sidebar, and engine. Layout widgets live under `widgets/study/`.
 library;
 
 import 'dart:async';
@@ -15,29 +11,29 @@ import 'package:provider/provider.dart';
 import '../constants/ui_breakpoints.dart';
 import '../core/app_state.dart';
 import '../core/study_controller.dart';
-import '../models/board_annotation.dart';
 import '../models/move_tree.dart' show TreePath;
 import '../services/repertoire_service.dart';
 import '../services/study_import/study_import_controller.dart';
 import '../services/study_import/study_import_exception.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
-import '../utils/board_shape_comments.dart';
 import '../utils/app_shortcuts.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_breadcrumb_trail.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/app_settings_button.dart';
 import '../widgets/board_editor/board_editor_dialog.dart';
-import '../widgets/chess_board_widget.dart';
 import '../widgets/common/searchable_picker_dialog.dart';
 import '../widgets/engine/inline_engine_bar.dart';
 import '../widgets/pgn/pgn_annotation_panel.dart';
-import '../widgets/interactive_pgn_editor.dart';
 import '../widgets/study/chapter_manager_dialog.dart';
 import '../widgets/study/study_chapter_sidebar.dart';
 import '../widgets/study/import_from_url_dialog.dart';
+import '../widgets/study/study_board_pane.dart';
 import '../widgets/study/study_import_status_chip.dart';
+import '../widgets/study/study_name_dialog.dart';
+import '../widgets/study/study_picker_bar.dart';
+import '../widgets/study/study_side_pane.dart';
 import '../widgets/trainer_keyboard_scope.dart';
 import '../widgets/training/move_input_widget.dart';
 
@@ -52,10 +48,6 @@ class _StudyScreenState extends State<StudyScreen> {
   late final StudyController _study;
   final FocusNode _focusNode = FocusNode();
   final GlobalKey<MoveInputWidgetState> _moveInputKey = GlobalKey();
-
-  /// Inline study rename (click the name in the app bar).
-  bool _editingName = false;
-  final TextEditingController _nameEditController = TextEditingController();
 
   AppState? _appStateRef;
 
@@ -130,7 +122,6 @@ class _StudyScreenState extends State<StudyScreen> {
     _import.removeListener(_onImportResult);
     _study.removeListener(_onStudyChanged);
     _focusNode.dispose();
-    _nameEditController.dispose();
     super.dispose();
   }
 
@@ -217,76 +208,14 @@ class _StudyScreenState extends State<StudyScreen> {
 
   // ── Study / chapter management ───────────────────────────────────────
 
-  Future<String?> _promptName(String title, {String? initial}) async {
-    final controller = TextEditingController(text: initial ?? '');
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Name',
-            border: OutlineInputBorder(),
-            isDense: true,
-          ),
-          onSubmitted: (value) => Navigator.pop(ctx, value),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    final safe = result
-        ?.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
-        .replaceAll(RegExp(r'_+'), '_')
-        .trim();
-    if (safe == null) return null;
-    if (safe.isEmpty) {
-      if (mounted) showAppSnackBar(context, 'Invalid name.', isError: true);
-      return null;
-    }
-    return safe;
-  }
+  Future<String?> _promptName(String title, {String? initial}) =>
+      promptStudyName(context, title: title, initial: initial);
 
   Future<void> _newStudy() async {
-    final name = await _promptName('New study');
+    final name = await promptStudyName(context, title: 'New study');
     if (name == null) return;
     try {
       await _study.newStudy(name);
-    } on ArgumentError catch (e) {
-      if (mounted) showAppSnackBar(context, e.message as String, isError: true);
-    }
-  }
-
-  void _startNameEdit() {
-    _nameEditController.text = _study.doc.name;
-    _nameEditController.selection = TextSelection(
-      baseOffset: 0,
-      extentOffset: _nameEditController.text.length,
-    );
-    setState(() => _editingName = true);
-  }
-
-  Future<void> _commitNameEdit() async {
-    if (!_editingName) return;
-    setState(() => _editingName = false);
-    final safe = _nameEditController.text
-        .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
-        .replaceAll(RegExp(r'_+'), '_')
-        .trim();
-    if (safe.isEmpty || safe == _study.doc.name) return;
-    try {
-      await _study.renameStudy(safe);
     } on ArgumentError catch (e) {
       if (mounted) showAppSnackBar(context, e.message as String, isError: true);
     }
@@ -673,7 +602,18 @@ class _StudyScreenState extends State<StudyScreen> {
             children: [
               const Text('Study'),
               const SizedBox(width: 16),
-              Flexible(child: _buildStudyPicker()),
+              Flexible(
+                child: StudyPickerBar(
+                  study: _study,
+                  focusNode: _focusNode,
+                  onNewStudy: () => unawaited(_newStudy()),
+                  onPickStudy: () => unawaited(_pickStudy()),
+                  onImportUrl: () => unawaited(_importFromUrl()),
+                  onImportPgn: () => unawaited(_importPgn()),
+                  onExportPgn: () => unawaited(_exportPgn()),
+                  onDeleteStudy: () => unawaited(_deleteCurrentStudy()),
+                ),
+              ),
             ],
           ),
         ),
@@ -716,8 +656,41 @@ class _StudyScreenState extends State<StudyScreen> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final compact = constraints.maxWidth < kCompactBreakpoint;
-            final board = _buildBoardPane();
-            final side = _buildSidePane(compact: compact);
+            final board = StudyBoardPane(
+              study: _study,
+              moveInputKey: _moveInputKey,
+              keyBindings: _keyBindings,
+              onShapeDrawn: (orig, dest) {
+                if (!_study.cursorHasNode) {
+                  showAppSnackBar(
+                    context,
+                    'Play a move first — arrows attach to a move, not the start position.',
+                  );
+                  return;
+                }
+                applyStudyBoardShape(
+                  _study,
+                  orig,
+                  dest,
+                  brush: studyShapeBrushFromKeyboard(),
+                );
+              },
+            );
+            final side = StudySidePane(
+              study: _study,
+              compact: compact,
+              onEngineLine: _addEngineLine,
+              onAddChapter: () => unawaited(_addChapter()),
+              onAddChapterFromPosition: () =>
+                  unawaited(_addChapter(fromPosition: true)),
+              onEditChapterPosition: () => unawaited(_editChapterPosition()),
+              onPickChapter: () => unawaited(_pickChapter()),
+              onManageChapters: () => unawaited(_manageChapters()),
+              onRenameChapter: () =>
+                  unawaited(_renameChapterAt(_study.chapterIndex)),
+              onDeleteChapter: () =>
+                  unawaited(_deleteChapterAt(_study.chapterIndex)),
+            );
             // Wide: Lichess study layout — chapters | board | moves. Compact
             // keeps the stacked two-pane layout with the chapter bar in the
             // side pane.
@@ -802,321 +775,5 @@ class _StudyScreenState extends State<StudyScreen> {
       emptyMessage: 'This study has no chapters yet.',
     );
     if (picked != null) _study.selectChapter(picked);
-  }
-
-  Widget _buildStudyPicker() {
-    final theme = Theme.of(context);
-    final current = _study.doc;
-    // A file opened from outside the studies directory ("Edit set in
-    // Study") is not in availableStudies and keeps its own name.
-    final knownPaths = _study.availableStudies.map((s) => s.filePath).toSet();
-    final isExternal =
-        current.filePath != null && !knownPaths.contains(current.filePath);
-    final canRename = current.filePath != null && !isExternal;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (_editingName)
-          SizedBox(
-            width: 220,
-            child: Focus(
-              onKeyEvent: (node, event) {
-                if (event is KeyDownEvent &&
-                    event.logicalKey == LogicalKeyboardKey.escape) {
-                  setState(() => _editingName = false); // cancel
-                  _focusNode.requestFocus();
-                  return KeyEventResult.handled;
-                }
-                return KeyEventResult.ignored;
-              },
-              onFocusChange: (focused) {
-                if (!focused) unawaited(_commitNameEdit());
-              },
-              child: TextField(
-                controller: _nameEditController,
-                autofocus: true,
-                style: theme.textTheme.bodyMedium,
-                decoration: const InputDecoration(
-                  isDense: true,
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 6,
-                  ),
-                ),
-                onSubmitted: (_) => _commitNameEdit(),
-              ),
-            ),
-          )
-        else
-          Tooltip(
-            message: canRename ? 'Click to rename' : '',
-            child: InkWell(
-              onTap: canRename ? _startNameEdit : null,
-              borderRadius: BorderRadius.circular(4),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 260),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 4,
-                  ),
-                  child: Text(
-                    isExternal ? '${current.name} (set)' : current.name,
-                    style: theme.textTheme.bodyMedium,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        IconButton(
-          icon: const Icon(Icons.arrow_drop_down, size: 22),
-          tooltip: 'Switch study',
-          visualDensity: VisualDensity.compact,
-          onPressed: _pickStudy,
-        ),
-        IconButton(
-          icon: const Icon(Icons.add, size: 20),
-          tooltip: 'New study',
-          onPressed: _newStudy,
-        ),
-        // Shown even with no study open — importing is how the first study
-        // gets created; only the actions that need a file are withheld.
-        PopupMenuButton<String>(
-          icon: const Icon(Icons.more_vert, size: 18),
-          tooltip: 'Manage studies',
-          onSelected: (action) {
-            switch (action) {
-              case 'importUrl':
-                unawaited(_importFromUrl());
-              case 'import':
-                unawaited(_importPgn());
-              case 'export':
-                unawaited(_exportPgn());
-              case 'delete':
-                unawaited(_deleteCurrentStudy());
-            }
-          },
-          itemBuilder: (_) => [
-            const PopupMenuItem(
-              value: 'importUrl',
-              child: Text('Import from URL…'),
-            ),
-            const PopupMenuItem(value: 'import', child: Text('Import PGN…')),
-            if (current.filePath != null) ...[
-              const PopupMenuItem(
-                value: 'export',
-                child: Text('Copy study PGN'),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem(
-                value: 'delete',
-                child: Text('Delete study…'),
-              ),
-            ],
-          ],
-        ),
-      ],
-    );
-  }
-
-  /// Right-drag on the board: draw an arrow (or a circle, when the drag starts
-  /// and ends on one square) into the current move's comment.
-  ///
-  /// Modifiers pick the colour the way Lichess does, and re-drawing the same
-  /// shape erases it. Shapes are stored as `[%cal]`/`[%csl]` tokens, so they
-  /// export with the PGN instead of living only in this app.
-  void _onShapeDrawn(String orig, String? dest) {
-    if (!_study.cursorHasNode) {
-      showAppSnackBar(
-        context,
-        'Play a move first — arrows attach to a move, not the start position.',
-      );
-      return;
-    }
-    final keys = HardwareKeyboard.instance;
-    final brush = keys.isShiftPressed
-        ? AnnotationBrush.red
-        : keys.isAltPressed
-        ? AnnotationBrush.blue
-        : keys.isControlPressed
-        ? AnnotationBrush.yellow
-        : AnnotationBrush.green;
-
-    final comment = _study.cursorComment;
-    final next = toggleBoardShape(
-      parseBoardShapes(comment),
-      BoardAnnotation(orig: orig, dest: dest, brush: brush),
-    );
-    _study.setComment(_study.path, writeBoardShapes(comment, next));
-  }
-
-  Widget _buildBoardPane() {
-    return Padding(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        children: [
-          Expanded(
-            child: Center(
-              child: AspectRatio(
-                aspectRatio: 1,
-                child: ChessBoardWidget(
-                  position: _study.currentPosition,
-                  flipped: _study.flipped,
-                  onMove: (move) => _study.playSan(move.san),
-                  annotations: parseBoardShapes(_study.cursorComment),
-                  onShapeDrawn: _onShapeDrawn,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 320),
-            child: MoveInputWidget(
-              key: _moveInputKey,
-              position: _study.currentPosition,
-              onMove: (move) => _study.playSan(move.san),
-              // Non-move keys (↑/↓, empty-field ←/→, …) keep working as
-              // shortcuts while a move is being typed; move characters
-              // ("e4", "Nf3") always type normally.
-              onNavigationKey: (event) =>
-                  handleMoveInputNavigationKey(_keyBindings, event),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSidePane({required bool compact}) {
-    final theme = Theme.of(context);
-    return Column(
-      children: [
-        // Engine on top of the side pane — same spot as the PGN viewer.
-        InlineEngineBar(
-          fen: _study.currentPosition.fen,
-          previewFlipped: _study.flipped,
-          onLineMoveTapped: _addEngineLine,
-        ),
-        const Divider(height: 1),
-        // Compact-only chapter bar; on wide layouts the sidebar owns
-        // chapter switching and management.
-        if (compact) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.bookmark_outline,
-                  size: 16,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: InkWell(
-                    onTap: _pickChapter,
-                    borderRadius: BorderRadius.circular(4),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              _study.doc.chapters.isEmpty
-                                  ? 'No chapters'
-                                  : _study
-                                        .doc
-                                        .chapters[_study.chapterIndex]
-                                        .name,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodyMedium,
-                            ),
-                          ),
-                          const Icon(Icons.arrow_drop_down, size: 20),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.add, size: 18),
-                  tooltip: 'New chapter',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: _addChapter,
-                ),
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, size: 18),
-                  tooltip: 'Chapter actions',
-                  onSelected: (action) {
-                    switch (action) {
-                      case 'manage':
-                        unawaited(_manageChapters());
-                      case 'add_from_position':
-                        unawaited(_addChapter(fromPosition: true));
-                      case 'set_position':
-                        unawaited(_editChapterPosition());
-                      case 'rename':
-                        unawaited(_renameChapterAt(_study.chapterIndex));
-                      case 'delete':
-                        unawaited(_deleteChapterAt(_study.chapterIndex));
-                    }
-                  },
-                  // "Train this chapter" used to sit here as well as in the app
-                  // bar's train menu; one home each is enough.
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(
-                      value: 'manage',
-                      child: Text('Manage & reorder chapters…'),
-                    ),
-                    PopupMenuDivider(),
-                    PopupMenuItem(
-                      value: 'add_from_position',
-                      child: Text('New chapter from position…'),
-                    ),
-                    PopupMenuItem(
-                      value: 'set_position',
-                      child: Text('Set starting position…'),
-                    ),
-                    PopupMenuItem(
-                      value: 'rename',
-                      child: Text('Rename chapter…'),
-                    ),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: Text('Delete chapter…'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 8),
-        ] else
-          const SizedBox(height: 8),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: InteractivePgnEditor(
-              tree: _study.tree,
-              currentPath: _study.path,
-              currentRepertoireName: _study.chapter.name,
-              showAnnotationPanel: true,
-              onJump: _study.jump,
-              onCommentChanged: _study.setComment,
-              onToggleNag: _study.toggleNag,
-              onDelete: _study.deleteAt,
-              onPromote: _study.promote,
-              onMakeMainLine: _study.makeMainLine,
-              onCopyToClipboard: (text, message) {
-                unawaited(Clipboard.setData(ClipboardData(text: text)));
-                showAppSnackBar(context, message);
-              },
-            ),
-          ),
-        ),
-      ],
-    );
   }
 }

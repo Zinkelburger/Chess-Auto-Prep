@@ -203,7 +203,7 @@ class ViewerOpeningTree {
   void onMoveSelected(String move) {
     if (openingTree == null) return;
     if (openingTree!.makeMove(move)) {
-      treeCurrentMoveSequence = openingTree!.currentNode.getMovePath();
+      treeCurrentMoveSequence = openingTree!.currentMovePath;
       _updatePositionFromTree();
     }
     onChanged();
@@ -212,14 +212,14 @@ class ViewerOpeningTree {
   void goBack() {
     if (openingTree == null) return;
     openingTree!.goBack();
-    treeCurrentMoveSequence = openingTree!.currentNode.getMovePath();
+    treeCurrentMoveSequence = openingTree!.currentMovePath;
     _updatePositionFromTree();
     onChanged();
   }
 
   void goForward() {
     if (openingTree == null) return;
-    final moves = openingTree!.currentGroup.children;
+    final moves = openingTree!.continuations;
     if (moves.isNotEmpty) {
       onMoveSelected(moves.first.move);
     }
@@ -240,10 +240,10 @@ class ViewerOpeningTree {
     // visited nodes to guarantee termination.
     final visited = <OpeningTreeNode>{};
     while (visited.add(tree.currentNode)) {
-      final moves = tree.currentGroup.children;
+      final moves = tree.continuations;
       if (moves.isEmpty || !tree.makeMove(moves.first.move)) break;
     }
-    treeCurrentMoveSequence = tree.currentNode.getMovePath();
+    treeCurrentMoveSequence = tree.currentMovePath;
     _updatePositionFromTree();
     onChanged();
   }
@@ -268,11 +268,8 @@ class ViewerOpeningTree {
   void _walkTo(List<String> seq) {
     final tree = openingTree;
     if (tree == null) return;
-    tree.reset();
-    for (final move in seq) {
-      if (!tree.makeMove(move)) break;
-    }
-    treeCurrentMoveSequence = tree.currentNode.getMovePath();
+    tree.syncToMoveHistory(seq);
+    treeCurrentMoveSequence = tree.currentMovePath;
   }
 
   /// Sync the opening tree cursor to the current board position via FEN
@@ -282,17 +279,18 @@ class ViewerOpeningTree {
     if (openingTree == null) return;
     openingTree!.reset();
     if (openingTree!.navigateToFen(currentFen())) {
-      treeCurrentMoveSequence = openingTree!.currentNode.getMovePath();
+      treeCurrentMoveSequence = openingTree!.currentMovePath;
     } else {
       openingTree!.reset();
       treeCurrentMoveSequence = [];
     }
   }
 
-  /// Update the board position from the tree's current node FEN.
+  /// Update the board position from the tree's current FEN (off-book
+  /// cursor included).
   void _updatePositionFromTree() {
     if (openingTree == null) return;
-    final fen = openingTree!.currentNode.fen;
+    final fen = openingTree!.currentFen;
     try {
       applyPosition(Chess.fromSetup(Setup.parseFen(fen)));
     } catch (_) {
@@ -302,7 +300,7 @@ class ViewerOpeningTree {
 
   List<int> gamesAtTreePosition() {
     if (openingTree == null) return [];
-    final fen = normalizeFen(openingTree!.currentNode.fen);
+    final fen = normalizeFen(openingTree!.currentFen);
     return _positionGameCache.putIfAbsent(fen, () {
       if (_positionGameCache.length >= _maxCacheEntries) {
         final keysToRemove = _positionGameCache.keys

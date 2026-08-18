@@ -8,7 +8,9 @@ import 'package:flutter/services.dart';
 
 import '../theme/app_colors.dart';
 import '../utils/app_shortcuts.dart';
+import 'common/list_search_field.dart';
 import 'game_nav_item.dart';
+import 'game_number_field.dart';
 import 'shortcut_tooltip.dart';
 
 const _visibleRows = 10;
@@ -192,8 +194,6 @@ Future<int?> showGameSearchDialog({
 /// opening". Merging them into one field hides the current position while
 /// you type and makes "12" mean both game 12 and a text query.
 class GameSearchButton extends StatelessWidget {
-  static const _minSize = Size(88, 40);
-
   final VoidCallback? onPressed;
   final AppShortcut? shortcut;
 
@@ -201,15 +201,23 @@ class GameSearchButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Same outline, radius, and type as [GameNumberField] so the pair reads
+    // as one control group instead of a padded CTA next to a compact box.
     final button = OutlinedButton.icon(
       onPressed: onPressed,
-      icon: const Icon(Icons.search, size: 20),
+      icon: const Icon(Icons.search, size: 16),
       label: const Text('Search'),
       style: OutlinedButton.styleFrom(
-        minimumSize: _minSize,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        tapTargetSize: MaterialTapTargetSize.padded,
+        foregroundColor: AppColors.ink,
+        iconSize: 16,
+        minimumSize: const Size(0, kGameNavControlHeight),
+        maximumSize: const Size(double.infinity, kGameNavControlHeight),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         visualDensity: VisualDensity.standard,
+        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        side: const BorderSide(color: AppColors.outline),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
     );
     const description = 'Search games by player, event or opening';
@@ -240,9 +248,6 @@ class GameSearchDialog extends StatefulWidget {
 }
 
 class _GameSearchDialogState extends State<GameSearchDialog> {
-  final _controller = TextEditingController();
-  final _focusNode = FocusNode();
-
   // Display/search data precomputed once so scrolling and typing stay smooth.
   late final List<_GameEntry> _entries = widget.games
       .map(_GameEntry.fromGame)
@@ -252,33 +257,18 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
   late List<_SearchResult> _results = _computeResults(_entries, '');
   String _lastQuery = '';
 
-  @override
-  void initState() {
-    super.initState();
-    _controller.addListener(_onQueryChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusNode.requestFocus();
-    });
-  }
-
-  void _onQueryChanged() {
-    if (_controller.text == _lastQuery) return;
-    _lastQuery = _controller.text;
+  void _onQueryChanged(String value) {
+    if (value == _lastQuery) return;
+    if (!mounted) return;
+    _lastQuery = value;
     setState(() {
-      _results = _computeResults(_entries, _controller.text);
+      _results = _computeResults(_entries, value);
     });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    _focusNode.dispose();
-    super.dispose();
   }
 
   void _select(int index) => Navigator.pop(context, index);
 
-  void _onSubmitted(String _) {
+  void _onSubmitted() {
     final results = _results;
     if (results.isNotEmpty) _select(results.first.index);
   }
@@ -303,37 +293,11 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                TextField(
-                  controller: _controller,
-                  focusNode: _focusNode,
+                ListSearchField(
+                  hintText: 'Search games or enter game #...',
                   autofocus: true,
-                  decoration: InputDecoration(
-                    hintText: 'Search games or enter game #...',
-                    hintStyle: const TextStyle(
-                      color: AppColors.onSurfaceMuted,
-                      fontSize: 13,
-                    ),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                      borderSide: const BorderSide(color: AppColors.outline),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                      borderSide: const BorderSide(color: AppColors.outline),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                      borderSide: BorderSide(color: theme.colorScheme.primary),
-                    ),
-                  ),
-                  style: const TextStyle(fontSize: 14),
+                  onChanged: _onQueryChanged,
                   onSubmitted: _onSubmitted,
-                  textInputAction: TextInputAction.go,
                 ),
                 const SizedBox(height: 12),
                 SizedBox(

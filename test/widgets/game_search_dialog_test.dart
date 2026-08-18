@@ -1,5 +1,5 @@
-import 'package:chess_auto_prep/utils/app_shortcuts.dart';
 import 'package:chess_auto_prep/widgets/game_nav_bar.dart';
+import 'package:chess_auto_prep/widgets/game_number_field.dart';
 import 'package:chess_auto_prep/widgets/game_search_dialog.dart';
 import 'package:chess_auto_prep/widgets/shortcut_tooltip.dart';
 import 'package:flutter/material.dart';
@@ -49,22 +49,16 @@ Widget _navBar({void Function(int)? onGoToGame}) => MaterialApp(
 );
 
 void main() {
-  testWidgets('Search is a labeled button at least 40px tall', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: GameSearchButton(
-            shortcut: AppShortcut.searchGames,
-            onPressed: () {},
-          ),
-        ),
-      ),
-    );
+  testWidgets('Search is a compact labeled button next to the game number', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_navBar());
 
     expect(find.text('Search'), findsOneWidget);
-    final size = tester.getSize(find.byType(OutlinedButton));
-    expect(size.height, greaterThanOrEqualTo(40));
-    expect(size.width, greaterThanOrEqualTo(88));
+    final searchSize = tester.getSize(find.byType(OutlinedButton));
+    final numberSize = tester.getSize(find.byType(GameNumberField));
+    expect(searchSize.height, equals(kGameNavControlHeight));
+    expect(numberSize.height, equals(kGameNavControlHeight));
     expect(
       find.byWidgetPredicate(
         (w) =>

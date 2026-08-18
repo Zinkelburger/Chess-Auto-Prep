@@ -91,7 +91,7 @@ mixin _NavigationMixin on _PositionAnalysisWidgetStateBase {
   void _treeGoForward() {
     final tree = widget.openingTree;
     if (tree == null) return;
-    final moves = tree.currentGroup.children;
+    final moves = tree.continuations;
     if (moves.isNotEmpty && tree.makeMove(moves.first.move)) {
       _navigateTo(tree.currentNode.fen);
     }

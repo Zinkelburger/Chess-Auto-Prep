@@ -134,7 +134,9 @@ void main() {
     expect(rowFinder, findsOneWidget);
     final row = tester.widget<RichText>(rowFinder);
 
-    expect(row.text.style?.fontFamily, isNull);
+    // Text.rich inherits the theme face (Roboto here). That's still
+    // proportional — the thing we refuse is an explicit monospace family.
+    expect(row.text.style?.fontFamily, isNot('monospace'));
 
     // The pane is a flowing wrap, not an aligned column, so nothing in it
     // opts into monospace — that texture read as a code listing.
@@ -238,7 +240,7 @@ void main() {
   });
 
   testWidgets(
-    'Chessable Z0 null moves do not truncate the Colle intro sideline',
+    'Chessable dummy intro is promoted; comments stay upright, Z0 is hidden',
     (tester) async {
       await pumpPgn(
         tester,
@@ -251,12 +253,29 @@ void main() {
       expect(find.text('Nf3'), findsWidgets);
       expect(find.text('e3'), findsWidgets);
       expect(
+        find.textContaining('Welcome to this course', findRichText: true),
+        findsOneWidget,
+      );
+      expect(
         find.textContaining('We intend to play', findRichText: true),
         findsOneWidget,
       );
       expect(find.textContaining('next.', findRichText: true), findsOneWidget);
       expect(find.text('Z0'), findsNothing);
       expect(find.text('--'), findsNothing);
+
+      var sawWelcome = false;
+      for (final rich in tester.widgetList<RichText>(find.byType(RichText))) {
+        rich.text.visitChildren((span) {
+          if (span is TextSpan &&
+              (span.text?.contains('Welcome to this course') ?? false)) {
+            sawWelcome = true;
+            expect(span.style?.fontStyle, anyOf(isNull, FontStyle.normal));
+          }
+          return true;
+        });
+      }
+      expect(sawWelcome, isTrue);
     },
   );
 }

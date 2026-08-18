@@ -154,19 +154,19 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
   String _extractEventTitle(String pgn) => pgn_utils.extractEventTitle(pgn);
   @override
   Widget build(BuildContext context) {
-    final currentNode = widget.tree.currentNode;
-    final movePath = currentNode.getMovePathString();
+    final tree = widget.tree;
+    final movePath = tree.currentMovePathString;
     // Transposition-aware: stats and continuations are merged across every
-    // path that reaches this position, so counts match the FEN list.
-    final position = widget.tree.groupFor(currentNode);
-    final continuations = position.children;
+    // path that reaches this FEN, including one-ply transpositions into book.
+    final position = tree.currentGroup;
+    final continuations = tree.continuations;
 
     // Reach annotation: how likely the analyzed player is to end up here.
     final protagonistIsWhite = widget.protagonistIsWhite;
     final reach = protagonistIsWhite != null
         ? position.reachEstimate(protagonistIsWhite: protagonistIsWhite)
         : null;
-    final fenParts = currentNode.fen.split(' ');
+    final fenParts = tree.currentFen.split(' ');
     final protagonistToMove =
         protagonistIsWhite != null &&
         fenParts.length > 1 &&
@@ -190,7 +190,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                 children: [
                   Expanded(
                     child: widget.onPathPlySelected != null
-                        ? _buildClickablePath(currentNode)
+                        ? _buildClickablePath()
                         : Text(
                             movePath,
                             style: TextStyle(
@@ -214,7 +214,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                       ),
                       padding: EdgeInsets.zero,
                       tooltip: 'Back',
-                      onPressed: currentNode.parent != null
+                      onPressed: tree.canGoBack
                           ? () => widget.onGoBack?.call()
                           : null,
                     ),
@@ -247,13 +247,13 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                       ),
                       padding: EdgeInsets.zero,
                       tooltip: 'Copy moves',
-                      onPressed: currentNode.parent == null
+                      onPressed: tree.currentMovePath.isEmpty
                           ? null
                           : () {
                               unawaited(
                                 Clipboard.setData(
                                   ClipboardData(
-                                    text: _movetext(currentNode.getMovePath()),
+                                    text: _movetext(tree.currentMovePath),
                                   ),
                                 ),
                               );
@@ -267,19 +267,19 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
               // Stats for current position (summed across transpositions).
               // The reach annotation stays terse to keep this on one line;
               // the tooltip carries the explanation.
-              _buildStatsLine(position, reach, currentNode),
+              _buildStatsLine(position, reach),
             ],
           ),
         ),
 
         // Out of book warning
-        if (widget.currentMoveSequence.length > widget.tree.currentDepth)
+        if (!tree.inBook && tree.currentMovePath.isNotEmpty)
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
             color: AppColors.warningSurface,
             child: const Text(
-              'Current position is out of book',
+              'Current position is out of book — transposing moves still listed',
               style: TextStyle(fontSize: 11, color: AppColors.onWarning),
             ),
           ),
@@ -290,7 +290,13 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
               ? Center(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
-                    child: currentNode.parent == null
+                    child: !tree.inBook
+                        ? const Text(
+                            'Not in the database.\nNo move from here transposes into book.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: AppColors.onSurfaceMuted),
+                          )
+                        : tree.currentMovePath.isEmpty
                         ? const Text(
                             'No games found.\nAnalyze a player to build the tree.',
                             textAlign: TextAlign.center,
@@ -468,12 +474,11 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
 
   /// One-line position stats, with the reach annotation appended when the
   /// protagonist's color is known and we're past the starting position.
-  Widget _buildStatsLine(
-    PositionGroup position,
-    ReachEstimate? reach,
-    OpeningTreeNode currentNode,
-  ) {
-    final showReach = reach != null && currentNode.parent != null;
+  Widget _buildStatsLine(PositionGroup position, ReachEstimate? reach) {
+    final showReach =
+        reach != null &&
+        widget.tree.inBook &&
+        widget.tree.currentMovePath.isNotEmpty;
     // Record from the displayed point of view (see [WdlPerspective]); the
     // neutral perspective keeps a plain white-draws-black triple.
     final flip = widget.wdlPerspective == WdlPerspective.playerIsBlack;
@@ -483,12 +488,16 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
         : '${flip ? position.losses : position.wins}W-'
               '${position.draws}D-'
               '${flip ? position.wins : position.losses}L';
+    final noun = position.hasWdl ? 'games' : 'lines';
     final text = Text(
-      '${position.gamesPlayed} games • '
-      '${rate.toStringAsFixed(1)}% '
-      '($record)'
-      '${position.nodes.length > 1 ? ' • ${position.nodes.length} move orders' : ''}'
-      '${showReach ? ' • ${reach.percentLabel}% reached' : ''}',
+      position.hasWdl
+          ? '${position.gamesPlayed} $noun • '
+                '${rate.toStringAsFixed(1)}% '
+                '($record)'
+                '${position.nodes.length > 1 ? ' • ${position.nodes.length} move orders' : ''}'
+                '${showReach ? ' • ${reach.percentLabel}% reached' : ''}'
+          : '${position.gamesPlayed} $noun'
+                '${position.nodes.length > 1 ? ' • ${position.nodes.length} move orders' : ''}',
       style: TextStyle(fontSize: 11, color: AppColors.inkSoft),
     );
     if (!showReach) return text;
@@ -507,8 +516,9 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
 
   /// Move path rendered as tappable tokens: tap a move to jump to that ply,
   /// tap the leading restart icon to return to the starting position.
-  Widget _buildClickablePath(OpeningTreeNode currentNode) {
-    final moves = currentNode.getMovePath();
+  Widget _buildClickablePath() {
+    final moves = widget.tree.currentMovePath;
+    final currentNode = widget.tree.currentNode;
     if (moves.isEmpty) {
       return Text(
         'Starting position',

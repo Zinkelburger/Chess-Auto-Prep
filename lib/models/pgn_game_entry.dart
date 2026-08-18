@@ -17,17 +17,44 @@ class PgnGameEntry {
   });
 
   String get label {
-    final w = headers['White'] ?? '?';
-    final b = headers['Black'] ?? '?';
+    final w = (headers['White'] ?? '?').trim();
+    final b = (headers['Black'] ?? '?').trim();
     final wElo = headers['WhiteElo'];
     final bElo = headers['BlackElo'];
-    final wStr = wElo != null && wElo.isNotEmpty && wElo != '?'
-        ? '$w ($wElo)'
-        : w;
-    final bStr = bElo != null && bElo.isNotEmpty && bElo != '?'
-        ? '$b ($bElo)'
-        : b;
+    final wStr = _eloSuffix(w, wElo);
+    final bStr = _eloSuffix(b, bElo);
     final d = formatPgnDate(headers['Date']);
-    return d.isEmpty ? '$wStr vs $bStr' : '$wStr vs $bStr  $d';
+
+    final title = _courseStyleTitle(wStr, bStr, w, b, wElo, bElo);
+    if (d.isEmpty) return title;
+    return '$title  $d';
+  }
+
+  static String _eloSuffix(String name, String? elo) {
+    if (elo != null && elo.isNotEmpty && elo != '?') return '$name ($elo)';
+    return name;
+  }
+
+  /// Course exports put the chapter in [White] and the line in [Black], with
+  /// Result `*` and no ratings. Player games (rated, or "Last, First") stay
+  /// "White vs Black". [Result] must be present as `*` so unlabeled test
+  /// fixtures and real games that omitted the header don't get a chapter dash.
+  String _courseStyleTitle(
+    String wStr,
+    String bStr,
+    String w,
+    String b,
+    String? wElo,
+    String? bElo,
+  ) {
+    final result = headers['Result']?.trim();
+    final rated =
+        (wElo != null && wElo.isNotEmpty && wElo != '?') ||
+        (bElo != null && bElo.isNotEmpty && bElo != '?');
+    final course =
+        result == '*' && !rated && w.isNotEmpty && w != '?' && !w.contains(',');
+    if (!course) return '$wStr vs $bStr';
+    if (b.isEmpty || b == '?' || b == w) return wStr;
+    return '$wStr — $bStr';
   }
 }

@@ -314,6 +314,41 @@ void main() {
     );
 
     test(
+      'userSelectedTreeMove keeps the board move order on a one-ply transposition',
+      () async {
+        const pgn = '''
+// Color: White
+
+[Event "Book line"]
+[Date "2026-01-01"]
+[White "Me"]
+[Black "Opponent"]
+[Result "*"]
+
+1. d4 Nf6 2. e3 c5
+''';
+
+        await controller.restoreRepertoireFromPgn(pgn);
+        controller.goToStart();
+        controller.playMove('d4');
+        controller.playMove('c5');
+        controller.playMove('e3');
+        expect(controller.openingTree!.inBook, isFalse);
+        expect(
+          controller.openingTree!.continuations.map((g) => g.move),
+          contains('Nf6'),
+        );
+
+        controller.userSelectedTreeMove('Nf6');
+
+        expect(controller.currentMoveSequence, ['d4', 'c5', 'e3', 'Nf6']);
+        expect(controller.openingTree!.inBook, isTrue);
+        expect(controller.fen, fenAfterMoves(['d4', 'c5', 'e3', 'Nf6']));
+        assertNavigationInvariants(controller);
+      },
+    );
+
+    test(
       'consecutive playMove calls produce monotonically increasing move indices',
       () {
         const moves = ['e4', 'e5', 'Nf3', 'Nc6'];

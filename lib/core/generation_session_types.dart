@@ -5,7 +5,10 @@
 library;
 
 import '../models/build_tree_node.dart';
+import '../services/generation/eca_calculator.dart';
+import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
+import '../services/generation/line_extractor.dart';
 
 /// One exported line from a completed generation run.
 class GeneratedLineExport {
@@ -57,4 +60,49 @@ class GenerationRequest {
     required this.onLinesSaved,
     this.existingTree,
   });
+}
+
+/// What Phase 2 produces: the scored tree's derived structures plus the
+/// counts the run summary and debug dump report.
+///
+/// Exists so the phase methods hand each other a named result instead of
+/// sharing a dozen locals inside one long pipeline method.
+class TreeAnalysis {
+  final FenMap fenMap;
+  final ExpectimaxCalculator ecaCalc;
+  final int easeCount;
+  final int ecaCount;
+
+  /// Repertoire moves marked by the selector. Mutable because Phase 2.5
+  /// verification may demote moves and revise the count.
+  int selectedCount;
+
+  TreeAnalysis({
+    required this.fenMap,
+    required this.ecaCalc,
+    required this.easeCount,
+    required this.ecaCount,
+    required this.selectedCount,
+  });
+}
+
+/// What Phase 3 produces: the lines to export, plus what was dropped getting
+/// there so the summary can explain the shortfall.
+class ExtractedLines {
+  /// Lines surviving the trap filter, similarity pruning, and ranking.
+  final List<ExtractedLine> lines;
+
+  /// How many lines existed before similarity pruning.
+  final int rawCount;
+
+  /// Sentence fragment appended to the run summary when "only traps" ran.
+  final String trapsOnlyNote;
+
+  const ExtractedLines({
+    required this.lines,
+    required this.rawCount,
+    required this.trapsOnlyNote,
+  });
+
+  bool get wasPruned => lines.length < rawCount;
 }
