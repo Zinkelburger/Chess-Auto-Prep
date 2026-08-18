@@ -55,6 +55,14 @@ mixin _GenerationConfigIo
     _pgnFilePaths
       ..clear()
       ..addAll(config.pgnFilePaths);
+    // The skeleton card is mounted (Offstage) but its state may not exist yet
+    // on the first apply; load it after the frame. Auto-expand when non-empty
+    // so a resumed/preset plan is visible, not silently carried.
+    final plan = config.skeletonPlan;
+    _showSkeleton = !plan.isEmpty;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _skeletonKey.currentState?.loadPlan(plan);
+    });
   }
 
   /// Pre-configure DB Explorer mode with the given PGN file paths and
@@ -244,6 +252,8 @@ mixin _GenerationConfigIo
         40,
       ),
       setupMoves: _setupMovesCtrl.text.trim(),
+      skeletonPlan:
+          _skeletonKey.currentState?.currentPlan() ?? const SkeletonPlan(),
       setupToleranceCp: (int.tryParse(_setupToleranceCtrl.text.trim()) ?? 30)
           .clamp(0, 500),
       // Novelties and the natural-move bias pull in opposite directions;

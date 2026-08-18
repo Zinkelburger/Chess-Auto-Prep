@@ -341,6 +341,55 @@ mixin _GenerationConfigCard
     await _reloadPresets();
   }
 
+  /// Collapsible skeleton-plan editor — the repertoire-planning front door.
+  Widget _skeletonSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _showSkeleton = !_showSkeleton),
+          child: Row(
+            children: [
+              Icon(
+                _showSkeleton ? Icons.expand_less : Icons.expand_more,
+                size: 20,
+                color: AppColors.onSurfaceSoft,
+              ),
+              const SizedBox(width: 4),
+              const Text(
+                'Your lines & structures (optional)',
+                style: TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
+              ),
+              const SizedBox(width: 4),
+              const Tooltip(
+                message:
+                    'Give the build the lines you already know you want and '
+                    'the structures to avoid. It pins your moves, answers '
+                    'other move-orders the same way where sound, and steers '
+                    'clear of the structures you dislike.',
+                child: Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: AppColors.onSurfaceMuted,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Offstage(
+          offstage: !_showSkeleton,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: SkeletonPlanCard(
+              key: _skeletonKey,
+              playAsWhite: widget.playAsWhite,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _presetsMenu() {
     return PopupMenuButton<String>(
       tooltip: 'Saved setting presets',

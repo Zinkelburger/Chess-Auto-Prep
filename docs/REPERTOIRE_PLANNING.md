@@ -1,9 +1,11 @@
 # Repertoire Planning — the sketch → generate → review workbench
 
-Status: design + experimental evidence, August 2026. Nothing here is built yet.
-The generation pipeline it drives already exists (`lib/services/generation/`,
-`docs/ALGORITHM.md`); this document is about the *front door* and about two
-algorithm changes the experiment showed are needed.
+Status: **Phase 1 shipped** (branch `feat/repertoire-planning`), August 2026.
+The back-end selection changes and a first editor UI are built and tested; the
+fuller board workbench is the next phase. See "What shipped" at the bottom.
+The generation pipeline this drives already exists (`lib/services/generation/`,
+`docs/ALGORITHM.md`); this document is the *front door* design plus the
+experiment that grounds it.
 
 ## The problem
 
@@ -209,3 +211,80 @@ daily quota — it limits *request rate* — so the plan is:
 4. **`queue`** unknown positions in the background so tomorrow's run has them.
 5. Hygiene: HTTPS, identifying `User-Agent`, concurrency ≤ 2, and cache every
    hit in `eval_cache.db` so a position is never asked twice.
+
+
+## What shipped (Phase 1)
+
+Back-end (`lib/services/generation/`), all unit-tested, full suite green:
+
+- **`SkeletonPlan`** (`skeleton_plan.dart`) — parses SAN/PGN lines into pinned
+  our-moves, transfer targets (piece-distance to the nearest skeleton
+  position), and structure vetoes (`PawnOnSquare`, `EarlyQueenTrade`). Pure
+  data + pure functions; carried in `TreeBuildConfig.skeletonPlan`, serialized
+  as one flat JSON-string blob so resumes and presets round-trip it. Keeps the
+  raw `sourceLines` so the editor reloads an exact copy.
+- **Selection** (`repertoire_selector.dart`) — layered over the existing
+  scorers: a **pin** wins unconditionally; a **structure veto** drops a pick
+  that walks into a disliked structure (bounded probability-weighted lookahead
+  over the built subtree, matching the experiment's `expected_feature`); a
+  **transfer bias** prefers the move the skeleton played nearby, always inside
+  the eval-loss window. Order: pin → veto → transfer → memorability → setup.
+- **Candidate union** (`node_expander.dart`) — transfer and pinned moves are
+  injected as eval-gated our-move candidates (pins bypass the eval gate, since
+  selection forces them), so they exist even when engine MultiPV omits them —
+  the experiment's central finding. Transfer moves are also kept alive through
+  Fast's alternative gate so their subtrees are built.
+
+UI (`lib/widgets/generation/`):
+
+- **`SkeletonPlanCard`** — a collapsible "Your lines & structures" section in
+  the generation form: a monospace multi-line field for the lines (live
+  feedback: pins counted, illegal-move lines flagged) and veto chips. Writes
+  `config.skeletonPlan`; kept mounted so its state is readable at build time
+  and auto-expands when a resumed/preset plan is non-empty.
+
+Eval sources:
+
+- **ChessDB cloud on by default** with **rate-limit backoff**
+  (`chessdb_api_provider.dart`): consulted before the engine; on HTTP 429 or a
+  rate-limit body it cools down (exponential, capped at 60 s) and stands down
+  for the day after six consecutive limits. `isRateLimited` is exposed for the
+  UI.
+
+### Not yet built (next phases)
+
+- The three-lens **board workbench** (sketch/generate/review) — this Phase 1
+  ships the plan *input*, not the live board + candidate table + tree.
+- **Common-vs-trappy** per-node reporting and the chapter-planner hook that
+  keeps a trappy alternative (…d5 vs 4.Qxd4) alongside the common line.
+- **Pins as forced deep build roots** — pins are honoured in selection and
+  injected as candidates wherever the build reaches them, but a pinned line in
+  a branch the build never visits is not yet force-explored. Deferred because
+  it touches the frontier/transposition/coverage invariants, which need the
+  real (non-headless) build to validate.
+- **`queryall` at our-move nodes** and background `queue` of unknown positions
+  (the provider still uses `queryscore`).
+
+## Integration with the Planner (Aug 2026)
+
+`feat/repertoire-planning` was folded into the working tree alongside the
+Planner (`lib/features/planner/`, "Plan a build…"). The two are layered:
+
+- **The Planner decides *what* to build.** Its walk over the ECO trie
+  produces flat chapters, each a "generate from here" path (see
+  `docs/COMPONENT_MAP.md`, *Planner*).
+- **The skeleton decides *how* each build fills gaps.** `PlanRunner`
+  (`plan_runner.dart`, `withPlanLines`) turns every planned chapter's move
+  path into a skeleton line: the user's our-moves become **pins**, and across
+  chapters they become **transfer** targets — the London chapter answers 2.Bf4
+  the way the QGD chapter answered 2.c4 unless the eval window says no.
+  Anything typed into the form's own "Your lines & structures" card (still
+  shown in the Planner's review step and in the classic Generate form) is
+  kept and merged; pins are one per position, and the walk's choice wins.
+- **Structure vetoes** are not emitted by the walk yet — the manual card is
+  their entry point for now.
+
+The Planner's other config touch, `TreeBuildConfig.rootReplyExclude`, is an
+ownership boundary between sibling chapters and deliberately runs before the
+coverage-floor bypass; see the "One deliberate exception" note in
+`lib/services/generation/README.md`.

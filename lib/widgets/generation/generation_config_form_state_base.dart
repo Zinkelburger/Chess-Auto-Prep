@@ -4,6 +4,8 @@ abstract class _GenerationConfigFormStateBase
     extends State<GenerationConfigForm> {
   final GlobalKey<EvalSourcesSectionState> _evalSourcesKey =
       GlobalKey<EvalSourcesSectionState>();
+  final GlobalKey<SkeletonPlanCardState> _skeletonKey =
+      GlobalKey<SkeletonPlanCardState>();
   final GlobalKey<PgnSourcesPanelState> _pgnSourcesKey =
       GlobalKey<PgnSourcesPanelState>();
   bool _cdbDirectAvailable = false;
@@ -107,6 +109,7 @@ abstract class _GenerationConfigFormStateBase
   /// `validateBeforeStart` and mid-build quota updates all reach it through
   /// [_evalSourcesKey], which must never be null.
   bool _showEvalSources = false;
+  bool _showSkeleton = false;
 
   /// Named saved profiles (name → config JSON), cached from
   /// [GenerationPresetStore] for the presets menu.

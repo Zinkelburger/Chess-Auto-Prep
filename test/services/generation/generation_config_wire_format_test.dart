@@ -86,6 +86,7 @@ const expectedKeys = <String>{
   'search_algorithm',
   'selection_mode',
   'setup_moves',
+  'skeleton_plan',
   'setup_tolerance_cp',
   'target_line_count',
   'time_budget_minutes',

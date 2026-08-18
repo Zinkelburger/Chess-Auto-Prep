@@ -203,6 +203,15 @@ have matching `covered` checks so those answers survive to the PGN. If you
 add a filter anywhere in the fan-out or selection path, it must have a
 coverage-floor bypass.
 
+**One deliberate exception:** `TreeBuildConfig.rootReplyExclude`, applied at
+`ply == 0` only, drops replies *before* the bypass. It is not a fan-out
+filter but an ownership boundary: the planner (`features/planner`) cuts
+sibling chapters at an opponent tabiya — "QGD vs 3.Nc3", "vs Catalan" — and
+a "sidelines" chapter rooted at the same position must leave those replies
+to the chapters that own them, or two chapters build the same lines. The
+hole is not silent: every excluded reply is the root of another chapter in
+the same plan. Nothing else may skip the bypass.
+
 ## Fast vs Pure search
 
 Pure = exhaustive FIFO BFS at full width. Fast = best-first (max-heap on

@@ -4,7 +4,11 @@
 /// Ports C's `build_repertoire_recursive` from `repertoire.c`.
 library;
 
+import 'package:dartchess/dartchess.dart';
+
 import '../../models/build_tree_node.dart';
+import '../../utils/chess_utils.dart' show tryParseFen;
+import '../../utils/fen_utils.dart' show normalizeFen;
 import '../../utils/eval_constants.dart';
 import 'eca_calculator.dart';
 import 'fen_map.dart';
@@ -25,6 +29,11 @@ class RepertoireSelector {
 
   /// Normalized preferred-setup SAN set (empty = bias off).
   late final Set<String> _setupMoves = parseSetupMoves(config.setupMoves);
+
+  /// The user's skeleton (pins, transfer targets, structure vetoes).
+  late final SkeletonPlan _plan = config.skeletonPlan;
+  late final Map<String, String> _pins = _plan.pinsByFen;
+  late final Side _ourSide = config.playAsWhite ? Side.white : Side.black;
 
   RepertoireSelector({
     required this.config,
@@ -89,6 +98,17 @@ class RepertoireSelector {
   }
 
   ScoredChild? _pickOurMove(BuildTreeNode node) {
+    // Pins win unconditionally: a move the user played by hand is never
+    // overridden by any scorer. (It is still eval-checked at build time and
+    // the UI warns if it loses too much — but selection honours the choice.)
+    final pinned = _pinnedChild(node);
+    if (pinned != null) {
+      return ScoredChild(
+        child: pinned,
+        expectimaxValue: pinned.expectimaxValue,
+      );
+    }
+
     final winner = switch (config.selectionMode) {
       SelectionMode.engineOnly => _pickByEngineEval(node),
       SelectionMode.dbWinRateOnly => _pickByDbWinRate(node),
@@ -96,9 +116,139 @@ class RepertoireSelector {
       SelectionMode.playable => _pickByPlayability(node),
       SelectionMode.trappy => _pickByOpponentCpl(node),
     };
-    // Setup bias last: an explicit preferred system outranks the soft
-    // memorability preference.
-    return _applySetupBias(node, _applyMemorabilityBias(node, winner));
+    // Layered biases, cheapest-overriding-last so the strongest signal wins:
+    //   structure veto  → drop the pick if it walks into a disliked structure
+    //   transfer        → prefer the move the skeleton played nearby
+    //   memorability    → prefer the more natural move
+    //   setup           → an explicit preferred system
+    // (Pins already handled above.)
+    var w = _applyStructureVeto(node, winner);
+    w = _applyTransferBias(node, w);
+    return _applySetupBias(node, _applyMemorabilityBias(node, w));
+  }
+
+  /// The child of [node] that a pin selects, or null when [node] is not a
+  /// pinned position or the pinned move is not among its children.
+  BuildTreeNode? _pinnedChild(BuildTreeNode node) {
+    if (_pins.isEmpty) return null;
+    final uci = _pins[normalizeFen(node.fen)];
+    if (uci == null) return null;
+    for (final child in node.children) {
+      if (child.moveUci == uci) return child;
+    }
+    return null;
+  }
+
+  /// Structure veto: if [winner] walks into a disliked structure (an avoided
+  /// [StructureFeature] its subtree is expected to reach), swap it for the
+  /// best sound child that avoids it. When every sound child is vetoed the
+  /// winner stands — the veto filters, it never leaves us with nothing.
+  ScoredChild? _applyStructureVeto(BuildTreeNode node, ScoredChild? winner) {
+    if (winner == null || _plan.vetoes.isEmpty) return winner;
+    if (!_vetoed(winner.child)) return winner;
+
+    final bestCp = bestSiblingEvalCp(
+      node.children,
+      playAsWhite: config.playAsWhite,
+    );
+    if (bestCp == kWorstEvalCp) return winner;
+
+    // Among sound (within-eval-loss) children that are NOT vetoed, keep the
+    // one the objective likes best.
+    BuildTreeNode? pick;
+    var bestScore = double.negativeInfinity;
+    for (final child in node.children) {
+      if (!child.hasEngineEval) continue;
+      if (child.evalForUs(config.playAsWhite) < bestCp - config.maxEvalLossCp) {
+        continue;
+      }
+      if (_vetoed(child)) continue;
+      final score = child.hasExpectimax
+          ? child.expectimaxValue
+          : child.evalForUs(config.playAsWhite) / kMateCpBase;
+      if (score > bestScore) {
+        bestScore = score;
+        pick = child;
+      }
+    }
+    if (pick == null || identical(pick, winner.child)) return winner;
+    return ScoredChild(child: pick, expectimaxValue: pick.expectimaxValue);
+  }
+
+  /// Transfer bias: within [SkeletonPlan] transfer distance and the eval-loss
+  /// window, prefer the move the skeleton played at the nearest position (the
+  /// "answer 2.Nf3 like your 2.c4" behaviour). Only fires at unpinned nodes,
+  /// only picks a non-vetoed child, and never overrides the eval guard.
+  ScoredChild? _applyTransferBias(BuildTreeNode node, ScoredChild? winner) {
+    if (winner == null || _plan.nodes.isEmpty) return winner;
+    final match = _plan.transferFor(node.fen);
+    if (match == null) return winner;
+    if (winner.child.moveUci == match.uci) return winner;
+
+    final bestCp = bestSiblingEvalCp(
+      node.children,
+      playAsWhite: config.playAsWhite,
+    );
+    if (bestCp == kWorstEvalCp) return winner;
+
+    for (final child in node.children) {
+      if (child.moveUci != match.uci) continue;
+      if (!child.hasEngineEval) return winner;
+      if (child.evalForUs(config.playAsWhite) < bestCp - config.maxEvalLossCp) {
+        return winner; // transfer move is unsound here — leave the pick
+      }
+      if (_vetoed(child)) return winner;
+      return ScoredChild(child: child, expectimaxValue: child.expectimaxValue);
+    }
+    return winner;
+  }
+
+  /// Whether [child] (an opponent-to-move node after our move) is expected to
+  /// reach a vetoed structure, via a bounded probability-weighted walk of the
+  /// already-built subtree. Mirrors the experiment's `expected_feature`: sum
+  /// opponent replies by probability, take our structurally-best answer, and
+  /// veto when the expected "avoid" score crosses [_vetoThreshold].
+  bool _vetoed(BuildTreeNode child) {
+    if (_plan.vetoes.isEmpty) return false;
+    final score = _structureLookahead(child, _vetoPlies);
+    return score <= _vetoThreshold;
+  }
+
+  static const int _vetoPlies = 4;
+  static const double _vetoThreshold = -0.5;
+
+  double _structureLookahead(BuildTreeNode node, int pliesLeft) {
+    double here() {
+      final pos = tryParseFen(node.fen);
+      return pos == null ? 0.0 : _plan.structureScore(pos, _ourSide);
+    }
+
+    if (pliesLeft <= 0 || node.children.isEmpty) return here();
+
+    final isOurMove = node.isWhiteToMove == config.playAsWhite;
+    if (isOurMove) {
+      // We steer: take the continuation that best avoids the vetoed feature,
+      // so the veto only fires when we cannot escape it.
+      var best = double.negativeInfinity;
+      for (final c in node.children) {
+        final v = _structureLookahead(c, pliesLeft - 1);
+        if (v > best) best = v;
+      }
+      return best == double.negativeInfinity ? here() : best;
+    }
+
+    // Opponent to move: probability-weighted expectation over replies, with
+    // the uncovered tail mass scored as the position stands. Raw (unnormalized)
+    // probabilities, matching the pipeline's convention.
+    var acc = 0.0;
+    var mass = 0.0;
+    for (final c in node.children) {
+      final p = c.moveProbability;
+      acc += p * _structureLookahead(c, pliesLeft - 1);
+      mass += p;
+    }
+    if (mass < 1.0) acc += (1.0 - mass) * here();
+    return acc;
   }
 
   /// Memorability tie-break: within

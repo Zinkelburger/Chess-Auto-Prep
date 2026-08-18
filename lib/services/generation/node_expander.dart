@@ -99,7 +99,20 @@ void addOpponentChildren({
   int childrenAdded = 0;
   double massCovered = 0.0;
 
+  // A planned build may hand replies at the root to sibling chapters. This
+  // runs *before* the coverage-floor bypass on purpose (see README, "One
+  // deliberate exception"): each excluded reply is the root of another
+  // chapter in the same plan, so leaving it out here is ownership, not a
+  // hole.
+  final excluded = config.rootReplyExclude.isNotEmpty && node.ply == 0
+      ? {for (final san in config.rootReplyExclude) normalizeSetupSan(san)}
+      : const <String>{};
+
   for (final move in candidates) {
+    if (excluded.isNotEmpty) {
+      final san = move.san.isNotEmpty ? move.san : uciToSan(node.fen, move.uci);
+      if (excluded.contains(normalizeSetupSan(san))) continue;
+    }
     final prob = move.probability;
     final newCumul = node.cumulativeProbability * prob;
     final covered = config.coverMinProb > 0.0 && prob >= config.coverMinProb;
@@ -336,60 +349,99 @@ abstract class NodeExpander {
   }) async {
     final setup = parseSetupMoves(config.setupMoves);
     if (setup.isEmpty) return;
-    final whiteToMove = isWhiteToMove(node.fen);
-
     for (final san in setup) {
       final uci = sanToUci(node.fen, san);
       if (uci == null) continue; // not legal here (or already played)
-      final childFen = playUciMove(node.fen, uci);
-      if (childFen == null) continue;
-      if (node.children.any((c) => c.fen == childFen || c.moveUci == uci)) {
-        continue; // already a candidate
-      }
-
-      // Child eval: Stockfish when available, else the DB eval chain
-      // (matches how each build mode evaluates regular candidates).
-      final int childCpWhite;
-      final int evalDepthUsed;
-      if (config.usesStockfish && run.pool.workerCount > 0) {
-        final result = await run.pool.evaluateFen(childFen, config.evalDepth);
-        run.stats.sfMultipvCalls++;
-        final childIsWhite = isWhiteToMove(childFen);
-        childCpWhite = childIsWhite ? result.effectiveCp : -result.effectiveCp;
-        evalDepthUsed = config.evalDepth;
-      } else {
-        final dbEval = await run.evalResolver.lookupDbEvalWhite(
-          childFen,
-          config,
-        );
-        if (dbEval == null) continue;
-        childCpWhite = dbEval.$1;
-        evalDepthUsed = dbEval.$2;
-      }
-
-      if (bestCpWhite != null) {
-        final evalLoss = whiteToMove
-            ? bestCpWhite - childCpWhite
-            : childCpWhite - bestCpWhite;
-        if (evalLoss > config.maxEvalLossCp) continue;
-      }
-
-      final child = run.makeChild(
-        parent: node,
-        fen: childFen,
-        san: uciToSan(node.fen, uci),
-        uci: uci,
-      );
-      if (child == null) continue;
-
-      child.moveProbability = 1.0;
-      child.cumulativeProbability = node.cumulativeProbability;
-      final childIsWhite = isWhiteToMove(childFen);
-      child.engineEvalCp = childIsWhite ? childCpWhite : -childCpWhite;
-      run.evalResolver.cacheEvalWhite(childFen, childCpWhite, evalDepthUsed);
-
-      run.emitNodeProgress(child);
+      await _injectCandidateUci(node, uci, bestCpWhite: bestCpWhite);
     }
+  }
+
+  /// Skeleton-transfer candidate injection (candidate union): the move the
+  /// user's skeleton played at the nearest position is often absent from
+  /// engine MultiPV — the experiment found Stockfish's top-8 omits ...c5 at
+  /// both 2.Nf3 and 2.Bf4 — so without this the selector's transfer bias would
+  /// have nothing to choose. Inject it as an eval-gated candidate exactly like
+  /// a setup move; the selector decides whether it wins.
+  Future<void> injectTransferCandidate(
+    BuildTreeNode node, {
+    required int? bestCpWhite,
+  }) async {
+    final plan = config.skeletonPlan;
+    if (plan.nodes.isEmpty) return;
+    // Only at our-move nodes we did not pin (a pinned node's move is already a
+    // candidate through the normal sources, or will be forced by selection).
+    final match = plan.transferFor(node.fen);
+    if (match == null) return;
+    await _injectCandidateUci(node, match.uci, bestCpWhite: bestCpWhite);
+  }
+
+  /// Pinned-move candidate injection: a move the user played by hand must
+  /// exist as a candidate even when engine MultiPV omits it, so selection's
+  /// pin override has a child to mark. Unlike setup/transfer, a pin bypasses
+  /// the eval-loss window (bestCpWhite: null) — the user's choice stands even
+  /// if it costs eval; the UI warns them separately.
+  Future<void> injectPinnedCandidate(BuildTreeNode node) async {
+    final pins = config.skeletonPlan.pinsByFen;
+    if (pins.isEmpty) return;
+    final uci = pins[normalizeFen(node.fen)];
+    if (uci == null) return;
+    await _injectCandidateUci(node, uci, bestCpWhite: null);
+  }
+
+  /// Evaluate [uci] in [node]'s position and add it as an our-move candidate
+  /// child, subject to the same eval-loss window as regular candidates.
+  /// No-op when the move is illegal, already a candidate, or unevaluable.
+  Future<void> _injectCandidateUci(
+    BuildTreeNode node,
+    String uci, {
+    required int? bestCpWhite,
+  }) async {
+    final whiteToMove = isWhiteToMove(node.fen);
+    final childFen = playUciMove(node.fen, uci);
+    if (childFen == null) return;
+    if (node.children.any((c) => c.fen == childFen || c.moveUci == uci)) {
+      return; // already a candidate
+    }
+
+    // Child eval: Stockfish when available, else the DB eval chain
+    // (matches how each build mode evaluates regular candidates).
+    final int childCpWhite;
+    final int evalDepthUsed;
+    if (config.usesStockfish && run.pool.workerCount > 0) {
+      final result = await run.pool.evaluateFen(childFen, config.evalDepth);
+      run.stats.sfMultipvCalls++;
+      final childIsWhite = isWhiteToMove(childFen);
+      childCpWhite = childIsWhite ? result.effectiveCp : -result.effectiveCp;
+      evalDepthUsed = config.evalDepth;
+    } else {
+      final dbEval = await run.evalResolver.lookupDbEvalWhite(childFen, config);
+      if (dbEval == null) return;
+      childCpWhite = dbEval.$1;
+      evalDepthUsed = dbEval.$2;
+    }
+
+    if (bestCpWhite != null) {
+      final evalLoss = whiteToMove
+          ? bestCpWhite - childCpWhite
+          : childCpWhite - bestCpWhite;
+      if (evalLoss > config.maxEvalLossCp) return;
+    }
+
+    final child = run.makeChild(
+      parent: node,
+      fen: childFen,
+      san: uciToSan(node.fen, uci),
+      uci: uci,
+    );
+    if (child == null) return;
+
+    child.moveProbability = 1.0;
+    child.cumulativeProbability = node.cumulativeProbability;
+    final childIsWhite = isWhiteToMove(childFen);
+    child.engineEvalCp = childIsWhite ? childCpWhite : -childCpWhite;
+    run.evalResolver.cacheEvalWhite(childFen, childCpWhite, evalDepthUsed);
+
+    run.emitNodeProgress(child);
   }
 
   /// Best-first priorities at an our-move node: the incumbent (best eval for
@@ -456,6 +508,11 @@ abstract class NodeExpander {
     }
 
     final setupSans = parseSetupMoves(config.setupMoves).toSet();
+    // A skeleton-transfer move is kept alive like a setup move: its subtree
+    // must exist in case selection prefers it.
+    final transferUci = config.skeletonPlan.nodes.isEmpty
+        ? null
+        : config.skeletonPlan.transferFor(node.fen)?.uci;
     final incumbentCp = incumbent.evalForUs(config.playAsWhite);
     final alts =
         [
@@ -470,7 +527,8 @@ abstract class NodeExpander {
     final expand = <BuildTreeNode>[incumbent];
     var altsTaken = 0;
     for (final alt in alts) {
-      if (setupSans.contains(alt.moveSan)) {
+      if (setupSans.contains(alt.moveSan) ||
+          (transferUci != null && alt.moveUci == transferUci)) {
         expand.add(alt);
         continue;
       }

@@ -1,10 +1,14 @@
 /// Configuration and output types for repertoire generation.
 library;
 
+import 'dart:convert';
+
 import '../../constants/engine_defaults.dart';
 import '../../utils/system_info.dart';
 import 'export/move_annotation.dart';
+import 'skeleton_plan.dart';
 
+export 'skeleton_plan.dart' show SkeletonPlan;
 export 'export/move_annotation.dart' show MoveAnnotationDetail;
 
 // ── Selection mode ──────────────────────────────────────────────────────
@@ -173,12 +177,28 @@ class TreeBuildConfig {
   /// still be preferred by selection.
   final int setupToleranceCp;
 
+  // ── Root reply exclusion (planned builds) ──
+  /// Opponent replies (SAN) at the *root* position that this build must not
+  /// expand. A planned repertoire cuts sibling chapters at an opponent
+  /// tabiya — "QGD vs 3.Nc3", "QGD vs Catalan", "QGD sidelines" — and the
+  /// sidelines chapter is rooted at the same position as its siblings, so
+  /// it excludes the replies they own. Only the root is filtered; deeper
+  /// transpositions are legitimately this chapter's business.
+  final List<String> rootReplyExclude;
+
   /// Memorability tie-break: within this many centipawns of the best child
   /// eval, selection prefers the our-move with the highest own-side Maia
   /// probability — the move the user would naturally play anyway, which is
   /// cheaper to memorize.  Capped at [maxEvalLossCp]; ignored in trappy
   /// mode; 0 disables.
   final int memorabilityToleranceCp;
+
+  // ── Skeleton plan (repertoire planning front door) ──
+  /// The user's skeleton: pinned our-moves, transfer targets, and structure
+  /// vetoes (see `skeleton_plan.dart` and `docs/REPERTOIRE_PLANNING.md`).
+  /// Serialized as a JSON *string* ([skeletonPlanJson]) so the persisted
+  /// config stays flat. Empty plan = the classic build with no steering.
+  final SkeletonPlan skeletonPlan;
 
   // ── Build algorithm ──
   final BuildMode buildMode;
@@ -324,7 +344,9 @@ class TreeBuildConfig {
     this.verifyDepth = 0,
     this.setupMoves = '',
     this.setupToleranceCp = 30,
+    this.rootReplyExclude = const [],
     this.memorabilityToleranceCp = 0,
+    this.skeletonPlan = const SkeletonPlan(),
     this.buildMode = BuildMode.stockfishExpectimax,
     this.evalDepth = kDefaultGenerationEvalDepth,
     this.engineThreads = 0,
@@ -392,7 +414,10 @@ class TreeBuildConfig {
       verifyFinal: json['verify_final'] as bool? ?? true,
       verifyDepth: (json['verify_depth'] as num?)?.toInt() ?? 0,
       setupMoves: json['setup_moves'] as String? ?? '',
+      rootReplyExclude:
+          (json['root_reply_exclude'] as List?)?.cast<String>() ?? const [],
       setupToleranceCp: (json['setup_tolerance_cp'] as num?)?.toInt() ?? 30,
+      skeletonPlan: _decodeSkeleton(json['skeleton_plan']),
       memorabilityToleranceCp:
           (json['memorability_tolerance_cp'] as num?)?.toInt() ?? 0,
       buildMode: _parseBuildMode(json['build_mode'] as String?),
@@ -645,7 +670,9 @@ class TreeBuildConfig {
     'verify_depth': verifyDepth,
     'setup_moves': setupMoves,
     'setup_tolerance_cp': setupToleranceCp,
+    if (rootReplyExclude.isNotEmpty) 'root_reply_exclude': rootReplyExclude,
     'memorability_tolerance_cp': memorabilityToleranceCp,
+    'skeleton_plan': _encodeSkeleton(skeletonPlan),
     'build_mode': buildMode.name,
     'eval_depth': evalDepth,
     'engine_threads': resolvedEngineThreads,
@@ -710,7 +737,9 @@ class TreeBuildConfig {
     int? verifyDepth,
     String? setupMoves,
     int? setupToleranceCp,
+    List<String>? rootReplyExclude,
     int? memorabilityToleranceCp,
+    SkeletonPlan? skeletonPlan,
     BuildMode? buildMode,
     int? evalDepth,
     int? engineThreads,
@@ -771,8 +800,10 @@ class TreeBuildConfig {
       verifyDepth: verifyDepth ?? this.verifyDepth,
       setupMoves: setupMoves ?? this.setupMoves,
       setupToleranceCp: setupToleranceCp ?? this.setupToleranceCp,
+      rootReplyExclude: rootReplyExclude ?? this.rootReplyExclude,
       memorabilityToleranceCp:
           memorabilityToleranceCp ?? this.memorabilityToleranceCp,
+      skeletonPlan: skeletonPlan ?? this.skeletonPlan,
       buildMode: buildMode ?? this.buildMode,
       evalDepth: evalDepth ?? this.evalDepth,
       engineThreads: engineThreads ?? this.engineThreads,
@@ -873,4 +904,26 @@ BuildMode _parseBuildMode(String? value) {
     default:
       return BuildMode.stockfishExpectimax;
   }
+}
+
+/// Encode a [SkeletonPlan] to a compact JSON string for the flat persisted
+/// config. Empty plan → empty string so old readers and diffs stay clean.
+String _encodeSkeleton(SkeletonPlan plan) =>
+    plan.isEmpty ? '' : jsonEncode(plan.toJson());
+
+/// Decode the `skeleton_plan` field, which may be a JSON string (current),
+/// an already-decoded map (defensive), or absent/empty (→ empty plan).
+SkeletonPlan _decodeSkeleton(Object? raw) {
+  if (raw is Map<String, dynamic>) return SkeletonPlan.fromJson(raw);
+  if (raw is String && raw.isNotEmpty) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        return SkeletonPlan.fromJson(decoded);
+      }
+    } catch (_) {
+      // Corrupt blob → empty plan, never a wrong steer.
+    }
+  }
+  return const SkeletonPlan();
 }

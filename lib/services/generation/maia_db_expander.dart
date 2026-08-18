@@ -90,6 +90,8 @@ class MaiaDbExpander extends NodeExpander {
     }
 
     await injectSetupCandidates(node, bestCpWhite: bestCpWhite);
+    await injectTransferCandidate(node, bestCpWhite: bestCpWhite);
+    await injectPinnedCandidate(node);
 
     final incumbent = assignOurMovePriorities(node);
 

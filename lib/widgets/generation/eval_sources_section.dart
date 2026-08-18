@@ -32,7 +32,12 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
   bool _enableLocalChessDb = false;
   final TextEditingController _localChessDbPathCtrl = TextEditingController();
   bool? _localChessDbValid;
-  bool _enableChessDbApi = false;
+  // On by default: the ChessDB cloud is a fallback consulted *before* the
+  // engine, so it only speeds things up when no local dump is configured, and
+  // the provider now backs off on server rate-limiting. The user can turn it
+  // off. (See docs/REPERTOIRE_PLANNING.md, 'Eval sources when the user has no
+  // database'.)
+  bool _enableChessDbApi = true;
   final TextEditingController _chessDbQuotaCtrl = TextEditingController(
     text: '5000',
   );
@@ -289,8 +294,9 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
           _enableChessDbApi,
           (v) => _update(() => _enableChessDbApi = v),
           tooltip:
-              'Query chessdb.cn for positions not in local cache.\n'
-              'Subject to a configurable daily request quota.',
+              'Query chessdb.cn for positions not in the local cache — a fast,\n'
+              'free cloud eval source, consulted before the engine. On by\n'
+              'default; backs off automatically if the server rate-limits.',
         ),
         const SizedBox(height: 6),
         Wrap(

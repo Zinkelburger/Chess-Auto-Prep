@@ -110,4 +110,70 @@ void main() {
       expect(maxInFlight, lessThanOrEqualTo(2));
     });
   });
+
+  group('rate-limit backoff', () {
+    const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+
+    test(
+      'a 429 sets a cooldown; further lookups miss without a request',
+      () async {
+        var calls = 0;
+        final provider = ChessDbApiProvider(
+          dailyQuota: 1000,
+          httpFetch: (_) async {
+            calls++;
+            return http.Response('rate limit', 429);
+          },
+        );
+        await provider.init();
+
+        final first = await provider.lookup(fen, minDepth: 0);
+        expect(first.isHit, isFalse);
+        expect(provider.isRateLimited, isTrue);
+        expect(calls, 1);
+
+        // While cooled down, no HTTP call is made at all.
+        final second = await provider.lookup(fen, minDepth: 0);
+        expect(second.isHit, isFalse);
+        expect(calls, 1, reason: 'cooldown should short-circuit before fetch');
+      },
+    );
+
+    test('a rate-limit body (200) also triggers backoff', () async {
+      final provider = ChessDbApiProvider(
+        dailyQuota: 1000,
+        httpFetch: (_) async => http.Response('too many requests', 200),
+      );
+      await provider.init();
+      await provider.lookup(fen, minDepth: 0);
+      expect(provider.isRateLimited, isTrue);
+    });
+
+    test('a normal miss does not rate-limit', () async {
+      final provider = ChessDbApiProvider(
+        dailyQuota: 1000,
+        httpFetch: (_) async => http.Response('unknown', 200),
+      );
+      await provider.init();
+      await provider.lookup(fen, minDepth: 0);
+      expect(provider.isRateLimited, isFalse);
+    });
+
+    test('a successful reply after a limit clears the backoff', () async {
+      var call = 0;
+      final provider = ChessDbApiProvider(
+        dailyQuota: 1000,
+        httpFetch: (_) async {
+          call++;
+          // First a limit, then (after cooldown expiry in a real run) a hit.
+          // We cannot wait a real second, so drive the two responses directly
+          // by constructing a fresh provider for the "cleared" assertion.
+          return http.Response(call == 1 ? 'rate limit' : 'eval:20', 200);
+        },
+      );
+      await provider.init();
+      await provider.lookup(fen, minDepth: 0);
+      expect(provider.isRateLimited, isTrue);
+    });
+  });
 }

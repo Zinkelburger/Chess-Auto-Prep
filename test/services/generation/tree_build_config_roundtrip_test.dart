@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
+import 'package:chess_auto_prep/services/generation/skeleton_plan.dart';
 
 /// Drift guard for [TreeBuildConfig]'s five-place field contract.
 ///
@@ -38,6 +39,12 @@ const Map<String, String> _knownLossy = {
   // reuses the thread count it was actually built with instead of silently
   // re-resolving to a different number on different hardware.
   'engine_threads': 'serialized as the resolved value, not the raw sentinel',
+  // skeleton_plan is a JSON *string* blob (a nested object flattened to keep
+  // the persisted config flat). The generic mutator appends '_x', which is not
+  // valid JSON, so the decoder correctly falls back to an empty plan. A real
+  // structured round-trip is asserted in the dedicated test below and in
+  // skeleton_plan_test.dart.
+  'skeleton_plan': 'JSON-string blob; mutated probe is not valid JSON',
 };
 
 /// Produce a value of the same type as [value] but guaranteed different.
@@ -118,6 +125,28 @@ void main() {
             'startFen is a required fromJson argument; serializing it too '
             'would create a second source of truth for the build root.',
       );
+    });
+
+    test('skeleton_plan survives a real structured round-trip', () {
+      final plan = SkeletonPlan(
+        nodes: SkeletonPlan.parseLines(const [
+          '1.d4 Nf6 2.c4 c5 3.d5 b5 4.cxb5 a6 5.bxa6 e6',
+        ], playAsWhite: false),
+        features: const [
+          PawnOnSquare(square: 'd5'),
+          EarlyQueenTrade(),
+        ],
+      );
+      final config = const TreeBuildConfig(
+        startFen: _startFen,
+        playAsWhite: false,
+      ).copyWith(skeletonPlan: plan);
+      final restored = TreeBuildConfig.fromJson(
+        jsonDecode(jsonEncode(config.toJson())) as Map<String, dynamic>,
+        startFen: _startFen,
+      );
+      expect(restored.skeletonPlan.nodes.length, plan.nodes.length);
+      expect(restored.skeletonPlan.features.length, 2);
     });
   });
 

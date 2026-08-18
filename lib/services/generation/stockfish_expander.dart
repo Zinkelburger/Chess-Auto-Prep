@@ -95,6 +95,8 @@ class StockfishExpander extends NodeExpander {
     }
 
     await injectSetupCandidates(node, bestCpWhite: bestCp);
+    await injectTransferCandidate(node, bestCpWhite: bestCp);
+    await injectPinnedCandidate(node);
 
     // Populate maia_frequency on our-move children.  C gates this on
     // `populate_maia_frequency` (novelty > 0 || find_traps); Dart always

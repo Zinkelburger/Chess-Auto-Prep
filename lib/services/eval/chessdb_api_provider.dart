@@ -106,6 +106,14 @@ class ChessDbApiProvider implements ExternalEvalProvider {
   int _inFlight = 0;
   final _waiters = <Completer<void>>[];
 
+  // Rate-limit backoff: ChessDB has no published daily quota, only a request
+  // rate. Rather than stop at a made-up ceiling, we run until the server
+  // pushes back, then cool down for a growing window; after enough
+  // consecutive limits we stand down for the rest of the day and let the
+  // engine take over. Reset on any successful reply.
+  int _consecutiveLimits = 0;
+  DateTime? _cooldownUntil;
+
   ChessDbApiProvider({
     this.dailyQuota = 5000,
     this.concurrency = 2,
@@ -116,6 +124,14 @@ class ChessDbApiProvider implements ExternalEvalProvider {
   int get usedToday => _usedToday;
   int get quotaLimit => dailyQuota;
   bool get quotaRemaining => _usedToday < dailyQuota;
+
+  /// True while the provider is backing off after server rate-limiting.
+  /// The eval chain skips it (falling through to the engine) until this
+  /// clears. Surfaced so the UI can say "ChessDB (rate-limited)".
+  bool get isRateLimited {
+    final until = _cooldownUntil;
+    return until != null && DateTime.now().isBefore(until);
+  }
 
   Future<void> init() async {
     if (_quotaLoaded) return;
@@ -143,21 +159,34 @@ class ChessDbApiProvider implements ExternalEvalProvider {
   @override
   Future<EvalLookupResult> lookup(String fen, {required int minDepth}) async {
     await init();
-    if (!quotaRemaining) return const EvalLookupResult.miss();
+    if (!quotaRemaining || isRateLimited) return const EvalLookupResult.miss();
 
     await _acquireSlot();
     try {
-      if (!quotaRemaining) return const EvalLookupResult.miss();
+      if (!quotaRemaining || isRateLimited) {
+        return const EvalLookupResult.miss();
+      }
 
       final board = Uri.encodeComponent(canonicalizeFen4(fen));
       final uri = Uri.parse('$_defaultBaseUrl?action=queryscore&board=$board');
       final fetch = httpFetch ?? http.get;
       final response = await fetch(uri);
 
-      if (response.statusCode == 429) return const EvalLookupResult.miss();
+      if (_isRateLimitResponse(response)) {
+        _noteRateLimited();
+        return const EvalLookupResult.miss();
+      }
 
       final hit = parseChessDbQueryScoreBody(response.body, fen);
-      if (hit == null) return const EvalLookupResult.miss();
+      if (hit == null) {
+        // A clean "unknown"/miss is not rate-limiting — don't back off, but
+        // don't reset the limit streak on it either.
+        return const EvalLookupResult.miss();
+      }
+
+      // A real answer means we are not rate-limited: clear any backoff.
+      _consecutiveLimits = 0;
+      _cooldownUntil = null;
 
       if (hit.depth > 0 && hit.depth < minDepth) {
         return const EvalLookupResult.shallow();
@@ -173,6 +202,35 @@ class ChessDbApiProvider implements ExternalEvalProvider {
       _releaseSlot();
     }
   }
+
+  /// Whether [response] is the server telling us to slow down (HTTP 429 or a
+  /// rate-limit body), as opposed to a normal miss.
+  bool _isRateLimitResponse(http.Response response) {
+    if (response.statusCode == 429) return true;
+    final body = response.body.toLowerCase();
+    return body.contains('rate limit') || body.contains('too many');
+  }
+
+  /// Record a rate-limit and extend the cooldown. Exponential in the number
+  /// of consecutive limits (1s, 2s, 4s, …) capped at 60s; after
+  /// [_standDownAfter] in a row, stand down for the rest of the day so the
+  /// build stops hammering a server that has clearly cut us off.
+  void _noteRateLimited() {
+    _consecutiveLimits++;
+    final now = DateTime.now();
+    if (_consecutiveLimits >= _standDownAfter) {
+      _cooldownUntil = DateTime(now.year, now.month, now.day + 1);
+      return;
+    }
+    final backoffSeconds = (1 << (_consecutiveLimits - 1)).clamp(
+      1,
+      _maxBackoffSeconds,
+    );
+    _cooldownUntil = now.add(Duration(seconds: backoffSeconds));
+  }
+
+  static const int _standDownAfter = 6;
+  static const int _maxBackoffSeconds = 60;
 
   Future<void> _acquireSlot() async {
     while (_inFlight >= concurrency) {

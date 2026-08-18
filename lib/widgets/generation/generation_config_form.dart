@@ -16,6 +16,7 @@ import '../labeled_toggle.dart';
 import '../pgn_sources_panel.dart';
 import 'engine_resources_section.dart';
 import 'eval_sources_section.dart';
+import 'skeleton_plan_card.dart';
 
 part 'generation_config_form_state_base.dart';
 part 'generation_config_form_descriptions.dart';
@@ -131,6 +132,8 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
         _opponentSection(),
         _outputSection(),
         _searchSection(),
+        const Divider(height: 24),
+        _skeletonSection(),
         const Divider(height: 24),
         Row(
           children: [
