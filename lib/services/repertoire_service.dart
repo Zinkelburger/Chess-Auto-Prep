@@ -6,6 +6,9 @@ import 'dart:convert';
 import 'dart:io' as io;
 import 'dart:isolate';
 
+import 'package:path/path.dart' as p;
+
+import 'package:crypto/crypto.dart' show sha256;
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 import '../models/repertoire_line.dart';
@@ -169,6 +172,7 @@ class RepertoireService {
             importance: importance,
             chapter: chapter,
             isModelGame: isModelGameHeaders(game.headers),
+            gameIndex: gameIndex,
           ),
         );
       } catch (e) {
@@ -179,7 +183,76 @@ class RepertoireService {
       }
     }
 
-    return lines;
+    return _withUniqueIds(lines);
+  }
+
+  /// Guarantees every line in a file has a distinct id.
+  ///
+  /// The move-based fallback id ([_generateStableLineId]) is a truncated
+  /// base64 of the moves, so two lines sharing a long opening prefix — the
+  /// normal case in a repertoire — get the *same* id. Training progress is
+  /// keyed by these ids and the file editors used to look games up by them,
+  /// so a collision silently mixed two lines' histories and let a delete or
+  /// rename land on the wrong game.
+  ///
+  /// The first line to claim an id keeps it, so ids that already exist in
+  /// saved progress stay valid; every later collision is re-derived from a
+  /// full hash of its moves and file position, which does not truncate.
+  /// [lineIdsForGames] applies the same rule when editing a file, so the
+  /// two always agree.
+  List<RepertoireLine> _withUniqueIds(List<RepertoireLine> lines) {
+    final seen = <String>{};
+    var changed = false;
+    final out = <RepertoireLine>[];
+    for (final line in lines) {
+      if (seen.add(line.id)) {
+        out.add(line);
+        continue;
+      }
+      changed = true;
+      var id = _fullLineId(line.moves, line.gameIndex);
+      // Astronomically unlikely, but keep the invariant absolute.
+      while (!seen.add(id)) {
+        id = _fullLineId([...line.moves, id], line.gameIndex);
+      }
+      out.add(line.copyWithId(id));
+    }
+    return changed ? out : lines;
+  }
+
+  /// A collision-free id: hash of the whole move list and file position.
+  String _fullLineId(List<String> moves, int index) {
+    final digest = sha256.convert(utf8.encode('${moves.join(' ')}|$index'));
+    return 'line_${digest.toString().substring(0, 22)}';
+  }
+
+  /// The id each game in [games] resolves to — null for games that do not
+  /// parse or have no moves — using exactly the rule of [parseRepertoirePgn],
+  /// including collision resolution. This is what file edits must use to
+  /// find a line by id.
+  List<String?> lineIdsForGames(List<String> games) {
+    final ids = List<String?>.filled(games.length, null);
+    final seen = <String>{};
+    for (var i = 0; i < games.length; i++) {
+      final List<String> moves;
+      final PgnGame game;
+      try {
+        game = PgnGame.parsePgn(games[i]);
+        moves = game.moves.mainline().map((n) => n.san).toList();
+      } catch (_) {
+        continue;
+      }
+      if (moves.isEmpty) continue;
+      var id = _extractLineId(game, moves, i);
+      if (!seen.add(id)) {
+        id = _fullLineId(moves, i);
+        while (!seen.add(id)) {
+          id = _fullLineId([...moves, id], i);
+        }
+      }
+      ids[i] = id;
+    }
+    return ids;
   }
 
   /// Detects chapter titles carried in game headers, the way Chessable
@@ -425,17 +498,33 @@ class RepertoireService {
   String generateLineId(List<String> moves, int index) =>
       _generateStableLineId(moves, index);
 
-  /// Find the index of the game matching [lineId] within [games].
+  /// The id a line appended at file position [index] will resolve to once
+  /// the file is re-parsed: the legacy move-based id, unless a line already
+  /// in the file ([existingIds]) holds it, in which case the full-hash id —
+  /// the same rule as [_withUniqueIds]. Use this for in-memory lines so
+  /// they can be edited before a reload without hitting the wrong game.
+  String newLineId(
+    List<String> moves,
+    int index, {
+    required Iterable<String> existingIds,
+  }) {
+    final seen = existingIds.toSet();
+    var id = _generateStableLineId(moves, index);
+    if (!seen.contains(id)) return id;
+    id = _fullLineId(moves, index);
+    while (seen.contains(id)) {
+      id = _fullLineId([...moves, id], index);
+    }
+    return id;
+  }
+
+  /// Find the index of the game matching [lineId] within [games], resolving
+  /// ids exactly as [parseRepertoirePgn] does so a collision-renamed line is
+  /// found under the id the app actually shows for it.
   int? _findGameIndexByLineId(List<String> games, String lineId) {
-    for (int i = 0; i < games.length; i++) {
-      try {
-        final game = PgnGame.parsePgn(games[i]);
-        final moves = game.moves.mainline().map((n) => n.san).toList();
-        final id = _extractLineId(game, moves, i);
-        if (id == lineId) return i;
-      } catch (_) {
-        continue;
-      }
+    final ids = lineIdsForGames(games);
+    for (var i = 0; i < ids.length; i++) {
+      if (ids[i] == lineId) return i;
     }
     return null;
   }
@@ -634,6 +723,92 @@ class RepertoireService {
     return _editLineInFile(filePath, lineId, (games, matchIndex) {
       games.removeAt(matchIndex);
     });
+  }
+
+  /// The full PGN text of the [gameIndex]-th game in the file, or null when
+  /// the file or the game is missing.
+  ///
+  /// Index-addressed rather than id-addressed on purpose: the move-based line
+  /// id truncates and collides for lines sharing a long prefix, so an id
+  /// lookup can return the wrong game. [RepertoireLine.gameIndex] is exact.
+  Future<String?> readGameTextAt(String filePath, int gameIndex) async {
+    final file = io.File(filePath);
+    if (!await file.exists()) return null;
+    final document = _splitPgnDocumentPreservingPreamble(
+      await readTextFile(file),
+    );
+    if (gameIndex < 0 || gameIndex >= document.games.length) return null;
+    return document.games[gameIndex];
+  }
+
+  /// Edits the [gameIndex]-th game in place. Returns false when out of range.
+  Future<bool> _editGameAt(
+    String filePath,
+    int gameIndex,
+    void Function(List<String> games) mutate,
+  ) async {
+    final file = io.File(filePath);
+    if (!await file.exists()) return false;
+    final document = _splitPgnDocumentPreservingPreamble(
+      await readTextFile(file),
+    );
+    if (gameIndex < 0 || gameIndex >= document.games.length) return false;
+    final games = List<String>.from(document.games);
+    mutate(games);
+    await writeTextFileAtomically(
+      file,
+      _reassembleDocument(document.preamble, games),
+    );
+    return true;
+  }
+
+  Future<bool> deleteGameAt(String filePath, int gameIndex) =>
+      _editGameAt(filePath, gameIndex, (games) => games.removeAt(gameIndex));
+
+  Future<bool> updateGameTitleAt(
+    String filePath,
+    int gameIndex,
+    String newTitle,
+  ) => _editGameAt(filePath, gameIndex, (games) {
+    final gameText = games[gameIndex];
+    final eventRegex = RegExp(r'\[Event\s+"[^"]*"\]');
+    games[gameIndex] = eventRegex.hasMatch(gameText)
+        ? gameText.replaceFirst(eventRegex, '[Event "$newTitle"]')
+        : '[Event "$newTitle"]\n$gameText';
+  });
+
+  /// Appends [gameTexts] to the chapter at [filePath], creating the file when
+  /// it does not exist. Each text is one complete PGN game.
+  Future<void> appendGameTexts(String filePath, List<String> gameTexts) async {
+    if (gameTexts.isEmpty) return;
+    final file = io.File(filePath);
+    final content = await file.exists() ? await readTextFile(file) : '';
+    final document = _splitPgnDocumentPreservingPreamble(content);
+    final games = [
+      ...document.games,
+      for (final t in gameTexts)
+        if (t.trim().isNotEmpty) t.trim(),
+    ];
+    await writeTextFileAtomically(
+      file,
+      _reassembleDocument(document.preamble, games),
+    );
+  }
+
+  /// Moves the [gameIndex]-th game of [fromPath] to the end of [toPath]:
+  /// appended to the destination first, then removed from the source, so a
+  /// failure between the two can leave a duplicate but never a lost line.
+  /// Returns false when the game was not found.
+  Future<bool> moveGame({
+    required String fromPath,
+    required int gameIndex,
+    required String toPath,
+  }) async {
+    if (p.equals(fromPath, toPath)) return true;
+    final text = await readGameTextAt(fromPath, gameIndex);
+    if (text == null) return false;
+    await appendGameTexts(toPath, [text]);
+    return deleteGameAt(fromPath, gameIndex);
   }
 
   /// Writes spaced-repetition metadata into PGN headers for a specific line.

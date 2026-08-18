@@ -1,6 +1,6 @@
 /// Resizable, collapsible bottom pane with tabbed content (VS Code-style).
 ///
-/// Tabs: Findings, Jobs, Lines. Collapsed by default; opens to a specific
+/// Tabs: Findings, Jobs. Collapsed by default; opens to a specific
 /// tab when triggered. Drag-resizable top edge. Full-width under both
 /// board and right pane columns.
 library;
@@ -18,11 +18,9 @@ class BottomPane extends StatefulWidget {
 
   final Widget findingsContent;
   final Widget jobsContent;
-  final Widget linesContent;
 
   final int findingsBadge;
   final int jobsBadge;
-  final int linesBadge;
 
   /// Called when the pane is closed via the X button or drag-handle double-tap.
   /// Not called for programmatic [BottomPaneState.close] — callers of that
@@ -34,10 +32,8 @@ class BottomPane extends StatefulWidget {
     required this.controller,
     required this.findingsContent,
     required this.jobsContent,
-    required this.linesContent,
     this.findingsBadge = 0,
     this.jobsBadge = 0,
-    this.linesBadge = 0,
     this.onClose,
   });
 
@@ -58,7 +54,7 @@ class BottomPaneState extends State<BottomPane>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 3,
+      length: BottomPaneTab.values.length,
       vsync: this,
       initialIndex: _controller.activeTab.index,
     );
@@ -117,11 +113,7 @@ class BottomPaneState extends State<BottomPane>
             child: TabBarView(
               controller: _tabController,
               physics: const NeverScrollableScrollPhysics(),
-              children: [
-                widget.findingsContent,
-                widget.jobsContent,
-                widget.linesContent,
-              ],
+              children: [widget.findingsContent, widget.jobsContent],
             ),
           ),
         ],
@@ -197,7 +189,6 @@ class BottomPaneState extends State<BottomPane>
               tabs: [
                 _buildTab('Findings', widget.findingsBadge, AppColors.warning),
                 _buildTab('Jobs', widget.jobsBadge, AppColors.accent),
-                _buildTab('Lines', widget.linesBadge, null),
               ],
             ),
           ),

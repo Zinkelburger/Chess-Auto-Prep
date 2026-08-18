@@ -26,7 +26,7 @@ class RepertoirePgnTabLabel extends StatelessWidget {
   }
 }
 
-/// "Lines"/"Draft"/"Session" tab label; highlighted while a build-by-playing
+/// "Chapters"/"Draft"/"Session" tab label; highlighted while a build-by-playing
 /// session or a build-from-games draft is active.
 class RepertoireLinesTabLabel extends StatelessWidget {
   const RepertoireLinesTabLabel({
@@ -57,7 +57,7 @@ class RepertoireLinesTabLabel extends StatelessWidget {
                 ? Icons.sports_esports
                 : isDraftActive
                 ? Icons.download_done
-                : Icons.list_alt,
+                : Icons.menu_book_outlined,
             size: 14,
             color: highlight,
           ),
@@ -67,7 +67,7 @@ class RepertoireLinesTabLabel extends StatelessWidget {
                 ? 'Session'
                 : isDraftActive
                 ? 'Draft'
-                : 'Lines${hasTraps ? ' & Traps' : ''}',
+                : 'Chapters${hasTraps ? ' & Traps' : ''}',
             style: TextStyle(
               fontSize: 12,
               color: highlight,

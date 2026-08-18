@@ -89,42 +89,61 @@ void main() {
     ) async {
       await _pumpScreen(tester, repertoirePath: _writeRepertoire(tester));
 
-      // Breadcrumb: repertoire folder, then chapter.
-      expect(find.text('MyRep'), findsOneWidget);
-      expect(find.text('Main'), findsOneWidget);
+      // Breadcrumb (repertoire folder, then chapter) and the outline column
+      // both name them.
+      expect(find.text('MyRep'), findsWidgets);
+      expect(find.text('Main'), findsWidgets);
 
       // The PGN editor is always visible in the wide layout — it is not a tab.
       expect(find.text('PGN'), findsNothing);
 
-      // Lines/Tree live in the side panel, which starts expanded.
-      expect(find.text('Lines'), findsOneWidget);
+      // The outline holds chapters and lines on the left; the analysis panel
+      // (Engine | Database | Tree) sits on the right. Both start expanded.
+      expect(find.byTooltip('Hide chapters (L)'), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'Engine'), findsOneWidget);
+      expect(find.text('Database'), findsOneWidget);
       expect(find.text('Tree'), findsOneWidget);
-      expect(find.byTooltip('Hide lines (L)'), findsOneWidget);
+      expect(find.byTooltip('Hide analysis panel'), findsOneWidget);
 
-      // The chapter's single line is listed.
+      // The chapter's single line is listed in the outline.
       expect(find.text('Italian Game'), findsOneWidget);
-      expect(find.text('1 line'), findsOneWidget);
+      expect(find.textContaining('1 chapter · 1 line'), findsOneWidget);
 
       // Board-size control is offered (there is width to trade here).
       expect(find.byTooltip('Board size: Large'), findsOneWidget);
     });
 
-    testWidgets('collapsing the Lines panel shows a strip and is persisted', (
+    testWidgets('collapsing the analysis panel shows a strip and persists', (
       tester,
     ) async {
       await _pumpScreen(tester, repertoirePath: _writeRepertoire(tester));
 
-      await tester.tap(find.byTooltip('Hide lines (L)'));
+      await tester.tap(find.byTooltip('Hide analysis panel'));
       await tester.pump();
 
-      expect(find.byTooltip('Show lines (L)'), findsOneWidget);
-      // The strip keeps the line count visible.
-      expect(find.text('Lines (1)'), findsOneWidget);
+      expect(find.byTooltip('Show analysis panel'), findsOneWidget);
+      expect(find.text('Analysis'), findsOneWidget);
       // The tab bar is gone with the panel.
       expect(find.text('Tree'), findsNothing);
 
       final prefs = await tester.runAsync(SharedPreferences.getInstance);
       expect(prefs!.getBool('repertoire.lines_panel_collapsed'), isTrue);
+    });
+
+    testWidgets('collapsing the outline shows a Chapters strip and persists', (
+      tester,
+    ) async {
+      await _pumpScreen(tester, repertoirePath: _writeRepertoire(tester));
+
+      await tester.tap(find.byTooltip('Hide chapters (L)'));
+      await tester.pump();
+
+      expect(find.byTooltip('Show chapters (L)'), findsOneWidget);
+      expect(find.text('Chapters'), findsOneWidget);
+      expect(find.text('Italian Game'), findsNothing);
+
+      final prefs = await tester.runAsync(SharedPreferences.getInstance);
+      expect(prefs!.getBool('repertoire.outline_panel_collapsed'), isTrue);
     });
 
     testWidgets('restores the persisted panel and board size on boot', (
@@ -137,13 +156,13 @@ void main() {
 
       await _pumpScreen(tester, repertoirePath: _writeRepertoire(tester));
 
-      expect(find.byTooltip('Show lines (L)'), findsOneWidget);
+      expect(find.byTooltip('Show analysis panel'), findsOneWidget);
       expect(find.byTooltip('Board size: Small'), findsOneWidget);
     });
   });
 
   group('compact layout', () {
-    testWidgets('stacks the board over PGN | Lines | Tree tabs', (
+    testWidgets('stacks the board over PGN | Chapters | Tree tabs', (
       tester,
     ) async {
       await _pumpScreen(
@@ -154,12 +173,13 @@ void main() {
 
       // All three surfaces become tabs of one tools column.
       expect(find.text('PGN'), findsOneWidget);
-      expect(find.text('Lines'), findsOneWidget);
+      expect(find.text('Chapters'), findsOneWidget);
       expect(find.text('Tree'), findsOneWidget);
 
-      // No side panel, and no board-size control: the board is stacked above
-      // the tools, so shrinking it hands width to nothing.
-      expect(find.byTooltip('Hide lines (L)'), findsNothing);
+      // No side panels, and no board-size control: the board is stacked
+      // above the tools, so shrinking it hands width to nothing.
+      expect(find.byTooltip('Hide analysis panel'), findsNothing);
+      expect(find.byTooltip('Hide chapters (L)'), findsNothing);
       expect(find.byTooltip('Board size: Large'), findsNothing);
     });
   });

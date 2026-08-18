@@ -205,11 +205,12 @@ class RepertoireController
   }
 
   /// Called when user selects a move in the opening tree.
+  ///
+  /// Plays from the repertoire cursor (the board), not the opening-tree
+  /// node's book path, so a one-ply transposition keeps the user's move
+  /// order (1.d4 c5 2.e3 Nf6 rather than jumping to 1.d4 Nf6 2.e3 c5).
   void userSelectedTreeMove(String sanMove) {
-    if (_openingTree == null) return;
-    final treeMoves = _openingTree!.currentNode.getMovePath();
-    final basePath = _pathForMoveSequence(treeMoves);
-    playMoveAtTreePath(basePath, sanMove);
+    playMove(sanMove);
   }
 
   /// Atomically navigate to a specific position within a line.
@@ -664,6 +665,7 @@ class RepertoireController
         pgnContent: pgnContent,
         index: _repertoireLines.length,
         isWhite: _isRepertoireWhite,
+        existingIds: _repertoireLines.map((l) => l.id),
       ),
     );
 

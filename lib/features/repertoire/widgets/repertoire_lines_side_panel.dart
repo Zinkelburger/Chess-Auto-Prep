@@ -28,9 +28,18 @@ class RepertoireLinesSidePanel extends StatelessWidget {
     required this.tabs,
     required this.children,
     required this.onCollapsedChanged,
+    this.stripLabel,
+    this.hideTooltip = 'Hide lines (L)',
+    this.showTooltip = 'Show lines (L)',
   });
 
   final bool collapsed;
+
+  /// Label on the collapsed strip when the panel is not showing lines,
+  /// drafts or sessions — e.g. "Analysis". Null keeps the surface-based label.
+  final String? stripLabel;
+  final String hideTooltip;
+  final String showTooltip;
 
   /// Expanded width, already resolved against the available space.
   final double width;
@@ -57,7 +66,7 @@ class RepertoireLinesSidePanel extends StatelessWidget {
               IconButton(
                 icon: const Icon(Icons.keyboard_double_arrow_right, size: 16),
                 onPressed: () => onCollapsedChanged(true),
-                tooltip: 'Hide lines (L)',
+                tooltip: hideTooltip,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
               ),
@@ -95,7 +104,7 @@ class RepertoireLinesSidePanel extends StatelessWidget {
       RepertoireLinesSurface.session => ('Session', theme.colorScheme.primary),
       RepertoireLinesSurface.draft => ('Draft', AppColors.warning),
       RepertoireLinesSurface.lines => (
-        'Lines ($lineCount)',
+        stripLabel ?? 'Lines ($lineCount)',
         AppColors.onSurfaceMuted,
       ),
     };
@@ -109,7 +118,7 @@ class RepertoireLinesSidePanel extends StatelessWidget {
           children: [
             const SizedBox(height: 8),
             Tooltip(
-              message: 'Show lines (L)',
+              message: showTooltip,
               child: const Icon(
                 Icons.keyboard_double_arrow_left,
                 size: 16,
@@ -149,6 +158,7 @@ class RepertoireLinesPanelDragHandle extends StatelessWidget {
     required this.maxWidth,
     required this.onWidthChanged,
     required this.onDragEnd,
+    this.panelOnLeft = false,
   });
 
   final double currentWidth;
@@ -156,6 +166,10 @@ class RepertoireLinesPanelDragHandle extends StatelessWidget {
   final double maxWidth;
   final ValueChanged<double> onWidthChanged;
   final VoidCallback onDragEnd;
+
+  /// True when the panel being resized sits to the *left* of this handle
+  /// (the outline column); false for a panel to the right (analysis column).
+  final bool panelOnLeft;
 
   @override
   Widget build(BuildContext context) {
@@ -166,6 +180,16 @@ class RepertoireLinesPanelDragHandle extends StatelessWidget {
         onHorizontalDragUpdate: (details) {
           final box = context.findRenderObject() as RenderBox?;
           if (box == null) return;
+          if (panelOnLeft) {
+            // The panel runs from its own left edge (fixed) to this handle.
+            final panelLeft = box.localToGlobal(Offset.zero).dx - currentWidth;
+            onWidthChanged(
+              (details.globalPosition.dx - panelLeft)
+                  .clamp(minWidth, maxWidth)
+                  .toDouble(),
+            );
+            return;
+          }
           // The panel runs from this handle's right edge to its own right
           // edge, which does not move during the drag.
           final panelRight =

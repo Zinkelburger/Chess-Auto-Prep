@@ -14,7 +14,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../utils/safe_change_notifier.dart';
 
-enum BottomPaneTab { findings, jobs, lines }
+enum BottomPaneTab { findings, jobs }
 
 class BottomPaneController extends ChangeNotifier with SafeChangeNotifier {
   /// Height as a fraction of screen height, so the pane keeps its proportion

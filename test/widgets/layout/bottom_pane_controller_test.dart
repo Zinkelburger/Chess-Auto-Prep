@@ -42,10 +42,10 @@ void main() {
 
     test('closing keeps the tab, so reopening returns where you were', () {
       final c = BottomPaneController();
-      c.open(BottomPaneTab.lines);
+      c.open(BottomPaneTab.jobs);
       c.close();
       c.toggle();
-      expect(c.activeTab, BottomPaneTab.lines);
+      expect(c.activeTab, BottomPaneTab.jobs);
     });
   });
 

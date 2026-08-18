@@ -51,6 +51,13 @@ class RepertoireLine {
   /// count as your book when your own games are checked against the file.
   final bool isModelGame;
 
+  /// Position of this game in its PGN file (0-based, counting every game,
+  /// including ones that failed to parse), or -1 when unknown. [id] is not
+  /// guaranteed unique — the move-based fallback truncates, so lines sharing
+  /// a long opening prefix collide — so file edits that must hit exactly this
+  /// game address it by index.
+  final int gameIndex;
+
   RepertoireLine({
     required this.id,
     required this.name,
@@ -64,7 +71,25 @@ class RepertoireLine {
     this.importance,
     this.chapter,
     this.isModelGame = false,
+    this.gameIndex = -1,
   });
+
+  /// The same line under a different id (collision resolution at parse time).
+  RepertoireLine copyWithId(String newId) => RepertoireLine(
+    id: newId,
+    name: name,
+    moves: moves,
+    color: color,
+    startPosition: startPosition,
+    fullPgn: fullPgn,
+    comments: comments,
+    variations: variations,
+    headers: headers,
+    importance: importance,
+    chapter: chapter,
+    isModelGame: isModelGame,
+    gameIndex: gameIndex,
+  );
 
   /// Creates a training question at the specified move index
   /// Returns the position where the user needs to make their move

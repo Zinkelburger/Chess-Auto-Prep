@@ -78,8 +78,9 @@ class RepertoireAuthoring {
     required String pgnContent,
     required int index,
     required bool isWhite,
+    Iterable<String> existingIds = const [],
   }) {
-    final id = _service.generateLineId(moves, index);
+    final id = _service.newLineId(moves, index, existingIds: existingIds);
     final name = title.isNotEmpty && title != 'Repertoire Line'
         ? title
         : (moves.length >= 3

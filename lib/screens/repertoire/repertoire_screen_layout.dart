@@ -10,20 +10,45 @@ mixin _RepertoireLayout
         _RepertoireScreenStateBase,
         _RepertoireSessionHandlers,
         _RepertoireTabContent {
+  /// Wide layout, left to right: the outline (chapters and lines), the
+  /// board, the PGN editor, and the analysis panel (engine, database, tree).
+  /// What the repertoire *contains* on the left, the *position* in the
+  /// middle, *evidence about the position* on the right.
   Widget _buildWideLayout() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final panelWidth = _layout.resolveLinesPanelWidth(constraints.maxWidth);
+        final outlineWidth = _layout.outlinePanelCollapsed
+            ? 28.0
+            : _layout.resolveOutlinePanelWidth(constraints.maxWidth);
+        final panelWidth = _layout.linesPanelCollapsed
+            ? 28.0
+            : _layout.resolveLinesPanelWidth(constraints.maxWidth);
         // The board zone needs a bounded width: the bars under the board
         // (build-session, ephemeral finding) hold Rows with Expanded
         // children, which cannot lay out under the Row's unbounded width.
+        // It sizes against what is left once both side columns are placed,
+        // so opening the outline never crowds the PGN editor out.
         final boardZoneWidth = _layout.boardZoneWidth(
-          availableWidth: constraints.maxWidth,
+          availableWidth: constraints.maxWidth - outlineWidth - panelWidth,
           availableHeight: constraints.maxHeight,
         );
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            _buildOutlineSidePanel(outlineWidth),
+            if (_layout.outlinePanelCollapsed)
+              _verticalZoneDivider()
+            else
+              RepertoireLinesPanelDragHandle(
+                currentWidth: outlineWidth,
+                minWidth: RepertoireLayoutPrefs.minPanelWidth,
+                maxWidth: RepertoireLayoutPrefs.maxLinesPanelWidth(
+                  constraints.maxWidth,
+                ),
+                panelOnLeft: true,
+                onWidthChanged: _layout.dragOutlinePanelWidth,
+                onDragEnd: _layout.saveOutlinePanelWidth,
+              ),
             SizedBox(width: boardZoneWidth, child: _buildBoardZone()),
             _verticalZoneDivider(),
             Expanded(child: _buildWideToolsColumn()),
@@ -39,10 +64,73 @@ mixin _RepertoireLayout
                 onWidthChanged: _layout.dragLinesPanelWidth,
                 onDragEnd: _layout.saveLinesPanelWidth,
               ),
-            _buildLinesSidePanel(panelWidth),
+            _buildAnalysisSidePanel(panelWidth),
           ],
         );
       },
+    );
+  }
+
+  /// The left column: the outline (or, while one runs, the build-by-playing
+  /// session / games draft that is adding lines to it), collapsible to a
+  /// strip.
+  Widget _buildOutlineSidePanel(double width) {
+    if (_layout.outlinePanelCollapsed) {
+      final surface = _isBuildSessionActive
+          ? RepertoireLinesSurface.session
+          : _isDraftActive
+          ? RepertoireLinesSurface.draft
+          : RepertoireLinesSurface.lines;
+      return RepertoireLinesSidePanel(
+        collapsed: true,
+        width: width,
+        surface: surface,
+        lineCount: _controller.repertoireLines.length,
+        tabController: _sidePanelTabController,
+        tabs: const [],
+        children: const [],
+        stripLabel: 'Chapters',
+        hideTooltip: 'Hide chapters (L)',
+        showTooltip: 'Show chapters (L)',
+        onCollapsedChanged: _layout.setOutlinePanelCollapsed,
+      );
+    }
+    return SizedBox(
+      width: width,
+      child: Column(children: [Expanded(child: _buildOutlineColumnContent())]),
+    );
+  }
+
+  /// What fills the outline column — the same surface the compact layout's
+  /// Lines tab shows: a running session or draft, the metrics browser, or
+  /// the chapter/line tree.
+  Widget _buildOutlineColumnContent() => _buildSecondTabContent();
+
+  /// The right column: Engine | Database | Tree, collapsible to a strip.
+  Widget _buildAnalysisSidePanel(double width) {
+    return RepertoireLinesSidePanel(
+      collapsed: _layout.linesPanelCollapsed,
+      width: width,
+      surface: RepertoireLinesSurface.lines,
+      lineCount: _controller.repertoireLines.length,
+      tabController: _sidePanelTabController,
+      tabs: const [
+        Tab(height: 30, child: Text('Engine', style: TextStyle(fontSize: 12))),
+        Tab(
+          height: 30,
+          child: Text('Database', style: TextStyle(fontSize: 12)),
+        ),
+        Tab(height: 30, child: Text('Tree', style: TextStyle(fontSize: 12))),
+      ],
+      children: [
+        _buildEngineTabContent(),
+        _buildDatabaseTabContent(),
+        _buildTreeTabContent(),
+      ],
+      stripLabel: 'Analysis',
+      hideTooltip: 'Hide analysis panel',
+      showTooltip: 'Show analysis panel',
+      onCollapsedChanged: _layout.setLinesPanelCollapsed,
     );
   }
 
@@ -62,7 +150,7 @@ mixin _RepertoireLayout
         if (_isCompactLayout) {
           _toolsTabController.animateTo(_toolsTabController.index == 1 ? 0 : 1);
         } else {
-          unawaited(_layout.toggleLinesPanelCollapsed());
+          unawaited(_layout.toggleOutlinePanelCollapsed());
         }
       },
       onCollapseBottomPane: () {
@@ -179,34 +267,20 @@ mixin _RepertoireLayout
     );
   }
 
-  /// Wide-layout tools column: the PGN editor, always visible — the
-  /// Lines/Draft and Tree surfaces live in the side panel to the right.
+  /// Wide-layout tools column: the PGN editor, always visible. The engine
+  /// and database live in the analysis panel to the right, the chapters and
+  /// lines in the outline to the left.
   Widget _buildWideToolsColumn() {
     return Column(
       children: [
-        Expanded(child: _buildPgnTabWithEngines()),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(4.0),
+            child: _buildPgnTab(),
+          ),
+        ),
         _buildNavControls(),
       ],
-    );
-  }
-
-  /// Wide-layout side panel hosting the Lines/Draft and Tree surfaces so they
-  /// stay clickable while the PGN editor is visible. Collapses to a thin
-  /// strip.
-  Widget _buildLinesSidePanel(double width) {
-    return RepertoireLinesSidePanel(
-      collapsed: _layout.linesPanelCollapsed,
-      width: width,
-      surface: _isBuildSessionActive
-          ? RepertoireLinesSurface.session
-          : _isDraftActive
-          ? RepertoireLinesSurface.draft
-          : RepertoireLinesSurface.lines,
-      lineCount: _controller.repertoireLines.length,
-      tabController: _sidePanelTabController,
-      tabs: [_buildLinesTabLabel(), _buildTreeTabLabel()],
-      children: [_buildSecondTabContent(), _buildTreeTabContent()],
-      onCollapsedChanged: _layout.setLinesPanelCollapsed,
     );
   }
 

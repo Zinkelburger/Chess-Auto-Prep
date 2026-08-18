@@ -17,8 +17,9 @@ mixin _RepertoireTabContent
     );
   }
 
-  /// Second tools tab: normally the Lines list, but it becomes the Draft
-  /// review surface while a build-from-games session is active.
+  /// The chapters-and-lines surface (compact: second tools tab; wide: the
+  /// outline column): normally the outline, the metrics browser when asked
+  /// for, and the Draft / Session surface while one of those runs.
   Widget _buildSecondTabContent() {
     if (_isBuildSessionActive) {
       return BuildSessionPane(
@@ -56,7 +57,77 @@ mixin _RepertoireTabContent
         onSelectLine: (sans) => _controller.loadMoveSequence(sans),
       );
     }
-    return _buildLinesTabContent();
+    return _showLineMetrics ? _buildLineMetricsView() : _buildOutlinePanel();
+  }
+
+  /// The old lines browser (coverage, ease, coherence…) with a way back.
+  Widget _buildLineMetricsView() {
+    return Column(
+      children: [
+        SizedBox(
+          height: 32,
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back, size: 16),
+                tooltip: 'Back to chapters',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                onPressed: () => setState(() => _showLineMetrics = false),
+              ),
+              const Text(
+                'Line metrics',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+              const Spacer(),
+              if (!_isCompactLayout)
+                IconButton(
+                  icon: const Icon(Icons.keyboard_double_arrow_left, size: 16),
+                  tooltip: 'Hide chapters (L)',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
+                  onPressed: () => _layout.setOutlinePanelCollapsed(true),
+                ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(child: _buildLinesTabContent()),
+      ],
+    );
+  }
+
+  Widget _buildOutlinePanel() {
+    final selected = _controller.selectedPgnLine;
+    final chapterPath = _controller.currentRepertoire?.filePath;
+    return Column(
+      children: [
+        Expanded(
+          child: RepertoireOutlinePanel(
+            controller: _outline,
+            currentMoves: _controller.currentMoveSequence,
+            selectedLine: selected == null || chapterPath == null
+                ? null
+                : (chapterPath: chapterPath, gameIndex: selected.gameIndex),
+            onOpenChapter: (path) => unawaited(_openChapterPath(path)),
+            onOpenLine: (path, line) => unawaited(_openOutlineLine(path, line)),
+            onGenerateInto: (path) => unawaited(_generateIntoChapter(path)),
+            onAuditChapter: (path) => unawaited(_auditChapter(path)),
+            onTrainChapter: _trainChapter,
+            onTrainLine: _trainOutlineLine,
+            onShowMetrics: () => setState(() => _showLineMetrics = true),
+            onPlanBuild: () => unawaited(_openPlanner()),
+            chapterBadge: _planRunner.statusLabelFor,
+            onCollapse: _isCompactLayout
+                ? null
+                : () => unawaited(_layout.setOutlinePanelCollapsed(true)),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildTreeTabContent() {
@@ -68,6 +139,48 @@ mixin _RepertoireTabContent
       onMoveSelected: _controller.userSelectedTreeMove,
       onGoBack: _controller.goBack,
       onGoForward: _controller.goForward,
+      repertoireMovesAtPosition: _repertoireMovesAtCurrentPosition,
+      onPlayMove: _controller.playMove,
+      onAddMove: _onExplorerAddMove,
+    );
+  }
+
+  /// Engine tab of the analysis panel: Stockfish lines with the expectimax
+  /// bar under them. Stacked, because the panel is a column and the two bars
+  /// were built as headers that read left to right.
+  Widget _buildEngineTabContent() {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InlineEngineBar(
+            // Follow the scratchpad while a session explores.
+            fen: _isBuildSessionActive
+                ? _buildSession.boardFen
+                : _controller.fen,
+            isActive: true,
+          ),
+          const Divider(height: 1),
+          InlineExpectimaxBar(
+            controller: _controller,
+            tree: _generationController.generatedTree,
+            treeConfig: _generationController.generatedTreeConfig,
+            fenMap: _generationController.generatedTreeFenMap,
+            boardPreview: _boardPreview,
+            coherenceResult: _generationController.coherenceService.result,
+            isGenerating: _generationController.isGenerating,
+            isGenerationPaused: _generationController.isPaused,
+            fenOverride: _isBuildSessionActive ? _buildSession.boardFen : null,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Database tab of the analysis panel: the live opening explorer.
+  Widget _buildDatabaseTabContent() {
+    return RepertoireDatabasePane(
+      fen: _controller.fen,
       repertoireMovesAtPosition: _repertoireMovesAtCurrentPosition,
       onPlayMove: _controller.playMove,
       onAddMove: _onExplorerAddMove,
@@ -238,20 +351,8 @@ mixin _RepertoireTabContent
         controller: _bottomPane,
         findingsContent: _buildFindingsContent(),
         jobsContent: _buildJobsContent(),
-        linesContent: Stack(
-          key: _bottomLinesPreviewStackKey,
-          children: [
-            _buildLinesContent(),
-            FloatingBoardPreview(
-              stackKey: _bottomLinesPreviewStackKey,
-              controller: _boardPreview,
-              flipped: _boardFlipped,
-            ),
-          ],
-        ),
         findingsBadge: _auditController.activeFindingCount,
         jobsBadge: _jobManager.activeJobs.length,
-        linesBadge: _controller.repertoireLines.length,
         onClose: _clearInlineConfigFlags,
       ),
     );

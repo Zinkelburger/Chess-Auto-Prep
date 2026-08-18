@@ -60,6 +60,7 @@ import '../features/repertoire/services/chapter_store.dart';
 import '../features/repertoire/widgets/add_chapter_dialog.dart';
 import '../features/repertoire/widgets/repertoire_lines_side_panel.dart';
 import '../features/repertoire/widgets/repertoire_tree_pane.dart';
+import '../features/repertoire/widgets/repertoire_database_pane.dart';
 import '../features/traps/controllers/trap_session_controller.dart';
 import '../features/traps/services/trap_line_builder.dart';
 import 'package:chess_auto_prep/models/trap_line_info.dart';
@@ -78,6 +79,15 @@ import 'repertoire_selection_screen.dart';
 import '../features/repertoire/controllers/build_launcher.dart';
 import '../features/repertoire/controllers/generation_notification_router.dart';
 import '../features/repertoire/controllers/inline_config_router.dart';
+import '../features/repertoire/controllers/repertoire_outline_controller.dart';
+import '../features/repertoire/models/repertoire_outline.dart';
+import '../features/repertoire/widgets/repertoire_outline_panel.dart';
+import '../features/planner/controllers/plan_runner.dart';
+import '../features/planner/widgets/plan_build_screen.dart';
+import '../features/planner/widgets/plan_runner_banner.dart';
+import '../services/generation/generation_config.dart';
+import '../constants/chess_constants.dart';
+import '../services/storage/app_paths.dart';
 
 part 'repertoire/repertoire_screen_layout.dart';
 part 'repertoire/repertoire_screen_session.dart';
@@ -148,10 +158,36 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
 
   late final TabController _toolsTabController;
 
-  /// Wide layout only: Lines/Draft | Tree tabs inside the side panel — the
-  /// PGN editor stays visible in the tools column at all times.
+  /// Wide layout only: Engine | Database | Tree tabs inside the analysis
+  /// panel on the right — the PGN editor stays visible in the middle column
+  /// and the outline (chapters and lines) holds the left column.
   late final TabController _sidePanelTabController;
   bool _showTrapsInLinesTab = false;
+
+  /// The repertoire as chapters, folders and lines — the left column. Reads
+  /// the folder on disk; the screen tells it which chapter is active.
+  late final RepertoireOutlineController _outline;
+
+  /// The outline column shows the plain chapter/line tree by default; this
+  /// swaps it for the metrics browser (coverage, ease, coherence).
+  bool _showLineMetrics = false;
+
+  /// The repertoire folder the outline is currently reading, so a chapter
+  /// switch inside the same repertoire only refreshes rather than reopens.
+  String? _outlineRoot;
+
+  /// Identity of the last PGN text the outline was refreshed for. A save
+  /// replaces [RepertoireController.repertoirePgn], which is the signal that
+  /// the chapter's lines may have changed.
+  String? _outlinePgnSeen;
+
+  /// The chapter path the outline was last synced for.
+  String? _outlineChapterSeen;
+
+  /// Runs a planned build: creates the chapters, then generates them one by
+  /// one through [_generationController]. Lives on the screen so it outlives
+  /// the planner route.
+  late final PlanRunner _planRunner;
 
   /// Persisted wide-layout shape: side panel collapsed/width, board column
   /// size. Shrinking the board is how the user hands width to the engine
@@ -185,7 +221,6 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
 
   final FocusNode _focusNode = FocusNode();
   final GlobalKey _linesPreviewStackKey = GlobalKey();
-  final GlobalKey _bottomLinesPreviewStackKey = GlobalKey();
 
   bool _navigatingToFinding = false;
 
@@ -195,14 +230,13 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
     setState(() {});
   }
 
-  /// Bring the Lines/Draft surface into view: the second tab when compact,
-  /// the side panel's Lines tab (expanding the panel if collapsed) when wide.
+  /// Bring the Lines/Draft/Session surface into view: the second tab when
+  /// compact, the outline column (expanding it if collapsed) when wide.
   void _showLinesSurface() {
     if (_isCompactLayout) {
       _toolsTabController.animateTo(1);
     } else {
-      unawaited(_layout.setLinesPanelCollapsed(false));
-      _sidePanelTabController.animateTo(0);
+      unawaited(_layout.setOutlinePanelCollapsed(false));
     }
   }
 
@@ -274,6 +308,16 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
       }
     });
   }
+
+  // Outline column actions, implemented on the concrete state and called
+  // from the layout mixin.
+  Future<void> _openChapterPath(String path);
+  Future<void> _openOutlineLine(String chapterPath, OutlineLine line);
+  Future<void> _generateIntoChapter(String chapterPath);
+  Future<void> _auditChapter(String chapterPath);
+  void _trainChapter(String chapterPath);
+  void _trainOutlineLine(String chapterPath, OutlineLine line);
+  Future<void> _openPlanner();
 }
 
 class _RepertoireScreenState extends _RepertoireScreenStateBase
@@ -283,7 +327,13 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     super.initState();
 
     _toolsTabController = TabController(length: 3, vsync: this);
-    _sidePanelTabController = TabController(length: 2, vsync: this);
+    _sidePanelTabController = TabController(length: 3, vsync: this);
+    _outline = RepertoireOutlineController(
+      onActiveChapterMoved: _onActiveChapterMoved,
+    );
+    _planRunner = PlanRunner(generation: _generationController)
+      ..onChapterChanged = _onPlannedChapterChanged
+      ..addListener(_onPlanRunnerChanged);
     _layout.addListener(_onLayoutChanged);
     unawaited(_layout.load());
     _controller = RepertoireController();
@@ -427,6 +477,244 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       unawaited(_auditController.tryRestore(newRepertoireId!));
       unawaited(_loadChapters());
     }
+    _syncOutline();
+  }
+
+  // ── Outline (left column) ────────────────────────────────────────
+
+  /// Keep the outline pointed at the open repertoire and fresh after saves.
+  ///
+  /// Called from every controller notification, so it returns immediately
+  /// unless the chapter or its PGN text actually changed.
+  void _syncOutline() {
+    final current = _controller.currentRepertoire;
+    if (current == null || _controller.isLoading) return;
+    final chapterPath = current.filePath;
+    final pgn = _controller.repertoirePgn;
+    final sameChapter =
+        _outlineChapterSeen != null &&
+        p.equals(_outlineChapterSeen!, chapterPath);
+    if (sameChapter && identical(pgn, _outlinePgnSeen)) return;
+    _outlineChapterSeen = chapterPath;
+    unawaited(() async {
+      final root = await _repertoireRootFor(chapterPath);
+      if (!mounted) return;
+      final sameRoot = _outlineRoot != null && p.equals(_outlineRoot!, root);
+      final pgnChanged = !identical(pgn, _outlinePgnSeen);
+      _outlinePgnSeen = pgn;
+      if (!sameRoot) {
+        _outlineRoot = root;
+        await _outline.open(
+          rootPath: root,
+          activeChapterPath: chapterPath,
+          isWhite: _controller.isRepertoireWhite,
+        );
+      } else {
+        if (_outline.activeChapterPath == null ||
+            !p.equals(_outline.activeChapterPath!, chapterPath)) {
+          _outline.setActiveChapter(chapterPath);
+        }
+        if (pgnChanged) await _outline.refresh();
+      }
+    }());
+  }
+
+  /// The repertoire folder that holds [chapterPath]: the ancestor directly
+  /// under the app's repertoires directory. Chapters may sit in nested
+  /// sub-folders, so the immediate parent is not necessarily the root.
+  Future<String> _repertoireRootFor(String chapterPath) async {
+    try {
+      final base = (await AppPaths.repertoiresDirectory()).path;
+      var dir = p.dirname(chapterPath);
+      if (p.isWithin(base, dir)) {
+        while (!p.equals(p.dirname(dir), base)) {
+          dir = p.dirname(dir);
+        }
+        return dir;
+      }
+    } catch (_) {
+      // Fall through to the immediate parent.
+    }
+    return _chapterStore.folderOf(chapterPath);
+  }
+
+  /// The outline renamed, moved or deleted the chapter the board shows.
+  void _onActiveChapterMoved(String? newPath) {
+    if (!mounted) return;
+    if (newPath == null) {
+      // The active chapter is gone: fall back to any remaining chapter, or
+      // leave the editor on an unsaved buffer.
+      final next = _outline.outline?.allChapters.firstOrNull;
+      if (next != null) {
+        unawaited(_openChapterPath(next.path));
+      }
+      unawaited(_loadChapters());
+      return;
+    }
+    final current = _controller.currentRepertoire;
+    if (current != null && p.equals(current.filePath, newPath)) {
+      // Same file, new contents (a line moved in or out): reload in place.
+      unawaited(_reloadRepertoire());
+      return;
+    }
+    unawaited(_openChapterPath(newPath));
+    unawaited(_loadChapters());
+  }
+
+  /// Switch the board/editor to the chapter file at [path].
+  @override
+  Future<void> _openChapterPath(String path) async {
+    final current = _controller.currentRepertoire;
+    if (current != null && p.equals(current.filePath, path)) return;
+    final known = _chapters.where((c) => p.equals(c.filePath, path));
+    final meta = known.isNotEmpty
+        ? known.first
+        : RepertoireMetadata(
+            filePath: path,
+            name: p.basenameWithoutExtension(path),
+            lastModified: DateTime.now(),
+          );
+    await _controller.setRepertoire(meta);
+    _reclaimFocus();
+  }
+
+  /// A line picked in the outline: switch chapter if needed, then load it.
+  @override
+  Future<void> _openOutlineLine(String chapterPath, OutlineLine line) async {
+    await _openChapterPath(chapterPath);
+    if (!mounted) return;
+    // setRepertoire loads asynchronously; wait for the lines to be there.
+    for (var i = 0; i < 40 && _controller.isLoading; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    final match = _controller.repertoireLines
+        .where((l) => l.gameIndex == line.gameIndex)
+        .firstOrNull;
+    if (match != null) {
+      _selectLine(match);
+    } else {
+      _controller.loadMoveSequence(line.moves);
+    }
+  }
+
+  /// "Generate lines into this chapter": make it the active chapter, put the
+  /// board on the chapter's root — the moves every line in it shares, or the
+  /// start position for an empty chapter — and open the generation setup,
+  /// which builds from the board. Generated lines land in the active
+  /// chapter's file, so this is what "into this chapter" means.
+  @override
+  Future<void> _generateIntoChapter(String chapterPath) async {
+    await _openChapterPath(chapterPath);
+    if (!mounted) return;
+    for (var i = 0; i < 40 && _controller.isLoading; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    if (!mounted) return;
+    _controller.loadMoveSequence(
+      _commonPrefix(_controller.repertoireLines.map((l) => l.moves)),
+    );
+    _openGenerationDialog();
+  }
+
+  /// The longest SAN prefix shared by every sequence; empty for no lines.
+  static List<String> _commonPrefix(Iterable<List<String>> sequences) {
+    List<String>? prefix;
+    for (final seq in sequences) {
+      if (prefix == null) {
+        prefix = List.of(seq);
+        continue;
+      }
+      var n = 0;
+      while (n < prefix.length && n < seq.length && prefix[n] == seq[n]) {
+        n++;
+      }
+      prefix = prefix.sublist(0, n);
+      if (prefix.isEmpty) break;
+    }
+    return prefix ?? const [];
+  }
+
+  @override
+  Future<void> _auditChapter(String chapterPath) async {
+    await _openChapterPath(chapterPath);
+    if (!mounted) return;
+    _openAuditDialog(forceConfig: true);
+  }
+
+  @override
+  void _trainChapter(String chapterPath) {
+    context.read<AppState>().switchToTrainer(repertoirePath: chapterPath);
+  }
+
+  // ── Planner ──────────────────────────────────────────────────
+
+  void _onPlanRunnerChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _onPlannedChapterChanged(String chapterPath) {
+    if (!mounted) return;
+    unawaited(_outline.refresh());
+    unawaited(_loadChapters());
+    final current = _controller.currentRepertoire;
+    if (current != null && p.equals(current.filePath, chapterPath)) {
+      unawaited(_reloadRepertoire());
+    }
+  }
+
+  /// Full-width planning mode: answer the forks, get chapters, generate.
+  @override
+  Future<void> _openPlanner() async {
+    if (_controller.currentRepertoire == null) return;
+    if (_planRunner.isRunning || _generationController.isGenerating) {
+      showAppSnackBar(
+        context,
+        'A build is already running — let it finish or stop it first.',
+        isError: true,
+      );
+      return;
+    }
+    final root = _outlineRoot;
+    if (root == null) return;
+    final appState = _appState ?? context.read<AppState>();
+    final isWhite = _controller.isRepertoireWhite;
+    final base =
+        _generationController.lastConfig ??
+        TreeBuildConfig(startFen: kStandardStartFen, playAsWhite: isWhite);
+    final result = await Navigator.of(context).push<PlanBuildResult>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => PlanBuildScreen(
+          isWhite: isWhite,
+          repertoireName: p.basename(root),
+          outline: _outline.outline,
+          initialMoves: List.of(_controller.currentMoveSequence),
+          baseConfig: base,
+          chesscomUsername: appState.chesscomUsername,
+          lichessUsername: appState.lichessUsername,
+          defaultElo: base.maiaElo,
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    _reclaimFocus();
+    unawaited(
+      _planRunner.run(
+        plan: result.plan,
+        folderPath: root,
+        config: result.config,
+        generate: result.generate,
+      ),
+    );
+    if (result.generate) _openBottomPane(BottomPaneTab.jobs);
+  }
+
+  @override
+  void _trainOutlineLine(String chapterPath, OutlineLine line) {
+    context.read<AppState>().switchToTrainer(
+      repertoirePath: chapterPath,
+      lineId: line.id,
+    );
   }
 
   Future<void> _showColorSelectionDialog() async {
@@ -480,6 +768,8 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     _layout.dispose();
     _toolsTabController.dispose();
     _sidePanelTabController.dispose();
+    _outline.dispose();
+    _planRunner.dispose();
     _focusNode.dispose();
     _boardPreview.dispose();
     _draftController.removeListener(_onDraftChanged);
@@ -611,6 +901,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         onSelectRepertoire: _showRepertoireSelection,
         onTrainRepertoire: _trainRepertoire,
         onOpenGeneration: _openGenerationDialog,
+        onPlanBuild: () => unawaited(_openPlanner()),
         onBuildByPlaying: () => _buildLauncher.startBuildByPlaying(context),
         onBuildFromGames: () => _buildLauncher.buildFromGames(context),
         onOpenAudit: _openAuditDialog,
@@ -635,7 +926,14 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
             children: [
               // Paused builds free the tab and the engine; a slim banner
               // keeps resume/discard in reach.
-              if (_generationController.isGenerating &&
+              if (_planRunner.isRunning)
+                PlanRunnerBanner(
+                  runner: _planRunner,
+                  isPaused: _generationController.isPaused,
+                  onPause: _generationController.pauseBuild,
+                  onResume: _generationController.resumeBuild,
+                )
+              else if (_generationController.isGenerating &&
                   _generationController.isPaused)
                 GenerationPausedBanner(
                   onResume: _generationController.resumeBuild,

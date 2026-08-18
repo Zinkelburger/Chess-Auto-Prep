@@ -74,6 +74,19 @@ abstract class StorageService {
   /// Recursively deletes the repertoire folder at [dirPath]. No-op if missing.
   Future<void> deleteRepertoireDirectory(String dirPath);
 
+  /// Immediate sub-folders of [dirPath] (absolute paths, sorted by name).
+  /// A repertoire folder may nest folders to group chapters; each is a
+  /// "sub-chapter" in the builder's outline. Empty when [dirPath] is missing.
+  Future<List<String>> listSubdirectories(String dirPath);
+
+  /// Creates the folder at [path] (and any missing parents). No-op if it
+  /// already exists.
+  Future<void> createDirectory(String path);
+
+  /// Moves or renames the folder at [oldPath] to [newPath], whose parent must
+  /// exist. Used to nest one chapter group inside another.
+  Future<void> moveDirectory(String oldPath, String newPath);
+
   // ── Study file management ────────────────────────────────────────────────
 
   /// Lists all `.pgn` files in the studies directory ([RepertoireMetadata]

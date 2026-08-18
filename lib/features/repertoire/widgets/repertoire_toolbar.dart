@@ -13,9 +13,10 @@ import '../../../widgets/layout/board_zone.dart';
 ///
 /// Actions are grouped by workflow, not by feature:
 /// - the title doubles as the repertoire switcher,
-/// - a pick-then-run control ([RepertoireActionRunner]) is the single entry
-///   point for every repertoire action (generate, build from games, import
-///   PGN, audit): a dropdown chooses the action, a "Run" button fires it,
+/// - one "Add lines" menu ([RepertoireAddLinesMenu]) holds every way of
+///   putting moves into the repertoire (generate, build by playing, from
+///   games, import/paste PGN); Audit stands beside it as a check on what is
+///   already there,
 /// - Train is the primary (filled) action,
 /// - everything occasional lives in the trailing overflow menu.
 class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
@@ -34,6 +35,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     this.onOpenChapters,
     this.onTrainRepertoire,
     this.onOpenGeneration,
+    this.onPlanBuild,
     this.onBuildByPlaying,
     this.onBuildFromGames,
     this.onOpenAudit,
@@ -56,6 +58,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onOpenChapters;
   final VoidCallback? onTrainRepertoire;
   final VoidCallback? onOpenGeneration;
+  final VoidCallback? onPlanBuild;
   final VoidCallback? onBuildByPlaying;
   final VoidCallback? onBuildFromGames;
   final VoidCallback? onOpenAudit;
@@ -99,15 +102,15 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
             isPaused: isGenerationPaused,
             onTap: onOpenGeneration,
           ),
-        if (onOpenGeneration != null || onOpenAudit != null)
-          RepertoireActionRunner(
-            onGenerate: onOpenGeneration,
-            onBuildByPlaying: onBuildByPlaying,
-            onBuildFromGames: onBuildFromGames,
-            onImportPgnFile: onImportPgnFile,
-            onImportPgnPaste: onImportPgnPaste,
-            onOpenAudit: onOpenAudit,
-          ),
+        RepertoireAddLinesMenu(
+          onPlanBuild: onPlanBuild,
+          onGenerate: onOpenGeneration,
+          onBuildByPlaying: onBuildByPlaying,
+          onBuildFromGames: onBuildFromGames,
+          onImportPgnFile: onImportPgnFile,
+          onImportPgnPaste: onImportPgnPaste,
+        ),
+        if (onOpenAudit != null) RepertoireAuditButton(onPressed: onOpenAudit),
         if (showTrainButton && onTrainRepertoire != null)
           RepertoireTrainButton(
             onPressed: generationLocked ? null : onTrainRepertoire,
@@ -478,175 +481,161 @@ class RepertoireGenerationStatusChip extends StatelessWidget {
   }
 }
 
-/// A repertoire action the user can pick from the runner dropdown.
-class _RepAction {
-  const _RepAction(this.id, this.label, this.icon, this.onRun);
+/// One entry in the "Add lines" menu.
+class _AddLinesEntry {
+  const _AddLinesEntry(this.label, this.icon, this.onRun, {this.hint});
 
-  final String id;
   final String label;
   final IconData icon;
   final VoidCallback onRun;
+  final String? hint;
 }
 
-/// Pick-then-run control for repertoire actions (generate, add lines, audit).
-///
-/// A dropdown selects *which* action; a separate "Run" button executes it.
-/// Splitting the picker from the trigger means opening the menu can never fire
-/// a heavy action (e.g. Generate) by accident — the failure mode of the old
-/// split button.
-class RepertoireActionRunner extends StatefulWidget {
-  const RepertoireActionRunner({
+/// The one place every way of *adding lines* to a repertoire lives: generate
+/// with the engine, build by playing, mine your own games, import or paste a
+/// PGN. One tap opens the menu, one tap runs the item — every entry opens its
+/// own configuration step or picker first, so nothing heavy can fire by
+/// accident and there is no separate "Run" step to explain.
+class RepertoireAddLinesMenu extends StatelessWidget {
+  const RepertoireAddLinesMenu({
     super.key,
+    this.onPlanBuild,
     this.onGenerate,
     this.onBuildByPlaying,
     this.onBuildFromGames,
     this.onImportPgnFile,
     this.onImportPgnPaste,
-    this.onOpenAudit,
   });
 
+  final VoidCallback? onPlanBuild;
   final VoidCallback? onGenerate;
   final VoidCallback? onBuildByPlaying;
   final VoidCallback? onBuildFromGames;
   final VoidCallback? onImportPgnFile;
   final VoidCallback? onImportPgnPaste;
-  final VoidCallback? onOpenAudit;
 
-  @override
-  State<RepertoireActionRunner> createState() => _RepertoireActionRunnerState();
-}
-
-class _RepertoireActionRunnerState extends State<RepertoireActionRunner> {
-  String? _selectedId;
-
-  List<_RepAction> get _actions => [
-    if (widget.onGenerate != null)
-      _RepAction(
-        'generate',
-        'Generate',
-        Icons.auto_awesome,
-        widget.onGenerate!,
+  List<_AddLinesEntry> get _entries => [
+    if (onPlanBuild != null)
+      _AddLinesEntry(
+        'Plan a build…',
+        Icons.route_outlined,
+        onPlanBuild!,
+        hint: 'Answer a few forks; get chapters, then generate them all',
       ),
-    if (widget.onBuildByPlaying != null)
-      _RepAction(
-        'build_by_playing',
+    if (onGenerate != null)
+      _AddLinesEntry(
+        'Generate from here…',
+        Icons.auto_awesome,
+        onGenerate!,
+        hint: 'One engine build from the board position',
+      ),
+    if (onBuildByPlaying != null)
+      _AddLinesEntry(
         'Build by playing',
         Icons.sports_esports,
-        widget.onBuildByPlaying!,
+        onBuildByPlaying!,
+        hint: 'Play your moves; the app answers',
       ),
-    if (widget.onBuildFromGames != null)
-      _RepAction(
-        'from_games',
-        'From my games',
+    if (onBuildFromGames != null)
+      _AddLinesEntry(
+        'From my games…',
         Icons.download_for_offline_outlined,
-        widget.onBuildFromGames!,
+        onBuildFromGames!,
+        hint: 'Mine lines you already play',
       ),
-    if (widget.onImportPgnFile != null)
-      _RepAction(
-        'import_pgn_file',
-        'Import PGN file',
-        Icons.file_open,
-        widget.onImportPgnFile!,
-      ),
-    if (widget.onImportPgnPaste != null)
-      _RepAction(
-        'import_pgn_paste',
-        'Paste PGN',
-        Icons.paste,
-        widget.onImportPgnPaste!,
-      ),
-    if (widget.onOpenAudit != null)
-      _RepAction(
-        'audit',
-        'Audit for gaps',
-        Icons.policy_outlined,
-        widget.onOpenAudit!,
-      ),
+    if (onImportPgnFile != null)
+      _AddLinesEntry('Import PGN file…', Icons.file_open, onImportPgnFile!),
+    if (onImportPgnPaste != null)
+      _AddLinesEntry('Paste PGN…', Icons.paste, onImportPgnPaste!),
   ];
 
   @override
   Widget build(BuildContext context) {
-    final actions = _actions;
-    if (actions.isEmpty) return const SizedBox.shrink();
-
-    // Keep the selection valid as the available actions change.
-    var selectedId = _selectedId;
-    if (selectedId == null || !actions.any((a) => a.id == selectedId)) {
-      selectedId = actions.first.id;
-    }
-    final selected = actions.firstWhere((a) => a.id == selectedId);
-
-    final theme = Theme.of(context);
+    final entries = _entries;
+    if (entries.isEmpty) return const SizedBox.shrink();
     final compact =
         MediaQuery.sizeOf(context).width < kToolbarCompactBreakpoint;
-
-    final dropdown = DropdownButtonHideUnderline(
-      child: DropdownButton<String>(
-        value: selectedId,
-        isDense: true,
-        borderRadius: BorderRadius.circular(8),
-        onChanged: (value) => setState(() => _selectedId = value),
-        selectedItemBuilder: (_) => [
-          for (final a in actions)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(a.icon, size: 18),
-                const SizedBox(width: 6),
-                Text(a.label),
-              ],
-            ),
-        ],
-        items: [
-          for (final a in actions)
-            DropdownMenuItem(
-              value: a.id,
-              child: Row(
-                children: [
-                  Icon(a.icon, size: 20),
-                  const SizedBox(width: 10),
-                  Text(a.label),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
 
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: Center(
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Tooltip(
-              message: 'Choose action',
-              waitDuration: const Duration(milliseconds: 600),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                decoration: BoxDecoration(
-                  border: Border.all(color: theme.dividerColor),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: dropdown,
-              ),
-            ),
-            const SizedBox(width: 6),
-            if (compact)
-              IconButton.filledTonal(
-                tooltip: 'Run ${selected.label}',
-                onPressed: selected.onRun,
-                iconSize: 18,
-                icon: const Icon(Icons.play_arrow),
-              )
-            else
-              FilledButton.tonalIcon(
-                onPressed: selected.onRun,
-                icon: const Icon(Icons.play_arrow, size: 18),
-                label: const Text('Run'),
+        child: MenuAnchor(
+          menuChildren: [
+            for (final e in entries)
+              MenuItemButton(
+                leadingIcon: Icon(e.icon, size: 20),
+                onPressed: e.onRun,
+                child: e.hint == null
+                    ? Text(e.label)
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(e.label),
+                          Text(
+                            e.hint!,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: AppColors.onSurfaceMuted),
+                          ),
+                        ],
+                      ),
               ),
           ],
+          builder: (context, controller, _) {
+            void toggle() =>
+                controller.isOpen ? controller.close() : controller.open();
+            return compact
+                ? IconButton.filledTonal(
+                    tooltip: 'Add lines',
+                    onPressed: toggle,
+                    iconSize: 18,
+                    icon: const Icon(Icons.add),
+                  )
+                : FilledButton.tonalIcon(
+                    onPressed: toggle,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('Add lines'),
+                        SizedBox(width: 2),
+                        Icon(Icons.arrow_drop_down, size: 18),
+                      ],
+                    ),
+                  );
+          },
         ),
+      ),
+    );
+  }
+}
+
+/// Audit is a check on what is already there, not a way of adding lines, so
+/// it stands beside the menu rather than inside it.
+class RepertoireAuditButton extends StatelessWidget {
+  const RepertoireAuditButton({super.key, required this.onPressed});
+
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final compact =
+        MediaQuery.sizeOf(context).width < kToolbarCompactBreakpoint;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Center(
+        child: compact
+            ? IconButton.outlined(
+                tooltip: 'Audit for gaps',
+                onPressed: onPressed,
+                iconSize: 18,
+                icon: const Icon(Icons.policy_outlined),
+              )
+            : OutlinedButton.icon(
+                onPressed: onPressed,
+                icon: const Icon(Icons.policy_outlined, size: 18),
+                label: const Text('Audit'),
+              ),
       ),
     );
   }

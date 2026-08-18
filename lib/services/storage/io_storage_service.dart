@@ -267,6 +267,31 @@ class IOStorageService implements StorageService {
     }
   }
 
+  @override
+  Future<List<String>> listSubdirectories(String dirPath) async {
+    final dir = Directory(dirPath);
+    if (!await dir.exists()) return [];
+    final out = <String>[
+      await for (final entity in dir.list())
+        if (entity is Directory) entity.path,
+    ];
+    out.sort(
+      (a, b) =>
+          p.basename(a).toLowerCase().compareTo(p.basename(b).toLowerCase()),
+    );
+    return out;
+  }
+
+  @override
+  Future<void> createDirectory(String path) async {
+    await Directory(path).create(recursive: true);
+  }
+
+  @override
+  Future<void> moveDirectory(String oldPath, String newPath) async {
+    await Directory(oldPath).rename(newPath);
+  }
+
   // ── Study file management ────────────────────────────────────────────────
 
   @override

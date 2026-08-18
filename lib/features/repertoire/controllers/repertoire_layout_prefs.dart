@@ -22,6 +22,9 @@ class RepertoireLayoutPrefs extends ChangeNotifier with SafeChangeNotifier {
   static const String collapsedKey = 'repertoire.lines_panel_collapsed';
   static const String widthKey = 'repertoire.lines_panel_width';
   static const String boardSizeKey = 'repertoire.board_size';
+  static const String outlineCollapsedKey =
+      'repertoire.outline_panel_collapsed';
+  static const String outlineWidthKey = 'repertoire.outline_panel_width';
 
   /// Narrowest the Lines side panel may be dragged before it is worth
   /// collapsing instead.
@@ -39,6 +42,12 @@ class RepertoireLayoutPrefs extends ChangeNotifier with SafeChangeNotifier {
 
   BoardSize get boardSize => _boardSize;
 
+  bool _outlinePanelCollapsed = false;
+  bool get outlinePanelCollapsed => _outlinePanelCollapsed;
+
+  double? _outlinePanelWidth;
+  double? get outlinePanelWidth => _outlinePanelWidth;
+
   /// Reads all three knobs. A failed read leaves the defaults in place: a
   /// broken preference store should cost the user their layout, not the
   /// screen.
@@ -48,6 +57,8 @@ class RepertoireLayoutPrefs extends ChangeNotifier with SafeChangeNotifier {
       _linesPanelCollapsed = prefs.getBool(collapsedKey) ?? false;
       _linesPanelWidth = prefs.getDouble(widthKey);
       _boardSize = BoardSize.fromName(prefs.getString(boardSizeKey));
+      _outlinePanelCollapsed = prefs.getBool(outlineCollapsedKey) ?? false;
+      _outlinePanelWidth = prefs.getDouble(outlineWidthKey);
       notifyListeners();
     } catch (e) {
       log.w('Failed to load layout prefs', name: 'RepertoireLayout', error: e);
@@ -78,6 +89,28 @@ class RepertoireLayoutPrefs extends ChangeNotifier with SafeChangeNotifier {
     await _write((prefs) => prefs.setDouble(widthKey, width));
   }
 
+  Future<void> setOutlinePanelCollapsed(bool collapsed) async {
+    if (_outlinePanelCollapsed == collapsed) return;
+    _outlinePanelCollapsed = collapsed;
+    notifyListeners();
+    await _write((prefs) => prefs.setBool(outlineCollapsedKey, collapsed));
+  }
+
+  Future<void> toggleOutlinePanelCollapsed() =>
+      setOutlinePanelCollapsed(!_outlinePanelCollapsed);
+
+  void dragOutlinePanelWidth(double width) {
+    if (_outlinePanelWidth == width) return;
+    _outlinePanelWidth = width;
+    notifyListeners();
+  }
+
+  Future<void> saveOutlinePanelWidth() async {
+    final width = _outlinePanelWidth;
+    if (width == null) return;
+    await _write((prefs) => prefs.setDouble(outlineWidthKey, width));
+  }
+
   Future<void> setBoardSize(BoardSize size) async {
     if (_boardSize == size) return;
     _boardSize = size;
@@ -98,6 +131,15 @@ class RepertoireLayoutPrefs extends ChangeNotifier with SafeChangeNotifier {
   double resolveLinesPanelWidth(double availableWidth) {
     final defaultWidth = (availableWidth * 0.24).clamp(260.0, 400.0);
     return (_linesPanelWidth ?? defaultWidth)
+        .clamp(minPanelWidth, maxLinesPanelWidth(availableWidth))
+        .toDouble();
+  }
+
+  /// The outline column's width: dragged width if set, else a proportional
+  /// default, inside [minPanelWidth]..[maxLinesPanelWidth].
+  double resolveOutlinePanelWidth(double availableWidth) {
+    final defaultWidth = (availableWidth * 0.20).clamp(240.0, 340.0);
+    return (_outlinePanelWidth ?? defaultWidth)
         .clamp(minPanelWidth, maxLinesPanelWidth(availableWidth))
         .toDouble();
   }
