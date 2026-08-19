@@ -125,10 +125,10 @@ void main() {
       expect(c.step!.preselected, containsAll(['c4', 'Bf4']));
       expect(c.step!.preselected, isNot(contains('Nf3')));
 
-      await c.acceptCoverage(c.step!.preselected);
-      // Nf3 (5%) is at the floor → an "other replies" build point at
-      // 1.d4 d5, inside the root chapter; the London (15%, another family)
-      // became its own chapter.
+      await c.acceptCoverage(c.step!.preselected, coverRest: true);
+      // With "everything else" ticked, Nf3 (5%) becomes an "other replies"
+      // build point at 1.d4 d5 inside the root chapter; the London (15%,
+      // another family) became its own chapter.
       final root = c.chapters.first;
       expect(root.points.where((pt) => pt.isSidelines), hasLength(1));
       expect(root.points.single.excludeReplies, containsAll(['c4', 'Bf4']));
@@ -163,7 +163,7 @@ void main() {
         await c.start(['d4', 'd5', 'c4', 'e6']);
         expect(c.step!.kind, PlanStepKind.theirMove);
         expect(c.step!.preselected, {'Nc3', 'Nf3', 'g3'});
-        await c.acceptCoverage(['Nc3', 'Nf3', 'g3']);
+        await c.acceptCoverage(['Nc3', 'Nf3', 'g3'], coverRest: true);
         // cxd5 at 5% keeps an "other replies" build point at the tabiya.
         final plan = await c.finish();
         final families = plan.chapters.map((ch) => ch.family).toList();

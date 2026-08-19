@@ -113,8 +113,9 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
   final Set<String> _selected = {};
 
   /// Their-move steps: also build everything else played here (one line
-  /// rooted at the position that excludes the ticked replies).
-  bool _coverRest = true;
+  /// rooted at the position that excludes the ticked replies). Off by
+  /// default — a repertoire is what you ticked.
+  bool _coverRest = false;
   List<String>? _previewMoves;
 
   // Review-phase state.
@@ -147,7 +148,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
         _selected
           ..clear()
           ..addAll(step.preselected);
-        _coverRest = true;
+        _coverRest = false;
         _previewMoves = null;
       }
     });
@@ -996,7 +997,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
         if (!ours && !step.loading)
           CheckboxListTile(
             value: _coverRest,
-            onChanged: (v) => setState(() => _coverRest = v ?? true),
+            onChanged: (v) => setState(() => _coverRest = v ?? false),
             dense: true,
             controlAffinity: ListTileControlAffinity.leading,
             contentPadding: const EdgeInsets.symmetric(horizontal: 8),
@@ -1008,7 +1009,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
               style: const TextStyle(fontSize: 12.5),
             ),
             subtitle: const Text(
-              'Untick to set up only the ticked replies and nothing more.',
+              'Off: only the ticked replies go in the repertoire.',
               style: TextStyle(fontSize: 11),
             ),
           ),

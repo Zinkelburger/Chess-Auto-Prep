@@ -209,11 +209,11 @@ class PlanController extends ChangeNotifier {
   /// Their-move tabiya: [split] get their own chapters; the rest stay with a
   /// sidelines chapter here (if they carry enough games).
   /// [coverRest] — whether everything the opponent plays here *besides* the
-  /// ticked replies should still be built (as one line rooted here that
-  /// excludes them). Off means: only the ticked replies, nothing else.
+  /// ticked replies should also be built (as one line rooted here that
+  /// excludes them). Off by default: a repertoire is what was ticked.
   Future<void> acceptCoverage(
     Iterable<String> split, {
-    bool coverRest = true,
+    bool coverRest = false,
   }) async {
     final step = _step;
     if (step == null || step.kind != PlanStepKind.theirMove) return;
