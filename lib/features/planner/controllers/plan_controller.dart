@@ -208,13 +208,9 @@ class PlanController extends ChangeNotifier {
 
   /// Their-move tabiya: [split] get their own chapters; the rest stay with a
   /// sidelines chapter here (if they carry enough games).
-  /// [coverRest] — whether everything the opponent plays here *besides* the
-  /// ticked replies should also be built (as one line rooted here that
-  /// excludes them). Off by default: a repertoire is what was ticked.
-  Future<void> acceptCoverage(
-    Iterable<String> split, {
-    bool coverRest = false,
-  }) async {
+  /// Their-move step: the ticked replies are set up, and only they. A
+  /// repertoire is what you chose; nothing is added for what you did not.
+  Future<void> acceptCoverage(Iterable<String> split) async {
     final step = _step;
     if (step == null || step.kind != PlanStepKind.theirMove) return;
     _pushHistory();
@@ -226,37 +222,15 @@ class PlanController extends ChangeNotifier {
       await _assignChapter(child, parent: step.moves, ourChoice: false);
       _frontier.insert(0, child);
     }
-    final rest = step.candidates.where((c) => !splitSans.contains(c.san));
-    final restMass = rest.fold<double>(0, (s, c) => s + (c.share ?? 0));
-    var restCovered = false;
     if (splitSans.isEmpty) {
-      await _cutChapter(step.moves, reason: 'all replies covered here');
-      restCovered = true;
-    } else if (coverRest && restMass >= minShare) {
-      await _cutChapter(
-        step.moves,
-        excludeReplies: splitSans,
-        reason: 'everything else played here',
-      );
-      restCovered = true;
+      // Nothing ticked: this line ends here and the engine takes it.
+      await _cutChapter(step.moves, reason: 'generate from here');
     }
     decisions.add(
-      '${_ref(step.moves.length)}: set up ${splitSans.join(', ')}'
-      '${restCovered && splitSans.isNotEmpty ? ' + everything else' : ''}'
-      '${!coverRest && splitSans.isNotEmpty ? ' only' : ''}',
+      '${_ref(step.moves.length)}: set up ${splitSans.isEmpty ? 'nothing more — generate from here' : splitSans.join(', ')}',
     );
     _step = null;
     await _advance();
-  }
-
-  /// Share of games at the current their-move step not covered by [split].
-  double restMassFor(Iterable<String> split) {
-    final step = _step;
-    if (step == null) return 0;
-    final chosen = split.toSet();
-    return step.candidates
-        .where((c) => !chosen.contains(c.san))
-        .fold<double>(0, (s, c) => s + (c.share ?? 0));
   }
 
   /// Cut a chapter at the current position and move on.

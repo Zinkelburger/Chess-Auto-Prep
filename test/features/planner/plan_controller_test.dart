@@ -125,13 +125,11 @@ void main() {
       expect(c.step!.preselected, containsAll(['c4', 'Bf4']));
       expect(c.step!.preselected, isNot(contains('Nf3')));
 
-      await c.acceptCoverage(c.step!.preselected, coverRest: true);
-      // With "everything else" ticked, Nf3 (5%) becomes an "other replies"
-      // build point at 1.d4 d5 inside the root chapter; the London (15%,
-      // another family) became its own chapter.
+      await c.acceptCoverage(c.step!.preselected);
+      // Only the ticked replies exist: nothing is built for 2.Nf3, and the
+      // London (another family) became its own chapter.
       final root = c.chapters.first;
-      expect(root.points.where((pt) => pt.isSidelines), hasLength(1));
-      expect(root.points.single.excludeReplies, containsAll(['c4', 'Bf4']));
+      expect(root.points, isEmpty);
       expect(c.chapters.map((ch) => ch.family), contains('London System'));
 
       // Next: 1.d4 d5 2.c4, Black to move, a fork → our-move question.
@@ -163,20 +161,19 @@ void main() {
         await c.start(['d4', 'd5', 'c4', 'e6']);
         expect(c.step!.kind, PlanStepKind.theirMove);
         expect(c.step!.preselected, {'Nc3', 'Nf3', 'g3'});
-        await c.acceptCoverage(['Nc3', 'Nf3', 'g3'], coverRest: true);
-        // cxd5 at 5% keeps an "other replies" build point at the tabiya.
+        await c.acceptCoverage(['Nc3', 'Nf3', 'g3']);
         final plan = await c.finish();
         final families = plan.chapters.map((ch) => ch.family).toList();
         // The QGD root chapter, plus the Catalan (10% ≥ chapterMass and
         // another family). 3.Nc3 and 3.Nf3 stay QGD → no chapters of their
-        // own.
+        // own; cxd5 was not ticked, so nothing is built for it.
         expect(families, ["Queen's Gambit Declined", 'Catalan']);
-        final root = plan.chapters.firstWhere(
-          (ch) => ch.family == "Queen's Gambit Declined",
-        );
-        final side = root.points.firstWhere((pt) => pt.isSidelines);
-        expect(side.moves, ['d4', 'd5', 'c4', 'e6']);
-        expect(side.excludeReplies, ['Nc3', 'Nf3', 'g3']);
+        final builds = plan.chapters
+            .expand((ch) => ch.buildPaths)
+            .map((p) => p.join(' '))
+            .toSet();
+        expect(builds, isNot(contains('d4 d5 c4 e6 cxd5')));
+        expect(builds, isNot(contains('d4 d5 c4 e6')));
       },
     );
 
@@ -378,19 +375,4 @@ void main() {
       expect(plan.chapters.first.points.single.moves, ['d4', 'd5', 'c4']);
     },
   );
-
-  test('unticking "everything else" builds only the chosen replies', () async {
-    final c = PlanController(
-      source: _FakeSource(trie, shares),
-      isWhite: false,
-      tabiyaThreshold: 6,
-    )..engineFillLimit = 0;
-    await c.start(['d4', 'd5']);
-    expect(c.step!.kind, PlanStepKind.theirMove);
-    // Only 2.c4 — no "everything else" line at 1.d4 d5.
-    await c.acceptCoverage(['c4'], coverRest: false);
-    final root = c.chapters.first;
-    expect(root.points.where((pt) => pt.isSidelines), isEmpty);
-    expect(c.decisions.last, contains('only'));
-  });
 }
