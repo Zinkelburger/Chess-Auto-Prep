@@ -843,8 +843,13 @@ class GenerationSessionController extends ChangeNotifier
 
     final database = buildService.lastGameDatabase;
     if (database == null || database.games.isEmpty) {
-      lastModelGameNote =
-          ' No model games: this build had no game database to draw them from.';
+      // Only worth saying when a database was part of the build; an engine
+      // build never has one, and "no game database" would just be noise.
+      if (config.buildMode == BuildMode.dbExplorer) {
+        lastModelGameNote =
+            ' No model games: this build had no game database to draw them '
+            'from.';
+      }
       return const [];
     }
 

@@ -642,20 +642,28 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
     final fen = pos.fen;
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: AspectRatio(
-            aspectRatio: 1,
-            child: ChessBoardWidget(
-              position: pos,
-              flipped: !widget.isWhite,
-              // Start: the board sets the root. Walk: a move played at the
-              // question position becomes a candidate and is selected —
-              // Maia's list is a suggestion, not a fence.
-              enableUserMoves: interactive || _boardAcceptsMoves,
-              onMove: interactive
-                  ? _onStartBoardMove
-                  : (_boardAcceptsMoves ? _onWalkBoardMove : null),
+        // The largest square that fits the column's width *and* its share of
+        // the height — a narrow or short window (split screen) must never
+        // push the moves and engine off the bottom.
+        Expanded(
+          flex: 3,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: 1,
+                child: ChessBoardWidget(
+                  position: pos,
+                  flipped: !widget.isWhite,
+                  // Start: the board sets the root. Walk: a move played at
+                  // the question position becomes a candidate and is
+                  // selected — Maia's list is a suggestion, not a fence.
+                  enableUserMoves: interactive || _boardAcceptsMoves,
+                  onMove: interactive
+                      ? _onStartBoardMove
+                      : (_boardAcceptsMoves ? _onWalkBoardMove : null),
+                ),
+              ),
             ),
           ),
         ),
@@ -700,6 +708,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
         ),
         const Divider(height: 1),
         Expanded(
+          flex: 2,
           child: DefaultTabController(
             length: 2,
             child: Column(
@@ -968,24 +977,27 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
           )
         else
           // About ten rows tall; the rest scrolls. The buttons sit right
-          // under the table, not at the bottom of the screen.
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 10 * 30.0 + 28),
-            child: SingleChildScrollView(
-              child: PlanCandidateTable(
-                candidates: step.candidates,
-                selected: _selected,
-                isWhiteToMove: whiteToMove,
-                reachProb: step.reachProb,
-                singleSelect: ours,
-                ownLabel: ours ? 'You' : 'Vs you',
-                onSelect: (san) => _selectRow(step, san),
-                evaluating: _plan.evaluating,
-                onEvaluate: (san) => unawaited(_plan.evaluateCandidate(san)),
-                evalSourceLabel: switch (_source) {
-                  final DefaultPlanDataSource d => d.evalSourceLabel,
-                  _ => 'Eval',
-                },
+          // under the table, not at the bottom of the screen. Flexible so a
+          // short window shrinks the table instead of overflowing.
+          Flexible(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 10 * 30.0 + 28),
+              child: SingleChildScrollView(
+                child: PlanCandidateTable(
+                  candidates: step.candidates,
+                  selected: _selected,
+                  isWhiteToMove: whiteToMove,
+                  reachProb: step.reachProb,
+                  singleSelect: ours,
+                  ownLabel: ours ? 'You' : 'Vs you',
+                  onSelect: (san) => _selectRow(step, san),
+                  evaluating: _plan.evaluating,
+                  onEvaluate: (san) => unawaited(_plan.evaluateCandidate(san)),
+                  evalSourceLabel: switch (_source) {
+                    final DefaultPlanDataSource d => d.evalSourceLabel,
+                    _ => 'Eval',
+                  },
+                ),
               ),
             ),
           ),
@@ -1030,7 +1042,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
 
   /// Same position, different move order: reuse or set up separately.
   Widget _buildTranspositionCard(PlanStep step) {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1081,7 +1093,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
     final ours = step.fen.split(' ')[1] != 'b'
         ? widget.isWhite
         : !widget.isWhite;
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

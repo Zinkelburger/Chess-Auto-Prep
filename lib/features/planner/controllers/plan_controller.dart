@@ -108,7 +108,13 @@ class PlanController extends ChangeNotifier {
   /// Positions still to be walked, for the "N open" counter.
   int get openBranches => _frontier.length + (_step == null ? 0 : 1);
   int get answered => _history.length;
-  List<PlanChapter> get chapters => List.unmodifiable(_chapters);
+
+  /// Chapters that have something to build. Chapters are opened eagerly as
+  /// the walk crosses into a new opening family, but one that never received
+  /// a build point (the family changed again before any line ended there) is
+  /// bookkeeping, not a chapter — it is never shown and never created.
+  List<PlanChapter> get chapters =>
+      List.unmodifiable(_chapters.where((c) => c.points.isNotEmpty));
   bool get canGoBack => _history.isNotEmpty;
 
   /// Log of what was decided, in order, for the "Plan so far" tree.

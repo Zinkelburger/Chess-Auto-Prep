@@ -221,4 +221,30 @@ void main() {
     );
     expect(back.onPressed, isNull);
   });
+
+  testWidgets('a short, narrow window does not overflow', (tester) async {
+    tester.view.physicalSize = const Size(960, 500);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlanBuildScreen(
+          isWhite: false,
+          repertoireName: 'French',
+          outline: null,
+          initialMoves: const ['d4', 'd5', 'c4'],
+          baseConfig: const TreeBuildConfig(
+            startFen: kStandardStartFen,
+            playAsWhite: false,
+          ),
+          dataSource: _FakeSource(EcoTrie.build([_tsv])),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
 }

@@ -126,11 +126,9 @@ void main() {
       expect(c.step!.preselected, isNot(contains('Nf3')));
 
       await c.acceptCoverage(c.step!.preselected);
-      // Only the ticked replies exist: nothing is built for 2.Nf3, and the
-      // London (another family) became its own chapter.
-      final root = c.chapters.first;
-      expect(root.points, isEmpty);
-      expect(c.chapters.map((ch) => ch.family), contains('London System'));
+      // Only the ticked replies exist; nothing has been built yet, so no
+      // chapter shows (they appear as lines get their generate points).
+      expect(c.chapters, isEmpty);
 
       // Next: 1.d4 d5 2.c4, Black to move, a fork → our-move question.
       expect(c.step!.moves, ['d4', 'd5', 'c4']);
@@ -375,4 +373,21 @@ void main() {
       expect(plan.chapters.first.points.single.moves, ['d4', 'd5', 'c4']);
     },
   );
+
+  test('chapters opened for families passed through are not shown', () async {
+    // Every our-move fork with a family change opens a chapter eagerly, but
+    // only chapters that received a build point are chapters.
+    final c = PlanController(
+      source: _FakeSource(trie, shares),
+      isWhite: false,
+      tabiyaThreshold: 6,
+    )..engineFillLimit = 0;
+    await c.start(['d4', 'd5', 'c4']);
+    await c.choose(['e6']); // Queen's Gambit → Queen's Gambit Declined
+    expect(c.chapters, isEmpty); // nothing built yet — nothing to show
+    await c.acceptCoverage(['Nc3']);
+    await c.confirmLeaf();
+    final plan = await c.finish();
+    expect(plan.chapters.map((ch) => ch.family), ["Queen's Gambit Declined"]);
+  });
 }
