@@ -111,6 +111,10 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
 
   // Walk-phase state.
   final Set<String> _selected = {};
+
+  /// Their-move steps: also build everything else played here (one line
+  /// rooted at the position that excludes the ticked replies).
+  bool _coverRest = true;
   List<String>? _previewMoves;
 
   // Review-phase state.
@@ -143,6 +147,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
         _selected
           ..clear()
           ..addAll(step.preselected);
+        _coverRest = true;
         _previewMoves = null;
       }
     });
@@ -391,7 +396,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
     unawaited(
       ours
           ? _plan.choose(_selected.toList())
-          : _plan.acceptCoverage(_selected.toList()),
+          : _plan.acceptCoverage(_selected.toList(), coverRest: _coverRest),
     );
   }
 
@@ -988,6 +993,25 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
               ),
             ),
           ),
+        if (!ours && !step.loading)
+          CheckboxListTile(
+            value: _coverRest,
+            onChanged: (v) => setState(() => _coverRest = v ?? true),
+            dense: true,
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+            title: Text(
+              'Also build everything else played here'
+              '${_selected.isEmpty ? '' : ' (not ${_selected.join(', ')})'}'
+              ' — ${(_plan.restMassFor(_selected) * 100).toStringAsFixed(0)}% '
+              'of games',
+              style: const TextStyle(fontSize: 12.5),
+            ),
+            subtitle: const Text(
+              'Untick to set up only the ticked replies and nothing more.',
+              style: TextStyle(fontSize: 11),
+            ),
+          ),
         const Divider(height: 1),
         Padding(
           padding: const EdgeInsets.all(10),
@@ -1395,7 +1419,7 @@ class _ChapterEditRow extends StatelessWidget {
                 for (final pt in chapter.points)
                   Text(
                     '⚙ ${pt.moves.isEmpty ? 'start position' : pt.moves.join(' ')}'
-                    '${pt.excludeReplies.isEmpty ? '' : ' · except ${pt.excludeReplies.join(', ')}'}',
+                    '${pt.excludeReplies.isEmpty ? '' : ' · everything played here except ${pt.excludeReplies.join(', ')} (those have their own lines)'}',
                     style: const TextStyle(
                       fontSize: 10.5,
                       color: AppColors.onSurfaceDim,

@@ -378,4 +378,19 @@ void main() {
       expect(plan.chapters.first.points.single.moves, ['d4', 'd5', 'c4']);
     },
   );
+
+  test('unticking "everything else" builds only the chosen replies', () async {
+    final c = PlanController(
+      source: _FakeSource(trie, shares),
+      isWhite: false,
+      tabiyaThreshold: 6,
+    )..engineFillLimit = 0;
+    await c.start(['d4', 'd5']);
+    expect(c.step!.kind, PlanStepKind.theirMove);
+    // Only 2.c4 — no "everything else" line at 1.d4 d5.
+    await c.acceptCoverage(['c4'], coverRest: false);
+    final root = c.chapters.first;
+    expect(root.points.where((pt) => pt.isSidelines), isEmpty);
+    expect(c.decisions.last, contains('only'));
+  });
 }
