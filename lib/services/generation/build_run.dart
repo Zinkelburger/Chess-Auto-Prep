@@ -9,6 +9,8 @@
 /// service) fail loudly at the entry point instead of corrupting state.
 library;
 
+import 'dart:math' as math;
+
 import '../../models/build_tree_node.dart';
 import '../master_games/master_games_db.dart' show BookLookup, BookMove;
 import '../../utils/fen_utils.dart';
@@ -109,7 +111,13 @@ class BuildRun {
     final lookup = masterBook;
     if (lookup == null) return const [];
     try {
-      return lookup(fen);
+      final moves = lookup(fen);
+      // Counted here because this is the single funnel every book read goes
+      // through — reply candidates, our-move injection and the depth cap
+      // all land on it.
+      stats.masterBookQueries++;
+      if (moves.isNotEmpty) stats.masterBookHits++;
+      return moves;
     } catch (e) {
       log('Master book lookup failed @ $fen: $e');
       return const [];
@@ -127,8 +135,26 @@ class BuildRun {
 
   /// True when [fen] is master practice: a book is in use and the position
   /// has at least [TreeBuildConfig.masterMinGames] games.
-  bool isMasterPractice(String fen) =>
-      masterBook != null && masterGamesAt(fen) >= config.masterMinGames;
+  bool isMasterPractice(String fen) {
+    if (masterBook == null) return false;
+    final games = masterGamesAt(fen);
+    if (games < config.masterMinGames) return false;
+    stats.masterPracticeHits++;
+    stats.masterGamesAtHits += games;
+    return true;
+  }
+
+  /// Search-order multiplier for [fen]: `1 + weight * ln(1 + games)` over the
+  /// master games there, 1.0 off-book or with the weight at 0.  Kept on the
+  /// edge (see [BuildTreeNode.searchPriorityDiscount]) so a priority rebuild
+  /// re-derives it instead of dropping back to raw reach probability.
+  double masterPriorityFactor(String fen) {
+    final weight = config.masterPriorityWeight;
+    if (weight <= 0 || masterBook == null) return 1.0;
+    final games = masterGamesAt(fen);
+    if (games <= 0) return 1.0;
+    return 1.0 + weight * math.log(1 + games);
+  }
 
   /// Where the build stops for a node in [fen] at [ply]: [TreeBuildConfig.
   /// maxPly], extended by [TreeBuildConfig.masterDepthBonusPlies] while the
@@ -139,7 +165,9 @@ class BuildRun {
     final base = config.maxPly;
     final bonus = config.masterDepthBonusPlies;
     if (bonus <= 0 || ply < base || masterBook == null) return base;
-    return isMasterPractice(fen) ? base + bonus : base;
+    if (!isMasterPractice(fen)) return base;
+    stats.masterDepthBonusGrants++;
+    return base + bonus;
   }
 
   /// True once [TreeBuildConfig.timeBudgetMinutes] of active build time has

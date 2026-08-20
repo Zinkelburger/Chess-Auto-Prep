@@ -408,7 +408,10 @@ class AnalysisGamesService {
   Future<String?> loadAnalysisGames(String platform, String username) async {
     try {
       final file = File(await analysisPgnPath(platform, username));
-      return await file.exists() ? readTextFile(file) : null;
+      if (!await file.exists()) return null;
+      // Awaited inside the try on purpose: returning the future unawaited
+      // would let a read failure escape the catch below unlogged.
+      return await readTextFile(file);
     } catch (e) {
       // A missing file already returned null above, so reaching here means a
       // real read failure (permissions, corrupt path). Callers cannot tell the

@@ -1054,7 +1054,7 @@ class GenerationSessionController extends ChangeNotifier
       repertoireName: p.basenameWithoutExtension(request.repertoireFilePath),
     ).compose(
       lines: extracted.lines,
-      modelGames: _selectModelGames(tree, config),
+      modelGames: _selectModelGames(tree, config, improvements),
       refutations: refutations,
       alternatives: alternatives,
       engineTails: tails,
@@ -1120,7 +1120,11 @@ class GenerationSessionController extends ChangeNotifier
   /// empty trailing section is otherwise indistinguishable from the feature
   /// being off, and "nothing in your database follows this repertoire" is
   /// something the user can act on.
-  List<ModelGame> _selectModelGames(BuildTree tree, TreeBuildConfig config) {
+  List<ModelGame> _selectModelGames(
+    BuildTree tree,
+    TreeBuildConfig config,
+    ImprovementMap improvements,
+  ) {
     lastModelGameNote = '';
     if (config.modelGameCount <= 0) return const [];
 
@@ -1158,6 +1162,7 @@ class GenerationSessionController extends ChangeNotifier
       tree,
       limit: config.modelGameCount,
       fenMap: _current?.fenMap,
+      improvedFens: improvements.keys.toSet(),
     );
     if (games.isEmpty) {
       lastModelGameNote =

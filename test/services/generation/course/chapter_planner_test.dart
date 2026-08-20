@@ -68,11 +68,10 @@ void main() {
       ]);
 
       expect(groups, hasLength(2));
-      expect(
-        groups.map((g) => g.prefixSan[1]).toSet(),
-        {'e5', 'c5'},
-        reason: 'chapters divide at the opponent move that splits the mass',
-      );
+      expect(groups.map((g) => g.prefixSan[1]).toSet(), {
+        'e5',
+        'c5',
+      }, reason: 'chapters divide at the opponent move that splits the mass');
     });
 
     test('orders chapters by how often they are reached', () {

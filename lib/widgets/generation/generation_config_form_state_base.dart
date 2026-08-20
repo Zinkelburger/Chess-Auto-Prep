@@ -114,6 +114,9 @@ abstract class _GenerationConfigFormStateBase
   final TextEditingController _masterDepthBonusCtrl = TextEditingController(
     text: '10',
   );
+  final TextEditingController _masterPriorityWeightCtrl = TextEditingController(
+    text: '0.35',
+  );
   final TextEditingController _offBookOppMaxChildrenCtrl =
       TextEditingController(text: '2');
 

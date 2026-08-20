@@ -529,11 +529,10 @@ void main() {
       expect(controller.phase, TrainingPhase.replaying);
       expect(controller.waitingForUser, isTrue);
       expect(controller.feedback, contains('Replay'));
-      expect(
-        controller.session.moveHistory,
-        ['e4', 'e5'],
-        reason: 'replay rewinds the board to just before the missed move',
-      );
+      expect(controller.session.moveHistory, [
+        'e4',
+        'e5',
+      ], reason: 'replay rewinds the board to just before the missed move');
 
       // Wrong replay attempt: stays in replay with a retry prompt.
       await controller.handleUserMove(_move(uci: 'g1h3', san: 'Nh3'));

@@ -742,6 +742,24 @@ mixin _GenerationConfigAdvanced
         runSpacing: 8,
         children: [
           _numField(
+            _masterPriorityWeightCtrl,
+            'Master search-order weight',
+            defaultText: '0.35',
+            onEdited: refresh,
+            enabled: _useMasterGames,
+            disabledReason: 'Master games are off',
+            tooltip:
+                'How much a position masters have played jumps the search '
+                'queue. The frontier is otherwise ordered on how likely a '
+                'line is, which spends the budget on what is probable '
+                'rather than on what is known — so under a time limit the '
+                'book changed which moves were considered but not which '
+                'ones got looked at first. Applied as 1 + weight x ln(1 + '
+                'games): two master games already earn a nudge, a 400-game '
+                'main line earns roughly triple, and off-book positions are '
+                'untouched. 0: pure reach probability, as before.',
+          ),
+          _numField(
             _masterDepthBonusCtrl,
             'Extra depth in master lines (plies)',
             defaultText: '10',

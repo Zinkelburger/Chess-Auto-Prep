@@ -170,7 +170,12 @@ void addOpponentChildren({
 
     child.moveProbability = prob;
     child.cumulativeProbability = newCumul;
-    child.searchPriority = basePri * prob;
+    // Master practice earns search order, not just candidacy: a reply
+    // masters have actually played is expanded before an equally likely one
+    // nobody has. Stored on the edge so a priority rebuild keeps it.
+    final masterFactor = run.masterPriorityFactor(childFen);
+    child.searchPriority = basePri * prob * masterFactor;
+    child.searchPriorityDiscount = masterFactor;
     if (attachStats && move.games > 0) {
       child.setLichessStats(move.whiteWins, move.blackWins, move.draws);
     }
@@ -305,6 +310,7 @@ abstract class NodeExpander {
     }
 
     node.setLichessStats(whiteWins, blackWins, draws);
+    run.stats.masterOppExpansions++;
     final observed = [
       for (final m in book)
         ObservedMove(
@@ -450,7 +456,9 @@ abstract class NodeExpander {
 
     child.moveProbability = prob;
     child.cumulativeProbability = node.cumulativeProbability * prob;
-    child.searchPriority = effectiveSearchPriority(node) * prob;
+    final masterFactor = run.masterPriorityFactor(child.fen);
+    child.searchPriority = effectiveSearchPriority(node) * prob * masterFactor;
+    child.searchPriorityDiscount = masterFactor;
     child.engineInjected = true;
 
     run.emitNodeProgress(child);
@@ -509,6 +517,7 @@ abstract class NodeExpander {
       if (m.games < config.masterMinGames) break; // sorted by games desc
       await _injectCandidateUci(node, m.uci, bestCpWhite: bestCpWhite);
       injected++;
+      run.stats.masterCandidatesInjected++;
     }
     final yearByUci = {for (final m in book) m.uci: m.lastYear};
     for (final child in node.children) {
@@ -633,10 +642,10 @@ abstract class NodeExpander {
     incumbent ??= node.children.first;
     for (final child in node.children) {
       final isIncumbent = identical(child, incumbent);
-      child.searchPriority = isIncumbent
-          ? basePri
-          : basePri * config.ourAltDiscount;
-      child.searchPriorityDiscount = isIncumbent ? 1.0 : config.ourAltDiscount;
+      final discount = isIncumbent ? 1.0 : config.ourAltDiscount;
+      final masterFactor = run.masterPriorityFactor(child.fen);
+      child.searchPriority = basePri * discount * masterFactor;
+      child.searchPriorityDiscount = discount * masterFactor;
     }
     return incumbent;
   }

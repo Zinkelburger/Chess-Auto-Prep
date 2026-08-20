@@ -133,4 +133,5 @@ tools/experiments/fast_vs_pure/results/*/pid
 
 # benko_master harness: keep the scripts, not the runs (trees, engine copies, pids)
 tools/experiments/benko_master/run_*/
+tools/experiments/benko_master/ab_*/
 tools/experiments/benko_master/LATEST*

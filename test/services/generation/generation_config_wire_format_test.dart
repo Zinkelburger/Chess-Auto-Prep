@@ -61,6 +61,7 @@ const expectedKeys = <String>{
   'maia_prior_games',
   'master_depth_bonus_plies',
   'master_min_games',
+  'master_priority_weight',
   'max_depth',
   'max_eval_cp',
   'max_eval_loss_cp',

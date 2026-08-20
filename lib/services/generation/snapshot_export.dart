@@ -132,13 +132,16 @@ SnapshotExportResult runSnapshotExport(SnapshotExportRequest request) {
 /// [engineTails] is keyed by leaf FEN; a line whose leaf is present gets the
 /// continuation hung off its final move. Computed by the caller because it
 /// needs the engine and this function is isolate-pure.
-List<String> extractSnapshotLines({
+/// The lines a snapshot exports: extracted, trap-filtered, coverage-pruned
+/// and ranked — everything [extractSnapshotLines] does except turning them
+/// into PGN text.  Split out so a caller that needs the lines themselves
+/// (the master-improvement prober wants `ExtractedLine`, not movetext) gets
+/// exactly the set that will be written, instead of re-deriving the policy
+/// and drifting from it.
+List<ExtractedLine> snapshotLines({
   required BuildTree tree,
   required TreeBuildConfig config,
   required FenMap fenMap,
-  required List<String> prefix,
-  required String repertoireStartFen,
-  Map<String, EngineTail> engineTails = const {},
 }) {
   tree.sortAllChildren();
   tree.computeMetadata();
@@ -163,6 +166,22 @@ List<String> extractSnapshotLines({
   if (config.rankLinesByImportance) {
     extractedLines.sort((a, b) => b.probability.compareTo(a.probability));
   }
+  return extractedLines;
+}
+
+List<String> extractSnapshotLines({
+  required BuildTree tree,
+  required TreeBuildConfig config,
+  required FenMap fenMap,
+  required List<String> prefix,
+  required String repertoireStartFen,
+  Map<String, EngineTail> engineTails = const {},
+}) {
+  final extractedLines = snapshotLines(
+    tree: tree,
+    config: config,
+    fenMap: fenMap,
+  );
 
   final rootFen = prefix.isEmpty ? tree.root.fen : repertoireStartFen;
   return [

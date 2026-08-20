@@ -17,22 +17,20 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   group('Tactics — End-to-End', () {
-    testWidgets(
-      'import, start, show solution, play moves, complete tactic',
-      (tester) async {
-        await pumpApp(tester);
+    testWidgets('import, start, show solution, play moves, complete tactic', (
+      tester,
+    ) async {
+      await pumpApp(tester);
 
-        await importAndWaitForPositions(tester);
-        await tapStartSession(tester);
-        expectTacticLoaded();
+      await importAndWaitForPositions(tester);
+      await tapStartSession(tester);
+      expectTacticLoaded();
 
-        final allMoves = await showSolutionAndParseMoves(tester);
-        print('Solution moves: $allMoves');
+      final allMoves = await showSolutionAndParseMoves(tester);
+      print('Solution moves: $allMoves');
 
-        await playTacticMoves(tester, allMoves);
-        await expectTacticCompleted(tester);
-      },
-      timeout: const Timeout(Duration(minutes: 3)),
-    );
+      await playTacticMoves(tester, allMoves);
+      await expectTacticCompleted(tester);
+    }, timeout: const Timeout(Duration(minutes: 3)));
   });
 }

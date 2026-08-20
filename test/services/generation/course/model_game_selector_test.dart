@@ -107,6 +107,58 @@ void main() {
       expect(picked.map((g) => g.record.white), ['Won', 'Drew', 'Lost']);
     });
 
+    test('holds a share of the slots for games we improve on', () {
+      // A realistic improvement site: the game follows the repertoire to
+      // 1.e4 e5 and then plays 2.d4 where we play 2.Nf3 — an our-side
+      // departure, which is precisely what _byInstructiveness ranks last
+      // (it leaves earliest) and what the course cites as "improves on".
+      const shallow = ModelGameSelector(playAsWhite: true, minFollowedPlies: 2);
+      final database = _database([
+        _game(moves: ['e4', 'e5', 'Nf3'], white: 'Deep one', elo: 2800),
+        _game(moves: ['e4', 'c5', 'Nf3'], white: 'Deep two', elo: 2790),
+        _game(moves: ['e4', 'e5', 'd4'], white: 'Improved on', elo: 2300),
+      ]);
+      final tree = _repertoire();
+      final departureFen = tree.root.children
+          .firstWhere((c) => c.moveSan == 'e4')
+          .children
+          .firstWhere((c) => c.moveSan == 'e5')
+          .fen;
+
+      // Without the reservation the departing game loses every slot.
+      expect(
+        shallow.select(database, tree, limit: 2).map((g) => g.record.white),
+        isNot(contains('Improved on')),
+      );
+
+      // With it, the game we beat is shown to the reader.
+      final picked = shallow.select(
+        database,
+        tree,
+        limit: 2,
+        improvedFens: {departureFen},
+      );
+      expect(picked.map((g) => g.record.white), contains('Improved on'));
+      expect(picked, hasLength(2), reason: 'the other slot still gets filled');
+    });
+
+    test(
+      'an improvement at a position no game departs from changes nothing',
+      () {
+        final database = _database([
+          _game(moves: ['e4', 'e5', 'Nf3'], white: 'Deep one', elo: 2800),
+          _game(moves: ['e4', 'c5', 'Nf3'], white: 'Deep two', elo: 2790),
+        ]);
+        final tree = _repertoire();
+        expect(
+          selector
+              .select(database, tree, limit: 2, improvedFens: {'nonsense fen'})
+              .map((g) => g.record.white),
+          selector.select(database, tree, limit: 2).map((g) => g.record.white),
+        );
+      },
+    );
+
     test('breaks remaining ties by player strength', () {
       final database = _database([
         _game(moves: ['e4', 'e5', 'Nf3'], white: 'Weak', elo: 2200),

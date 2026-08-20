@@ -66,8 +66,11 @@ class BuildTreeNode implements MoveTreeNodeView {
   double searchPriority = -1.0;
 
   /// This edge's *local* discount applied to [searchPriority] beyond
-  /// [moveProbability] — 1.0 everywhere except our-move alternatives, which
-  /// carry `ourAltDiscount` (or a DB frequency share).  Lets a zero→positive
+  /// [moveProbability] — 1.0 unless the edge carries a search-order modifier:
+  /// our-move alternatives carry `ourAltDiscount` (or a DB frequency share),
+  /// and any move into master practice carries the master boost
+  /// (`BuildRun.masterPriorityFactor`); an our-move alternative into a book
+  /// position carries both, multiplied.  Lets a zero→positive
   /// transposition rebuild ([propagateHigherCumP]) re-derive discounted
   /// priorities instead of collapsing them to the raw cumulative probability.
   /// A transient search signal, not serialized: after a resume it defaults to
@@ -408,6 +411,31 @@ class BuildStats {
   int chessDbApiShallow = 0;
   int chessDbApiQuotaBlocked = 0;
 
+  // ── Master games (TWIC) ──
+  /// Book lookups made, and how many found the position at all.
+  int masterBookQueries = 0;
+  int masterBookHits = 0;
+
+  /// Hits that cleared [TreeBuildConfig.masterMinGames] — the bar the
+  /// depth bonus and our-move injection actually use.  The gap between this
+  /// and [masterBookHits] is how much of the book is too thin to act on.
+  int masterPracticeHits = 0;
+
+  /// Games summed over [masterPracticeHits] positions, so a run can report
+  /// the average sample its master decisions rested on rather than just how
+  /// often something was found.
+  int masterGamesAtHits = 0;
+
+  /// Opponent fan-outs whose replies came from the book (blended with Maia)
+  /// rather than from Maia alone.
+  int masterOppExpansions = 0;
+
+  /// Our-move candidates injected because masters played them.
+  int masterCandidatesInjected = 0;
+
+  /// Nodes allowed past [TreeBuildConfig.maxPly] by the master depth bonus.
+  int masterDepthBonusGrants = 0;
+
   int transpositionEvalHits = 0;
   int extEvalSubtreeSkips = 0;
 
@@ -439,6 +467,16 @@ class BuildStats {
     'chessdb_api_misses': chessDbApiMisses,
     'chessdb_api_shallow': chessDbApiShallow,
     'chessdb_api_quota_blocked': chessDbApiQuotaBlocked,
+    'master_book_queries': masterBookQueries,
+    'master_book_hits': masterBookHits,
+    'master_practice_hits': masterPracticeHits,
+    'master_games_at_hits': masterGamesAtHits,
+    'master_avg_games_at_practice': masterPracticeHits == 0
+        ? 0
+        : (masterGamesAtHits / masterPracticeHits).round(),
+    'master_opp_expansions': masterOppExpansions,
+    'master_candidates_injected': masterCandidatesInjected,
+    'master_depth_bonus_grants': masterDepthBonusGrants,
     'transposition_eval_hits': transpositionEvalHits,
     'ext_eval_subtree_skips': extEvalSubtreeSkips,
   };

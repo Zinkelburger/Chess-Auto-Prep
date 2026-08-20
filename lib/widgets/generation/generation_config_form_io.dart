@@ -59,6 +59,7 @@ mixin _GenerationConfigIo
     _useMasterGames = config.useMasterGames;
     _downloadMasterGamesIfMissing = config.downloadMasterGamesIfMissing;
     _masterDepthBonusCtrl.text = config.masterDepthBonusPlies.toString();
+    _masterPriorityWeightCtrl.text = config.masterPriorityWeight.toString();
     _offBookOppMaxChildrenCtrl.text = config.offBookOppMaxChildren.toString();
     _pgnFilePaths
       ..clear()
@@ -249,6 +250,9 @@ mixin _GenerationConfigIo
       downloadMasterGamesIfMissing: _downloadMasterGamesIfMissing,
       masterDepthBonusPlies:
           (int.tryParse(_masterDepthBonusCtrl.text.trim()) ?? 10).clamp(0, 40),
+      masterPriorityWeight:
+          (double.tryParse(_masterPriorityWeightCtrl.text.trim()) ?? 0.35)
+              .clamp(0.0, 3.0),
       offBookOppMaxChildren:
           (int.tryParse(_offBookOppMaxChildrenCtrl.text.trim()) ?? 2).clamp(
             0,

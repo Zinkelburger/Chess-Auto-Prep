@@ -85,107 +85,103 @@ class _RealPaths extends PathProviderPlatform with MockPlatformInterfaceMixin {
 }
 
 void main() {
-  test(
-    'extract lines from a built tree',
-    () async {
-      TestWidgetsFlutterBinding.ensureInitialized();
-      SharedPreferences.setMockInitialValues({});
-      PathProviderPlatform.instance = _RealPaths(
-        p.join(
-          Platform.environment['HOME']!,
-          '.local',
-          'share',
-          'com.example.chess_auto_prep',
-        ),
+  test('extract lines from a built tree', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    SharedPreferences.setMockInitialValues({});
+    PathProviderPlatform.instance = _RealPaths(
+      p.join(
+        Platform.environment['HOME']!,
+        '.local',
+        'share',
+        'com.example.chess_auto_prep',
+      ),
+    );
+
+    expect(_treePath, isNotEmpty, reason: 'pass --dart-define=TREE=…');
+    expect(_outPath, isNotEmpty, reason: 'pass --dart-define=OUT=…');
+
+    final treeFile = File(_treePath);
+    expect(
+      treeFile.existsSync(),
+      isTrue,
+      reason: 'no tree at $_treePath — run a build first',
+    );
+
+    final treeJson = await treeFile.readAsString();
+    final data = jsonDecode(treeJson) as Map<String, dynamic>;
+    final config = Map<String, dynamic>.from(
+      data['config'] as Map<String, dynamic>? ?? const {},
+    );
+    // The build's own prefix: the moves played before the tree's root, which
+    // every extracted line has to be written back on top of.
+    final prefix = (data['start_moves'] as String? ?? '')
+        .split(RegExp(r'\s+'))
+        .where((s) => s.isNotEmpty)
+        .toList();
+
+    // Mirror the app's legacy migration before injecting anything: a tree
+    // predating the coverage target carries the old default line cap, and
+    // adding the coverage key here would make it look current and let that
+    // stale cap silently override whatever coverage is asked for.
+    if (!config.containsKey('line_coverage_target')) {
+      config.remove('target_line_count');
+    }
+    if (_lineTarget >= 0) config['target_line_count'] = _lineTarget;
+    if (_coverage > 0) config['line_coverage_target'] = _coverage / 100.0;
+    final playAsWhite = config['play_as_white'] as bool? ?? true;
+
+    stdout.writeln(
+      '[extract] ${data['total_nodes']} nodes, max depth '
+      '${data['max_depth']}, prefix ${prefix.join(' ')}',
+    );
+
+    // Engine continuations for the lines that stopped at the ply cap.
+    // Needs Stockfish, so it happens here rather than inside the pure
+    // export; the export takes the finished map.
+    final tails = await _engineTails(treeJson, config, prefix);
+
+    final sw = Stopwatch()..start();
+    final result = runSnapshotExport(
+      SnapshotExportRequest(
+        treeJson: treeJson,
+        configJson: config,
+        prefix: prefix,
+        repertoireStartFen: kStandardStartFen,
+        engineTails: tails,
+      ),
+    );
+    stdout.writeln(
+      '[extract] selected ${result.selectedCount} nodes → '
+      '${result.pgnEntries.length} lines in ${sw.elapsedMilliseconds}ms',
+    );
+
+    expect(
+      result.pgnEntries,
+      isNotEmpty,
+      reason:
+          'selection kept nothing — the tree is too shallow, or the config\'s '
+          'eval window rejects every continuation',
+    );
+
+    final out = File(_outPath);
+    final header = await _headerFor(out, playAsWhite: playAsWhite);
+
+    final buffer = StringBuffer(header)
+      ..writeln(
+        '// Re-extracted from ${p.basename(_treePath)} '
+        '(${data['total_nodes']} nodes) on '
+        '${DateTime.now().toString().split('.')[0]} — no rebuild.',
       );
-
-      expect(_treePath, isNotEmpty, reason: 'pass --dart-define=TREE=…');
-      expect(_outPath, isNotEmpty, reason: 'pass --dart-define=OUT=…');
-
-      final treeFile = File(_treePath);
-      expect(
-        treeFile.existsSync(),
-        isTrue,
-        reason: 'no tree at $_treePath — run a build first',
-      );
-
-      final treeJson = await treeFile.readAsString();
-      final data = jsonDecode(treeJson) as Map<String, dynamic>;
-      final config = Map<String, dynamic>.from(
-        data['config'] as Map<String, dynamic>? ?? const {},
-      );
-      // The build's own prefix: the moves played before the tree's root, which
-      // every extracted line has to be written back on top of.
-      final prefix = (data['start_moves'] as String? ?? '')
-          .split(RegExp(r'\s+'))
-          .where((s) => s.isNotEmpty)
-          .toList();
-
-      // Mirror the app's legacy migration before injecting anything: a tree
-      // predating the coverage target carries the old default line cap, and
-      // adding the coverage key here would make it look current and let that
-      // stale cap silently override whatever coverage is asked for.
-      if (!config.containsKey('line_coverage_target')) {
-        config.remove('target_line_count');
-      }
-      if (_lineTarget >= 0) config['target_line_count'] = _lineTarget;
-      if (_coverage > 0) config['line_coverage_target'] = _coverage / 100.0;
-      final playAsWhite = config['play_as_white'] as bool? ?? true;
-
-      stdout.writeln(
-        '[extract] ${data['total_nodes']} nodes, max depth '
-        '${data['max_depth']}, prefix ${prefix.join(' ')}',
-      );
-
-      // Engine continuations for the lines that stopped at the ply cap.
-      // Needs Stockfish, so it happens here rather than inside the pure
-      // export; the export takes the finished map.
-      final tails = await _engineTails(treeJson, config, prefix);
-
-      final sw = Stopwatch()..start();
-      final result = runSnapshotExport(
-        SnapshotExportRequest(
-          treeJson: treeJson,
-          configJson: config,
-          prefix: prefix,
-          repertoireStartFen: kStandardStartFen,
-          engineTails: tails,
-        ),
-      );
-      stdout.writeln(
-        '[extract] selected ${result.selectedCount} nodes → '
-        '${result.pgnEntries.length} lines in ${sw.elapsedMilliseconds}ms',
-      );
-
-      expect(
-        result.pgnEntries,
-        isNotEmpty,
-        reason:
-            'selection kept nothing — the tree is too shallow, or the config\'s '
-            'eval window rejects every continuation',
-      );
-
-      final out = File(_outPath);
-      final header = await _headerFor(out, playAsWhite: playAsWhite);
-
-      final buffer = StringBuffer(header)
-        ..writeln(
-          '// Re-extracted from ${p.basename(_treePath)} '
-          '(${data['total_nodes']} nodes) on '
-          '${DateTime.now().toString().split('.')[0]} — no rebuild.',
-        );
-      for (final pgn in result.pgnEntries) {
-        buffer
-          ..writeln()
-          ..writeln(pgn);
-      }
-      await out.writeAsString(buffer.toString());
-      stdout.writeln(
-        '[extract] wrote ${result.pgnEntries.length} lines to $_outPath',
-      );
-    },
-    timeout: const Timeout(Duration(minutes: 10)),
-  );
+    for (final pgn in result.pgnEntries) {
+      buffer
+        ..writeln()
+        ..writeln(pgn);
+    }
+    await out.writeAsString(buffer.toString());
+    stdout.writeln(
+      '[extract] wrote ${result.pgnEntries.length} lines to $_outPath',
+    );
+  }, timeout: const Timeout(Duration(minutes: 10)));
 }
 
 /// The `// ` comment block to put at the top of the chapter.

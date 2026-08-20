@@ -106,6 +106,7 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
     _modelGameCountCtrl.dispose();
     _modelGameMinEloCtrl.dispose();
     _masterDepthBonusCtrl.dispose();
+    _masterPriorityWeightCtrl.dispose();
     _offBookOppMaxChildrenCtrl.dispose();
     _dbMinGamesCtrl.dispose();
     _dbMinProbCtrl.dispose();

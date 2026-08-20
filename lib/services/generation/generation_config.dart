@@ -367,6 +367,19 @@ class TreeBuildConfig {
   /// injection ignores it.
   final int masterMinGames;
 
+  /// Search-order weight for master practice: a position masters have played
+  /// is expanded before an equally-likely position none has.  The frontier is
+  /// otherwise ordered on reach probability alone, which spends the node
+  /// budget on whatever is *likely* rather than on what is *known* — under a
+  /// time budget that is what decides which lines exist at all.
+  ///
+  /// Applied as `1 + weight * ln(1 + games)`, so the curve is generous at the
+  /// bottom (2 games already earns a boost, which is the point — a line two
+  /// masters chose is worth evaluating) and flattens at the top instead of
+  /// letting a 400-game main line crowd out everything else.  0 disables it
+  /// and restores pure reach-probability ordering.
+  final double masterPriorityWeight;
+
   /// How many plies past [maxPly] a line may run while each position along
   /// it is still master practice.  Book lines are the lines worth knowing
   /// deeper; a Maia-only sideline stops at [maxPly] as before.  The book is
@@ -455,6 +468,7 @@ class TreeBuildConfig {
     this.downloadMasterGamesIfMissing = true,
     this.masterMinGames = 3,
     this.masterDepthBonusPlies = 10,
+    this.masterPriorityWeight = 0.35,
     this.offBookOppMaxChildren = 2,
     this.improvementMinGainCp = 40,
     this.dbMinProb = 0.05,
@@ -552,6 +566,8 @@ class TreeBuildConfig {
       downloadMasterGamesIfMissing:
           json['download_master_games_if_missing'] as bool? ?? true,
       masterMinGames: (json['master_min_games'] as num?)?.toInt() ?? 3,
+      masterPriorityWeight:
+          (json['master_priority_weight'] as num?)?.toDouble() ?? 0.35,
       masterDepthBonusPlies:
           (json['master_depth_bonus_plies'] as num?)?.toInt() ?? 10,
       offBookOppMaxChildren:
@@ -819,6 +835,7 @@ class TreeBuildConfig {
     'use_master_games': useMasterGames,
     'download_master_games_if_missing': downloadMasterGamesIfMissing,
     'master_min_games': masterMinGames,
+    'master_priority_weight': masterPriorityWeight,
     'master_depth_bonus_plies': masterDepthBonusPlies,
     'off_book_opp_max_children': offBookOppMaxChildren,
     'improvement_min_gain_cp': improvementMinGainCp,
@@ -941,6 +958,7 @@ class TreeBuildConfig {
     bool? useMasterGames,
     bool? downloadMasterGamesIfMissing,
     int? masterMinGames,
+    double? masterPriorityWeight,
     int? masterDepthBonusPlies,
     int? offBookOppMaxChildren,
     int? improvementMinGainCp,
@@ -1016,6 +1034,7 @@ class TreeBuildConfig {
       downloadMasterGamesIfMissing:
           downloadMasterGamesIfMissing ?? this.downloadMasterGamesIfMissing,
       masterMinGames: masterMinGames ?? this.masterMinGames,
+      masterPriorityWeight: masterPriorityWeight ?? this.masterPriorityWeight,
       masterDepthBonusPlies:
           masterDepthBonusPlies ?? this.masterDepthBonusPlies,
       offBookOppMaxChildren:

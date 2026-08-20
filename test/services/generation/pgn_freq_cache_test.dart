@@ -179,11 +179,11 @@ void main() {
       }
       reservoir.finalize();
 
-      expect(
-        reservoir.entries.map((g) => g.averageElo),
-        [2700, 2600, 2500],
-        reason: 'strongest first, capacity respected',
-      );
+      expect(reservoir.entries.map((g) => g.averageElo), [
+        2700,
+        2600,
+        2500,
+      ], reason: 'strongest first, capacity respected');
     });
 
     test('rejects candidates below the admission bar without storing them', () {

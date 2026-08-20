@@ -391,6 +391,134 @@ void main() {
     });
   });
 
+  group('master search-order weight', () {
+    BookMove book(String uci, int games) => BookMove(
+      uci: uci,
+      games: games,
+      whiteWins: games ~/ 3,
+      draws: games ~/ 3,
+      blackWins: games - 2 * (games ~/ 3),
+      averageElo: 2600,
+      maxElo: 2700,
+      lastYear: 2024,
+      topGameId: 1,
+      recentGameId: 2,
+    );
+
+    BuildRun runWithBook(
+      TreeBuildConfig config,
+      BuildTree tree,
+      BookLookup? masterBook,
+    ) {
+      final stats = BuildStats();
+      return BuildRun(
+        config: config,
+        tree: tree,
+        fenMap: FenMap(),
+        pool: FakeStockfishPool(),
+        evalResolver: TreeEvalResolver()..stats = stats,
+        stats: stats,
+        runLog: RunDebugLog(),
+        progress: TreeBuildProgressTracker(),
+        onProgress: (_) {},
+        cancel: BuildCancellation(),
+        finishNow: () => false,
+        waitIfPaused: () async {},
+        nextNodeId: 1000,
+        masterBook: masterBook,
+      );
+    }
+
+    test('a position masters played outranks an equally likely one they did '
+        'not', () async {
+      resetNodeIds();
+      final node = makeNode(
+        fen: kFenAfterE4,
+        san: 'e4',
+        uci: 'e2e4',
+        ply: 1,
+        isWhiteToMove: false,
+      )..searchPriority = 1.0;
+      // Two replies masters have played, equally often at 50/50 — but the
+      // book knows far more about the position after c5 than after e5.
+      MaiaFactory.testOverride = FakeMaiaEvaluator({
+        kFenAfterE4: {'c7c5': 0.5, 'e7e5': 0.5},
+      });
+      final tree = _treeWith(node);
+      final fenAfterC5 = playUciMove(kFenAfterE4, 'c7c5')!;
+      final run = runWithBook(
+        _base.copyWith(
+          coverMinProb: 0.0,
+          maiaPriorGames: 10,
+          masterPriorityWeight: 0.35,
+        ),
+        tree,
+        (fen) => fen == fenAfterC5 ? [book('g1f3', 400)] : const [],
+      );
+      await NodeExpander.forRun(
+        run,
+      ).expandOpponentMove(node, FrontierQueue(bestFirst: true));
+
+      final c5 = _child(node, 'c5');
+      final e5 = _child(node, 'e5');
+      // Same reach probability, so without the weight these would tie.
+      expect(c5.moveProbability, closeTo(e5.moveProbability, 1e-9));
+      expect(c5.searchPriority, greaterThan(e5.searchPriority));
+      // 1 + 0.35 * ln(401) ~= 3.10, and the off-book sibling stays at 1.0.
+      expect(c5.searchPriorityDiscount, closeTo(3.098, 0.01));
+      expect(e5.searchPriorityDiscount, 1.0);
+    });
+
+    test('two master games already earn a boost', () {
+      final tree = _treeWith(
+        makeNode(fen: kFenAfterE4, san: 'e4', ply: 1, isWhiteToMove: false),
+      );
+      final run = runWithBook(
+        _base.copyWith(masterPriorityWeight: 0.35),
+        tree,
+        (_) => [book('g1f3', 2)],
+      );
+      // 1 + 0.35 * ln(3) ~= 1.38 — a nudge, not a takeover.
+      expect(run.masterPriorityFactor(kFenAfterE4), closeTo(1.384, 0.01));
+    });
+
+    test('weight 0 restores pure reach-probability ordering', () {
+      final tree = _treeWith(
+        makeNode(fen: kFenAfterE4, san: 'e4', ply: 1, isWhiteToMove: false),
+      );
+      final run = runWithBook(
+        _base.copyWith(masterPriorityWeight: 0),
+        tree,
+        (_) => [book('g1f3', 400)],
+      );
+      expect(run.masterPriorityFactor(kFenAfterE4), 1.0);
+    });
+
+    test('an off-book position is never boosted', () {
+      final tree = _treeWith(
+        makeNode(fen: kFenAfterE4, san: 'e4', ply: 1, isWhiteToMove: false),
+      );
+      final run = runWithBook(
+        _base.copyWith(masterPriorityWeight: 0.35),
+        tree,
+        (_) => const [],
+      );
+      expect(run.masterPriorityFactor(kFenAfterE4), 1.0);
+    });
+
+    test('no book at all leaves priorities untouched', () {
+      final tree = _treeWith(
+        makeNode(fen: kFenAfterE4, san: 'e4', ply: 1, isWhiteToMove: false),
+      );
+      final run = runWithBook(
+        _base.copyWith(masterPriorityWeight: 0.35),
+        tree,
+        null,
+      );
+      expect(run.masterPriorityFactor(kFenAfterE4), 1.0);
+    });
+  });
+
   group('opponent expansion via the master-games book', () {
     BookMove book(String uci, int games, {int ww = 0, int bw = 0}) => BookMove(
       uci: uci,

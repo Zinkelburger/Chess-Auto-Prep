@@ -24,13 +24,17 @@ import 'package:chess_auto_prep/services/generation/eca_calculator.dart';
 import 'package:chess_auto_prep/services/generation/fen_map.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
 import 'package:chess_auto_prep/services/generation/repertoire_selector.dart';
+import 'package:chess_auto_prep/services/generation/course/master_improvements.dart';
+import 'package:chess_auto_prep/services/generation/course/model_game_selector.dart';
 import 'package:chess_auto_prep/services/generation/snapshot_export.dart';
 import 'package:chess_auto_prep/services/generation/tree_ease.dart';
 import 'package:chess_auto_prep/services/generation/tree_prune.dart';
 import 'package:chess_auto_prep/services/generation/tree_my_ease.dart';
 import 'package:chess_auto_prep/services/generation/tree_serialization.dart';
 import 'package:chess_auto_prep/services/maia/maia_factory.dart';
+import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 import 'package:chess_auto_prep/services/master_games/master_games_db.dart';
+import 'package:chess_auto_prep/services/master_games/master_model_games.dart';
 import 'package:chess_auto_prep/services/tree_build_service.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart' show fenAfterMoves;
 import 'package:flutter/foundation.dart';
@@ -54,6 +58,11 @@ const _multipv = int.fromEnvironment('MULTIPV', defaultValue: 4);
 const _maiaElo = int.fromEnvironment('MAIA_ELO', defaultValue: 2200);
 const _minEvalCp = int.fromEnvironment('MIN_EVAL_CP', defaultValue: -20);
 const _pure = bool.fromEnvironment('PURE', defaultValue: false);
+const _modelGames = int.fromEnvironment('MODEL_GAMES', defaultValue: 6);
+const _masterPriorityWeight = String.fromEnvironment(
+  'MASTER_PRIORITY_WEIGHT',
+  defaultValue: '0.35',
+);
 
 class _SandboxPathProvider extends PathProviderPlatform
     with MockPlatformInterfaceMixin {
@@ -138,7 +147,8 @@ void main() {
       enableChessDbApi: false,
       enableCdbDirect: false,
       enableLocalChessDb: false,
-      modelGameCount: 0,
+      modelGameCount: _modelGames,
+      masterPriorityWeight: double.parse(_masterPriorityWeight),
     );
     _say('root after "${sans.join(' ')}" = $startFen');
     _say('config ${jsonEncode(config.toJson())}');
@@ -219,6 +229,9 @@ void main() {
     // hand the user.  The raw extractor alone wrote every leaf — 602 lines
     // for a tree the app's coverage pruning reduces to 149, three quarters
     // of them siblings differing only in the opponent's last move.
+    // The very lines the PGN is written from, so the improvement prober
+    // judges what the user will actually see rather than every raw leaf.
+    final exported = snapshotLines(tree: tree, config: config, fenMap: fenMap);
     final entries = extractSnapshotLines(
       tree: tree,
       config: config,
@@ -264,6 +277,83 @@ void main() {
           'had no reply, and the position was under coverMinProb',
     );
 
+    // Phase 3.8 before 3.6 on purpose: the improvements decide which games
+    // get the reserved model-game slots.
+    final prober = MasterImprovementProber(
+      config: config,
+      book: book.bookMoves,
+      gameById: book.game,
+    );
+    final sites = prober.sites(exported);
+    _say('improvement sites: ${sites.length}');
+    var improvements = <String, MasterImprovement>{};
+    if (sites.isNotEmpty) {
+      if (StockfishPool.instance.workerCount == 0) {
+        await StockfishPool.instance.prepareForTreeBuild(
+          config.resolvedEngineThreads,
+        );
+      }
+      improvements = Map.of(await prober.probe(exported));
+      _say('improvements found: ${improvements.length}');
+      for (final imp in improvements.values.take(5)) {
+        _say('  ${imp.note} (+${imp.gainCp}cp)');
+      }
+    }
+
+    final modelGames = ModelGameSelector(playAsWhite: config.playAsWhite)
+        .select(
+          masterGameCandidates(
+            book,
+            tree,
+            playAsWhite: config.playAsWhite,
+            minElo: config.modelGameMinElo,
+          ),
+          tree,
+          limit: config.modelGameCount,
+          fenMap: fenMap,
+          improvedFens: improvements.keys.toSet(),
+        );
+    _say(
+      'model games: ${modelGames.length} of ${config.modelGameCount} '
+      'asked for',
+    );
+    for (final g in modelGames.take(6)) {
+      final dep = g.departure;
+      final improved = dep != null && improvements.containsKey(dep.fenBefore);
+      _say(
+        '  ${g.record.white} — ${g.record.black} '
+        '(${g.record.outcome?.name ?? '?'}), '
+        'followed ${g.followedPlies} plies'
+        '${improved ? ' [we improve on it]' : ''}',
+      );
+    }
+
+    File(p.join(outDir.path, 'master_practice.json')).writeAsStringSync(
+      const JsonEncoder.withIndent('  ').convert({
+        'model_games': [
+          for (final g in modelGames)
+            {
+              'white': g.record.white,
+              'black': g.record.black,
+              'result': g.record.outcome?.name,
+              'followed_plies': g.followedPlies,
+            },
+        ],
+        'improvement_sites': sites.length,
+        'improvements': [
+          for (final e in improvements.entries)
+            {
+              'fen': e.key,
+              'note': e.value.note,
+              'gain_cp': e.value.gainCp,
+              'master_san': e.value.masterSan,
+              'master_games': e.value.masterGames,
+              'continuation': e.value.continuation,
+            },
+        ],
+      }),
+    );
+
     final perPly = <int>[];
     void count(BuildTreeNode n) {
       while (perPly.length <= n.ply) {
@@ -299,6 +389,9 @@ void main() {
         'eval_window_anchored': [anchored.minEvalCp, anchored.maxEvalCp],
         'selected': selected,
         'lines': entries.length,
+        'model_games': modelGames.length,
+        'improvement_sites': sites.length,
+        'improvements': improvements.length,
         'pruned_too_low': service.lastPrunedTooLow.length,
         'removed_uncovered': service.lastRemovedUncovered.length,
         'per_ply': perPly,

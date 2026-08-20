@@ -109,11 +109,20 @@ class ModelGameSelector {
   /// Variety comes before rank: one game per distinct variation is taken
   /// before any variation gets a second, so a course covers its chapters
   /// instead of showing six wins in the same line.
+  /// [improvedFens] are the positions where the repertoire was shown to beat
+  /// master practice (`MasterImprovement` keys).  A game we improve on
+  /// departs at exactly that position, and departing early is what
+  /// [_byInstructiveness] ranks *down* — so without a reserved share these
+  /// games lose every slot to games that follow further, and the course
+  /// cites "improves on Kasparov–Karpov" while never showing the reader what
+  /// Kasparov–Karpov actually did.  Half the slots (at least one) are held
+  /// for them when any exist.
   List<ModelGame> select(
     Iterable<PgnGameRecord> games,
     BuildTree tree, {
     required int limit,
     FenMap? fenMap,
+    Set<String> improvedFens = const {},
   }) {
     if (limit <= 0) return const [];
 
@@ -133,6 +142,24 @@ class ModelGameSelector {
 
     candidates.sort(_byInstructiveness);
 
+    // Reserved share first: the best games we demonstrably improve on.
+    final selected = <ModelGame>[];
+    if (improvedFens.isNotEmpty) {
+      final improved = [
+        for (final g in candidates)
+          if (g.departure != null &&
+              g.departure!.kind == DepartureKind.ours &&
+              improvedFens.contains(g.departure!.fenBefore))
+            g,
+      ];
+      final reserve = limit ~/ 2 < 1 ? 1 : limit ~/ 2;
+      for (final g in improved) {
+        if (selected.length >= reserve || selected.length >= limit) break;
+        selected.add(g);
+      }
+      candidates.removeWhere(selected.contains);
+    }
+
     // Round-robin over variations: pass one takes the best game of each,
     // pass two the next best, and so on until the limit is reached.
     final byVariation = <String, List<ModelGame>>{};
@@ -140,7 +167,6 @@ class ModelGameSelector {
       (byVariation[_signature(game)] ??= []).add(game);
     }
 
-    final selected = <ModelGame>[];
     for (var round = 0; selected.length < limit; round++) {
       var added = false;
       for (final games in byVariation.values) {
