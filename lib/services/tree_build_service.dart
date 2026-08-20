@@ -54,6 +54,7 @@ import 'generation/tree_build_progress.dart';
 import 'jobs/generation_phase.dart';
 import 'generation/tree_eval_resolver.dart';
 import 'generation/tree_prune.dart';
+import 'master_games/master_games_db.dart' show BookLookup;
 
 import 'tree_build_types.dart';
 
@@ -83,6 +84,12 @@ class TreeBuildService {
   /// Eval-too-low lines removed by the post-build prune of the most recent
   /// [build] run (they no longer exist in the returned tree).
   List<PrunedLine> lastPrunedTooLow = const [];
+
+  /// Leaves the coverage sweep removed for being under the coverage floor
+  /// with no reply of ours — recorded for the same reason as
+  /// [lastPrunedTooLow]: "was this line ever generated?" is otherwise
+  /// unanswerable, because the sweep deletes silently.
+  List<PrunedLine> lastRemovedUncovered = const [];
 
   /// Human-practice statistics scanned from the user's PGN database by the
   /// most recent DB Explorer run, or null when the last build had no game
@@ -160,6 +167,7 @@ class TreeBuildService {
     required bool Function() finishNow,
     required void Function(BuildProgress) onProgress,
     required int nextNodeId,
+    BookLookup? masterBook,
   }) {
     if (_isBuilding) {
       throw StateError('A tree build is already running');
@@ -171,6 +179,7 @@ class TreeBuildService {
     _evalResolver.stats = _stats;
     runLog.clear();
     lastPrunedTooLow = const [];
+    lastRemovedUncovered = const [];
     lastGameDatabase = null;
 
     final run = BuildRun(
@@ -187,6 +196,7 @@ class TreeBuildService {
       finishNow: finishNow,
       waitIfPaused: waitIfPaused,
       nextNodeId: nextNodeId,
+      masterBook: masterBook,
     );
     run.stopwatch.start();
     run.progress.reset(
@@ -211,6 +221,7 @@ class TreeBuildService {
     required void Function(BuildProgress) onProgress,
     bool Function()? finishNow,
     BuildTree? existingTree,
+    BookLookup? masterBook,
   }) async {
     // Everything up to the try block is synchronous: the re-entrancy guard
     // in _startRun and the run state must be in place before the first
@@ -246,6 +257,7 @@ class TreeBuildService {
       finishNow: finishNow ?? () => false,
       onProgress: onProgress,
       nextNodeId: nextNodeId,
+      masterBook: masterBook,
     );
     _log(
       'Build start: resume=${existingTree != null}, '
@@ -281,13 +293,7 @@ class TreeBuildService {
             '(local ChessDB, cdbdirect, or ChessDB API)',
           );
         }
-        if (tree.root.hasEngineEval) {
-          final rootEvalUs = tree.root.evalForUs(config.playAsWhite);
-          run.config = config.copyWith(
-            minEvalCp: config.minEvalCp + rootEvalUs,
-            maxEvalCp: config.maxEvalCp + rootEvalUs,
-          );
-        }
+        run.config = config.anchoredToRoot(tree.root);
       }
 
       run.progress.reset(
@@ -313,7 +319,11 @@ class TreeBuildService {
       }
 
       final prunedLines = <PrunedLine>[];
-      final pruned = pruneEvalTooLow(tree, removedLines: prunedLines);
+      final pruned = pruneEvalTooLow(
+        tree,
+        playAsWhite: config.playAsWhite,
+        removedLines: prunedLines,
+      );
       lastPrunedTooLow = prunedLines;
       if (pruned > 0) {
         _log(
@@ -494,7 +504,9 @@ class TreeBuildService {
         node.moveProbability >= config.coverMinProb;
     var coverageOnly = false;
 
-    if (node.ply >= config.maxPly) {
+    // Depth cap: maxPly, or further while the position is master practice
+    // (see BuildRun.plyCapAt) — book lines run deeper, Maia-only ones do not.
+    if (node.ply >= run.plyCapAt(node.fen, node.ply)) {
       if (!owesAnswer) {
         if (!node.hasEngineEval && config.usesStockfish) {
           await _evalResolver.ensureEval(
@@ -563,7 +575,22 @@ class TreeBuildService {
 
     // Mark explored only after expansion finishes so pause/cancel mid-call
     // leaves the node resumable (explored=false, possibly partial children).
-    if (!run.isCancelled) {
+    //
+    // An expansion that produced neither a move nor a prune reason did not
+    // actually happen — the usual cause is the engine returning no lines
+    // because the pool was winding down at the end of a budgeted run. Calling
+    // that "explored" freezes the gap permanently: the node is our turn, has
+    // no move, and carries nothing to say why. Leaving it unexplored is both
+    // honest and useful, since [prepareResumeFrontier] collects exactly these
+    // and a resume retries them.
+    //
+    // A genuinely terminal position (mate or stalemate) also lands here and
+    // stays unexplored forever. That is harmless — nothing re-queues it
+    // during a run — and the engine's silence cannot be told apart from an
+    // engine that is not answering, so claiming the node is finished would be
+    // guessing.
+    if (!run.isCancelled &&
+        (node.children.isNotEmpty || node.pruneReason != PruneReason.none)) {
       node.explored = true;
     }
   }
@@ -607,6 +634,7 @@ class TreeBuildService {
 
     int answered = 0;
     int removed = 0;
+    final removedLines = <PrunedLine>[];
     final throwawayQueue = FrontierQueue(bestFirst: false);
 
     for (final group in groups.values) {
@@ -673,11 +701,13 @@ class TreeBuildService {
       // Below the floor, or the expansion produced no answer: remove the
       // whole equivalence group so no line ends on an unanswered move.
       for (final n in group) {
+        removedLines.add(PrunedLine.fromNode(n));
         _removeLeaf(tree, n);
         removed++;
       }
     }
 
+    lastRemovedUncovered = removedLines;
     if (answered > 0 || removed > 0) {
       _log(
         'Coverage sweep: $answered holes answered, '

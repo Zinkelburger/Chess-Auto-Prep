@@ -377,6 +377,14 @@ class Registry:
 
         register_opening_tools(self)
 
+        from .master_games import register_master_games_tools
+
+        register_master_games_tools(self)
+
+        from .app_games import register_app_games_tools
+
+        register_app_games_tools(self)
+
     # ── Handlers ───────────────────────────────────────────────────────────
 
     def _directory_search(self, args: dict) -> dict:

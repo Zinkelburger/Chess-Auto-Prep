@@ -7,6 +7,8 @@ import 'package:flutter/foundation.dart';
 import '../../constants/engine_defaults.dart';
 import '../../models/tactics_position.dart';
 import 'tactics_engine.dart';
+import '../game_store/game_store.dart';
+import '../game_store/game_store_service.dart';
 import '../../models/engine_settings.dart';
 import '../engine/stockfish_pool.dart';
 import '../games_library/game_filter.dart' show dedupKeyForHeaders;
@@ -101,15 +103,17 @@ class TacticsImportService {
     String? chesscomUsername,
     DateTime? since,
   }) async {
-    final content = await StorageFactory.instance.readImportedPgns();
-    if (content == null || content.isEmpty) return (total: 0, pending: 0);
+    final store = await GameStoreService.instance.open();
+    final games = store.summaries(GameCollections.tactics);
+    if (games.isEmpty) return (total: 0, pending: 0);
 
     final hasLichess = lichessUsername != null && lichessUsername.isNotEmpty;
     final hasChessCom = chesscomUsername != null && chesscomUsername.isNotEmpty;
 
-    final games = splitPgnIntoGames(content);
     int pending = 0;
-    for (final game in games) {
+    for (final summary in games) {
+      // Headers only — no movetext parsed to produce two integers.
+      final game = summary.headerBlock;
       final gameId = _extractGameId(game);
       if (gameId.isEmpty || _isGameAnalyzed(gameId)) continue;
       if (since != null && _isGameBefore(game, since)) continue;
@@ -152,32 +156,32 @@ class TacticsImportService {
   /// game and is what prevents re-analysis when an overlapping date range
   /// is fetched again later.
   Future<int> pruneStoredPgns({DateTime? since}) async {
-    final content = await StorageFactory.instance.readImportedPgns();
-    if (content == null || content.isEmpty) return 0;
+    final store = await GameStoreService.instance.open();
+    final games = store.summaries(GameCollections.tactics);
+    if (games.isEmpty) return 0;
 
     final referenced = await _tacticReferencedGameIds();
-    final games = splitPgnIntoGames(content);
-    final kept = <String>[];
-    for (final game in games) {
+    final remove = <String>[];
+    for (final summary in games) {
+      final game = summary.headerBlock;
       final gameId = _extractGameId(game);
-      if (gameId.isNotEmpty && referenced.contains(gameId)) {
-        kept.add(game);
+      if (gameId.isNotEmpty && referenced.contains(gameId)) continue;
+      if (gameId.isNotEmpty && _isGameAnalyzed(gameId)) {
+        remove.add(summary.key);
         continue;
       }
-      if (gameId.isNotEmpty && _isGameAnalyzed(gameId)) continue;
-      if (since != null && _isGameBefore(game, since)) continue;
-      kept.add(game);
+      if (since != null && _isGameBefore(game, since)) remove.add(summary.key);
     }
-    if (kept.length == games.length) return 0;
+    if (remove.isEmpty) return 0;
 
-    await StorageFactory.instance.saveImportedPgns(kept.join('\n\n'));
+    final removed = store.deleteKeys(GameCollections.tactics, remove);
     if (kDebugMode) {
       log.i(
-        'Pruned ${games.length - kept.length} stored PGNs '
-        '(${kept.length} kept)',
+        'Pruned $removed stored PGNs '
+        '(${games.length - removed} kept)',
       );
     }
-    return games.length - kept.length;
+    return removed;
   }
 
   /// Resume analysis of stored PGN games that haven't been analyzed yet.
@@ -199,8 +203,9 @@ class TacticsImportService {
     GameReviewedCallback? onGameReviewed,
   }) async {
     _cancelled = false;
-    final content = await StorageFactory.instance.readImportedPgns();
-    if (content == null || content.isEmpty) {
+    final store = await GameStoreService.instance.open();
+    final stored = store.list(GameCollections.tactics);
+    if (stored.isEmpty) {
       return (
         positions: <TacticsPosition>[],
         gamesAnalyzed: 0,
@@ -208,7 +213,7 @@ class TacticsImportService {
       );
     }
 
-    final games = splitPgnIntoGames(content);
+    final games = [for (final g in stored) g.pgn];
     final lichessGames = <String>[];
     final chessComGames = <String>[];
     int preFilterSkipped = 0;
@@ -511,51 +516,32 @@ class TacticsImportService {
     );
   }
 
-  /// Save raw PGNs to storage with GameId headers injected.
+  /// Save raw PGNs to the games database with GameId headers injected.
   ///
-  /// Appends to existing PGNs, skipping any games whose GameId already
-  /// appears in the stored file.
+  /// Append-only: a game whose GameId is already stored is left as it is
+  /// (it may carry annotations the viewer wrote since).
   Future<void> _savePgns(String pgnContent) async {
     try {
       final games = splitPgnIntoGames(pgnContent);
       final processedGames = games.map(_injectGameIdHeader).toList();
+      final store = await GameStoreService.instance.open();
+      final result = store.importChunks(
+        processedGames,
+        collection: GameCollections.tactics,
+        keepExisting: true,
+      );
 
-      final existing = await StorageFactory.instance.readImportedPgns() ?? '';
-
-      // Collect GameIds already in storage to avoid duplicates
-      final existingIds = <String>{};
-      if (existing.isNotEmpty) {
-        for (final match in RegExp(
-          r'\[GameId "([^"]+)"\]',
-        ).allMatches(existing)) {
-          existingIds.add(match.group(1)!);
-        }
-      }
-
-      // Only append games not already stored
-      final newGames = processedGames.where((game) {
-        final idMatch = RegExp(r'\[GameId "([^"]+)"\]').firstMatch(game);
-        return idMatch == null || !existingIds.contains(idMatch.group(1));
-      }).toList();
-
-      if (newGames.isEmpty) {
-        if (kDebugMode) {
+      if (kDebugMode) {
+        if (result.inserted == 0) {
           log.i(
             'All ${games.length} PGNs already in storage, nothing to append',
           );
+        } else {
+          log.w(
+            'Appended ${result.inserted} new PGNs to storage '
+            '(${result.skipped} duplicates skipped)',
+          );
         }
-        return;
-      }
-
-      final newContent = existing.isEmpty
-          ? newGames.join('\n\n')
-          : '$existing\n\n${newGames.join('\n\n')}';
-      await StorageFactory.instance.saveImportedPgns(newContent);
-
-      if (kDebugMode) {
-        log.w(
-          'Appended ${newGames.length} new PGNs to storage (${games.length - newGames.length} duplicates skipped)',
-        );
       }
     } catch (e) {
       if (kDebugMode) {

@@ -22,6 +22,7 @@ import '../utils/app_shortcuts.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_breadcrumb_trail.dart';
 import '../widgets/app_mode_menu_button.dart';
+import '../widgets/app_overflow_menu.dart';
 import '../widgets/app_settings_button.dart';
 import '../widgets/pgn_viewer_widget.dart';
 import '../widgets/trainer_keyboard_scope.dart';
@@ -338,30 +339,42 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
         ),
       ),
       actions: [
-        if (repertoire != null)
-          IconButton(
-            tooltip: 'Reload',
-            icon: const Icon(Icons.refresh),
-            onPressed: () => _training.loadRepertoire(),
-          ),
-        if (repertoire != null && _training.sourceIsStudy)
-          IconButton(
-            tooltip: 'Edit study',
-            icon: const Icon(Icons.menu_book_outlined),
-            onPressed: _openInStudy,
-          )
-        else if (repertoire != null)
-          IconButton(
-            tooltip: 'Open in Builder',
-            icon: const Icon(Icons.construction),
-            onPressed: _openInBuilder,
-          ),
-        IconButton(
-          tooltip: 'Select repertoire',
-          icon: const Icon(Icons.library_books),
+        // Choosing what to train is the one thing this screen is for, so it
+        // is the only labelled action; reload and the two hand-offs are
+        // occasional and sit in the overflow.
+        TextButton.icon(
+          icon: const Icon(Icons.library_books, size: 18),
+          label: const Text('Select repertoire'),
           onPressed: _selectRepertoire,
         ),
-        const AppSettingsButton(),
+        AppOverflowMenu(
+          entries: [
+            if (repertoire != null)
+              AppMenuEntry(
+                label: 'Reload from disk',
+                icon: Icons.refresh,
+                onRun: () => unawaited(_training.loadRepertoire()),
+              ),
+            if (repertoire != null && _training.sourceIsStudy)
+              AppMenuEntry(
+                label: 'Edit study…',
+                icon: Icons.menu_book_outlined,
+                onRun: _openInStudy,
+              )
+            else if (repertoire != null)
+              AppMenuEntry(
+                label: 'Open in Builder',
+                icon: Icons.construction,
+                onRun: _openInBuilder,
+              ),
+            AppMenuEntry(
+              label: 'App settings…',
+              icon: Icons.settings,
+              dividerAbove: true,
+              onRun: () => openAppSettings(context),
+            ),
+          ],
+        ),
         const AppModeMenuButton(),
         const SizedBox(width: 8),
       ],

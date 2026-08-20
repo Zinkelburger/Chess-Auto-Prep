@@ -63,6 +63,17 @@ isModelGame` reads them back, and the trainer, the deviation walker and
 in a file full of yours — drilling it, or counting it as your book when your
 own games are checked, is wrong in both directions.
 
+A model game is annotated at exactly one move: where it leaves the
+repertoire. `ModelGameSelector` records the departure while it follows the
+game through the tree (`ModelGameDeparture`): if *our* side departed, the
+composer writes `{Our repertoire: 10...Qb6}` on the game's move — `… —
+improves on 10...Nf6 (+0.35)` when the improvement probe backed that exact
+departure — and hangs our mainline off it as a variation; if the opponent
+departed, `{Outside the repertoire — prepared here: …}`. The same movetext is
+emitted a second time as real games (`ComposedCourse.modelGamePgns`) and the
+session controller writes it to `<repertoire>_model_games.pgn` beside the
+course, for the PGN viewer; the in-course chapter stays the study copy.
+
 **Nothing writes prose comments.** A generated comment nobody asked for is
 noise a reader learns to skip, which costs the annotations that do carry
 information (`[%eval]`, `[%maiaProbability]`, …). Where the export used to
@@ -102,12 +113,37 @@ even one.
 
 ## Where human-practice data comes from
 
-Only `BuildMode.dbExplorer`. The Lichess Explorer fetch path is mothballed
-app-wide (`ProbabilityService` returns null unconditionally), so the
-generation pipeline no longer asks for it — `useLichessDb`, `useMasters`,
-`speeds`, `ratingRange`, `minGames` and `maiaOnly` on `TreeBuildConfig` are
-inert and survive only because the audit/holes/tricks features still build
-configs with them. Opponent replies come from Maia everywhere else.
+Two sources. `BuildMode.dbExplorer` scans the user's own PGN files
+(`pgn_freq_map.dart`, below). Every other mode consults the **master-games
+book** (`services/master_games/`, TWIC in SQLite) through `BuildRun.
+masterBook` when the database is downloaded and `useMasterGames` is on, and
+Maia otherwise. The Lichess Explorer fetch path is mothballed app-wide
+(`ProbabilityService` returns null unconditionally) — `useLichessDb`,
+`useMasters`, `speeds`, `ratingRange`, `minGames` and `maiaOnly` on
+`TreeBuildConfig` are inert and survive only because the audit/holes/tricks
+features still build configs with them.
+
+**Master practice as the guide.** With a book in use the build treats a
+position as *master practice* when it has at least `masterMinGames` book
+games (`BuildRun.isMasterPractice`), and:
+
+- opponent replies at book positions are book frequencies Dirichlet-blended
+  with Maia (`opponent_prior.dart`); at off-book positions they are Maia
+  alone, capped at `offBookOppMaxChildren` (`NodeExpander._offBookCap`) so
+  the node budget goes to depth where there is practice rather than breadth
+  where there is none — the coverage floor still bypasses the cap;
+- our-move nodes always get the book's `kMasterCandidateCount` most-played
+  moves as eval-gated candidates (`injectMasterCandidates`), so selection
+  can choose what masters play even when MultiPV omits it — it still
+  decides on eval;
+- the ply cap is `maxPly`, plus `masterDepthBonusPlies` while the position
+  is still master practice (`BuildRun.plyCapAt`, checked per node in
+  `_processBuildNode`) — a book line runs deeper, a Maia-only sideline stops
+  at `maxPly`.
+
+No database, or a position the book has never seen, degrades to exactly the
+Maia-only behaviour. The book is indexed to `kBookMaxPly` (30), which bounds
+the depth bonus on its own.
 
 `pgn_freq_map.dart` is therefore the app's model of human practice: per move,
 counts **plus** win/draw/loss, mean rating, and the last year played, with a

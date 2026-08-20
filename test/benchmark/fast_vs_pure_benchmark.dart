@@ -63,6 +63,12 @@ const _budgetMin = int.fromEnvironment('BUDGET_MIN', defaultValue: 0);
 const _multipv = int.fromEnvironment('MULTIPV', defaultValue: 4);
 const _maiaElo = int.fromEnvironment('MAIA_ELO', defaultValue: 2200);
 
+/// Eval-window floor relative to the root eval.  The app default (0) lets
+/// root-eval noise prune every root child at shallow depths (observed:
+/// root +47, best child +30 → empty tree), which would waste a run; the
+/// experiment widens it symmetrically for both algorithms.
+const _minEvalCp = int.fromEnvironment('MIN_EVAL_CP', defaultValue: -20);
+
 // ── sandbox path provider ────────────────────────────────────────────────
 
 class _SandboxPathProvider extends PathProviderPlatform
@@ -106,6 +112,7 @@ TreeBuildConfig _buildConfig() {
     timeBudgetMinutes: _budgetMin,
     ourMultipv: _multipv,
     maiaElo: _maiaElo,
+    minEvalCp: _minEvalCp,
     verifyFinal: false,
     // Nothing that reaches the network / external eval sources.
     enableChessDbApi: false,
@@ -171,6 +178,14 @@ Future<void> _runBuild() async {
   );
   wall.stop();
   final buildMs = wall.elapsedMilliseconds;
+  File(p.join(outDir.path, 'run.log')).writeAsStringSync(service.runLog.dump());
+  if (tree.totalNodes < 20) {
+    fail(
+      'Degenerate tree (${tree.totalNodes} nodes) — root eval '
+      '${tree.root.engineEvalCp}cp probably pruned every child; '
+      'see ${outDir.path}/run.log',
+    );
+  }
   final searches =
       service.buildStats.sfMultipvCalls + service.buildStats.sfSingleCalls;
   _say(
@@ -181,15 +196,20 @@ Future<void> _runBuild() async {
 
   // Phase 2 exactly as GenerationSessionController._analyzeTreePhase.
   final p2 = Stopwatch()..start();
+  // Against the root-anchored window, as the controller does it. With the
+  // raw window, a root where our side is worse than minEvalCp selects
+  // nothing at all — the Black side of any gambit scores zero moves and the
+  // comparison silently measures empty trees.
+  final anchored = config.anchoredToRoot(tree.root);
   calculateTreeEase(tree);
   final fenMap = FenMap()..populate(tree.root);
-  final eca = ExpectimaxCalculator(config: config, fenMap: fenMap);
+  final eca = ExpectimaxCalculator(config: anchored, fenMap: fenMap);
   eca.calculate(tree);
   eca.computeTrapScores(tree.root);
   eca.calculateCplValues(tree.root);
-  calculateMyEase(tree, playAsWhite: config.playAsWhite);
+  calculateMyEase(tree, playAsWhite: anchored.playAsWhite);
   final selected = RepertoireSelector(
-    config: config,
+    config: anchored,
     ecaCalc: eca,
     fenMap: fenMap,
   ).select(tree);
@@ -213,7 +233,6 @@ Future<void> _runBuild() async {
   count(tree.root);
 
   File(p.join(outDir.path, 'tree.json')).writeAsStringSync(serializeTree(tree));
-  File(p.join(outDir.path, 'run.log')).writeAsStringSync(service.runLog.dump());
   File(p.join(outDir.path, 'stats.json')).writeAsStringSync(
     const JsonEncoder.withIndent('  ').convert({
       'algo': _algo,

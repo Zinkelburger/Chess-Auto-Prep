@@ -11,6 +11,8 @@ import 'pgn_parsing_service.dart';
 import '../utils/atomic_file.dart';
 import '../utils/file_text_reader.dart';
 import 'storage/app_paths.dart';
+import 'game_store/game_store.dart';
+import 'game_store/game_store_service.dart';
 
 /// Service for downloading and managing games for position analysis.
 ///
@@ -303,6 +305,21 @@ class AnalysisGamesService {
     // Invalidate stale cached analysis so it gets rebuilt on next view.
     await clearCachedAnalysis(platform, username);
 
+    // Mirror into the games database (indexed headers + opening positions),
+    // off the UI isolate.  The PGN file stays the working copy the analysis
+    // isolates and the PGN viewer read by path; the database is what lets
+    // "this player's games reaching this position" be an indexed query.
+    // Best-effort: a database hiccup must not fail a download.
+    try {
+      await GameStoreService.instance.importPgnInBackground(
+        collection: GameCollections.analysis(key),
+        pgnText: pgns,
+        replace: true,
+      );
+    } catch (e) {
+      log.w('Games database mirror failed for $key: $e');
+    }
+
     return info;
   }
 
@@ -497,6 +514,12 @@ class AnalysisGamesService {
     for (final suffix in _playerFileSuffixes) {
       final file = File(p.join(directory.path, '$key$suffix'));
       if (await file.exists()) await file.delete();
+    }
+    try {
+      final store = await GameStoreService.instance.open();
+      store.deleteCollection(GameCollections.analysis(key));
+    } catch (e) {
+      log.w('Games database delete failed for $key: $e');
     }
   }
 

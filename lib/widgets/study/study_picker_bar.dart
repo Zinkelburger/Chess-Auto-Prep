@@ -170,7 +170,10 @@ class _StudyPickerBarState extends State<StudyPickerBar> {
               value: 'importUrl',
               child: Text('Import from URL…'),
             ),
-            const PopupMenuItem(value: 'import', child: Text('Import PGN…')),
+            const PopupMenuItem(
+              value: 'import',
+              child: Text('Load from disk…'),
+            ),
             if (current.filePath != null) ...[
               const PopupMenuItem(
                 value: 'export',

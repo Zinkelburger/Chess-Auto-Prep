@@ -42,6 +42,10 @@ mixin _GenerationConfigIo
     _selectionMode = config.selectionMode;
     _relativeEval = config.relativeEval;
     _preferNovelties = config.noveltyWeight > 0;
+    _engineTailCtrl.text = config.engineTailPlies.toString();
+    _lineCoverageCtrl.text = (config.lineCoverageTarget * 100)
+        .round()
+        .toString();
     _targetLinesCtrl.text = config.targetLineCount.toString();
     _rankLinesByImportance = config.rankLinesByImportance;
     _annotationDetail = config.annotationDetail;
@@ -52,6 +56,10 @@ mixin _GenerationConfigIo
     _modelGameMinEloCtrl.text = config.modelGameMinElo.toString();
     _refutationLines = config.refutationLines;
     _alternativeLines = config.alternativeLines;
+    _useMasterGames = config.useMasterGames;
+    _downloadMasterGamesIfMissing = config.downloadMasterGamesIfMissing;
+    _masterDepthBonusCtrl.text = config.masterDepthBonusPlies.toString();
+    _offBookOppMaxChildrenCtrl.text = config.offBookOppMaxChildren.toString();
     _pgnFilePaths
       ..clear()
       ..addAll(config.pgnFilePaths);
@@ -166,8 +174,9 @@ mixin _GenerationConfigIo
 
     final isTrappyMode = _selectionMode == SelectionMode.trappy;
     final userMaxEvalLoss = int.tryParse(_evalGuardCtrl.text.trim()) ?? 30;
-    final userMinEval =
-        int.tryParse(_minEvalCtrl.text.trim()) ?? (playAsWhite ? 0 : -100);
+    // Colour-independent: with relativeEval on (the default) this is an
+    // offset from the root's own eval, and an offset has no colour.
+    final userMinEval = int.tryParse(_minEvalCtrl.text.trim()) ?? -100;
 
     return TreeBuildConfig(
       startFen: startFen,
@@ -196,16 +205,26 @@ mixin _GenerationConfigIo
                 ? (userMinEval > -100 ? -100 : userMinEval)
                 : (userMinEval > -300 ? -300 : userMinEval))
           : userMinEval,
-      maxEvalCp:
-          int.tryParse(_maxEvalCtrl.text.trim()) ?? (playAsWhite ? 200 : 100),
+      maxEvalCp: int.tryParse(_maxEvalCtrl.text.trim()) ?? 200,
       maiaElo: int.tryParse(_maiaEloCtrl.text.trim()) ?? 2200,
       oppPolicyTemperature:
           (double.tryParse(_oppPolicyTempCtrl.text.trim()) ?? 1.0).clamp(
             0.1,
             10.0,
           ),
-      targetLineCount: (int.tryParse(_targetLinesCtrl.text.trim()) ?? 100)
-          .clamp(0, 100000),
+      engineTailPlies: (int.tryParse(_engineTailCtrl.text.trim()) ?? 6).clamp(
+        0,
+        40,
+      ),
+      lineCoverageTarget:
+          ((double.tryParse(_lineCoverageCtrl.text.trim()) ?? 92) / 100).clamp(
+            0.05,
+            1.0,
+          ),
+      targetLineCount: (int.tryParse(_targetLinesCtrl.text.trim()) ?? 0).clamp(
+        0,
+        100000,
+      ),
       trapsOnly: _trapsOnly,
       rankLinesByImportance: _rankLinesByImportance,
       annotationDetail: _annotationDetail,
@@ -226,6 +245,15 @@ mixin _GenerationConfigIo
           .clamp(0, 4000),
       refutationLines: _refutationLines,
       alternativeLines: _alternativeLines,
+      useMasterGames: _useMasterGames,
+      downloadMasterGamesIfMissing: _downloadMasterGamesIfMissing,
+      masterDepthBonusPlies:
+          (int.tryParse(_masterDepthBonusCtrl.text.trim()) ?? 10).clamp(0, 40),
+      offBookOppMaxChildren:
+          (int.tryParse(_offBookOppMaxChildrenCtrl.text.trim()) ?? 2).clamp(
+            0,
+            20,
+          ),
       ourMultipv: int.tryParse(_multipvCtrl.text.trim()) ?? 4,
       oppMaxChildren: int.tryParse(_oppMaxChildrenCtrl.text.trim()) ?? 4,
       oppMassTarget: double.tryParse(_oppMassTargetCtrl.text.trim()) ?? 0.80,

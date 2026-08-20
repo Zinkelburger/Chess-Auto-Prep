@@ -32,10 +32,12 @@ PgnGameRecord _game({
   movesSan: moves,
 );
 
-PgnFreqMap _database(List<PgnGameRecord> games) {
+/// The selector takes any candidate games; a scanned database's reservoir
+/// is one source, so mirror that here.
+Iterable<PgnGameRecord> _database(List<PgnGameRecord> games) {
   final map = PgnFreqMap();
   map.games.addAllUnchecked(games);
-  return map;
+  return map.games.entries;
 }
 
 void main() {
@@ -138,6 +140,83 @@ void main() {
       ]);
 
       expect(selector.select(database, _repertoire(), limit: 3), hasLength(3));
+    });
+
+    group('departure', () {
+      test('our side leaving: the repertoire move and its mainline', () {
+        // After 1.e4 e5 the repertoire plays 2.Nf3; the game played 2.Bc4.
+        final picked = selector.select(
+          _database([
+            _game(moves: ['e4', 'e5', 'Bc4', 'Nf6', 'd3']),
+          ]),
+          _repertoire(),
+          limit: 1,
+        );
+        // minFollowedPlies 3 would drop it, so loosen for this check.
+        expect(picked, isEmpty);
+        const loose = ModelGameSelector(playAsWhite: true, minFollowedPlies: 2);
+        final game = loose
+            .select(
+              _database([
+                _game(moves: ['e4', 'e5', 'Bc4', 'Nf6', 'd3']),
+              ]),
+              _repertoire(),
+              limit: 1,
+            )
+            .single;
+        expect(game.followedPlies, 2);
+        final d = game.departure!;
+        expect(d.kind, DepartureKind.ours);
+        expect(d.index, 2);
+        expect(d.gameSan, 'Bc4');
+        expect(d.repertoireSan, 'Nf3');
+        expect(d.repertoireLine, ['Nf3']); // the tree ends after 2.Nf3
+        expect(d.preparedReplies, isEmpty);
+      });
+
+      test('opponent leaving: the replies we prepare, most likely first', () {
+        const loose = ModelGameSelector(playAsWhite: true, minFollowedPlies: 1);
+        final game = loose
+            .select(
+              _database([
+                _game(moves: ['e4', 'c6', 'd4', 'd5']),
+              ]),
+              _repertoire(),
+              limit: 1,
+            )
+            .single;
+        expect(game.followedPlies, 1);
+        final d = game.departure!;
+        expect(d.kind, DepartureKind.opponent);
+        expect(d.index, 1);
+        expect(d.gameSan, 'c6');
+        expect(d.preparedReplies, ['e5', 'c5']); // 0.55 before 0.35
+        expect(d.repertoireLine, isEmpty);
+      });
+
+      test('a game that stays inside the repertoire has no departure', () {
+        final game = selector
+            .select(
+              _database([
+                _game(moves: ['e4', 'e5', 'Nf3']),
+              ]),
+              _repertoire(),
+              limit: 1,
+            )
+            .single;
+        expect(game.departure, isNull);
+        // Running past the tree is not a departure either.
+        final past = selector
+            .select(
+              _database([
+                _game(moves: ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5']),
+              ]),
+              _repertoire(),
+              limit: 1,
+            )
+            .single;
+        expect(past.departure, isNull);
+      });
     });
 
     test('an empty database and a zero limit both yield nothing', () {

@@ -62,7 +62,59 @@ mixin _GenerationConfigCard
             : 'Replies are predicted by Maia at this rating. For frequencies '
                   'from real games, build from a PGN database instead.',
       ),
+      // Master practice is what turns predicted replies into moves titled
+      // players actually chose, so the offer to fetch it belongs beside the
+      // rating rather than in the Advanced dialog, where nobody found it.
+      ..._masterGamesDownloadRow(),
     ]);
+  }
+
+  /// The one-time "fetch the master games first" offer.  Present only while
+  /// the database is empty and this build is set to use it — once the games
+  /// are there the row is gone for good, and the on/off switch itself stays
+  /// in Advanced where the other master-games knobs live.
+  List<Widget> _masterGamesDownloadRow() {
+    // Nullable watch: forms hosted without the app-level providers (widget
+    // tests, previews) simply show no row.
+    final service = context.watch<MasterGamesService?>();
+    if (service == null || !service.isLoaded) return const [];
+    if (!_useMasterGames || service.hasGames) return const [];
+
+    final years = _masterGamesYears(service);
+    final gb = (years * 0.6).round();
+    return [
+      const SizedBox(height: 10),
+      _labeledCheckbox(
+        'Download master games first (about $gb GB, once)',
+        _downloadMasterGamesIfMissing,
+        (v) => setState(() => _downloadMasterGamesIfMissing = v),
+        tooltip:
+            'The master-games database is empty. Ticked, the build waits '
+            'while the last $years years of The Week in Chess download and '
+            'import, then builds on master practice: opponent replies from '
+            'titled-player games, real model games, and "improves on … in '
+            '<game>" notes. You can start the build without them at any '
+            'point while it downloads. Unticked: build now from Maia and '
+            'the engine alone. Either way the download is also available '
+            'in Settings → Master games, where the number of years lives.',
+      ),
+      _caption(
+        service.isSyncing
+            ? 'A download is already running — the build waits for it '
+                  'to finish.'
+            : 'One download for every future build. Untick to build now '
+                  'without master practice.',
+      ),
+    ];
+  }
+
+  /// Years of TWIC the service is set to fetch, matching the Settings
+  /// stepper, so the size estimate here and there agree.
+  int _masterGamesYears(MasterGamesService service) {
+    final years =
+        ((twicIssueEstimateFor(DateTime.now()) - service.startIssue) / 52)
+            .round();
+    return years < 1 ? 1 : years;
   }
 
   // ── Search ──────────────────────────────────────────────────────────────
@@ -287,13 +339,9 @@ mixin _GenerationConfigCard
   void _resetToDefaults() {
     setState(() {
       _applyInitialConfig(
-        TreeBuildConfig(
+        TreeBuildConfig.formDefaults(
           startFen: '',
           playAsWhite: widget.playAsWhite,
-          minEvalCp: widget.playAsWhite ? 0 : -100,
-          maxEvalCp: widget.playAsWhite ? 200 : 100,
-          // The form's declared default; TreeBuildConfig's own is 50.
-          maxEvalLossCp: 30,
         ),
       );
     });

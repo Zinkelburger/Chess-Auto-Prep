@@ -79,8 +79,17 @@ abstract class _GenerationConfigFormStateBase
   bool _relativeEval = true;
   bool _preferNovelties = false;
 
+  final TextEditingController _engineTailCtrl = TextEditingController(
+    text: '6',
+  );
+
+  /// Coverage target as a percentage, which is how it is shown and typed.
+  /// [TreeBuildConfig.lineCoverageTarget] holds the 0..1 fraction.
+  final TextEditingController _lineCoverageCtrl = TextEditingController(
+    text: '92',
+  );
   final TextEditingController _targetLinesCtrl = TextEditingController(
-    text: '100',
+    text: '0',
   );
   bool _rankLinesByImportance = true;
   MoveAnnotationDetail _annotationDetail = MoveAnnotationDetail.full;
@@ -100,6 +109,13 @@ abstract class _GenerationConfigFormStateBase
   );
   bool _refutationLines = true;
   bool _alternativeLines = true;
+  bool _useMasterGames = true;
+  bool _downloadMasterGamesIfMissing = true;
+  final TextEditingController _masterDepthBonusCtrl = TextEditingController(
+    text: '10',
+  );
+  final TextEditingController _offBookOppMaxChildrenCtrl =
+      TextEditingController(text: '2');
 
   SelectionMode _selectionMode = SelectionMode.expectimax;
   BuildMode _buildMode = BuildMode.stockfishExpectimax;

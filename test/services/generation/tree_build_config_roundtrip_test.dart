@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
 import 'package:chess_auto_prep/services/generation/skeleton_plan.dart';
 
@@ -60,6 +61,35 @@ Object? _mutate(String key, Object? value) {
 }
 
 void main() {
+  group('legacy line-count migration', () {
+    test('a map with no coverage key drops its stale line cap', () {
+      // What every tree built before the coverage target looks like.
+      final legacy = {'target_line_count': 100, 'play_as_white': false};
+      final config = TreeBuildConfig.fromJson(
+        legacy,
+        startFen: kStandardStartFen,
+      );
+
+      expect(config.lineCoverageTarget, 0.92);
+      expect(
+        config.targetLineCount,
+        0,
+        reason: 'the old default would cap re-exports far below 92% coverage',
+      );
+    });
+
+    test('a cap set alongside a coverage target is kept', () {
+      final current = {'line_coverage_target': 0.8, 'target_line_count': 100};
+      final config = TreeBuildConfig.fromJson(
+        current,
+        startFen: kStandardStartFen,
+      );
+
+      expect(config.lineCoverageTarget, 0.8);
+      expect(config.targetLineCount, 100);
+    });
+  });
+
   group('TreeBuildConfig serialization contract', () {
     test('every serialized field survives a toJson → fromJson round-trip', () {
       const original = TreeBuildConfig(startFen: _startFen, playAsWhite: true);

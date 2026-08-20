@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../models/tactics_position.dart';
 import '../../utils/app_messages.dart';
+import '../../utils/log.dart';
 import '../../utils/safe_change_notifier.dart';
 import '../engine/engine_lifecycle.dart';
 import '../games_library/game_review_store.dart';
@@ -203,18 +204,26 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
     if (lichessUsername != null) _lichessUsername = lichessUsername;
     if (chesscomUsername != null) _chesscomUsername = chesscomUsername;
     final service = TacticsImportService(database: database);
-    await service.initialize();
     final since = pendingSinceProvider?.call();
-    if (!isImporting) {
-      await service.pruneStoredPgns(since: since);
+    try {
+      await service.initialize();
+      if (!isImporting) {
+        await service.pruneStoredPgns(since: since);
+      }
+      final counts = await service.countPendingGames(
+        lichessUsername: _lichessUsername,
+        chesscomUsername: _chesscomUsername,
+        since: since,
+      );
+      pendingGameCount = counts.pending;
+      totalStoredGames = counts.total;
+    } catch (e) {
+      // This runs on screen build and after settings changes; the games
+      // database being briefly unreachable must not throw into the widget
+      // tree.  Keep the counts we last showed and let the next refresh fix
+      // them.
+      log.e('Could not refresh the pending-game count: $e');
     }
-    final counts = await service.countPendingGames(
-      lichessUsername: _lichessUsername,
-      chesscomUsername: _chesscomUsername,
-      since: since,
-    );
-    pendingGameCount = counts.pending;
-    totalStoredGames = counts.total;
     notifyListeners();
   }
 

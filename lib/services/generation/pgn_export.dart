@@ -5,6 +5,7 @@
 /// mid-run snapshot export where no opening book is available.
 library;
 
+import 'engine_tail.dart';
 import 'dart:io';
 
 import '../../constants/chess_constants.dart';
@@ -50,6 +51,11 @@ class PgnBatchWriter {
 /// games instead (see `course/course_composer.dart`).  Kept for the snapshot
 /// export, which runs as a pure function over a serialized tree and has no
 /// opening book to name chapters with.
+/// [engineTail] extends a line that stopped at the build's ply cap with a few
+/// plies of raw engine play, appended to the mainline so it is trained along
+/// with everything else. The first appended move carries a note saying where
+/// preparation stopped — the moves are best play rather than vouched-for
+/// theory, and the file should say so even though you drill them.
 String writeRepertoireLine({
   required List<String> movesSan,
   required String title,
@@ -60,8 +66,12 @@ String writeRepertoireLine({
   int annotationOffset = 0,
   int startMoveNumber = 1,
   bool rankByImportance = true,
+  EngineTail? engineTail,
 }) {
   final probability = '${(line.probability * 100).toStringAsFixed(3)}%';
+  final tail = (engineTail == null || engineTail.movesSan.isEmpty)
+      ? null
+      : engineTail;
   return writePgnGame(
     PgnGameSpec(
       headers: {
@@ -72,8 +82,26 @@ String writeRepertoireLine({
         'Annotator': 'Chess Auto Prep',
         if (rankByImportance) 'CumProb': probability,
       },
-      movesSan: movesSan,
-      annotations: line.moveAnnotations,
+      movesSan: [...movesSan, if (tail != null) ...tail.movesSan],
+      annotations: [
+        // Padded to the prepared move count first: a short annotation list
+        // would otherwise slide the tail's note onto an earlier move.
+        ...line.moveAnnotations,
+        for (
+          var i = line.moveAnnotations.length;
+          i < movesSan.length - annotationOffset;
+          i++
+        )
+          MoveAnnotation.none,
+        if (tail != null) ...[
+          MoveAnnotation(
+            note:
+                'Engine continuation from here at depth ${tail.depth} — '
+                'best play, not prepared theory',
+          ),
+          for (var i = 1; i < tail.movesSan.length; i++) MoveAnnotation.none,
+        ],
+      ],
       annotationOffset: annotationOffset,
       startFen: rootFen.isEmpty ? kStandardStartFen : rootFen,
       rootWhiteToMove: isWhiteToMove(rootFen),

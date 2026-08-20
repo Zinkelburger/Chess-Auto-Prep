@@ -27,17 +27,55 @@ String _name(ExtractedLine l) => l.movesSan.single;
 
 void main() {
   group('LinePruner', () {
-    test('targetCount <= 0 disables pruning', () {
+    test('targetCount <= 0 means no cap, not no pruning', () {
+      // The old contract returned the input untouched here, which handed
+      // callers back every exact duplicate. Pruning always runs now; 0 only
+      // says "do not cap the count".
       final lines = [
         _line('a', 0.5, [('e2e4', 1.0)]),
         _line('b', 0.5, [('e2e4', 1.0)]),
       ];
-      expect(LinePruner.prune(lines, targetCount: 0), same(lines));
-      expect(LinePruner.prune(lines, targetCount: -1), same(lines));
+      expect(LinePruner.prune(lines, targetCount: 0).map(_name), ['a']);
+      expect(LinePruner.prune(lines, targetCount: -1).map(_name), ['a']);
     });
 
-    test('lines with identical our-move projections collapse to one', () {
-      // Same keys = we play the same moves; only opponent moves differ.
+    test('coverageTarget stops early once the share is reached', () {
+      // Coverage is measured in reach mass even though the greedy *orders*
+      // picks by unit value: 'likely' is 90% of the games reaching this set,
+      // so it alone satisfies a 90% target.
+      final lines = [
+        _line('likely', 0.9, [('a', 9.0)]),
+        _line('rare', 0.1, [('b', 1.0)]),
+      ];
+      expect(LinePruner.prune(lines, coverageTarget: 0.9).map(_name), [
+        'likely',
+      ]);
+      expect(LinePruner.prune(lines, coverageTarget: 1.0).map(_name), [
+        'likely',
+        'rare',
+      ]);
+    });
+
+    test('a hard cap still wins over an unmet coverage target', () {
+      final lines = [
+        _line('a', 0.5, [('a', 1.0)]),
+        _line('b', 0.5, [('b', 1.0)]),
+        _line('c', 0.5, [('c', 1.0)]),
+      ];
+      final kept = LinePruner.prune(lines, targetCount: 2, coverageTarget: 1.0);
+      expect(kept.length, 2);
+    });
+
+    test('never returns nothing when there is something to teach', () {
+      final lines = [
+        _line('a', 0.5, [('a', 1.0)]),
+        _line('b', 0.5, [('b', 1.0)]),
+      ];
+      expect(LinePruner.prune(lines, coverageTarget: 0.0).length, 1);
+    });
+
+    test('lines teaching identical decisions collapse to one', () {
+      // Same keys = the same positions answered the same way.
       final lines = [
         _line('likely', 0.5, [('e2e4', 1.0), ('e2e4 g1f3', 0.8)]),
         _line('rare', 0.2, [('e2e4', 1.0), ('e2e4 g1f3', 0.3)]),
@@ -99,7 +137,7 @@ void main() {
       expect(kept.map(_name), ['teaches']);
     });
 
-    test('collapses extracted lines that differ only in opponent moves', () {
+    test('keeps both answers when the opponent branches', () {
       final t = StandardTree();
       t.e4.isRepertoireMove = true;
       t.e4e5nf3.isRepertoireMove = true;
@@ -117,11 +155,13 @@ void main() {
       final lines = extractor.extract(t.toTree());
       expect(lines.length, 2);
 
-      // Both lines play e4 then Nf3 — one representative survives, and it
-      // is the more likely branch (1...e5).
-      final kept = LinePruner.prune(lines, targetCount: 10);
-      expect(kept.length, 1);
-      expect(kept.single.movesSan[1], 'e5');
+      // Both lines play e4 then Nf3, so the old projection key called them
+      // duplicates and dropped the 1...c5 one — leaving a repertoire with no
+      // answer to 1...c5 at all. They are two positions and two things to
+      // know, so both survive.
+      final kept = LinePruner.prune(lines);
+      expect(kept.length, 2);
+      expect(kept.map((l) => l.movesSan[1]), ['e5', 'c5']);
     });
 
     test('preserves input order among survivors', () {

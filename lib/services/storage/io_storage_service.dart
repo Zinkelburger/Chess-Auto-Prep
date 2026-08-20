@@ -5,6 +5,8 @@ import '../../utils/file_text_reader.dart';
 import '../../models/repertoire_metadata.dart';
 import '../../models/tactics_set_metadata.dart';
 import '../pgn_parsing_service.dart' as pgn;
+import '../game_store/game_store.dart';
+import '../game_store/game_store_service.dart';
 import 'app_paths.dart';
 import 'storage_service.dart';
 import 'package:chess_auto_prep/utils/log.dart';
@@ -14,7 +16,6 @@ StorageService getStorageService() => IOStorageService();
 class IOStorageService implements StorageService {
   static const String _tacticsCsvFileName = 'tactics_positions.csv';
   static const String _analyzedGamesFileName = 'analyzed_games.txt';
-  static const String _importedGamesFileName = 'imported_games.pgn';
   static const String _repertoireReviewsFileName = 'repertoire_reviews.csv';
   static const String _repertoireReviewHistoryFileName =
       'repertoire_review_history.csv';
@@ -452,24 +453,32 @@ class IOStorageService implements StorageService {
     }
   }
 
+  /// The tactics archive lives in the games database now (collection
+  /// `tactics`); these two keep the whole-archive-as-text contract for the
+  /// callers that still want it.  Hot paths (lookup by GameId, counts,
+  /// pruning, appends) go to [GameStore] directly.
   @override
   Future<String?> readImportedPgns() async {
     try {
-      final file = await _getFile(_importedGamesFileName);
-      if (await file.exists()) {
-        return await readTextFile(file);
-      }
+      final store = await GameStoreService.instance.open();
+      if (store.count(GameCollections.tactics) == 0) return null;
+      return store.exportPgn(GameCollections.tactics);
     } catch (e) {
       log.e('Error reading imported PGNs: $e');
     }
     return null;
   }
 
+  /// Replace the archive with [pgnContent] (empty = clear).
   @override
   Future<void> saveImportedPgns(String pgnContent) async {
     try {
-      final file = await _getFile(_importedGamesFileName);
-      await writeTextFileAtomically(file, pgnContent);
+      final store = await GameStoreService.instance.open();
+      store.importPgn(
+        pgnContent,
+        collection: GameCollections.tactics,
+        replace: true,
+      );
     } catch (e) {
       log.e('Error saving imported PGNs: $e');
     }

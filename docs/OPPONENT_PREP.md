@@ -53,6 +53,14 @@ claude mcp add chess-prep -- python3 /abs/path/to/tools/mcp/chess_prep/__main__.
 | `pgn_walk` | Ply-by-ply: in-book / transposition / novelty, with replies |
 | `pgn_eval` | Stockfish MultiPV at a position, compared to book moves |
 | `pgn_audit` | Flag book moves Stockfish thinks are mistakes |
+| `master_status` | Coverage of the app's local master-games database (TWIC) |
+| `master_book` | What titled players play from a position, with a cited game per move |
+| `master_game` | One master game by id, as PGN |
+| `master_games` | A player's recent master games |
+| `my_games_status` | Collections in the user's own games database (Player Analysis, library, tactics) |
+| `my_games_at` | The user's / an analysed opponent's games reaching a position |
+| `my_games_by_player` | Games in the user's database by player |
+| `my_game` | One of those games, as PGN |
 
 Working files live in `~/.local/share/chess-prep/` (macOS: `~/Library/
 Application Support/chess-prep/`; override with `CHESS_PREP_DATA_DIR`, or the
@@ -84,6 +92,30 @@ pgn_audit    {path, moves: "…", side: "white"}    # book mistakes along a line
 
 `pgn_eval` / `pgn_audit` need a Stockfish binary (`STOCKFISH` or on `PATH`).
 Chessable `Z0` dummy mainlines are promoted the same way as in the app.
+
+### Master games (TWIC)
+
+The app downloads The Week in Chess into `master_games.db` (Settings → Master
+games database). The `master_*` tools read that file directly — no app
+running, no PGN parsing — from the app's support directory
+(`~/.local/share/com.example.chess_auto_prep/`; override with
+`CHESS_PREP_MASTER_DB`). Positions are keyed the same way as the PGN tree
+(4-field FEN), hashed with FNV-1a; `chess_prep.master_games.position_key`
+reproduces the app's key.
+
+```
+master_status
+master_book  {moves: "1. d4 Nf6 2. c4 c5 3. d5 b5"}   # masters' replies + cited games
+master_game  {id: 12345}                               # the cited game's PGN
+master_games {player: "Carlsen"}                       # recent games by a player
+```
+
+The user's own games live next to it in `app_games.db`: everything the app
+downloads or imports (Player Analysis downloads as `analysis:<player>`, the
+home games library as `library:<platform>_<user>`, the tactics archive as
+`tactics`), with an opening position index. `my_games_at {moves: "1. e4 c5",
+collection: "analysis:chesscom_hikaru"}` answers "which of this opponent's
+games reached this position?" without parsing a PGN.
 
 ### Identity resolution
 

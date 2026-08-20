@@ -396,21 +396,38 @@ mixin _GenerationConfigAdvanced
           ),
           _numField(
             _minEvalCtrl,
-            'Min eval for us (cp)',
-            defaultText: widget.playAsWhite ? '0' : '-100',
+            _relativeEval ? 'Floor, vs. start (cp)' : 'Min eval for us (cp)',
+            defaultText: _relativeEval ? '-100' : '0',
             onEdited: refresh,
-            tooltip:
-                'Lines evaluated below this (for us) are abandoned as '
-                'lost causes.',
+            tooltip: _relativeEval
+                ? 'How much worse than the starting position you will still '
+                      'prepare.\nThe floor moves with the root: at a root of '
+                      '0.00 a value of -100 floors\nat -1.00, and at a root of '
+                      '+0.60 the same value floors at -0.40. One\nsetting, '
+                      'whatever position you hand the builder.\n\n'
+                      'This judges positions *you* chose to enter. A position '
+                      'the opponent\nforces on you is never dropped for being '
+                      'bad — you need an answer\nmost precisely when you are '
+                      'worse.\n\n0 means "never accept anything worse than '
+                      'the start", which rules out\nnormal opening play and '
+                      'every gambit.'
+                : 'Lines evaluated below this (for us) are abandoned as '
+                      'lost causes.',
           ),
           _numField(
             _maxEvalCtrl,
-            'Max eval for us (cp)',
-            defaultText: widget.playAsWhite ? '200' : '100',
+            _relativeEval ? 'Ceiling, vs. start (cp)' : 'Max eval for us (cp)',
+            defaultText: _relativeEval
+                ? '200'
+                : (widget.playAsWhite ? '200' : '100'),
             onEdited: refresh,
-            tooltip:
-                'Lines evaluated above this are abandoned as already '
-                'winning — no need to memorize conversions.',
+            tooltip: _relativeEval
+                ? 'How much better than the starting position is far enough. '
+                      'Past this the\nline stops as already winning — no need '
+                      'to memorise conversions. Measured\nfrom the root the '
+                      'same way the floor is.'
+                : 'Lines evaluated above this are abandoned as already '
+                      'winning — no need to memorize conversions.',
           ),
           _numField(
             _leafConfidenceCtrl,
@@ -432,8 +449,11 @@ mixin _GenerationConfigAdvanced
           refresh();
         },
         tooltip:
-            'On: min/max eval are measured relative to the starting '
-            'position\'s eval. Off: absolute centipawn limits.',
+            'On (recommended): the two limits above are offsets from the '
+            'root position\'s\nown eval, so the same numbers mean the same '
+            'thing whatever position you\nbuild from. Off: they are absolute '
+            'centipawn scores, and you have to\nre-pick them per position and '
+            'per colour.',
       ),
     ];
   }
@@ -549,14 +569,47 @@ mixin _GenerationConfigAdvanced
   List<Widget> _exportSection(VoidCallback refresh) {
     return [
       _numField(
-        _targetLinesCtrl,
-        'Max unique lines (0 = keep all)',
-        defaultText: '100',
+        _lineCoverageCtrl,
+        'Coverage target %',
+        defaultText: '92',
         onEdited: refresh,
         tooltip:
-            'Similar lines (same moves by you, different opponent moves) '
-            'collapse to one representative; the survivors teach the most '
-            'new, likely, sharp moves — up to this many.',
+            'How much of what you will actually face the exported lines '
+            'should cover.\nLines are kept in order of how much new ground '
+            'each one breaks — a position\nyou reach and the move you play '
+            'there — and the export stops once this\nshare of the reachable '
+            'probability is covered. Lines that only repeat\ndecisions '
+            'already covered, including ones that transpose in from another\n'
+            'move order, are never kept at any setting.\n\n'
+            '100% keeps everything that teaches anything new. The last few '
+            'percent\ncost the most lines: on a real Benko tree 92% was 300 '
+            'lines and 100%\nwas 530, the extra ones splitting hairs at move '
+            '14.',
+      ),
+      const SizedBox(height: 8),
+      _numField(
+        _engineTailCtrl,
+        'Engine continuation plies (0 = off)',
+        defaultText: '6',
+        onEdited: refresh,
+        tooltip:
+            'A line that stops because the build hit its ply cap ends mid-'
+            'position.\nThis walks the final position with the engine at the '
+            'verification depth\nand appends that many plies of best play to '
+            'the line.\n\nThe appended moves are part of the line and get '
+            'trained with the rest.\nThey are engine best play rather than '
+            'moves selection vouched for, so the\nfirst one carries a note '
+            'in the PGN saying where preparation stopped.',
+      ),
+      const SizedBox(height: 8),
+      _numField(
+        _targetLinesCtrl,
+        'Hard cap on lines (0 = no cap)',
+        defaultText: '0',
+        onEdited: refresh,
+        tooltip:
+            'Stops the export at this many lines even if the coverage target '
+            'is not met.\nLeave at 0 and let coverage decide.',
       ),
       const SizedBox(height: 4),
       _labeledCheckbox(
@@ -648,9 +701,10 @@ mixin _GenerationConfigAdvanced
             defaultText: '6',
             onEdited: refresh,
             tooltip:
-                'Strong games from your PGN database that follow this '
-                'repertoire out of the opening, appended as a final '
-                'chapter. Needs a PGN database as the build source.',
+                'Strong games that follow this repertoire out of the '
+                'opening, appended as a final chapter — from your PGN '
+                'database when that is the build source, else from the '
+                'master games database (Settings) when it is downloaded.',
           ),
           _numField(
             _modelGameMinEloCtrl,
@@ -660,6 +714,61 @@ mixin _GenerationConfigAdvanced
             tooltip:
                 'A game between weaker players is not a model game. Games '
                 'with no rating at all are still eligible.',
+          ),
+        ],
+      ),
+      const SizedBox(height: 12),
+      _labeledCheckbox(
+        'Use the master games database',
+        _useMasterGames,
+        (v) {
+          _useMasterGames = v;
+          refresh();
+        },
+        tooltip:
+            'When the master games database is downloaded (Settings → Master '
+            'games), master practice guides the build: opponent replies come '
+            'from titled-player practice blended with Maia, the moves '
+            'masters play most are always candidates for your side, lines '
+            'that stay in master practice run deeper, model games are real '
+            'master games, and a repertoire move that beats what masters '
+            'played is annotated "improves on … in <game>". Positions no '
+            'master has reached fall back to Maia and the engine. Off: Maia '
+            'and the engine alone.',
+      ),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 16,
+        runSpacing: 8,
+        children: [
+          _numField(
+            _masterDepthBonusCtrl,
+            'Extra depth in master lines (plies)',
+            defaultText: '10',
+            onEdited: refresh,
+            enabled: _useMasterGames,
+            disabledReason: 'Master games are off',
+            tooltip:
+                'A line may run this many plies past the depth limit while '
+                'every position along it is master practice (at least a few '
+                'master games). The book is indexed to move 15, so this '
+                'never goes past there. 0: all lines stop at the depth '
+                'limit.',
+          ),
+          _numField(
+            _offBookOppMaxChildrenCtrl,
+            'Opponent replies off-book',
+            defaultText: '2',
+            onEdited: refresh,
+            enabled: _useMasterGames,
+            disabledReason: 'Master games are off',
+            tooltip:
+                'Fan-out cap for opponent replies at positions no master has '
+                'reached (Maia-only). Narrower here keeps the tree from '
+                'spending its budget on sidelines nobody plays and puts it '
+                'into depth where there is practice. Replies likely enough '
+                'to need an answer are always kept. 0: same cap as in-book '
+                'positions.',
           ),
         ],
       ),

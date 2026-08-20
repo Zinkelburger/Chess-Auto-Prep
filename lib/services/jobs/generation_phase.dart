@@ -6,6 +6,8 @@
 library;
 
 enum GenerationPhase {
+  /// Waiting for the master-games (TWIC) download the build asked for.
+  downloadingMasterGames,
   parsingPgn,
   buildingTree,
   enrichingEvals,

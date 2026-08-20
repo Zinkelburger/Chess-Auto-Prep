@@ -23,10 +23,12 @@ import '../utils/app_messages.dart';
 import '../utils/log.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../widgets/chess_board_widget.dart';
+import '../widgets/master_games_prompt_banner.dart';
 import '../features/coverage/widgets/coverage_calculator_widget.dart';
 import '../widgets/pgn_with_analysis_pane.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/storage/storage_factory.dart';
+import '../widgets/app_settings_button.dart';
 import '../widgets/pgn_import_dialog.dart';
 import '../widgets/repertoire_generation_tab.dart';
 import '../widgets/generation/generation_lock_overlay.dart';
@@ -49,6 +51,7 @@ import '../services/jobs/repertoire_job.dart';
 import '../features/audit/models/audit_finding.dart';
 import '../features/audit/models/ephemeral_finding_preview.dart';
 import '../features/audit/services/audit_board_annotations.dart';
+import '../features/audit/widgets/audit_config_panel.dart';
 import '../features/audit/widgets/audit_findings_panel.dart';
 import '../features/audit/widgets/ephemeral_finding_bar.dart';
 import '../features/traps/widgets/trap_navigation_buttons.dart';
@@ -58,6 +61,7 @@ import '../widgets/engine/floating_board_preview.dart';
 import '../features/repertoire/controllers/repertoire_layout_prefs.dart';
 import '../features/repertoire/services/chapter_store.dart';
 import '../features/repertoire/widgets/add_chapter_dialog.dart';
+import '../features/repertoire/widgets/build_config_screen.dart';
 import '../features/repertoire/widgets/repertoire_lines_side_panel.dart';
 import '../features/repertoire/widgets/repertoire_tree_pane.dart';
 import '../features/repertoire/widgets/repertoire_database_pane.dart';
@@ -78,7 +82,7 @@ import 'repertoire_chapters_screen.dart';
 import 'repertoire_selection_screen.dart';
 import '../features/repertoire/controllers/build_launcher.dart';
 import '../features/repertoire/controllers/generation_notification_router.dart';
-import '../features/repertoire/controllers/inline_config_router.dart';
+import '../features/repertoire/controllers/audit_entry_router.dart';
 import '../features/repertoire/controllers/repertoire_outline_controller.dart';
 import '../features/repertoire/models/repertoire_outline.dart';
 import '../features/repertoire/widgets/repertoire_outline_panel.dart';
@@ -125,9 +129,13 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
       GlobalKey<AuditFindingsPanelState>();
   bool _isCompactLayout = false;
 
-  /// Whether the Jobs tab is showing the inline generation or audit config,
-  /// and which tab each entry point should bring forward.
-  final InlineConfigRouter _inlineConfig = InlineConfigRouter();
+  /// Whether pressing Audit means "configure a run" or "show me what the
+  /// last one found".
+  static const AuditEntryRouter _auditEntry = AuditEntryRouter();
+
+  /// Guards against stacking a second copy of a config route when the same
+  /// entry point is triggered twice (menu, shortcut, jobs panel).
+  bool _configRouteOpen = false;
 
   final JobManager _jobManager = JobManager.instance;
 
@@ -244,45 +252,146 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
 
   void _toggleBottomPane(BottomPaneTab tab) => _bottomPane.toggle(tab);
 
-  void _closeBottomPane() {
-    _bottomPane.close();
-    _clearInlineConfigFlags();
+  void _closeBottomPane() => _bottomPane.close();
+
+  /// Name shown in a config route's app bar — the chapter's own name, which
+  /// is what the breadcrumb title shows too.
+  String get _configRouteTitle => _controller.currentRepertoire?.name ?? '';
+
+  /// Opens the generation config full-screen. The route closes itself once
+  /// the build starts; we then bring the Jobs pane forward so the progress
+  /// it kicked off is the first thing back on screen.
+  Future<void> _openGenerationDialog() async {
+    if (_configRouteOpen) return;
+    _configRouteOpen = true;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => BuildConfigScreen(
+          repertoireName: _configRouteTitle,
+          title: 'Generate from here',
+          icon: Icons.auto_awesome,
+          startSignal: _generationController,
+          hasStarted: () => _generationController.isGenerating,
+          child: RepertoireGenerationTab(
+            key: _generationTabKey,
+            fen: _controller.fen,
+            isWhiteRepertoire: _controller.isRepertoireWhite,
+            currentRepertoire: _controller.currentRepertoire,
+            currentMoveSequence: _controller.currentMoveSequence,
+            repertoireStartFen: _controller.startingFen ?? kStandardStartFen,
+            generationController: _generationController,
+            onLinesSaved: (lines) {
+              _controller.appendNewLines([
+                for (final l in lines)
+                  (moves: l.moves, title: l.title, pgn: l.pgn),
+              ]);
+            },
+          ),
+        ),
+      ),
+    );
+    _configRouteOpen = false;
+    if (!mounted) return;
+    if (_generationController.isGenerating) _openBottomPane(BottomPaneTab.jobs);
+    _reclaimFocus();
   }
 
-  void _clearInlineConfigFlags() {
-    if (_inlineConfig.clear()) setState(() {});
+  /// Opens the audit config full-screen, the same way.
+  Future<void> _openAuditConfigRoute() async {
+    if (_configRouteOpen) return;
+    _configRouteOpen = true;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => BuildConfigScreen(
+          repertoireName: _configRouteTitle,
+          title: 'Audit for gaps',
+          icon: Icons.policy_outlined,
+          startSignal: _auditController,
+          hasStarted: () => _auditController.isAuditing,
+          child: AuditConfigPanel(
+            openingTree: _controller.openingTree,
+            isWhiteRepertoire: _controller.isRepertoireWhite,
+            currentFen: _controller.fen,
+            currentMoveSequence: _controller.currentMoveSequence,
+            repertoireFilePath: _repertoireFilePath,
+            auditService: _auditController.service,
+            onConfigChanged: _auditController.onConfigChanged,
+            onAuditingChanged: _onAuditingChanged,
+            onResultReady: (result) {
+              if (mounted) {
+                _auditController.onResultReady(result, _repertoireFilePath);
+              }
+            },
+            onLiveFinding: (finding) {
+              if (mounted) _auditController.onLiveFinding(finding);
+            },
+            onProgress: (checked, total) {
+              if (mounted) _auditController.onProgress(checked, total);
+            },
+          ),
+        ),
+      ),
+    );
+    _configRouteOpen = false;
+    if (!mounted) return;
+    _reclaimFocus();
   }
 
-  void _openGenerationDialog() {
-    setState(_inlineConfig.openGeneration);
-    _openBottomPane(BottomPaneTab.jobs);
+  void _onAuditingChanged(bool auditing) {
+    if (!mounted) return;
+    _auditController.onAuditingChanged(
+      auditing,
+      _jobManager,
+      _controller.currentRepertoire?.name ?? 'Audit',
+    );
+    if (auditing) _openBottomPane(BottomPaneTab.findings);
   }
-
-  /// Bottom-pane tab for an [InlineConfigTarget].
-  static BottomPaneTab _paneTabFor(InlineConfigTarget target) =>
-      switch (target) {
-        InlineConfigTarget.jobs => BottomPaneTab.jobs,
-        InlineConfigTarget.findings => BottomPaneTab.findings,
-      };
 
   void _discoverTrapsFromRepertoire() {
     final path = _repertoireFilePath;
     if (path == null) return;
-    _openGenerationDialog();
+    unawaited(_openGenerationDialog());
+    _seedGenerationWhenReady(pgnPaths: [path]);
+  }
+
+  /// Seeds the DB-explorer source on the generation form once its route is on
+  /// screen. The form lives in a pushed route now, so its state is not
+  /// reachable in the same frame the push is requested — hence the retries,
+  /// the same shape [RepertoireGenerationTabState] already uses internally to
+  /// wait for its own form.
+  void _seedGenerationWhenReady({
+    required List<String> pgnPaths,
+    bool autoStart = false,
+    int triesLeft = 5,
+  }) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _generationTabKey.currentState?.seedDbExplorer(pgnPaths: [path]);
+      final tab = _generationTabKey.currentState;
+      if (tab == null) {
+        if (triesLeft <= 0) return;
+        _seedGenerationWhenReady(
+          pgnPaths: pgnPaths,
+          autoStart: autoStart,
+          triesLeft: triesLeft - 1,
+        );
+        return;
+      }
+      tab.seedDbExplorer(pgnPaths: pgnPaths, autoStart: autoStart);
     });
   }
 
   void _openAuditDialog({bool forceConfig = false}) {
-    final target = _inlineConfig.openAudit(
+    final target = _auditEntry.resolve(
       forceConfig: forceConfig,
       auditHasSomethingToShow:
           _auditController.isAuditing || _auditController.hasResults,
     );
-    setState(() {});
-    _openBottomPane(_paneTabFor(target));
+    switch (target) {
+      case AuditEntry.findings:
+        _openBottomPane(BottomPaneTab.findings);
+      case AuditEntry.config:
+        unawaited(_openAuditConfigRoute());
+    }
   }
 
   String? get _repertoireFilePath => _controller.currentRepertoire?.filePath;
@@ -420,16 +529,10 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
   }
 
   Future<void> _seedGenerationAfterLoad(List<String> pgnPaths) async {
-    _openGenerationDialog();
+    unawaited(_openGenerationDialog());
     await _controller.awaitLoaded();
     if (!mounted) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _generationTabKey.currentState?.seedDbExplorer(
-        pgnPaths: pgnPaths,
-        autoStart: true,
-      );
-    });
+    _seedGenerationWhenReady(pgnPaths: pgnPaths, autoStart: true);
   }
 
   void _onTrapsChanged() {
@@ -613,7 +716,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     _controller.loadMoveSequence(
       _commonPrefix(_controller.repertoireLines.map((l) => l.moves)),
     );
-    _openGenerationDialog();
+    unawaited(_openGenerationDialog());
   }
 
   /// The longest SAN prefix shared by every sequence; empty for no lines.
@@ -678,9 +781,19 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     if (root == null) return;
     final appState = _appState ?? context.read<AppState>();
     final isWhite = _controller.isRepertoireWhite;
-    final base =
-        _generationController.lastConfig ??
-        TreeBuildConfig(startFen: kStandardStartFen, playAsWhite: isWhite);
+    // Reuse the last run's settings only when they were for this colour.
+    // With `relativeEval` off the eval window is absolute, so a White window
+    // carried onto a Black repertoire prunes every line that is merely equal.
+    // (With it on — the default — the window is an offset from the root and
+    // colour does not enter into it, but the guard still has to hold for the
+    // absolute case.)
+    final last = _generationController.lastConfig;
+    final base = last != null && last.playAsWhite == isWhite
+        ? last
+        : TreeBuildConfig.formDefaults(
+            startFen: kStandardStartFen,
+            playAsWhite: isWhite,
+          );
     final result = await Navigator.of(context).push<PlanBuildResult>(
       MaterialPageRoute(
         fullscreenDialog: true,
@@ -798,7 +911,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         appBar: RepertoireToolbar(
           title: const Text('Repertoire Builder'),
           onOpenSettings: () async {
-            await openRepertoireSettings(context);
+            await openAppSettings(context);
             _reclaimFocus();
           },
         ),
@@ -822,7 +935,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
           title: const Text('Repertoire Builder'),
           showSelectRepertoireAction: true,
           onOpenSettings: () async {
-            await openRepertoireSettings(context);
+            await openAppSettings(context);
             _reclaimFocus();
           },
           onSelectRepertoire: _showRepertoireSelection,
@@ -859,7 +972,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
           title: const Text('Repertoire Builder'),
           showSelectRepertoireAction: true,
           onOpenSettings: () async {
-            await openRepertoireSettings(context);
+            await openAppSettings(context);
             _reclaimFocus();
           },
           onSelectRepertoire: _showRepertoireSelection,
@@ -895,7 +1008,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         showSelectRepertoireAction: true,
         generationLocked: _generationController.isGenerating,
         onOpenSettings: () async {
-          await openRepertoireSettings(context);
+          await openAppSettings(context);
           _reclaimFocus();
         },
         onSelectRepertoire: _showRepertoireSelection,
@@ -938,6 +1051,12 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
                 GenerationPausedBanner(
                   onResume: _generationController.resumeBuild,
                   onDiscard: _confirmDiscardBuild,
+                )
+              else
+                // Master-games download nudge / progress; renders nothing
+                // once the database exists or the prompt was dismissed.
+                MasterGamesPromptBanner(
+                  onShowJobs: () => _openBottomPane(BottomPaneTab.jobs),
                 ),
               Expanded(
                 child: Stack(
@@ -968,6 +1087,10 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
                         canPause: _generationController.canPause,
                         isCancelling: _generationController.isCancelling,
                         onPause: _generationController.pauseBuild,
+                        isAwaitingMasterGames:
+                            _generationController.isAwaitingMasterGames,
+                        onSkipMasterGames:
+                            _generationController.skipMasterGamesDownload,
                       ),
                   ],
                 ),

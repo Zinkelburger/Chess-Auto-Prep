@@ -4,6 +4,7 @@ library;
 import 'dart:convert';
 
 import '../../constants/engine_defaults.dart';
+import '../../models/build_tree_node.dart';
 import '../../utils/system_info.dart';
 import 'export/move_annotation.dart';
 import 'skeleton_plan.dart';
@@ -244,11 +245,44 @@ class TreeBuildConfig {
   final double oppPolicyTemperature;
 
   // ── PGN export ──
-  /// Cap on exported lines after similarity pruning: extracted lines are
-  /// reduced by greedy set cover over the our-moves each line teaches, so
-  /// lines differing only in opponent moves collapse to one representative
-  /// and the survivors are the lines covering the most new, likely,
-  /// sharp our-moves.  0 keeps every extracted line (no pruning).
+  /// Plies of raw engine continuation appended to an exported line once the
+  /// prepared part runs out, so a line that stopped at the depth limit ends
+  /// somewhere a reader can see rather than mid-air. 0 turns it off.
+  ///
+  /// The appended moves are explicitly *not* repertoire: they carry a note
+  /// in the PGN saying where preparation stopped, and nothing downstream
+  /// treats them as prepared theory.
+  final int engineTailPlies;
+
+  /// Stockfish depth for that continuation. 0 = auto ([resolvedVerifyDepth],
+  /// i.e. max(evalDepth + 6, 20)). It is deliberately deeper than the build's
+  /// own [evalDepth]: the whole point is that the tail is a better look at
+  /// the position than the truncated search that stopped there.
+  final int engineTailDepth;
+
+  /// Share (0..1) of reachable value the exported lines should cover.
+  ///
+  /// This is the knob that decides how big a repertoire is. Extracted lines
+  /// are reduced by greedy set cover over the decisions each one teaches —
+  /// "in this position, play this move" — and the export keeps the shortest
+  /// run of that greedy order reaching this share. Lines that only repeat
+  /// decisions already covered, whether by answering a different opponent
+  /// try or by transposing in from another move order, contribute nothing
+  /// and never make the cut.
+  ///
+  /// Expressed as coverage rather than as a line count because coverage
+  /// transfers between repertoires and a line count does not: on one Benko
+  /// tree 300 lines was 92% and on a shallower one the same 300 would be
+  /// everything twice over. 1.0 keeps every line that teaches anything new.
+  final double lineCoverageTarget;
+
+  /// Hard cap on exported lines, applied on top of [lineCoverageTarget].
+  /// 0 means no cap, which is the default — [lineCoverageTarget] is meant to
+  /// be what decides the size.
+  ///
+  /// Note that 0 no longer means "no pruning": pruning always runs now. It
+  /// only ever drops a line whose every decision is taught by a line that
+  /// was kept, so the old opt-out bought nothing but duplicates.
   final int targetLineCount;
 
   /// Export only the lines that run through a trap — a position where the
@@ -311,6 +345,44 @@ class TreeBuildConfig {
   // ── DB Explorer (PGN frequency seeding) ──
   final List<String> pgnFilePaths;
   final int dbMinGames;
+
+  // ── Master games (TWIC) ──
+  /// Consult the local master-games database when it has games: opponent
+  /// replies come from titled-player practice (blended with Maia), model
+  /// games are real master games along the line, and a repertoire move that
+  /// beats what masters actually played is annotated "improves on … in
+  /// <game>".  Has no effect until the database is downloaded.
+  final bool useMasterGames;
+
+  /// When [useMasterGames] is on but the database is empty, download it
+  /// (The Week in Chess) before the build starts instead of quietly building
+  /// without master practice.  The wait is offered with an escape hatch —
+  /// see `GenerationSessionController.skipMasterGamesDownload` — and does
+  /// nothing once the database has games.
+  final bool downloadMasterGamesIfMissing;
+
+  /// A position counts as *master practice* when the book holds at least
+  /// this many games from it.  Below that a position is treated as off-book:
+  /// its replies come from Maia alone, it gets no depth bonus, and our-move
+  /// injection ignores it.
+  final int masterMinGames;
+
+  /// How many plies past [maxPly] a line may run while each position along
+  /// it is still master practice.  Book lines are the lines worth knowing
+  /// deeper; a Maia-only sideline stops at [maxPly] as before.  The book is
+  /// indexed to move 15, which bounds the bonus naturally.  0 disables.
+  final int masterDepthBonusPlies;
+
+  /// Opponent fan-out cap at off-book positions when a master book is in
+  /// use (0 = same as [oppMaxChildren]).  Where no master has been, wide
+  /// fan-out buys breadth nobody plays; narrowing it here spends the node
+  /// budget on depth in the lines that are practice.  The coverage floor
+  /// ([coverMinProb]) still bypasses it, so a likely reply is never dropped.
+  final int offBookOppMaxChildren;
+
+  /// Minimum engine gain (centipawns, for us) over the master move before a
+  /// repertoire move is annotated as an improvement on a cited game.
+  final int improvementMinGainCp;
   final double dbMinProb;
   final int minElo;
 
@@ -360,7 +432,10 @@ class TreeBuildConfig {
     this.maiaElo = 2200,
     this.maiaMinProb = 0.05,
     this.oppPolicyTemperature = 1.0,
-    this.targetLineCount = 100,
+    this.engineTailPlies = 6,
+    this.engineTailDepth = 0,
+    this.lineCoverageTarget = 0.92,
+    this.targetLineCount = 0,
     this.trapsOnly = false,
     this.rankLinesByImportance = true,
     this.annotationDetail = MoveAnnotationDetail.full,
@@ -376,6 +451,12 @@ class TreeBuildConfig {
     this.noveltyWeight = 0,
     this.pgnFilePaths = const [],
     this.dbMinGames = 5,
+    this.useMasterGames = true,
+    this.downloadMasterGamesIfMissing = true,
+    this.masterMinGames = 3,
+    this.masterDepthBonusPlies = 10,
+    this.offBookOppMaxChildren = 2,
+    this.improvementMinGainCp = 40,
     this.dbMinProb = 0.05,
     this.minElo = 0,
     this.enableCdbDirect = false,
@@ -395,6 +476,13 @@ class TreeBuildConfig {
     Map<String, dynamic> json, {
     required String startFen,
   }) {
+    // A config written before [lineCoverageTarget] existed sizes the export
+    // with `target_line_count`, whose default was 100. Carrying that value
+    // forward would cap every re-export of an older tree at 100 lines and
+    // silently defeat the coverage target it is now asked for, so a legacy
+    // map drops it and lets coverage decide. Anything this build wrote has
+    // the coverage key, so an explicit cap set today still survives.
+    final legacy = !json.containsKey('line_coverage_target');
     return TreeBuildConfig(
       startFen: startFen,
       playAsWhite: json['play_as_white'] as bool? ?? true,
@@ -435,7 +523,13 @@ class TreeBuildConfig {
       maiaMinProb: (json['maia_min_prob'] as num?)?.toDouble() ?? 0.05,
       oppPolicyTemperature:
           (json['opp_policy_temperature'] as num?)?.toDouble() ?? 1.0,
-      targetLineCount: (json['target_line_count'] as num?)?.toInt() ?? 100,
+      engineTailPlies: (json['engine_tail_plies'] as num?)?.toInt() ?? 6,
+      engineTailDepth: (json['engine_tail_depth'] as num?)?.toInt() ?? 0,
+      lineCoverageTarget:
+          (json['line_coverage_target'] as num?)?.toDouble() ?? 0.92,
+      targetLineCount: legacy
+          ? 0
+          : ((json['target_line_count'] as num?)?.toInt() ?? 0),
       trapsOnly: json['traps_only'] as bool? ?? false,
       rankLinesByImportance: json['rank_lines_by_importance'] as bool? ?? true,
       annotationDetail: _parseAnnotationDetail(json),
@@ -454,6 +548,16 @@ class TreeBuildConfig {
           (json['pgn_file_paths'] as List<dynamic>?)?.cast<String>() ??
           const [],
       dbMinGames: (json['db_min_games'] as num?)?.toInt() ?? 5,
+      useMasterGames: json['use_master_games'] as bool? ?? true,
+      downloadMasterGamesIfMissing:
+          json['download_master_games_if_missing'] as bool? ?? true,
+      masterMinGames: (json['master_min_games'] as num?)?.toInt() ?? 3,
+      masterDepthBonusPlies:
+          (json['master_depth_bonus_plies'] as num?)?.toInt() ?? 10,
+      offBookOppMaxChildren:
+          (json['off_book_opp_max_children'] as num?)?.toInt() ?? 2,
+      improvementMinGainCp:
+          (json['improvement_min_gain_cp'] as num?)?.toInt() ?? 40,
       dbMinProb: (json['db_min_prob'] as num?)?.toDouble() ?? 0.05,
       minElo: (json['min_elo'] as num?)?.toInt() ?? 0,
       enableCdbDirect: json['enable_cdbdirect'] as bool? ?? false,
@@ -521,6 +625,10 @@ class TreeBuildConfig {
   /// Verification depth with the 0 = auto rule applied.
   int get resolvedVerifyDepth =>
       verifyDepth > 0 ? verifyDepth : (evalDepth + 6 < 20 ? 20 : evalDepth + 6);
+
+  /// Depth actually used for the engine tail; see [engineTailDepth].
+  int get resolvedEngineTailDepth =>
+      engineTailDepth > 0 ? engineTailDepth : resolvedVerifyDepth;
 
   /// Minimum depth required from external eval sources.
   int get effectiveMinEvalDepth =>
@@ -686,6 +794,9 @@ class TreeBuildConfig {
     'maia_elo': maiaElo,
     'maia_min_prob': maiaMinProb,
     'opp_policy_temperature': oppPolicyTemperature,
+    'engine_tail_plies': engineTailPlies,
+    'engine_tail_depth': engineTailDepth,
+    'line_coverage_target': lineCoverageTarget,
     'target_line_count': targetLineCount,
     'traps_only': trapsOnly,
     'rank_lines_by_importance': rankLinesByImportance,
@@ -705,6 +816,12 @@ class TreeBuildConfig {
     'novelty_weight': noveltyWeight,
     'pgn_file_paths': pgnFilePaths,
     'db_min_games': dbMinGames,
+    'use_master_games': useMasterGames,
+    'download_master_games_if_missing': downloadMasterGamesIfMissing,
+    'master_min_games': masterMinGames,
+    'master_depth_bonus_plies': masterDepthBonusPlies,
+    'off_book_opp_max_children': offBookOppMaxChildren,
+    'improvement_min_gain_cp': improvementMinGainCp,
     'db_min_prob': dbMinProb,
     'min_elo': minElo,
     'enable_cdbdirect': enableCdbDirect,
@@ -719,6 +836,55 @@ class TreeBuildConfig {
     'enable_ext_eval_subtree_skip': enableExtEvalSubtreeSkip,
     'min_acceptable_eval_depth': minAcceptableEvalDepth,
   };
+
+  /// The generation form's defaults for [playAsWhite]: the eval window is
+  /// colour-aware because Black is objectively a little worse from move one,
+  /// so a floor of 0 would throw away sound Black lines (and every gambit).
+  /// Anything that seeds a build without going through the form — the
+  /// planner's base config, presets — must start here, not at the bare
+  /// constructor defaults.
+  /// [relativeEval] is on by default, which makes [minEvalCp]/[maxEvalCp]
+  /// offsets from the root's own eval rather than absolute scores — so these
+  /// defaults are the same for both colours on purpose.
+  ///
+  /// They used to be colour-split (White 0/200, Black -100/100), which only
+  /// made sense read as absolute evals: White starts a shade better, Black a
+  /// shade worse. As offsets that split is meaningless, and the White floor
+  /// of 0 was actively harmful — as an offset it says "never prepare a
+  /// position even a centipawn worse than the one you started from", which
+  /// deletes normal opening play and every gambit outright.
+  factory TreeBuildConfig.formDefaults({
+    required String startFen,
+    required bool playAsWhite,
+  }) => TreeBuildConfig(
+    startFen: startFen,
+    playAsWhite: playAsWhite,
+    minEvalCp: -100,
+    maxEvalCp: 200,
+    // The form's declared default; the constructor's own is 50.
+    maxEvalLossCp: 30,
+  );
+
+  /// The eval window actually applied to a tree built from [root]: with
+  /// [relativeEval] the build shifts [minEvalCp]/[maxEvalCp] by the root
+  /// eval (for us) once it is known.  Every post-build consumer of the
+  /// window — repertoire selection, verification, snapshot export — must go
+  /// through this too, or it judges nodes against the unshifted window and
+  /// (for Black, whose root eval is negative) rejects the entire tree.
+  ///
+  /// This is what makes the window mean the same thing whatever position you
+  /// hand the builder. A root at 0.00 and a root at +0.60 get windows 60cp
+  /// apart in absolute terms and identical in relative ones, so "prepare
+  /// down to a pawn worse than where this starts" is one setting rather than
+  /// one per position.
+  TreeBuildConfig anchoredToRoot(BuildTreeNode root) {
+    if (!relativeEval || !root.hasEngineEval) return this;
+    final rootEvalUs = root.evalForUs(playAsWhite);
+    return copyWith(
+      minEvalCp: minEvalCp + rootEvalUs,
+      maxEvalCp: maxEvalCp + rootEvalUs,
+    );
+  }
 
   TreeBuildConfig copyWith({
     String? startFen,
@@ -753,6 +919,9 @@ class TreeBuildConfig {
     int? maiaElo,
     double? maiaMinProb,
     double? oppPolicyTemperature,
+    int? engineTailPlies,
+    int? engineTailDepth,
+    double? lineCoverageTarget,
     int? targetLineCount,
     bool? trapsOnly,
     bool? rankLinesByImportance,
@@ -769,6 +938,12 @@ class TreeBuildConfig {
     int? noveltyWeight,
     List<String>? pgnFilePaths,
     int? dbMinGames,
+    bool? useMasterGames,
+    bool? downloadMasterGamesIfMissing,
+    int? masterMinGames,
+    int? masterDepthBonusPlies,
+    int? offBookOppMaxChildren,
+    int? improvementMinGainCp,
     double? dbMinProb,
     int? minElo,
     bool? enableCdbDirect,
@@ -817,6 +992,9 @@ class TreeBuildConfig {
       maiaElo: maiaElo ?? this.maiaElo,
       maiaMinProb: maiaMinProb ?? this.maiaMinProb,
       oppPolicyTemperature: oppPolicyTemperature ?? this.oppPolicyTemperature,
+      engineTailPlies: engineTailPlies ?? this.engineTailPlies,
+      engineTailDepth: engineTailDepth ?? this.engineTailDepth,
+      lineCoverageTarget: lineCoverageTarget ?? this.lineCoverageTarget,
       targetLineCount: targetLineCount ?? this.targetLineCount,
       trapsOnly: trapsOnly ?? this.trapsOnly,
       rankLinesByImportance:
@@ -834,6 +1012,15 @@ class TreeBuildConfig {
       noveltyWeight: noveltyWeight ?? this.noveltyWeight,
       pgnFilePaths: pgnFilePaths ?? this.pgnFilePaths,
       dbMinGames: dbMinGames ?? this.dbMinGames,
+      useMasterGames: useMasterGames ?? this.useMasterGames,
+      downloadMasterGamesIfMissing:
+          downloadMasterGamesIfMissing ?? this.downloadMasterGamesIfMissing,
+      masterMinGames: masterMinGames ?? this.masterMinGames,
+      masterDepthBonusPlies:
+          masterDepthBonusPlies ?? this.masterDepthBonusPlies,
+      offBookOppMaxChildren:
+          offBookOppMaxChildren ?? this.offBookOppMaxChildren,
+      improvementMinGainCp: improvementMinGainCp ?? this.improvementMinGainCp,
       dbMinProb: dbMinProb ?? this.dbMinProb,
       minElo: minElo ?? this.minElo,
       enableCdbDirect: enableCdbDirect ?? this.enableCdbDirect,

@@ -19,6 +19,7 @@ enum JobType {
   studyImport,
   tacticsImport,
   gameAnalysis,
+  masterGames,
 }
 
 // ── Progress snapshot ───────────────────────────────────────────────
@@ -142,6 +143,10 @@ class JobManager extends ChangeNotifier with SafeChangeNotifier {
       .where((j) => j.type == JobType.gameAnalysis && j.isActive)
       .firstOrNull;
 
+  RepertoireJob? get currentMasterGamesJob => _jobs
+      .where((j) => j.type == JobType.masterGames && j.isActive)
+      .firstOrNull;
+
   /// Create and register a new job. Returns the job for further configuration.
   RepertoireJob createJob({
     required JobType type,
@@ -215,6 +220,13 @@ class JobManager extends ChangeNotifier with SafeChangeNotifier {
       return p.totalNodes == 0
           ? 'Review: analyzing'
           : 'Review: ${p.nodesProcessed}/${p.totalNodes} games';
+    }
+    final masters = currentMasterGamesJob;
+    if (masters != null) {
+      final p = masters.progress;
+      return p.totalNodes == 0
+          ? 'TWIC: checking'
+          : 'TWIC: ${p.nodesProcessed}/${p.totalNodes} issues';
     }
     return null;
   }

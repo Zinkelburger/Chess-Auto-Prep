@@ -16,6 +16,8 @@ class GenerationLockOverlay extends StatelessWidget {
     required this.canPause,
     required this.isCancelling,
     required this.onPause,
+    this.isAwaitingMasterGames = false,
+    this.onSkipMasterGames,
   });
 
   final String statusText;
@@ -27,6 +29,14 @@ class GenerationLockOverlay extends StatelessWidget {
   /// unwinds; the overlay reflects it and disables Pause.
   final bool isCancelling;
   final VoidCallback onPause;
+
+  /// The run is parked on the master-games download it asked for, not yet
+  /// building.  Pause means nothing here; the way out is to build without
+  /// them.
+  final bool isAwaitingMasterGames;
+
+  /// Stop waiting for the master games and start the build now.
+  final VoidCallback? onSkipMasterGames;
 
   @override
   Widget build(BuildContext context) {
@@ -51,15 +61,22 @@ class GenerationLockOverlay extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               Text(
-                isCancelling ? 'Cancelling...' : 'Generating Repertoire...',
+                isCancelling
+                    ? 'Cancelling...'
+                    : isAwaitingMasterGames
+                    ? 'Downloading Master Games...'
+                    : 'Generating Repertoire...',
                 style: Theme.of(
                   context,
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 8),
               Text(
-                'This tab is locked while your repertoire builds.\n'
-                'Training, Study, and puzzles stay available.',
+                isAwaitingMasterGames
+                    ? 'The build starts as soon as the games are in.\n'
+                          'Training, Study, and puzzles stay available.'
+                    : 'This tab is locked while your repertoire builds.\n'
+                          'Training, Study, and puzzles stay available.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 13,
@@ -82,37 +99,57 @@ class GenerationLockOverlay extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 18),
-              Tooltip(
-                message: canPause
-                    ? 'Pause the build and free the engine'
-                    : 'This phase finishes on its own and cannot pause',
-                child: FilledButton.icon(
-                  onPressed: canPause && !isCancelling ? onPause : null,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.warningSurface,
+              if (isAwaitingMasterGames) ...[
+                OutlinedButton.icon(
+                  onPressed: onSkipMasterGames,
+                  icon: const Icon(Icons.play_arrow, size: 18),
+                  label: const Text('Start now without them'),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Starting now builds from Maia and the engine alone.\n'
+                  'Whatever has already downloaded is kept — Settings \u2192\n'
+                  'Master games finishes the job whenever you like.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: AppColors.onSurfaceMuted,
+                    height: 1.4,
                   ),
-                  icon: const Icon(Icons.pause, color: AppColors.onWarning),
-                  label: const Text(
-                    'Pause',
-                    style: TextStyle(
-                      color: AppColors.onWarning,
-                      fontWeight: FontWeight.w600,
+                ),
+              ] else ...[
+                Tooltip(
+                  message: canPause
+                      ? 'Pause the build and free the engine'
+                      : 'This phase finishes on its own and cannot pause',
+                  child: FilledButton.icon(
+                    onPressed: canPause && !isCancelling ? onPause : null,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.warningSurface,
+                    ),
+                    icon: const Icon(Icons.pause, color: AppColors.onWarning),
+                    label: const Text(
+                      'Pause',
+                      style: TextStyle(
+                        color: AppColors.onWarning,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Pausing frees the engine and unlocks the tab.\n'
-                'You can resume it later — or discard it if you change '
-                'your mind.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 11.5,
-                  color: AppColors.onSurfaceMuted,
-                  height: 1.4,
+                const SizedBox(height: 10),
+                Text(
+                  'Pausing frees the engine and unlocks the tab.\n'
+                  'You can resume it later — or discard it if you change '
+                  'your mind.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    color: AppColors.onSurfaceMuted,
+                    height: 1.4,
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),

@@ -33,7 +33,7 @@ class FenMap {
 
   bool get isFrozen => _frozen;
 
-  /// Look up the canonical (first-expanded) node for a FEN.
+  /// Look up the canonical (expanded) node for a FEN.
   BuildTreeNode? getCanonical(String fen) => _canonical[_key(fen)];
 
   bool contains(String fen) => _canonical.containsKey(_key(fen));
@@ -73,23 +73,53 @@ class FenMap {
 
   int get size => _canonical.length;
 
-  /// Walk a tree and register all nodes.  Canonical nodes are the first
-  /// expansion of each FEN; childless duplicates become transposition
-  /// leaves.  Idempotent: safe to call repeatedly on a growing tree (the
-  /// on-the-fly service re-populates during progressive deepening).
+  /// Walk a tree and register all nodes.  The canonical node for a FEN is an
+  /// *expanded* one wherever the tree holds one; childless duplicates become
+  /// transposition leaves that resolve through it.  Idempotent: safe to call
+  /// repeatedly on a growing tree (the on-the-fly service re-populates during
+  /// progressive deepening).
+  ///
+  /// The expanded-wins rule is load-bearing, not a tidiness preference. This
+  /// walk is a plain DFS, so "first node seen" is decided by child order, and
+  /// a position reachable by two move orders is routinely met at its
+  /// *unexpanded* copy first. Registering that copy as canonical stranded
+  /// every line through it: [resolveTransposition] would hand back a childless
+  /// node, the extractor would find no answer, and the line ended on the
+  /// opponent's move with the user to play and nothing to play. The answered
+  /// twin was not even recorded as an equivalent, so nothing could repair it
+  /// downstream. On a 7.6k-node Benko tree that cost 52 positions and ~14% of
+  /// the repertoire's reach mass.
   void populate(BuildTreeNode node) {
     _assertMutable();
     if (node.fen.isNotEmpty) {
       final canonical = getCanonical(node.fen);
       if (canonical == null) {
         putCanonical(node.fen, node);
-      } else if (!identical(canonical, node) && node.children.isEmpty) {
-        addTransposition(node.fen, node);
+      } else if (!identical(canonical, node)) {
+        if (canonical.children.isEmpty && node.children.isNotEmpty) {
+          // Promote: the expanded copy becomes canonical and the childless
+          // one it displaces becomes a transposition leaf pointing at it.
+          _canonical[_key(node.fen)] = node;
+          _removeTransposition(node.fen, node);
+          addTransposition(node.fen, canonical);
+        } else if (node.children.isEmpty) {
+          addTransposition(node.fen, node);
+        }
       }
     }
     for (final child in node.children) {
       populate(child);
     }
+  }
+
+  /// Drop [node] from the equivalence list for [fen], if it is there. Used
+  /// when a node registered as a transposition leaf on an earlier pass is
+  /// promoted to canonical on a later one.
+  void _removeTransposition(String fen, BuildTreeNode node) {
+    final list = _equivalents[_key(fen)];
+    if (list == null) return;
+    list.removeWhere((n) => identical(n, node));
+    if (list.isEmpty) _equivalents.remove(_key(fen));
   }
 
   void clear() {

@@ -7,6 +7,7 @@ library;
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/models/eval_database_settings.dart';
 import 'package:chess_auto_prep/screens/settings_screen.dart';
+import 'package:chess_auto_prep/services/master_games/master_games_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -30,6 +31,10 @@ void main() {
           ChangeNotifierProvider<AppState>(create: (_) => AppState()),
           ChangeNotifierProvider<EvalDatabaseSettings>.value(
             value: EvalDatabaseSettings.instance,
+          ),
+          // Not loaded: the panel shows "no games yet" without touching disk.
+          ChangeNotifierProvider<MasterGamesService>(
+            create: (_) => MasterGamesService(),
           ),
         ],
         child: const MaterialApp(home: SettingsScreen()),

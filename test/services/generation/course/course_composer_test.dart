@@ -1,14 +1,18 @@
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/services/generation/course/chapter_titles.dart';
+import 'package:chess_auto_prep/services/generation/course/master_improvements.dart';
 import 'package:chess_auto_prep/services/generation/course/course_composer.dart';
 import 'package:chess_auto_prep/services/generation/course/model_game_selector.dart';
 import 'package:chess_auto_prep/services/generation/course/opening_namer.dart';
 import 'package:chess_auto_prep/services/generation/course/refutation_prober.dart';
 import 'package:chess_auto_prep/services/generation/export/move_annotation.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
+import 'package:chess_auto_prep/services/generation/engine_tail.dart';
 import 'package:chess_auto_prep/services/generation/line_extractor.dart';
 import 'package:chess_auto_prep/services/generation/pgn_freq_map.dart';
+import 'package:chess_auto_prep/services/master_games/master_games_db.dart';
 import 'package:chess_auto_prep/services/repertoire_service.dart';
+import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 ExtractedLine _line(String moves, {double probability = 0.01}) {
@@ -67,6 +71,14 @@ CourseComposer _composer(
   repertoirePrefix: prefix,
   repertoireName: 'Test repertoire',
 );
+
+String _fenAfter(List<String> sans) {
+  Position pos = Chess.initial;
+  for (final san in sans) {
+    pos = pos.play(pos.parseSan(san)!);
+  }
+  return pos.fen;
+}
 
 PgnGameRecord _record({
   required String white,
@@ -280,6 +292,217 @@ void main() {
         ).compose(lines: _fan('e4 e5', 4), modelGames: games);
 
         expect(course.entries.last.pgn, isNot(contains('{')));
+      });
+
+      test('are also emitted as real games for a companion file', () {
+        final course = _composer(
+          _config(),
+        ).compose(lines: _fan('e4 e5', 4), modelGames: games);
+        expect(course.modelGamePgns, hasLength(1));
+        final pgn = course.modelGamePgns.single;
+        expect(pgn, contains('[White "Carlsen, M"]'));
+        expect(pgn, contains('[Black "Anand, V"]'));
+        expect(pgn, contains('[Result "1-0"]'));
+        expect(pgn, contains('[Event "Test Open"]'));
+        expect(pgn, contains('[Repertoire "'));
+        expect(pgn.trim(), endsWith('1-0'));
+        expect(pgn, isNot(contains('ModelGameWhite')));
+        // Both shapes share one movetext.
+        expect(course.entries.last.pgn, contains('1. e4 e5 2. Nf3 Nc6 3. Bb5'));
+        expect(pgn, contains('1. e4 e5 2. Nf3 Nc6 3. Bb5'));
+      });
+
+      group('departure annotations', () {
+        final before = _fenAfter(['e4', 'e5', 'Nf3', 'Nc6']);
+        // The game played 3.Bb5 where the repertoire plays 3.Bc4.
+        final departs = ModelGame(
+          record: _record(
+            white: 'Carlsen, M',
+            black: 'Anand, V',
+            elo: 2800,
+            outcome: GameOutcome.whiteWin,
+            moves: ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Ba4'],
+          ),
+          followedPlies: 4,
+          departure: ModelGameDeparture(
+            index: 4,
+            kind: DepartureKind.ours,
+            fenBefore: before,
+            gameSan: 'Bb5',
+            repertoireLine: const ['Bc4', 'Bc5', 'c3'],
+          ),
+        );
+
+        test('our departure: comment names the repertoire move and the '
+            'repertoire mainline hangs off the game move', () {
+          final course = _composer(
+            _config(),
+          ).compose(lines: _fan('e4 e5', 4), modelGames: [departs]);
+          for (final pgn in [
+            course.entries.last.pgn,
+            course.modelGamePgns.single,
+          ]) {
+            expect(
+              pgn,
+              contains(
+                '3. Bb5 {Our repertoire: 3.Bc4} (3. Bc4 Bc5 4. c3) a6 4. Ba4',
+              ),
+            );
+          }
+        });
+
+        test('our departure cites the improvement when the probe found one '
+            'at that position for that master move', () {
+          const cited = MasterGame(
+            id: 1,
+            twicIssue: 1600,
+            event: 'Tata Steel',
+            site: 'Wijk aan Zee',
+            date: '2025.01.20',
+            round: '3',
+            white: 'Giri,A',
+            black: 'Caruana,F',
+            result: '1/2-1/2',
+            whiteElo: 2740,
+            blackElo: 2800,
+            whiteFideId: null,
+            blackFideId: null,
+            eco: 'C65',
+            plyCount: 4,
+            movetext: '1. e4 e5 2. Nf3 Nc6',
+          );
+          final course = _composer(_config()).compose(
+            lines: _fan('e4 e5', 4),
+            modelGames: [departs],
+            improvements: {
+              before: const MasterImprovement(
+                ourSan: 'Bc4',
+                masterSan: 'Bb5',
+                gainCp: 35,
+                masterGames: 40,
+                game: cited,
+                continuation: ['a6'],
+              ),
+            },
+          );
+          expect(
+            course.modelGamePgns.single,
+            contains('{Our repertoire: 3.Bc4 — improves on 3.Bb5 (+0.35)}'),
+          );
+          // A different master move at the same position is not "improved on".
+          final other = _composer(_config()).compose(
+            lines: _fan('e4 e5', 4),
+            modelGames: [departs],
+            improvements: {
+              before: const MasterImprovement(
+                ourSan: 'Bc4',
+                masterSan: 'd4',
+                gainCp: 35,
+                masterGames: 40,
+                game: cited,
+                continuation: [],
+              ),
+            },
+          );
+          expect(
+            other.modelGamePgns.single,
+            contains('{Our repertoire: 3.Bc4}'),
+          );
+          expect(other.modelGamePgns.single, isNot(contains('improves')));
+        });
+
+        test('opponent departure: lists the replies we prepare', () {
+          final game = ModelGame(
+            record: _record(
+              white: 'Carlsen, M',
+              black: 'Anand, V',
+              elo: 2800,
+              outcome: GameOutcome.whiteWin,
+              moves: ['e4', 'c6', 'd4'],
+            ),
+            followedPlies: 1,
+            departure: ModelGameDeparture(
+              index: 1,
+              kind: DepartureKind.opponent,
+              fenBefore: _fenAfter(['e4']),
+              gameSan: 'c6',
+              preparedReplies: const ['e5', 'c5'],
+            ),
+          );
+          final course = _composer(
+            _config(),
+          ).compose(lines: _fan('e4 e5', 4), modelGames: [game]);
+          expect(
+            course.modelGamePgns.single,
+            contains(
+              '1. e4 c6 {Outside the repertoire — prepared here: 1...e5, 1...c5} 2. d4',
+            ),
+          );
+          expect(course.modelGamePgns.single, isNot(contains('(')));
+        });
+
+        test('an annotated model game is still read back as a model game', () {
+          final course = _composer(_config()).compose(
+            lines: [..._fan('e4 e5 Nf3', 4), ..._fan('e4 c5 Nf3', 4)],
+            modelGames: [departs],
+          );
+          final parsed = RepertoireService().parseRepertoirePgn(
+            course.toPgn(),
+            trainingColor: 'white',
+          );
+          expect(parsed.where((l) => l.isModelGame), hasLength(1));
+        });
+      });
+    });
+
+    group('engine tails', () {
+      final cut = ExtractedLine(
+        movesSan: const ['e4', 'e5', 'Nf3'],
+        movesUci: const [],
+        probability: 0.5,
+        leafFen: 'cutoff',
+      );
+
+      test('extends the mainline so the moves are trained', () {
+        final course = _composer(_config(detail: MoveAnnotationDetail.none))
+            .compose(
+              lines: [cut],
+              engineTails: const {
+                'cutoff': EngineTail(movesSan: ['Nc6', 'Bb5', 'a6'], depth: 22),
+              },
+            );
+
+        final entry = course.entries.single;
+        expect(entry.movesSan, ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6']);
+        expect(entry.pgn, contains('2. Nf3 Nc6 3. Bb5 a6'));
+      });
+
+      test('marks where preparation stopped', () {
+        final course = _composer(_config(detail: MoveAnnotationDetail.full))
+            .compose(
+              lines: [cut],
+              engineTails: const {
+                'cutoff': EngineTail(movesSan: ['Nc6', 'Bb5'], depth: 22),
+              },
+            );
+
+        // Trained like the rest, but the file still says which moves the
+        // build actually vouched for.
+        expect(
+          course.entries.single.pgn,
+          contains(
+            'Nc6 {Engine continuation from here at depth 22 — best play, '
+            'not prepared theory}',
+          ),
+        );
+      });
+
+      test('no tail for a line the engine had nothing to say about', () {
+        final course = _composer(
+          _config(detail: MoveAnnotationDetail.none),
+        ).compose(lines: [cut], engineTails: const {});
+
+        expect(course.entries.single.pgn, isNot(contains('Prepared line')));
       });
     });
 

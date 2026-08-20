@@ -40,8 +40,8 @@ import '../widgets/engine/engine_gate.dart';
 import '../widgets/engine_weakness_dialog.dart';
 import '../widgets/app_breadcrumb_trail.dart';
 import '../widgets/app_mode_menu_button.dart';
+import '../widgets/app_overflow_menu.dart';
 import '../widgets/app_settings_button.dart';
-import '../widgets/info_hint.dart';
 import '../widgets/position_analysis_widget.dart';
 import 'player_selection_screen.dart';
 
@@ -207,12 +207,6 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
             onPressed: _canStartEngineJob ? _showWeaknessConfig : null,
           ),
           _buildActionsMenu(),
-          IconButton(
-            icon: const Icon(Icons.person_search),
-            tooltip: 'Select Player',
-            onPressed: _showPlayerSelection,
-          ),
-          const AppSettingsButton(),
           const AppModeMenuButton(),
         ],
       ),
@@ -269,93 +263,67 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
   }
 
   /// Kebab holding everything that isn't the primary engine run: the two
-  /// opponent hunts, then the position handoffs (formerly buttons under the
-  /// board). Handoffs save a *line* in a study; puzzle-ness is a marker the
-  /// user sets on a move inside the study ("Puzzle starts here"), not a
-  /// separate authored artifact.
+  /// opponent hunts, the position handoffs, then switching player and opening
+  /// app settings — the last two were icon buttons of their own until the bar
+  /// grew to six controls. Handoffs save a *line* in a study; puzzle-ness is
+  /// a marker the user sets on a move inside the study ("Puzzle starts
+  /// here"), not a separate authored artifact.
   Widget _buildActionsMenu() {
-    return PopupMenuButton<String>(
-      icon: const Icon(Icons.more_vert, size: 18),
-      tooltip: 'More actions',
-      onSelected: (action) {
-        switch (action) {
-          case 'find_holes':
-            unawaited(_showHoleHuntConfig());
-          case 'find_tricks':
-            unawaited(_showTrickHuntConfig());
-          case 'add_line':
-            unawaited(_boardActions.addCurrentLineToStudy());
-          case 'open_games':
-            _boardActions.openGamesInPgnViewer();
-        }
-      },
-      itemBuilder: (_) => [
-        PopupMenuItem(
-          value: 'find_holes',
+    return AppOverflowMenu(
+      entries: [
+        AppMenuEntry(
+          label: 'Find holes…',
+          icon: Icons.gps_fixed,
           enabled: _canStartEngineJob,
-          child: ListTile(
-            enabled: _canStartEngineJob,
-            leading: const Icon(Icons.gps_fixed, size: 20),
-            title: const Text('Find holes…'),
-            trailing: const InfoHint(
+          onRun: () => unawaited(_showHoleHuntConfig()),
+          hint:
               'Attacks this player\'s games from the other side and reports\n'
               'where the lines can be beaten: strong moves the games never\n'
               'answer, moves with a verified refutation, and traps a human is\n'
               'likely to fall into. Not the same as Analyze with Engine, which\n'
               'only scores positions by raw eval — results here are ranked by\n'
               'reach probability × gain, so it stays a short list.',
-            ),
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-          ),
         ),
-        PopupMenuItem(
-          value: 'find_tricks',
+        AppMenuEntry(
+          label: 'Find tricks…',
+          icon: Icons.auto_fix_high,
           enabled: _canStartEngineJob,
-          child: ListTile(
-            enabled: _canStartEngineJob,
-            leading: const Icon(Icons.auto_fix_high, size: 20),
-            title: const Text('Find tricks…'),
-            trailing: const InfoHint(
+          onRun: () => unawaited(_showTrickHuntConfig()),
+          hint:
               'Plays the other side of this player\'s games and hunts moves\n'
               'that are close to engine-best but poisonous in practice —\n'
               'including novelties the games never faced. A move is reported\n'
               'when the mistakes it invites outweigh what it concedes, ranked\n'
               'by reach probability × net gain.',
-            ),
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-          ),
         ),
-        const PopupMenuDivider(),
-        PopupMenuItem(
-          value: 'add_line',
+        AppMenuEntry(
+          label: 'Add line to study…',
+          icon: Icons.menu_book_outlined,
           enabled: _boardActions.hasPosition,
-          child: ListTile(
-            enabled: _boardActions.hasPosition,
-            leading: const Icon(Icons.menu_book_outlined, size: 20),
-            title: const Text('Add line to study…'),
-            trailing: const InfoHint(
+          dividerAbove: true,
+          onRun: () => unawaited(_boardActions.addCurrentLineToStudy()),
+          hint:
               'Saves the moves that led to this position as a chapter of a '
               'study,\nwith your comments. Review or train it as-is, or flag '
               'a move in the\nstudy with "Puzzle starts here" to train just '
               'that part of the line.',
-            ),
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-          ),
         ),
-        const PopupMenuDivider(),
-        PopupMenuItem(
-          value: 'open_games',
+        AppMenuEntry(
+          label: 'Open games in PGN viewer',
+          icon: Icons.open_in_new,
           enabled: _boardActions.canOpenGames,
-          child: ListTile(
-            enabled: _boardActions.canOpenGames,
-            leading: const Icon(Icons.open_in_new, size: 20),
-            title: const Text('Open games in PGN viewer'),
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-          ),
+          onRun: _boardActions.openGamesInPgnViewer,
+        ),
+        AppMenuEntry(
+          label: 'Select player…',
+          icon: Icons.person_search,
+          dividerAbove: true,
+          onRun: _showPlayerSelection,
+        ),
+        AppMenuEntry(
+          label: 'App settings…',
+          icon: Icons.settings,
+          onRun: () => openAppSettings(context),
         ),
       ],
     );

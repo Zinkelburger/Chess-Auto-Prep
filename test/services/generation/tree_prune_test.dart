@@ -57,7 +57,7 @@ void main() {
       root.children.add(_node());
       final tree = _treeFrom(root);
 
-      expect(pruneEvalTooLow(tree), 0);
+      expect(pruneEvalTooLow(tree, playAsWhite: false), 0);
       expect(root.children.length, 2);
       expect(tree.totalNodes, 3);
       expect(tree.nodeIndex.length, 3);
@@ -78,7 +78,7 @@ void main() {
       expect(tree.totalNodes, 5);
 
       // drop subtree = drop + 2 grandchildren = 3 nodes removed
-      expect(pruneEvalTooLow(tree), 3);
+      expect(pruneEvalTooLow(tree, playAsWhite: false), 3);
       expect(root.children, [keep]);
       expect(tree.totalNodes, 2);
       // removed nodes are gone from the index; survivors remain
@@ -101,7 +101,7 @@ void main() {
       final tree = _treeFrom(root);
 
       // flagged + its leaf = 2 removed
-      expect(pruneEvalTooLow(tree), 2);
+      expect(pruneEvalTooLow(tree, playAsWhite: false), 2);
       expect(mid.children.map((c) => c.moveSan), ['sibling']);
       expect(tree.totalNodes, root.countSubtree());
     });
@@ -121,7 +121,10 @@ void main() {
       final tree = _treeFrom(root);
 
       final removed = <PrunedLine>[];
-      expect(pruneEvalTooLow(tree, removedLines: removed), 2);
+      expect(
+        pruneEvalTooLow(tree, playAsWhite: false, removedLines: removed),
+        2,
+      );
 
       // Only the subtree root is recorded, not its descendants.
       expect(removed.length, 1);
@@ -134,12 +137,67 @@ void main() {
       expect(line.toJson()['line_san'], 'drop');
     });
 
+    group('never leaves us without a move', () {
+      /// Our-turn parent (we are White here) whose every reply is flagged.
+      (BuildTree, BuildTreeNode, List<BuildTreeNode>) allFlagged() {
+        final root = _node(san: '');
+        final ours = _node(san: 'ourTurn');
+        final bad = _node(san: 'bad', prune: PruneReason.evalTooLow)
+          ..engineEvalCp = -300;
+        final lessBad = _node(san: 'lessBad', prune: PruneReason.evalTooLow)
+          ..engineEvalCp = -120;
+        ours.children.addAll([bad, lessBad]);
+        root.children.add(ours);
+        return (_treeFrom(root), ours, [bad, lessBad]);
+      }
+
+      test('keeps the least bad reply rather than emptying the node', () {
+        final (tree, ours, moves) = allFlagged();
+
+        // One of the two goes; the better one stays as a leaf, so the line
+        // ends on our move instead of on the opponent's with nothing to play.
+        expect(pruneEvalTooLow(tree, playAsWhite: true), 1);
+        expect(ours.children, [moves[1]]);
+      });
+
+      test('is idempotent — a second pass keeps the same move', () {
+        final (tree, ours, moves) = allFlagged();
+
+        pruneEvalTooLow(tree, playAsWhite: true);
+        expect(pruneEvalTooLow(tree, playAsWhite: true), 0);
+        expect(ours.children, [moves[1]]);
+      });
+
+      test('does not apply where the opponent is to move', () {
+        // Same shape, but now it is their turn at the parent: these are
+        // positions we chose to enter, and dropping them all is correct.
+        final (tree, ours, _) = allFlagged();
+
+        expect(pruneEvalTooLow(tree, playAsWhite: false), 2);
+        expect(ours.children, isEmpty);
+      });
+
+      test('still drops flagged replies when a good one survives', () {
+        final root = _node(san: '');
+        final ours = _node(san: 'ourTurn');
+        final good = _node(san: 'good')..engineEvalCp = 10;
+        final bad = _node(san: 'bad', prune: PruneReason.evalTooLow)
+          ..engineEvalCp = -300;
+        ours.children.addAll([good, bad]);
+        root.children.add(ours);
+        final tree = _treeFrom(root);
+
+        expect(pruneEvalTooLow(tree, playAsWhite: true), 1);
+        expect(ours.children, [good]);
+      });
+    });
+
     test('evalTooHigh and other reasons are NOT pruned', () {
       final root = _node(san: '');
       root.children.add(_node(san: 'high', prune: PruneReason.evalTooHigh));
       final tree = _treeFrom(root);
 
-      expect(pruneEvalTooLow(tree), 0);
+      expect(pruneEvalTooLow(tree, playAsWhite: false), 0);
       expect(root.children.length, 1);
     });
   });

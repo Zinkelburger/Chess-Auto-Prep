@@ -11,6 +11,7 @@ export 'generation_phase.dart';
 
 extension GenerationPhaseLabels on GenerationPhase {
   String get label => switch (this) {
+    GenerationPhase.downloadingMasterGames => 'Downloading master games',
     GenerationPhase.parsingPgn => 'Parsing PGN',
     GenerationPhase.buildingTree => 'Building tree',
     GenerationPhase.enrichingEvals => 'Enriching evals',
@@ -23,6 +24,7 @@ extension GenerationPhaseLabels on GenerationPhase {
   };
 
   IconData get icon => switch (this) {
+    GenerationPhase.downloadingMasterGames => Icons.cloud_download_outlined,
     GenerationPhase.parsingPgn => Icons.description_outlined,
     GenerationPhase.buildingTree => Icons.account_tree_outlined,
     GenerationPhase.enrichingEvals => Icons.psychology_outlined,
@@ -112,6 +114,10 @@ List<String> buildGenerationStatParts({
       return ['$nodes nodes', 'engine evals in progress'];
     case GenerationPhase.parsingPgn:
       return ['Reading game files…'];
+    case GenerationPhase.downloadingMasterGames:
+      // The service's own line ("TWIC 1512 — importing… (7/260)") is already
+      // the status text; node counts mean nothing before the build starts.
+      return const ['The Week in Chess'];
     case GenerationPhase.verifying:
       return ['$nodes nodes', 'deep-checking selected moves'];
     case GenerationPhase.extractingLines:

@@ -21,6 +21,8 @@ import '../analysis_games_service.dart';
 import '../chess_api_urls.dart';
 import '../lichess_api_client.dart';
 import '../pgn_parsing_service.dart' show splitPgnIntoGames, extractHeaders;
+import '../game_store/game_store.dart';
+import '../game_store/game_store_service.dart';
 import '../storage/app_paths.dart';
 import 'game_filter.dart';
 
@@ -69,10 +71,14 @@ class GamesLibraryService {
     List<GameSelection> selections,
   ) => applySelectionUnion(parseGameRecords(pgn), selections);
 
+  static String _usernameKey(String username) =>
+      username.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]'), '_');
+
   Future<File> _cacheFile(GamesPlatform platform, String username) async {
     final dir = await AppPaths.gamesLibraryDirectory(create: true);
-    final safe = username.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]'), '_');
-    return File(p.join(dir.path, '${platform.name}_$safe.pgn'));
+    return File(
+      p.join(dir.path, '${platform.name}_${_usernameKey(username)}.pgn'),
+    );
   }
 
   /// Path of the on-disk cache for this player — the file the PGN viewer
@@ -147,7 +153,40 @@ class GamesLibraryService {
       }
     }
 
+    await _mirrorToStore(platform, username, file, pgn);
     return selectFromPgnUnion(pgn, [selection, ...unionWith]);
+  }
+
+  /// Keep the games database's `library:` collection equal to the cache
+  /// file, which stays the working copy (the PGN viewer edits it by path).
+  /// Runs only when the file is newer than the last mirror, off the UI
+  /// isolate, and never fails a load.
+  Future<void> _mirrorToStore(
+    GamesPlatform platform,
+    String username,
+    File file,
+    String pgn,
+  ) async {
+    if (pgn.trim().isEmpty) return;
+    try {
+      final collection = GameCollections.library(
+        platform.name,
+        _usernameKey(username),
+      );
+      final store = await GameStoreService.instance.open();
+      final mirrored = store.collectionUpdatedAt(collection);
+      final modified = await file.exists()
+          ? await file.lastModified()
+          : DateTime.now();
+      if (mirrored != null && !modified.isAfter(mirrored)) return;
+      await GameStoreService.instance.importPgnInBackground(
+        collection: collection,
+        pgnText: pgn,
+        replace: true,
+      );
+    } catch (_) {
+      // Mirror is a convenience index; the file is authoritative.
+    }
   }
 
   /// Replace one game's movetext inside a cache file, keeping its headers and

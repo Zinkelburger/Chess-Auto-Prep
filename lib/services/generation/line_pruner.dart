@@ -1,10 +1,19 @@
 /// Similarity pruning of extracted lines via greedy weighted set cover.
 ///
-/// The unit of value is the our-move a line teaches
-/// ([LineCoverageUnit], keyed by our-move projection prefix), so lines that
-/// differ only in opponent moves share every unit: once one is selected the
-/// other's marginal value is zero and it is dropped.  The survivors are the
-/// lines that teach the most new, likely-to-occur, sharpest our-moves.
+/// The unit of value is the decision a line teaches ([LineCoverageUnit],
+/// keyed by the position faced plus the move we play in it), so two lines
+/// share a unit whenever they put the user in front of the same choice —
+/// whether they differ only in the opponent's moves or transpose into one
+/// another by a different move order. Once one is selected the other's
+/// marginal value is zero and it is dropped. The survivors are the lines
+/// that teach the most new, likely-to-occur, sharpest decisions.
+///
+/// How many survive is driven by coverage rather than by a raw line count:
+/// the greedy runs to exhaustion, and the caller asks for the share of
+/// reachable value it wants. A line budget stays available as a hard cap for
+/// callers that need one, but it is no longer the thing you tune — "cover 92%
+/// of what I will actually face" transfers between repertoires in a way that
+/// "give me 100 lines" does not.
 library;
 
 import 'line_extractor.dart';
@@ -12,20 +21,32 @@ import 'line_extractor.dart';
 class LinePruner {
   LinePruner._();
 
-  /// Reduce [lines] to at most [targetCount] lines maximizing covered
-  /// our-move value.  Stops early once no remaining line adds an uncovered
-  /// our-move, so the result can be shorter than [targetCount]; lines with
-  /// zero novel value (pure duplicates by our-move projection) are always
-  /// dropped.  Preserves the input's relative order.  Returns [lines]
-  /// unchanged when [targetCount] <= 0.
+  /// Reduce [lines] to the survivors of a greedy weighted set cover over the
+  /// decisions they teach.
+  ///
+  /// [coverageTarget] is the share (0..1) of total reachable value to cover;
+  /// the result is the shortest prefix of the greedy order that reaches it.
+  /// 1.0 keeps every line that teaches anything new.
+  ///
+  /// [targetCount] is a hard cap on the number of lines, applied on top of
+  /// [coverageTarget]; 0 means no cap. Note the change from earlier
+  /// behaviour: 0 used to mean "skip pruning entirely", which handed callers
+  /// back every exact training duplicate (748 of 1533 on a real Benko tree).
+  /// Pruning now always runs — it only ever drops a line whose every decision
+  /// is already taught by a line that was kept, so there is nothing to lose
+  /// by it and no reason to offer switching it off.
+  ///
+  /// Lines with no decisions to teach are always dropped. Preserves the
+  /// input's relative order.
   static List<ExtractedLine> prune(
     List<ExtractedLine> lines, {
-    required int targetCount,
+    int targetCount = 0,
+    double coverageTarget = 1.0,
   }) {
-    if (targetCount <= 0 || lines.length <= 1) return lines;
+    if (lines.length <= 1) return lines;
 
     // Intern unit keys to ints so the greedy loop hashes ints, not
-    // move-sequence strings.
+    // position-and-move strings.
     final unitIdByKey = <String, int>{};
     final lineUnitIds = <List<int>>[];
     final lineUnitValues = <List<double>>[];
@@ -45,17 +66,44 @@ class LinePruner {
     // Marginal values only shrink as coverage grows, so a line whose cached
     // bound trails the current round's best can be skipped unrecomputed.
     final upperBound = List<double>.filled(lines.length, double.infinity);
-    final selected = <int>[];
 
-    while (selected.length < targetCount) {
+    // Lines that teach nothing are never picked and never count towards
+    // coverage; a line is "covered" once every decision in it is taught by
+    // something already kept.
+    final uncoveredLeft = [for (final ids in lineUnitIds) ids.toSet().length];
+    final linesByUnit = List.generate(unitIdByKey.length, (_) => <int>[]);
+    for (var i = 0; i < lineUnitIds.length; i++) {
+      for (final id in lineUnitIds[i].toSet()) {
+        linesByUnit[id].add(i);
+      }
+    }
+    var totalMass = 0.0;
+    for (var i = 0; i < lines.length; i++) {
+      if (uncoveredLeft[i] > 0) totalMass += lines[i].probability;
+    }
+
+    // Run the greedy to exhaustion, recording after each pick how much reach
+    // mass is *fully* covered by the picks so far.
+    //
+    // Coverage is deliberately measured in reach mass rather than in the
+    // unit values that order the greedy. The values are dominated by the
+    // handful of near-certain decisions at the top of the tree, so 92% of
+    // value arrives after ~60 lines while 92% of the positions you actually
+    // reach needs ~300. The second number is the one that answers "how much
+    // of what I will face does this book cover", which is the question the
+    // setting claims to answer.
+    final picks = <int>[];
+    final coveredMassAfter = <double>[];
+    var coveredMass = 0.0;
+    while (true) {
       var bestIdx = -1;
       var bestValue = 0.0;
-      for (int i = 0; i < lines.length; i++) {
+      for (var i = 0; i < lines.length; i++) {
         if (chosen[i] || upperBound[i] <= bestValue) continue;
         var marginal = 0.0;
         final ids = lineUnitIds[i];
         final values = lineUnitValues[i];
-        for (int j = 0; j < ids.length; j++) {
+        for (var j = 0; j < ids.length; j++) {
           if (!covered[ids[j]]) marginal += values[j];
         }
         upperBound[i] = marginal;
@@ -66,13 +114,34 @@ class LinePruner {
       }
       if (bestIdx < 0) break;
       chosen[bestIdx] = true;
-      selected.add(bestIdx);
-      for (final id in lineUnitIds[bestIdx]) {
+      picks.add(bestIdx);
+      for (final id in lineUnitIds[bestIdx].toSet()) {
+        if (covered[id]) continue;
         covered[id] = true;
+        for (final line in linesByUnit[id]) {
+          if (--uncoveredLeft[line] == 0)
+            coveredMass += lines[line].probability;
+        }
       }
+      coveredMassAfter.add(coveredMass);
     }
+    if (picks.isEmpty) return const [];
 
-    selected.sort();
+    final cap = targetCount > 0 && targetCount < picks.length
+        ? targetCount
+        : picks.length;
+    final want = coverageTarget.clamp(0.0, 1.0) * totalMass;
+
+    var take = 0;
+    while (take < cap && coveredMassAfter[take] < want) {
+      take++;
+    }
+    // The loop stops *at* the first pick that reaches the target, so take
+    // that one too. This also makes a target of zero return one line rather
+    // than none: a set with something to teach never comes back empty.
+    if (take < cap) take++;
+
+    final selected = picks.take(take).toList()..sort();
     return [for (final i in selected) lines[i]];
   }
 }

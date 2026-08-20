@@ -38,6 +38,8 @@ dependencies:
   # Persistent eval cache (desktop: Linux / macOS / Windows).
   sqflite_common_ffi: ^2.4.2
   sqlite3: ^3.3.3
+  # TWIC master-games download (zip per weekly issue).
+  archive: ^4.0.9
   cdbdirect_flutter_libs:
     path: packages/cdbdirect_flutter_libs
   path: ^1.9.0

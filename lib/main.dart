@@ -16,6 +16,7 @@ import 'theme/app_text_styles.dart';
 import 'services/default_pgn_service.dart';
 import 'services/engine/engine_lifecycle.dart';
 import 'services/eval_cache.dart';
+import 'services/master_games/master_games_service.dart';
 import 'widgets/escape_to_pop_scope.dart';
 
 void main() {
@@ -63,6 +64,12 @@ Future<void> _initializeApp() async {
   // same idempotent init() future so early engine-pane writes wait for the
   // DB instead of sticking in the L1 memory map only.
   unawaited(EvalCache.instance.init());
+  // Master-games coverage for the settings panel and the generator.
+  unawaited(
+    MasterGamesService.instance.load().then(
+      (_) => MasterGamesService.instance.autoSyncIfDue(),
+    ),
+  );
 
   unawaited(DefaultPgnService.ensureExtracted());
 }
@@ -157,6 +164,9 @@ class ChessAutoPrepApp extends StatelessWidget {
         ),
         ChangeNotifierProvider<EngineLifecycle>.value(
           value: EngineLifecycle.instance,
+        ),
+        ChangeNotifierProvider<MasterGamesService>.value(
+          value: MasterGamesService.instance,
         ),
         // App-scoped (not study-mode-scoped) so other modes can add chapters
         // ("Add line to study" in the PGN viewer) through the same document

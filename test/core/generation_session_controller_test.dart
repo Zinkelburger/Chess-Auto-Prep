@@ -4,12 +4,23 @@
 // startBuild, progress updates with notify throttling, the idle guards on
 // the control surface, and dispose safety.
 
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:archive/archive.dart';
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/core/generation_session_controller.dart';
 import 'package:chess_auto_prep/models/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
 import 'package:chess_auto_prep/services/jobs/generation_phase.dart';
+import 'package:chess_auto_prep/services/master_games/master_games_service.dart';
+import 'package:chess_auto_prep/services/master_games/twic_client.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 const _fenAfterE4 =
     'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
@@ -257,6 +268,153 @@ void main() {
       controller.updateProgress(nodes: 99);
       expect(controller.progressNodes, 99);
       await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+  });
+
+  group('master-games download phase', () {
+    late Directory tmp;
+    // Held open so the download never finishes on its own: every test here
+    // is about what happens *while* the run is parked on it.
+    late Completer<void> hold;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      tmp = await Directory.systemTemp.createTemp('genmg');
+      hold = Completer<void>();
+    });
+    tearDown(() async {
+      if (!hold.isCompleted) hold.complete();
+      await tmp.delete(recursive: true);
+    });
+
+    Uint8List zipOf(int issue) {
+      final pgn =
+          '[Event "Issue $issue"]\n[White "A,A"]\n[Black "B,B"]\n'
+          '[Result "1-0"]\n\n1. e4 e5 1-0\n';
+      final archive = Archive()
+        ..addFile(ArchiveFile.bytes('twic$issue.pgn', utf8.encode(pgn)));
+      return Uint8List.fromList(ZipEncoder().encode(archive));
+    }
+
+    /// Answers HEADs immediately (so the issue probe finishes) but parks
+    /// every zip body on [hold].
+    http.Client stalling() => MockClient((request) async {
+      final m = RegExp(r'twic(\d+)g\.zip$').firstMatch(request.url.path);
+      final issue = m == null ? null : int.parse(m.group(1)!);
+      if (issue == null || issue < 1650 || issue > 1651) {
+        return http.Response('', 404);
+      }
+      if (request.method == 'HEAD') return http.Response('', 200);
+      await hold.future;
+      return http.Response.bytes(zipOf(issue), 200);
+    });
+
+    Future<MasterGamesService> emptyService() async {
+      final svc = MasterGamesService(
+        clientFactory: () => TwicClient(httpClient: stalling()),
+        dbPathProvider: () async => '${tmp.path}/master_games.db',
+      );
+      addTearDown(svc.dispose);
+      await svc.load();
+      await svc.setStartIssue(1650);
+      return svc;
+    }
+
+    GenerationRequest requestWith({required bool download}) =>
+        GenerationRequest(
+          config: TreeBuildConfig(
+            startFen: kStandardStartFen,
+            playAsWhite: true,
+            downloadMasterGamesIfMissing: download,
+          ),
+          repertoireFilePath: '${tmp.path}/rep.pgn',
+          buildRootFen: kStandardStartFen,
+          lineMovePrefix: const [],
+          repertoireStartFen: kStandardStartFen,
+          onLinesSaved: (_) {},
+        );
+
+    /// Lets the pipeline run until [ready], without a real clock.
+    Future<void> until(bool Function() ready) async {
+      for (var i = 0; i < 200 && !ready(); i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+
+    test('an empty database parks the run before the engine is claimed, '
+        'and cancelling there is felt at once', () async {
+      final svc = await emptyService();
+      final controller = GenerationSessionController()..masterGames = () => svc;
+
+      final run = controller.startBuild(requestWith(download: true));
+      await until(() => controller.isAwaitingMasterGames);
+
+      expect(controller.isGenerating, isTrue);
+      expect(controller.progressPhase, GenerationPhase.downloadingMasterGames);
+      expect(controller.canPause, isFalse, reason: 'nothing to pause yet');
+      expect(svc.isSyncing, isTrue);
+      // The service's own line is mirrored into the build status.
+      await until(() => controller.progressStatus.contains('TWIC'));
+      expect(controller.progressStatus, contains('TWIC'));
+
+      controller.cancelBuild();
+      await run;
+
+      expect(controller.isGenerating, isFalse);
+      expect(controller.lastRunSummary, contains('Cancelled'));
+      expect(controller.generatedTree, isNull, reason: 'never got to build');
+      controller.dispose();
+    });
+
+    test('"start now without them" stops the wait and the download it '
+        'started', () async {
+      final svc = await emptyService();
+      final controller = GenerationSessionController()..masterGames = () => svc;
+
+      final run = controller.startBuild(requestWith(download: true));
+      await until(() => controller.isAwaitingMasterGames);
+
+      // Both calls land before the parked await resumes, so the run ends
+      // here instead of going on to claim an engine this test has no use
+      // for; the point is that the skip released the wait.
+      controller.skipMasterGamesDownload();
+      controller.cancelBuild();
+      expect(controller.isAwaitingMasterGames, isFalse);
+
+      await run;
+      expect(controller.isGenerating, isFalse);
+      // Ours to cancel, since this run started it.
+      await until(() => !svc.isSyncing);
+      expect(svc.isSyncing, isFalse);
+      controller.dispose();
+    });
+
+    test('with the download unticked the run never parks', () async {
+      final svc = await emptyService();
+      final controller = GenerationSessionController()..masterGames = () => svc;
+
+      // Refused for an unrelated reason (a resume from another position), so
+      // the pipeline stops before the engine — what matters is that it did
+      // not stop on the download first.
+      final request = GenerationRequest(
+        config: const TreeBuildConfig(
+          startFen: kStandardStartFen,
+          playAsWhite: true,
+          downloadMasterGamesIfMissing: false,
+        ),
+        repertoireFilePath: '${tmp.path}/rep.pgn',
+        buildRootFen: kStandardStartFen,
+        lineMovePrefix: const [],
+        repertoireStartFen: kStandardStartFen,
+        onLinesSaved: (_) {},
+        existingTree: _smallTree(rootFen: _fenAfterE4),
+      );
+      await controller.startBuild(request);
+
+      expect(controller.lastError, contains('Cannot resume'));
+      expect(controller.isAwaitingMasterGames, isFalse);
+      expect(svc.isSyncing, isFalse, reason: 'no download was started');
+      controller.dispose();
     });
   });
 }

@@ -44,10 +44,16 @@ String _pgnFor(String black) =>
     '1. e4 e5 2. Nf3 1-0';
 
 /// Canonical absolute paths of every regular file anywhere under [root].
+/// Every file under [root], except the games database (`app_games.db` and
+/// its WAL/SHM companions): that file has a fixed name in the support dir —
+/// nothing user-derived reaches its path — and both services mirror their
+/// games into it, so it appears in every run.
 Future<List<String>> _allFiles(Directory root) async {
   final out = <String>[];
   await for (final e in root.list(recursive: true, followLinks: false)) {
-    if (e is File) out.add(p.canonicalize(e.path));
+    if (e is! File) continue;
+    if (p.basename(e.path).startsWith('app_games.db')) continue;
+    out.add(p.canonicalize(e.path));
   }
   return out;
 }

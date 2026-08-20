@@ -30,6 +30,9 @@ import '../models/eval_database_settings.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/system_info.dart';
 import '../widgets/eval_database_settings_panel.dart';
+import '../widgets/master_games_settings_panel.dart';
+import '../widgets/games_database_settings_panel.dart';
+import '../services/master_games/master_games_service.dart';
 import '../widgets/settings/account_settings_section.dart';
 import '../widgets/settings/settings_widgets.dart';
 
@@ -90,6 +93,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                       // ── Engine ───────────────────────────────────
                       _buildEngineSection(cores),
+
+                      // ── Master games ─────────────────────────────
+                      Builder(
+                        builder: (context) {
+                          context.watch<MasterGamesService>();
+                          return _buildMasterGamesSection();
+                        },
+                      ),
+
+                      // ── Your games ───────────────────────────────
+                      _buildGamesDatabaseSection(),
 
                       // ── Database ─────────────────────────────────
                       Builder(
@@ -160,6 +174,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onChanged: (v) => _engine.maiaElo = v,
         ),
       ],
+    );
+  }
+
+  // ── Master games section ───────────────────────────────────────────────────
+
+  Widget _buildMasterGamesSection() {
+    return const SettingsGroup(
+      title: 'Master games database',
+      icon: Icons.library_books_outlined,
+      subtitle:
+          'Titled-player games from The Week in Chess, stored locally so '
+          'repertoires are built on master practice: opponent replies, model '
+          'games, and "improves on … in <game>" notes.',
+      children: [MasterGamesSettingsPanel()],
+    );
+  }
+
+  // ── Your games section ─────────────────────────────────────────────────────
+
+  Widget _buildGamesDatabaseSection() {
+    return const SettingsGroup(
+      title: 'Your games database',
+      icon: Icons.inventory_2_outlined,
+      subtitle:
+          'Every game the app downloads or imports — Player Analysis, the '
+          'home games library, the tactics archive — parsed once into a local '
+          'database with indexed players, dates and opening positions.',
+      children: [GamesDatabaseSettingsPanel()],
     );
   }
 

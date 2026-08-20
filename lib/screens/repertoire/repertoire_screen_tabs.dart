@@ -240,56 +240,14 @@ mixin _RepertoireTabContent
   }
 
   Widget _buildJobsContent() {
-    // The inline generation config auto-hides once a generation starts.
-    if (_generationController.isGenerating && _inlineConfig.showGeneration) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        if (_inlineConfig.onGenerationStarted()) setState(() {});
-      });
-    }
-
     return JobsTabContent(
-      showInlineGenConfig: _inlineConfig.showGeneration,
-      showInlineAuditConfig: _inlineConfig.showAudit,
       controller: _controller,
       generationController: _generationController,
       auditController: _auditController,
       jobManager: _jobManager,
-      generationTabKey: _generationTabKey,
-      onCloseInlineGenConfig: () {
-        if (_inlineConfig.onGenerationStarted()) setState(() {});
-      },
-      onCloseInlineAuditConfig: () {
-        if (_inlineConfig.onAuditStarted()) setState(() {});
-      },
-      onOpenGenerationDialog: _openGenerationDialog,
+      onOpenGenerationDialog: () => unawaited(_openGenerationDialog()),
       onOpenAuditConfig: () => _openAuditDialog(forceConfig: true),
       onOpenCoverageDialog: _showCoverageCalculator,
-      onAuditingChanged: (auditing) {
-        if (!mounted) return;
-        _auditController.onAuditingChanged(
-          auditing,
-          _jobManager,
-          _controller.currentRepertoire?.name ?? 'Audit',
-        );
-        if (auditing) {
-          _inlineConfig.onAuditStarted();
-          setState(() {});
-          _openBottomPane(BottomPaneTab.findings);
-        }
-      },
-      onAuditResultReady: (result) {
-        if (!mounted) return;
-        _auditController.onResultReady(result, _repertoireFilePath);
-      },
-      onAuditLiveFinding: (finding) {
-        if (!mounted) return;
-        _auditController.onLiveFinding(finding);
-      },
-      onAuditProgress: (checked, total) {
-        if (!mounted) return;
-        _auditController.onProgress(checked, total);
-      },
     );
   }
 
@@ -353,7 +311,6 @@ mixin _RepertoireTabContent
         jobsContent: _buildJobsContent(),
         findingsBadge: _auditController.activeFindingCount,
         jobsBadge: _jobManager.activeJobs.length,
-        onClose: _clearInlineConfigFlags,
       ),
     );
   }

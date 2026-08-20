@@ -10,6 +10,7 @@
 library;
 
 import 'dart:async';
+import 'dart:io';
 import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
@@ -23,13 +24,19 @@ import '../services/engine/engine_interrupt.dart';
 import '../services/engine/stockfish_pool.dart';
 import '../services/generation/course/chapter_titles.dart';
 import '../services/generation/course/course_composer.dart';
+import '../services/generation/course/master_improvements.dart';
 import '../services/generation/course/model_game_selector.dart';
 import '../services/generation/course/opening_namer.dart';
 import '../services/generation/course/refutation_prober.dart';
+import '../services/generation/pgn_freq_map.dart' show PgnGameRecord;
+import '../services/master_games/master_games_db.dart';
+import '../services/master_games/master_games_service.dart';
+import '../services/master_games/master_model_games.dart';
 import '../services/generation/eca_calculator.dart';
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import '../services/generation/line_extractor.dart';
+import '../services/generation/engine_tail.dart';
 import '../services/generation/line_pruner.dart';
 import '../services/generation/pgn_export.dart';
 import '../services/opening_book_service.dart';
@@ -62,6 +69,19 @@ class GenerationSessionController extends ChangeNotifier
     with SafeChangeNotifier {
   final TreeBuildService buildService = TreeBuildService();
   final CoherenceService coherenceService = CoherenceService();
+
+  /// The master-games database, consulted when the config asks for it and
+  /// it has games.  A supplier because the service loads (and syncs) after
+  /// this controller is constructed.
+  MasterGamesService Function() masterGames = () => MasterGamesService.instance;
+
+  /// The database to use for this run, or null when off/absent.
+  MasterGamesDb? _masterDbFor(TreeBuildConfig config) {
+    if (!config.useMasterGames) return null;
+    final service = masterGames();
+    if (!service.isAvailableForGeneration) return null;
+    return service.db;
+  }
 
   /// Live BFS / phase stats. The Jobs panel reads this; the pipeline writes it.
   late final GenerationProgress progress = GenerationProgress(
@@ -96,6 +116,21 @@ class GenerationSessionController extends ChangeNotifier
   /// is left to resume.  Tracked separately from [_cancelRequested] because
   /// the unwind must skip the partial-tree save and delete the file instead.
   bool _discardRequested = false;
+
+  /// Set once the user answers "start now without them" to the master-games
+  /// wait.  Session-scoped on purpose: a plan run builds one chapter after
+  /// another, and being asked to wait again for every chapter would make the
+  /// answer meaningless.
+  bool _masterGamesDownloadDeclined = false;
+
+  /// Completes when the run stops waiting for the master-games download —
+  /// because the user said so, or because the build was cancelled. Null
+  /// whenever the run is not parked on that wait.
+  Completer<void>? _masterWaitGate;
+
+  /// Whether the sync being waited on was started by this run (so stopping
+  /// the wait may stop the download) rather than joined.
+  bool _startedMasterSync = false;
 
   /// Single source of truth for the generated tree and every artifact derived
   /// from it (FenMap, eval-tree snapshot, trap index).
@@ -136,11 +171,20 @@ class GenerationSessionController extends ChangeNotifier
   /// (or was not asked for any).
   String lastModelGameNote = '';
 
+  /// Where the last run wrote its companion model-games file, if it did.
+  String? lastModelGamesPath;
+
   /// Losing replies the last run showed the punishment for.
   int lastRefutationCount = 0;
 
+  /// Leaf positions given an engine continuation by the last export.
+  int lastEngineTailCount = 0;
+
   /// Positions where the last run showed a refuted move the book leaves out.
   int lastAlternativeCount = 0;
+
+  /// Moves the last run annotated as improvements on a cited master game.
+  int lastImprovementCount = 0;
 
   final PgnBatchWriter _pgnWriter = PgnBatchWriter();
   Stopwatch _pipelineSw = Stopwatch();
@@ -160,6 +204,11 @@ class GenerationSessionController extends ChangeNotifier
       !_isPaused &&
       !_cancelRequested &&
       progress.phase.isPausable;
+
+  /// True while the run is parked waiting for the master-games download it
+  /// asked for.  The lock overlay offers "Start now without them" here.
+  bool get isAwaitingMasterGames =>
+      _isGenerating && progress.phase == GenerationPhase.downloadingMasterGames;
 
   bool get isSnapshotExporting => snapshots.isExporting;
   String? get snapshotStatus => snapshots.status;
@@ -250,6 +299,16 @@ class GenerationSessionController extends ChangeNotifier
 
     var engineEntered = false;
     try {
+      // Before the engine is claimed: an empty master-games database that
+      // the config asked to fill is downloaded here, so the build that
+      // wanted master practice actually gets it. Holding the engine across
+      // a multi-gigabyte download would strand it for nothing.
+      await _downloadMasterGamesPhase(config);
+      if (_cancelRequested) {
+        lastRunSummary = 'Cancelled before the build started.';
+        return;
+      }
+
       engineEntered = await _enterEngineIfNeeded(config);
 
       final built = await _buildTreePhase(request, prefix);
@@ -257,8 +316,16 @@ class GenerationSessionController extends ChangeNotifier
       if (built == null) return;
       final (:tree, :finishedEarly) = built;
 
-      final analysis = _analyzeTreePhase(tree, config);
-      await _verifyPhase(tree, analysis, config, finishedEarly: finishedEarly);
+      // Selection and verification judge nodes against the same eval window
+      // the build applied — the root-anchored one when relativeEval is on.
+      final anchored = config.anchoredToRoot(tree.root);
+      final analysis = _analyzeTreePhase(tree, anchored);
+      await _verifyPhase(
+        tree,
+        analysis,
+        anchored,
+        finishedEarly: finishedEarly,
+      );
       if (_cancelRequested) {
         lastRunSummary =
             'Cancelled during verification '
@@ -301,6 +368,87 @@ class GenerationSessionController extends ChangeNotifier
     }
   }
 
+  // ── Master games ─────────────────────────────────────────────────────
+
+  /// Fill an empty master-games database before building, when the config
+  /// asked for master practice and
+  /// [TreeBuildConfig.downloadMasterGamesIfMissing] is on.  Runs before the
+  /// engine is claimed, so a multi-gigabyte download does not strand
+  /// Stockfish, and returns as soon as the sync ends — finished, cancelled
+  /// or failed.  A failure is not fatal: the build proceeds without a book,
+  /// exactly as it does today.  Does nothing when the database already has
+  /// games or when the user declined the wait earlier this session.
+  Future<void> _downloadMasterGamesPhase(TreeBuildConfig config) async {
+    if (!config.useMasterGames || !config.downloadMasterGamesIfMissing) return;
+    if (_masterGamesDownloadDeclined || _cancelRequested) return;
+    final service = masterGames();
+    if (service.hasGames) return;
+
+    progress.setStatus(
+      'Downloading master games…',
+      GenerationPhase.downloadingMasterGames,
+    );
+    // Mirror the service's own progress line into the build status, so the
+    // lock overlay and the job tile show issue counts rather than a bare
+    // spinner.
+    void mirror() {
+      if (!isAwaitingMasterGames) return;
+      final status = service.status;
+      progress.setStatus(
+        status.isEmpty ? 'Downloading master games…' : status,
+        GenerationPhase.downloadingMasterGames,
+      );
+    }
+
+    // A sync already in flight (the startup auto-sync, or one started from
+    // Settings) is joined rather than duplicated — and, because it is not
+    // ours, is left running when we stop waiting.
+    _startedMasterSync = !service.isSyncing;
+    final gate = _masterWaitGate = Completer<void>();
+    service.addListener(mirror);
+    try {
+      final sync =
+          (_startedMasterSync ? service.sync() : service.syncCompletion)
+              .catchError((Object e) {
+                log.w(
+                  'master games download failed',
+                  name: 'GenerationSession',
+                  error: e,
+                );
+              });
+      // Whichever comes first: the sync ending, or the user (or a cancel)
+      // deciding not to wait for it.
+      await Future.any([sync, gate.future]);
+    } finally {
+      service.removeListener(mirror);
+      _masterWaitGate = null;
+    }
+    if (_cancelRequested) return;
+    progress.setStatus('Starting build…', GenerationPhase.idle);
+  }
+
+  /// Stop waiting for the master-games download.  The download itself is
+  /// cancelled only when this run started it — a sync the user kicked off
+  /// from Settings is theirs, and keeps going.  Cancelled or not, issues
+  /// already imported are kept and the next sync resumes from there.
+  void _stopWaitingForMasterGames() {
+    final gate = _masterWaitGate;
+    if (gate == null || gate.isCompleted) return;
+    if (_startedMasterSync) masterGames().cancel();
+    gate.complete();
+  }
+
+  /// "Start now without them": get on with the build using Maia and the
+  /// engine alone.  Sticky for the session, so a plan run building one
+  /// chapter after another does not ask again for every chapter.
+  void skipMasterGamesDownload() {
+    if (!isAwaitingMasterGames) return;
+    _masterGamesDownloadDeclined = true;
+    _stopWaitingForMasterGames();
+    progress.setStatus('Starting build…', GenerationPhase.idle);
+    notifyListeners();
+  }
+
   // ── Run lifecycle ────────────────────────────────────────────────────
 
   /// Reset every per-run field and announce the run to listeners/the job tile.
@@ -319,6 +467,7 @@ class GenerationSessionController extends ChangeNotifier
     lastModelGameNote = '';
     lastRefutationCount = 0;
     lastAlternativeCount = 0;
+    lastImprovementCount = 0;
     lastConfig = config;
     progress.reset();
     activeConfig = config;
@@ -470,6 +619,7 @@ class GenerationSessionController extends ChangeNotifier
           finishNow: () => _finishNowRequested,
           existingTree: existingTree,
           onProgress: progress.handleBuildProgress,
+          masterBook: _masterDbFor(config)?.bookMoves,
         );
       }
     }
@@ -635,15 +785,17 @@ class GenerationSessionController extends ChangeNotifier
     }
 
     final rawCount = lines.length;
-    if (config.targetLineCount > 0) {
-      lines = LinePruner.prune(lines, targetCount: config.targetLineCount);
-      if (lines.length < rawCount) {
-        progress.setStatus(
-          'Phase 3: kept ${lines.length} of $rawCount lines '
-          '(similarity pruning)...',
-          GenerationPhase.extractingLines,
-        );
-      }
+    lines = LinePruner.prune(
+      lines,
+      targetCount: config.targetLineCount,
+      coverageTarget: config.lineCoverageTarget,
+    );
+    if (lines.length < rawCount) {
+      progress.setStatus(
+        'Phase 3: kept ${lines.length} of $rawCount lines — '
+        '${(config.lineCoverageTarget * 100).round()}% coverage...',
+        GenerationPhase.extractingLines,
+      );
     }
     if (config.rankLinesByImportance) {
       lines.sort((a, b) => b.probability.compareTo(a.probability));
@@ -669,6 +821,8 @@ class GenerationSessionController extends ChangeNotifier
     final filePath = request.repertoireFilePath;
     final refutations = await _refutationPhase(extracted, request.config);
     final alternatives = await _alternativePhase(extracted, request.config);
+    final tails = await _engineTailPhase(extracted, request.config);
+    final improvements = await _improvementPhase(extracted, request.config);
     final course = await _composeCourse(
       tree,
       extracted,
@@ -676,6 +830,8 @@ class GenerationSessionController extends ChangeNotifier
       prefix,
       refutations,
       alternatives,
+      tails,
+      improvements,
     );
     lastCourseOutline = course.outline;
 
@@ -694,10 +850,45 @@ class GenerationSessionController extends ChangeNotifier
       );
     }
     await _pgnWriter.flush(filePath);
+    await _writeModelGamesFile(course, filePath);
     if (saved.isNotEmpty) {
       request.onLinesSaved(saved);
     }
   }
+
+  /// `<repertoire>_model_games.pgn` beside the course: the model games as
+  /// real games (real headers, real results, same annotations) so the PGN
+  /// viewer opens them as a game collection rather than as study chapters.
+  /// The chapter inside the course stays — it is what the study/trainer
+  /// flow reads.  A course with no model games removes a stale companion
+  /// from an earlier run so the two never disagree.
+  Future<void> _writeModelGamesFile(
+    ComposedCourse course,
+    String courseFilePath,
+  ) async {
+    lastModelGamesPath = null;
+    final path = modelGamesPathFor(courseFilePath);
+    final file = File(path);
+    try {
+      if (course.modelGamePgns.isEmpty) {
+        if (await file.exists()) await file.delete();
+        return;
+      }
+      await file.writeAsString(course.modelGamesPgn());
+      lastModelGamesPath = path;
+      lastModelGameNote =
+          '$lastModelGameNote Model games also saved to '
+          '${p.basename(path)}.';
+    } catch (e) {
+      debugPrint('Model games file not written: $e');
+    }
+  }
+
+  /// Companion file path for a course at [courseFilePath].
+  static String modelGamesPathFor(String courseFilePath) => p.join(
+    p.dirname(courseFilePath),
+    '${p.basenameWithoutExtension(courseFilePath)}_model_games.pgn',
+  );
 
   /// Build the course document.  Everything optional here degrades rather
   /// than fails: a missing opening book means move-based chapter names, and
@@ -743,6 +934,51 @@ class GenerationSessionController extends ChangeNotifier
     }
   }
 
+  /// Extend lines that stop at the build's ply cap with a few plies of raw
+  /// engine play, so a truncated line ends somewhere a reader can see.
+  ///
+  /// Emitted as a sideline off the final move rather than appended to it, for
+  /// the same reason refutations are: the mainline is what training quizzes,
+  /// and these moves carry none of the vetting the prepared moves do. They
+  /// are a look over the edge, not repertoire.
+  ///
+  /// Best-effort like [_refutationPhase]: this pass costs the tails when it
+  /// fails, never the export.
+  Future<Map<String, EngineTail>> _engineTailPhase(
+    ExtractedLines extracted,
+    TreeBuildConfig config,
+  ) async {
+    lastEngineTailCount = 0;
+    if (config.engineTailPlies <= 0 ||
+        !config.needsStockfish ||
+        _cancelRequested) {
+      return const {};
+    }
+    try {
+      if (StockfishPool.instance.workerCount == 0) {
+        await StockfishPool.instance.prepareForTreeBuild(
+          config.resolvedEngineThreads,
+        );
+      }
+      final tails = await computeEngineTails(
+        lines: extracted.lines,
+        config: config,
+        pool: StockfishPool.instance,
+        isCancelled: () => _cancelRequested,
+        onProgress: (done, total) => progress.setStatus(
+          'Phase 3.7: Extending cut-off lines with engine play '
+          '($done of $total) at depth ${config.resolvedEngineTailDepth}...',
+          GenerationPhase.extractingLines,
+        ),
+      );
+      lastEngineTailCount = tails.length;
+      return tails;
+    } catch (e) {
+      debugPrint('Engine tail pass failed: $e');
+      return const {};
+    }
+  }
+
   /// Ask what a human would play at each position the export passes through
   /// that the book leaves out, and why it is left out.
   ///
@@ -762,6 +998,7 @@ class GenerationSessionController extends ChangeNotifier
     final prober = RefutationProber(
       config: config,
       freqMap: buildService.lastGameDatabase,
+      masterBook: _masterDbFor(config)?.bookMoves,
     );
     if (prober.alternativeSites(extracted.lines).isEmpty) return const {};
 
@@ -795,6 +1032,8 @@ class GenerationSessionController extends ChangeNotifier
     List<String> prefix,
     RefutationMap refutations,
     AlternativeMap alternatives,
+    Map<String, EngineTail> tails,
+    ImprovementMap improvements,
   ) async {
     final config = request.config;
     final rootFen = prefix.isEmpty ? tree.root.fen : request.repertoireStartFen;
@@ -818,7 +1057,51 @@ class GenerationSessionController extends ChangeNotifier
       modelGames: _selectModelGames(tree, config),
       refutations: refutations,
       alternatives: alternatives,
+      engineTails: tails,
+      improvements: improvements,
     );
+  }
+
+  /// Phase 3.8: where the repertoire departs from what masters play and the
+  /// engine backs the departure, cite the game it improves on.  Skipped
+  /// without the database; best-effort like the other post-build passes.
+  Future<ImprovementMap> _improvementPhase(
+    ExtractedLines extracted,
+    TreeBuildConfig config,
+  ) async {
+    lastImprovementCount = 0;
+    if (!config.needsStockfish || _cancelRequested) return const {};
+    final db = _masterDbFor(config);
+    if (db == null) return const {};
+
+    final prober = MasterImprovementProber(
+      config: config,
+      book: db.bookMoves,
+      gameById: db.game,
+    );
+    if (prober.sites(extracted.lines).isEmpty) return const {};
+
+    try {
+      if (StockfishPool.instance.workerCount == 0) {
+        await StockfishPool.instance.prepareForTreeBuild(
+          config.resolvedEngineThreads,
+        );
+      }
+      final improvements = await prober.probe(
+        extracted.lines,
+        isCancelled: () => _cancelRequested,
+        onProgress: (done, total) => progress.setStatus(
+          'Phase 3.8: Comparing with master practice '
+          '($done of $total positions)...',
+          GenerationPhase.extractingLines,
+        ),
+      );
+      lastImprovementCount = improvements.length;
+      return improvements;
+    } catch (e) {
+      debugPrint('Improvements pass failed: $e');
+      return const {};
+    }
   }
 
   Future<OpeningNamer> _loadOpeningNamer(String rootFen) async {
@@ -842,27 +1125,43 @@ class GenerationSessionController extends ChangeNotifier
     if (config.modelGameCount <= 0) return const [];
 
     final database = buildService.lastGameDatabase;
-    if (database == null || database.games.isEmpty) {
-      // Only worth saying when a database was part of the build; an engine
-      // build never has one, and "no game database" would just be noise.
-      if (config.buildMode == BuildMode.dbExplorer) {
-        lastModelGameNote =
-            ' No model games: this build had no game database to draw them '
-            'from.';
+    final Iterable<PgnGameRecord> candidates;
+    final String sourceLabel;
+    if (database != null && !database.games.isEmpty) {
+      candidates = database.games.entries;
+      sourceLabel =
+          'the ${database.games.length} strongest games in the database';
+    } else {
+      final masterDb = _masterDbFor(config);
+      if (masterDb == null) {
+        // Only worth saying when a database was part of the build; an
+        // engine build never has one, and "no game database" would just be
+        // noise.
+        if (config.buildMode == BuildMode.dbExplorer) {
+          lastModelGameNote =
+              ' No model games: this build had no game database to draw '
+              'them from.';
+        }
+        return const [];
       }
-      return const [];
+      candidates = masterGameCandidates(
+        masterDb,
+        tree,
+        playAsWhite: config.playAsWhite,
+        minElo: config.modelGameMinElo,
+      );
+      sourceLabel = 'the master games database';
     }
 
     final games = ModelGameSelector(playAsWhite: config.playAsWhite).select(
-      database,
+      candidates,
       tree,
       limit: config.modelGameCount,
       fenMap: _current?.fenMap,
     );
     if (games.isEmpty) {
       lastModelGameNote =
-          ' No model games: none of the ${database.games.length} strongest '
-          'games in the database follow this repertoire.';
+          ' No model games: nothing in $sourceLabel follows this repertoire.';
     }
     return games;
   }
@@ -981,7 +1280,8 @@ class GenerationSessionController extends ChangeNotifier
     if (chapters < 2 &&
         games == 0 &&
         lastRefutationCount == 0 &&
-        lastAlternativeCount == 0) {
+        lastAlternativeCount == 0 &&
+        lastImprovementCount == 0) {
       return '';
     }
     return [
@@ -990,6 +1290,8 @@ class GenerationSessionController extends ChangeNotifier
       if (lastRefutationCount > 0) ', $lastRefutationCount punished replies',
       if (lastAlternativeCount > 0)
         ', $lastAlternativeCount refuted alternatives',
+      if (lastImprovementCount > 0)
+        ', $lastImprovementCount improvements on master games',
     ].join();
   }
 
@@ -1139,6 +1441,9 @@ class GenerationSessionController extends ChangeNotifier
       _pipelineSw.start();
     }
     buildService.stopBuild();
+    // A run parked on the master-games download has no BFS to stop; without
+    // this the cancel would not be felt until the whole download finished.
+    _stopWaitingForMasterGames();
     progress.status = _discardRequested ? 'Discarding…' : 'Cancelling…';
     progress.flushNotify();
   }

@@ -5,12 +5,60 @@
 /// the repertoire — every one of our moves is the move the repertoire teaches
 /// — and then prefers the ones a strong player would learn the most from.
 ///
-/// Pure over the built tree and the parsed database: no engine, no I/O.
+/// Pure over the built tree and the candidate games (a scanned PGN
+/// database's reservoir, or games pulled from the master-games database):
+/// no engine, no I/O.
 library;
 
 import '../../../models/build_tree_node.dart';
 import '../fen_map.dart';
 import '../pgn_freq_map.dart';
+
+/// Who stepped off the repertoire first in a model game.
+enum DepartureKind {
+  /// Our side played something other than the repertoire move — the
+  /// repertoire *improves on* (or at least differs from) the game here.
+  ours,
+
+  /// The opponent played a reply the repertoire does not cover.
+  opponent,
+}
+
+/// Where a model game leaves the repertoire, and what the repertoire does
+/// there instead — what an annotated model game needs to say "we play
+/// 10...Qb6 here".  Absent when the game ends, or the tree runs out, while
+/// still inside the repertoire.
+class ModelGameDeparture {
+  /// Index in the game's `movesSan` of the departing move.
+  final int index;
+  final DepartureKind kind;
+
+  /// Position the departing move was played from (the tree node's FEN).
+  final String fenBefore;
+
+  /// The move the game played.
+  final String gameSan;
+
+  /// [DepartureKind.ours]: the repertoire move followed by its mainline, as
+  /// SAN from [fenBefore] — a clickable variation.  Empty otherwise.
+  final List<String> repertoireLine;
+
+  /// [DepartureKind.opponent]: the replies the repertoire does prepare from
+  /// [fenBefore], most likely first.  Empty otherwise.
+  final List<String> preparedReplies;
+
+  const ModelGameDeparture({
+    required this.index,
+    required this.kind,
+    required this.fenBefore,
+    required this.gameSan,
+    this.repertoireLine = const [],
+    this.preparedReplies = const [],
+  });
+
+  String? get repertoireSan =>
+      repertoireLine.isEmpty ? null : repertoireLine.first;
+}
 
 /// A database game that follows the repertoire, with the evidence for why it
 /// was chosen.
@@ -22,7 +70,15 @@ class ModelGame {
   /// opponent's only had to exist in the tree.
   final int followedPlies;
 
-  const ModelGame({required this.record, required this.followedPlies});
+  /// Where and how the game left the repertoire (null: it never did within
+  /// the tree's reach).
+  final ModelGameDeparture? departure;
+
+  const ModelGame({
+    required this.record,
+    required this.followedPlies,
+    this.departure,
+  });
 
   /// Moves the game shares with the repertoire — its "line signature", used
   /// to keep the selection from being six games of the same variation.
@@ -54,18 +110,24 @@ class ModelGameSelector {
   /// before any variation gets a second, so a course covers its chapters
   /// instead of showing six wins in the same line.
   List<ModelGame> select(
-    PgnFreqMap database,
+    Iterable<PgnGameRecord> games,
     BuildTree tree, {
     required int limit,
     FenMap? fenMap,
   }) {
-    if (limit <= 0 || database.games.isEmpty) return const [];
+    if (limit <= 0) return const [];
 
     final candidates = <ModelGame>[];
-    for (final record in database.games.entries) {
-      final followed = _followedPlies(tree, record.movesSan, fenMap);
+    for (final record in games) {
+      final (followed, departure) = _follow(tree, record.movesSan, fenMap);
       if (followed < minFollowedPlies) continue;
-      candidates.add(ModelGame(record: record, followedPlies: followed));
+      candidates.add(
+        ModelGame(
+          record: record,
+          followedPlies: followed,
+          departure: departure,
+        ),
+      );
     }
     if (candidates.isEmpty) return const [];
 
@@ -120,10 +182,23 @@ class ModelGameSelector {
     return 0;
   }
 
+  /// Plies of the repertoire mainline shown after a departure, counting the
+  /// repertoire move itself.
+  static const int repertoireLinePlies = 10;
+
+  /// Prepared replies listed at an opponent departure.
+  static const int preparedRepliesShown = 3;
+
   /// How far [movesSan] stays inside the repertoire, starting at the tree
-  /// root.  Stops at the first move that is not in the tree, or at the first
-  /// of *our* moves that is not the one the repertoire selected.
-  int _followedPlies(BuildTree tree, List<String> movesSan, FenMap? fenMap) {
+  /// root, and where it leaves.  Following stops at the first move that is
+  /// not in the tree, or at the first of *our* moves that is not the one the
+  /// repertoire selected; the departure describes that move when the tree
+  /// still had something to say there.
+  (int, ModelGameDeparture?) _follow(
+    BuildTree tree,
+    List<String> movesSan,
+    FenMap? fenMap,
+  ) {
     var node = tree.root;
     var followed = 0;
 
@@ -138,12 +213,77 @@ class ModelGameSelector {
           break;
         }
       }
-      if (next == null) break;
-      if (isOurTurn && !next.isRepertoireMove) break;
-
+      final stays = next != null && (!isOurTurn || next.isRepertoireMove);
+      if (!stays) {
+        return (followed, _departure(resolved, followed, san, fenMap));
+      }
       node = next;
       followed++;
     }
-    return followed;
+    return (followed, null);
+  }
+
+  ModelGameDeparture? _departure(
+    BuildTreeNode node,
+    int index,
+    String gameSan,
+    FenMap? fenMap,
+  ) {
+    final isOurTurn = node.isWhiteToMove == playAsWhite;
+    if (isOurTurn) {
+      final line = _repertoireLine(node, fenMap);
+      if (line.isEmpty) return null; // tree ends here: nothing to compare
+      return ModelGameDeparture(
+        index: index,
+        kind: DepartureKind.ours,
+        fenBefore: node.fen,
+        gameSan: gameSan,
+        repertoireLine: line,
+      );
+    }
+    final replies = node.children.toList()
+      ..sort((a, b) => b.moveProbability.compareTo(a.moveProbability));
+    if (replies.isEmpty) return null;
+    return ModelGameDeparture(
+      index: index,
+      kind: DepartureKind.opponent,
+      fenBefore: node.fen,
+      gameSan: gameSan,
+      preparedReplies: [
+        for (final c in replies.take(preparedRepliesShown)) c.moveSan,
+      ],
+    );
+  }
+
+  /// The repertoire mainline from an our-move [node]: our selected move at
+  /// our turns, the most likely reply at theirs, for [repertoireLinePlies].
+  List<String> _repertoireLine(BuildTreeNode node, FenMap? fenMap) {
+    final out = <String>[];
+    var current = node;
+    final visited = <String>{};
+    while (out.length < repertoireLinePlies) {
+      final resolved = resolveTransposition(current, fenMap);
+      if (!visited.add(resolved.fen)) break;
+      final isOurTurn = resolved.isWhiteToMove == playAsWhite;
+      BuildTreeNode? next;
+      if (isOurTurn) {
+        for (final c in resolved.children) {
+          if (c.isRepertoireMove) {
+            next = c;
+            break;
+          }
+        }
+      } else {
+        for (final c in resolved.children) {
+          if (next == null || c.moveProbability > next.moveProbability) {
+            next = c;
+          }
+        }
+      }
+      if (next == null) break;
+      out.add(next.moveSan);
+      current = next;
+    }
+    return out;
   }
 }

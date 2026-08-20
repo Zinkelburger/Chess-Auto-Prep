@@ -2,23 +2,28 @@ import 'package:flutter/material.dart';
 
 import '../../../constants/ui_breakpoints.dart';
 import '../../../models/repertoire_metadata.dart';
-import '../../../screens/settings_screen.dart';
 import '../../../theme/app_colors.dart';
 import '../../../widgets/app_breadcrumb_trail.dart';
 import '../../../widgets/app_mode_menu_button.dart';
+import '../../../widgets/app_overflow_menu.dart';
 import '../../../widgets/common/searchable_picker_dialog.dart';
 import '../../../widgets/layout/board_zone.dart';
 
 /// App bar for the repertoire screen: title, generation status, and actions.
 ///
-/// Actions are grouped by workflow, not by feature:
-/// - the title doubles as the repertoire switcher,
+/// Four controls, in the order they are reached for:
+/// - the title doubles as the repertoire/chapter switcher,
 /// - one "Add lines" menu ([RepertoireAddLinesMenu]) holds every way of
-///   putting moves into the repertoire (generate, build by playing, from
-///   games, import/paste PGN); Audit stands beside it as a check on what is
-///   already there,
+///   putting moves into the repertoire,
 /// - Train is the primary (filled) action,
-/// - everything occasional lives in the trailing overflow menu.
+/// - everything else — Audit and both settings dialogs — lives in the
+///   trailing overflow menu. Audit used to sit in the bar as a button of
+///   its own; six controls read as a wall, and it is a check on what is
+///   already there rather than something you reach for while building.
+///
+/// Chapters are reached from the breadcrumb title, which already lists them
+/// with a search box — the bar's separate Chapters icon went nowhere the
+/// title did not.
 class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   const RepertoireToolbar({
     super.key,
@@ -27,12 +32,10 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     this.isGenerationPaused = false,
     this.showTrainButton = false,
     this.showSelectRepertoireAction = false,
-    this.showChaptersAction = false,
     this.generationLocked = false,
     this.trapNavigation,
     required this.onOpenSettings,
     this.onSelectRepertoire,
-    this.onOpenChapters,
     this.onTrainRepertoire,
     this.onOpenGeneration,
     this.onPlanBuild,
@@ -50,12 +53,10 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   final bool isGenerationPaused;
   final bool showTrainButton;
   final bool showSelectRepertoireAction;
-  final bool showChaptersAction;
   final bool generationLocked;
   final Widget? trapNavigation;
   final VoidCallback onOpenSettings;
   final VoidCallback? onSelectRepertoire;
-  final VoidCallback? onOpenChapters;
   final VoidCallback? onTrainRepertoire;
   final VoidCallback? onOpenGeneration;
   final VoidCallback? onPlanBuild;
@@ -91,12 +92,6 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
       ),
       actions: [
         BoardZoneControls(trapNavigation: trapNavigation),
-        if (showChaptersAction && onOpenChapters != null)
-          IconButton(
-            tooltip: 'Chapters',
-            icon: const Icon(Icons.menu_book, size: 20),
-            onPressed: generationLocked ? null : onOpenChapters,
-          ),
         if (isGenerating)
           RepertoireGenerationStatusChip(
             isPaused: isGenerationPaused,
@@ -110,64 +105,57 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
           onImportPgnFile: onImportPgnFile,
           onImportPgnPaste: onImportPgnPaste,
         ),
-        if (onOpenAudit != null) RepertoireAuditButton(onPressed: onOpenAudit),
         if (showTrainButton && onTrainRepertoire != null)
           RepertoireTrainButton(
             onPressed: generationLocked ? null : onTrainRepertoire,
           ),
-        PopupMenuButton<String>(
-          icon: const Icon(Icons.more_vert, size: 20),
-          tooltip: 'More actions',
-          onSelected: (value) {
-            switch (value) {
-              case 'repertoire_options':
-                onOpenRepertoireOptions?.call();
-              case 'settings':
-                onOpenSettings();
-            }
-          },
-          itemBuilder: (_) => [
+        AppOverflowMenu(
+          entries: [
+            if (onOpenAudit != null)
+              AppMenuEntry(
+                label: 'Audit for gaps…',
+                icon: Icons.policy_outlined,
+                onRun: onOpenAudit!,
+              ),
             if (onOpenRepertoireOptions != null)
-              PopupMenuItem(
-                value: 'repertoire_options',
-                child: ListTile(
-                  // Bordered swatch, not a bare Icon: the sideBlack disc is
-                  // near-invisible on the popup surface without an outline.
-                  leading: Container(
-                    width: 20,
-                    height: 20,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: (isWhiteRepertoire ?? true)
-                          ? AppColors.sideWhite
-                          : AppColors.sideBlack,
-                      border: Border.all(color: AppColors.outline),
-                    ),
-                  ),
-                  title: const Text('Repertoire settings…'),
-                  subtitle: isWhiteRepertoire == null
-                      ? null
-                      : Text(
-                          'Playing ${isWhiteRepertoire! ? 'White' : 'Black'}',
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                ),
+              AppMenuEntry(
+                label: 'Repertoire settings…',
+                // Bordered swatch, not a bare Icon: the sideBlack disc is
+                // near-invisible on the popup surface without an outline.
+                leading: _SideSwatch(isWhite: isWhiteRepertoire ?? true),
+                onRun: onOpenRepertoireOptions!,
+                dividerAbove: true,
               ),
-            const PopupMenuItem(
-              value: 'settings',
-              child: ListTile(
-                leading: Icon(Icons.settings, size: 20),
-                title: Text('App settings…'),
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-              ),
+            AppMenuEntry(
+              label: 'App settings…',
+              icon: Icons.settings,
+              onRun: onOpenSettings,
+              dividerAbove: onOpenRepertoireOptions == null,
             ),
           ],
         ),
         const AppModeMenuButton(),
       ],
+    );
+  }
+}
+
+/// The side-to-play disc shown beside "Repertoire settings…".
+class _SideSwatch extends StatelessWidget {
+  const _SideSwatch({required this.isWhite});
+
+  final bool isWhite;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 18,
+      height: 18,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: isWhite ? AppColors.sideWhite : AppColors.sideBlack,
+        border: Border.all(color: AppColors.outline),
+      ),
     );
   }
 }
@@ -481,21 +469,15 @@ class RepertoireGenerationStatusChip extends StatelessWidget {
   }
 }
 
-/// One entry in the "Add lines" menu.
-class _AddLinesEntry {
-  const _AddLinesEntry(this.label, this.icon, this.onRun, {this.hint});
-
-  final String label;
-  final IconData icon;
-  final VoidCallback onRun;
-  final String? hint;
-}
-
-/// The one place every way of *adding lines* to a repertoire lives: generate
-/// with the engine, build by playing, mine your own games, import or paste a
-/// PGN. One tap opens the menu, one tap runs the item — every entry opens its
-/// own configuration step or picker first, so nothing heavy can fire by
-/// accident and there is no separate "Run" step to explain.
+/// The one place every way of *adding lines* to a repertoire lives: plan a
+/// build, generate from the board, play the moves yourself, mine your own
+/// games, or load a PGN off disk. One tap opens the menu, one tap runs the
+/// item — every entry opens its own configuration step or picker first, so
+/// nothing heavy can fire by accident.
+///
+/// Rows are labels only. They used to carry an explaining sentence each,
+/// which turned a six-item menu into a wall of prose and made the choice
+/// harder rather than easier; the labels say which is which on their own.
 class RepertoireAddLinesMenu extends StatelessWidget {
   const RepertoireAddLinesMenu({
     super.key,
@@ -514,39 +496,46 @@ class RepertoireAddLinesMenu extends StatelessWidget {
   final VoidCallback? onImportPgnFile;
   final VoidCallback? onImportPgnPaste;
 
-  List<_AddLinesEntry> get _entries => [
+  List<AppMenuEntry> get _entries => [
     if (onPlanBuild != null)
-      _AddLinesEntry(
-        'Plan a build…',
-        Icons.route_outlined,
-        onPlanBuild!,
-        hint: 'Answer a few forks; get chapters, then generate them all',
+      AppMenuEntry(
+        label: 'Plan a build…',
+        icon: Icons.route_outlined,
+        onRun: onPlanBuild!,
       ),
     if (onGenerate != null)
-      _AddLinesEntry(
-        'Generate from here…',
-        Icons.auto_awesome,
-        onGenerate!,
-        hint: 'One engine build from the board position',
+      AppMenuEntry(
+        label: 'Generate from here…',
+        icon: Icons.auto_awesome,
+        onRun: onGenerate!,
       ),
+    // Named for what the user does, not for the mode's internal name: the
+    // one thing that separates it from Generate is who chooses our moves.
     if (onBuildByPlaying != null)
-      _AddLinesEntry(
-        'Build by playing',
-        Icons.sports_esports,
-        onBuildByPlaying!,
-        hint: 'Play your moves; the app answers',
+      AppMenuEntry(
+        label: 'Play the moves myself…',
+        icon: Icons.sports_esports,
+        onRun: onBuildByPlaying!,
       ),
     if (onBuildFromGames != null)
-      _AddLinesEntry(
-        'From my games…',
-        Icons.download_for_offline_outlined,
-        onBuildFromGames!,
-        hint: 'Mine lines you already play',
+      AppMenuEntry(
+        label: 'From my games…',
+        icon: Icons.download_for_offline_outlined,
+        onRun: onBuildFromGames!,
       ),
     if (onImportPgnFile != null)
-      _AddLinesEntry('Import PGN file…', Icons.file_open, onImportPgnFile!),
+      AppMenuEntry(
+        label: 'Load from disk…',
+        icon: Icons.file_open,
+        onRun: onImportPgnFile!,
+        dividerAbove: true,
+      ),
     if (onImportPgnPaste != null)
-      _AddLinesEntry('Paste PGN…', Icons.paste, onImportPgnPaste!),
+      AppMenuEntry(
+        label: 'Paste PGN…',
+        icon: Icons.paste,
+        onRun: onImportPgnPaste!,
+      ),
   ];
 
   @override
@@ -561,25 +550,14 @@ class RepertoireAddLinesMenu extends StatelessWidget {
       child: Center(
         child: MenuAnchor(
           menuChildren: [
-            for (final e in entries)
+            for (final e in entries) ...[
+              if (e.dividerAbove) const Divider(height: 1),
               MenuItemButton(
-                leadingIcon: Icon(e.icon, size: 20),
+                leadingIcon: Icon(e.icon, size: 18),
                 onPressed: e.onRun,
-                child: e.hint == null
-                    ? Text(e.label)
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(e.label),
-                          Text(
-                            e.hint!,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: AppColors.onSurfaceMuted),
-                          ),
-                        ],
-                      ),
+                child: Text(e.label, style: const TextStyle(fontSize: 13)),
               ),
+            ],
           ],
           builder: (context, controller, _) {
             void toggle() =>
@@ -605,37 +583,6 @@ class RepertoireAddLinesMenu extends StatelessWidget {
                   );
           },
         ),
-      ),
-    );
-  }
-}
-
-/// Audit is a check on what is already there, not a way of adding lines, so
-/// it stands beside the menu rather than inside it.
-class RepertoireAuditButton extends StatelessWidget {
-  const RepertoireAuditButton({super.key, required this.onPressed});
-
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final compact =
-        MediaQuery.sizeOf(context).width < kToolbarCompactBreakpoint;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Center(
-        child: compact
-            ? IconButton.outlined(
-                tooltip: 'Audit for gaps',
-                onPressed: onPressed,
-                iconSize: 18,
-                icon: const Icon(Icons.policy_outlined),
-              )
-            : OutlinedButton.icon(
-                onPressed: onPressed,
-                icon: const Icon(Icons.policy_outlined, size: 18),
-                label: const Text('Audit'),
-              ),
       ),
     );
   }
@@ -668,12 +615,4 @@ class RepertoireTrainButton extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Opens global settings from the repertoire toolbar.
-Future<void> openRepertoireSettings(BuildContext context) {
-  return Navigator.push(
-    context,
-    MaterialPageRoute(builder: (_) => const SettingsScreen()),
-  );
 }

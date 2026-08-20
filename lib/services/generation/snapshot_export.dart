@@ -14,6 +14,7 @@ library;
 import '../../models/build_tree_node.dart';
 import '../../utils/findability.dart';
 import 'eca_calculator.dart';
+import 'engine_tail.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
 import 'line_extractor.dart';
@@ -41,12 +42,16 @@ class SnapshotExportRequest {
   /// as JSON so the caller can run the engine pass before extraction.
   final bool stopAfterSelection;
 
+  /// Engine continuations keyed by leaf FEN, if the caller computed any.
+  final Map<String, EngineTail> engineTails;
+
   const SnapshotExportRequest({
     required this.treeJson,
     required this.configJson,
     required this.prefix,
     required this.repertoireStartFen,
     this.stopAfterSelection = false,
+    this.engineTails = const {},
   });
 }
 
@@ -76,10 +81,12 @@ class SnapshotExportResult {
 /// run via `Isolate.run`.
 SnapshotExportResult runSnapshotExport(SnapshotExportRequest request) {
   final tree = deserializeTree(request.treeJson);
+  // The snapshot stores the config as the user set it; selection must see
+  // the same root-anchored eval window the build used.
   final config = TreeBuildConfig.fromJson(
     request.configJson,
     startFen: tree.root.fen,
-  );
+  ).anchoredToRoot(tree.root);
 
   calculateTreeEase(tree);
   final fenMap = FenMap()..populate(tree.root);
@@ -112,6 +119,7 @@ SnapshotExportResult runSnapshotExport(SnapshotExportRequest request) {
       fenMap: fenMap,
       prefix: request.prefix,
       repertoireStartFen: request.repertoireStartFen,
+      engineTails: request.engineTails,
     ),
     selectedCount: selectedCount,
     totalNodes: tree.totalNodes,
@@ -121,12 +129,16 @@ SnapshotExportResult runSnapshotExport(SnapshotExportRequest request) {
 
 /// Extract lines from a post-selection tree and format them as PGN entries.
 /// Mirrors the final pipeline's export loop in [GenerationSessionController].
+/// [engineTails] is keyed by leaf FEN; a line whose leaf is present gets the
+/// continuation hung off its final move. Computed by the caller because it
+/// needs the engine and this function is isolate-pure.
 List<String> extractSnapshotLines({
   required BuildTree tree,
   required TreeBuildConfig config,
   required FenMap fenMap,
   required List<String> prefix,
   required String repertoireStartFen,
+  Map<String, EngineTail> engineTails = const {},
 }) {
   tree.sortAllChildren();
   tree.computeMetadata();
@@ -143,12 +155,11 @@ List<String> extractSnapshotLines({
       (line) => line.movesSan,
     );
   }
-  if (config.targetLineCount > 0) {
-    extractedLines = LinePruner.prune(
-      extractedLines,
-      targetCount: config.targetLineCount,
-    );
-  }
+  extractedLines = LinePruner.prune(
+    extractedLines,
+    targetCount: config.targetLineCount,
+    coverageTarget: config.lineCoverageTarget,
+  );
   if (config.rankLinesByImportance) {
     extractedLines.sort((a, b) => b.probability.compareTo(a.probability));
   }
@@ -165,6 +176,7 @@ List<String> extractSnapshotLines({
         detail: config.annotationDetail,
         annotationOffset: prefix.length,
         rankByImportance: config.rankLinesByImportance,
+        engineTail: engineTails[extractedLines[i].leafFen],
       ),
   ];
 }

@@ -186,6 +186,64 @@ void main() {
       expect(evalWindowPrune(node, config), isTrue);
       expect(node.pruneReason, PruneReason.evalTooLow);
     });
+
+    // A node where *we* are to move was reached by the opponent's move.
+    // evalTooLow deletes the whole subtree, so applying it there deletes the
+    // repertoire's answer to a move the opponent has already played.
+    BuildTreeNode afterOpponentReply({double probability = 0.5}) => makeNode(
+      fen: kFenAfterE4E5,
+      san: 'e5',
+      ply: 2,
+      isWhiteToMove: true, // we are White, so this is our turn
+      evalCp: -100, // -100 for us, below the -50 floor
+      moveProbability: probability,
+    );
+
+    test('a position the opponent forced on us is never deleted', () {
+      final node = afterOpponentReply();
+
+      expect(evalWindowPrune(node, config), isFalse);
+      expect(node.pruneReason, PruneReason.none);
+    });
+
+    test('however rarely they play it — we still have to have an answer', () {
+      final node = afterOpponentReply(probability: 0.001);
+
+      expect(evalWindowPrune(node, config), isFalse);
+      expect(node.pruneReason, PruneReason.none);
+    });
+
+    test('a position we chose to enter is still deleted when it is bad', () {
+      // Opponent to move: we played the move that led here, so the window is
+      // judging our own choice and may reject it.
+      final node = makeNode(
+        fen: kFenAfterE4,
+        san: 'e4',
+        ply: 1,
+        isWhiteToMove: false,
+        evalCp: 100, // -100 for us
+      );
+
+      expect(evalWindowPrune(node, config), isTrue);
+      expect(node.pruneReason, PruneReason.evalTooLow);
+    });
+
+    test('a winning position is still capped on either side to move', () {
+      for (final ourTurn in [true, false]) {
+        final node = makeNode(
+          fen: ourTurn ? kFenAfterE4E5 : kFenAfterE4,
+          san: 'x',
+          ply: 2,
+          isWhiteToMove: ourTurn,
+          evalCp: ourTurn ? 300 : -300, // +300 for us either way
+        );
+
+        // Too-high keeps the node as an annotated leaf rather than deleting
+        // it, so it leaves no hole and needs no exemption.
+        expect(evalWindowPrune(node, config), isTrue);
+        expect(node.pruneReason, PruneReason.evalTooHigh);
+      }
+    });
   });
 
   group('addOpponentChildren fan-out policy', () {

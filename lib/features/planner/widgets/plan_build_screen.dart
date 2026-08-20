@@ -451,17 +451,6 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
               icon: const Icon(Icons.flag_outlined, size: 16),
               label: const Text('Finish now'),
             ),
-          PopupMenuButton<String>(
-            tooltip: 'Options',
-            onSelected: (_) => setState(() => _useOwnGames = !_useOwnGames),
-            itemBuilder: (_) => [
-              CheckedPopupMenuItem<String>(
-                value: 'games',
-                checked: _useOwnGames,
-                child: const Text('Use my games from Player Analysis'),
-              ),
-            ],
-          ),
           IconButton(
             tooltip: 'Close planner',
             icon: const Icon(Icons.close),
@@ -831,17 +820,33 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
             border: OutlineInputBorder(),
           ),
         ),
-        if (_ownGamesNote != null) ...[
-          const SizedBox(height: 8),
-          Text(
-            _ownGamesNote!,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.onSurfaceMuted,
-            ),
+        const SizedBox(height: 8),
+        // Lives here rather than on the review card: the games are read once,
+        // when the walk starts, and they decide which replies come
+        // pre-ticked. By review time the answer has already been used.
+        CheckboxListTile(
+          value: _useOwnGames,
+          onChanged: _preparing
+              ? null
+              : (v) => setState(() => _useOwnGames = v ?? false),
+          controlAffinity: ListTileControlAffinity.leading,
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text(
+            'Prefer lines I play in my games',
+            style: TextStyle(fontSize: 13),
           ),
-        ],
-        const SizedBox(height: 24),
+          subtitle: _ownGamesNote == null
+              ? null
+              : Text(
+                  _ownGamesNote!,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    color: AppColors.onSurfaceMuted,
+                  ),
+                ),
+        ),
+        const SizedBox(height: 16),
         Row(
           children: [
             const Spacer(),

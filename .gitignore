@@ -124,3 +124,13 @@ scripts/chesscom_titled_analysis/data/
 
 # Sample TWIC input -- re-fetch with python/twic-position-finder/downloader.py
 twic*.pgn
+
+# harness results: trees, sandboxes, logs (keep compare reports)
+tools/experiments/fast_vs_pure/results/*/fast/
+tools/experiments/fast_vs_pure/results/*/pure/
+tools/experiments/fast_vs_pure/results/*/*.log
+tools/experiments/fast_vs_pure/results/*/pid
+
+# benko_master harness: keep the scripts, not the runs (trees, engine copies, pids)
+tools/experiments/benko_master/run_*/
+tools/experiments/benko_master/LATEST*

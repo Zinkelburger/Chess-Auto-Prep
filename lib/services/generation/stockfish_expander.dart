@@ -44,7 +44,17 @@ class StockfishExpander extends NodeExpander {
 
     // Eval-window pruning (deferred from the build loop so the eval comes
     // from MultiPV line 0, avoiding an extra single-PV call).
-    if (evalWindowPrune(node, config)) return;
+    //
+    // Even when it fires we leave the engine's move behind. This node is our
+    // turn, which means the opponent has already played and the repertoire is
+    // being asked a question; answering "nothing" is not available to us. The
+    // prune reason stays on the node, so the move is recorded without the
+    // subtree that would follow it — for a won position that reads as "play
+    // this, then it is just technique".
+    if (evalWindowPrune(node, config)) {
+      _addBestMove(node, discovery.lines.first, whiteToMove: whiteToMove);
+      return;
+    }
 
     // Filter candidates by eval loss (direction depends on STM).  Fast
     // halves the window at cold nodes; the root and the wide-opening band
@@ -59,42 +69,25 @@ class StockfishExpander extends NodeExpander {
       final evalLoss = whiteToMove
           ? bestCp - line.effectiveCp
           : line.effectiveCp - bestCp;
+      // Line 0 loses nothing against itself, so the best move always clears
+      // this gate however bad the position is. That is deliberate and
+      // load-bearing: a position the opponent forced on us gets an answer
+      // even when every answer is grim. The window only decides how many
+      // *alternatives* ride along beside it.
       if (evalLoss > evalLossWindow) continue;
+      _addBestMove(node, line, whiteToMove: whiteToMove);
+    }
 
-      final childFen = playUciMove(node.fen, line.moveUci);
-      if (childFen == null) continue;
-
-      final san = uciToSan(node.fen, line.moveUci);
-      final childIsWhite = isWhiteToMove(childFen);
-      final childEvalStm = whiteToMove ? -line.effectiveCp : line.effectiveCp;
-
-      final child = run.makeChild(
-        parent: node,
-        fen: childFen,
-        san: san,
-        uci: line.moveUci,
-      );
-      if (child == null) continue;
-
-      child.moveProbability = 1.0;
-      child.cumulativeProbability = node.cumulativeProbability;
-      child.engineEvalCp = childEvalStm;
-      run.evalResolver.cacheEvalWhite(
-        childFen,
-        childIsWhite ? childEvalStm : -childEvalStm,
-        config.evalDepth,
-      );
-
-      // Line 0 only: stash engine's preferred opponent reply on the child
-      // (opponent-to-move position after our best move).
-      if (line.pvNumber == 1 && line.pv.length >= 2) {
-        child.pvContinuationMove = line.pv[1];
-      }
-
-      run.emitNodeProgress(child);
+    // Belt and braces for the same rule: every gate above is a `continue`,
+    // so a node can come out of the loop with nothing at all. The best move
+    // by definition loses nothing against itself and should always survive —
+    // if it somehow did not, take it anyway.
+    if (node.children.isEmpty) {
+      _addBestMove(node, discovery.lines.first, whiteToMove: whiteToMove);
     }
 
     await injectSetupCandidates(node, bestCpWhite: bestCp);
+    await injectMasterCandidates(node, bestCpWhite: bestCp);
     await injectTransferCandidate(node, bestCpWhite: bestCp);
     await injectPinnedCandidate(node);
 
@@ -136,5 +129,46 @@ class StockfishExpander extends NodeExpander {
       if (run.isCancelled) break;
       queue.add(child);
     }
+  }
+
+  /// Attach one MultiPV line to [node] as an our-move child. No gates: the
+  /// caller has already decided this move belongs here.
+  void _addBestMove(
+    BuildTreeNode node,
+    DiscoveryLine line, {
+    required bool whiteToMove,
+  }) {
+    if (line.moveUci.isEmpty) return;
+    final childFen = playUciMove(node.fen, line.moveUci);
+    if (childFen == null) return;
+
+    final san = uciToSan(node.fen, line.moveUci);
+    final childIsWhite = isWhiteToMove(childFen);
+    final childEvalStm = whiteToMove ? -line.effectiveCp : line.effectiveCp;
+
+    final child = run.makeChild(
+      parent: node,
+      fen: childFen,
+      san: san,
+      uci: line.moveUci,
+    );
+    if (child == null) return;
+
+    child.moveProbability = 1.0;
+    child.cumulativeProbability = node.cumulativeProbability;
+    child.engineEvalCp = childEvalStm;
+    run.evalResolver.cacheEvalWhite(
+      childFen,
+      childIsWhite ? childEvalStm : -childEvalStm,
+      config.evalDepth,
+    );
+
+    // Line 0 only: stash engine's preferred opponent reply on the child
+    // (opponent-to-move position after our best move).
+    if (line.pvNumber == 1 && line.pv.length >= 2) {
+      child.pvContinuationMove = line.pv[1];
+    }
+
+    run.emitNodeProgress(child);
   }
 }

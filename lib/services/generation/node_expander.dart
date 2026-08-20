@@ -22,6 +22,7 @@ import '../../models/build_tree_node.dart';
 import '../../utils/chess_utils.dart' show playUciMove, sanToUci, uciToSan;
 import '../../utils/fen_utils.dart';
 import '../maia/maia_factory.dart';
+import '../../models/analysis/discovery_result.dart';
 import '../maia/maia_service.dart';
 import 'build_run.dart';
 import 'frontier_queue.dart';
@@ -41,6 +42,29 @@ const double kPvInjectEpsilon = 0.01;
 /// Apply the eval window to [node]: outside [TreeBuildConfig.minEvalCp] /
 /// [TreeBuildConfig.maxEvalCp] the node gets an explicit [PruneReason] and
 /// true is returned (caller stops expanding it).  No-op without an eval.
+///
+/// The window judges *our* choices, never theirs. Concretely, the too-low
+/// half only applies where the opponent is the side to move — a position we
+/// walked into, so rejecting it rejects our own move. At a node where **we**
+/// are to move, the opponent put us there; calling it too bad and deleting
+/// it does not make the move go away, it just means the repertoire has
+/// nothing to say when they play it. A position we are forced into still
+/// needs an answer, and the worse it is the more we need one.
+///
+/// This is not hypothetical. On a Benko tree whose root sat at -57cp for
+/// Black, a `minEvalCp` of 0 anchored the floor to -57; 6.Nc3 — which Maia
+/// gives 73.9% of White's replies — evaluated -76, was flagged here, and
+/// [pruneEvalTooLow] deleted the whole subtree. 6.dxe6 at 19.3% survived by
+/// two centipawns. The exported repertoire covered under a fifth of what
+/// White actually plays and said nothing about the rest.
+///
+/// Too-high is unchanged and applies to both sides: [PruneReason.evalTooHigh]
+/// keeps the node as an annotated leaf rather than deleting it, so it leaves
+/// no hole — it only says "you are winning, stop preparing".
+///
+/// Depth in a bad position is still controlled, just by the gates that
+/// belong to it: [TreeBuildConfig.maxEvalLossCp] on our candidate moves, the
+/// reach-probability floor, and the expectimax value.
 bool evalWindowPrune(BuildTreeNode node, TreeBuildConfig config) {
   if (!node.hasEngineEval) return false;
   final evalUs = node.evalForUs(config.playAsWhite);
@@ -50,6 +74,9 @@ bool evalWindowPrune(BuildTreeNode node, TreeBuildConfig config) {
     return true;
   }
   if (evalUs < config.minEvalCp) {
+    // We are the side to move here, so the opponent chose this position for
+    // us. Never delete it for being unpleasant.
+    if (node.isWhiteToMove == config.playAsWhite) return false;
     node.pruneReason = PruneReason.evalTooLow;
     node.pruneEvalCp = evalUs;
     return true;
@@ -214,17 +241,28 @@ abstract class NodeExpander {
     bool coverageOnly = false,
   });
 
-  /// Expand an opponent node from Maia's policy and enqueue all children —
-  /// eval-window checks happen when each child is dequeued.
+  /// Expand an opponent node and enqueue all children — eval-window checks
+  /// happen when each child is dequeued.
   ///
-  /// Real game frequencies reach the tree through [BuildMode.dbExplorer],
-  /// which drives expansion from a scanned PGN database instead of per-node
-  /// lookups; see `tree_build_db_explorer.dart`.
+  /// Candidates come from the master-games book when the run has one and
+  /// the position is in it (titled-player frequencies blended with Maia,
+  /// exactly like a scanned PGN database in [BuildMode.dbExplorer]), else
+  /// from Maia's policy alone.
   Future<void> expandOpponentMove(
     BuildTreeNode node,
     FrontierQueue queue,
   ) async {
-    await _addOpponentChildrenFromMaia(node, maiaForInject: true);
+    final fromBook = await _addOpponentChildrenFromMasterBook(node);
+    if (!fromBook) {
+      // Off-book (or no book at all).  With a book in use, an off-book
+      // position is one no master has reached: fan out narrowly and let the
+      // budget go to depth in the lines that are practice.
+      await _addOpponentChildrenFromMaia(
+        node,
+        maiaForInject: true,
+        offBook: run.masterBook != null,
+      );
+    }
     if (node.children.isEmpty) return;
 
     for (final child in List.of(node.children)) {
@@ -235,9 +273,82 @@ abstract class NodeExpander {
 
   // ── Shared opponent sources ─────────────────────────────────────────────
 
+  /// Below this many book games the position is too thin to drive
+  /// expansion on its own; Maia (through smoothing) must be there too.
+  static const int _minBookGamesWithoutMaia = 5;
+
+  /// Master-games book source.  Returns false when the run has no book, the
+  /// position is unknown, or the sample is too thin to use without Maia —
+  /// the caller then falls back to the Maia-only source.
+  Future<bool> _addOpponentChildrenFromMasterBook(BuildTreeNode node) async {
+    if (run.masterBook == null) return false;
+    final book = run.bookAt(node.fen);
+    if (book.isEmpty) return false;
+
+    var total = 0;
+    var whiteWins = 0;
+    var draws = 0;
+    var blackWins = 0;
+    for (final m in book) {
+      total += m.games;
+      whiteWins += m.whiteWins;
+      draws += m.draws;
+      blackWins += m.blackWins;
+    }
+    if (total <= 0) return false;
+
+    final maia = await maiaPolicyForSmoothing(run, node.fen, total);
+    if (maia.isEmpty &&
+        total < _minBookGamesWithoutMaia &&
+        MaiaFactory.isAvailable) {
+      return false;
+    }
+
+    node.setLichessStats(whiteWins, blackWins, draws);
+    final observed = [
+      for (final m in book)
+        ObservedMove(
+          uci: m.uci,
+          san: '',
+          games: m.games,
+          whiteWins: m.whiteWins,
+          blackWins: m.blackWins,
+          draws: m.draws,
+        ),
+    ];
+    final smoothed = smoothOpponentMoves(
+      observed: observed,
+      totalGames: total,
+      maiaPolicy: maia,
+      priorGames: config.maiaPriorGames,
+    );
+    final yearByUci = {for (final m in book) m.uci: m.lastYear};
+    addOpponentChildren(
+      run: run,
+      node: node,
+      candidates: smoothed,
+      smoothing: true,
+      minMoveProb: config.maiaMinProb,
+      maxChildren: config.effectiveOppMaxChildren(
+        effectiveSearchPriority(node),
+      ),
+      massTarget: config.oppMassTarget,
+      attachStats: true,
+      onChild: (child) {
+        final y = yearByUci[child.moveUci];
+        if (y != null && y > 0) child.lastPlayedYear = y;
+        final p = maia[child.moveUci];
+        if (p != null) child.maiaFrequency = p;
+      },
+    );
+    await _maybeInjectPvContinuation(node, maiaPolicy: maia);
+    return true;
+  }
+
   Future<void> _addOpponentChildrenFromMaia(
     BuildTreeNode node, {
     bool maiaForInject = false,
+    bool offBook = false,
   }) async {
     if (!MaiaFactory.isAvailable || MaiaFactory.instance == null) return;
 
@@ -277,8 +388,9 @@ abstract class NodeExpander {
       ],
       smoothing: false,
       minMoveProb: config.maiaMinProb,
-      maxChildren: config.effectiveOppMaxChildren(
-        effectiveSearchPriority(node),
+      maxChildren: _offBookCap(
+        config.effectiveOppMaxChildren(effectiveSearchPriority(node)),
+        offBook: offBook,
       ),
       massTarget: config.oppMassTarget,
     );
@@ -286,6 +398,15 @@ abstract class NodeExpander {
     if (maiaForInject) {
       await _maybeInjectPvContinuation(node, maiaPolicy: policy);
     }
+  }
+
+  /// [TreeBuildConfig.offBookOppMaxChildren] applied on top of the regular
+  /// cap at off-book positions; the smaller wins, 0 means no narrowing.
+  int _offBookCap(int cap, {required bool offBook}) {
+    final off = config.offBookOppMaxChildren;
+    if (!offBook || off <= 0) return cap;
+    if (cap <= 0) return off;
+    return cap < off ? cap : off;
   }
 
   /// Ensure the engine's preferred opponent reply (stashed on the node by
@@ -353,6 +474,48 @@ abstract class NodeExpander {
       final uci = sanToUci(node.fen, san);
       if (uci == null) continue; // not legal here (or already played)
       await _injectCandidateUci(node, uci, bestCpWhite: bestCpWhite);
+    }
+  }
+
+  /// How many of the book's most-played moves are offered as our-move
+  /// candidates at a master-practice position.
+  static const int kMasterCandidateCount = 2;
+
+  /// Master-practice candidate injection: the moves masters actually play
+  /// here are often in MultiPV already, but not always — a theoretical main
+  /// line the engine rates a hair below a sharper try would otherwise never
+  /// be a candidate, and selection cannot choose what it never sees.  Inject
+  /// the book's top [kMasterCandidateCount] moves (each with at least
+  /// [TreeBuildConfig.masterMinGames] games), eval-gated like a setup move;
+  /// the selector still decides on eval.  Children that are in the book get
+  /// the year the move was last played, for the recency annotation.
+  /// No-op off-book or without a database.
+  Future<void> injectMasterCandidates(
+    BuildTreeNode node, {
+    required int? bestCpWhite,
+  }) async {
+    if (run.masterBook == null) return;
+    final book = run.bookAt(node.fen); // most played first
+    if (book.isEmpty) return;
+    var total = 0;
+    for (final m in book) {
+      total += m.games;
+    }
+    if (total < config.masterMinGames) return;
+
+    var injected = 0;
+    for (final m in book) {
+      if (injected >= kMasterCandidateCount) break;
+      if (m.games < config.masterMinGames) break; // sorted by games desc
+      await _injectCandidateUci(node, m.uci, bestCpWhite: bestCpWhite);
+      injected++;
+    }
+    final yearByUci = {for (final m in book) m.uci: m.lastYear};
+    for (final child in node.children) {
+      final y = yearByUci[child.moveUci];
+      if (y != null && y > 0 && child.lastPlayedYear <= 0) {
+        child.lastPlayedYear = y;
+      }
     }
   }
 

@@ -22,10 +22,13 @@ import '../../../utils/fen_utils.dart';
 import '../export/move_annotation.dart';
 import '../export/pgn_game_writer.dart';
 import '../generation_config.dart';
+import '../engine_tail.dart';
 import '../line_extractor.dart';
 import 'chapter_planner.dart';
 import 'chapter_titles.dart';
 import 'model_game_selector.dart';
+import 'master_improvements.dart';
+import 'opening_namer.dart' show formatMoveReference;
 import 'refutation_prober.dart';
 
 // ── Output ───────────────────────────────────────────────────────────────
@@ -77,11 +80,21 @@ class ComposedCourse {
   final List<CourseEntry> entries;
   final List<ChapterOutline> outline;
 
+  /// The model games again, as *games*: real `White`/`Black`/`Result`
+  /// headers and the same annotated movetext, for a companion
+  /// `<title>_model_games.pgn` a PGN viewer opens as a game collection.
+  /// Inside the course they travel as a chapter with study headers (see
+  /// [CourseComposer._modelGameEntry]); this is the other shape.
+  final List<String> modelGamePgns;
+
   const ComposedCourse({
     required this.title,
     required this.entries,
     required this.outline,
+    this.modelGamePgns = const [],
   });
+
+  String modelGamesPgn() => modelGamePgns.join('\n');
 
   int get lineChapterCount =>
       outline.where((c) => c.kind == ChapterKind.lines).length;
@@ -119,19 +132,28 @@ class CourseComposer {
   /// Punishing continuations for lines that end on a losing reply, keyed by
   /// the position they start from.  Set for the duration of [compose].
   RefutationMap _refutations = const {};
+  Map<String, EngineTail> _engineTails = const {};
 
   /// Refuted moves the book leaves out, keyed by the position they are played
   /// in.  Set for the duration of [compose].
   AlternativeMap _alternatives = const {};
+
+  /// Where the repertoire improves on master practice, keyed by the position
+  /// the improvement is played in.  Set for the duration of [compose].
+  ImprovementMap _improvements = const {};
 
   ComposedCourse compose({
     required List<ExtractedLine> lines,
     List<ModelGame> modelGames = const [],
     RefutationMap refutations = const {},
     AlternativeMap alternatives = const {},
+    Map<String, EngineTail> engineTails = const {},
+    ImprovementMap improvements = const {},
   }) {
     _refutations = refutations;
     _alternatives = alternatives;
+    _engineTails = engineTails;
+    _improvements = improvements;
     final title = namer.courseTitle(fallback: repertoireName);
     final groups = config.organizeIntoChapters
         ? ChapterPlanner(
@@ -174,6 +196,7 @@ class CourseComposer {
       );
     }
 
+    final modelGamePgns = <String>[];
     if (modelGames.isNotEmpty) {
       final chapter = ChapterTitle(
         index: groups.length + 1,
@@ -182,6 +205,7 @@ class CourseComposer {
       );
       for (final game in modelGames) {
         entries.add(_modelGameEntry(game, chapter, title));
+        modelGamePgns.add(_modelGameStandalonePgn(game, title));
       }
       outline.add(
         ChapterOutline(
@@ -192,7 +216,12 @@ class CourseComposer {
       );
     }
 
-    return ComposedCourse(title: title, entries: entries, outline: outline);
+    return ComposedCourse(
+      title: title,
+      entries: entries,
+      outline: outline,
+      modelGamePgns: modelGamePgns,
+    );
   }
 
   // ── Entries ────────────────────────────────────────────────────────────
@@ -205,8 +234,14 @@ class CourseComposer {
     required String courseTitle,
   }) {
     final line = group.lines[lineIndex];
-    final moves = [...repertoirePrefix, ...line.movesSan];
+    // The prepared part of the line — what selection and expectimax vouch
+    // for. Sidelines index into this, so it has to be computed before the
+    // engine tail extends the movetext past it.
+    final prepared = [...repertoirePrefix, ...line.movesSan];
+    final tail = line.leafFen == null ? null : _engineTails[line.leafFen!];
+    final moves = [...prepared, if (tail != null) ...tail.movesSan];
     final alternatives = _alternativesFor(line);
+    final improvements = _improvementsFor(line);
 
     return CourseEntry(
       refutation: _refutationFor(line),
@@ -232,12 +267,21 @@ class CourseComposer {
             'Opening': variationName,
           },
           movesSan: moves,
-          annotations: line.moveAnnotations,
+          annotations: [
+            // Padded to the prepared move count first: annotations may be
+            // shorter than the moves they describe, and appending the tail's
+            // onto a short list would slide its note onto an earlier move.
+            ..._padded(
+              _annotationsWithImprovements(line, improvements),
+              line.movesSan.length,
+            ),
+            if (tail != null) ..._tailAnnotations(tail),
+          ],
           annotationOffset: repertoirePrefix.length,
           startFen: repertoireStartFen,
           rootWhiteToMove: isWhiteToMove(repertoireStartFen),
           startMoveNumber: namer.startMoveNumber,
-          variations: _sidelines(moves, line, alternatives),
+          variations: _sidelines(prepared, line, alternatives, improvements),
         ),
         detail: config.annotationDetail,
       ),
@@ -263,9 +307,41 @@ class CourseComposer {
     return out;
   }
 
+  /// Improvements on master practice along [line], keyed by the index of our
+  /// move that improves.
+  Map<int, MasterImprovement> _improvementsFor(ExtractedLine line) {
+    if (_improvements.isEmpty) return const {};
+    final out = <int, MasterImprovement>{};
+    for (final choice in line.choices) {
+      if (!choice.isOurMove) continue;
+      final found = _improvements[choice.fenBefore];
+      if (found != null) out[choice.moveIndex] = found;
+    }
+    return out;
+  }
+
+  /// The line's annotations with "improves on … in <game>" notes attached to
+  /// the moves that earned them.  Annotations are indexed by line move, so
+  /// a line shorter on annotations than on moves is padded.
+  List<MoveAnnotation> _annotationsWithImprovements(
+    ExtractedLine line,
+    Map<int, MasterImprovement> improvements,
+  ) {
+    if (improvements.isEmpty) return line.moveAnnotations;
+    final out = List<MoveAnnotation>.of(line.moveAnnotations);
+    for (final entry in improvements.entries) {
+      while (out.length <= entry.key) {
+        out.add(MoveAnnotation.none);
+      }
+      out[entry.key] = out[entry.key].withNote(entry.value.note);
+    }
+    return out;
+  }
+
   /// Every sideline this line carries, keyed by the mainline move it hangs
-  /// off: what the moves we skipped run into, and — last, so the line reads
-  /// forwards — how the reply it ends on is punished.
+  /// off: what the moves we skipped run into, the master move we improve on,
+  /// and — last, so the line reads forwards — how the reply it ends on is
+  /// punished.
   ///
   /// The punishment repeats the move it hangs off, which is how PGN writes a
   /// continuation rather than an alternative: the reader clicks the move and
@@ -275,9 +351,24 @@ class CourseComposer {
     List<String> moves,
     ExtractedLine line,
     Map<int, RefutedAlternative> alternatives,
+    Map<int, MasterImprovement> improvements,
   ) {
     if (moves.isEmpty) return const {};
     final out = <int, List<PgnSideline>>{};
+
+    // The master move we improve on, with how the cited game went on from
+    // it — clickable evidence for the note on our move.
+    for (final entry in improvements.entries) {
+      final index = repertoirePrefix.length + entry.key;
+      if (index >= moves.length) continue;
+      final imp = entry.value;
+      (out[index] ??= []).add(
+        PgnSideline([
+          imp.masterSan,
+          ...imp.continuation,
+        ], comment: imp.sidelineComment),
+      );
+    }
 
     for (final entry in alternatives.entries) {
       final index = repertoirePrefix.length + entry.key;
@@ -297,8 +388,35 @@ class CourseComposer {
         PgnSideline([moves.last, ...refutation]),
       );
     }
+
     return out;
   }
+
+  /// [annotations] grown to [length] with empty entries, so anything appended
+  /// after it lines up with the move it belongs to.
+  static List<MoveAnnotation> _padded(
+    List<MoveAnnotation> annotations,
+    int length,
+  ) => annotations.length >= length
+      ? annotations
+      : [
+          ...annotations,
+          for (var i = annotations.length; i < length; i++) MoveAnnotation.none,
+        ];
+
+  /// Annotations for the engine continuation: a note on the first move
+  /// saying where preparation stopped, then nothing. The moves themselves are
+  /// part of the line — they get trained like any other — but the reader (and
+  /// anyone reviewing the file later) should be able to see which of them the
+  /// build actually vouched for.
+  List<MoveAnnotation> _tailAnnotations(EngineTail tail) => [
+    MoveAnnotation(
+      note:
+          'Engine continuation from here at depth ${tail.depth} — best play, '
+          'not prepared theory',
+    ),
+    for (var i = 1; i < tail.movesSan.length; i++) MoveAnnotation.none,
+  ];
 
   /// What a refuted move costs, as the same `[%...]` token the mainline uses
   /// for everything else — and only when the export carries metrics at all.
@@ -319,36 +437,129 @@ class CourseComposer {
       movesSan: record.movesSan,
       chapterName: chapter.name,
       variationName: variationName,
-      pgn: writePgnGame(
-        PgnGameSpec(
-          headers: {
-            'Event': courseTitle,
-            'White': chapter.name,
-            'Black': variationName,
-            // A course chapter is study material, not a result-bearing game:
-            // "*" is what keeps header-based chapter detection working.  The
-            // real game data is preserved under unambiguous ModelGame* tags.
-            'Result': '*',
-            'Annotator': 'Chess Auto Prep',
-            'Opening': variationName,
-            kModelGameWhiteTag: record.white,
-            kModelGameBlackTag: record.black,
-            kModelGameResultTag: record.outcome?.pgnToken ?? '*',
-            if (record.event.isNotEmpty) kModelGameEventTag: record.event,
-            if (record.date.isNotEmpty) kModelGameDateTag: record.date,
-            if (record.whiteElo > 0)
-              kModelGameWhiteEloTag: '${record.whiteElo}',
-            if (record.blackElo > 0)
-              kModelGameBlackEloTag: '${record.blackElo}',
-          },
-          movesSan: record.movesSan,
-          startFen: _modelGameStartFen,
-          rootWhiteToMove: isWhiteToMove(_modelGameStartFen),
-          startMoveNumber: fullMoveNumber(_modelGameStartFen),
-        ),
-        detail: MoveAnnotationDetail.none,
-      ),
+      pgn: _writeModelGame(game, {
+        'Event': courseTitle,
+        'White': chapter.name,
+        'Black': variationName,
+        // A course chapter is study material, not a result-bearing game:
+        // "*" is what keeps header-based chapter detection working.  The
+        // real game data is preserved under unambiguous ModelGame* tags.
+        'Result': '*',
+        'Annotator': 'Chess Auto Prep',
+        'Opening': variationName,
+        kModelGameWhiteTag: record.white,
+        kModelGameBlackTag: record.black,
+        kModelGameResultTag: record.outcome?.pgnToken ?? '*',
+        if (record.event.isNotEmpty) kModelGameEventTag: record.event,
+        if (record.date.isNotEmpty) kModelGameDateTag: record.date,
+        if (record.whiteElo > 0) kModelGameWhiteEloTag: '${record.whiteElo}',
+        if (record.blackElo > 0) kModelGameBlackEloTag: '${record.blackElo}',
+      }, result: '*'),
     );
+  }
+
+  /// The same game as a real game record for the companion file.
+  String _modelGameStandalonePgn(ModelGame game, String courseTitle) {
+    final record = game.record;
+    final result = record.outcome?.pgnToken ?? '*';
+    return _writeModelGame(game, {
+      'Event': record.event.isEmpty ? '?' : record.event,
+      'Site': '?',
+      'Date': record.date.isEmpty ? '????.??.??' : record.date,
+      'Round': '?',
+      'White': record.white,
+      'Black': record.black,
+      'Result': result,
+      if (record.whiteElo > 0) 'WhiteElo': '${record.whiteElo}',
+      if (record.blackElo > 0) 'BlackElo': '${record.blackElo}',
+      'Annotator': 'Chess Auto Prep',
+      'Repertoire': courseTitle,
+    }, result: result);
+  }
+
+  /// Movetext shared by both shapes of a model game: the game's moves, and
+  /// at the move where it leaves the repertoire, what the repertoire does
+  /// instead — a comment ("Our repertoire: 10...Qb6 — improves on 10...Nf6
+  /// (+0.35)") and our mainline as a variation off that move, or, when the
+  /// opponent left first, the replies we prepare.
+  String _writeModelGame(
+    ModelGame game,
+    Map<String, String> headers, {
+    required String result,
+  }) {
+    final record = game.record;
+    final startFen = _modelGameStartFen;
+    final rootWhiteToMove = isWhiteToMove(startFen);
+    final startMoveNumber = fullMoveNumber(startFen);
+
+    final annotations = <MoveAnnotation>[];
+    final variations = <int, List<PgnSideline>>{};
+    final d = game.departure;
+    if (d != null && d.index < record.movesSan.length) {
+      final note = _departureNote(
+        d,
+        rootWhiteToMove: rootWhiteToMove,
+        startMoveNumber: startMoveNumber,
+      );
+      if (note != null) {
+        annotations.addAll(
+          List.filled(d.index, const MoveAnnotation(), growable: true),
+        );
+        annotations.add(MoveAnnotation(note: note));
+      }
+      if (d.kind == DepartureKind.ours && d.repertoireLine.isNotEmpty) {
+        variations[d.index] = [PgnSideline(d.repertoireLine)];
+      }
+    }
+
+    return writePgnGame(
+      PgnGameSpec(
+        headers: headers,
+        movesSan: record.movesSan,
+        annotations: annotations,
+        variations: variations,
+        startFen: startFen,
+        rootWhiteToMove: rootWhiteToMove,
+        startMoveNumber: startMoveNumber,
+        result: result,
+      ),
+      // `likelihood` rather than `none`: it writes notes and nothing else
+      // here (model games carry no metrics), and `none` would drop the note.
+      detail: MoveAnnotationDetail.likelihood,
+    );
+  }
+
+  String? _departureNote(
+    ModelGameDeparture d, {
+    required bool rootWhiteToMove,
+    required int startMoveNumber,
+  }) {
+    String ref(String san) => formatMoveReference(
+      san,
+      d.index,
+      rootWhiteToMove: rootWhiteToMove,
+      startMoveNumber: startMoveNumber,
+    );
+    switch (d.kind) {
+      case DepartureKind.ours:
+        final ours = d.repertoireSan;
+        if (ours == null) return null;
+        final improvement = _improvements[d.fenBefore];
+        final improves =
+            improvement != null &&
+            improvement.ourSan == ours &&
+            improvement.masterSan == d.gameSan;
+        final b = StringBuffer('Our repertoire: ${ref(ours)}');
+        if (improves) {
+          final pawns = (improvement.gainCp / 100).toStringAsFixed(2);
+          b.write(' — improves on ${ref(d.gameSan)} (+$pawns)');
+        }
+        return b.toString();
+      case DepartureKind.opponent:
+        if (d.preparedReplies.isEmpty) return null;
+        final prepared = d.preparedReplies.map(ref).join(', ');
+        return 'Outside the repertoire — prepared here: $prepared';
+    }
   }
 
   /// Retained games are scanned from the *build* root, so that is where their

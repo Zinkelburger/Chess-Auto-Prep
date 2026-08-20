@@ -21,6 +21,7 @@ import 'package:chess_auto_prep/services/generation/run_debug_dump.dart';
 import 'package:chess_auto_prep/services/generation/tree_build_progress.dart';
 import 'package:chess_auto_prep/services/generation/tree_eval_resolver.dart';
 import 'package:chess_auto_prep/services/maia/maia_factory.dart';
+import 'package:chess_auto_prep/services/master_games/master_games_db.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart' show playUciMove;
 import 'package:flutter_test/flutter_test.dart';
 
@@ -74,6 +75,58 @@ void main() {
   tearDown(() => MaiaFactory.testOverride = null);
 
   group('StockfishExpander our-move expansion', () {
+    // Our turn means the opponent has already moved and the repertoire is
+    // being asked what to play. "Nothing" is not an answer it may give, so
+    // every path out of expandOurMove has to leave a move behind.
+    group('always leaves us a move', () {
+      // A dead-lost position for White, far below any sane floor.
+      const lost = -900;
+
+      BuildTreeNode ourNode() =>
+          makeNode(fen: kItalianFen, san: 'Nf3', ply: 4, isWhiteToMove: true)
+            ..searchPriority = 1.0;
+
+      test('a hopeless position still gets the best move', () async {
+        resetNodeIds();
+        final node = ourNode();
+        final pool = FakeStockfishPool()
+          ..discoveryByFen[kItalianFen] = DiscoveryResult(
+            lines: [
+              discoveryLine(pvNumber: 1, cpWhite: lost, pv: ['f3g5']),
+            ],
+          );
+        final config = _base.copyWith(minEvalCp: -50);
+
+        await NodeExpander.forRun(
+          _makeRun(config: config, tree: _treeWith(node), pool: pool),
+        ).expandOurMove(node, FrontierQueue(bestFirst: true));
+
+        expect(node.children.map((c) => c.moveSan), ['Ng5']);
+      });
+
+      test('a won position gets the move but no subtree to memorise', () async {
+        resetNodeIds();
+        final node = ourNode();
+        final pool = FakeStockfishPool()
+          ..discoveryByFen[kItalianFen] = DiscoveryResult(
+            lines: [
+              discoveryLine(pvNumber: 1, cpWhite: 900, pv: ['f3g5']),
+            ],
+          );
+        final config = _base.copyWith(maxEvalCp: 200);
+        final queue = FrontierQueue(bestFirst: true);
+
+        await NodeExpander.forRun(
+          _makeRun(config: config, tree: _treeWith(node), pool: pool),
+        ).expandOurMove(node, queue);
+
+        expect(node.children.map((c) => c.moveSan), ['Ng5']);
+        expect(node.pruneReason, PruneReason.evalTooHigh);
+        // Nothing queued: past the ceiling it is technique, not theory.
+        expect(queue.isEmpty, isTrue);
+      });
+    });
+
     test('root: wide MultiPV, eval-loss filter, STM signs, PV-reply stash, '
         'Maia frequencies, incumbent priorities', () async {
       resetNodeIds();
@@ -200,7 +253,7 @@ void main() {
       },
     );
 
-    test('eval outside the window: node pruned, no children', () async {
+    test('eval outside the window: node pruned, best move kept', () async {
       resetNodeIds();
       final node = makeNode(
         fen: kItalianFen,
@@ -223,7 +276,10 @@ void main() {
 
       expect(node.pruneReason, PruneReason.evalTooHigh);
       expect(node.pruneEvalCp, 300);
-      expect(node.children, isEmpty);
+      // The prune stops the *subtree*, not the answer: this is our turn, so
+      // the engine's move is still recorded. It used to leave nothing here,
+      // which read as a repertoire with no reply to a move already played.
+      expect(node.children.map((c) => c.moveSan), ['Bb5']);
     });
 
     test(
@@ -332,6 +388,372 @@ void main() {
         node.children.map((c) => c.moveSan),
         unorderedEquals(['e5', 'c5', 'Nf6']),
       );
+    });
+  });
+
+  group('opponent expansion via the master-games book', () {
+    BookMove book(String uci, int games, {int ww = 0, int bw = 0}) => BookMove(
+      uci: uci,
+      games: games,
+      whiteWins: ww,
+      draws: games - ww - bw,
+      blackWins: bw,
+      averageElo: 2600,
+      maxElo: 2700,
+      lastYear: 2024,
+      topGameId: 1,
+      recentGameId: 2,
+    );
+
+    BuildTreeNode oppNode() => makeNode(
+      fen: kFenAfterE4,
+      san: 'e4',
+      uci: 'e2e4',
+      ply: 1,
+      isWhiteToMove: false,
+    )..searchPriority = 1.0;
+
+    test('book frequencies drive the fan-out, blended with Maia, and carry '
+        'game stats onto the children', () async {
+      resetNodeIds();
+      final node = oppNode();
+      // Masters: 1...c5 700, 1...e5 250, 1...e6 50 (N = 1000 ≥ 100·λ, so
+      // Maia is not even consulted: pure frequencies).
+      MaiaFactory.testOverride = FakeMaiaEvaluator({
+        kFenAfterE4: {'e7e5': 0.9, 'g8f6': 0.1},
+      });
+      final run = BuildRun(
+        config: _base.copyWith(coverMinProb: 0.0, maiaPriorGames: 10),
+        tree: _treeWith(node),
+        fenMap: FenMap(),
+        pool: FakeStockfishPool(),
+        evalResolver: TreeEvalResolver()..stats = BuildStats(),
+        stats: BuildStats(),
+        runLog: RunDebugLog(),
+        progress: TreeBuildProgressTracker(),
+        onProgress: (_) {},
+        cancel: BuildCancellation(),
+        finishNow: () => false,
+        waitIfPaused: () async {},
+        nextNodeId: 1000,
+        masterBook: (fen) => fen == kFenAfterE4
+            ? [
+                book('c7c5', 700, ww: 300, bw: 250),
+                book('e7e5', 250, ww: 100, bw: 80),
+                book('e7e6', 50),
+              ]
+            : const [],
+      );
+      final queue = FrontierQueue(bestFirst: true);
+      await NodeExpander.forRun(run).expandOpponentMove(node, queue);
+
+      // c5 (0.70) + e5 (0.25) reach the 0.8 mass target.
+      expect(
+        node.children.map((c) => c.moveSan),
+        unorderedEquals(['c5', 'e5']),
+      );
+      final c5 = _child(node, 'c5');
+      expect(c5.moveProbability, closeTo(0.7, 1e-9));
+      expect(c5.totalGames, 700);
+      expect(c5.whiteWins, 300);
+      expect(c5.lastPlayedYear, 2024);
+      expect(node.totalGames, 1000);
+      expect(queue.length, 2);
+    });
+
+    test('a thin book position falls back to Maia', () async {
+      resetNodeIds();
+      final node = oppNode();
+      MaiaFactory.testOverride = FakeMaiaEvaluator({
+        kFenAfterE4: {'e7e5': 0.6, 'c7c5': 0.4},
+      });
+      final run = BuildRun(
+        // priorGames 0 switches smoothing off, so the 2-game book sample
+        // would have to stand alone — too thin, Maia takes over.
+        config: _base.copyWith(coverMinProb: 0.0, maiaPriorGames: 0),
+        tree: _treeWith(node),
+        fenMap: FenMap(),
+        pool: FakeStockfishPool(),
+        evalResolver: TreeEvalResolver()..stats = BuildStats(),
+        stats: BuildStats(),
+        runLog: RunDebugLog(),
+        progress: TreeBuildProgressTracker(),
+        onProgress: (_) {},
+        cancel: BuildCancellation(),
+        finishNow: () => false,
+        waitIfPaused: () async {},
+        nextNodeId: 1000,
+        masterBook: (_) => [book('d7d5', 2)],
+      );
+      await NodeExpander.forRun(
+        run,
+      ).expandOpponentMove(node, FrontierQueue(bestFirst: true));
+
+      expect(
+        node.children.map((c) => c.moveSan),
+        unorderedEquals(['e5', 'c5']),
+      );
+      expect(node.totalGames, 0);
+    });
+  });
+
+  group('master practice as the guide', () {
+    BookMove book(String uci, int games, {int year = 2024}) => BookMove(
+      uci: uci,
+      games: games,
+      whiteWins: 0,
+      draws: games,
+      blackWins: 0,
+      averageElo: 2600,
+      maxElo: 2700,
+      lastYear: year,
+      topGameId: 1,
+      recentGameId: 2,
+    );
+
+    BuildRun runWith({
+      required TreeBuildConfig config,
+      required BuildTreeNode node,
+      required FakeStockfishPool pool,
+      BookLookup? masterBook,
+    }) => BuildRun(
+      config: config,
+      tree: _treeWith(node),
+      fenMap: FenMap(),
+      pool: pool,
+      evalResolver: TreeEvalResolver()..stats = BuildStats(),
+      stats: BuildStats(),
+      runLog: RunDebugLog(),
+      progress: TreeBuildProgressTracker(),
+      onProgress: (_) {},
+      cancel: BuildCancellation(),
+      finishNow: () => false,
+      waitIfPaused: () async {},
+      nextNodeId: 1000,
+      masterBook: masterBook,
+    );
+
+    test('off-book positions fan out narrowly when a book is in use, '
+        'and as before when there is no book at all', () async {
+      // Four equally likely Maia replies; no mass target, no coverage floor,
+      // so the only limit is the child cap.
+      MaiaFactory.testOverride = FakeMaiaEvaluator({
+        kFenAfterE4: {'e7e5': 0.25, 'c7c5': 0.25, 'e7e6': 0.25, 'c7c6': 0.25},
+      });
+      final config = _base.copyWith(
+        coverMinProb: 0.0,
+        oppMassTarget: 1.0,
+        maiaMinProb: 0.0,
+        oppMaxChildren: 4,
+      );
+      BuildTreeNode oppNode() => makeNode(
+        fen: kFenAfterE4,
+        san: 'e4',
+        uci: 'e2e4',
+        ply: 1,
+        isWhiteToMove: false,
+      )..searchPriority = 1.0;
+
+      resetNodeIds();
+      final withBook = oppNode();
+      await NodeExpander.forRun(
+        runWith(
+          config: config,
+          node: withBook,
+          pool: FakeStockfishPool(),
+          masterBook: (_) => const [], // book present, position unknown
+        ),
+      ).expandOpponentMove(withBook, FrontierQueue(bestFirst: true));
+      expect(withBook.children.length, config.offBookOppMaxChildren);
+      expect(withBook.children.length, 2);
+
+      resetNodeIds();
+      final noBook = oppNode();
+      await NodeExpander.forRun(
+        runWith(config: config, node: noBook, pool: FakeStockfishPool()),
+      ).expandOpponentMove(noBook, FrontierQueue(bestFirst: true));
+      expect(noBook.children.length, 4);
+
+      // Narrowing switched off: the regular cap applies even off-book.
+      resetNodeIds();
+      final wide = oppNode();
+      await NodeExpander.forRun(
+        runWith(
+          config: config.copyWith(offBookOppMaxChildren: 0),
+          node: wide,
+          pool: FakeStockfishPool(),
+          masterBook: (_) => const [],
+        ),
+      ).expandOpponentMove(wide, FrontierQueue(bestFirst: true));
+      expect(wide.children.length, 4);
+    });
+
+    test('the ply cap extends past maxPly only while the position is '
+        'master practice', () {
+      final node = makeNode(
+        fen: kFenAfterE4,
+        san: 'e4',
+        uci: 'e2e4',
+        ply: 1,
+        isWhiteToMove: false,
+      );
+      final config = _base.copyWith(
+        maxPly: 20,
+        masterDepthBonusPlies: 10,
+        masterMinGames: 3,
+      );
+      final practice = runWith(
+        config: config,
+        node: node,
+        pool: FakeStockfishPool(),
+        masterBook: (fen) => fen == kFenAfterE4
+            ? [book('c7c5', 2), book('e7e5', 1)] // 3 games: practice
+            : const [],
+      );
+      expect(practice.isMasterPractice(kFenAfterE4), isTrue);
+      expect(practice.isMasterPractice(kStandardStartFen), isFalse);
+      // Below maxPly the cap is maxPly regardless.
+      expect(practice.plyCapAt(kFenAfterE4, 19), 20);
+      // At/after maxPly a book position earns the bonus, an off-book one
+      // does not.
+      expect(practice.plyCapAt(kFenAfterE4, 20), 30);
+      expect(practice.plyCapAt(kFenAfterE4, 29), 30);
+      expect(practice.plyCapAt(kStandardStartFen, 20), 20);
+
+      final thin = runWith(
+        config: config,
+        node: node,
+        pool: FakeStockfishPool(),
+        masterBook: (_) => [book('c7c5', 2)], // below masterMinGames
+      );
+      expect(thin.plyCapAt(kFenAfterE4, 20), 20);
+
+      final noBook = runWith(
+        config: config,
+        node: node,
+        pool: FakeStockfishPool(),
+      );
+      expect(noBook.plyCapAt(kFenAfterE4, 20), 20);
+
+      final off = runWith(
+        config: config.copyWith(masterDepthBonusPlies: 0),
+        node: node,
+        pool: FakeStockfishPool(),
+        masterBook: (_) => [book('c7c5', 50)],
+      );
+      expect(off.plyCapAt(kFenAfterE4, 20), 20);
+    });
+
+    test('our-move expansion injects the book\'s most-played moves as '
+        'eval-gated candidates and stamps recency', () async {
+      resetNodeIds();
+      final root = makeNode(
+        fen: kStandardStartFen,
+        san: '',
+        ply: 0,
+        isWhiteToMove: true,
+      )..searchPriority = 1.0;
+      final afterD4 = playUciMove(kStandardStartFen, 'd2d4')!;
+      final afterC4 = playUciMove(kStandardStartFen, 'c2c4')!;
+      final afterB4 = playUciMove(kStandardStartFen, 'b2b4')!;
+      final pool = FakeStockfishPool()
+        ..discoveryByFen[kStandardStartFen] = DiscoveryResult(
+          lines: [
+            discoveryLine(pvNumber: 1, cpWhite: 40, pv: ['e2e4']),
+          ],
+        )
+        // Black to move after each: STM cp is the negation of White POV.
+        ..stmCpByFen[afterD4] =
+            -30 // +30 for White: inside the 50cp window
+        ..stmCpByFen[afterC4] = -25
+        ..stmCpByFen[afterB4] = 40; // -40 for White: 80cp behind, rejected
+      MaiaFactory.testOverride = FakeMaiaEvaluator({kStandardStartFen: {}});
+
+      final run = runWith(
+        config: _base.copyWith(masterMinGames: 3),
+        node: root,
+        pool: pool,
+        masterBook: (fen) => fen == kStandardStartFen
+            ? [
+                book('e2e4', 900, year: 2026), // already in MultiPV
+                book('d2d4', 800, year: 2025),
+                book('c2c4', 200, year: 2023),
+                book('b2b4', 5), // third most-played: not offered
+                book('g2g4', 2),
+              ]
+            : const [],
+      );
+      await NodeExpander.forRun(
+        run,
+      ).expandOurMove(root, FrontierQueue(bestFirst: true));
+
+      // The book's two most-played moves are candidates: e4 was already
+      // there from the engine, d4 is injected; c4 (third) and b4 are never
+      // evaluated — the offer is bounded, not "everything masters play".
+      expect(
+        root.children.map((c) => c.moveSan),
+        unorderedEquals(['e4', 'd4']),
+      );
+      expect(pool.evalCalls, [afterD4]);
+      expect(_child(root, 'd4').engineEvalCp, -30);
+      expect(_child(root, 'e4').lastPlayedYear, 2026);
+      expect(_child(root, 'd4').lastPlayedYear, 2025);
+    });
+
+    test('an injected master move outside the eval window is dropped, and '
+        'a thin position injects nothing', () async {
+      resetNodeIds();
+      final root = makeNode(
+        fen: kStandardStartFen,
+        san: '',
+        ply: 0,
+        isWhiteToMove: true,
+      )..searchPriority = 1.0;
+      final afterB4 = playUciMove(kStandardStartFen, 'b2b4')!;
+      final pool = FakeStockfishPool()
+        ..discoveryByFen[kStandardStartFen] = DiscoveryResult(
+          lines: [
+            discoveryLine(pvNumber: 1, cpWhite: 40, pv: ['e2e4']),
+          ],
+        )
+        ..stmCpByFen[afterB4] = 40;
+      MaiaFactory.testOverride = FakeMaiaEvaluator({kStandardStartFen: {}});
+
+      final run = runWith(
+        config: _base.copyWith(masterMinGames: 3),
+        node: root,
+        pool: pool,
+        masterBook: (_) => [book('b2b4', 50)],
+      );
+      await NodeExpander.forRun(
+        run,
+      ).expandOurMove(root, FrontierQueue(bestFirst: true));
+      expect(root.children.map((c) => c.moveSan), ['e4']);
+      expect(pool.evalCalls, [afterB4]);
+
+      resetNodeIds();
+      final root2 = makeNode(
+        fen: kStandardStartFen,
+        san: '',
+        ply: 0,
+        isWhiteToMove: true,
+      )..searchPriority = 1.0;
+      final pool2 = FakeStockfishPool()
+        ..discoveryByFen[kStandardStartFen] = DiscoveryResult(
+          lines: [
+            discoveryLine(pvNumber: 1, cpWhite: 40, pv: ['e2e4']),
+          ],
+        );
+      await NodeExpander.forRun(
+        runWith(
+          config: _base.copyWith(masterMinGames: 3),
+          node: root2,
+          pool: pool2,
+          masterBook: (_) => [book('d2d4', 2)],
+        ),
+      ).expandOurMove(root2, FrontierQueue(bestFirst: true));
+      expect(root2.children.map((c) => c.moveSan), ['e4']);
+      expect(pool2.evalCalls, isEmpty);
     });
   });
 

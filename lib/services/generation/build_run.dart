@@ -10,6 +10,7 @@
 library;
 
 import '../../models/build_tree_node.dart';
+import '../master_games/master_games_db.dart' show BookLookup, BookMove;
 import '../../utils/fen_utils.dart';
 import '../engine/stockfish_pool.dart';
 import 'generation_config.dart';
@@ -51,6 +52,11 @@ class BuildRun {
   /// window once the root eval is known.
   TreeBuildConfig config;
 
+  /// Master-games book for opponent priors (null when the database is
+  /// absent or switched off): what titled players reply from a position,
+  /// blended with Maia the same way a scanned PGN database is.
+  final BookLookup? masterBook;
+
   final BuildTree tree;
   final FenMap fenMap;
   final StockfishPool pool;
@@ -89,9 +95,52 @@ class BuildRun {
     required this.finishNow,
     required this.waitIfPaused,
     required this.nextNodeId,
+    this.masterBook,
   });
 
   bool get isCancelled => cancel.isCancelled;
+
+  // ── Master practice ─────────────────────────────────────────────────────
+
+  /// Book moves from [fen]; empty when there is no book, the position is
+  /// unknown, or the lookup fails (logged once per position, never thrown —
+  /// a broken database must not kill a build).
+  List<BookMove> bookAt(String fen) {
+    final lookup = masterBook;
+    if (lookup == null) return const [];
+    try {
+      return lookup(fen);
+    } catch (e) {
+      log('Master book lookup failed @ $fen: $e');
+      return const [];
+    }
+  }
+
+  /// Master games from [fen] (sum over moves); 0 off-book.
+  int masterGamesAt(String fen) {
+    var n = 0;
+    for (final m in bookAt(fen)) {
+      n += m.games;
+    }
+    return n;
+  }
+
+  /// True when [fen] is master practice: a book is in use and the position
+  /// has at least [TreeBuildConfig.masterMinGames] games.
+  bool isMasterPractice(String fen) =>
+      masterBook != null && masterGamesAt(fen) >= config.masterMinGames;
+
+  /// Where the build stops for a node in [fen] at [ply]: [TreeBuildConfig.
+  /// maxPly], extended by [TreeBuildConfig.masterDepthBonusPlies] while the
+  /// position is master practice.  The extension is per position, not per
+  /// line — the first off-book position past [maxPly] ends the line, so
+  /// depth follows the book and nothing else.
+  int plyCapAt(String fen, int ply) {
+    final base = config.maxPly;
+    final bonus = config.masterDepthBonusPlies;
+    if (bonus <= 0 || ply < base || masterBook == null) return base;
+    return isMasterPractice(fen) ? base + bonus : base;
+  }
 
   /// True once [TreeBuildConfig.timeBudgetMinutes] of active build time has
   /// elapsed (0 = no budget).  The stopwatch is paused with the pause gate,

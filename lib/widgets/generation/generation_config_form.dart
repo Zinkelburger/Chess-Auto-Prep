@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
+import 'package:provider/provider.dart';
 
 import '../../constants/engine_defaults.dart';
 import '../../models/eval_database_settings.dart';
@@ -9,6 +10,8 @@ import '../../models/pgn_source.dart';
 import '../../services/eval/cdbdirect_eval_provider.dart';
 import '../../services/generation/generation_config.dart';
 import '../../services/generation/generation_presets.dart';
+import '../../services/master_games/master_games_service.dart';
+import '../../services/master_games/twic_client.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/app_messages.dart';
@@ -102,6 +105,8 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
     _minLinesPerChapterCtrl.dispose();
     _modelGameCountCtrl.dispose();
     _modelGameMinEloCtrl.dispose();
+    _masterDepthBonusCtrl.dispose();
+    _offBookOppMaxChildrenCtrl.dispose();
     _dbMinGamesCtrl.dispose();
     _dbMinProbCtrl.dispose();
     _minEloCtrl.dispose();
@@ -118,6 +123,8 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
     _setupToleranceCtrl.dispose();
     _timeBudgetCtrl.dispose();
     _memorabilityToleranceCtrl.dispose();
+    _engineTailCtrl.dispose();
+    _lineCoverageCtrl.dispose();
     _targetLinesCtrl.dispose();
     super.dispose();
   }

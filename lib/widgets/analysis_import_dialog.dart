@@ -208,7 +208,7 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return AlertDialog(
-      title: const Text('Import PGN Files for Analysis'),
+      title: const Text('Load games from disk'),
       content: SizedBox(
         width: 450,
         child: SingleChildScrollView(

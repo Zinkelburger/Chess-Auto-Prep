@@ -23,7 +23,7 @@ class PgnImportResult {
 /// Returns a [PgnImportResult] if the user confirms, or `null` on cancel.
 Future<PgnImportResult?> showPgnImportDialog(
   BuildContext context, {
-  String title = 'Import PGN',
+  String title = 'Load from disk',
   String confirmLabel = 'Import',
 }) {
   return showDialog<PgnImportResult>(

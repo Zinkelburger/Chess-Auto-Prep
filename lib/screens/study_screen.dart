@@ -21,6 +21,7 @@ import '../utils/app_shortcuts.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_breadcrumb_trail.dart';
 import '../widgets/app_mode_menu_button.dart';
+import '../widgets/app_overflow_menu.dart';
 import '../widgets/app_settings_button.dart';
 import '../widgets/board_editor/board_editor_dialog.dart';
 import '../widgets/common/searchable_picker_dialog.dart';
@@ -331,7 +332,7 @@ class _StudyScreenState extends State<StudyScreen> {
     final pgn = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Import PGN'),
+        title: const Text('Load from disk'),
         content: SizedBox(
           width: 460,
           child: TextField(
@@ -636,16 +637,27 @@ class _StudyScreenState extends State<StudyScreen> {
             ],
           ),
           IconButton(
-            icon: const Icon(Icons.menu_book, size: 20),
-            tooltip: 'Browse in PGN viewer (A)',
-            onPressed: _study.doc.filePath == null ? null : _browseInViewer,
-          ),
-          IconButton(
             icon: const Icon(Icons.swap_vert, size: 20),
             tooltip: 'Flip board',
             onPressed: _study.toggleFlipped,
           ),
-          const AppSettingsButton(),
+          AppOverflowMenu(
+            entries: [
+              AppMenuEntry(
+                label: 'Browse in PGN viewer',
+                icon: Icons.menu_book,
+                enabled: _study.doc.filePath != null,
+                shortcut: 'A',
+                onRun: _browseInViewer,
+              ),
+              AppMenuEntry(
+                label: 'App settings…',
+                icon: Icons.settings,
+                dividerAbove: true,
+                onRun: () => openAppSettings(context),
+              ),
+            ],
+          ),
           const AppModeMenuButton(),
         ],
       ),

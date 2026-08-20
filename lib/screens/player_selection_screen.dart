@@ -115,7 +115,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
             heroTag: 'import_pgn',
             onPressed: _showImportDialog,
             icon: const Icon(Icons.file_open),
-            label: const Text('Import PGN Files'),
+            label: const Text('Load from disk'),
           ),
           const SizedBox(height: 12),
           FloatingActionButton.extended(
@@ -192,7 +192,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
                 OutlinedButton.icon(
                   onPressed: _showImportDialog,
                   icon: const Icon(Icons.file_open),
-                  label: const Text('Import PGN Files'),
+                  label: const Text('Load from disk'),
                 ),
               ],
             ),

@@ -67,7 +67,10 @@ mixin _AppBarBuildersMixin
       ),
       actions: [
         if (_controller.filteredGames.isNotEmpty) ...[
-          // Study modes: opening tree, amend, solitaire.
+          // What stays in the bar is the *view modes* — controls with an on
+          // state you can see on the board. Everything that merely does
+          // something once moved into the overflow below, which is what took
+          // this bar from eleven controls to six.
           if (!_controller.isSolitaireMode) ...[
             IconButton(
               onPressed: _controller.toggleOpeningTree,
@@ -92,11 +95,6 @@ mixin _AppBarBuildersMixin
               ),
               tooltip: 'Amend game',
             ),
-            IconButton(
-              onPressed: _editInStudy,
-              icon: const Icon(Icons.edit_note, size: 20),
-              tooltip: 'Edit in Study (A)',
-            ),
           ],
           IconButton(
             onPressed: _controller.showOpeningTree
@@ -113,16 +111,6 @@ mixin _AppBarBuildersMixin
                 ? 'Exit solitaire mode (Esc)'
                 : 'Solitaire mode (Ctrl+S)',
           ),
-          if (_controller.isSolitaireMode && _controller.totalTrophyCount > 0)
-            IconButton(
-              onPressed: () => _showTrophyCabinet(),
-              icon: const Icon(
-                Icons.emoji_events,
-                size: 20,
-                color: AppColors.starAccent,
-              ),
-              tooltip: 'Trophies (${_controller.totalTrophyCount})',
-            ),
           // No group separators: the thin vertical rules read as part of the
           // button beside them ("what is that bar doing on my button?"), and
           // grouping by hairline was never worth that. Icons are spaced and
@@ -136,98 +124,78 @@ mixin _AppBarBuildersMixin
             icon: const Icon(Icons.swap_vert, size: 20),
             tooltip: 'Flip board (F)',
           ),
-          if (!_controller.isSolitaireMode) ...[
+          if (!_controller.isSolitaireMode)
             PgnPerspectiveButton(controller: _controller),
-            // File / misc: export, overflow.
-            IconButton(
-              onPressed: _exportSlice,
-              icon: const Icon(Icons.file_upload_outlined, size: 20),
-              tooltip: 'Export filtered games',
-            ),
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, size: 20),
-              tooltip: 'More actions',
-              onSelected: (value) {
-                if (value == 'generate_repertoire') {
-                  unawaited(_generateRepertoireFromGames());
-                } else if (value == 'save_as_study') {
-                  unawaited(_saveSliceAsStudy());
-                } else if (value == 'trophies') {
-                  _showTrophyCabinet();
-                } else if (value == 'slice') {
-                  // Leaving single-game focus is the point of asking for
-                  // filters: the chip bar comes back with the dialog.
-                  setState(() => _singleGameFocus = false);
-                  _openSliceDialog();
-                }
-              },
-              itemBuilder: (_) => [
-                // Only while the chip bar is hidden — otherwise this duplicates
-                // the "Slice" chip sitting in the title row.
-                if (_singleGameFocus)
-                  const PopupMenuItem(
-                    value: 'slice',
-                    child: ListTile(
-                      leading: Icon(Icons.filter_alt_outlined, size: 20),
-                      title: Text('Filter these games…'),
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ),
-                PopupMenuItem(
-                  value: 'save_as_study',
-                  child: ListTile(
-                    leading: const Icon(Icons.edit_note, size: 20),
-                    title: Text(
-                      'Save ${_controller.filteredGames.length} filtered '
-                      'game${_controller.filteredGames.length == 1 ? '' : 's'} '
-                      'as study…',
-                    ),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'generate_repertoire',
-                  child: ListTile(
-                    leading: const Icon(Icons.auto_fix_high, size: 20),
-                    title: const Text('Seed a repertoire from these games…'),
-                    trailing: InfoHint(
-                      'Creates a repertoire and hands the '
-                      '${_controller.filteredGames.length} currently filtered '
-                      'game${_controller.filteredGames.length == 1 ? '' : 's'} '
-                      'to the Repertoire Builder\n'
-                      'as the seed for generation. The games become the '
-                      'starting move data; the builder then explores and '
-                      'scores lines from there.',
-                    ),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'trophies',
-                  child: ListTile(
-                    leading: const Icon(
-                      Icons.emoji_events,
-                      size: 20,
-                      color: AppColors.starAccent,
-                    ),
-                    title: Text(
-                      'Trophy cabinet (${_controller.totalTrophyCount})',
-                    ),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-              ],
-            ),
-          ],
         ],
-        const AppSettingsButton(),
+        // One overflow for the whole bar, present in every state — solitaire
+        // included, which is how the trophy cabinet and app settings stay
+        // reachable there without icons of their own.
+        AppOverflowMenu(entries: _overflowEntries()),
         const AppModeMenuButton(),
       ],
     );
+  }
+
+  List<AppMenuEntry> _overflowEntries() {
+    final games = _controller.filteredGames;
+    final plural = games.length == 1 ? '' : 's';
+    return [
+      if (games.isNotEmpty && !_controller.isSolitaireMode) ...[
+        AppMenuEntry(
+          label: 'Edit in Study',
+          icon: Icons.edit_note,
+          shortcut: 'A',
+          onRun: _editInStudy,
+        ),
+        // Only while the chip bar is hidden — otherwise this duplicates the
+        // "Slice" chip sitting in the title row.
+        if (_singleGameFocus)
+          AppMenuEntry(
+            label: 'Filter these games…',
+            icon: Icons.filter_alt_outlined,
+            onRun: () {
+              // Leaving single-game focus is the point of asking for filters:
+              // the chip bar comes back with the dialog.
+              setState(() => _singleGameFocus = false);
+              _openSliceDialog();
+            },
+          ),
+        AppMenuEntry(
+          label: 'Export filtered games…',
+          icon: Icons.file_upload_outlined,
+          dividerAbove: true,
+          onRun: _exportSlice,
+        ),
+        AppMenuEntry(
+          label: 'Save ${games.length} filtered game$plural as study…',
+          icon: Icons.edit_note,
+          onRun: () => unawaited(_saveSliceAsStudy()),
+        ),
+        AppMenuEntry(
+          label: 'Seed a repertoire from these games…',
+          icon: Icons.auto_fix_high,
+          onRun: () => unawaited(_generateRepertoireFromGames()),
+          hint:
+              'Creates a repertoire and hands the ${games.length} currently '
+              'filtered game$plural to the Repertoire Builder\n'
+              'as the seed for generation. The games become the starting move '
+              'data; the builder then explores and scores lines from there.',
+        ),
+      ],
+      if (_controller.totalTrophyCount > 0)
+        AppMenuEntry(
+          label: 'Trophy cabinet (${_controller.totalTrophyCount})',
+          icon: Icons.emoji_events,
+          dividerAbove: true,
+          onRun: _showTrophyCabinet,
+        ),
+      AppMenuEntry(
+        label: 'App settings…',
+        icon: Icons.settings,
+        dividerAbove: true,
+        onRun: () => openAppSettings(context),
+      ),
+    ];
   }
 
   /// App-bar file button: shows the loaded file name and opens a menu with

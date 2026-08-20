@@ -125,8 +125,9 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
     }
 
     // Empty and non-empty share the toolbar: "New repertoire" and
-    // "Import PGN…" are exactly what a first-time user needs, and the layout
-    // must not rearrange itself the moment the first repertoire exists.
+    // "Load from disk…" are exactly what a first-time user needs, and the
+    // toolbar must not rearrange itself the moment the first repertoire
+    // exists.
     if (_repertoires.isEmpty && _studies.isEmpty) {
       return Column(
         children: [
@@ -180,7 +181,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
   }
 
   /// Search plus the two ways a repertoire comes into existence, both spelled
-  /// out. "Import PGN" used to be a chip hidden inside the create dialog, so
+  /// out. Loading a PGN used to be a chip hidden inside the create dialog, so
   /// the app's most common starting point looked unsupported.
   Widget _buildToolbar() {
     return Padding(
@@ -203,7 +204,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
           OutlinedButton.icon(
             onPressed: _importFromPgn,
             icon: const Icon(Icons.file_upload_outlined, size: 18),
-            label: const Text('Import PGN…'),
+            label: const Text('Load from disk…'),
           ),
         ],
       ),

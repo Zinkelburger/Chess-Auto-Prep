@@ -386,6 +386,7 @@ class JobsPanel extends StatelessWidget {
       JobType.studyImport => Icons.cloud_download_outlined,
       JobType.tacticsImport => Icons.extension_outlined,
       JobType.gameAnalysis => Icons.reviews_outlined,
+      JobType.masterGames => Icons.library_books_outlined,
     };
     // A stopped *resumable* job was paused, not cancelled: its work is already
     // on disk and starting it again carries on from there. "Cancelled" would

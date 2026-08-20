@@ -46,12 +46,33 @@ class PrunedLine {
 /// keeping the rest of the tree intact. Also drops the removed nodes from the
 /// tree's [BuildTree.nodeIndex] and refreshes [BuildTree.totalNodes].
 ///
+/// One move is always left behind at a node where **we** are to move. If
+/// every reply we have there is below the window, removing them all would
+/// leave the repertoire with no answer to a move the opponent has already
+/// played, which is not an answer it is allowed to give — so the least bad
+/// of them survives as a leaf and the line ends on our move.
+///
+/// This matters even with a sane window. The flag is applied at build depth,
+/// which is shallow: on a real Benko tree a depth-14 search read a position
+/// 28cp worse than depth 20 did, and the deletion is irreversible — the
+/// depth-20 verification pass that would have exonerated it runs afterwards
+/// and cannot resurrect what is already gone.
+///
 /// When [removedLines] is provided, a [PrunedLine] snapshot of each removed
 /// subtree root is appended to it (descendants are not recorded separately).
 ///
 /// Returns the number of nodes removed (including descendants).
-int pruneEvalTooLow(BuildTree tree, {List<PrunedLine>? removedLines}) {
-  final removed = _pruneRecursive(tree, tree.root, removedLines);
+int pruneEvalTooLow(
+  BuildTree tree, {
+  required bool playAsWhite,
+  List<PrunedLine>? removedLines,
+}) {
+  final removed = _pruneRecursive(
+    tree,
+    tree.root,
+    removedLines,
+    playAsWhite: playAsWhite,
+  );
   if (removed > 0) {
     tree.totalNodes = tree.root.countSubtree();
   }
@@ -61,19 +82,42 @@ int pruneEvalTooLow(BuildTree tree, {List<PrunedLine>? removedLines}) {
 int _pruneRecursive(
   BuildTree tree,
   BuildTreeNode node,
-  List<PrunedLine>? removedLines,
-) {
+  List<PrunedLine>? removedLines, {
+  required bool playAsWhite,
+}) {
+  // Our turn here, and nothing we can play survives the window: keep the
+  // best of a bad set rather than answer with silence. Decided before any
+  // removal so the pass is idempotent — a second run reaches the same
+  // conclusion about the same node.
+  BuildTreeNode? reprieved;
+  if (node.children.isNotEmpty && node.isWhiteToMove == playAsWhite) {
+    final doomed = node.children
+        .where((c) => c.pruneReason == PruneReason.evalTooLow)
+        .toList();
+    if (doomed.length == node.children.length) {
+      reprieved = doomed.reduce(
+        (a, b) => b.evalForUs(playAsWhite) > a.evalForUs(playAsWhite) ? b : a,
+      );
+    }
+  }
+
   int removed = 0;
   for (int i = node.children.length - 1; i >= 0; i--) {
     final child = node.children[i];
-    if (child.pruneReason == PruneReason.evalTooLow) {
+    if (child.pruneReason == PruneReason.evalTooLow &&
+        !identical(child, reprieved)) {
       removedLines?.add(PrunedLine.fromNode(child));
       final subtreeSize = child.countSubtree();
       _removeFromIndex(tree, child);
       node.children.removeAt(i);
       removed += subtreeSize;
     } else {
-      removed += _pruneRecursive(tree, child, removedLines);
+      removed += _pruneRecursive(
+        tree,
+        child,
+        removedLines,
+        playAsWhite: playAsWhite,
+      );
     }
   }
   return removed;

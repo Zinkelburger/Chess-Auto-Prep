@@ -26,6 +26,7 @@ import '../../../utils/chess_utils.dart';
 import '../../../utils/fen_utils.dart';
 import '../../engine/stockfish_pool.dart';
 import '../../maia/maia_factory.dart';
+import '../../master_games/master_games_db.dart' show BookLookup, BookMove;
 import '../generation_config.dart';
 import '../line_extractor.dart';
 import '../pgn_freq_map.dart';
@@ -67,8 +68,12 @@ class RefutedAlternative {
 typedef AlternativeMap = Map<String, RefutedAlternative>;
 
 class RefutationProber {
-  RefutationProber({required this.config, StockfishPool? pool, this.freqMap})
-    : pool = pool ?? StockfishPool.instance;
+  RefutationProber({
+    required this.config,
+    StockfishPool? pool,
+    this.freqMap,
+    this.masterBook,
+  }) : pool = pool ?? StockfishPool.instance;
 
   final TreeBuildConfig config;
   final StockfishPool pool;
@@ -77,6 +82,10 @@ class RefutationProber {
   /// for [probeAlternatives] when Maia is unavailable.  Null is normal — an
   /// engine-only build has no games.
   final PgnFreqMap? freqMap;
+
+  /// Master practice from the local master-games book, the second fallback
+  /// move source after [freqMap].
+  final BookLookup? masterBook;
 
   /// Half-moves of punishment to show.  Long enough that the point is made
   /// (win the piece, then consolidate), short enough that it stays a hint
@@ -248,15 +257,29 @@ class RefutationProber {
     }
   }
 
-  /// Database frequencies at [site], as shares of the games played there.
+  /// Database frequencies at [site], as shares of the games played there —
+  /// from the scanned PGN database, else from the master-games book.
   List<MapEntry<String, double>> _databaseShares(LineChoice site) {
     final position = freqMap?.get(site.fenBefore);
-    if (position == null) return const [];
-    final total = position.playedTotal;
+    if (position != null && position.playedTotal > 0) {
+      final total = position.playedTotal;
+      return [
+        for (final move in position.moves)
+          MapEntry(move.uci, move.count / total),
+      ]..sort((a, b) => b.value.compareTo(a.value));
+    }
+    final lookup = masterBook;
+    if (lookup == null) return const [];
+    final List<BookMove> book;
+    try {
+      book = lookup(site.fenBefore);
+    } catch (_) {
+      return const [];
+    }
+    final total = book.fold(0, (sum, m) => sum + m.games);
     if (total <= 0) return const [];
-    return [
-      for (final move in position.moves) MapEntry(move.uci, move.count / total),
-    ]..sort((a, b) => b.value.compareTo(a.value));
+    return [for (final move in book) MapEntry(move.uci, move.games / total)]
+      ..sort((a, b) => b.value.compareTo(a.value));
   }
 
   /// Play [uci] at [site] and ask the engine what it runs into.  Null when the
