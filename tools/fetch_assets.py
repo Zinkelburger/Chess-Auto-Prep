@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
-"""Fetch the Stockfish engine binaries, which are not tracked in git.
+"""Fetch the Stockfish engine binary for this machine (not tracked in git).
 
 These files are bundled by `pubspec.yaml` and loaded from the Flutter root
 bundle at runtime, so they must exist *before* `flutter build` runs -- not
 just before someone launches the app in development. Run this from the repo
-root (or via `make assets`) as a build prerequisite, including in CI.
+root as a build prerequisite, including in CI.
 
-    python3 tools/fetch_assets.py            # fetch whatever is missing
-    python3 tools/fetch_assets.py --check    # verify only, non-zero exit if missing
+    python3 tools/fetch_assets.py            # host platform only (~75 MB)
+    python3 tools/fetch_assets.py --check    # verify host asset; non-zero if missing
     python3 tools/fetch_assets.py --force    # re-download and overwrite
     python3 tools/fetch_assets.py --only stockfish-linux
+    python3 tools/fetch_assets.py --only stockfish-macos-arm64
+
+Default is the current OS/arch so a Linux checkout does not pull Windows and
+macOS engines. Release CI fetches one target per job and Flutter bundles that
+file into the app. macOS ships two downloads (Apple Silicon vs Intel), each
+with the matching engine in the same `stockfish-macos.gz` slot.
 
 Standard library only, so CI needs no pip install step.
 """
@@ -22,6 +28,7 @@ import hashlib
 import io
 import json
 import os
+import platform
 import sys
 import tarfile
 import tempfile
@@ -51,14 +58,14 @@ STOCKFISH_BASE = (
 # than to a known machine, baseline is the correct default. If you only target
 # modern hardware, swap in the -avx2 asset names below.
 #
-# NOTE (macOS): stockfish-macos-x86-64 runs on Apple Silicon only through
-# Rosetta 2, which is not always installed and which Apple has begun winding
-# down. The native m1 build is far faster but will not run on Intel Macs. The
-# app has a single `stockfish-macos` slot, so this is an either/or until
-# process_connection.dart learns to pick per-architecture. See README.
+# macOS: Apple Silicon and Intel are different upstream archives, but both
+# write `stockfish-macos.gz`. process_connection.dart has one macOS slot; the
+# release workflow builds two apps and fetches the matching archive into that
+# slot so users download the right architecture instead of a universal binary.
 STOCKFISH_ASSETS = {
     "stockfish-linux": "stockfish-ubuntu-x86-64.tar",
-    "stockfish-macos": "stockfish-macos-x86-64.tar",
+    "stockfish-macos-arm64": "stockfish-macos-m1-apple-silicon.tar",
+    "stockfish-macos-x86_64": "stockfish-macos-x86-64.tar",
     "stockfish-windows.exe": "stockfish-windows-x86-64.zip",
 }
 
@@ -73,9 +80,13 @@ TARGETS = {
         "dest": "assets/executables/stockfish-linux.gz",
         "url": f"{STOCKFISH_BASE}/{STOCKFISH_ASSETS['stockfish-linux']}",
     },
-    "stockfish-macos": {
+    "stockfish-macos-arm64": {
         "dest": "assets/executables/stockfish-macos.gz",
-        "url": f"{STOCKFISH_BASE}/{STOCKFISH_ASSETS['stockfish-macos']}",
+        "url": f"{STOCKFISH_BASE}/{STOCKFISH_ASSETS['stockfish-macos-arm64']}",
+    },
+    "stockfish-macos-x86_64": {
+        "dest": "assets/executables/stockfish-macos.gz",
+        "url": f"{STOCKFISH_BASE}/{STOCKFISH_ASSETS['stockfish-macos-x86_64']}",
     },
     "stockfish-windows": {
         "dest": "assets/executables/stockfish-windows.exe.gz",
@@ -96,6 +107,21 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+def host_targets() -> list[str]:
+    """Stockfish target(s) for the machine running this script."""
+    plat = sys.platform
+    machine = platform.machine().lower()
+    if plat.startswith("linux"):
+        return ["stockfish-linux"]
+    if plat == "darwin":
+        if machine in ("arm64", "aarch64"):
+            return ["stockfish-macos-arm64"]
+        return ["stockfish-macos-x86_64"]
+    if plat == "win32":
+        return ["stockfish-windows"]
+    raise SystemExit(f"ERROR: unsupported platform {plat} ({machine})")
+
+
 def load_lock() -> dict:
     if LOCKFILE.exists():
         return json.loads(LOCKFILE.read_text())
@@ -105,6 +131,23 @@ def load_lock() -> dict:
 def save_lock(lock: dict) -> None:
     LOCKFILE.parent.mkdir(parents=True, exist_ok=True)
     LOCKFILE.write_text(json.dumps(lock, indent=2, sort_keys=True) + "\n")
+
+
+def dest_is_current(name: str, dest: Path, lock: dict) -> bool:
+    """True if `dest` exists and matches the lockfile output hash when present."""
+    if not dest.exists():
+        return False
+    expected = lock.get(name, {}).get("output_sha256")
+    if not expected:
+        return True
+    actual = sha256_file(dest)
+    if actual == expected:
+        return True
+    print(
+        f"[stale] {name}: {dest.relative_to(REPO_ROOT)} hash mismatch "
+        f"(have {actual[:12]}…, want {expected[:12]}…) — re-fetching"
+    )
+    return False
 
 
 def download(url: str, dest: Path) -> None:
@@ -187,7 +230,7 @@ def write_gz(payload: bytes, dest: Path) -> None:
 def fetch(name: str, spec: dict, lock: dict, force: bool) -> bool:
     """Returns True if the asset changed on disk."""
     dest = REPO_ROOT / spec["dest"]
-    if dest.exists() and not force:
+    if dest_is_current(name, dest, lock) and not force:
         print(f"[ok]   {name}: {spec['dest']} present ({human(dest.stat().st_size)})")
         return False
 
@@ -221,31 +264,54 @@ def fetch(name: str, spec: dict, lock: dict, force: bool) -> bool:
     return True
 
 
+def check_targets(names: list[str], lock: dict) -> int:
+    missing: list[str] = []
+    mismatched: list[str] = []
+    for n in names:
+        dest = REPO_ROOT / TARGETS[n]["dest"]
+        if not dest.exists():
+            print(f"[MISS] {n}: {TARGETS[n]['dest']}")
+            missing.append(n)
+            continue
+        expected = lock.get(n, {}).get("output_sha256")
+        if expected and sha256_file(dest) != expected:
+            print(f"[HASH] {n}: {TARGETS[n]['dest']} does not match assets.lock.json")
+            mismatched.append(n)
+            continue
+        print(f"[ok  ] {n}: {TARGETS[n]['dest']}")
+    if missing or mismatched:
+        extra = ""
+        if mismatched:
+            extra = " Re-run with --force if the lockfile was updated."
+        print(
+            f"\n{len(missing) + len(mismatched)} asset(s) missing or stale. "
+            f"Run: python3 tools/fetch_assets.py{' --only ' + ' --only '.join(names) if names != host_targets() else ''}."
+            f"{extra}",
+            file=sys.stderr,
+        )
+        return 1
+    print("\nAll requested assets present.")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--check", action="store_true", help="verify only, do not download")
     ap.add_argument("--force", action="store_true", help="re-download even if present")
-    ap.add_argument("--only", action="append", choices=sorted(TARGETS), help="subset")
+    ap.add_argument(
+        "--only",
+        action="append",
+        choices=sorted(TARGETS),
+        help="subset (default: host platform only)",
+    )
     args = ap.parse_args()
 
-    names = args.only or sorted(TARGETS)
+    names = args.only or host_targets()
+    lock = load_lock()
 
     if args.check:
-        missing = [n for n in names if not (REPO_ROOT / TARGETS[n]["dest"]).exists()]
-        for n in names:
-            dest = REPO_ROOT / TARGETS[n]["dest"]
-            mark = "ok  " if dest.exists() else "MISS"
-            print(f"[{mark}] {n}: {TARGETS[n]['dest']}")
-        if missing:
-            print(
-                f"\n{len(missing)} asset(s) missing. Run: python3 tools/fetch_assets.py",
-                file=sys.stderr,
-            )
-            return 1
-        print("\nAll assets present.")
-        return 0
+        return check_targets(names, lock)
 
-    lock = load_lock()
     changed = False
     for n in names:
         changed |= fetch(n, TARGETS[n], lock, args.force)

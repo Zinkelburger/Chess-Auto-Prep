@@ -8,6 +8,12 @@ on:
 permissions:
   contents: write
 
+# Stockfish is gitignored and fetched per job (host/arch only) so git clones
+# stay small. Each artifact still bundles that platform's engine via
+# pubspec.yaml → assets/executables/. macOS is two downloads, not a universal
+# binary: Apple Silicon and Intel each get a native Flutter build plus the
+# matching Stockfish in the same stockfish-macos.gz slot.
+
 jobs:
   build-linux:
     runs-on: ubuntu-22.04
@@ -16,7 +22,9 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: 3.47.1
           channel: stable
+          cache: true
 
       - name: Install Linux dependencies
         run: |
@@ -40,10 +48,16 @@ jobs:
           ./packages/cdbdirect_flutter_libs/scripts/build_native.sh --target linux-x64
           test -f packages/cdbdirect_flutter_libs/native/linux-x64/libcdbdirect.so
 
-      - name: Remove non-Linux Stockfish binaries
+      - name: Cache Stockfish
+        uses: actions/cache@v4
+        with:
+          path: assets/executables
+          key: stockfish-${{ hashFiles('tools/assets.lock.json') }}-linux
+
+      - name: Fetch Stockfish (Linux)
         run: |
-          rm -f assets/executables/stockfish-windows.exe.gz
-          rm -f assets/executables/stockfish-macos.gz
+          python3 tools/fetch_assets.py --only stockfish-linux
+          python3 tools/fetch_assets.py --check --only stockfish-linux
 
       - name: Build Linux release
         run: flutter build linux --release
@@ -98,13 +112,24 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: 3.47.1
           channel: stable
+          cache: true
 
-      - name: Remove non-Windows Stockfish binaries
-        shell: pwsh
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache Stockfish
+        uses: actions/cache@v4
+        with:
+          path: assets/executables
+          key: stockfish-${{ hashFiles('tools/assets.lock.json') }}-windows
+
+      - name: Fetch Stockfish (Windows)
         run: |
-          Remove-Item -Force assets/executables/stockfish-linux.gz -ErrorAction SilentlyContinue
-          Remove-Item -Force assets/executables/stockfish-macos.gz -ErrorAction SilentlyContinue
+          python tools/fetch_assets.py --only stockfish-windows
+          python tools/fetch_assets.py --check --only stockfish-windows
 
       - name: Build Windows release
         run: flutter build windows --release
@@ -121,30 +146,80 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            stockfish: stockfish-macos-arm64
+            excluded: x86_64
+          - arch: x86_64
+            stockfish: stockfish-macos-x86_64
+            excluded: arm64
     steps:
       - uses: actions/checkout@v4
 
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: 3.47.1
           channel: stable
+          cache: true
 
-      - name: Remove non-macOS Stockfish binaries
+      - name: Cache Stockfish
+        uses: actions/cache@v4
+        with:
+          path: assets/executables
+          key: stockfish-${{ hashFiles('tools/assets.lock.json') }}-${{ matrix.stockfish }}
+
+      - name: Fetch Stockfish (${{ matrix.arch }})
         run: |
-          rm -f assets/executables/stockfish-windows.exe.gz
-          rm -f assets/executables/stockfish-linux.gz
+          python3 tools/fetch_assets.py --only ${{ matrix.stockfish }}
+          python3 tools/fetch_assets.py --check --only ${{ matrix.stockfish }}
 
-      - name: Build macOS release
+      - name: Build macOS ${{ matrix.arch }} release
+        env:
+          FLUTTER_XCODE_ARCHS: ${{ matrix.arch }}
+          FLUTTER_XCODE_EXCLUDED_ARCHS: ${{ matrix.excluded }}
+          FLUTTER_XCODE_ONLY_ACTIVE_ARCH: "NO"
         run: flutter build macos --release
+
+      - name: Keep ${{ matrix.arch }} only
+        run: |
+          set -euo pipefail
+          ARCH="${{ matrix.arch }}"
+          shopt -s nullglob
+          apps=(build/macos/Build/Products/Release/*.app)
+          if [[ ${#apps[@]} -ne 1 ]]; then
+            echo "expected one .app, found ${#apps[@]}"
+            ls -la build/macos/Build/Products/Release || true
+            exit 1
+          fi
+          APP="${apps[0]}"
+          EXEC=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")
+          BIN="$APP/Contents/MacOS/$EXEC"
+          INFO=$(lipo -info "$BIN")
+          echo "$INFO"
+          if echo "$INFO" | grep -q 'Non-fat file'; then
+            echo "Already single-architecture"
+          else
+            echo "Universal binary; thinning to $ARCH with ditto"
+            THIN="${APP%.app}-${ARCH}.app"
+            rm -rf "$THIN"
+            ditto --arch "$ARCH" "$APP" "$THIN"
+            rm -rf "$APP"
+            mv "$THIN" "$APP"
+            lipo -info "$APP/Contents/MacOS/$EXEC"
+          fi
 
       - name: Zip app bundle
         run: |
           cd build/macos/Build/Products/Release
-          zip -r ../../../../../chess-auto-prep-${{ github.ref_name }}-macos.zip *.app
+          zip -r ../../../../../chess-auto-prep-${{ github.ref_name }}-macos-${{ matrix.arch }}.zip *.app
 
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-build
-          path: chess-auto-prep-${{ github.ref_name }}-macos.zip
+          name: macos-${{ matrix.arch }}-build
+          path: chess-auto-prep-${{ github.ref_name }}-macos-${{ matrix.arch }}.zip
 
   release:
     needs: [build-linux, build-windows, build-macos]
@@ -160,3 +235,5 @@ jobs:
         with:
           files: artifacts/*
           generate_release_notes: true
+          body: |
+            **Which macOS zip?** Apple Silicon (M1/M2/M3/M4) → `macos-arm64`. Intel → `macos-x86_64`. Each build includes the matching Stockfish; they are not a universal binary.

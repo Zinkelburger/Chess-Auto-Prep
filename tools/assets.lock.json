@@ -5,7 +5,13 @@
     "source_sha256": "5c6f38b02a4da5f3ffe763f27da6c3e743eebefd92b50cb3661623b96696adff",
     "url": "https://github.com/official-stockfish/Stockfish/releases/download/sf_18/stockfish-ubuntu-x86-64.tar"
   },
-  "stockfish-macos": {
+  "stockfish-macos-arm64": {
+    "output_bytes": 78027809,
+    "output_sha256": "dfd4aa83a837fd35185b3534b6807103a05629c32af1325f3758be9a4529e774",
+    "source_sha256": "4d77c4aa3ad9bd1ea8111f2ac5a4620fe7ebf998d6893bf828d49ccd579c8cb0",
+    "url": "https://github.com/official-stockfish/Stockfish/releases/download/sf_18/stockfish-macos-m1-apple-silicon.tar"
+  },
+  "stockfish-macos-x86_64": {
     "output_bytes": 75869397,
     "output_sha256": "d4f7a39cf00ec1174411002da351cfe70f487eeb38d50fbaf5c9bfcbd55a73c6",
     "source_sha256": "e7d7a2bca13915419d41ac6cb8cedb123dd2ba1c39a22c574df7a2aa3f526592",

@@ -31,45 +31,65 @@ git clone <repository-url>
 cd Chess-Auto-Prep
 ```
 
-2. Install dependencies
+2. Install Dart/Flutter packages
 ```bash
 flutter pub get
 ```
 
-3. Fetch the binary assets (required — see [Binary assets](#binary-assets))
+3. Stockfish (optional — see [Binary assets](#binary-assets))
 ```bash
-python3 tools/fetch_assets.py
+python3 tools/fetch_assets.py   # this machine only; `flutter run` also fetches if missing
 ```
 
-4. Run the app
+4. Run
 ```bash
 flutter run
 ```
 
+Maia needs no extra step: the ONNX model is in git, and ONNX Runtime is a Flutter plugin.
+
 ## Binary assets
 
-The three Stockfish engines (~217 MB) are **not tracked in git** — they are
-fetched from the pinned upstream release on demand.
+Two engines ship in the app: **Stockfish** (UCI process) and **Maia** (ONNX).
+They are installed differently because only one has an upstream download.
+
+### Stockfish (fetched, then bundled)
+
+Not tracked in git (Linux+Windows+macOS is ~217 MB). `tools/fetch_assets.py`
+downloads the pinned upstream build for **this machine only** (~75 MB gzipped).
+
+| How you run | What happens |
+|-------------|--------------|
+| `python3 tools/fetch_assets.py` | Explicit installer. Puts `assets/executables/*.gz` so the next `flutter run` / `flutter build` bundles it. |
+| `flutter run` / `flutter build` on Linux or Windows | CMake configure runs the same script if the `.gz` is missing. |
+| `flutter run` on macOS | Xcode Assemble fetches the **host** engine only if `stockfish-macos.gz` is missing (so CI’s Intel job cannot overwrite a pre-fetched x86_64 binary). |
+| Engine starts with no bundled `.gz` | The app downloads the lockfile URL into the support dir (first use, needs network). |
+| GitHub Release zip | CI fetched the matching OS/arch before `flutter build`, so users do not download Stockfish. |
 
 ```bash
-python3 tools/fetch_assets.py           # fetch anything missing (~217 MB, once)
-python3 tools/fetch_assets.py --check   # verify presence; non-zero exit if missing
+python3 tools/fetch_assets.py           # host OS/arch only
+python3 tools/fetch_assets.py --check   # verify that asset; non-zero if missing
 python3 tools/fetch_assets.py --force   # re-download and overwrite
+python3 tools/fetch_assets.py --only stockfish-macos-arm64
 ```
 
-The script is stdlib-only (no pip install), idempotent, and records upstream
-checksums in `tools/assets.lock.json` — commit that file when versions change.
+Checksums live in `tools/assets.lock.json` (also a Flutter asset so the
+in-app download can verify). Commit it when versions change.
 
-`assets/maia3_simplified.onnx` (46 MB) **is** tracked, and deliberately so: it
-is a local export with no upstream to fetch from, so git is the only copy that
-exists. See [Regenerating the Maia model](#regenerating-the-maia-model).
+### Maia (in git + plugin)
 
-> **This is a build prerequisite, not just a dev convenience.** `pubspec.yaml`
-> bundles `assets/executables/` and `assets/maia3_simplified.onnx` into the
-> Flutter root bundle, and `lib/services/engine/process_connection.dart` loads
-> them from there at runtime. Stockfish must be present *before* `flutter build`
-> runs, including in CI. Add `python3 tools/fetch_assets.py --check` to your
-> pipeline ahead of the build step to fail fast with a clear message.
+`assets/maia3_simplified.onnx` (~44 MB) **is** tracked: it is a local export
+with no upstream file to fetch. Vocab JSON next to it is tiny and also
+tracked. Native ONNX Runtime (`.so` / `.dll` / universal `.dylib`) comes from
+the `onnxruntime` Flutter plugin and is copied into each desktop bundle
+automatically — including both macOS architectures, which `ditto --arch`
+thins per zip.
+
+See [Regenerating the Maia model](#regenerating-the-maia-model).
+
+> **Stockfish must be on disk before a *release* `flutter build` if you want
+> it inside the zip** (CI does this). A local `flutter run` without the
+> installer still works: the first engine use downloads it.
 
 ### Upgrading Stockfish
 
@@ -83,12 +103,18 @@ The pinned builds are **CPU-baseline** (`stockfish-ubuntu-x86-64` etc.). Faster
 user's CPU lacks dies with `SIGILL` at startup, so baseline is the right default
 for a shipped app.
 
-> **Open decision (macOS):** the app has a single `stockfish-macos` slot, so it
-> gets the x86-64 build, which runs on Apple Silicon only via Rosetta 2 — not
-> always installed, and being wound down by Apple. The native
-> `stockfish-macos-m1-apple-silicon` build is far faster but will not run on
-> Intel Macs. Shipping both requires teaching `process_connection.dart` to pick
-> per-architecture.
+### macOS downloads (Apple Silicon vs Intel)
+
+GitHub Releases ship **two** macOS zips, not one universal/fat app:
+
+| File | Machine | Stockfish inside `stockfish-macos.gz` |
+|------|---------|----------------------------------------|
+| `*-macos-arm64.zip` | M1 / M2 / M3 / M4 | `stockfish-macos-m1-apple-silicon` |
+| `*-macos-x86_64.zip` | Intel | `stockfish-macos-x86-64` |
+
+The app still has a single `stockfish-macos` slot; each zip is built with only
+that architecture's Flutter binary and engine, so the download stays about half
+the size of a universal bundle.
 
 ### Regenerating the Maia model
 
@@ -121,9 +147,16 @@ See [tree_builder/CDBDIRECT_SETUP.md](tree_builder/CDBDIRECT_SETUP.md) for downl
 
 ### Building for Different Platforms
 
+Fetch Stockfish for the target first (`python3 tools/fetch_assets.py`, or
+`--only` for a cross-build). Then:
+
 - **Android**: `flutter build apk`
 - **iOS**: `flutter build ios`
 - **Desktop**: `flutter build windows/macos/linux`
+
+macOS release artifacts are split by architecture in CI (see
+[macOS downloads](#macos-downloads-apple-silicon-vs-intel)). A local
+`flutter build macos` still produces whatever Xcode emits on this machine.
 
 ### Linux (KDE Wayland) app icon
 
@@ -154,9 +187,9 @@ Then restart the app (`flutter run -d linux`).
 
 ## Repository layout
 
-The Flutter app is `lib/` + `assets/` + the platform runner dirs. Everything
-else in this repo is a **separate program that the app does not build, ship, or
-call at runtime**:
+The Flutter app is `lib/` + `assets/` + the platform runner dirs. Most other
+trees here are **separate programs the app does not ship**. `tools/fetch_assets.py`
+is the exception: it is a build step that fills gitignored Stockfish binaries.
 
 | Path | What it is | Needed to run the app? |
 |------|-----------|------------------------|
@@ -165,7 +198,8 @@ call at runtime**:
 | `tree_builder/` | **Standalone C program.** The original prototype and reference implementation of the expectimax algorithm — since ported to Dart in `lib/services/generation/`. Also hosts the cdbdirect (local ChessDB) native build. | No — *except* its `make setup-cdbdirect` step, if you want the local 1 TB ChessDB dump. See [tree_builder/README.md](tree_builder/README.md). |
 | `python/twic-position-finder/` | **Separate web service.** TWIC Position Finder — the live site + API behind `api.chessautoprep.com` (FastAPI backend, Astro frontend, weekly ingest cron, lesson booking). Deployed on its own. | No |
 | `scripts/` | One-off data/analysis scripts (chess.com titled-player stats, USCF mapping, epub/pdf game extraction) | No |
-| `tools/` | Small API/perf benchmarking harnesses | No |
+| `tools/fetch_assets.py` | Downloads the host Stockfish into `assets/executables/` (gitignored) | **Yes, before `flutter run` / `flutter build`** |
+| `tools/` (other) | MCP server, API/perf harnesses | No |
 
 ## Configuration
 

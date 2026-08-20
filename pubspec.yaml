@@ -3,7 +3,7 @@ description: Chess tactics trainer and PGN analyzer
 
 publish_to: 'none'
 
-version: 1.12.0
+version: 1.12.1
 
 environment:
   sdk: '>=3.12.0 <4.0.0'
@@ -68,6 +68,7 @@ flutter:
     - assets/data/all_moves_maia3.json
     - assets/data/all_moves_maia3_reversed.json
     - assets/executables/
+    - tools/assets.lock.json
     - assets/pgn_collections/
     - assets/data/openings/
 

@@ -46,6 +46,11 @@ function(APPLY_STANDARD_SETTINGS TARGET)
   target_compile_definitions(${TARGET} PRIVATE "$<$<NOT:$<CONFIG:Debug>>:NDEBUG>")
 endfunction()
 
+# Host Stockfish into assets/executables/ before Flutter assemble bundles them.
+# Skipped on GitHub Actions (the workflow fetches, or tests do not need it).
+include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/FetchStockfish.cmake")
+chess_auto_prep_fetch_stockfish(stockfish-linux)
+
 # Flutter library and tool build rules.
 set(FLUTTER_MANAGED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/flutter")
 add_subdirectory(${FLUTTER_MANAGED_DIR})

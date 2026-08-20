@@ -1,12 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate';
-import 'package:flutter/services.dart';
-import 'package:path/path.dart' as p;
-import 'engine_connection.dart';
-import '../storage/app_paths.dart';
+
 import 'package:chess_auto_prep/utils/log.dart';
+
+import 'engine_connection.dart';
+import 'stockfish_bundle.dart';
 
 class ProcessConnection implements EngineConnection {
   Process? _process;
@@ -15,10 +14,6 @@ class ProcessConnection implements EngineConnection {
   StreamSubscription? _processSubscription;
   bool _isDisposed = false;
   final Completer<void> _done = Completer<void>();
-
-  /// Cached resolved path — avoids repeated file-existence checks and
-  /// platform-channel calls for every worker spawn.
-  static String? _cachedPath;
 
   ProcessConnection._();
 
@@ -36,58 +31,8 @@ class ProcessConnection implements EngineConnection {
   /// Must be called from the main isolate (uses platform channels for
   /// asset loading and path resolution). Worker isolates should receive
   /// the resolved path string instead of calling this directly.
-  static Future<String> resolveExecutablePath() async {
-    if (_cachedPath != null) return _cachedPath!;
-
-    String binaryName;
-    if (Platform.isWindows) {
-      binaryName = 'stockfish-windows.exe';
-    } else if (Platform.isMacOS) {
-      binaryName = 'stockfish-macos';
-    } else if (Platform.isLinux) {
-      binaryName = 'stockfish-linux';
-    } else {
-      throw UnsupportedError('Unsupported desktop platform');
-    }
-
-    final dir = await AppPaths.supportDirectory();
-    final file = File(p.join(dir.path, binaryName));
-
-    if (!await file.exists()) {
-      log.i('Extracting Stockfish binary to ${file.path}...');
-      await file.parent.create(recursive: true);
-
-      final byteData = await rootBundle.load(
-        'assets/executables/$binaryName.gz',
-      );
-      // Copy out of the shared asset buffer so the bytes can be sent to the
-      // worker isolate (the asUint8List view is a non-transferable window
-      // over rootBundle-owned memory).
-      final compressed = Uint8List.fromList(
-        byteData.buffer.asUint8List(
-          byteData.offsetInBytes,
-          byteData.lengthInBytes,
-        ),
-      );
-      final targetPath = file.path;
-      // gzip.decode is fully synchronous over a ~73MB asset (~90MB decoded) —
-      // decoding on the UI isolate froze the first frame for hundreds of ms.
-      // Decode AND write on a worker isolate so neither the compressed input
-      // nor the decoded output ever touches the UI isolate. Runs at most once
-      // (guarded by the file.exists check above).
-      await Isolate.run(() {
-        final decompressed = gzip.decode(compressed);
-        File(targetPath).writeAsBytesSync(decompressed, flush: true);
-      });
-
-      if (!Platform.isWindows) {
-        await Process.run('chmod', ['+x', file.path]);
-      }
-    }
-
-    _cachedPath = file.path;
-    return _cachedPath!;
-  }
+  static Future<String> resolveExecutablePath() =>
+      StockfishBundle.ensureExecutable();
 
   Future<void> _init() async {
     try {

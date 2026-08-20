@@ -21,7 +21,7 @@ jobs:
       # re-running `dart format` in the same commit if output changes.
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.44.2
+          flutter-version: 3.47.1
           channel: stable
           cache: true
 
@@ -49,7 +49,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.44.2
+          flutter-version: 3.47.1
           channel: stable
           cache: true
 

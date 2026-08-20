@@ -327,7 +327,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"$FLUTTER_ROOT\"/packages/flutter_tools/bin/macos_assemble.sh && touch Flutter/ephemeral/tripwire";
+			shellScript = "GZ=\"$PROJECT_DIR\"/../assets/executables/stockfish-macos.gz\nif [ -z \"$GITHUB_ACTIONS\" ] && [ ! -f \"$GZ\" ]; then\n  if [ \"$(uname -m)\" = arm64 ]; then T=stockfish-macos-arm64; else T=stockfish-macos-x86_64; fi\n  python3 \"$PROJECT_DIR\"/../tools/fetch_assets.py --only \"$T\" || echo \"warning: Stockfish fetch failed; app will download on first engine use\"\nfi\n\"$FLUTTER_ROOT\"/packages/flutter_tools/bin/macos_assemble.sh && touch Flutter/ephemeral/tripwire";
 		};
 /* End PBXShellScriptBuildPhase section */
 
