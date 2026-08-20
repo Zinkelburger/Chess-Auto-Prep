@@ -125,7 +125,12 @@ String? _suffixFor(PgnGameSpec spec, int index, MoveAnnotationDetail detail) {
   if (detail.emitsAnything &&
       annotationIndex >= 0 &&
       annotationIndex < spec.annotations.length) {
-    final comment = spec.annotations[annotationIndex].toPgnComment(detail);
+    final annotation = spec.annotations[annotationIndex];
+    // `Nh3!` / `e5?` — the glyph sits on the SAN, before any comment, which
+    // is where every viewer (and the app's own parser) expects it.
+    final glyph = annotation.glyph;
+    if (glyph != null) buffer.write(glyph);
+    final comment = annotation.toPgnComment(detail);
     if (comment != null) buffer.write(' {$comment}');
   }
 

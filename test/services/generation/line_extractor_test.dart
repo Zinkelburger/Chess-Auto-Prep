@@ -272,10 +272,19 @@ void main() {
       final e5Line = lines.firstWhere((l) => l.movesSan[1] == 'e5');
       final c5Line = lines.firstWhere((l) => l.movesSan[1] == 'c5');
 
-      // Both lines play e4 then Nf3 — identical projections, so identical
-      // keys even though the opponent moves differ.
-      expect(e5Line.coverageUnits.map((u) => u.key), ['e2e4', 'e2e4 g1f3']);
-      expect(c5Line.coverageUnits.map((u) => u.key), ['e2e4', 'e2e4 g1f3']);
+      // Keys are the decision itself: the position faced, then the move.
+      // Both lines open with the same root decision, so that key is shared.
+      expect(e5Line.coverageUnits.first.key, endsWith('|e2e4'));
+      expect(c5Line.coverageUnits.first.key, e5Line.coverageUnits.first.key);
+
+      // Their second decisions are *not* shared. Playing Nf3 after 1...e5 and
+      // playing Nf3 after 1...c5 are two things to know, because they are two
+      // positions; only the SAN coincides. The old projection key called them
+      // one, which is why the c5 line used to be prunable away and the
+      // repertoire could end up never answering 1...c5 at all.
+      expect(e5Line.coverageUnits[1].key, isNot(c5Line.coverageUnits[1].key));
+      expect(e5Line.coverageUnits[1].key, endsWith('|g1f3'));
+      expect(c5Line.coverageUnits[1].key, endsWith('|g1f3'));
 
       // e4 at the root: d4 sibling evals better for us (30 vs 25), so the
       // gap clamps to 0 and the value is the bare reach probability 1.0.
@@ -323,6 +332,145 @@ void main() {
       expect(first.myEase, closeTo(0.82, 1e-9));
       expect(first.evalCp, isNotNull);
       expect(first.likelihood, isNull, reason: 'we choose our own moves');
+    });
+
+    group('difficulty annotations', () {
+      StandardTree marked() {
+        final t = StandardTree();
+        t.e4.isRepertoireMove = true;
+        t.e4e5nf3.isRepertoireMove = true;
+        t.e4c5nf3.isRepertoireMove = true;
+        return t;
+      }
+
+      ExtractedLine e5LineOf(StandardTree t, {TreeBuildConfig? config}) =>
+          LineExtractor(
+            config: config ?? _config(),
+          ).extract(t.toTree()).firstWhere((l) => l.movesSan[1] == 'e5');
+
+      void addQh5(StandardTree t, {required int evalCp}) => makeNode(
+        fen: 'rnbqkbnr/pppp1ppp/8/4p2Q/4P3/8/PPPP1PPP/RNB1KBNR b KQkq - 1 2',
+        san: 'Qh5',
+        uci: 'd1h5',
+        ply: 3,
+        isWhiteToMove: false,
+        evalCp: evalCp,
+        parent: t.e4e5,
+      );
+
+      test('a move with no stored alternative is not called forced', () {
+        // A sole child usually means the search never widened here, not
+        // that every alternative loses — so no claim is made.
+        final nf3 = e5LineOf(marked()).moveAnnotations[2];
+
+        expect(nf3.isOnlyMove, isFalse);
+        expect(nf3.glyph, isNull);
+      });
+
+      test('an alternative losing most of the window makes it forced', () {
+        final t = marked();
+        addQh5(t, evalCp: 12); // -12 for us, 42cp behind Nf3 in a 50cp window
+
+        final nf3 = e5LineOf(t).moveAnnotations[2];
+        expect(nf3.isOnlyMove, isTrue);
+        expect(nf3.onlyMoveLeadCp, 42);
+        expect(nf3.glyph, '!');
+      });
+
+      test('a playable alternative cancels it', () {
+        final t = marked();
+        addQh5(t, evalCp: -10); // +10 for us, 20cp behind Nf3
+
+        expect(e5LineOf(t).moveAnnotations[2].isOnlyMove, isFalse);
+      });
+
+      test('the bar caps at 100cp however wide the window', () {
+        final t = marked();
+        addQh5(t, evalCp: 80); // -80 for us, 110cp behind Nf3
+        final config = TreeBuildConfig(
+          startFen: _startFen,
+          playAsWhite: true,
+          minProbability: 0.01,
+          maxEvalLossCp: 300,
+        );
+
+        final nf3 = e5LineOf(t, config: config).moveAnnotations[2];
+        expect(nf3.isOnlyMove, isTrue);
+        expect(nf3.onlyMoveLeadCp, 110);
+      });
+
+      test('names the natural move humans prefer to ours', () {
+        final t = marked();
+        t.e4.maiaFrequency = 0.05;
+        t.d4.maiaFrequency = 0.60;
+
+        final e4 = e5LineOf(t).moveAnnotations[0];
+        expect(e4.humanFrequency, closeTo(0.05, 1e-9));
+        expect(e4.naturalAlternativeSan, 'd4');
+        // d4 is +30 for us against e4's +25: the natural move costs nothing.
+        expect(e4.naturalAlternativeLossCp, -5);
+        expect(e4.explanation, contains('the natural d4 is nearly as good'));
+      });
+
+      test('a popular move gets no hard-to-find warning', () {
+        final t = marked();
+        t.e4.maiaFrequency = 0.45;
+        t.d4.maiaFrequency = 0.50;
+
+        final e4 = e5LineOf(t).moveAnnotations[0];
+        expect(e4.isHardToFind, isFalse);
+        expect(e4.naturalAlternativeSan, isNull);
+      });
+
+      test('grades an opponent reply against best play for them', () {
+        final t = marked();
+        // After 1.e4 the position is +25 for us; ...c5 leaves it +200.
+        t.e4c5.engineEvalCp = 200;
+
+        final lines = LineExtractor(config: _config()).extract(t.toTree());
+        final c5 = lines
+            .firstWhere((l) => l.movesSan[1] == 'c5')
+            .moveAnnotations[1];
+        expect(c5.mistakeCp, 175);
+        expect(c5.betterMoveSan, 'e5', reason: '...e5 (+35) holds the bar');
+        expect(c5.glyph, '?');
+
+        final e5 = e5LineOf(t).moveAnnotations[1];
+        expect(e5.mistakeCp, isNull, reason: '+35 against +25 is no mistake');
+      });
+
+      test('names no better move when every stored reply is bad', () {
+        final t = marked();
+        t.e4c5.engineEvalCp = 200;
+        t.e4e5.engineEvalCp = 150;
+
+        final lines = LineExtractor(config: _config()).extract(t.toTree());
+        final c5 = lines
+            .firstWhere((l) => l.movesSan[1] == 'c5')
+            .moveAnnotations[1];
+        expect(c5.mistakeCp, 175);
+        expect(c5.betterMoveSan, isNull);
+      });
+
+      test('flags the last move seen in master games', () {
+        final t = marked();
+        t.e4.totalGames = 100;
+        t.e4e5.totalGames = 40;
+
+        final line = e5LineOf(t);
+        expect(line.moveAnnotations[0].lastBookMove, isFalse);
+        expect(line.moveAnnotations[1].lastBookMove, isTrue);
+        expect(line.moveAnnotations[2].lastBookMove, isFalse);
+      });
+
+      test('a line still in book at its leaf has no boundary', () {
+        final t = marked();
+        t.e4.totalGames = 100;
+        t.e4e5.totalGames = 40;
+        t.e4e5nf3.totalGames = 30;
+
+        expect(e5LineOf(t).moveAnnotations.any((a) => a.lastBookMove), isFalse);
+      });
     });
 
     group('choice points', () {

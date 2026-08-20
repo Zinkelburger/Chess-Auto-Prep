@@ -83,6 +83,25 @@ void main() {
       expect(movetextOf(pgn), '1. e4 {[%eval +0.30]} (1. e4 e5) *');
     });
 
+    test('an annotation glyph sits on the SAN, ahead of the comment', () {
+      final pgn = writePgnGame(
+        const PgnGameSpec(
+          headers: {'Event': 'Course'},
+          movesSan: ['e4', 'f6'],
+          annotations: [
+            MoveAnnotation(isOnlyMove: true),
+            MoveAnnotation(mistakeCp: 160, betterMoveSan: 'e5'),
+          ],
+        ),
+        detail: MoveAnnotationDetail.likelihood,
+      );
+
+      expect(
+        movetextOf(pgn),
+        '1. e4! {Only move.} f6? {Blunder: gives up 1.60 against e5.} *',
+      );
+    });
+
     test('a line starting mid-game numbers its sidelines from the FEN', () {
       // Black to move on move 4.
       const fen =

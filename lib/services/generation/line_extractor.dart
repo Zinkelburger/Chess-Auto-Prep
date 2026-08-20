@@ -17,12 +17,24 @@ import 'generation_config.dart';
 
 /// One our-move a line teaches, for [LinePruner]'s greedy set cover.
 ///
-/// [key] is the our-move projection prefix (space-joined UCI of OUR moves
-/// up to and including this one, opponent moves excluded) — two lines that
-/// answer different opponent deviations with the same sequence of our moves
-/// share every key and are training duplicates.  [value] is the reach
-/// probability of the position it was played in, scaled up when the move is
-/// an only-move (large eval gap to the best non-selected sibling).
+/// [key] is the *decision itself* — canonical FEN of the position faced, plus
+/// the UCI we play in it. That is what a line actually teaches: "in this
+/// position, play this move." Two lines share a key whenever they put the
+/// user in front of the same choice, whether they got there by the same move
+/// order or a different one.
+///
+/// It used to be the our-move projection prefix — the space-joined UCI of our
+/// moves so far — which is order-*dependent*. That caught lines answering
+/// different opponent deviations with the same replies, but not the far more
+/// common case of two lines transposing into one another: same positions,
+/// same answers, different move order, entirely different projection strings.
+/// Both survived pruning and the user was shown two lines teaching one idea.
+/// On a 7.6k-node Benko tree, 490 of 2099 extracted lines shared a decision
+/// set with another and 701 were wholly contained in a single other line.
+///
+/// [value] is the reach probability of the position it was played in, scaled
+/// up when the move is an only-move (large eval gap to the best non-selected
+/// sibling).
 class LineCoverageUnit {
   final String key;
   final double value;
@@ -110,11 +122,10 @@ class ExtractedLine {
     this.choices = const [],
   });
 
-  /// Our moves only, as UCI — the identity of what this line actually teaches.
-  /// Two lines with the same projection are training duplicates however much
-  /// their opponent moves differ.
-  String get ourMoveProjection =>
-      coverageUnits.isEmpty ? '' : coverageUnits.last.key;
+  /// The set of decisions this line teaches — "this position, this move" for
+  /// every point where it is our turn. Order-free on purpose: two lines that
+  /// transpose into each other teach the same thing and compare equal here.
+  Set<String> get taughtDecisions => {for (final u in coverageUnits) u.key};
 }
 
 // ── Extractor ────────────────────────────────────────────────────────────
@@ -129,7 +140,20 @@ class LineExtractor {
   static const int _sharpnessCapCp = 200;
 
   /// An our-move this far ahead of every alternative is effectively forced.
+  ///
+  /// Scaled to the build's eval-loss window: the expander never stores an
+  /// alternative worse than [TreeBuildConfig.maxEvalLossCp], so with the
+  /// default 50cp window a fixed 100cp bar could never be met.  A stored
+  /// alternative that loses most of the window is what "forced" looks like
+  /// in the tree.  A move with *no* stored sibling is not called forced:
+  /// the fast search narrows or skips alternatives at cold nodes, so a sole
+  /// child usually means unexplored rather than only.
   static const int _onlyMoveGapCp = 100;
+
+  int get _onlyMoveThresholdCp {
+    final scaled = config.maxEvalLossCp * 4 ~/ 5;
+    return scaled < _onlyMoveGapCp ? scaled : _onlyMoveGapCp;
+  }
 
   /// Extract complete repertoire lines from the tree.
   List<ExtractedLine> extract(BuildTree tree, {int maxLines = 10000}) {
@@ -179,9 +203,10 @@ class LineExtractor {
         if (selected != null) {
           pushedAny = true;
           final gapCp = _leadOverAlternatives(resolved, selected);
-          final projectionKey = coverageUnits.isEmpty
-              ? selected.moveUci
-              : '${coverageUnits.last.key} ${selected.moveUci}';
+          // Keyed by the position faced rather than the path taken to it, so
+          // a transposition is recognised as the same decision.
+          final decisionKey =
+              '${canonicalizeFen(resolved.fen)}|${selected.moveUci}';
           _extractDfs(
             node: selected,
             movesSan: [...movesSan, selected.moveSan],
@@ -197,7 +222,7 @@ class LineExtractor {
             coverageUnits: [
               ...coverageUnits,
               LineCoverageUnit(
-                key: projectionKey,
+                key: decisionKey,
                 value:
                     selected.cumulativeProbability *
                     (1.0 + gapCp.clamp(0, _sharpnessCapCp) / 100.0),
@@ -256,7 +281,7 @@ class LineExtractor {
         openingEco: openingEco,
         leafEvalCp: node.engineEvalCp,
         leafFen: node.fen,
-        moveAnnotations: moveAnnotations,
+        moveAnnotations: _markTheoryBoundary(moveAnnotations),
         coverageUnits: coverageUnits,
         choices: choices,
       ),
@@ -293,36 +318,131 @@ class LineExtractor {
 
   // ── Annotation ────────────────────────────────────────────────────────
 
-  MoveAnnotation _annotateOurMove(BuildTreeNode selected, int gapCp) =>
-      MoveAnnotation(
-        evalCp: selected.hasEngineEval
-            ? selected.evalForUs(config.playAsWhite)
-            : null,
-        myEase: selected.myEase >= 0 ? selected.myEase : null,
-        isOnlyMove: gapCp >= _onlyMoveGapCp,
-        practicalScore: _practicalScore(selected),
-        gameCount: selected.totalGames > 0 ? selected.totalGames : null,
-        lastPlayedYear: selected.lastPlayedYear > 0
-            ? selected.lastPlayedYear
-            : null,
-      );
+  MoveAnnotation _annotateOurMove(BuildTreeNode selected, int gapCp) {
+    final isOnlyMove =
+        _hasEvaluatedSibling(selected) && gapCp >= _onlyMoveThresholdCp;
+    final natural = _naturalAlternative(selected);
+    return MoveAnnotation(
+      evalCp: selected.hasEngineEval
+          ? selected.evalForUs(config.playAsWhite)
+          : null,
+      myEase: selected.myEase >= 0 ? selected.myEase : null,
+      isOnlyMove: isOnlyMove,
+      onlyMoveLeadCp: isOnlyMove ? gapCp : null,
+      humanFrequency: selected.maiaFrequency >= 0
+          ? selected.maiaFrequency
+          : null,
+      naturalAlternativeSan: natural?.moveSan,
+      naturalAlternativeLossCp: natural != null && natural.hasEngineEval
+          ? selected.evalForUs(config.playAsWhite) -
+                natural.evalForUs(config.playAsWhite)
+          : null,
+      practicalScore: _practicalScore(selected),
+      gameCount: selected.totalGames > 0 ? selected.totalGames : null,
+      lastPlayedYear: selected.lastPlayedYear > 0
+          ? selected.lastPlayedYear
+          : null,
+    );
+  }
+
+  bool _hasEvaluatedSibling(BuildTreeNode selected) =>
+      selected.parent?.children.any(
+        (c) => !identical(c, selected) && c.hasEngineEval,
+      ) ??
+      false;
+
+  /// The sibling humans clearly prefer to [selected], when there is one.
+  ///
+  /// Only siblings the tree holds can be named, and the expander keeps only
+  /// moves inside the eval-loss window — so the alternative is always a
+  /// *playable* natural move, which is the one worth warning about.  A
+  /// natural move that simply loses never became a child and is not named.
+  BuildTreeNode? _naturalAlternative(BuildTreeNode selected) {
+    final parent = selected.parent;
+    if (parent == null || selected.maiaFrequency < 0) return null;
+    if (selected.maiaFrequency >= MoveAnnotation.kHardToFindFrequency) {
+      return null;
+    }
+    BuildTreeNode? best;
+    for (final sibling in parent.children) {
+      if (identical(sibling, selected) || sibling.maiaFrequency < 0) continue;
+      if (best == null || sibling.maiaFrequency > best.maiaFrequency) {
+        best = sibling;
+      }
+    }
+    if (best == null ||
+        best.maiaFrequency - selected.maiaFrequency <
+            MoveAnnotation.kNaturalAlternativeMargin) {
+      return null;
+    }
+    return best;
+  }
+
+  /// Flag the last move with master games when the line then leaves them, so
+  /// the reader sees where practice ends and the engine continuation starts.
+  /// A line still in book at its leaf, or never in book, is left alone.
+  List<MoveAnnotation> _markTheoryBoundary(List<MoveAnnotation> annotations) {
+    var last = -1;
+    for (var i = 0; i < annotations.length; i++) {
+      if ((annotations[i].gameCount ?? 0) > 0) last = i;
+    }
+    if (last < 0 || last == annotations.length - 1) return annotations;
+    return [
+      for (var i = 0; i < annotations.length; i++)
+        i == last ? annotations[i].withLastBookMove() : annotations[i],
+    ];
+  }
 
   MoveAnnotation _annotateOpponentMove(
     BuildTreeNode position,
     BuildTreeNode child,
   ) {
     final (likelihood, source) = _likelihoodOf(child);
+    final mistake = _mistakeOf(position, child);
     return MoveAnnotation(
       likelihood: likelihood,
       likelihoodSource: source,
       gameCount: child.totalGames > 0 ? child.totalGames : null,
       practicalScore: _practicalScore(child),
       evalCp: child.hasEngineEval ? child.evalForUs(config.playAsWhite) : null,
+      mistakeCp: mistake?.lossCp,
+      betterMoveSan: mistake?.better?.moveSan,
       // The ease of the position the opponent was choosing from is what says
       // whether this move was easy to find — not the ease of where it lands.
       opponentEase: position.ease,
       lastPlayedYear: child.lastPlayedYear > 0 ? child.lastPlayedYear : null,
     );
+  }
+
+  /// How much [child] gives away at [position], when that reaches
+  /// [MoveAnnotation.kMistakeCp].  The bar is the position's own eval — the
+  /// engine's best play for them — because a bad reply is often the only
+  /// reply the tree stored, so the best *sibling* is frequently missing.  The
+  /// better move is named only when a stored sibling actually holds the
+  /// position (is within the mistake margin of the bar).
+  ({int lossCp, BuildTreeNode? better})? _mistakeOf(
+    BuildTreeNode position,
+    BuildTreeNode child,
+  ) {
+    if (!child.hasEngineEval || !position.hasEngineEval) return null;
+    final bar = position.evalForUs(config.playAsWhite);
+    final loss = child.evalForUs(config.playAsWhite) - bar;
+    if (loss < MoveAnnotation.kMistakeCp) return null;
+    BuildTreeNode? better;
+    for (final sibling in position.children) {
+      if (identical(sibling, child) || !sibling.hasEngineEval) continue;
+      if (better == null ||
+          sibling.evalForUs(config.playAsWhite) <
+              better.evalForUs(config.playAsWhite)) {
+        better = sibling;
+      }
+    }
+    if (better != null &&
+        better.evalForUs(config.playAsWhite) - bar >=
+            MoveAnnotation.kMistakeCp) {
+      better = null;
+    }
+    return (lossCp: loss, better: better);
   }
 
   /// Move likelihood and where it came from.  Real game frequencies win over

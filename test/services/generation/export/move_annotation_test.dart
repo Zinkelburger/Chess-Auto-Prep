@@ -19,10 +19,17 @@ void main() {
       expect(rich.toPgnComment(MoveAnnotationDetail.none), isNull);
     });
 
-    test('likelihood emits only the reply probability', () {
+    test('likelihood emits the reply probability and any prose', () {
       final comment = rich.toPgnComment(MoveAnnotationDetail.likelihood)!;
 
-      expect(comment, '[%humanFrequency 0.312]');
+      expect(comment, 'Only move. [%humanFrequency 0.312]');
+      expect(
+        const MoveAnnotation(
+          likelihood: 0.312,
+          likelihoodSource: MoveLikelihoodSource.gameDatabase,
+        ).toPgnComment(MoveAnnotationDetail.likelihood),
+        '[%humanFrequency 0.312]',
+      );
     });
 
     test('full emits every metric that is present', () {
@@ -71,6 +78,64 @@ void main() {
       expect(evalOf(0), '[%eval 0.00]');
       expect(evalOf(5), '[%eval +0.05]');
       expect(evalOf(-250), '[%eval -2.50]');
+    });
+  });
+
+  group('MoveAnnotation.explanation', () {
+    test('quotes the lead of an only-move when it is known', () {
+      expect(
+        const MoveAnnotation(isOnlyMove: true, onlyMoveLeadCp: 62).explanation,
+        'Only move: the next best gives up 0.62.',
+      );
+      expect(const MoveAnnotation(isOnlyMove: true).glyph, '!');
+    });
+
+    test('warns about a hard-to-find move and names the natural one', () {
+      expect(
+        const MoveAnnotation(
+          humanFrequency: 0.04,
+          naturalAlternativeSan: 'Nf3',
+          naturalAlternativeLossCp: 35,
+        ).explanation,
+        'Hard to find: only 4% of players see it; the natural Nf3 costs 0.35.',
+      );
+      expect(
+        const MoveAnnotation(humanFrequency: 0.12).explanation,
+        'Hard to find: only 12% of players see it.',
+      );
+      expect(
+        const MoveAnnotation(
+          humanFrequency: 0.004,
+          naturalAlternativeSan: 'Bg2',
+          naturalAlternativeLossCp: 4,
+        ).explanation,
+        'Hard to find: under 1% of players see it; the natural Bg2 is nearly '
+        'as good.',
+      );
+      expect(const MoveAnnotation(humanFrequency: 0.5).explanation, isEmpty);
+    });
+
+    test('grades an opponent mistake and names the better move', () {
+      const inaccuracy = MoveAnnotation(mistakeCp: 90, betterMoveSan: 'Bd7');
+      const blunder = MoveAnnotation(mistakeCp: 297);
+
+      expect(inaccuracy.explanation, 'Inaccuracy: gives up 0.90 against Bd7.');
+      expect(inaccuracy.glyph, '?!');
+      expect(blunder.explanation, 'Blunder: gives up 2.97.');
+      expect(blunder.glyph, '?');
+      expect(const MoveAnnotation(mistakeCp: 40).glyph, isNull);
+    });
+
+    test('marks where master practice ends', () {
+      expect(
+        const MoveAnnotation(gameCount: 9, lastBookMove: true).explanation,
+        'Last move seen in master games (9 games); from here the line is '
+        'engine and Maia.',
+      );
+      expect(
+        const MoveAnnotation(gameCount: 9, lastBookMove: true).isEmpty,
+        isFalse,
+      );
     });
   });
 
