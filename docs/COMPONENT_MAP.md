@@ -245,6 +245,8 @@ Maia:
 
 macOS GitHub Releases are two zips (`macos-arm64` / `macos-x86_64`). Each has the
 matching Stockfish; `ditto --arch` also thins the universal ONNX Runtime dylib.
+Release packaging uses `zip -ry` so framework `Versions/Current` symlinks are
+stored as links (plain `zip -r` packed Stockfish/Maia/Flutter three times).
 
 ### Tree generation (expectimax pipeline)
 

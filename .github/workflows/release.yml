@@ -196,25 +196,25 @@ jobs:
           fi
           APP="${apps[0]}"
           EXEC=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")
-          BIN="$APP/Contents/MacOS/$EXEC"
-          INFO=$(lipo -info "$BIN")
-          echo "$INFO"
-          if echo "$INFO" | grep -q 'Non-fat file'; then
-            echo "Already single-architecture"
-          else
-            echo "Universal binary; thinning to $ARCH with ditto"
-            THIN="${APP%.app}-${ARCH}.app"
-            rm -rf "$THIN"
-            ditto --arch "$ARCH" "$APP" "$THIN"
-            rm -rf "$APP"
-            mv "$THIN" "$APP"
-            lipo -info "$APP/Contents/MacOS/$EXEC"
-          fi
+          # Main binary may already be thin; FlutterMacOS / onnxruntime often
+          # are still universal. Always ditto the whole bundle.
+          echo "Thinning bundle to $ARCH"
+          THIN="${APP%.app}-${ARCH}.app"
+          rm -rf "$THIN"
+          ditto --arch "$ARCH" "$APP" "$THIN"
+          rm -rf "$APP"
+          mv "$THIN" "$APP"
+          echo "Main: $(lipo -info "$APP/Contents/MacOS/$EXEC")"
+          find "$APP/Contents/Frameworks" \( -name FlutterMacOS -o -name 'libonnxruntime*' \) ! -type l -print0 \
+            | while IFS= read -r -d '' f; do echo "$f: $(lipo -info "$f")"; done
 
       - name: Zip app bundle
         run: |
           cd build/macos/Build/Products/Release
-          zip -r ../../../../../chess-auto-prep-${{ github.ref_name }}-macos-${{ matrix.arch }}.zip *.app
+          # -y keeps Versions/Current symlinks as links. zip -r follows them and
+          # stores Stockfish + Maia + FlutterMacOS three times (~400 MB zips).
+          zip -ry ../../../../../chess-auto-prep-${{ github.ref_name }}-macos-${{ matrix.arch }}.zip *.app
+          ls -lh ../../../../../chess-auto-prep-${{ github.ref_name }}-macos-${{ matrix.arch }}.zip
 
       - uses: actions/upload-artifact@v4
         with:
