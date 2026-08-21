@@ -26,24 +26,16 @@ import 'generation_session_types.dart';
 
 class SnapshotExporter {
   SnapshotExporter({
-    required void Function() notify,
-    required bool Function() isGenerating,
-    required bool Function() isPaused,
-    required bool Function() cancelRequested,
-    required GenerationRequest? Function() activeRequest,
-    required TreeBuildConfig? Function() activeConfig,
-    required List<String> Function() startMoveSequence,
-    required TreeBuildService Function() buildService,
-    required GenerationProgress Function() progress,
-  }) : _notify = notify,
-       _isGenerating = isGenerating,
-       _isPaused = isPaused,
-       _cancelRequested = cancelRequested,
-       _activeRequest = activeRequest,
-       _activeConfig = activeConfig,
-       _startMoveSequence = startMoveSequence,
-       _buildService = buildService,
-       _progress = progress;
+    required this._notify,
+    required this._isGenerating,
+    required this._isPaused,
+    required this._cancelRequested,
+    required this._activeRequest,
+    required this._activeConfig,
+    required this._startMoveSequence,
+    required this._buildService,
+    required this._progress,
+  });
 
   final void Function() _notify;
   final bool Function() _isGenerating;

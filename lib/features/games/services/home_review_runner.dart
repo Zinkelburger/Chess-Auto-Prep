@@ -62,17 +62,14 @@ enum HomeReviewStage {
 
 class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
   HomeReviewRunner({
-    required RecentGamesController games,
+    required this._games,
     required TacticsImportCoordinator importCoordinator,
-    required String? Function() lichessUsername,
-    required String? Function() chesscomUsername,
+    required this._lichessUsername,
+    required this._chesscomUsername,
     GamesWindowSettings? windowSettings,
     MiningSettings? miningSettings,
     EngineSettings? engine,
-  }) : _games = games,
-       _import = importCoordinator,
-       _lichessUsername = lichessUsername,
-       _chesscomUsername = chesscomUsername,
+  }) : _import = importCoordinator,
        _windowSettings = windowSettings ?? GamesWindowSettings.instance,
        _mining = miningSettings ?? MiningSettings.instance,
        _engine = engine ?? EngineSettings.instance;

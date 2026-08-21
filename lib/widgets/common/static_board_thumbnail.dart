@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../theme/app_colors.dart';
+import '../../utils/fen_utils.dart';
 import '../../utils/chess_utils.dart' show roleChar;
 
 /// A static board preview that stays cheap in long lists.
@@ -69,9 +70,9 @@ class _StaticBoardThumbnailState extends State<StaticBoardThumbnail> {
 
   void _parse() {
     try {
-      final fields = widget.fen.trim().split(' ');
-      _board = Board.parseFen(fields[0]);
-      _flipped = widget.flipped ?? (fields.length > 1 && fields[1] == 'b');
+      final fen = widget.fen.trim();
+      _board = Board.parseFen(fen.split(' ').first);
+      _flipped = widget.flipped ?? !isWhiteToMove(fen);
     } catch (_) {
       _board = null;
     }

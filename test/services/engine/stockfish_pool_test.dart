@@ -4,7 +4,6 @@ library;
 import 'dart:async';
 
 import 'package:chess_auto_prep/services/engine/engine_connection.dart';
-import 'package:chess_auto_prep/services/engine/eval_worker.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 import 'package:flutter_test/flutter_test.dart';
 

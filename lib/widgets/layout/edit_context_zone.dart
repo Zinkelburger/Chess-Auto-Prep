@@ -570,9 +570,6 @@ class _EditContextZoneState extends State<EditContextZone> {
       treeConfig: widget.treeConfig,
       fenMap: widget.fenMap,
       boardPreview: preview,
-      isGenerating: widget.isGenerating,
-      isGenerationPaused: widget.isGenerationPaused,
-      autoComputeEnabled: true,
       onMoveSelected: controller.playMove,
       onLineMoveClicked: (sanMoves, index) {
         controller.applyLineFromCurrent(sanMoves, index);

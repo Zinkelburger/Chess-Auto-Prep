@@ -34,6 +34,7 @@ import '../../../services/generation/course/opening_namer.dart'
 import '../models/plan_models.dart';
 import '../services/plan_data_source.dart';
 import '../services/plan_knowledge.dart';
+import '../../../utils/movetext_builder.dart';
 
 enum PlanPhase { start, walking, review }
 
@@ -460,15 +461,8 @@ class PlanController extends ChangeNotifier {
     await _openStep(step.moves);
   }
 
-  static String _label(List<String> moves) {
-    final buf = StringBuffer();
-    for (var i = 0; i < moves.length; i++) {
-      if (i.isEven) buf.write('${i ~/ 2 + 1}.');
-      buf.write(moves[i]);
-      if (i < moves.length - 1) buf.write(' ');
-    }
-    return buf.toString();
-  }
+  static String _label(List<String> moves) =>
+      buildNumberedMovetext(moves, compact: true);
 
   Future<void> _openLeafConfirm(List<String> path, String fen) async {
     final name = await source.nameFor(path);
@@ -816,7 +810,7 @@ class PlanController extends ChangeNotifier {
   // ── Helpers ────────────────────────────────────────────────────────────
 
   bool _isOurMove(String fen) {
-    final whiteToMove = fen.split(' ').elementAtOrNull(1) != 'b';
+    final whiteToMove = isWhiteToMove(fen);
     return whiteToMove == isWhite;
   }
 

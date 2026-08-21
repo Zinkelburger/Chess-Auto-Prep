@@ -65,7 +65,6 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
 
     EngineLifecycle.instance.onPositionChanged(widget.fen);
     _trySaveCurrentToCache();
-    _analysis.beginEnginePaneAnalysis(widget.fen);
     _initialAnalysisStarted = false;
     unawaited(_startInitialAnalysis());
   }
@@ -123,7 +122,6 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
       final results = await Future.wait<Object?>([discoveryFuture, maiaFuture]);
 
       if (!mounted || _analysisGeneration != myGen) {
-        _analysis.endEnginePaneAnalysis(widget.fen);
         return;
       }
 
@@ -159,7 +157,6 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
 
       _scheduleSetState();
     } catch (e) {
-      _analysis.endEnginePaneAnalysis(widget.fen);
       if (kDebugMode) log.e('[Engine] Pipeline FAILED — $e');
       rethrow;
     }
@@ -297,7 +294,6 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
       final ps = _analysis.poolStatus.value;
       if (ps.isComplete) {
         EngineLifecycle.instance.onAnalysisComplete();
-        _analysis.endEnginePaneAnalysis(_currentAnalysisFen);
         _perfLog(
           'Evaluation COMPLETE — ${_analysis.results.value.length} evals',
         );

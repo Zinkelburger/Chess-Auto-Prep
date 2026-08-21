@@ -33,6 +33,7 @@ class StudyController extends ChangeNotifier
   int _chapterIndex = 0;
   int get chapterIndex => _chapterIndex;
   StudyChapter get chapter => _doc.chapters[_chapterIndex];
+  @override
   MoveTree get tree => chapter.tree;
 
   TreePath _path = TreePath.empty;

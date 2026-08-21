@@ -34,6 +34,7 @@ import '../../audit/models/audit_result.dart';
 import '../../holes/services/hole_scoring.dart';
 import 'trick_hunt_config.dart';
 import 'trick_scoring.dart';
+import '../../../utils/fen_utils.dart';
 
 enum TrickHuntPhase { walking, discovery, probing }
 
@@ -193,7 +194,7 @@ class TrickHuntService {
           fen: target.fen,
           depth: config.discoveryDepth,
           multiPv: config.discoveryMultiPv,
-          isWhiteToMove: target.fen.contains(' w '),
+          isWhiteToMove: isWhiteToMove(target.fen),
         );
         discoveriesRun++;
         if (discovery.lines.isEmpty) continue;

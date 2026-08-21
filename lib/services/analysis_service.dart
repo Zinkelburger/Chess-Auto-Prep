@@ -14,7 +14,6 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import 'engine/stockfish_pool.dart';
-import 'engine/eval_worker.dart';
 import '../models/analysis/move_analysis_result.dart';
 import '../utils/chess_utils.dart' show playUciMove;
 import '../utils/fen_utils.dart';
@@ -65,100 +64,6 @@ class AnalysisService {
       apply();
     } else {
       WidgetsBinding.instance.addPostFrameCallback((_) => apply());
-    }
-  }
-
-  // ── Engine-pane priority gate ─────────────────────────────────────────
-  //
-  // On-the-fly expectimax shares [StockfishPool] with the interactive engine
-  // pane.  The pane calls [beginEnginePaneAnalysis] while its full pipeline
-  // (Maia + DB + discovery + per-move eval) runs; expectimax waits via
-  // [waitForEnginePaneAnalysis] so Stockfish serves the current position first.
-
-  String? _enginePaneFen;
-  Completer<void>? _enginePaneDone;
-
-  void beginEnginePaneAnalysis(String fen) {
-    if (_enginePaneFen == fen &&
-        _enginePaneDone != null &&
-        !_enginePaneDone!.isCompleted) {
-      return;
-    }
-    endEnginePaneAnalysis();
-    _enginePaneFen = fen;
-    _enginePaneDone = Completer<void>();
-    if (kDebugMode) {
-      debugPrint(
-        '[Analysis] Engine-pane pipeline BLOCKING expectimax for '
-        '${fen.split(' ').take(2).join(' ')}',
-      );
-    }
-  }
-
-  void endEnginePaneAnalysis([String? fen]) {
-    if (fen != null && _enginePaneFen != null && _enginePaneFen != fen) {
-      return;
-    }
-    final blockedFen = _enginePaneFen;
-    _enginePaneFen = null;
-    final done = _enginePaneDone;
-    _enginePaneDone = null;
-    if (done != null && !done.isCompleted) {
-      done.complete();
-    }
-    if (kDebugMode && blockedFen != null) {
-      debugPrint('[Analysis] Engine-pane pipeline DONE — expectimax may run');
-    }
-  }
-
-  Future<void> waitForEnginePaneAnalysis(String fen) async {
-    // The engine pane registers its gate synchronously before starting work;
-    // poll briefly in case of minor scheduling skew.
-    const poll = Duration(milliseconds: 16);
-    const maxWait = Duration(milliseconds: 200);
-    // Yield-only, not a hard dependency: the pane's full pipeline (discovery
-    // + per-move deep evals) can run for a minute or stall outright, and
-    // expectimax must never be held hostage by it — the pool serializes
-    // worker access anyway.  Give the pane a short head start, then go.
-    const maxGateWait = Duration(seconds: 3);
-    final deadline = DateTime.now().add(maxWait);
-
-    while (DateTime.now().isBefore(deadline)) {
-      if (_enginePaneFen == fen) {
-        final done = _enginePaneDone;
-        if (done != null) {
-          if (kDebugMode) {
-            debugPrint(
-              '[Analysis] Expectimax waiting for engine-pane pipeline '
-              '(${fen.split(' ').take(2).join(' ')})',
-            );
-          }
-          try {
-            await done.future.timeout(maxGateWait);
-            if (kDebugMode) {
-              debugPrint(
-                '[Analysis] Expectimax may proceed — engine-pane done',
-              );
-            }
-          } on TimeoutException {
-            if (kDebugMode) {
-              debugPrint(
-                '[Analysis] Expectimax proceeding — engine-pane '
-                'pipeline still busy after ${maxGateWait.inSeconds}s',
-              );
-            }
-          }
-          return;
-        }
-      }
-      await Future.delayed(poll);
-    }
-
-    if (kDebugMode && _enginePaneFen != fen) {
-      debugPrint(
-        '[Analysis] Expectimax proceeding without engine-pane gate '
-        '(timed out waiting for ${fen.split(' ').take(2).join(' ')})',
-      );
     }
   }
 
@@ -336,7 +241,6 @@ class AnalysisService {
       results.value = {};
       poolStatus.value = const PoolStatus();
     });
-    endEnginePaneAnalysis();
   }
 
   // ── Worker loop ───────────────────────────────────────────────────────

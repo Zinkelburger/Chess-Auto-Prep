@@ -90,12 +90,12 @@ void main() {
       // chord, so a tooltip advertising nothing is unrepresentable rather
       // than caught at runtime.
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: ShortcutTooltip(
               description: 'Previous game',
               shortcut: AppShortcut.previousItem,
-              child: const Text('Go'),
+              child: Text('Go'),
             ),
           ),
         ),

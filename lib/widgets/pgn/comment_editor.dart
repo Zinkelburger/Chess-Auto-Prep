@@ -58,15 +58,15 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
               autofocus: true,
               maxLines: null,
               style: const TextStyle(fontSize: 13, color: AppColors.ink),
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 isDense: true,
-                contentPadding: const EdgeInsets.symmetric(
+                contentPadding: EdgeInsets.symmetric(
                   horizontal: 6,
                   vertical: 4,
                 ),
                 border: InputBorder.none,
                 hintText: 'Comment',
-                hintStyle: const TextStyle(
+                hintStyle: TextStyle(
                   color: AppColors.onSurfaceMuted,
                   fontSize: 13,
                 ),

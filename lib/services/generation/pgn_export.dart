@@ -67,8 +67,12 @@ String writeRepertoireLine({
   int startMoveNumber = 1,
   bool rankByImportance = true,
   EngineTail? engineTail,
+  List<MoveAnnotation>? annotations,
 }) {
   final probability = '${(line.probability * 100).toStringAsFixed(3)}%';
+  // [line]'s own annotations unless the caller has something to add — the
+  // "improves on" notes, which are probed after the line is extracted.
+  final moveAnnotations = annotations ?? line.moveAnnotations;
   final tail = (engineTail == null || engineTail.movesSan.isEmpty)
       ? null
       : engineTail;
@@ -86,9 +90,9 @@ String writeRepertoireLine({
       annotations: [
         // Padded to the prepared move count first: a short annotation list
         // would otherwise slide the tail's note onto an earlier move.
-        ...line.moveAnnotations,
+        ...moveAnnotations,
         for (
-          var i = line.moveAnnotations.length;
+          var i = moveAnnotations.length;
           i < movesSan.length - annotationOffset;
           i++
         )

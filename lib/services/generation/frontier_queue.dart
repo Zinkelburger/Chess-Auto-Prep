@@ -13,7 +13,7 @@
 /// enqueued and each one's heap slot.  That keeps [add] idempotent (a node
 /// already in the frontier is never inserted twice) and lets a node whose
 /// [BuildTreeNode.searchPriority] was rescaled while queued — the
-/// transposition reach-probability bump in [propagateHigherCumP] — be
+/// transposition reach-probability bump in [addArrivalCumP] — be
 /// re-sifted in place.  Without this, that rescale-then-`add` path used to
 /// leave a stale heap slot *and* a duplicate entry, and the duplicate's second
 /// pop re-enqueued the node's whole child set (the resume branch), leaking

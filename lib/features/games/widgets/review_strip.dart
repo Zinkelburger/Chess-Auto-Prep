@@ -356,7 +356,7 @@ class ReviewStrip extends StatelessWidget {
       final found = coordinator.newPositionsFound;
       final site = runner.detail;
       return [
-        if (site != null) site,
+        ?site,
         '$found ${found == 1 ? 'puzzle' : 'puzzles'} found',
       ].join(' · ');
     }

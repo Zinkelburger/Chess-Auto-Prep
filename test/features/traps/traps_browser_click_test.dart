@@ -86,8 +86,8 @@ void main() {
       // Same trap, but the stored SAN lead-up is corrupt/stale ("Zz9" cannot
       // parse), so the full replay fails. The FEN is still good, so we should
       // recover a tree rooted at the trap position with annotated replies.
-      final trap = TrapLineInfo(
-        movesSan: const ['e4', 'd5', 'Zz9'],
+      const trap = TrapLineInfo(
+        movesSan: ['e4', 'd5', 'Zz9'],
         trapScore: 0.5,
         popularProb: 0.4,
         popularMove: 'Nc6',
@@ -102,7 +102,7 @@ void main() {
         fen: 'rn2kb1r/ppp1pppp/5n2/q6b/2B5/2NP1P2/PPPB2PP/R2QK1NR b KQkq - 2 7',
         refutationMove: 'Nd5',
         refutationEvalCp: 260,
-        allReplies: const [
+        allReplies: [
           TrapReply(
             san: 'Nc6',
             probability: 0.4,
@@ -128,8 +128,8 @@ void main() {
     });
 
     test('legacy trap without allReplies still gets both key replies', () {
-      final trap = TrapLineInfo(
-        movesSan: const ['e4', 'e5'],
+      const trap = TrapLineInfo(
+        movesSan: ['e4', 'e5'],
         trapScore: 0.3,
         popularProb: 0.5,
         popularMove: 'Nf3',

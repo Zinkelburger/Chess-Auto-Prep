@@ -6,6 +6,7 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 
+import '../services/eval/eval_canonicalize.dart' show canonicalizeFen4;
 import 'eval_constants.dart' show cpToMate;
 
 /// Convert a UCI move string (e.g. `e2e4`) to SAN notation given [fen].
@@ -347,6 +348,40 @@ String fenAfterMoves(String startFen, List<String> sanMoves, int upToIndex) {
   } catch (_) {
     return startFen;
   }
+}
+
+/// How many of [sanMoves] have to be played from [startFen] to stand in
+/// [targetFen], or -1 when the line never reaches it.
+///
+/// A build rooted mid-opening — a chapter's setup moves, `d4 Nf6 c4 c5 d5 b5
+/// cxb5 a6 bxa6 e6` — has a tree whose root is already ten plies deep, while a
+/// database game's moves start at move one.  Anything that walks a whole game
+/// against such a tree needs this offset first, or it compares the game's
+/// first move against the root's replies and concludes the game has nothing
+/// to do with the repertoire.
+///
+/// Positions are compared on their first four FEN fields, so a game that
+/// transposes into [targetFen] by a different move order is found too.  Walks
+/// the moves once; [startFen] itself is index 0.
+int plyReachingFen(
+  List<String> sanMoves,
+  String targetFen, {
+  required String startFen,
+}) {
+  final target = canonicalizeFen4(targetFen);
+  try {
+    Position pos = Chess.fromSetup(Setup.parseFen(startFen));
+    if (canonicalizeFen4(pos.fen) == target) return 0;
+    for (int i = 0; i < sanMoves.length; i++) {
+      final next = playSanOrNullMove(pos, sanMoves[i]);
+      if (next == null) return -1;
+      pos = next;
+      if (canonicalizeFen4(pos.fen) == target) return i + 1;
+    }
+  } catch (_) {
+    return -1;
+  }
+  return -1;
 }
 
 /// From/to squares for highlighting the last move on a mini board.

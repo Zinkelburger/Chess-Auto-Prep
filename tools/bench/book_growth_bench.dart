@@ -90,8 +90,9 @@ void main() {
           up.execute([k, uci, ply, 1, 0, 0, 5000, 2, 2600, 2025, gid, gid]);
         }
       }
-      if (issue % batch == batch - 1 || issue == issues - 1)
+      if (issue % batch == batch - 1 || issue == issues - 1) {
         db.execute('COMMIT');
+      }
       if (issue % 5 == 4 || issue == issues - 1) {
         final rows = db.select('SELECT COUNT(*) FROM book').first.columnAt(0);
         final mb =

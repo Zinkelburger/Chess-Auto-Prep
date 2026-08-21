@@ -111,6 +111,20 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
     });
   }
 
+  /// Drop both filters.
+  ///
+  /// Cancelling the debounce is the point: a timer still in flight from an
+  /// earlier keystroke would fire after the clear and restore the text the
+  /// user just removed, leaving the field empty but the list still filtered.
+  void _clearFilters() {
+    _debounce?.cancel();
+    _searchController.clear();
+    setState(() {
+      _search = '';
+      _atPosition = false;
+    });
+  }
+
   bool get _filtering =>
       _search.isNotEmpty || (_atPosition && widget.currentMoves.isNotEmpty);
 
@@ -233,13 +247,7 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
             ? 'No line passes through this position.'
             : 'No chapter or line matches "$_search".',
         action: TextButton(
-          onPressed: () {
-            _searchController.clear();
-            setState(() {
-              _search = '';
-              _atPosition = false;
-            });
-          },
+          onPressed: _clearFilters,
           child: const Text('Clear filters'),
         ),
       );

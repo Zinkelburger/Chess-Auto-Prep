@@ -9,6 +9,7 @@ void main() {
       gameCount: 1204,
       practicalScore: 0.542,
       evalCp: 31,
+      expectimaxValue: 0.62,
       opponentEase: 0.42,
       myEase: 0.81,
       isOnlyMove: true,
@@ -37,6 +38,8 @@ void main() {
 
       expect(comment, contains('[%humanFrequency 0.312]'));
       expect(comment, contains('[%eval +0.31]'));
+      // V = 0.62 → the same pawn scale as [%eval], so a reader can compare.
+      expect(comment, contains('[%expectimax +'));
       expect(comment, contains('[%onlyMove]'));
       expect(comment, contains('[%myEase 0.81]'));
       expect(comment, contains('[%ease 0.42]'));

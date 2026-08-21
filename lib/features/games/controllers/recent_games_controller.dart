@@ -51,16 +51,14 @@ class GamesListFilters {
 /// models, then computes repertoire deviations for each.
 class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
   RecentGamesController({
-    required String? Function() lichessUsername,
-    required String? Function() chesscomUsername,
+    required this._lichessUsername,
+    required this._chesscomUsername,
     GamesLibraryService? library,
     GameDeviationService? deviationService,
     GamesWindowSettings? windowSettings,
     GameReviewStore? reviewStore,
     DateTime Function()? now,
-  }) : _lichessUsername = lichessUsername,
-       _chesscomUsername = chesscomUsername,
-       _library = library ?? GamesLibraryService(),
+  }) : _library = library ?? GamesLibraryService(),
        _deviation = deviationService ?? GameDeviationService.instance,
        _windowSettings = windowSettings ?? GamesWindowSettings.instance,
        _reviewStore = reviewStore ?? GameReviewStore.instance,

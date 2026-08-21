@@ -98,9 +98,13 @@ class ExtractedLines {
   /// Sentence fragment appended to the run summary when "only traps" ran.
   final String trapsOnlyNote;
 
+  /// True when extraction hit its line cap and branches were dropped.
+  final bool truncated;
+
   const ExtractedLines({
     required this.lines,
     required this.rawCount,
+    this.truncated = false,
     required this.trapsOnlyNote,
   });
 

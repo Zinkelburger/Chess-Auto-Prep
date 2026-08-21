@@ -18,11 +18,9 @@ import 'package:chess_auto_prep/utils/chess_utils.dart' show isNullMoveSan;
 import 'package:chess_auto_prep/utils/training_markers.dart';
 import 'package:chess_auto_prep/widgets/pgn/movetext_primitives.dart'
     show MoveChip;
-import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import 'pgn/comment_editor.dart';
 import 'pgn/comment_prose_spans.dart';
 import 'pgn/pgn_annotation_panel.dart';
-import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
 
 class InteractivePgnEditor extends StatefulWidget {
   /// The move tree to display (owned by controller).
@@ -73,14 +71,7 @@ class InteractivePgnEditor extends StatefulWidget {
   /// title field and written back on save so autosaves don't clobber it.
   final String? lineTitle;
 
-  final String? currentRepertoireName;
   final String? repertoireColor;
-
-  /// Optional trap index (currently unused; kept for API compatibility).
-  final TrapIndexService? trapIndex;
-
-  /// Optional board preview on trap dot hover.
-  final BoardPreviewController? boardPreview;
 
   /// Read-only header shown instead of the title field for ephemeral lines
   /// (e.g. "Trap #45 · Sicilian Defense").
@@ -108,10 +99,7 @@ class InteractivePgnEditor extends StatefulWidget {
     this.onViewInLines,
     this.isEditingExistingLine = false,
     this.lineTitle,
-    this.currentRepertoireName,
     this.repertoireColor,
-    this.trapIndex,
-    this.boardPreview,
     this.ephemeralTitle,
     this.showAnnotationPanel = false,
   });
@@ -512,16 +500,16 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                           Expanded(
                             child: TextField(
                               controller: _titleController,
-                              decoration: InputDecoration(
+                              decoration: const InputDecoration(
                                 hintText: 'Line title',
-                                hintStyle: const TextStyle(
+                                hintStyle: TextStyle(
                                   color: AppColors.onSurfaceMuted,
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
                                 ),
                                 border: InputBorder.none,
                                 isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(
+                                contentPadding: EdgeInsets.symmetric(
                                   vertical: 4,
                                 ),
                               ),

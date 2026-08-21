@@ -72,6 +72,32 @@ CourseComposer _composer(
   repertoireName: 'Test repertoire',
 );
 
+/// A composer whose build root is ten plies in, the way a Benko chapter's is.
+/// [_modelGameStartFen] follows `config.startFen`, so a model game written
+/// from move one would be movetext that cannot be played from the header FEN.
+CourseComposer _midOpeningComposer(List<String> prefix) {
+  final rootFen = _fenAfter(prefix);
+  return CourseComposer(
+    config: TreeBuildConfig(
+      startFen: rootFen,
+      playAsWhite: false,
+      organizeIntoChapters: true,
+      maxLinesPerChapter: 6,
+      minLinesPerChapter: 3,
+    ),
+    namer: CourseNamer(
+      namer: OpeningNamer.unavailable(startFen: rootFen),
+      rootWhiteToMove: true,
+      startMoveNumber: 6,
+      repertoirePrefix: prefix,
+      playAsWhite: false,
+    ),
+    repertoireStartFen: rootFen,
+    repertoirePrefix: const [],
+    repertoireName: 'Benko',
+  );
+}
+
 String _fenAfter(List<String> sans) {
   Position pos = Chess.initial;
   for (final san in sans) {
@@ -223,6 +249,35 @@ void main() {
           followedPlies: 5,
         ),
       ];
+
+      test('a build rooted mid-opening writes the game from that root', () {
+        const prefix = [
+          'd4', 'Nf6', 'c4', 'c5', 'd5', 'b5', 'cxb5', 'a6', 'bxa6', 'e6', //
+        ];
+        final game = ModelGame(
+          record: _record(
+            white: 'Stalmach, R',
+            black: 'Suleymanli, S',
+            elo: 2370,
+            outcome: GameOutcome.blackWin,
+            moves: [...prefix, 'Nc3', 'exd5', 'Nxd5', 'Be7'],
+          ),
+          followedPlies: 3,
+          rootIndex: prefix.length,
+        );
+
+        final course = _midOpeningComposer(
+          prefix,
+        ).compose(lines: _fan('Nc3 exd5', 4), modelGames: [game]);
+
+        final pgn = course.entries.last.pgn;
+        // The prefix is already on the board under the FEN header; writing it
+        // again produced a game whose first move is illegal in its own
+        // position.  Numbering starts at the root's move six, Black to reply.
+        expect(pgn, contains('6. Nc3 exd5'));
+        expect(pgn, isNot(contains('1. d4')));
+        expect(course.entries.last.movesSan, ['Nc3', 'exd5', 'Nxd5', 'Be7']);
+      });
 
       test('append as a trailing chapter', () {
         final course = _composer(
@@ -456,9 +511,9 @@ void main() {
     });
 
     group('engine tails', () {
-      final cut = ExtractedLine(
-        movesSan: const ['e4', 'e5', 'Nf3'],
-        movesUci: const [],
+      const cut = ExtractedLine(
+        movesSan: ['e4', 'e5', 'Nf3'],
+        movesUci: [],
         probability: 0.5,
         leafFen: 'cutoff',
       );
@@ -508,9 +563,9 @@ void main() {
 
     group('refutations', () {
       // A line the build stopped because the reply left us winning.
-      final blunder = ExtractedLine(
-        movesSan: const ['e4', 'e5', 'Nc3', 'Nf6', 'Bc4', 'Nxe4'],
-        movesUci: const [],
+      const blunder = ExtractedLine(
+        movesSan: ['e4', 'e5', 'Nc3', 'Nf6', 'Bc4', 'Nxe4'],
+        movesUci: [],
         probability: 0.01,
         leafFen: 'x',
       );

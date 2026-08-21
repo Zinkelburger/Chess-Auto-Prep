@@ -25,7 +25,9 @@ import 'dart:io';
 
 import 'package:sqlite3/sqlite3.dart';
 
+import '../../utils/pgn_utils.dart';
 import '../storage/app_paths.dart';
+import 'game_authority.dart';
 import 'movetext_codec.dart';
 import 'position_key.dart';
 
@@ -54,6 +56,20 @@ class BookMove {
   /// Game id of the most recent encounter with this move.
   final int recentGameId;
 
+  /// Game id of the strongest *classical over-the-board* encounter, or 0 when
+  /// only online / speed games have played this move (and 0 on a database
+  /// that has not had `rebuildClassicalCitations` run over it).
+  final int topClassicalGameId;
+
+  /// The game to cite for this move.
+  ///
+  /// A citation is a claim about theory, so it prefers the strongest
+  /// over-the-board classical game even when a higher-rated blitz game
+  /// exists — and falls back to the strongest game of any kind rather than
+  /// citing nothing.
+  int get citeGameId =>
+      topClassicalGameId != 0 ? topClassicalGameId : topGameId;
+
   const BookMove({
     required this.uci,
     required this.games,
@@ -65,6 +81,7 @@ class BookMove {
     required this.lastYear,
     required this.topGameId,
     required this.recentGameId,
+    this.topClassicalGameId = 0,
   });
 
   /// Score for White in [0, 1].
@@ -135,12 +152,12 @@ class MasterGame {
   /// Full PGN text with the standard seven tags plus Elo/ECO when known.
   String toPgn() {
     final b = StringBuffer()
-      ..writeln('[Event "${_tag(event)}"]')
-      ..writeln('[Site "${_tag(site)}"]')
+      ..writeln('[Event "${escapeHeaderValue(event)}"]')
+      ..writeln('[Site "${escapeHeaderValue(site)}"]')
       ..writeln('[Date "${date.isEmpty ? '????.??.??' : date}"]')
-      ..writeln('[Round "${round.isEmpty ? '?' : _tag(round)}"]')
-      ..writeln('[White "${_tag(white)}"]')
-      ..writeln('[Black "${_tag(black)}"]')
+      ..writeln('[Round "${round.isEmpty ? '?' : escapeHeaderValue(round)}"]')
+      ..writeln('[White "${escapeHeaderValue(white)}"]')
+      ..writeln('[Black "${escapeHeaderValue(black)}"]')
       ..writeln('[Result "$result"]');
     if (whiteElo != null) b.writeln('[WhiteElo "$whiteElo"]');
     if (blackElo != null) b.writeln('[BlackElo "$blackElo"]');
@@ -152,8 +169,6 @@ class MasterGame {
       ..writeln();
     return b.toString();
   }
-
-  static String _tag(String s) => s.replaceAll('"', '\\"');
 }
 
 /// Coverage summary for the settings/prompt UI.
@@ -222,7 +237,7 @@ class MasterGamesDb {
 
   Database get raw => _db;
 
-  static const int _schemaVersion = 2;
+  static const int _schemaVersion = 3;
 
   static void _migrate(Database db) {
     final v = db.select('PRAGMA user_version').first.columnAt(0) as int;
@@ -254,7 +269,8 @@ class MasterGamesDb {
         black_fide INTEGER,
         eco TEXT NOT NULL DEFAULT '',
         ply_count INTEGER NOT NULL DEFAULT 0,
-        movetext BLOB NOT NULL
+        movetext BLOB NOT NULL,
+        authority INTEGER NOT NULL DEFAULT 0
       );
       CREATE INDEX IF NOT EXISTS games_twic ON games(twic);
       CREATE INDEX IF NOT EXISTS games_white ON games(white COLLATE NOCASE);
@@ -278,6 +294,8 @@ class MasterGamesDb {
         last_year INTEGER NOT NULL,
         top_game INTEGER NOT NULL,
         recent_game INTEGER NOT NULL,
+        top_classical_game INTEGER NOT NULL DEFAULT 0,
+        classical_max_elo INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY(pos, move)
       ) WITHOUT ROWID;
 
@@ -292,7 +310,48 @@ class MasterGamesDb {
         value BLOB NOT NULL
       );
     ''');
+    _migrateToV3(db, from: v);
     db.execute('PRAGMA user_version = $_schemaVersion');
+  }
+
+  /// v2 → v3: citation authority.
+  ///
+  /// A five-year TWIC import is over half online play, so `top_game` — the
+  /// highest-rated game that played a move — cites a Titled Tuesday blitz
+  /// game more often than not.  v3 records the strongest *classical
+  /// over-the-board* game alongside it so a citation can prefer one.
+  ///
+  /// Unlike the v1 migration this must not drop anything: the games are hours
+  /// of downloading.  The `games` column is backfilled here from headers
+  /// already stored; the book columns start empty and are filled by
+  /// `rebuildClassicalCitations` (master_book_rebuild.dart), which has to
+  /// replay movetext and so is a deliberate maintenance pass rather than
+  /// something an app launch does.
+  static void _migrateToV3(Database db, {required int from}) {
+    if (from >= 3) return;
+    if (!_hasColumn(db, 'games', 'authority')) {
+      db.execute(
+        'ALTER TABLE games ADD COLUMN authority INTEGER NOT NULL DEFAULT 0',
+      );
+      db.execute('UPDATE games SET authority = $kAuthoritySqlExpression');
+    }
+    if (!_hasColumn(db, 'book', 'top_classical_game')) {
+      db.execute(
+        'ALTER TABLE book ADD COLUMN top_classical_game '
+        'INTEGER NOT NULL DEFAULT 0',
+      );
+      db.execute(
+        'ALTER TABLE book ADD COLUMN classical_max_elo '
+        'INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+  }
+
+  static bool _hasColumn(Database db, String table, String column) {
+    for (final r in db.select('PRAGMA table_info($table)')) {
+      if (r.columnAt(1) == column) return true;
+    }
+    return false;
   }
 
   // ── Movetext codec ─────────────────────────────────────────────────────
@@ -355,7 +414,7 @@ class MasterGamesDb {
   List<BookMove> bookMoves(String fen) {
     final rows = _db.select(
       'SELECT move, games, white_wins, draws, black_wins, elo_sum, elo_n, '
-      'max_elo, last_year, top_game, recent_game '
+      'max_elo, last_year, top_game, recent_game, top_classical_game '
       'FROM book WHERE pos = ? ORDER BY games DESC, max_elo DESC',
       [positionKey(fen)],
     );
@@ -374,6 +433,7 @@ class MasterGamesDb {
           lastYear: r.columnAt(8) as int,
           topGameId: r.columnAt(9) as int,
           recentGameId: r.columnAt(10) as int,
+          topClassicalGameId: r.columnAt(11) as int,
         ),
     ];
   }

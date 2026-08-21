@@ -1,7 +1,8 @@
 /// Side-by-side Stockfish + expectimax under the PGN editor.
+///
+/// The engine half is live; the expectimax half is read from the built tree
+/// and never runs anything.
 library;
-
-import 'dart:async';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
@@ -13,15 +14,14 @@ import '../services/analysis_service.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../services/coherence_service.dart';
 import '../services/engine/engine_lifecycle.dart';
-import '../services/expectimax_line_service.dart'
-    show hasPrecomputedExpectimaxAtPly;
+import '../services/expectimax_line_service.dart' show findNodeByFen;
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
-import '../services/on_the_fly_expectimax_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/chess_utils.dart'
     show formatEvalDisplay, formatPackedEval, uciToSan;
+import '../utils/ease_utils.dart' show expectedCpFromWinProb;
 import 'analysis/analysis_panels_dialog.dart';
 import 'engine/expectimax_panel_host.dart';
 import 'engine/unified_engine_pane.dart';
@@ -35,8 +35,6 @@ class RepertoireAnalysisDock extends StatefulWidget {
   final BoardPreviewController boardPreview;
   final CoherenceResult? coherenceResult;
   final bool isActive;
-  final bool isGenerating;
-  final bool isGenerationPaused;
 
   const RepertoireAnalysisDock({
     super.key,
@@ -47,8 +45,6 @@ class RepertoireAnalysisDock extends StatefulWidget {
     required this.boardPreview,
     this.coherenceResult,
     required this.isActive,
-    this.isGenerating = false,
-    this.isGenerationPaused = false,
   });
 
   @override
@@ -56,62 +52,25 @@ class RepertoireAnalysisDock extends StatefulWidget {
 }
 
 class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
-  final OnTheFlyExpectimaxService _onTheFly = OnTheFlyExpectimaxService();
   final EngineSettings _settings = EngineSettings.instance;
   final AnalysisService _analysis = AnalysisService.instance;
-  bool _autoComputeScheduled = false;
 
   @override
   void initState() {
     super.initState();
-    _scheduleAutoCompute();
-    widget.controller.addListener(_onControllerChanged);
-    // Manual listener: may restart on-the-fly expectimax when dock/depth settings change.
-    _settings.addListener(_onSettingsChanged);
-    // Engine toggled on / generation finished should kick off compute.
-    EngineLifecycle.instance.addListener(_onSettingsChanged);
-    _analysis.discoveryResult.addListener(_onAnalysisUpdated);
-    _onTheFly.addListener(_onAnalysisUpdated);
+    widget.controller.addListener(_scheduleSetState);
+    _settings.addListener(_scheduleSetState);
+    EngineLifecycle.instance.addListener(_scheduleSetState);
+    _analysis.discoveryResult.addListener(_scheduleSetState);
   }
 
   @override
   void dispose() {
-    widget.controller.removeListener(_onControllerChanged);
-    _settings.removeListener(_onSettingsChanged);
-    EngineLifecycle.instance.removeListener(_onSettingsChanged);
-    _analysis.discoveryResult.removeListener(_onAnalysisUpdated);
-    _onTheFly.removeListener(_onAnalysisUpdated);
-    _onTheFly.dispose();
+    widget.controller.removeListener(_scheduleSetState);
+    _settings.removeListener(_scheduleSetState);
+    EngineLifecycle.instance.removeListener(_scheduleSetState);
+    _analysis.discoveryResult.removeListener(_scheduleSetState);
     super.dispose();
-  }
-
-  @override
-  void didUpdateWidget(covariant RepertoireAnalysisDock oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.tree != widget.tree ||
-        oldWidget.treeConfig != widget.treeConfig ||
-        oldWidget.isGenerating != widget.isGenerating ||
-        oldWidget.isGenerationPaused != widget.isGenerationPaused) {
-      _scheduleAutoCompute();
-    }
-  }
-
-  void _onControllerChanged() => _scheduleAutoCompute();
-
-  void _onSettingsChanged() {
-    _scheduleAutoCompute();
-    _scheduleSetState();
-  }
-
-  void _onAnalysisUpdated() => _scheduleSetState();
-
-  void _scheduleAutoCompute() {
-    if (_autoComputeScheduled) return;
-    _autoComputeScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _autoComputeScheduled = false;
-      if (mounted) _maybeAutoCompute();
-    });
   }
 
   void _scheduleSetState() {
@@ -121,44 +80,10 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
     });
   }
 
-  void _maybeAutoCompute() {
-    if (EngineLifecycle.instance.state == EngineState.generating) return;
-    if (widget.isGenerating && !widget.isGenerationPaused) return;
-    if (!_settings.showExpectimaxDock) return;
-    if (EngineLifecycle.instance.state == EngineState.off) {
-      // Expectimax pane visible = shared pool wanted — turn it on; the
-      // lifecycle listener re-enters here once the engine reaches idle.
-      unawaited(EngineLifecycle.instance.toggleOn());
-      return;
-    }
-
-    final fen = widget.controller.fen;
-    if (_onTheFly.currentFen == fen &&
-        (_onTheFly.state == OnTheFlyState.computing ||
-            (_onTheFly.state == OnTheFlyState.ready &&
-                _onTheFly.progressiveLines.lines.isNotEmpty))) {
-      return;
-    }
-
-    if (_hasPrecomputedExpectimax(fen)) return;
-
-    unawaited(
-      _onTheFly.ensureRunning(
-        fen: widget.controller.fen,
-        playAsWhite: widget.controller.isRepertoireWhite,
-        mainTree: widget.tree,
-        mainConfig: widget.treeConfig,
-        mainFenMap: widget.fenMap,
-        maxDepth: _settings.onTheFlyMaxDepth,
-      ),
-    );
-  }
-
   bool get _engineActive =>
       widget.isActive &&
       EngineLifecycle.instance.state != EngineState.off &&
-      EngineLifecycle.instance.state != EngineState.generating &&
-      (!widget.isGenerating || widget.isGenerationPaused);
+      EngineLifecycle.instance.state != EngineState.generating;
 
   @override
   Widget build(BuildContext context) {
@@ -221,8 +146,8 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
               ),
             ),
           if (_settings.showEngineDock && _settings.showExpectimaxDock)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
               child: Text(
                 '·',
                 style: TextStyle(color: AppColors.onSurfaceMuted),
@@ -230,12 +155,7 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
             ),
           if (_settings.showExpectimaxDock)
             Text(
-              // Same vocabulary as ExpectimaxLinesPane's header: the pane
-              // below reads from the built tree when it covers this
-              // position, and computes live otherwise.
-              _hasPrecomputedExpectimax(widget.controller.fen)
-                  ? 'Expectimax lines · from built tree'
-                  : 'Expectimax lines · live',
+              'Expectimax · from built tree',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
@@ -266,14 +186,15 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
       );
     }
 
+    // The position's own stored value — what the repertoire expects to get
+    // out of this position in practice, next to what the engine sees now.
     String exLabel = '—';
     String? exRaw;
-    final prog = _onTheFly.progressiveLines;
-    if (prog.lines.isNotEmpty) {
-      final line = prog.lines.first;
-      exLabel = _formatExEval(line.expectedEvalCp);
-      if (line.evalCp != null) {
-        exRaw = _formatExEval(line.evalCp!);
+    final node = _treeNodeAtCursor();
+    if (node != null && node.hasExpectimax) {
+      exLabel = _formatExEval(expectedCpFromWinProb(node.expectimaxValue));
+      if (node.hasEngineEval && widget.treeConfig != null) {
+        exRaw = _formatExEval(node.evalForUs(widget.treeConfig!.playAsWhite));
       }
     }
 
@@ -294,35 +215,22 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
             ),
             const SizedBox(width: 16),
             Tooltip(
-              message: exRaw != null
-                  ? 'Expectimax practical eval (V → cp).\n'
-                        'Accounts for likely opponent replies.\n'
-                        'Raw leaf engine: $exRaw'
-                  : 'Expectimax practical eval (V → cp).\n'
-                        'At our moves: max child V. At opponent moves: '
-                        'Σ pᵢ·V(childᵢ) plus tail for uncovered probability.',
+              message: node == null
+                  ? 'Practical value of this position from the built tree.\n'
+                        'The build never reached this position.'
+                  : exRaw != null
+                  ? 'Practical value of this position from the built tree:\n'
+                        'the engine eval folded with how often opponents go\n'
+                        'wrong from here.  Build-time engine eval: $exRaw'
+                  : 'Practical value of this position from the built tree:\n'
+                        'the engine eval folded with how often opponents go\n'
+                        'wrong from here.',
               child: _SummaryChip(
                 label: 'Expectimax',
                 value: exLabel,
                 color: AppColors.expectimaxColor(),
               ),
             ),
-            if (prog.isComputing) ...[
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 12,
-                height: 12,
-                child: CircularProgressIndicator(
-                  strokeWidth: 1.5,
-                  color: AppColors.expectimaxColor(),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                '${prog.bestCompletedDepth}/${prog.targetMaxDepth}',
-                style: AppTextStyles.caption.copyWith(fontSize: 10),
-              ),
-            ],
           ],
         ),
       ),
@@ -362,13 +270,15 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
     );
   }
 
-  bool _hasPrecomputedExpectimax(String fen) {
-    if (widget.tree == null || widget.treeConfig == null) return false;
-    return hasPrecomputedExpectimaxAtPly(
-      widget.tree!,
-      fen,
-      _settings.onTheFlyMaxDepth,
-    );
+  /// The built tree's node for the cursor position, resolving a
+  /// transposition leaf to the node that carries its subtree.
+  BuildTreeNode? _treeNodeAtCursor() {
+    final tree = widget.tree;
+    if (tree == null) return null;
+    final fen = widget.controller.fen;
+    final canonical = widget.fenMap?.getCanonical(fen);
+    if (canonical != null && canonical.children.isNotEmpty) return canonical;
+    return findNodeByFen(tree, fen) ?? canonical;
   }
 
   Widget _buildExpectimaxPane() {
@@ -379,11 +289,7 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
       fenMap: widget.fenMap,
       boardPreview: widget.boardPreview,
       coherenceResult: widget.coherenceResult,
-      isGenerating: widget.isGenerating,
-      isGenerationPaused: widget.isGenerationPaused,
-      onTheFlyService: _onTheFly,
       compact: true,
-      autoComputeEnabled: false,
       onMoveSelected: (san) => widget.controller.playMove(san),
       onLineMoveClicked: (sanMoves, index) {
         widget.controller.applyLineFromCurrent(sanMoves, index);

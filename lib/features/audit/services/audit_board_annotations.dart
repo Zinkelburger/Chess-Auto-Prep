@@ -7,6 +7,7 @@ import '../../../utils/log.dart';
 import '../../../models/board_annotation.dart';
 import '../models/audit_finding.dart';
 import '../models/audit_result.dart';
+import '../../../utils/fen_utils.dart';
 
 /// Build board annotations from audit findings matching [currentFen].
 ///
@@ -18,11 +19,11 @@ List<BoardAnnotation> buildAuditBoardAnnotations({
 }) {
   if (result == null) return const [];
 
-  final fenPrefix = currentFen.split(' ').take(4).join(' ');
+  final fenPrefix = normalizeFen(currentFen);
 
   final relevant = result.findings.where((f) {
     if (f.dismissed) return false;
-    final fFenPrefix = f.fen.split(' ').take(4).join(' ');
+    final fFenPrefix = normalizeFen(f.fen);
     return fFenPrefix == fenPrefix;
   }).toList();
 

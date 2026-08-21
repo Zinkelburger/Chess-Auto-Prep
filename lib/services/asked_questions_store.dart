@@ -74,8 +74,7 @@ class AskedQuestionAnswer {
 }
 
 class AskedQuestionsStore {
-  AskedQuestionsStore({String fileName = defaultFileName})
-    : _fileName = fileName;
+  AskedQuestionsStore({this._fileName = defaultFileName});
 
   static const defaultFileName = 'asked_questions.json';
   static const _version = 1;

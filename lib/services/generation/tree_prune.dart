@@ -6,6 +6,7 @@
 library;
 
 import '../../models/build_tree_node.dart';
+import 'fen_map.dart';
 import 'frontier_queue.dart';
 
 /// Snapshot of an eval-too-low subtree root taken just before deletion, so
@@ -130,93 +131,126 @@ void _removeFromIndex(BuildTree tree, BuildTreeNode node) {
   }
 }
 
-/// Scale cumulative probability through a canonical subtree when a
-/// transposition path reaches it with a higher probability (matches the C
-/// `propagate_higher_cumP`).
+/// Below this, an arrival adds nothing worth walking a subtree for.
+const double _kArrivalEpsilon = 1e-12;
+
+/// Add a new arrival's reach probability to a canonical subtree.
 ///
-/// No-op when [newCumP] is not greater than the canonical node's current
-/// cumulative probability. Otherwise the node and all descendants are scaled
-/// by the same ratio; unexplored leaves whose scaled probability clears
-/// [minProbability] are appended to [queue] for (re)exploration.
-void propagateHigherCumP(
+/// A position reached by several move orders is reached with the **sum** of
+/// their probabilities — they are disjoint ways for the game to get there.
+/// When a transposition leaf with reach [delta] is registered against
+/// [canonical], the canonical and every descendant gain `delta × (product
+/// of edge probabilities from the canonical down)`, which is exactly the
+/// extra mass each of them now carries.  Adding a delta rather than
+/// rescaling by a ratio keeps this correct when a descendant already holds
+/// arrivals of its own: those are left alone instead of being scaled too.
+///
+/// Where the walk meets a *registered* transposition leaf (one the build has
+/// already closed against its canonical), the leaf's own increment is
+/// forwarded into that canonical in turn — chains of transpositions stay
+/// consistent to any depth.  A chain that loops back onto a position already
+/// being updated (a repetition) stops there; [active] carries that guard.
+/// Unexplored frontier leaves are not forwarded: they add their full reach,
+/// increment included, when the build processes them.
+///
+/// Unexplored leaves whose reach clears [minProbability] are (re)queued;
+/// [FrontierQueue.add] re-sifts a leaf already waiting rather than
+/// duplicating it.  Search priorities scale with their node's reach so the
+/// frontier order follows the new mass.
+void addArrivalCumP(
   BuildTreeNode canonical,
-  double newCumP,
+  double delta,
   double minProbability,
-  FrontierQueue queue,
-) {
-  if (newCumP <= canonical.cumulativeProbability) return;
-  final old = canonical.cumulativeProbability;
-  canonical.cumulativeProbability = newCumP;
-  if (old <= 0.0) {
-    // Ratio would be Inf; rebuild descendant cumPs from edge probabilities
-    // so a zero→positive transposition still widens the frontier. Seed the
-    // priority baseline with the canonical's new cumP (its own discount-from-
-    // root is unrecoverable from the zeroed state, but relative discounts
-    // *within* the subtree are preserved from here down).
-    _rebuildCumPFromEdges(
-      canonical,
-      canonical.cumulativeProbability,
-      minProbability,
-      queue,
-    );
-    return;
-  }
-  final ratio = newCumP / old;
-  _propagateCumPRecursive(canonical, ratio, minProbability, queue);
+  FrontierQueue queue, {
+  FenMap? fenMap,
+  Set<String>? active,
+}) {
+  if (delta <= _kArrivalEpsilon) return;
+  final chain = active ?? <String>{};
+  final key = canonicalizeFen(canonical.fen);
+  if (!chain.add(key)) return; // repetition: already being updated above
+  _addReach(canonical, delta);
+  _addArrivalRecursive(
+    canonical,
+    delta,
+    effectiveSearchPriority(canonical),
+    minProbability,
+    queue,
+    fenMap,
+    chain,
+  );
+  chain.remove(key);
 }
 
-void _propagateCumPRecursive(
-  BuildTreeNode node,
-  double ratio,
-  double minProbability,
-  FrontierQueue queue,
-) {
-  for (final child in node.children) {
-    child.cumulativeProbability *= ratio;
-    if (child.searchPriority >= 0.0) child.searchPriority *= ratio;
-    if (child.children.isNotEmpty) {
-      _propagateCumPRecursive(child, ratio, minProbability, queue);
-    } else if (!child.explored &&
-        child.cumulativeProbability >= minProbability) {
-      // If the leaf is still queued, [FrontierQueue.add] re-sifts it in place
-      // for its just-raised searchPriority instead of adding a duplicate; if
-      // it was already popped (below-floor) it is re-enqueued.
-      queue.add(child);
-    }
+/// Add [delta] to [node]'s reach and scale its priority to match.
+void _addReach(BuildTreeNode node, double delta) {
+  final old = node.cumulativeProbability;
+  node.cumulativeProbability = old + delta;
+  if (node.searchPriority >= 0.0 && old > 0.0) {
+    node.searchPriority *= node.cumulativeProbability / old;
   }
 }
 
-/// Absolute cumP assign when the canonical had zero/negative probability
-/// (ratio scaling is undefined). Uses each child's [BuildTreeNode.moveProbability]
-/// as the parent→child edge weight.
-///
-/// [parentSearchPriority] is the rebuilt priority of [node]; each child's
-/// priority is `parent × edge × searchPriorityDiscount`, mirroring how the
-/// finite-ratio path multiplies rather than overwriting — so our-move
-/// alternatives keep their discount instead of getting the raw (undiscounted)
-/// cumP, which would let them jump the frontier ahead of higher-value lines.
-void _rebuildCumPFromEdges(
+void _addArrivalRecursive(
   BuildTreeNode node,
+  double delta,
   double parentSearchPriority,
   double minProbability,
   FrontierQueue queue,
+  FenMap? fenMap,
+  Set<String> chain,
 ) {
   for (final child in node.children) {
-    final edge = child.moveProbability;
-    child.cumulativeProbability = node.cumulativeProbability * edge;
-    if (child.searchPriority >= 0.0) {
+    final childDelta = delta * child.moveProbability;
+    if (childDelta <= _kArrivalEpsilon) continue;
+    final hadReach = child.cumulativeProbability > 0.0;
+    _addReach(child, childDelta);
+    if (!hadReach && child.searchPriority >= 0.0) {
+      // Nothing to scale from: rebuild the priority the way expansion
+      // assigns it, so an alternative keeps its discount.
       child.searchPriority =
-          parentSearchPriority * edge * child.searchPriorityDiscount;
+          parentSearchPriority *
+          child.moveProbability *
+          child.searchPriorityDiscount;
     }
-    // Fall back to cumP for legacy nodes that never carried a priority.
-    final childSearchPriority = child.searchPriority >= 0.0
-        ? child.searchPriority
-        : child.cumulativeProbability;
     if (child.children.isNotEmpty) {
-      _rebuildCumPFromEdges(child, childSearchPriority, minProbability, queue);
+      _addArrivalRecursive(
+        child,
+        childDelta,
+        effectiveSearchPriority(child),
+        minProbability,
+        queue,
+        fenMap,
+        chain,
+      );
+      continue;
+    }
+    final target = _registeredCanonicalOf(child, fenMap);
+    if (target != null) {
+      addArrivalCumP(
+        target,
+        childDelta,
+        minProbability,
+        queue,
+        fenMap: fenMap,
+        active: chain,
+      );
     } else if (!child.explored &&
         child.cumulativeProbability >= minProbability) {
       queue.add(child);
     }
   }
+}
+
+/// The canonical node [leaf] has been closed against, when the build has
+/// registered it as a transposition leaf — null for every other leaf.
+BuildTreeNode? _registeredCanonicalOf(BuildTreeNode leaf, FenMap? fenMap) {
+  if (fenMap == null) return null;
+  for (final t in fenMap.getTranspositions(leaf.fen)) {
+    if (identical(t, leaf)) {
+      final canonical = fenMap.getCanonical(leaf.fen);
+      return canonical == null || identical(canonical, leaf) ? null : canonical;
+    }
+  }
+  return null;
 }

@@ -238,7 +238,9 @@ class CourseComposer {
     // for. Sidelines index into this, so it has to be computed before the
     // engine tail extends the movetext past it.
     final prepared = [...repertoirePrefix, ...line.movesSan];
-    final tail = line.leafFen == null ? null : _engineTails[line.leafFen!];
+    final tail = line.leafFen == null || line.isTransposition
+        ? null
+        : _engineTails[line.leafFen!];
     final moves = [...prepared, if (tail != null) ...tail.movesSan];
     final alternatives = _alternativesFor(line);
     final improvements = _improvementsFor(line);
@@ -272,7 +274,7 @@ class CourseComposer {
             // shorter than the moves they describe, and appending the tail's
             // onto a short list would slide its note onto an earlier move.
             ..._padded(
-              _annotationsWithImprovements(line, improvements),
+              annotationsWithImprovements(line, improvements),
               line.movesSan.length,
             ),
             if (tail != null) ..._tailAnnotations(tail),
@@ -308,35 +310,9 @@ class CourseComposer {
   }
 
   /// Improvements on master practice along [line], keyed by the index of our
-  /// move that improves.
-  Map<int, MasterImprovement> _improvementsFor(ExtractedLine line) {
-    if (_improvements.isEmpty) return const {};
-    final out = <int, MasterImprovement>{};
-    for (final choice in line.choices) {
-      if (!choice.isOurMove) continue;
-      final found = _improvements[choice.fenBefore];
-      if (found != null) out[choice.moveIndex] = found;
-    }
-    return out;
-  }
-
-  /// The line's annotations with "improves on … in <game>" notes attached to
-  /// the moves that earned them.  Annotations are indexed by line move, so
-  /// a line shorter on annotations than on moves is padded.
-  List<MoveAnnotation> _annotationsWithImprovements(
-    ExtractedLine line,
-    Map<int, MasterImprovement> improvements,
-  ) {
-    if (improvements.isEmpty) return line.moveAnnotations;
-    final out = List<MoveAnnotation>.of(line.moveAnnotations);
-    for (final entry in improvements.entries) {
-      while (out.length <= entry.key) {
-        out.add(MoveAnnotation.none);
-      }
-      out[entry.key] = out[entry.key].withNote(entry.value.note);
-    }
-    return out;
-  }
+  /// move that improves.  Shared with the snapshot export.
+  Map<int, MasterImprovement> _improvementsFor(ExtractedLine line) =>
+      improvementsAlong(line, _improvements);
 
   /// Every sideline this line carries, keyed by the mainline move it hangs
   /// off: what the moves we skipped run into, the master move we improve on,
@@ -434,7 +410,9 @@ class CourseComposer {
     final variationName = _modelGameLabel(game);
 
     return CourseEntry(
-      movesSan: record.movesSan,
+      // "from the repertoire's start position", like every other entry —
+      // the plies before the build root belong to the root, not the entry.
+      movesSan: game.movesFromRoot,
       chapterName: chapter.name,
       variationName: variationName,
       pgn: _writeModelGame(game, {
@@ -487,15 +465,19 @@ class CourseComposer {
     Map<String, String> headers, {
     required String result,
   }) {
-    final record = game.record;
     final startFen = _modelGameStartFen;
     final rootWhiteToMove = isWhiteToMove(startFen);
     final startMoveNumber = fullMoveNumber(startFen);
+    // The movetext has to start where [startFen] does.  A build rooted
+    // mid-opening writes its model games from that root, so the plies the
+    // game spent reaching it are already on the board and must not be
+    // written again — `1. d4` under a Benko FEN header is not a legal game.
+    final movesSan = game.movesFromRoot;
 
     final annotations = <MoveAnnotation>[];
     final variations = <int, List<PgnSideline>>{};
     final d = game.departure;
-    if (d != null && d.index < record.movesSan.length) {
+    if (d != null && d.index < movesSan.length) {
       final note = _departureNote(
         d,
         rootWhiteToMove: rootWhiteToMove,
@@ -515,7 +497,7 @@ class CourseComposer {
     return writePgnGame(
       PgnGameSpec(
         headers: headers,
-        movesSan: record.movesSan,
+        movesSan: movesSan,
         annotations: annotations,
         variations: variations,
         startFen: startFen,

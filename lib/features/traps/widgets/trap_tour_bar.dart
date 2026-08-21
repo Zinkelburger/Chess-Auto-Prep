@@ -180,12 +180,12 @@ class TrapTourBarState extends State<TrapTourBar> {
                 const SizedBox(width: 10),
                 Expanded(child: _TrapTourNarrative(trap: trap)),
                 const SizedBox(width: 6),
-                Tooltip(
+                const Tooltip(
                   message:
                       'The trap line is loaded in the PGN tab — click '
                       'any move to step through it.\n'
                       'Shift+←/→ jumps between traps inside the line.',
-                  child: const Icon(
+                  child: Icon(
                     Icons.help_outline,
                     size: 14,
                     color: AppColors.onSurfaceDim,

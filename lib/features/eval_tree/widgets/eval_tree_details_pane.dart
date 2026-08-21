@@ -6,6 +6,7 @@ import '../../../utils/chess_utils.dart' show formatPackedEval;
 import '../tree_colors.dart';
 import '../controllers/eval_tree_controller.dart';
 import '../models/eval_tree_snapshot.dart';
+import '../../../utils/movetext_builder.dart';
 
 class EvalTreeDetailsPane extends StatelessWidget {
   final EvalTreeSnapshot snapshot;
@@ -575,18 +576,10 @@ class EvalTreeDetailsPane extends StatelessWidget {
     if (moves.isEmpty) {
       return 'Starting position';
     }
-    final buffer = StringBuffer();
-    final whiteFirst = snapshot.root.sideToMoveIsWhite;
-    for (var index = 0; index < moves.length; index++) {
-      final ply = index + (whiteFirst ? 0 : 1);
-      if (ply.isEven) {
-        buffer.write('${(ply ~/ 2) + 1}. ');
-      } else if (index == 0 && !whiteFirst) {
-        buffer.write('${(ply ~/ 2) + 1}... ');
-      }
-      buffer.write('${moves[index]} ');
-    }
-    return buffer.toString().trim();
+    return buildNumberedMovetext(
+      moves,
+      whiteToMoveFirst: snapshot.root.sideToMoveIsWhite,
+    );
   }
 
   String _formatEval(int cpForUs) => formatPackedEval(cpForUs, decimals: 2);

@@ -2,7 +2,7 @@
 ///
 /// End users only need to point the app at their downloaded `data/` directory.
 /// No env vars or setup scripts required when the platform library is bundled.
-library cdbdirect_flutter_libs;
+library;
 
 import 'dart:ffi';
 import 'dart:io';

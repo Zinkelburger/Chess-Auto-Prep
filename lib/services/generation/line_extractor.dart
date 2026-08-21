@@ -9,9 +9,12 @@
 library;
 
 import '../../models/build_tree_node.dart';
+import '../../utils/movetext_builder.dart';
 import 'export/move_annotation.dart';
+import 'export/move_annotator.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
+import '../../utils/fen_utils.dart';
 
 // ── Coverage unit ────────────────────────────────────────────────────────
 
@@ -107,6 +110,13 @@ class ExtractedLine {
   /// Every position this line passes through, in move order.
   final List<LineChoice> choices;
 
+  /// Set when the line was cut short because it transposed into a position
+  /// whose continuation another line carries: that owning line's moves from
+  /// the root to the position this line ends in (the same position by a
+  /// different order).  The continuation is not repeated here — see
+  /// [LineExtractor] for why.
+  final List<String>? transposesInto;
+
   const ExtractedLine({
     required this.movesSan,
     required this.movesUci,
@@ -120,7 +130,38 @@ class ExtractedLine {
     this.moveAnnotations = const [],
     this.coverageUnits = const [],
     this.choices = const [],
+    this.transposesInto,
   });
+
+  /// This line with its transposition pointer withdrawn: [transposesInto]
+  /// cleared and [note] — the text [LineExtractor] appended for it — removed
+  /// from the last annotation.
+  ///
+  /// Used when the move order the pointer named is not in the exported set,
+  /// so the line ends plainly instead of naming something unfindable.
+  ExtractedLine withoutTransposition(String note) => ExtractedLine(
+    movesSan: movesSan,
+    movesUci: movesUci,
+    probability: probability,
+    leafPruneReason: leafPruneReason,
+    leafPruneEvalCp: leafPruneEvalCp,
+    openingName: openingName,
+    openingEco: openingEco,
+    leafEvalCp: leafEvalCp,
+    leafFen: leafFen,
+    moveAnnotations: moveAnnotations.isEmpty
+        ? moveAnnotations
+        : [
+            ...moveAnnotations.take(moveAnnotations.length - 1),
+            moveAnnotations.last.withoutTransposition(note),
+          ],
+    coverageUnits: coverageUnits,
+    choices: choices,
+  );
+
+  /// True when this line ends at a transposition rather than at a leaf of
+  /// the tree.
+  bool get isTransposition => transposesInto != null;
 
   /// The set of decisions this line teaches — "this position, this move" for
   /// every point where it is our turn. Order-free on purpose: two lines that
@@ -130,46 +171,272 @@ class ExtractedLine {
 
 // ── Extractor ────────────────────────────────────────────────────────────
 
+/// Walks the selected tree into lines.
+///
+/// **Transpositions are merged here, not only in the pruner.**  The build
+/// keeps one expanded subtree per position and turns every other arrival
+/// into a childless transposition leaf that resolves to it.  Walking that
+/// subtree once per arrival — which is what following the leaves naively
+/// does — hands the pruner the same continuation dressed in every move
+/// order that reaches it (329 of 868 lines on a 31.8k-node Benko tree), and
+/// whenever two of those move orders each teach something of their own the
+/// pruner keeps both, so the reader sees one continuation twice.
+///
+/// Instead a cheap first pass walks the same traversal and, for every
+/// position reached by more than one move order, picks an *owner*: the
+/// arrival with the highest reach probability (ties to the earlier in tree
+/// order, which is the more probable branch after `sortAllChildren`).  The
+/// second pass emits the continuation under the owner only.  Every other
+/// arrival ends at the shared position — after our reply when it is our
+/// turn there, so no line ends on an unanswered opponent move — and records
+/// the owner's move order in [ExtractedLine.transposesInto], which the last
+/// move's annotation spells out as a note.  The pre-merge moves are still
+/// taught, so the move order itself is still drilled; only the repeat is
+/// gone.
+///
+/// Lines through positions reached one way only are untouched by this.
 class LineExtractor {
   final TreeBuildConfig config;
   final FenMap? fenMap;
 
-  LineExtractor({required this.config, this.fenMap});
+  LineExtractor({required this.config, this.fenMap})
+    : _annotator = MoveAnnotator(
+        playAsWhite: config.playAsWhite,
+        maxEvalLossCp: config.maxEvalLossCp,
+      );
+
+  /// Everything said *about* a move, as opposed to which moves a line holds.
+  final MoveAnnotator _annotator;
+
+  /// Per canonical position: the arrival that carries its continuation.
+  /// Rebuilt by every [extract] call.
+  Map<String, _Arrival> _owners = const {};
+
+  /// Move numbering of the root position, for the transposition note.
+  int _rootMoveNumber = 1;
+  bool _rootWhiteToMove = true;
 
   /// Eval gaps beyond this add no extra only-move weight.
   static const int _sharpnessCapCp = 200;
 
   /// An our-move this far ahead of every alternative is effectively forced.
   ///
-  /// Scaled to the build's eval-loss window: the expander never stores an
-  /// alternative worse than [TreeBuildConfig.maxEvalLossCp], so with the
-  /// default 50cp window a fixed 100cp bar could never be met.  A stored
-  /// alternative that loses most of the window is what "forced" looks like
-  /// in the tree.  A move with *no* stored sibling is not called forced:
-  /// the fast search narrows or skips alternatives at cold nodes, so a sole
-  /// child usually means unexplored rather than only.
-  static const int _onlyMoveGapCp = 100;
 
-  int get _onlyMoveThresholdCp {
-    final scaled = config.maxEvalLossCp * 4 ~/ 5;
-    return scaled < _onlyMoveGapCp ? scaled : _onlyMoveGapCp;
-  }
+  /// Upper bound on lines one extraction will produce.  A safety valve
+  /// against a pathological tree, not a tuning knob: a real 31.8k-node
+  /// build yields a few hundred.  When it is hit, [wasTruncated] says so
+  /// and the caller reports it — a silently shortened repertoire would read
+  /// as complete.
+  static const int kDefaultMaxLines = 50000;
+
+  /// True when the last [extract] stopped at its line cap, dropping every
+  /// branch the walk had not yet reached.
+  bool get wasTruncated => _truncated;
+  bool _truncated = false;
+
+  /// How many times [extract] may hand ownership back and walk again before
+  /// giving up.  Repairs are rare and each round fixes at least one position.
+  static const int _maxOwnershipRepairs = 4;
+
+  /// Every deferral the last traversal made: the contested position, the
+  /// arrival that stopped there, and how it got there.
+  List<({String key, BuildTreeNode node, List<String> movesSan, double reach})>
+  _merges = [];
 
   /// Extract complete repertoire lines from the tree.
-  List<ExtractedLine> extract(BuildTree tree, {int maxLines = 10000}) {
-    final lines = <ExtractedLine>[];
-    _extractDfs(
+  List<ExtractedLine> extract(
+    BuildTree tree, {
+    int maxLines = kDefaultMaxLines,
+  }) {
+    _truncated = false;
+    _rootWhiteToMove = tree.root.isWhiteToMove;
+    _rootMoveNumber = fullMoveNumber(tree.root.fen);
+    _owners = {};
+    _ownerDfs(
       node: tree.root,
       movesSan: const [],
-      movesUci: const [],
-      moveAnnotations: const [],
-      coverageUnits: const [],
-      choices: const [],
-      lines: lines,
-      maxLines: maxLines,
+      reach: 1.0,
       visited: <String>{},
     );
+    // The owner pass explores paths this one will not: it never stops at a
+    // merge, so it can hand a position's continuation to an arrival that the
+    // extraction traversal cannot reach.  Walk, check that every deferral
+    // actually landed somewhere, and give ownership back to the arrival that
+    // deferred when it did not.  Each round strictly increases the number of
+    // positions owned by an arrival this traversal reaches, so it converges;
+    // the bound is a backstop against a pathological tree, and
+    // [withdrawDanglingTranspositions] cleans up anything left.
+    var lines = <ExtractedLine>[];
+    for (var attempt = 0; ; attempt++) {
+      lines = <ExtractedLine>[];
+      _merges = [];
+      _extractDfs(
+        node: tree.root,
+        movesSan: const [],
+        movesUci: const [],
+        moveAnnotations: const [],
+        coverageUnits: const [],
+        choices: const [],
+        lines: lines,
+        maxLines: maxLines,
+        reach: 1.0,
+        visited: <String>{},
+      );
+      if (attempt >= _maxOwnershipRepairs) break;
+      if (!_reassignUnreachableOwners(lines)) break;
+    }
     return lines;
+  }
+
+  /// Give ownership back to arrivals whose deferral led nowhere.
+  ///
+  /// Returns true when at least one owner changed, meaning the caller should
+  /// walk again.
+  bool _reassignUnreachableOwners(List<ExtractedLine> lines) {
+    if (_merges.isEmpty) return false;
+    final played = _playedPrefixes(lines);
+    var changed = false;
+    for (final m in _merges) {
+      final owner = _owners[m.key];
+      // Already ours, or the owner's move order really is in the output.
+      if (owner == null || identical(owner.node, m.node)) continue;
+      if (played.contains(owner.movesSan.join(' '))) continue;
+      _owners[m.key] = _Arrival(m.node, m.reach, m.movesSan);
+      changed = true;
+    }
+    return changed;
+  }
+
+  /// Every move-order prefix [lines] actually plays.
+  static Set<String> _playedPrefixes(List<ExtractedLine> lines) {
+    final played = <String>{};
+    for (final line in lines) {
+      final buffer = StringBuffer();
+      for (var i = 0; i < line.movesSan.length; i++) {
+        if (i > 0) buffer.write(' ');
+        buffer.write(line.movesSan[i]);
+        played.add(buffer.toString());
+      }
+    }
+    return played;
+  }
+
+  /// First pass: the same traversal as [_extractDfs], recording for every
+  /// position the arrival with the highest reach probability.  A position
+  /// entered once is its own owner; one entered by several move orders gets
+  /// the most probable of them.
+  void _ownerDfs({
+    required BuildTreeNode node,
+    required List<String> movesSan,
+    required double reach,
+    required Set<String> visited,
+  }) {
+    final resolved = resolveTransposition(node, fenMap);
+    if (isTranspositionCycle(node, resolved, visited)) return;
+
+    final key = enterFenPath(resolved, visited);
+    final current = _owners[key];
+    if (current == null || reach > current.reach) {
+      _owners[key] = _Arrival(node, reach, movesSan);
+    }
+
+    final isOurMove = node.isWhiteToMove == config.playAsWhite;
+    if (isOurMove) {
+      final selected = resolved.children
+          .where((c) => c.isRepertoireMove)
+          .firstOrNull;
+      if (selected != null) {
+        _ownerDfs(
+          node: selected,
+          movesSan: [...movesSan, selected.moveSan],
+          reach: reach,
+          visited: visited,
+        );
+      }
+    } else {
+      for (final child in resolved.children) {
+        if (!_exportable(child)) continue;
+        _ownerDfs(
+          node: child,
+          movesSan: [...movesSan, child.moveSan],
+          reach: reach * child.moveProbability,
+          visited: visited,
+        );
+      }
+    }
+    leaveFenPath(key, visited);
+  }
+
+  /// Opponent replies below the reach floor are not exported unless the
+  /// coverage floor forced an answer for them.
+  bool _exportable(BuildTreeNode child) {
+    final covered =
+        config.coverMinProb > 0.0 &&
+        child.moveProbability >= config.coverMinProb;
+    return covered || child.cumulativeProbability >= config.minProbability;
+  }
+
+  /// Whether this arrival at [resolved]'s position is the one that carries
+  /// the continuation.  [node] is the arrival itself — a transposition leaf
+  /// or the canonical node — so identity, not position, decides.
+  bool _ownsContinuation(BuildTreeNode node, BuildTreeNode resolved) {
+    final owner = _owners[canonicalizeFen(resolved.fen)];
+    return owner == null || identical(owner.node, node);
+  }
+
+  /// How many transposition pointers the last
+  /// [withdrawDanglingTranspositions] had to withdraw.
+  int get danglingTranspositions => _danglingTranspositions;
+  int _danglingTranspositions = 0;
+
+  /// Withdraw every "Transposes to ..." pointer naming a move order that no
+  /// line in [lines] actually plays.
+  ///
+  /// The pointer exists so the shared continuation is taught once rather than
+  /// repeated under every move order that reaches it. Two things can leave it
+  /// aimed at nothing: [LinePruner] dropping the owning line (it pins owners
+  /// back, so what arrives here is the residue), and this extractor's two
+  /// traversals disagreeing about a transposition cycle — [_ownerDfs] and
+  /// [_extractDfs] carry independent `visited` sets, so a position whose owner
+  /// path is cut in pass 2 can have both arrivals stop and its continuation
+  /// emitted nowhere.
+  ///
+  /// Naming a line the reader cannot find is worse than a line that simply
+  /// ends, so the claim is withdrawn rather than exported. Call after every
+  /// filtering step, on the final set.
+  List<ExtractedLine> withdrawDanglingTranspositions(
+    List<ExtractedLine> lines,
+  ) {
+    _danglingTranspositions = 0;
+    if (!lines.any((l) => l.transposesInto != null)) return lines;
+
+    final played = _playedPrefixes(lines);
+
+    final out = <ExtractedLine>[];
+    for (final line in lines) {
+      final target = line.transposesInto;
+      // An empty target is the starting position, which is always present.
+      if (target == null ||
+          target.isEmpty ||
+          played.contains(target.join(' '))) {
+        out.add(line);
+        continue;
+      }
+      _danglingTranspositions++;
+      out.add(line.withoutTransposition(_transpositionNote(target)));
+    }
+    return out;
+  }
+
+  /// The note written on the last move of a line cut at a transposition.
+  String _transpositionNote(List<String> ownerMoves) {
+    if (ownerMoves.isEmpty) return 'Transposes to the starting position.';
+    final text = buildNumberedMovetext(
+      ownerMoves,
+      startMoveNumber: _rootMoveNumber,
+      whiteToMoveFirst: _rootWhiteToMove,
+    );
+    return 'Transposes to $text.';
   }
 
   void _extractDfs({
@@ -181,9 +448,13 @@ class LineExtractor {
     required List<LineChoice> choices,
     required List<ExtractedLine> lines,
     required int maxLines,
+    required double reach,
     required Set<String> visited,
   }) {
-    if (lines.length >= maxLines) return;
+    if (lines.length >= maxLines) {
+      _truncated = true;
+      return;
+    }
 
     final resolved = resolveTransposition(node, fenMap);
 
@@ -194,6 +465,24 @@ class LineExtractor {
     final isOurMove = node.isWhiteToMove == config.playAsWhite;
     var pushedAny = false;
 
+    // Another move order owns this position's continuation: stop here.  On
+    // our turn the reply is still written — the owner carries the subtree
+    // beyond it, but a line must not end with the opponent to move and us
+    // with nothing to play.
+    final merge =
+        !cycle && movesSan.isNotEmpty && !_ownsContinuation(node, resolved);
+    if (merge) {
+      // Remember which arrival deferred at which position, so [extract]'s
+      // repair pass can hand ownership back here if the owner turns out to be
+      // unreachable in this traversal.
+      _merges.add((
+        key: canonicalizeFen(resolved.fen),
+        node: node,
+        movesSan: movesSan,
+        reach: reach,
+      ));
+    }
+
     if (!cycle) {
       final key = enterFenPath(resolved, visited);
       if (isOurMove) {
@@ -202,47 +491,86 @@ class LineExtractor {
             .firstOrNull;
         if (selected != null) {
           pushedAny = true;
-          final gapCp = _leadOverAlternatives(resolved, selected);
+          final gapCp = _annotator.leadOverAlternatives(resolved, selected);
           // Keyed by the position faced rather than the path taken to it, so
           // a transposition is recognised as the same decision.
           final decisionKey =
               '${canonicalizeFen(resolved.fen)}|${selected.moveUci}';
-          _extractDfs(
-            node: selected,
-            movesSan: [...movesSan, selected.moveSan],
-            movesUci: [...movesUci, selected.moveUci],
-            moveAnnotations: [
-              ...moveAnnotations,
-              _annotateOurMove(selected, gapCp),
-            ],
-            choices: [
-              ...choices,
-              _choiceAt(resolved, movesSan.length, isOurMove: true),
-            ],
-            coverageUnits: [
-              ...coverageUnits,
-              LineCoverageUnit(
-                key: decisionKey,
-                value:
-                    selected.cumulativeProbability *
-                    (1.0 + gapCp.clamp(0, _sharpnessCapCp) / 100.0),
-              ),
-            ],
-            lines: lines,
-            maxLines: maxLines,
-            visited: visited,
-          );
+          final nextSan = [...movesSan, selected.moveSan];
+          final nextUci = [...movesUci, selected.moveUci];
+          final nextAnnotations = [
+            ...moveAnnotations,
+            _annotator.annotateOurMove(selected, gapCp),
+          ];
+          final nextChoices = [
+            ...choices,
+            _choiceAt(resolved, movesSan.length, isOurMove: true),
+          ];
+          final nextUnits = [
+            ...coverageUnits,
+            LineCoverageUnit(
+              key: decisionKey,
+              value:
+                  selected.cumulativeProbability *
+                  (1.0 + gapCp.clamp(0, _sharpnessCapCp) / 100.0),
+            ),
+          ];
+          if (merge) {
+            _emitLine(
+              leaf: selected,
+              // A merged line is a stub: it teaches the move order and hands
+              // over to the owner.  Its mass is the probability of *this*
+              // path, never the node's `cumulativeProbability` — the build
+              // sums every arrival into that, so when this arrival happens to
+              // be the canonical node the stub would be credited with the
+              // owner's mass too.
+              probability: reach,
+              movesSan: nextSan,
+              movesUci: nextUci,
+              moveAnnotations: nextAnnotations,
+              coverageUnits: nextUnits,
+              choices: nextChoices,
+              lines: lines,
+              // The owner's path to the *same* position this line ends in —
+              // its reply here is ours too.
+              transposesInto: [..._owners[key]!.movesSan, selected.moveSan],
+            );
+          } else {
+            _extractDfs(
+              node: selected,
+              movesSan: nextSan,
+              movesUci: nextUci,
+              moveAnnotations: nextAnnotations,
+              choices: nextChoices,
+              coverageUnits: nextUnits,
+              lines: lines,
+              maxLines: maxLines,
+              // Our own move does not change how likely the line is: we
+              // always play it.  Same rule as [_ownerDfs].
+              reach: reach,
+              visited: visited,
+            );
+          }
         }
+      } else if (merge) {
+        // We just moved into a position another line continues from.
+        pushedAny = true;
+        _emitLine(
+          leaf: node,
+          movesSan: movesSan,
+          movesUci: movesUci,
+          moveAnnotations: moveAnnotations,
+          coverageUnits: coverageUnits,
+          choices: choices,
+          lines: lines,
+          probability: reach,
+          transposesInto: _owners[key]!.movesSan,
+        );
       } else {
         for (final child in resolved.children) {
           // Coverage-floored children sit below the reach-probability floor
           // but carry a guaranteed answer — export their lines too.
-          final covered =
-              config.coverMinProb > 0.0 &&
-              child.moveProbability >= config.coverMinProb;
-          if (!covered && child.cumulativeProbability < config.minProbability) {
-            continue;
-          }
+          if (!_exportable(child)) continue;
           pushedAny = true;
           _extractDfs(
             node: child,
@@ -250,7 +578,7 @@ class LineExtractor {
             movesUci: [...movesUci, child.moveUci],
             moveAnnotations: [
               ...moveAnnotations,
-              _annotateOpponentMove(resolved, child),
+              _annotator.annotateOpponentMove(resolved, child),
             ],
             choices: [
               ...choices,
@@ -259,6 +587,7 @@ class LineExtractor {
             coverageUnits: coverageUnits,
             lines: lines,
             maxLines: maxLines,
+            reach: reach * child.moveProbability,
             visited: visited,
           );
         }
@@ -268,22 +597,58 @@ class LineExtractor {
 
     if (pushedAny || movesSan.isEmpty) return;
 
-    final (name: openingName, eco: openingEco) = _nearestOpening(node);
+    _emitLine(
+      leaf: node,
+      movesSan: movesSan,
+      movesUci: movesUci,
+      moveAnnotations: moveAnnotations,
+      coverageUnits: coverageUnits,
+      choices: choices,
+      lines: lines,
+    );
+  }
+
+  /// Record one finished line ending at [leaf].  A line cut at a
+  /// transposition names the owning move order on its last move.
+  void _emitLine({
+    required BuildTreeNode leaf,
+    required List<String> movesSan,
+    required List<String> movesUci,
+    required List<MoveAnnotation> moveAnnotations,
+    required List<LineCoverageUnit> coverageUnits,
+    required List<LineChoice> choices,
+    required List<ExtractedLine> lines,
+    List<String>? transposesInto,
+    double? probability,
+  }) {
+    final (name: openingName, eco: openingEco) = _nearestOpening(leaf);
+
+    var annotations = _annotator.markTheoryBoundary(moveAnnotations);
+    if (transposesInto != null && annotations.isNotEmpty) {
+      annotations = [
+        ...annotations.take(annotations.length - 1),
+        annotations.last.withTransposition(
+          transposesInto,
+          _transpositionNote(transposesInto),
+        ),
+      ];
+    }
 
     lines.add(
       ExtractedLine(
         movesSan: movesSan,
         movesUci: movesUci,
-        probability: node.cumulativeProbability,
-        leafPruneReason: node.pruneReason,
-        leafPruneEvalCp: node.pruneEvalCp,
+        probability: probability ?? leaf.cumulativeProbability,
+        leafPruneReason: leaf.pruneReason,
+        leafPruneEvalCp: leaf.pruneEvalCp,
         openingName: openingName,
         openingEco: openingEco,
-        leafEvalCp: node.engineEvalCp,
-        leafFen: node.fen,
-        moveAnnotations: _markTheoryBoundary(moveAnnotations),
+        leafEvalCp: leaf.engineEvalCp,
+        leafFen: leaf.fen,
+        moveAnnotations: annotations,
         coverageUnits: coverageUnits,
         choices: choices,
+        transposesInto: transposesInto,
       ),
     );
   }
@@ -316,169 +681,6 @@ class LineExtractor {
     );
   }
 
-  // ── Annotation ────────────────────────────────────────────────────────
-
-  MoveAnnotation _annotateOurMove(BuildTreeNode selected, int gapCp) {
-    final isOnlyMove =
-        _hasEvaluatedSibling(selected) && gapCp >= _onlyMoveThresholdCp;
-    final natural = _naturalAlternative(selected);
-    return MoveAnnotation(
-      evalCp: selected.hasEngineEval
-          ? selected.evalForUs(config.playAsWhite)
-          : null,
-      myEase: selected.myEase >= 0 ? selected.myEase : null,
-      isOnlyMove: isOnlyMove,
-      onlyMoveLeadCp: isOnlyMove ? gapCp : null,
-      humanFrequency: selected.maiaFrequency >= 0
-          ? selected.maiaFrequency
-          : null,
-      naturalAlternativeSan: natural?.moveSan,
-      naturalAlternativeLossCp: natural != null && natural.hasEngineEval
-          ? selected.evalForUs(config.playAsWhite) -
-                natural.evalForUs(config.playAsWhite)
-          : null,
-      practicalScore: _practicalScore(selected),
-      gameCount: selected.totalGames > 0 ? selected.totalGames : null,
-      lastPlayedYear: selected.lastPlayedYear > 0
-          ? selected.lastPlayedYear
-          : null,
-    );
-  }
-
-  bool _hasEvaluatedSibling(BuildTreeNode selected) =>
-      selected.parent?.children.any(
-        (c) => !identical(c, selected) && c.hasEngineEval,
-      ) ??
-      false;
-
-  /// The sibling humans clearly prefer to [selected], when there is one.
-  ///
-  /// Only siblings the tree holds can be named, and the expander keeps only
-  /// moves inside the eval-loss window — so the alternative is always a
-  /// *playable* natural move, which is the one worth warning about.  A
-  /// natural move that simply loses never became a child and is not named.
-  BuildTreeNode? _naturalAlternative(BuildTreeNode selected) {
-    final parent = selected.parent;
-    if (parent == null || selected.maiaFrequency < 0) return null;
-    if (selected.maiaFrequency >= MoveAnnotation.kHardToFindFrequency) {
-      return null;
-    }
-    BuildTreeNode? best;
-    for (final sibling in parent.children) {
-      if (identical(sibling, selected) || sibling.maiaFrequency < 0) continue;
-      if (best == null || sibling.maiaFrequency > best.maiaFrequency) {
-        best = sibling;
-      }
-    }
-    if (best == null ||
-        best.maiaFrequency - selected.maiaFrequency <
-            MoveAnnotation.kNaturalAlternativeMargin) {
-      return null;
-    }
-    return best;
-  }
-
-  /// Flag the last move with master games when the line then leaves them, so
-  /// the reader sees where practice ends and the engine continuation starts.
-  /// A line still in book at its leaf, or never in book, is left alone.
-  List<MoveAnnotation> _markTheoryBoundary(List<MoveAnnotation> annotations) {
-    var last = -1;
-    for (var i = 0; i < annotations.length; i++) {
-      if ((annotations[i].gameCount ?? 0) > 0) last = i;
-    }
-    if (last < 0 || last == annotations.length - 1) return annotations;
-    return [
-      for (var i = 0; i < annotations.length; i++)
-        i == last ? annotations[i].withLastBookMove() : annotations[i],
-    ];
-  }
-
-  MoveAnnotation _annotateOpponentMove(
-    BuildTreeNode position,
-    BuildTreeNode child,
-  ) {
-    final (likelihood, source) = _likelihoodOf(child);
-    final mistake = _mistakeOf(position, child);
-    return MoveAnnotation(
-      likelihood: likelihood,
-      likelihoodSource: source,
-      gameCount: child.totalGames > 0 ? child.totalGames : null,
-      practicalScore: _practicalScore(child),
-      evalCp: child.hasEngineEval ? child.evalForUs(config.playAsWhite) : null,
-      mistakeCp: mistake?.lossCp,
-      betterMoveSan: mistake?.better?.moveSan,
-      // The ease of the position the opponent was choosing from is what says
-      // whether this move was easy to find — not the ease of where it lands.
-      opponentEase: position.ease,
-      lastPlayedYear: child.lastPlayedYear > 0 ? child.lastPlayedYear : null,
-    );
-  }
-
-  /// How much [child] gives away at [position], when that reaches
-  /// [MoveAnnotation.kMistakeCp].  The bar is the position's own eval — the
-  /// engine's best play for them — because a bad reply is often the only
-  /// reply the tree stored, so the best *sibling* is frequently missing.  The
-  /// better move is named only when a stored sibling actually holds the
-  /// position (is within the mistake margin of the bar).
-  ({int lossCp, BuildTreeNode? better})? _mistakeOf(
-    BuildTreeNode position,
-    BuildTreeNode child,
-  ) {
-    if (!child.hasEngineEval || !position.hasEngineEval) return null;
-    final bar = position.evalForUs(config.playAsWhite);
-    final loss = child.evalForUs(config.playAsWhite) - bar;
-    if (loss < MoveAnnotation.kMistakeCp) return null;
-    BuildTreeNode? better;
-    for (final sibling in position.children) {
-      if (identical(sibling, child) || !sibling.hasEngineEval) continue;
-      if (better == null ||
-          sibling.evalForUs(config.playAsWhite) <
-              better.evalForUs(config.playAsWhite)) {
-        better = sibling;
-      }
-    }
-    if (better != null &&
-        better.evalForUs(config.playAsWhite) - bar >=
-            MoveAnnotation.kMistakeCp) {
-      better = null;
-    }
-    return (lossCp: loss, better: better);
-  }
-
-  /// Move likelihood and where it came from.  Real game frequencies win over
-  /// Maia's prediction; an engine-injected reply has no human number at all.
-  (double?, MoveLikelihoodSource?) _likelihoodOf(BuildTreeNode child) {
-    if (child.engineInjected) {
-      return (child.moveProbability, MoveLikelihoodSource.engine);
-    }
-    if (child.totalGames > 0) {
-      return (child.moveProbability, MoveLikelihoodSource.gameDatabase);
-    }
-    if (child.maiaFrequency >= 0) {
-      return (child.maiaFrequency, MoveLikelihoodSource.maia);
-    }
-    return (child.moveProbability, MoveLikelihoodSource.maia);
-  }
-
-  double? _practicalScore(BuildTreeNode node) =>
-      node.totalGames > 0 ? node.winRateFor(config.playAsWhite) : null;
-
-  /// How far [selected]'s eval leads the best evaluated alternative, in
-  /// centipawns.  No evaluated sibling means every alternative fell outside
-  /// the build's eval-loss window, so the move leads by at least that much.
-  int _leadOverAlternatives(BuildTreeNode position, BuildTreeNode selected) {
-    if (!selected.hasEngineEval) return 0;
-    final ourEval = selected.evalForUs(config.playAsWhite);
-    int? bestAlt;
-    for (final sibling in position.children) {
-      if (identical(sibling, selected) || !sibling.hasEngineEval) continue;
-      final value = sibling.evalForUs(config.playAsWhite);
-      if (bestAlt == null || value > bestAlt) bestAlt = value;
-    }
-    final lead = bestAlt == null ? config.maxEvalLossCp : ourEval - bestAlt;
-    return lead < 0 ? 0 : lead;
-  }
-
   /// Nearest named opening at or above [node], walking toward the root.
   ({String? name, String? eco}) _nearestOpening(BuildTreeNode node) {
     for (BuildTreeNode? cur = node; cur != null; cur = cur.parent) {
@@ -488,4 +690,15 @@ class LineExtractor {
     }
     return (name: null, eco: null);
   }
+}
+
+/// One way of reaching a position during extraction: the node entered (a
+/// canonical node or a transposition leaf), the reach probability along that
+/// path, and the moves that led there.
+class _Arrival {
+  final BuildTreeNode node;
+  final double reach;
+  final List<String> movesSan;
+
+  const _Arrival(this.node, this.reach, this.movesSan);
 }

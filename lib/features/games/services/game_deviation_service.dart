@@ -4,9 +4,12 @@
 /// This is the per-game complement of the aggregate draft flow
 /// (`RepertoireDiff` merges games into an `OpeningTree` and loses game
 /// identity). Matching is SAN-prefix with check/mate-suffix tolerance, the
-/// same definition of "in repertoire" the draft/merge pipeline uses;
-/// transposition tolerance is a deliberate non-goal for now, to stay
-/// consistent with it.
+/// same definition of "in repertoire" the draft/merge pipeline uses.
+/// General transposition tolerance is a deliberate non-goal, to stay
+/// consistent with it — with one exception: a generated line that ends with
+/// `[%transposes …]` is grafted onto the line it names, so a game that
+/// follows the cut move order keeps matching past the merge point exactly
+/// as the book intends.
 library;
 
 import 'dart:io';
@@ -16,6 +19,7 @@ import 'package:dartchess/dartchess.dart' show Chess;
 import '../../../models/repertoire_line.dart';
 import '../../../services/repertoire_service.dart';
 import '../../../services/storage/storage_factory.dart';
+import '../../../utils/pgn_comment_utils.dart';
 import 'game_moves.dart';
 import 'my_repertoire_settings.dart';
 
@@ -210,6 +214,7 @@ class GameDeviationService {
 
   static _SanTrieNode _buildTrie(List<RepertoireLine> lines) {
     final root = _SanTrieNode();
+    final grafts = <(_SanTrieNode end, List<String> owner)>[];
     for (final line in lines) {
       // Someone else's game illustrating the repertoire is not the
       // repertoire: its moves would extend the book far past where your own
@@ -222,6 +227,28 @@ class GameDeviationService {
         final key = normalizeSan(san);
         node.display.putIfAbsent(key, () => san);
         node = node.children.putIfAbsent(key, _SanTrieNode.new);
+      }
+      if (line.moves.isEmpty) continue;
+      final owner = parseTransposesToken(
+        line.comments['${line.moves.length - 1}'],
+      );
+      if (owner != null) grafts.add((node, owner));
+    }
+    // Graft after every line is in, so the owner's continuation is complete
+    // whichever order the chapter lists them in.  The end node shares the
+    // owner node's children rather than copying them: a later graft onto
+    // the owner is then seen through this one too.
+    for (final (end, owner) in grafts) {
+      _SanTrieNode? target = root;
+      for (final san in owner) {
+        target = target!.children[normalizeSan(san)];
+        if (target == null) break;
+      }
+      if (target == null || identical(target, end)) continue;
+      for (final entry in target.children.entries) {
+        end.children.putIfAbsent(entry.key, () => entry.value);
+        final shown = target.display[entry.key];
+        if (shown != null) end.display.putIfAbsent(entry.key, () => shown);
       }
     }
     return root;

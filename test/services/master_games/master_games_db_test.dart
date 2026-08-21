@@ -183,7 +183,7 @@ void main() {
     addTearDown(db.close);
     expect(db.stats().games, 0);
     expect(db.importedIssues(), isEmpty);
-    expect(db.raw.select('PRAGMA user_version').first.columnAt(0), 2);
+    expect(db.raw.select('PRAGMA user_version').first.columnAt(0), 3);
     // Importing into the rebuilt file works and stores blobs.
     importPgnIntoMasterGames(
       MasterGamesImportRequest(dbPath: dbPath, pgnText: _pgn, twicIssue: 1),
@@ -260,7 +260,7 @@ void main() {
       ply: 5,
       isWhiteToMove: false,
       parent: nc6,
-    )..isRepertoireMove = true;
+    ).isRepertoireMove = true;
 
     final candidates = masterGameCandidates(
       db,

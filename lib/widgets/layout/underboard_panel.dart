@@ -188,9 +188,9 @@ class UnderboardPanelState extends State<UnderboardPanel>
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: const Icon(
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4),
+              child: Icon(
                 Icons.drag_handle,
                 size: 16,
                 color: AppColors.onSurfaceMuted,

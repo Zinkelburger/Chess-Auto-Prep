@@ -28,18 +28,18 @@ mixin _EnginePaneTable on _UnifiedEnginePaneStateBase {
                 _buildTableHeader(),
                 const Divider(height: 1),
                 if (moves.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const SizedBox(
+                        SizedBox(
                           width: 14,
                           height: 14,
                           child: CircularProgressIndicator(strokeWidth: 1.5),
                         ),
-                        const SizedBox(width: 8),
-                        const Text(
+                        SizedBox(width: 8),
+                        Text(
                           'Analyzing...',
                           style: TextStyle(
                             color: AppColors.onSurfaceMuted,

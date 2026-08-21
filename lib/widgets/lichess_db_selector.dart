@@ -162,7 +162,7 @@ class LichessDbSelector extends StatelessWidget {
             ),
           ),
         if (compact)
-          Tooltip(
+          const Tooltip(
             message: 'Which time controls to include.',
             child: Text(
               'Speeds:',
@@ -215,7 +215,7 @@ class LichessDbSelector extends StatelessWidget {
             ),
           ),
         if (compact)
-          Tooltip(
+          const Tooltip(
             message:
                 'Rating buckets to include.\n'
                 'Each value is the lower bound of a Lichess rating bracket.',

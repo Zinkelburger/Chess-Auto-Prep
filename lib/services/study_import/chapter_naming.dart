@@ -7,6 +7,8 @@
 /// import path derives a name and stamps it in here.
 library;
 
+import '../../utils/pgn_utils.dart';
+
 /// Replace (or insert) [gameText]'s `[Event]` tag with [event].
 String withEventHeader(String gameText, String event) {
   final tag = '[Event "${escapeHeaderValue(event)}"]';
@@ -19,10 +21,6 @@ String withEventHeader(String gameText, String event) {
   }
   return '$tag\n$gameText';
 }
-
-/// Escape a PGN header value the way [StudyChapter.toPgn] does.
-String escapeHeaderValue(String value) =>
-    value.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
 
 /// A readable chapter name for one downloaded game, e.g.
 /// `Fischer, R - Spassky, B, World Championship 1972 (1-0)`.

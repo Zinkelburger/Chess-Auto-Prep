@@ -1,7 +1,7 @@
 /// Shared building blocks for settings surfaces.
 ///
 /// Used by [SettingsScreen] (global) and the per-surface settings dialogs
-/// (Stockfish, on-the-fly expectimax, analysis panels) to avoid duplicated
+/// (Stockfish, analysis panels) to avoid duplicated
 /// private helpers.
 library;
 
@@ -115,7 +115,7 @@ class SettingsGroup extends StatelessWidget {
                   ),
                 ),
               ),
-              if (trailing != null) trailing!,
+              ?trailing,
             ],
           ),
         ),
@@ -711,8 +711,8 @@ class SettingsTextFieldRow extends StatelessWidget {
 // Dialog frame for the per-surface settings dialogs
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Chrome shared by the per-surface settings dialogs (Stockfish, on-the-fly
-/// expectimax, analysis panels): a fixed title bar with icon and close button
+/// Chrome shared by the per-surface settings dialogs (Stockfish, analysis
+/// panels): a fixed title bar with icon and close button
 /// above a scrolling body. Short content shrink-wraps instead of leaving a
 /// half-empty fixed-height dialog.
 Future<void> showSettingsDialog(

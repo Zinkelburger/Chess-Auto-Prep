@@ -52,7 +52,7 @@ void main() {
 
   test('an empty plan leaves the form skeleton untouched', () {
     const base = SkeletonPlan();
-    final plan = const RepertoirePlan(
+    const plan = RepertoirePlan(
       isWhite: true,
       elo: 1800,
       minShare: 0.05,

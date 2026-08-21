@@ -6,6 +6,7 @@
 library;
 
 import '../models/repertoire_line.dart';
+import 'movetext_builder.dart';
 
 /// Extract the value between the first pair of double-quotes in a PGN header
 /// line, e.g. `[Event "Sicilian"]` → `"Sicilian"`.
@@ -17,6 +18,15 @@ String? extractHeaderValue(String line) {
   }
   return null;
 }
+
+/// Escape a value for use inside a PGN header, e.g. `[Event "..."]`.
+///
+/// The PGN spec makes backslash the escape character inside a tag value, so
+/// backslashes must be doubled *before* quotes are escaped — do it the other
+/// way round and the backslash pass mangles the quote escapes it just wrote.
+/// The inverse of [extractHeaderValue].
+String escapeHeaderValue(String value) =>
+    value.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
 
 /// Extract the display title for a PGN game string.
 ///
@@ -64,14 +74,5 @@ int getPositionMatchDepth(RepertoireLine line, List<String> currentMoves) {
 }
 
 /// Format a move list with move numbers optimised for substring search.
-String formatMovesForSearch(List<String> moves) {
-  final buffer = StringBuffer();
-  for (int i = 0; i < moves.length; i++) {
-    if (i % 2 == 0) {
-      buffer.write('${(i ~/ 2) + 1}.');
-    }
-    buffer.write(moves[i]);
-    buffer.write(' ');
-  }
-  return buffer.toString().trim();
-}
+String formatMovesForSearch(List<String> moves) =>
+    buildNumberedMovetext(moves, compact: true);

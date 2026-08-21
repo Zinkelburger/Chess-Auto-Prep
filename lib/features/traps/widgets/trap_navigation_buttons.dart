@@ -180,11 +180,11 @@ class TrapNavigationButtons extends StatelessWidget {
           return Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
                   '0 traps in line',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     color: AppColors.onSurfaceMuted,
                   ),

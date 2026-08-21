@@ -79,7 +79,7 @@ void main() {
     });
 
     test('parseRepertoirePgn handles multi-game file correctly', () {
-      final pgn = '''
+      const pgn = '''
 // Color: White
 
 [Event "Sicilian"]
@@ -110,7 +110,7 @@ void main() {
     });
 
     test('parseRepertoirePgn extracts side from header', () {
-      final whitePgn = '''
+      const whitePgn = '''
 // Color: White
 
 [Event "Line"]
@@ -122,7 +122,7 @@ void main() {
 1. d4 d5
 ''';
 
-      final blackPgn = '''
+      const blackPgn = '''
 // Color: Black
 
 [Event "Line"]
@@ -143,7 +143,7 @@ void main() {
         'variation names from Black headers', () {
       // Chessable puts the chapter in [White], the variation title in
       // [Black], and Result "*" on every game.
-      final pgn = '''
+      const pgn = '''
 [Event "?"]
 [White "1) Benoni With 6.e4"]
 [Black "6.e4 & 7.f4 #1"]
@@ -184,7 +184,7 @@ void main() {
       // The generator's trailing "Model games" chapter: a real game, so it
       // has to carry Result "*" and a chapter title like any other game, and
       // says what it really is in the ModelGame* tags.
-      final pgn = '''
+      const pgn = '''
 [Event "My repertoire"]
 [White "1. Open Sicilian"]
 [Black "2... d6"]
@@ -215,7 +215,7 @@ void main() {
 
     test('game collections and own exports get no chapters', () {
       // Real games: player names in White but decisive results.
-      final gamesPgn = '''
+      const gamesPgn = '''
 [Event "London"]
 [White "Kennedy, Hugh"]
 [Black "Wyvill, Marmaduke"]
@@ -231,7 +231,7 @@ void main() {
 1. e4 e5 1-0
 ''';
       // Own exports: White is the placeholder "Me".
-      final ownPgn = '''
+      const ownPgn = '''
 [Event "Repertoire Line"]
 [White "Me"]
 [Black "Opponent"]

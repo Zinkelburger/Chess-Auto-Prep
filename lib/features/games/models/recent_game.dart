@@ -104,10 +104,7 @@ class RecentGame {
 
   /// "B22 · Sicilian Defense, Alapin", dropping whichever half is missing.
   String? get openingDisplay {
-    final parts = [
-      if (ecoCode != null) ecoCode!,
-      if (openingName != null) openingName!,
-    ];
+    final parts = [?ecoCode, ?openingName];
     return parts.isEmpty ? null : parts.join(' · ');
   }
 

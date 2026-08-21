@@ -113,7 +113,7 @@ void main() {
       'select with expectimax mode marks highest-V child at our-move nodes',
       () {
         final tree = _twoBranchTree();
-        final config = const TreeBuildConfig(
+        const config = TreeBuildConfig(
           startFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
           playAsWhite: true,
           selectionMode: SelectionMode.expectimax,
@@ -133,7 +133,7 @@ void main() {
 
     test('select with engineOnly mode marks best-eval child', () {
       final tree = _twoBranchTree();
-      final config = const TreeBuildConfig(
+      const config = TreeBuildConfig(
         startFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
         playAsWhite: true,
         selectionMode: SelectionMode.engineOnly,
@@ -391,7 +391,7 @@ void main() {
 
     test('select is idempotent — running twice produces same markings', () {
       final tree = _twoBranchTree();
-      final config = const TreeBuildConfig(
+      const config = TreeBuildConfig(
         startFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
         playAsWhite: true,
         selectionMode: SelectionMode.expectimax,

@@ -83,7 +83,7 @@ class TreeEvalResolver {
       cdbDirect: _cdbDirect,
       chessDbApi: _chessDbApi,
       allowStockfishFallback: false,
-      stockfishEval: (_, __) async => (stmCp: 0, depth: 0),
+      stockfishEval: (_, _) async => (stmCp: 0, depth: 0),
       cacheWrite: (f, whiteCp, depth) async {
         cacheEvalWhite(f, whiteCp, depth);
       },

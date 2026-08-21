@@ -262,18 +262,15 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     _lastAnalyzedFen = fen;
 
     setState(() => _isSearching = true);
-    AnalysisService.instance.beginEnginePaneAnalysis(fen);
 
     final whiteToMove = isWhiteToMove(fen);
 
     try {
       final worker = await _ensureWorker();
       if (!mounted || _generation != myGen) {
-        AnalysisService.instance.endEnginePaneAnalysis(fen);
         return;
       }
       if (worker == null) {
-        AnalysisService.instance.endEnginePaneAnalysis(fen);
         setState(() => _isSearching = false);
         return;
       }
@@ -287,17 +284,14 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
       );
 
       if (!mounted || _generation != myGen) {
-        AnalysisService.instance.endEnginePaneAnalysis(fen);
         return;
       }
-      AnalysisService.instance.endEnginePaneAnalysis(fen);
       setState(() {
         _discovery = result;
         _isSearching = false;
       });
       _persistBestEvalToCache(fen, result);
     } catch (e) {
-      AnalysisService.instance.endEnginePaneAnalysis(fen);
       if (!mounted || _generation != myGen) return;
       if (kDebugMode) debugPrint('[InlineEngine] Discovery failed: $e');
       setState(() => _isSearching = false);
@@ -399,18 +393,18 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     final lines = _discovery.lines;
 
     if (lines.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const SizedBox(
+            SizedBox(
               width: 14,
               height: 14,
               child: CircularProgressIndicator(strokeWidth: 1.5),
             ),
-            const SizedBox(width: 8),
-            const Text(
+            SizedBox(width: 8),
+            Text(
               'Analyzing...',
               style: TextStyle(color: AppColors.onSurfaceMuted, fontSize: 13),
             ),
@@ -530,13 +524,8 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   ) {
     if (sanMoves.length <= 1) return const SizedBox.shrink();
 
-    final fenParts = widget.fen.split(' ');
-    final whiteToMove = isWhiteToMove(widget.fen);
-    final fullMoveNum = fenParts.length >= 6
-        ? (int.tryParse(fenParts[5]) ?? 1)
-        : 1;
     // Ply of the first move in the PV (index 0)
-    final firstMovePly = (fullMoveNum - 1) * 2 + (whiteToMove ? 0 : 1);
+    final firstMovePly = plyFromFen(widget.fen);
 
     return ClickableMoveLineWidget(
       sanMoves: sanMoves,

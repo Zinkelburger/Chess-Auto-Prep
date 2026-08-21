@@ -69,20 +69,12 @@ mixin _RepertoireQueries on ChangeNotifier {
   }
 
   String _fenForSans(List<String> sans) {
-    var pos = _positionFromFen(_repertoire.tree.startingFen) ?? Chess.initial;
+    var pos = tryParseFen(_repertoire.tree.startingFen) ?? Chess.initial;
     for (final san in sans) {
       final move = pos.parseSan(san);
       if (move == null) break;
       pos = pos.play(move);
     }
     return pos.fen;
-  }
-
-  Position? _positionFromFen(String fen) {
-    try {
-      return Chess.fromSetup(Setup.parseFen(fen));
-    } catch (_) {
-      return null;
-    }
   }
 }

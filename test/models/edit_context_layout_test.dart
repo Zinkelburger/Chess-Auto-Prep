@@ -12,7 +12,7 @@ void main() {
   });
 
   test('syncVisible adds newly enabled view to layout', () {
-    final layout = EditContextLayout(
+    const layout = EditContextLayout(
       columns: [
         EditContextColumnLayout(views: [EditContextView.browse]),
       ],

@@ -74,7 +74,7 @@ Future<void> main() async {
   print('╚═══════════════════════════════════════════════════════╝\n');
 
   print('Spawning isolate and making HTTP requests from inside it...');
-  print('${'─' * 70}');
+  print('─' * 70);
 
   final receivePort = ReceivePort();
   final wallSw = Stopwatch()..start();
@@ -84,18 +84,21 @@ Future<void> main() async {
   await for (final msg in receivePort) {
     if (msg is _IsolateResult) {
       final fenShort = _testFens[msg.index].split(' ')[0];
-      final short =
-          fenShort.length > 30 ? '${fenShort.substring(0, 30)}…' : fenShort;
-      print('  [${msg.index + 1}] http=${msg.httpMs}ms  parse=${msg.parseMs}ms  '
-          'total=${msg.httpMs + msg.parseMs}ms  '
-          '${msg.moves} moves  ${msg.games} games  $short');
+      final short = fenShort.length > 30
+          ? '${fenShort.substring(0, 30)}…'
+          : fenShort;
+      print(
+        '  [${msg.index + 1}] http=${msg.httpMs}ms  parse=${msg.parseMs}ms  '
+        'total=${msg.httpMs + msg.parseMs}ms  '
+        '${msg.moves} moves  ${msg.games} games  $short',
+      );
     } else if (msg == 'done') {
       break;
     }
   }
 
   final wallMs = wallSw.elapsedMilliseconds;
-  print('${'─' * 70}');
+  print('─' * 70);
   print('  Wall-clock: ${wallMs}ms\n');
 
   receivePort.close();

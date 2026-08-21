@@ -60,12 +60,23 @@ one and neither was obviously canonical. Pick the home, move the file, fix the
 imports.
 
 **Layering, enforced by review:** `core/`, `models/`, `services/`, and `utils/`
-must not import from `widgets/` or `screens/`. This currently holds with one
-exception (`utils/board_shape_comments.dart`). Check with:
+must not import from `widgets/` or `screens/`. This now holds with **no
+exceptions** — keep it that way. Check with:
 
 ```
 grep -rlE "import '.*(widgets/|screens/)" lib/core lib/models lib/services lib/utils
 ```
+
+The same rule applies to a feature's non-widget layers. That grep does not
+cover them, so widen it when touching `lib/features/`:
+
+```
+grep -rlE "import '.*(widgets/|screens/)" lib/features/*/controllers \
+  lib/features/*/services lib/features/*/models
+```
+
+One known violation remains: `features/repertoire/controllers/build_launcher.dart`
+imports two form widgets.
 
 ## Decomposition
 
@@ -87,5 +98,5 @@ explicitly when the caller deliberately snapshotted it across an `await` —
 - Verify with `flutter analyze` + tests + code reading. Do **not** launch the
   app or run integration tests locally to verify — headless/Xvfb runs can leak
   onto the developer's real screen (Wayland). Integration tests run in CI only.
-- Local Flutter lives at `~/flutter/bin/flutter` on the primary dev machine;
+- Local Flutter lives at `~/sdk/flutter/bin/flutter` on the primary dev machine;
   plain `flutter` may not be on PATH.

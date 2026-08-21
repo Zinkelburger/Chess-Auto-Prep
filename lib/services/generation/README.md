@@ -20,13 +20,27 @@ The Dart implementation ports a proven C `tree_builder`; comments saying
 | 3.5 | Ask the engine how each losing reply is punished, and what the moves the book leaves out run into | `course/refutation_prober.dart` |
 | 3.5 | Compose the surviving lines into a course: chapters, ECO names, model games | `course/` |
 
-`line_pruner.dart` runs after extraction when `targetLineCount > 0`
-(default 100): greedy weighted set cover over each line's
-`LineCoverageUnit`s — keyed by our-move projection prefix (opponent moves
-excluded), valued by reach probability × only-move sharpness — so lines
-that answer different opponent deviations with the same our-moves collapse
-to one representative. The build tree itself is never pruned by this; it is
-an export-time view.
+`line_extractor.dart` merges transpositions as it walks: a position reached
+by several move orders has its continuation emitted once, under the most
+probable arrival (an ownership pre-pass over the same traversal decides);
+every other arrival stops there — after our reply when it is our turn — with
+`ExtractedLine.transposesInto` set (the owner's moves to the *same* position
+the cut line ends in) and, on its last move, a "Transposes to …" note plus a
+`[%transposes Nf3 d5 d4 Nf6 c4]` token. The token is what lets the
+game-deviation walker (`features/games/services/game_deviation_service.dart`)
+graft the cut line onto the owner's continuation, so a game following the
+cut move order is still "in book" past the merge. On a 31.8k-node Benko tree this took raw extraction from 868 lines to
+581 with the set of taught decisions unchanged. Cut lines get no engine tail
+(`engine_tail.dart`, `course_composer.dart`). Extraction is capped at
+`LineExtractor.kDefaultMaxLines` (50k) as a safety valve; hitting it sets
+`wasTruncated`, which the run summary reports — never a silent shortfall.
+
+`line_pruner.dart` then runs greedy weighted set cover over each line's
+`LineCoverageUnit`s — keyed by the decision (canonical FEN + our UCI),
+valued by reach probability × only-move sharpness — so lines that answer
+different opponent deviations with the same our-moves collapse to one
+representative. The build tree itself is never pruned by either step; both
+are export-time views.
 
 Phase 1 is the only phase that touches engines or the network. Phases 2–3.5
 are pure functions over the tree — keep them that way; it is what makes
@@ -211,17 +225,35 @@ subtree) plus transposition leaves. Rules:
 
 - A node whose position is already canonical elsewhere becomes a childless
   transposition leaf (`_resolveTranspositionOrRegister`).
-- If the new path reaches the position with **higher** cumP,
-  `propagateHigherCumP` (`tree_prune.dart`) rescales the canonical subtree
-  by the ratio — or, when the old cumP was 0, rebuilds cumPs from edge
-  probabilities. Re-enqueued nodes are re-sifted in place by the indexed
-  heap (`frontier_queue.dart`), never duplicated.
+- A merged position's `cumulativeProbability` is the **sum** of its
+  arrivals — disjoint move orders into one position. Each new arrival's
+  reach is added to the canonical and flows down its subtree as
+  `delta × edge products` (`addArrivalCumP`, `tree_prune.dart`); adding a
+  delta rather than rescaling leaves a descendant's own arrivals alone.
+  Where the walk meets a leaf already registered as a transposition, the
+  increment is forwarded into *its* canonical, so chains stay consistent; a
+  repetition loop stops at the position already being updated. Unexplored
+  frontier leaves are not forwarded — they add their full reach when
+  processed. Re-enqueued nodes are re-sifted in place by the indexed heap
+  (`frontier_queue.dart`), never duplicated. (The C original kept the
+  *maximum* arrival; this is a deliberate departure.)
 - Expectimax runs **two passes** so transposition leaves visited before
   their canonical borrow the corrected value. Chains of borrows longer
   than one hop may not fully converge — accepted truncation, C parity.
 - Selection, extraction, and verification all resolve transpositions with
   a **cycle guard** (`visited` set of canonical FENs) — a redirect to a
   shallower node would otherwise recurse forever.
+- The table is per run and only nodes that pass through the queue register
+  in it. A **resume** therefore seeds it from the saved tree
+  (`FenMap.registerExpanded`: expanded nodes only, first in tree order wins)
+  before enqueuing the frontier, or a frontier leaf whose position was
+  expanded last session would be expanded again. A resumed node that already
+  holds children (an interrupted partial expansion) never becomes a
+  transposition leaf — `resolveTransposition` redirects childless nodes
+  only, so its partial subtree would shadow the canonical one; it re-expands.
+- A transposition leaf itself keeps only its own path's reach; the sum lives
+  on the canonical. Extraction's cut lines report the leaf's reach, and the
+  continuation's coverage units the canonical's.
 
 ## Coverage guarantee (no silent holes)
 
@@ -314,7 +346,10 @@ All in `test/services/generation/` unless noted:
 - Fast-zone scaling + config round-trips: `search_algorithm_test.dart`
 - Prune + cumP propagation: `tree_prune_test.dart`
 - Full Phase 2→3 pipeline on synthetic trees:
-  `select_then_extract_test.dart`, `line_extractor_test.dart`
+  `select_then_extract_test.dart`, `line_extractor_test.dart`; extraction-time
+  transposition merging: `line_extractor_transposition_test.dart`
+- Measurement on a real built tree (not run by `flutter test`):
+  `test/tools/analyze_lines.dart`, `test/tools/analyze_transpositions.dart`
 - Session controller progress/dispose:
   `test/core/generation_session_controller_test.dart`
 - Chapter cutting, naming, model games, and the composed PGN (including the

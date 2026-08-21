@@ -34,10 +34,8 @@ import '../../models/tactics_position.dart';
 import '../../models/tactics_session_settings.dart';
 import '../pgn_parsing_service.dart'
     show splitPgnIntoGames, extractHeaders, stripBom;
+import '../../utils/pgn_utils.dart';
 import 'tactics_engine.dart';
-
-String _escapeHeader(String s) =>
-    s.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
 
 String _sanitizeComment(String s) =>
     s.replaceAll('{', '(').replaceAll('}', ')');
@@ -105,13 +103,13 @@ String encodePuzzlePgn(
   final headers = StringBuffer();
   void header(String tag, String value) {
     if (value.isNotEmpty) {
-      headers.writeln('[$tag "${_escapeHeader(value)}"]');
+      headers.writeln('[$tag "${escapeHeaderValue(value)}"]');
     }
   }
 
   if (event != null) header('Event', event);
-  headers.writeln('[White "${_escapeHeader(puzzle.gameWhite)}"]');
-  headers.writeln('[Black "${_escapeHeader(puzzle.gameBlack)}"]');
+  headers.writeln('[White "${escapeHeaderValue(puzzle.gameWhite)}"]');
+  headers.writeln('[Black "${escapeHeaderValue(puzzle.gameBlack)}"]');
   header('Date', puzzle.gameDate);
   header('Site', puzzle.gameUrl);
   headers.writeln('[Result "*"]');

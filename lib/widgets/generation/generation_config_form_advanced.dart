@@ -195,11 +195,9 @@ mixin _GenerationConfigAdvanced
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AppColors.surfaceContainer,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(9),
-              ),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(9)),
             ),
             child: Row(
               children: [
@@ -306,9 +304,17 @@ mixin _GenerationConfigAdvanced
     ];
   }
 
-  List<Widget> _moveChoiceSection(VoidCallback refresh) {
-    final isTrappy = _selectionMode == SelectionMode.trappy;
-    final hasSetup = _setupMovesCtrl.text.trim().isNotEmpty;
+  /// How the build chooses our move: the selection algorithm, the forced
+  /// setup moves, and the window a candidate has to fall inside.
+  List<Widget> _moveChoiceSection(VoidCallback refresh) => [
+    ..._moveChoiceModeField(refresh),
+    ..._moveChoiceSetupField(refresh),
+    ..._moveChoiceWindowFields(refresh),
+    ..._moveChoiceRelativeEvalField(refresh),
+  ];
+
+  /// Which algorithm picks our move at each of our turns.
+  List<Widget> _moveChoiceModeField(VoidCallback refresh) {
     return [
       DropdownButtonFormField<SelectionMode>(
         initialValue: _selectionMode,
@@ -334,6 +340,13 @@ mixin _GenerationConfigAdvanced
               },
       ),
       _caption(_selectionModeDescription()),
+    ];
+  }
+
+  /// Forced opening moves — the setup the build must play out before its
+  /// own choices begin.
+  List<Widget> _moveChoiceSetupField(VoidCallback refresh) {
+    return [
       const SizedBox(height: 12),
       TextField(
         controller: _setupMovesCtrl,
@@ -352,6 +365,16 @@ mixin _GenerationConfigAdvanced
         ),
         style: const TextStyle(fontSize: 13),
       ),
+    ];
+  }
+
+  /// The eval window and the practical-play knobs that decide which
+  /// candidate moves survive.
+  List<Widget> _moveChoiceWindowFields(VoidCallback refresh) {
+    // Trappy selection and a forced setup each disable knobs below.
+    final isTrappy = _selectionMode == SelectionMode.trappy;
+    final hasSetup = _setupMovesCtrl.text.trim().isNotEmpty;
+    return [
       const SizedBox(height: 12),
       Wrap(
         spacing: 8,
@@ -441,6 +464,13 @@ mixin _GenerationConfigAdvanced
         ],
       ),
       const SizedBox(height: 4),
+    ];
+  }
+
+  /// Whether the eval limits are read against the starting position rather
+  /// than against absolute zero.
+  List<Widget> _moveChoiceRelativeEvalField(VoidCallback refresh) {
+    return [
       _labeledCheckbox(
         'Eval limits relative to starting position',
         _relativeEval,
@@ -566,7 +596,22 @@ mixin _GenerationConfigAdvanced
     ];
   }
 
-  List<Widget> _exportSection(VoidCallback refresh) {
+  /// Everything that shapes the exported PGN.
+  ///
+  /// Five unrelated domains used to share one 257-line list literal.
+  /// They are still presented as one section — the reader thinks of them
+  /// together as "what comes out" — but each is now edited on its own.
+  List<Widget> _exportSection(VoidCallback refresh) => [
+    ..._exportCoverageFields(refresh),
+    ..._exportChapterFields(refresh),
+    ..._exportMasterGameFields(refresh),
+    ..._exportRefutationFields(refresh),
+    ..._exportAlternativeFields(refresh),
+  ];
+
+  /// How much of the tree reaches the PGN: the coverage target, engine
+  /// continuations for lines the ply cap cut off, and line order.
+  List<Widget> _exportCoverageFields(VoidCallback refresh) {
     return [
       _numField(
         _lineCoverageCtrl,
@@ -655,6 +700,13 @@ mixin _GenerationConfigAdvanced
         'how hard each move is to find, and how the move scores in real '
         'games — next to every move.',
       ),
+    ];
+  }
+
+  /// Whether the export is one flat list or named chapters cut at branch
+  /// points, and how those chapters are sized.
+  List<Widget> _exportChapterFields(VoidCallback refresh) {
+    return [
       const SizedBox(height: 12),
       _labeledCheckbox(
         'Group lines into named chapters',
@@ -717,6 +769,13 @@ mixin _GenerationConfigAdvanced
           ),
         ],
       ),
+    ];
+  }
+
+  /// The master-games database: whether to consult it, and what it may
+  /// contribute to the book.
+  List<Widget> _exportMasterGameFields(VoidCallback refresh) {
+    return [
       const SizedBox(height: 12),
       _labeledCheckbox(
         'Use the master games database',
@@ -790,6 +849,13 @@ mixin _GenerationConfigAdvanced
           ),
         ],
       ),
+    ];
+  }
+
+  /// Punishing a losing reply — showing, as a sideline, why the move the
+  /// opponent just played loses.
+  List<Widget> _exportRefutationFields(VoidCallback refresh) {
+    return [
       const SizedBox(height: 12),
       _labeledCheckbox(
         'Show how a losing reply is punished',
@@ -804,6 +870,13 @@ mixin _GenerationConfigAdvanced
             'position is won and writes the answer as a variation on that '
             'move.',
       ),
+    ];
+  }
+
+  /// Explaining an omission — why a natural-looking move is not the one
+  /// the book gives.
+  List<Widget> _exportAlternativeFields(VoidCallback refresh) {
+    return [
       const SizedBox(height: 12),
       _labeledCheckbox(
         'Show why a natural move is not in the book',

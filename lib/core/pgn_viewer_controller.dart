@@ -26,6 +26,7 @@ import 'pgn/solitaire_controller.dart';
 export 'pgn/solitaire_controller.dart' show SolitaireController, SolitaireGuess;
 import '../utils/pgn_date_utils.dart';
 import '../utils/safe_change_notifier.dart';
+import '../utils/chess_utils.dart';
 
 part 'pgn/pgn_viewer_controller_metadata.dart';
 part 'pgn/pgn_viewer_controller_slices.dart';
@@ -301,6 +302,53 @@ class PgnViewerController extends ChangeNotifier
     return collectionsDir;
   }
 
+  /// Adopt [entries] as the loaded collection.
+  ///
+  /// The one place collection-scoped state is set, so the two load paths and
+  /// [closeFile] cannot drift apart. They used to keep three hand-written
+  /// blocks of 15, 15 and 20 assignments that had to agree: adding a field
+  /// meant remembering all three, and forgetting one left stale state behind
+  /// a load. Now it is a single edit here.
+  ///
+  /// [newPerspective] is passed in because each caller derives it
+  /// differently — from headers, from protagonist detection, or reset.
+  void _adoptCollection({
+    required String? path,
+    required List<PgnGameEntry> entries,
+    required Perspective newPerspective,
+  }) {
+    filePath = path;
+    allGames = entries;
+    _detectProtagonist(entries);
+    filteredGames = List.of(entries);
+    hasActiveFilters = false;
+    activeSliceConfig = const SliceConfig.empty();
+    _activeSliceIndices = null;
+    sortMode = GameSortMode.fileOrder;
+    currentGameIndex = 0;
+    pgnInitialFen = null;
+    _gameCursorFen = null;
+    perspective = newPerspective;
+    _viewerTree.resetForNewFile();
+  }
+
+  /// The perspective a freshly loaded collection should open in.
+  ///
+  /// An explicit `StudyPerspective` header wins. Failing that, a collection of
+  /// two or more games that share one protagonist opens from that player's
+  /// side — a single game is left alone, since "the protagonist" of one game
+  /// is just whoever the reader is looking at.
+  Perspective _perspectiveFor(List<PgnGameEntry> entries) {
+    final raw = entries.isNotEmpty
+        ? (entries.first.headers['StudyPerspective'] ?? '')
+        : '';
+    final fromHeader = Perspective.fromHeaderValue(raw);
+    if (raw.trim().isNotEmpty || entries.length < 2) return fromHeader;
+    final protagonist = detectProtagonistFrom(entries);
+    if (protagonist == null) return fromHeader;
+    return Perspective(mode: PerspectiveMode.player, playerName: protagonist);
+  }
+
   /// [restoreSavedSlice] — reapply the slice persisted for this file. Off for
   /// single-game handoffs (Games page "Review"): a leftover slice there only
   /// hides the target game and confuses the count display.
@@ -354,36 +402,13 @@ class PgnViewerController extends ChangeNotifier
       return;
     }
 
-    final perspectiveRaw = entries.isNotEmpty
-        ? (entries.first.headers['StudyPerspective'] ?? '')
-        : '';
-    var newPerspective = Perspective.fromHeaderValue(perspectiveRaw);
-
-    if (perspectiveRaw.trim().isEmpty && entries.length >= 2) {
-      final protagonist = detectProtagonistFrom(entries);
-      if (protagonist != null) {
-        newPerspective = Perspective(
-          mode: PerspectiveMode.player,
-          playerName: protagonist,
-        );
-      }
-    }
-
     isLoading = false;
-    filePath = path;
-    allGames = entries;
     _sliceEpoch++;
-    _detectProtagonist(entries);
-    filteredGames = List.of(entries);
-    hasActiveFilters = false;
-    activeSliceConfig = const SliceConfig.empty();
-    _activeSliceIndices = null;
-    sortMode = GameSortMode.fileOrder;
-    currentGameIndex = 0;
-    pgnInitialFen = null;
-    _gameCursorFen = null;
-    perspective = newPerspective;
-    _viewerTree.resetForNewFile();
+    _adoptCollection(
+      path: path,
+      entries: entries,
+      newPerspective: _perspectiveFor(entries),
+    );
     notifyListeners();
 
     await addToRecentFiles(path);
@@ -428,34 +453,14 @@ class PgnViewerController extends ChangeNotifier
       return;
     }
 
-    final perspectiveRaw = entries.first.headers['StudyPerspective'] ?? '';
-    var newPerspective = Perspective.fromHeaderValue(perspectiveRaw);
-    if (perspectiveRaw.trim().isEmpty && entries.length >= 2) {
-      final protagonist = detectProtagonistFrom(entries);
-      if (protagonist != null) {
-        newPerspective = Perspective(
-          mode: PerspectiveMode.player,
-          playerName: protagonist,
-        );
-      }
-    }
-
     isLoading = false;
-    filePath = null;
-    allGames = entries;
     _sliceEpoch++;
     _fenIndex.reset();
-    _detectProtagonist(entries);
-    filteredGames = List.of(entries);
-    hasActiveFilters = false;
-    activeSliceConfig = const SliceConfig.empty();
-    _activeSliceIndices = null;
-    sortMode = GameSortMode.fileOrder;
-    currentGameIndex = 0;
-    pgnInitialFen = null;
-    _gameCursorFen = null;
-    perspective = newPerspective;
-    _viewerTree.resetForNewFile();
+    _adoptCollection(
+      path: null,
+      entries: entries,
+      newPerspective: _perspectiveFor(entries),
+    );
     notifyListeners();
 
     await loadCurrentGame();
@@ -479,23 +484,18 @@ class PgnViewerController extends ChangeNotifier
     isLoading = false;
     errorMessage = null;
     pendingSliceRestore = null;
-    filePath = null;
-    allGames = <PgnGameEntry>[];
-    filteredGames = <PgnGameEntry>[];
-    hasActiveFilters = false;
-    activeSliceConfig = const SliceConfig.empty();
-    _activeSliceIndices = null;
-    sliceProtagonist = null;
-    protagonistFixedSide = null;
-    sortMode = GameSortMode.fileOrder;
-    currentGameIndex = 0;
-    pgnInitialFen = null;
-    _gameCursorFen = null;
-    perspective = const Perspective();
+    // An empty collection: _adoptCollection nulls the protagonist fields the
+    // same way this used to by hand.
+    _adoptCollection(
+      // Mutable, not `const []`: [allGames] is assigned as given, and sorting
+      // reorders these lists in place.
+      path: null,
+      entries: <PgnGameEntry>[],
+      newPerspective: const Perspective(),
+    );
     currentPosition = Chess.initial;
     boardFlipped = false;
     _fenIndex.reset();
-    _viewerTree.resetForNewFile();
     notifyListeners();
   }
 
@@ -820,11 +820,7 @@ class PgnViewerController extends ChangeNotifier
 
   Position? _tryParseFen(String? fen) {
     if (fen == null || fen.isEmpty) return null;
-    try {
-      return Chess.fromSetup(Setup.parseFen(fen));
-    } catch (_) {
-      return null;
-    }
+    return tryParseFen(fen);
   }
 
   String? defaultExportFileName() {

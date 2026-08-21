@@ -1,9 +1,90 @@
+import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/models/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/course/model_game_selector.dart';
 import 'package:chess_auto_prep/services/generation/pgn_freq_map.dart';
+import 'package:chess_auto_prep/utils/chess_utils.dart' show fenAfterMoves;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../generation_test_helpers.dart';
+
+/// The plies a Benko chapter is rooted after: a build that starts here has a
+/// tree whose root is already ten plies deep.
+const _benkoPrefix = [
+  'd4',
+  'Nf6',
+  'c4',
+  'c5',
+  'd5',
+  'b5',
+  'cxb5',
+  'a6',
+  'bxa6',
+  'e6',
+];
+
+/// A Black repertoire rooted mid-opening: after the Benko prefix we answer
+/// 6.Nc3 with 6...exd5, and prepare 7.Nxd5.
+///
+/// The real defect this pins lived here — the root is not the initial
+/// position, so a game's `1. d4` has nothing to match against it.
+BuildTree _benkoRepertoire() {
+  resetNodeIds();
+  String at(int i) => fenAfterMoves(kStandardStartFen, _benkoPrefix, i - 1);
+
+  final root = makeNode(
+    fen: at(10),
+    san: '',
+    ply: 10,
+    isWhiteToMove: true,
+    evalCp: 60,
+  );
+  final nc3 = makeNode(
+    fen: fenAfterMoves(kStandardStartFen, [..._benkoPrefix, 'Nc3'], 10),
+    san: 'Nc3',
+    ply: 11,
+    isWhiteToMove: false,
+    evalCp: 56,
+    parent: root,
+  );
+  final exd5 = makeNode(
+    fen: fenAfterMoves(kStandardStartFen, [..._benkoPrefix, 'Nc3', 'exd5'], 11),
+    san: 'exd5',
+    ply: 12,
+    isWhiteToMove: true,
+    evalCp: 56,
+    parent: nc3,
+  )..isRepertoireMove = true;
+  final nxd5 = makeNode(
+    fen: fenAfterMoves(kStandardStartFen, [
+      ..._benkoPrefix,
+      'Nc3',
+      'exd5',
+      'Nxd5',
+    ], 12),
+    san: 'Nxd5',
+    ply: 13,
+    isWhiteToMove: false,
+    evalCp: 56,
+    parent: exd5,
+  );
+  // Our reply, so a game that plays something else here departs from a
+  // repertoire move rather than simply running off the end of the tree.
+  makeNode(
+    fen: fenAfterMoves(kStandardStartFen, [
+      ..._benkoPrefix,
+      'Nc3',
+      'exd5',
+      'Nxd5',
+      'Nxd5',
+    ], 13),
+    san: 'Nxd5',
+    ply: 14,
+    isWhiteToMove: true,
+    evalCp: 56,
+    parent: nxd5,
+  )..isRepertoireMove = true;
+  return BuildTree(root: root, totalNodes: 5);
+}
 
 /// A White repertoire that plays 1.e4 and meets 1...e5 with 2.Nf3, 1...c5 with
 /// 2.Nf3.  `d4` exists in the tree but is not selected.
@@ -268,6 +349,104 @@ void main() {
             )
             .single;
         expect(past.departure, isNull);
+      });
+    });
+
+    group('a build rooted mid-opening', () {
+      const black = ModelGameSelector(playAsWhite: false, minFollowedPlies: 3);
+
+      test('follows games from the root, not from their first move', () {
+        // The whole game, from move one, as the master database stores it.
+        final database = _database([
+          _game(
+            moves: [..._benkoPrefix, 'Nc3', 'exd5', 'Nxd5', 'Be7'],
+            outcome: GameOutcome.blackWin,
+          ),
+        ]);
+
+        final picked = black.select(database, _benkoRepertoire(), limit: 3);
+
+        // Before the offset existed this was empty: `d4` was compared against
+        // the root's replies, missed, and every candidate scored zero.
+        expect(picked, hasLength(1));
+        expect(picked.single.rootIndex, _benkoPrefix.length);
+        expect(picked.single.followedPlies, 3);
+      });
+
+      test('counts the departure from the root, not from move one', () {
+        final database = _database([
+          _game(moves: [..._benkoPrefix, 'Nc3', 'exd5', 'Nxd5', 'Be7']),
+        ]);
+
+        final d = black
+            .select(database, _benkoRepertoire(), limit: 3)
+            .single
+            .departure!;
+
+        // 'Be7' is the game's 14th move but the root's 4th: the composer
+        // numbers model games from the root, so the index must match it.
+        expect(d.index, 3);
+        expect(d.gameSan, 'Be7');
+        expect(d.kind, DepartureKind.ours);
+        expect(d.repertoireSan, 'Nxd5');
+      });
+
+      test('the game it shows starts at the root', () {
+        final database = _database([
+          _game(moves: [..._benkoPrefix, 'Nc3', 'exd5', 'Nxd5', 'Be7']),
+        ]);
+
+        final picked = black.select(database, _benkoRepertoire(), limit: 3);
+
+        expect(picked.single.movesFromRoot, ['Nc3', 'exd5', 'Nxd5', 'Be7']);
+        expect(picked.single.followedMoves, ['Nc3', 'exd5', 'Nxd5']);
+      });
+
+      test('finds a game that transposes into the root', () {
+        // 1.c4 c5 2.d4 Nf6 reaches the same position as 1.d4 Nf6 2.c4 c5.
+        final database = _database([
+          _game(
+            moves: [
+              'c4',
+              'c5',
+              'd4',
+              'Nf6',
+              'd5',
+              'b5',
+              'cxb5',
+              'a6',
+              'bxa6',
+              'e6', //
+              'Nc3', 'exd5', 'Nxd5',
+            ],
+          ),
+        ]);
+
+        final picked = black.select(database, _benkoRepertoire(), limit: 3);
+
+        expect(picked, hasLength(1));
+        expect(picked.single.followedPlies, 3);
+      });
+
+      test('drops a game that never reaches the root', () {
+        final database = _database([
+          _game(moves: ['e4', 'c5', 'Nf3', 'd6', 'd4', 'cxd4']),
+        ]);
+
+        expect(black.select(database, _benkoRepertoire(), limit: 3), isEmpty);
+      });
+
+      test('two variations still get one slot each', () {
+        // Same ten-ply prefix, different continuations: signatures are taken
+        // from the root, so these must not collapse into one bucket.
+        final database = _database([
+          _game(moves: [..._benkoPrefix, 'Nc3', 'exd5', 'Nxd5', 'Be7']),
+          _game(moves: [..._benkoPrefix, 'Nc3', 'exd5', 'Nxd5', 'Nxd5']),
+        ]);
+
+        final picked = black.select(database, _benkoRepertoire(), limit: 2);
+
+        expect(picked, hasLength(2));
       });
     });
 

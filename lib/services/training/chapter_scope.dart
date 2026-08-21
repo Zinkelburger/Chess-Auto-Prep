@@ -25,12 +25,10 @@ import 'chapter_layout.dart';
 class ChapterScope {
   ChapterScope({
     required this.askedQuestions,
-    required TrainingSettings Function() settings,
-    required List<RepertoireLine> Function() lines,
-    required bool Function() sourceIsStudy,
-  }) : _settings = settings,
-       _lines = lines,
-       _sourceIsStudy = sourceIsStudy;
+    required this._settings,
+    required this._lines,
+    required this._sourceIsStudy,
+  });
 
   final AskedQuestionsStore askedQuestions;
 

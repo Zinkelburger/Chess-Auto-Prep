@@ -36,40 +36,6 @@ const int kDefaultStockfishTopN = 3;
 const int kMinStockfishTopN = 1;
 const int kMaxStockfishTopN = 10;
 
-const int kDefaultOnTheFlyMaxDepth = 5;
-const int kMinOnTheFlyMaxDepth = 1;
-const int kMaxOnTheFlyMaxDepth = 12;
-
-// ── Expectimax tree build ────────────────────────────────────────────────────
-
-const int kDefaultExpOurMultipv = 4;
-const int kMinExpOurMultipv = 1;
-const int kMaxExpOurMultipv = 8;
-
-const int kDefaultExpOppMaxChildren = 4;
-const int kMinExpOppMaxChildren = 1;
-const int kMaxExpOppMaxChildren = 12;
-
-const double kDefaultExpOppMassTarget = 0.80;
-const double kMinExpOppMassTarget = 0.5;
-const double kMaxExpOppMassTarget = 1.0;
-
-const double kDefaultExpMinProb = 0.02;
-const double kMinExpMinProb = 0.005;
-const double kMaxExpMinProb = 0.2;
-
-const int kDefaultExpMaxEvalLoss = 80;
-const int kMinExpMaxEvalLoss = 20;
-const int kMaxExpMaxEvalLoss = 300;
-
-const int kDefaultExpEvalDepth = 12;
-const int kMinExpEvalDepth = 6;
-const int kMaxExpEvalDepth = 20;
-
-/// Fast (best-first + priority pruning) vs Pure search for on-the-fly
-/// expectimax — same meaning as the Generate form's Fast/Pure choice.
-const bool kDefaultExpFastSearch = true;
-
 // ── Explorer ─────────────────────────────────────────────────────────────────
 
 const String kDefaultExplorerDatabase = 'lichess';

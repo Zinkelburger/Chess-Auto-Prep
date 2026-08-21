@@ -21,8 +21,6 @@ import '../services/games_repertoire/draft_repertoire_writer.dart';
 import '../services/opening_tree_builder.dart';
 import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';
-import '../utils/chess_utils.dart'
-    show recentMoveTrailSquares, playSanOrNullMove;
 import '../utils/fen_utils.dart';
 import '../utils/movetext_builder.dart';
 import '../utils/san_token_utils.dart';
@@ -30,6 +28,7 @@ import 'move_navigation.dart';
 import 'repertoire_authoring.dart';
 import 'repertoire_writer.dart';
 import '../utils/safe_change_notifier.dart';
+import '../utils/chess_utils.dart';
 
 part 'repertoire_controller_persistence.dart';
 
@@ -52,29 +51,52 @@ class RepertoireController
         MoveNavigation,
         SafeChangeNotifier,
         _RepertoirePersistence {
+  @override
   late final RepertoireWriter writer = RepertoireWriter(this);
 
   /// Pure PGN-authoring collaborator (game/line construction).
+  @override
   final RepertoireAuthoring _authoring = RepertoireAuthoring();
 
+  @override
   RepertoireMetadata? _currentRepertoire;
   RepertoireMetadata? get currentRepertoire => _currentRepertoire;
 
+  @override
   String? _repertoirePgn;
   String? get repertoirePgn => _repertoirePgn;
 
+  @override
   OpeningTree? _openingTree;
   OpeningTree? get openingTree => _openingTree;
 
-  List<RepertoireLine> _repertoireLines = [];
-  List<RepertoireLine> get repertoireLines => _repertoireLines;
+  List<RepertoireLine> _lines = const [];
 
+  /// The parsed lines of the loaded repertoire.
+  ///
+  /// Every assignment stores an unmodifiable copy, so the list can only ever
+  /// be *replaced*, never edited in place.  That matters: consumers such as
+  /// the lines browser and [OpeningTreeWidget] rebuild their display/search
+  /// indexes only when the list *identity* changes, and an in-place `add` or
+  /// `[i] =` would leave them showing stale rows.
+  @override
+  List<RepertoireLine> get _repertoireLines => _lines;
+  @override
+  set _repertoireLines(List<RepertoireLine> value) {
+    _lines = List.unmodifiable(value);
+  }
+
+  List<RepertoireLine> get repertoireLines => _lines;
+
+  @override
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
+  @override
   String? _loadError;
   String? get loadError => _loadError;
 
+  @override
   bool _isRepertoireWhite = true;
   bool get isRepertoireWhite => _isRepertoireWhite;
 
@@ -92,10 +114,22 @@ class RepertoireController
   @override
   MoveTree get tree => _tree;
 
+  TreePath _cursor = TreePath.empty;
+
   /// Cursor into [_tree].  Empty = starting position.
-  TreePath _path = TreePath.empty;
+  ///
+  /// Assigning this always re-syncs [_openingTree], so no caller can move the
+  /// cursor and leave the opening-tree view pointing somewhere else.  Every
+  /// assignment below sets [_tree] first, which the sync reads.
+  TreePath get _path => _cursor;
   @override
-  TreePath get path => _path;
+  set _path(TreePath value) {
+    _cursor = value;
+    _syncOpeningTree();
+  }
+
+  @override
+  TreePath get path => _cursor;
 
   // ── Derived state (backward-compatible getters) ──────────────────
 
@@ -103,6 +137,7 @@ class RepertoireController
   List<String> get moveHistory => _tree.sanSequenceAt(_path);
 
   /// Alias — always identical to [moveHistory] now.
+  @override
   List<String> get currentMoveSequence => moveHistory;
 
   /// Ply index (replaces old _currentMoveIndex).
@@ -112,13 +147,7 @@ class RepertoireController
   String get fen => _tree.fenAt(_path);
 
   /// Derived position (lazy; most callers only need [fen]).
-  Position get position {
-    try {
-      return Chess.fromSetup(Setup.parseFen(fen));
-    } catch (_) {
-      return Chess.initial;
-    }
-  }
+  Position get position => tryParseFen(fen) ?? Chess.initial;
 
   /// From/to squares of the last two half-moves at the cursor — the subtle
   /// Chessable-style recent-move trail for [ChessBoardWidget]. Empty at the
@@ -179,7 +208,6 @@ class RepertoireController
     if (_path == target) return;
     if (!_tree.isValidPath(target)) return;
     _path = target;
-    _syncOpeningTree();
     notifyListeners();
   }
 
@@ -214,6 +242,7 @@ class RepertoireController
   }
 
   /// Atomically navigate to a specific position within a line.
+  @override
   void navigateToLineMove(List<String> fullPath, {int? targetIndex}) {
     _ensureMovesInTree(fullPath);
     final tp = _pathForMoveSequence(fullPath);
@@ -253,7 +282,6 @@ class RepertoireController
     _annotatedLineLabel = null;
     _tree = MoveTree.fromMoves(moves, startingFen: _tree.startingFen);
     _path = _tree.mainlineEndFrom(TreePath.empty);
-    _syncOpeningTree();
     notifyListeners();
   }
 
@@ -262,7 +290,6 @@ class RepertoireController
     _annotatedLineLabel = null;
     _tree = MoveTree(startingFen: _tree.startingFen);
     _path = TreePath.empty;
-    _syncOpeningTree();
     notifyListeners();
   }
 
@@ -277,7 +304,6 @@ class RepertoireController
       _path = TreePath.empty;
       _selectedPgnLine = null;
       _annotatedLineLabel = null;
-      _syncOpeningTree();
       notifyListeners();
       return true;
     } catch (e) {
@@ -302,7 +328,6 @@ class RepertoireController
       _path = _tree.mainlineEndFrom(TreePath.empty);
       _selectedPgnLine = null;
       _annotatedLineLabel = null;
-      _syncOpeningTree();
       notifyListeners();
       return true;
     } catch (e) {
@@ -322,7 +347,6 @@ class RepertoireController
         ? MoveTree.fromPgn(line.fullPgn, startingFen: line.startPosition.fen)
         : MoveTree.fromMoves(line.moves, startingFen: _tree.startingFen);
     _path = _tree.mainlineEndFrom(TreePath.empty);
-    _syncOpeningTree();
     notifyListeners();
   }
 
@@ -332,7 +356,6 @@ class RepertoireController
     _annotatedLineLabel = null;
     _tree = MoveTree.fromMoves(moves, startingFen: _tree.startingFen);
     _path = _tree.mainlineEndFrom(TreePath.empty);
-    _syncOpeningTree();
     notifyListeners();
   }
 
@@ -351,7 +374,6 @@ class RepertoireController
     _path = cursor != null && tree.isValidPath(cursor)
         ? cursor
         : tree.mainlineEndFrom(TreePath.empty);
-    _syncOpeningTree();
     notifyListeners();
   }
 
@@ -363,7 +385,6 @@ class RepertoireController
         ? TreePath.empty
         : tp.take((moveIndex + 1).clamp(0, tp.length));
     _path = target;
-    _syncOpeningTree();
     notifyListeners();
   }
 
@@ -389,19 +410,20 @@ class RepertoireController
     final newCursor = target.parent;
     _tree.deleteAt(target);
     _path = _tree.isValidPath(newCursor) ? newCursor : TreePath.empty;
-    _syncOpeningTree();
     notifyListeners();
   }
 
   /// Promote variation at [target] to mainline.
+  ///
+  /// Promotion reorders a sibling group, so *every* index-based path into that
+  /// group stops meaning what it meant — not just [target]'s.  A cursor parked
+  /// on an earlier sibling would silently come to point at a different move.
+  /// Remember the cursor as a move sequence and re-resolve it afterwards,
+  /// which is stable under any reordering.
   void promoteVariation(TreePath target) {
+    final cursorSans = _tree.sanSequenceAt(_path);
     _tree.promoteVariation(target);
-    // After promotion the node is now at index 0 among siblings.
-    if (target.isNotEmpty && target.last != 0) {
-      // Recompute cursor if it pointed at the promoted node.
-      final promoted = TreePath([...target.parent.toList(), 0]);
-      if (_path == target) _path = promoted;
-    }
+    _path = _pathForMoveSequence(cursorSans);
     notifyListeners();
   }
 
@@ -465,7 +487,6 @@ class RepertoireController
       }
     }
     _path = _pathForMoveSequence(moveHistory);
-    _syncOpeningTree();
     notifyListeners();
   }
 
@@ -533,13 +554,13 @@ class RepertoireController
   List<String> _parsePgnMoveText(String movesStr) => cleanSanTokens(movesStr);
 
   /// If a root position is set, navigate to it so the tree starts there.
+  @override
   void _navigateToRootPosition() {
     if (_rootMoves.isEmpty) return;
     final sanMoves = _parsePgnMoveText(_rootMoves);
     if (sanMoves.isEmpty) return;
     _ensureMovesInTree(sanMoves);
     _path = _pathForMoveSequence(sanMoves);
-    _syncOpeningTree();
   }
 
   /// Converts a SAN move list to PGN move text.
@@ -547,6 +568,7 @@ class RepertoireController
   /// Move numbering starts from the tree's starting position, so
   /// black-to-move / mid-game roots get correct `N...` numbering instead of
   /// the old (wrong) assumption of White to move at move 1.
+  @override
   String _movesToPgnMoveText(List<String> moves) {
     if (moves.isEmpty) return '';
     var startMoveNumber = 1;
@@ -653,27 +675,9 @@ class RepertoireController
     bool updateTree = true,
     bool notify = true,
   }) {
-    if (updateTree) {
-      final startFen = startingFen ?? kStandardStartFen;
-      _openingTree?.appendLineFromFen(startFen, moves);
-    }
-
-    _repertoireLines.add(
-      _authoring.buildNewLine(
-        moves: moves,
-        title: title,
-        pgnContent: pgnContent,
-        index: _repertoireLines.length,
-        isWhite: _isRepertoireWhite,
-        existingIds: _repertoireLines.map((l) => l.id),
-      ),
-    );
-
-    if (_currentRepertoire != null) {
-      _currentRepertoire = _currentRepertoire!.copyWith(
-        gameCount: _repertoireLines.length,
-      );
-    }
+    final next = List.of(_repertoireLines);
+    _appendLineInto(next, moves, title, pgnContent, updateTree: updateTree);
+    _commitAppendedLines(next);
 
     if (notify) notifyListeners();
   }
@@ -684,12 +688,51 @@ class RepertoireController
   void appendNewLines(
     Iterable<({List<String> moves, String title, String pgn})> entries,
   ) {
+    final next = List.of(_repertoireLines);
     var any = false;
     for (final e in entries) {
-      appendNewLine(e.moves, e.title, e.pgn, notify: false);
+      _appendLineInto(next, e.moves, e.title, e.pgn, updateTree: true);
       any = true;
     }
-    if (any) notifyListeners();
+    if (!any) return;
+    _commitAppendedLines(next);
+    notifyListeners();
+  }
+
+  /// Build one new line into [target] and mirror it into the opening tree.
+  ///
+  /// [target] is a scratch list, so a bulk append pays one list copy rather
+  /// than one per entry.
+  void _appendLineInto(
+    List<RepertoireLine> target,
+    List<String> moves,
+    String title,
+    String pgnContent, {
+    required bool updateTree,
+  }) {
+    if (updateTree) {
+      final startFen = startingFen ?? kStandardStartFen;
+      _openingTree?.appendLineFromFen(startFen, moves);
+    }
+
+    target.add(
+      _authoring.buildNewLine(
+        moves: moves,
+        title: title,
+        pgnContent: pgnContent,
+        index: target.length,
+        isWhite: _isRepertoireWhite,
+        existingIds: target.map((l) => l.id),
+      ),
+    );
+  }
+
+  /// Swap in the grown list and keep the metadata game count in step.
+  void _commitAppendedLines(List<RepertoireLine> next) {
+    _repertoireLines = next;
+    if (_currentRepertoire != null) {
+      _currentRepertoire = _currentRepertoire!.copyWith(gameCount: next.length);
+    }
   }
 
   /// Extend an existing line after a one-click add.
@@ -710,10 +753,9 @@ class RepertoireController
       prefix,
     );
     if (lineIndex != null) {
-      _repertoireLines[lineIndex] = _authoring.extendLine(
-        _repertoireLines[lineIndex],
-        newMove,
-      );
+      final next = List.of(_repertoireLines);
+      next[lineIndex] = _authoring.extendLine(next[lineIndex], newMove);
+      _repertoireLines = next;
       notifyListeners();
       return;
     }

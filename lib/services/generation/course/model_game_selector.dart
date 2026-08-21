@@ -10,7 +10,9 @@
 /// no engine, no I/O.
 library;
 
+import '../../../constants/chess_constants.dart';
 import '../../../models/build_tree_node.dart';
+import '../../../utils/chess_utils.dart' show plyReachingFen;
 import '../fen_map.dart';
 import '../pgn_freq_map.dart';
 
@@ -74,16 +76,34 @@ class ModelGame {
   /// the tree's reach).
   final ModelGameDeparture? departure;
 
+  /// Index in [record]'s moves at which the game stands in the build root —
+  /// the plies it spent getting to where the repertoire starts.  Zero for a
+  /// build rooted at the initial position; ten for one rooted after
+  /// `d4 Nf6 c4 c5 d5 b5 cxb5 a6 bxa6 e6`.  Everything else here counts from
+  /// the root, so anything indexing back into [record] adds this first.
+  final int rootIndex;
+
   const ModelGame({
     required this.record,
     required this.followedPlies,
     this.departure,
+    this.rootIndex = 0,
   });
+
+  /// The game from the build root on: what a chapter shows, since the moves
+  /// before the root are the chapter's own starting position.
+  List<String> get movesFromRoot => rootIndex <= 0
+      ? record.movesSan
+      : record.movesSan.sublist(
+          rootIndex > record.movesSan.length
+              ? record.movesSan.length
+              : rootIndex,
+        );
 
   /// Moves the game shares with the repertoire — its "line signature", used
   /// to keep the selection from being six games of the same variation.
   List<String> get followedMoves =>
-      record.movesSan.take(followedPlies).toList(growable: false);
+      movesFromRoot.take(followedPlies).toList(growable: false);
 }
 
 /// Ranks and picks model games.
@@ -128,13 +148,26 @@ class ModelGameSelector {
 
     final candidates = <ModelGame>[];
     for (final record in games) {
-      final (followed, departure) = _follow(tree, record.movesSan, fenMap);
+      // Where the game meets the build root.  A game that never reaches it
+      // is not a model game for this repertoire at all.
+      final rootIndex = plyReachingFen(
+        record.movesSan,
+        tree.root.fen,
+        startFen: kStandardStartFen,
+      );
+      if (rootIndex < 0) continue;
+      final (followed, departure) = _follow(
+        tree,
+        record.movesSan.sublist(rootIndex),
+        fenMap,
+      );
       if (followed < minFollowedPlies) continue;
       candidates.add(
         ModelGame(
           record: record,
           followedPlies: followed,
           departure: departure,
+          rootIndex: rootIndex,
         ),
       );
     }
@@ -182,7 +215,7 @@ class ModelGameSelector {
     return selected;
   }
 
-  String _signature(ModelGame game) => game.record.movesSan
+  String _signature(ModelGame game) => game.movesFromRoot
       .take(
         game.followedPlies < signatureDepth
             ? game.followedPlies
@@ -220,6 +253,10 @@ class ModelGameSelector {
   /// not in the tree, or at the first of *our* moves that is not the one the
   /// repertoire selected; the departure describes that move when the tree
   /// still had something to say there.
+  ///
+  /// [movesSan] starts *at the root*, not at the game's first move — the
+  /// caller trims the plies that led there — so every index this returns is
+  /// root-relative, which is what [ModelGame.rootIndex] exists to undo.
   (int, ModelGameDeparture?) _follow(
     BuildTree tree,
     List<String> movesSan,

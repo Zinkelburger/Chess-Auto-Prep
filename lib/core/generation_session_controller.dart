@@ -24,6 +24,7 @@ import '../services/engine/engine_interrupt.dart';
 import '../services/engine/stockfish_pool.dart';
 import '../services/generation/course/chapter_titles.dart';
 import '../services/generation/course/course_composer.dart';
+import '../services/generation/course/enrichment_runner.dart';
 import '../services/generation/course/master_improvements.dart';
 import '../services/generation/course/model_game_selector.dart';
 import '../services/generation/course/opening_namer.dart';
@@ -175,16 +176,40 @@ class GenerationSessionController extends ChangeNotifier
   String? lastModelGamesPath;
 
   /// Losing replies the last run showed the punishment for.
-  int lastRefutationCount = 0;
+  /// Runs the best-effort post-build passes and keeps their counts.
+  late final EnrichmentRunner _enrichment = EnrichmentRunner(
+    config: () => activeConfig,
+    isCancelled: () => _cancelRequested,
+    onStatus: (message) =>
+        progress.setStatus(message, GenerationPhase.extractingLines),
+    ensureEngine: _ensureEnginePool,
+  );
+
+  /// Bring the shared engine pool up if nothing has started it yet.
+  ///
+  /// The four enrichment passes each carried their own copy of this block,
+  /// which is exactly the kind of thing that drifts apart.
+  Future<void> _ensureEnginePool() async {
+    if (StockfishPool.instance.workerCount != 0) return;
+    final threads = activeConfig?.resolvedEngineThreads;
+    if (threads == null) return;
+    await StockfishPool.instance.prepareForTreeBuild(threads);
+  }
+
+  int get lastRefutationCount =>
+      _enrichment.countOf(EnrichmentPass.refutations);
 
   /// Leaf positions given an engine continuation by the last export.
-  int lastEngineTailCount = 0;
+  int get lastEngineTailCount =>
+      _enrichment.countOf(EnrichmentPass.engineTails);
 
   /// Positions where the last run showed a refuted move the book leaves out.
-  int lastAlternativeCount = 0;
+  int get lastAlternativeCount =>
+      _enrichment.countOf(EnrichmentPass.alternatives);
 
   /// Moves the last run annotated as improvements on a cited master game.
-  int lastImprovementCount = 0;
+  int get lastImprovementCount =>
+      _enrichment.countOf(EnrichmentPass.improvements);
 
   final PgnBatchWriter _pgnWriter = PgnBatchWriter();
   Stopwatch _pipelineSw = Stopwatch();
@@ -465,9 +490,7 @@ class GenerationSessionController extends ChangeNotifier
     lastRunSummary = '';
     lastCourseOutline = const [];
     lastModelGameNote = '';
-    lastRefutationCount = 0;
-    lastAlternativeCount = 0;
-    lastImprovementCount = 0;
+    _enrichment.reset();
     lastConfig = config;
     progress.reset();
     activeConfig = config;
@@ -718,11 +741,7 @@ class GenerationSessionController extends ChangeNotifier
       GenerationPhase.verifying,
     );
     try {
-      if (StockfishPool.instance.workerCount == 0) {
-        await StockfishPool.instance.prepareForTreeBuild(
-          config.resolvedEngineThreads,
-        );
-      }
+      await _ensureEnginePool();
       final verifier = RepertoireVerifier(config: config);
       final report = await verifier.verify(
         tree,
@@ -895,44 +914,25 @@ class GenerationSessionController extends ChangeNotifier
   /// a build with no game database simply has no model games.
   /// Ask the engine how the replies that end a line in a won position are
   /// actually punished, so those lines stop dead on the opponent's mistake.
-  ///
-  /// Best-effort like verification: no engine, a cancelled run, or a failed
-  /// search costs the variations, never the export.
   Future<RefutationMap> _refutationPhase(
     ExtractedLines extracted,
     TreeBuildConfig config,
-  ) async {
-    lastRefutationCount = 0;
-    if (!config.refutationLines || !config.needsStockfish || _cancelRequested) {
-      return const {};
-    }
-
-    final prober = RefutationProber(config: config);
-    final targets = prober.targets(extracted.lines);
-    if (targets.isEmpty) return const {};
-
-    try {
-      if (StockfishPool.instance.workerCount == 0) {
-        await StockfishPool.instance.prepareForTreeBuild(
-          config.resolvedEngineThreads,
-        );
-      }
-      final refutations = await prober.probe(
+  ) => _enrichment.run<List<String>>(
+    EnrichmentPass.refutations,
+    enabled: config.refutationLines,
+    status: (done, total) =>
+        'Phase 3.5: Showing how losing replies are punished '
+        '($done of $total)...',
+    prepare: () {
+      final prober = RefutationProber(config: config);
+      if (prober.targets(extracted.lines).isEmpty) return null;
+      return ({required isCancelled, required onProgress}) => prober.probe(
         extracted.lines,
-        isCancelled: () => _cancelRequested,
-        onProgress: (done, total) => progress.setStatus(
-          'Phase 3.5: Showing how losing replies are punished '
-          '($done of $total)...',
-          GenerationPhase.extractingLines,
-        ),
+        isCancelled: isCancelled,
+        onProgress: onProgress,
       );
-      lastRefutationCount = refutations.length;
-      return refutations;
-    } catch (e) {
-      debugPrint('Refutation pass failed: $e');
-      return const {};
-    }
-  }
+    },
+  );
 
   /// Extend lines that stop at the build's ply cap with a few plies of raw
   /// engine play, so a truncated line ends somewhere a reader can see.
@@ -941,89 +941,80 @@ class GenerationSessionController extends ChangeNotifier
   /// the same reason refutations are: the mainline is what training quizzes,
   /// and these moves carry none of the vetting the prepared moves do. They
   /// are a look over the edge, not repertoire.
-  ///
-  /// Best-effort like [_refutationPhase]: this pass costs the tails when it
-  /// fails, never the export.
   Future<Map<String, EngineTail>> _engineTailPhase(
     ExtractedLines extracted,
     TreeBuildConfig config,
-  ) async {
-    lastEngineTailCount = 0;
-    if (config.engineTailPlies <= 0 ||
-        !config.needsStockfish ||
-        _cancelRequested) {
-      return const {};
-    }
-    try {
-      if (StockfishPool.instance.workerCount == 0) {
-        await StockfishPool.instance.prepareForTreeBuild(
-          config.resolvedEngineThreads,
-        );
-      }
-      final tails = await computeEngineTails(
-        lines: extracted.lines,
-        config: config,
-        pool: StockfishPool.instance,
-        isCancelled: () => _cancelRequested,
-        onProgress: (done, total) => progress.setStatus(
-          'Phase 3.7: Extending cut-off lines with engine play '
-          '($done of $total) at depth ${config.resolvedEngineTailDepth}...',
-          GenerationPhase.extractingLines,
+  ) => _enrichment.run<EngineTail>(
+    EnrichmentPass.engineTails,
+    enabled: config.engineTailPlies > 0,
+    status: (done, total) =>
+        'Phase 3.7: Extending cut-off lines with engine play '
+        '($done of $total) at depth ${config.resolvedEngineTailDepth}...',
+    prepare: () =>
+        ({required isCancelled, required onProgress}) => computeEngineTails(
+          lines: extracted.lines,
+          config: config,
+          pool: StockfishPool.instance,
+          isCancelled: isCancelled,
+          onProgress: onProgress,
         ),
-      );
-      lastEngineTailCount = tails.length;
-      return tails;
-    } catch (e) {
-      debugPrint('Engine tail pass failed: $e');
-      return const {};
-    }
-  }
+  );
 
   /// Ask what a human would play at each position the export passes through
   /// that the book leaves out, and why it is left out.
-  ///
-  /// Best-effort like [_refutationPhase]: this pass costs variations when it
-  /// fails, never the export.
   Future<AlternativeMap> _alternativePhase(
     ExtractedLines extracted,
     TreeBuildConfig config,
-  ) async {
-    lastAlternativeCount = 0;
-    if (!config.alternativeLines ||
-        !config.needsStockfish ||
-        _cancelRequested) {
-      return const {};
-    }
-
-    final prober = RefutationProber(
-      config: config,
-      freqMap: buildService.lastGameDatabase,
-      masterBook: _masterDbFor(config)?.bookMoves,
-    );
-    if (prober.alternativeSites(extracted.lines).isEmpty) return const {};
-
-    try {
-      if (StockfishPool.instance.workerCount == 0) {
-        await StockfishPool.instance.prepareForTreeBuild(
-          config.resolvedEngineThreads,
-        );
-      }
-      final alternatives = await prober.probeAlternatives(
-        extracted.lines,
-        isCancelled: () => _cancelRequested,
-        onProgress: (done, total) => progress.setStatus(
-          'Phase 3.6: Checking the moves the book leaves out '
-          '($done of $total positions)...',
-          GenerationPhase.extractingLines,
-        ),
+  ) => _enrichment.run<RefutedAlternative>(
+    EnrichmentPass.alternatives,
+    enabled: config.alternativeLines,
+    status: (done, total) =>
+        'Phase 3.6: Checking the moves the book leaves out '
+        '($done of $total positions)...',
+    prepare: () {
+      final prober = RefutationProber(
+        config: config,
+        freqMap: buildService.lastGameDatabase,
+        masterBook: _masterDbFor(config)?.bookMoves,
       );
-      lastAlternativeCount = alternatives.length;
-      return alternatives;
-    } catch (e) {
-      debugPrint('Alternatives pass failed: $e');
-      return const {};
-    }
-  }
+      if (prober.alternativeSites(extracted.lines).isEmpty) return null;
+      return ({required isCancelled, required onProgress}) =>
+          prober.probeAlternatives(
+            extracted.lines,
+            isCancelled: isCancelled,
+            onProgress: onProgress,
+          );
+    },
+  );
+
+  /// Where the repertoire departs from what masters play and the engine backs
+  /// the departure, cite the game it improves on.  Skipped without the
+  /// master-games database.
+  Future<ImprovementMap> _improvementPhase(
+    ExtractedLines extracted,
+    TreeBuildConfig config,
+  ) => _enrichment.run<MasterImprovement>(
+    EnrichmentPass.improvements,
+    enabled: true,
+    status: (done, total) =>
+        'Phase 3.8: Comparing with master practice '
+        '($done of $total positions)...',
+    prepare: () {
+      final db = _masterDbFor(config);
+      if (db == null) return null;
+      final prober = MasterImprovementProber(
+        config: config,
+        book: db.bookMoves,
+        gameById: db.game,
+      );
+      if (prober.sites(extracted.lines).isEmpty) return null;
+      return ({required isCancelled, required onProgress}) => prober.probe(
+        extracted.lines,
+        isCancelled: isCancelled,
+        onProgress: onProgress,
+      );
+    },
+  );
 
   Future<ComposedCourse> _composeCourse(
     BuildTree tree,
@@ -1060,48 +1051,6 @@ class GenerationSessionController extends ChangeNotifier
       engineTails: tails,
       improvements: improvements,
     );
-  }
-
-  /// Phase 3.8: where the repertoire departs from what masters play and the
-  /// engine backs the departure, cite the game it improves on.  Skipped
-  /// without the database; best-effort like the other post-build passes.
-  Future<ImprovementMap> _improvementPhase(
-    ExtractedLines extracted,
-    TreeBuildConfig config,
-  ) async {
-    lastImprovementCount = 0;
-    if (!config.needsStockfish || _cancelRequested) return const {};
-    final db = _masterDbFor(config);
-    if (db == null) return const {};
-
-    final prober = MasterImprovementProber(
-      config: config,
-      book: db.bookMoves,
-      gameById: db.game,
-    );
-    if (prober.sites(extracted.lines).isEmpty) return const {};
-
-    try {
-      if (StockfishPool.instance.workerCount == 0) {
-        await StockfishPool.instance.prepareForTreeBuild(
-          config.resolvedEngineThreads,
-        );
-      }
-      final improvements = await prober.probe(
-        extracted.lines,
-        isCancelled: () => _cancelRequested,
-        onProgress: (done, total) => progress.setStatus(
-          'Phase 3.8: Comparing with master practice '
-          '($done of $total positions)...',
-          GenerationPhase.extractingLines,
-        ),
-      );
-      lastImprovementCount = improvements.length;
-      return improvements;
-    } catch (e) {
-      debugPrint('Improvements pass failed: $e');
-      return const {};
-    }
   }
 
   Future<OpeningNamer> _loadOpeningNamer(String rootFen) async {

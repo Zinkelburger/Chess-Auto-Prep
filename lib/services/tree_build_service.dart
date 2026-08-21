@@ -404,6 +404,14 @@ class TreeBuildService {
         _log('No frontier positions to expand');
         return;
       }
+      // The transposition table is per run, and only nodes that pass through
+      // the queue register in it — which on resume is the frontier alone.
+      // Without seeding it from the saved tree, a frontier leaf whose
+      // position was already expanded last session is expanded again: the
+      // same engine work twice and a second copy of the subtree that nothing
+      // links to the first.  (The eval chain also reads the canonical node to
+      // reuse its eval.)
+      run.fenMap.registerExpanded(tree.root);
       // Legacy trees carry no priorities; reach probability is the natural
       // fallback (equals the priority when no alt-discount applied).
       for (final n in frontier) {
@@ -450,8 +458,8 @@ class TreeBuildService {
   }
 
   /// Transposition detection: when [node]'s position is already expanded
-  /// elsewhere, register [node] as a transposition leaf (propagating a
-  /// higher reach probability to the canonical subtree) and return true.
+  /// elsewhere, register [node] as a transposition leaf (adding its reach
+  /// probability to the canonical subtree) and return true.
   /// Otherwise register [node] as the canonical expansion and return false.
   static bool _resolveTranspositionOrRegister(
     BuildRun run,
@@ -459,14 +467,21 @@ class TreeBuildService {
     FrontierQueue queue,
   ) {
     final canonical = run.fenMap.getCanonical(node.fen);
-    if (canonical != null) {
-      run.fenMap.addTransposition(node.fen, node);
-      if (node.cumulativeProbability > canonical.cumulativeProbability) {
-        propagateHigherCumP(
+    // A node that already holds children (a resumed partial expansion) must
+    // not become a transposition leaf: [resolveTransposition] only redirects
+    // childless nodes, so its partial subtree would shadow the canonical one.
+    // It re-expands instead, as before the table was seeded on resume.
+    if (canonical != null &&
+        !identical(canonical, node) &&
+        node.children.isEmpty) {
+      // A second way into the position: its reach is the sum of both.
+      if (run.fenMap.addTransposition(node.fen, node)) {
+        addArrivalCumP(
           canonical,
           node.cumulativeProbability,
           run.config.minProbability,
           queue,
+          fenMap: run.fenMap,
         );
       }
       node.explored = true;
@@ -634,12 +649,17 @@ class TreeBuildService {
 
     int answered = 0;
     int removed = 0;
+    int outOfTime = 0;
     final removedLines = <PrunedLine>[];
     final throwawayQueue = FrontierQueue(bestFirst: false);
 
     for (final group in groups.values) {
       await waitIfPaused();
       if (run.isCancelled) break;
+      // Past the budget's sweep grace we stop *answering* holes but keep
+      // walking, so the leaves we never got to are still removed rather than
+      // left dangling on an unanswered opponent move.
+      final graced = !run.sweepBudgetExhausted;
 
       final canonical = run.fenMap.getCanonical(group.first.fen);
       if (canonical != null && !group.contains(canonical)) {
@@ -673,7 +693,9 @@ class TreeBuildService {
         if (t.moveProbability > maxProb) maxProb = t.moveProbability;
       }
 
-      if (maxProb >= config.coverMinProb) {
+      final worthAnswering = maxProb >= config.coverMinProb;
+      if (worthAnswering && !graced) outOfTime++;
+      if (worthAnswering && graced) {
         final canExpand =
             config.buildMode == BuildMode.maiaDbExplore ||
             _pool.workerCount > 0;
@@ -711,7 +733,8 @@ class TreeBuildService {
     if (answered > 0 || removed > 0) {
       _log(
         'Coverage sweep: $answered holes answered, '
-        '$removed uncovered leaves removed',
+        '$removed uncovered leaves removed'
+        '${outOfTime > 0 ? ', $outOfTime left unanswered (out of time)' : ''}',
       );
     }
     return answered + removed;

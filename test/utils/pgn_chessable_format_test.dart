@@ -12,7 +12,7 @@ void main() {
     });
 
     test('detects double-space paragraphs in long text', () {
-      final long = 'A' * 150 + '  ' + 'B' * 150 + '  ' + 'C' * 50;
+      final long = '${'A' * 150}  ${'B' * 150}  ${'C' * 50}';
       expect(hasChessableFormatting(long), true);
     });
 
@@ -63,7 +63,7 @@ void main() {
     });
 
     test('parses FEN segments', () {
-      final fen = '8/p3np1p/6p1/1N6/1Pk5/7P/P4PP1/6K1 w - - 3 8';
+      const fen = '8/p3np1p/6p1/1N6/1Pk5/7P/P4PP1/6K1 w - - 3 8';
       final segs = parseRichComment(
         'Position: @@StartFEN@@$fen@@EndFEN@@ continues.',
       );
@@ -95,7 +95,7 @@ void main() {
     });
 
     test('handles mixed markers and text', () {
-      final raw =
+      const raw =
           '@@HeaderStart@@Title@@HeaderEnd@@Intro text.  '
           '@@StartBlockQuote@@A quote.@@EndBlockQuote@@ '
           'Then @@StartBracket@@note@@EndBracket@@ end.';

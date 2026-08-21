@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 
 import '../services/game_analysis_controller.dart';
 import '../theme/app_colors.dart';
+import '../utils/movetext_builder.dart';
 import '../utils/chess_utils.dart' show formatEvalDisplay;
 
 // Chart-local aliases for the AppColors.chart* tokens (the app is dark-only).
@@ -211,12 +212,11 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
                         final idx = ply - 1;
                         if (idx < 0 || idx >= evals.length) return null;
                         final e = evals[idx];
-                        final moveNum = (ply + 1) ~/ 2;
-                        final dots = ply % 2 == 1 ? '.' : '...';
                         final evalStr = _formatEval(e);
                         final classStr = _classSymbol(e.classification);
                         return LineTooltipItem(
-                          '$moveNum$dots ${e.san}$classStr  $evalStr',
+                          '${formatMoveAtPly(ply - 1, e.san)}'
+                          '$classStr  $evalStr',
                           TextStyle(
                             fontSize: 11,
                             color:

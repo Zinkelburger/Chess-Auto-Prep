@@ -20,7 +20,6 @@
 /// build can end thousands of lines this way.
 library;
 
-import '../../../models/analysis/discovery_result.dart';
 import '../../../models/build_tree_node.dart' show PruneReason;
 import '../../../utils/chess_utils.dart';
 import '../../../utils/fen_utils.dart';

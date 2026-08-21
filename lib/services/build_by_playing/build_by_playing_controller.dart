@@ -34,6 +34,7 @@ import '../generation/fen_map.dart';
 import 'build_by_playing_config.dart';
 import 'build_by_playing_types.dart';
 import '../../utils/safe_change_notifier.dart';
+import '../../utils/chess_utils.dart';
 
 export 'build_by_playing_types.dart' show BuildByPlayingPhase, PendingBranch;
 
@@ -270,7 +271,7 @@ class BuildByPlayingController extends ChangeNotifier
       if (epoch != _epoch) return;
 
       final fen = _repertoire.fen;
-      final pos = _positionFromFen(fen);
+      final pos = tryParseFen(fen);
       final plyFromRoot =
           _repertoire.currentMoveSequence.length - _sessionRootLen;
 
@@ -484,7 +485,7 @@ class BuildByPlayingController extends ChangeNotifier
     final decisionFen = _decisionFen;
     final decisionPath = _decisionPath;
     if (decisionFen == null || decisionPath == null) return;
-    final pos = _positionFromFen(decisionFen);
+    final pos = tryParseFen(decisionFen);
     if (pos == null || pos.parseSan(san) == null) return;
 
     _scratchTree = null;

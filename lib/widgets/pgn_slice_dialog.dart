@@ -124,9 +124,9 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
+        const Text(
           'Quick Presets',
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.w600,
             fontSize: 14,
             color: AppColors.inkSoft,

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/core/repertoire_controller.dart';
+import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/models/repertoire_metadata.dart';
 
 /// Replay [moves] from [startingFen] (or standard start) and return the FEN.
@@ -120,6 +121,106 @@ void main() {
 
       expect(controller.repertoireLines, hasLength(1));
       expect(controller.repertoireLines.single.startPosition.fen, startingFen);
+    });
+  });
+
+  group('promoteVariation', () {
+    /// A tree with two replies to 2.c4: mainline e6, then g6 as a sibling.
+    RepertoireController controllerWithVariation() {
+      final controller = RepertoireController();
+      controller.loadMoveHistory(['d4', 'Nf6', 'c4', 'e6']);
+      controller.jumpToMoveIndex(2); // cursor after 2.c4
+      controller.playMove('g6'); // adds g6 as the second child
+      return controller;
+    }
+
+    test('a cursor on an earlier sibling keeps pointing at its own move', () {
+      final controller = controllerWithVariation();
+
+      // Park the cursor on the mainline e6, which sits at index 0.
+      controller.jump(const TreePath([0, 0, 0, 0]));
+      expect(controller.moveHistory, ['d4', 'Nf6', 'c4', 'e6']);
+
+      // Promoting g6 shuffles it to index 0, pushing e6 down to index 1.
+      controller.promoteVariation(const TreePath([0, 0, 0, 1]));
+
+      // The cursor must follow e6, not stay on index 0 and silently become g6.
+      expect(controller.moveHistory, ['d4', 'Nf6', 'c4', 'e6']);
+      expect(controller.fen, fenAfterMoves(['d4', 'Nf6', 'c4', 'e6']));
+    });
+
+    test('a cursor on the promoted move stays on it', () {
+      final controller = controllerWithVariation();
+      expect(controller.moveHistory, ['d4', 'Nf6', 'c4', 'g6']);
+
+      controller.promoteVariation(const TreePath([0, 0, 0, 1]));
+
+      expect(controller.moveHistory, ['d4', 'Nf6', 'c4', 'g6']);
+      expect(controller.path, const TreePath([0, 0, 0, 0]));
+    });
+
+    test('the opening tree cursor is re-synced after a promotion', () async {
+      final controller = RepertoireController();
+      await controller.restoreRepertoireFromPgn('''
+[Event "A"]
+[Result "*"]
+
+1. d4 Nf6 2. c4 e6 *
+
+[Event "B"]
+[Result "*"]
+
+1. d4 Nf6 2. c4 g6 *
+''');
+
+      controller.loadMoveHistory(['d4', 'Nf6', 'c4', 'e6']);
+      controller.jumpToMoveIndex(2);
+      controller.playMove('g6');
+      controller.jump(const TreePath([0, 0, 0, 0])); // back onto e6
+
+      controller.promoteVariation(const TreePath([0, 0, 0, 1]));
+
+      // Every path mutation funnels through the syncing setter, so the
+      // opening-tree cursor must agree with the move history.
+      expect(controller.openingTree, isNotNull);
+      expect(controller.openingTree!.currentMovePath, controller.moveHistory);
+    });
+  });
+
+  group('repertoireLines identity', () {
+    test('appendNewLine swaps the list rather than mutating it', () {
+      final controller = RepertoireController();
+      controller.appendNewLine(['e4'], 'One', '1. e4 *');
+      final first = controller.repertoireLines;
+
+      controller.appendNewLine(['d4'], 'Two', '1. d4 *');
+
+      // Consumers rebuild their search indexes only on identity change.
+      expect(identical(controller.repertoireLines, first), isFalse);
+      expect(first, hasLength(1));
+      expect(controller.repertoireLines, hasLength(2));
+    });
+
+    test('appendMoveToExistingLine swaps the list rather than mutating it', () {
+      final controller = RepertoireController();
+      controller.appendNewLine(['e4'], 'One', '1. e4 *');
+      final before = controller.repertoireLines;
+
+      controller.appendMoveToExistingLine(['e4'], 'e5');
+
+      expect(identical(controller.repertoireLines, before), isFalse);
+      expect(before.single.moves, ['e4']);
+      expect(controller.repertoireLines.single.moves, ['e4', 'e5']);
+    });
+
+    test('the exposed list rejects in-place mutation', () {
+      final controller = RepertoireController();
+      controller.appendNewLine(['e4'], 'One', '1. e4 *');
+
+      expect(
+        () => controller.repertoireLines.add(controller.repertoireLines.first),
+        throwsUnsupportedError,
+      );
     });
   });
 

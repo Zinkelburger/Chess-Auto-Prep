@@ -12,6 +12,8 @@
 /// which edits the disk and rebuilds.
 library;
 
+import '../../../utils/movetext_builder.dart';
+
 import 'package:path/path.dart' as p;
 
 /// Anything that appears in the outline: a folder, a chapter, or a line.
@@ -182,18 +184,8 @@ class OutlineLine extends OutlineNode {
 
   /// A short preview of the moves — the first [maxPlies] as `1.e4 e5 2.Nf3`.
   String preview({int maxPlies = 8}) {
-    final buf = StringBuffer();
     final n = moves.length < maxPlies ? moves.length : maxPlies;
-    for (var i = 0; i < n; i++) {
-      if (i.isEven) {
-        if (i > 0) buf.write(' ');
-        buf.write('${i ~/ 2 + 1}.');
-      } else {
-        buf.write(' ');
-      }
-      buf.write(moves[i]);
-    }
-    if (moves.length > n) buf.write(' …');
-    return buf.toString();
+    final text = buildNumberedMovetext(moves.take(n).toList(), compact: true);
+    return moves.length > n ? '$text …' : text;
   }
 }

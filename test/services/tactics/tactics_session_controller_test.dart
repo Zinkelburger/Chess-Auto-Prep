@@ -29,7 +29,7 @@ TacticsPosition _samplePosition({
 const _allTime = TacticsSessionSettings(maxAgeDays: null);
 
 /// Ignore delayed UI callbacks so assertions see immediate state.
-void _noopSchedule(Duration _, VoidCallback __) {}
+void _noopSchedule(Duration _, VoidCallback _) {}
 
 /// Execute callbacks immediately so we can test the full multi-move flow
 /// synchronously.

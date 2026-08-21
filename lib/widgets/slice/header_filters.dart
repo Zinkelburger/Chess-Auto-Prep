@@ -156,7 +156,7 @@ class HeaderFilters extends StatelessWidget {
                     ),
                     border: const OutlineInputBorder(),
                     suffixIcon: showEcoWarn
-                        ? Tooltip(
+                        ? const Tooltip(
                             message: 'Not a standard ECO code (A00–E99)',
                             child: Icon(
                               Icons.warning_amber,
@@ -184,11 +184,11 @@ class HeaderFilters extends StatelessWidget {
             ],
           ),
           if (showEcoWarn)
-            Padding(
-              padding: const EdgeInsets.only(left: 248, top: 2),
+            const Padding(
+              padding: EdgeInsets.only(left: 248, top: 2),
               child: Text(
                 'Expected A00–E99',
-                style: const TextStyle(fontSize: 10, color: AppColors.warning),
+                style: TextStyle(fontSize: 10, color: AppColors.warning),
               ),
             ),
           if (_showsNameMatches(f)) _buildNameMatchesLine(f.value),

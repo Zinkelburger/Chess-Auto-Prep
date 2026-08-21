@@ -2,6 +2,7 @@
 library;
 
 import '../../models/tactics_position.dart';
+import '../../utils/pgn_utils.dart';
 import 'tactics_pgn_codec.dart' show encodePuzzlePgn;
 
 /// PGN from the tactic FEN with [solutionSan] as the mainline, carrying the
@@ -12,9 +13,6 @@ import 'tactics_pgn_codec.dart' show encodePuzzlePgn;
 String buildSolutionPgn(TacticsPosition tactic, List<String> solutionSan) {
   return encodePuzzlePgn(tactic, solutionSan, includeNote: false).trim();
 }
-
-String _escapeHeaderValue(String s) =>
-    s.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
 
 /// The full source game as a standalone PGN, reconstructed from the tactic's
 /// stored [TacticsPosition.sourceMovetext] plus its game headers. Starts from
@@ -32,13 +30,13 @@ String buildSourceGamePgn(TacticsPosition tactic) {
 
   final buf = StringBuffer();
   buf.writeln('[Event "Source game"]');
-  buf.writeln('[White "${_escapeHeaderValue(white)}"]');
-  buf.writeln('[Black "${_escapeHeaderValue(black)}"]');
+  buf.writeln('[White "${escapeHeaderValue(white)}"]');
+  buf.writeln('[Black "${escapeHeaderValue(black)}"]');
   if (tactic.gameDate.isNotEmpty) {
-    buf.writeln('[Date "${_escapeHeaderValue(tactic.gameDate)}"]');
+    buf.writeln('[Date "${escapeHeaderValue(tactic.gameDate)}"]');
   }
   if (tactic.gameUrl.isNotEmpty) {
-    buf.writeln('[Site "${_escapeHeaderValue(tactic.gameUrl)}"]');
+    buf.writeln('[Site "${escapeHeaderValue(tactic.gameUrl)}"]');
   }
   buf.writeln('[Result "$result"]');
   buf.writeln();

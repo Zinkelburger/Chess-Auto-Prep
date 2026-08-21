@@ -11,6 +11,7 @@ import '../services/game_deviation_service.dart';
 import '../services/my_repertoire_settings.dart';
 import '../services/opening_review.dart';
 import 'my_repertoires_panel.dart';
+import '../../../utils/movetext_builder.dart';
 
 /// "Where does *this* game leave my book, and what should I have played?" — as
 /// a tab in the PGN viewer, beside Game and Analysis.
@@ -141,8 +142,9 @@ class _RepertoireLinePanelState extends State<RepertoireLinePanel> {
     setState(() => _reports = reports);
     // One book, one deviation: open it without making the user click twice.
     final only = reports.length == 1 ? reports.entries.first : null;
-    if (only != null && !only.value.inBook)
+    if (only != null && !only.value.inBook) {
       unawaited(_openLine(only.key, only.value));
+    }
   }
 
   void _setColour(bool meWhite) {

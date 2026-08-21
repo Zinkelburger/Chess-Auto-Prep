@@ -17,6 +17,7 @@ import 'game_analysis_chart.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import 'pgn_viewer_widget.dart';
+import '../utils/movetext_builder.dart';
 
 class GameAnalysisTab extends StatefulWidget {
   final GameAnalysisController analysisController;
@@ -288,10 +289,10 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
   @override
   Widget build(BuildContext context) {
     if (widget.gamePgnText == null) {
-      return Center(
+      return const Center(
         child: Text(
           'Load a PGN to analyze',
-          style: const TextStyle(color: AppColors.onSurfaceMuted),
+          style: TextStyle(color: AppColors.onSurfaceMuted),
         ),
       );
     }
@@ -381,9 +382,9 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
     }
 
     if (interesting.isEmpty && widget.detectedTrophies.isEmpty) {
-      return Center(
+      return const Center(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(16),
           child: Text(
             'No inaccuracies, mistakes, blunders, or interesting moves found.',
             style: AppTextStyles.muted,
@@ -449,8 +450,10 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
     required Map<int, MoveEval> evalByPly,
     bool hasTrophy = false,
   }) {
-    final moveNum = (e.ply + 1) ~/ 2;
-    final dots = e.isWhiteMove ? '.' : '...';
+    final numberLabel = moveNumberLabel(
+      moveNumber: moveNumberAtPly(e.ply - 1),
+      isWhite: e.isWhiteMove,
+    );
     final isNearest = index == nearestIdx;
 
     final Color classColor;
@@ -499,7 +502,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
                 children: [
                   SizedBox(
                     width: 48,
-                    child: Text('$moveNum$dots', style: AppTextStyles.caption),
+                    child: Text(numberLabel, style: AppTextStyles.caption),
                   ),
                   Text(
                     e.san,

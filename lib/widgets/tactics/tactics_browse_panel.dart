@@ -190,13 +190,13 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
       if (widget.isLoading) {
         return const Center(child: CircularProgressIndicator());
       }
-      return Center(
+      return const Center(
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: EdgeInsets.all(16.0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
+              Text(
                 'No tactics in this set yet.\n'
                 'Run the engine analysis on the home screen to mine '
                 'your games for puzzles.',

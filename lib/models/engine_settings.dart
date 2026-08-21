@@ -271,89 +271,6 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
     (v) => _stockfishTopN = v,
   );
 
-  /// Max BFS depth for on-the-fly expectimax (plies from current position).
-  int _onTheFlyMaxDepth = kDefaultOnTheFlyMaxDepth;
-  int get onTheFlyMaxDepth => _onTheFlyMaxDepth;
-  set onTheFlyMaxDepth(int value) => _assignInRange(
-    _onTheFlyMaxDepth,
-    value,
-    kMinOnTheFlyMaxDepth,
-    kMaxOnTheFlyMaxDepth,
-    (v) => _onTheFlyMaxDepth = v,
-  );
-
-  // ── Expectimax tree build settings ────────────────────────────────────
-
-  int _expectimaxOurMultipv = kDefaultExpOurMultipv;
-  int get expectimaxOurMultipv => _expectimaxOurMultipv;
-  set expectimaxOurMultipv(int v) => _assignInRange(
-    _expectimaxOurMultipv,
-    v,
-    kMinExpOurMultipv,
-    kMaxExpOurMultipv,
-    (n) => _expectimaxOurMultipv = n,
-  );
-
-  int _expectimaxOppMaxChildren = kDefaultExpOppMaxChildren;
-  int get expectimaxOppMaxChildren => _expectimaxOppMaxChildren;
-  set expectimaxOppMaxChildren(int v) => _assignInRange(
-    _expectimaxOppMaxChildren,
-    v,
-    kMinExpOppMaxChildren,
-    kMaxExpOppMaxChildren,
-    (n) => _expectimaxOppMaxChildren = n,
-  );
-
-  double _expectimaxOppMassTarget = kDefaultExpOppMassTarget;
-  double get expectimaxOppMassTarget => _expectimaxOppMassTarget;
-  set expectimaxOppMassTarget(double v) => _assignInRange(
-    _expectimaxOppMassTarget,
-    v,
-    kMinExpOppMassTarget,
-    kMaxExpOppMassTarget,
-    (n) => _expectimaxOppMassTarget = n,
-  );
-
-  double _expectimaxMinProb = kDefaultExpMinProb;
-  double get expectimaxMinProb => _expectimaxMinProb;
-  set expectimaxMinProb(double v) => _assignInRange(
-    _expectimaxMinProb,
-    v,
-    kMinExpMinProb,
-    kMaxExpMinProb,
-    (n) => _expectimaxMinProb = n,
-  );
-
-  int _expectimaxMaxEvalLoss = kDefaultExpMaxEvalLoss;
-  int get expectimaxMaxEvalLoss => _expectimaxMaxEvalLoss;
-  set expectimaxMaxEvalLoss(int v) => _assignInRange(
-    _expectimaxMaxEvalLoss,
-    v,
-    kMinExpMaxEvalLoss,
-    kMaxExpMaxEvalLoss,
-    (n) => _expectimaxMaxEvalLoss = n,
-  );
-
-  int _expectimaxEvalDepth = kDefaultExpEvalDepth;
-  int get expectimaxEvalDepth => _expectimaxEvalDepth;
-  set expectimaxEvalDepth(int v) => _assignInRange(
-    _expectimaxEvalDepth,
-    v,
-    kMinExpEvalDepth,
-    kMaxExpEvalDepth,
-    (n) => _expectimaxEvalDepth = v,
-  );
-
-  /// Fast search (best-first + priority pruning) vs Pure search for
-  /// on-the-fly expectimax — the same choice the Generate form offers.
-  bool _expectimaxFastSearch = kDefaultExpFastSearch;
-  bool get expectimaxFastSearch => _expectimaxFastSearch;
-  set expectimaxFastSearch(bool v) => _assignIfChanged(
-    _expectimaxFastSearch,
-    v,
-    (n) => _expectimaxFastSearch = n,
-  );
-
   // ── Singleton + system detection ─────────────────────────────────────
 
   /// Changes when analysis inputs change (not column dim state).
@@ -454,45 +371,6 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
         kMinStockfishTopN,
         kMaxStockfishTopN,
       );
-      _onTheFlyMaxDepth = loadInt(
-        'on_the_fly_max_depth',
-        kDefaultOnTheFlyMaxDepth,
-        kMinOnTheFlyMaxDepth,
-        kMaxOnTheFlyMaxDepth,
-      );
-      _expectimaxOurMultipv = loadInt(
-        'exp_our_multipv',
-        kDefaultExpOurMultipv,
-        kMinExpOurMultipv,
-        kMaxExpOurMultipv,
-      );
-      _expectimaxOppMaxChildren = loadInt(
-        'exp_opp_max_children',
-        kDefaultExpOppMaxChildren,
-        kMinExpOppMaxChildren,
-        kMaxExpOppMaxChildren,
-      );
-      _expectimaxOppMassTarget =
-          (prefs.getDouble('${_prefix}exp_opp_mass') ??
-                  kDefaultExpOppMassTarget)
-              .clamp(kMinExpOppMassTarget, kMaxExpOppMassTarget);
-      _expectimaxMinProb =
-          (prefs.getDouble('${_prefix}exp_min_prob') ?? kDefaultExpMinProb)
-              .clamp(kMinExpMinProb, kMaxExpMinProb);
-      _expectimaxMaxEvalLoss = loadInt(
-        'exp_max_eval_loss',
-        kDefaultExpMaxEvalLoss,
-        kMinExpMaxEvalLoss,
-        kMaxExpMaxEvalLoss,
-      );
-      _expectimaxEvalDepth = loadInt(
-        'exp_eval_depth',
-        kDefaultExpEvalDepth,
-        kMinExpEvalDepth,
-        kMaxExpEvalDepth,
-      );
-      _expectimaxFastSearch =
-          prefs.getBool('${_prefix}exp_fast_search') ?? kDefaultExpFastSearch;
       _probabilityStartMoves =
           prefs.getString('${_prefix}probability_start_moves') ?? '';
       _mutedAnalysisColumns
@@ -547,17 +425,6 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
         _candidateSourceOpp.storageKey,
       );
       await prefs.setInt('${_prefix}stockfish_top_n', _stockfishTopN);
-      await prefs.setInt('${_prefix}on_the_fly_max_depth', _onTheFlyMaxDepth);
-      await prefs.setInt('${_prefix}exp_our_multipv', _expectimaxOurMultipv);
-      await prefs.setInt(
-        '${_prefix}exp_opp_max_children',
-        _expectimaxOppMaxChildren,
-      );
-      await prefs.setDouble('${_prefix}exp_opp_mass', _expectimaxOppMassTarget);
-      await prefs.setDouble('${_prefix}exp_min_prob', _expectimaxMinProb);
-      await prefs.setInt('${_prefix}exp_max_eval_loss', _expectimaxMaxEvalLoss);
-      await prefs.setInt('${_prefix}exp_eval_depth', _expectimaxEvalDepth);
-      await prefs.setBool('${_prefix}exp_fast_search', _expectimaxFastSearch);
       await prefs.setString(
         '${_prefix}probability_start_moves',
         _probabilityStartMoves,
@@ -593,14 +460,6 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
     _candidateSourceOur = CandidateSource.maia;
     _candidateSourceOpp = CandidateSource.maia;
     _stockfishTopN = kDefaultStockfishTopN;
-    _onTheFlyMaxDepth = kDefaultOnTheFlyMaxDepth;
-    _expectimaxOurMultipv = kDefaultExpOurMultipv;
-    _expectimaxOppMaxChildren = kDefaultExpOppMaxChildren;
-    _expectimaxOppMassTarget = kDefaultExpOppMassTarget;
-    _expectimaxMinProb = kDefaultExpMinProb;
-    _expectimaxMaxEvalLoss = kDefaultExpMaxEvalLoss;
-    _expectimaxEvalDepth = kDefaultExpEvalDepth;
-    _expectimaxFastSearch = kDefaultExpFastSearch;
     _mutedAnalysisColumns.clear();
     _persist();
     notifyListeners();

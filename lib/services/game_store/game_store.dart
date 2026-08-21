@@ -456,11 +456,7 @@ class GameStore {
       '${since == null ? '' : 'AND (played_at IS NULL OR played_at >= ?) '}'
       'ORDER BY ${newestFirst ? 'played_at DESC, id DESC' : 'id ASC'} '
       '${limit == null ? '' : 'LIMIT ?'}',
-      [
-        collection,
-        if (since != null) since.millisecondsSinceEpoch,
-        if (limit != null) limit,
-      ],
+      [collection, if (since != null) since.millisecondsSinceEpoch, ?limit],
     );
     return [for (final r in rows) _game(r)];
   }
@@ -491,7 +487,7 @@ class GameStore {
       'SELECT $_cols FROM games g JOIN positions p ON p.game_id = g.id '
       'WHERE p.pos = ? ${collection == null ? '' : 'AND g.collection = ? '}'
       'ORDER BY g.played_at DESC, g.id DESC LIMIT ?',
-      [positionKey(fen), if (collection != null) collection, limit],
+      [positionKey(fen), ?collection, limit],
     );
     return [for (final r in rows) _game(r)];
   }
@@ -509,7 +505,7 @@ class GameStore {
       'OR black LIKE ? COLLATE NOCASE) '
       '${collection == null ? '' : 'AND collection = ? '}'
       'ORDER BY played_at DESC, id DESC LIMIT ?',
-      [q, q, if (collection != null) collection, limit],
+      [q, q, ?collection, limit],
     );
     return [for (final r in rows) _game(r)];
   }

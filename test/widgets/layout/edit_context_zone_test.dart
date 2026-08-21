@@ -58,15 +58,15 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
+      const MaterialApp(
         home: Scaffold(
           body: SizedBox(
             width: 960,
             height: 400,
             child: EditContextZone(
               initialView: EditContextView.browse,
-              browseContent: const Text('Browse slot'),
-              engineContent: const Text('Engine slot'),
+              browseContent: Text('Browse slot'),
+              engineContent: Text('Engine slot'),
             ),
           ),
         ),
@@ -84,15 +84,15 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
+      const MaterialApp(
         home: Scaffold(
           body: SizedBox(
             width: 960,
             height: 400,
             child: EditContextZone(
               initialView: EditContextView.browse,
-              browseContent: const Text('Browse slot'),
-              engineContent: const Text('Engine slot'),
+              browseContent: Text('Browse slot'),
+              engineContent: Text('Engine slot'),
             ),
           ),
         ),
@@ -168,14 +168,14 @@ void main() {
 
   testWidgets('layout button opens arrange sheet', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(
+      const MaterialApp(
         home: Scaffold(
           body: SizedBox(
             width: 600,
             height: 400,
             child: EditContextZone(
               initialView: EditContextView.browse,
-              browseContent: const Text('Browse slot'),
+              browseContent: Text('Browse slot'),
             ),
           ),
         ),

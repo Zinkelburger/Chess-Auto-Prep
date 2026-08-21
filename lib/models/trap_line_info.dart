@@ -6,6 +6,7 @@
 library;
 
 import 'trap_reply.dart';
+import '../utils/movetext_builder.dart';
 
 class TrapLineInfo {
   /// SAN moves from root to the trap position.
@@ -154,12 +155,5 @@ class TrapLineInfo {
   }
 
   /// The move sequence formatted as PGN-style text.
-  String get movesText {
-    final buf = StringBuffer();
-    for (int i = 0; i < movesSan.length; i++) {
-      if (i % 2 == 0) buf.write('${(i ~/ 2) + 1}.');
-      buf.write('${movesSan[i]} ');
-    }
-    return buf.toString().trimRight();
-  }
+  String get movesText => buildNumberedMovetext(movesSan, compact: true);
 }

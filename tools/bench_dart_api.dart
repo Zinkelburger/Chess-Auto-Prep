@@ -7,6 +7,8 @@
 ///   4) Simulated DFS with 300ms delay + JSON parsing + chess logic overhead
 ///
 /// Run with:  dart run tools/bench_dart_api.dart
+library;
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -67,20 +69,25 @@ class BenchmarkRun {
 
   BenchmarkRun(this.label);
 
-  double get avgMs =>
-      results.isEmpty ? 0 : results.fold(0.0, (s, r) => s + r.elapsedMs) / results.length;
-  double get minMs =>
-      results.isEmpty ? 0 : results.map((r) => r.elapsedMs).reduce((a, b) => a < b ? a : b);
-  double get maxMs =>
-      results.isEmpty ? 0 : results.map((r) => r.elapsedMs).reduce((a, b) => a > b ? a : b);
+  double get avgMs => results.isEmpty
+      ? 0
+      : results.fold(0.0, (s, r) => s + r.elapsedMs) / results.length;
+  double get minMs => results.isEmpty
+      ? 0
+      : results.map((r) => r.elapsedMs).reduce((a, b) => a < b ? a : b);
+  double get maxMs => results.isEmpty
+      ? 0
+      : results.map((r) => r.elapsedMs).reduce((a, b) => a > b ? a : b);
 }
 
 Uri _buildUri(String fen) {
-  return Uri.parse('$_baseUrl?'
-      'variant=$_variant&'
-      'speeds=$_speeds&'
-      'ratings=$_ratings&'
-      'fen=${Uri.encodeComponent(fen)}');
+  return Uri.parse(
+    '$_baseUrl?'
+    'variant=$_variant&'
+    'speeds=$_speeds&'
+    'ratings=$_ratings&'
+    'fen=${Uri.encodeComponent(fen)}',
+  );
 }
 
 Future<BenchmarkRun> runSequential({
@@ -118,7 +125,8 @@ Future<BenchmarkRun> runSequential({
       final moves = data['moves'] as List? ?? [];
       numMoves = moves.length;
       for (final m in moves) {
-        totalGames += (m['white'] as int? ?? 0) +
+        totalGames +=
+            (m['white'] as int? ?? 0) +
             (m['draws'] as int? ?? 0) +
             (m['black'] as int? ?? 0);
       }
@@ -126,28 +134,34 @@ Future<BenchmarkRun> runSequential({
 
     final fenShort = fens[i].split(' ')[0];
     if (fenShort.length > 25) {
-      run.results.add(RequestResult(
-        elapsedMs: elapsed,
-        status: response.statusCode,
-        numMoves: numMoves,
-        totalGames: totalGames,
-        fenShort: fenShort.substring(0, 25),
-      ));
+      run.results.add(
+        RequestResult(
+          elapsedMs: elapsed,
+          status: response.statusCode,
+          numMoves: numMoves,
+          totalGames: totalGames,
+          fenShort: fenShort.substring(0, 25),
+        ),
+      );
     } else {
-      run.results.add(RequestResult(
-        elapsedMs: elapsed,
-        status: response.statusCode,
-        numMoves: numMoves,
-        totalGames: totalGames,
-        fenShort: fenShort,
-      ));
+      run.results.add(
+        RequestResult(
+          elapsedMs: elapsed,
+          status: response.statusCode,
+          numMoves: numMoves,
+          totalGames: totalGames,
+          fenShort: fenShort,
+        ),
+      );
     }
 
-    print('  [${(i + 1).toString().padLeft(2)}/${fens.length}] '
-        '${elapsed.toStringAsFixed(1).padLeft(7)}ms  '
-        'HTTP ${response.statusCode}  '
-        '${numMoves.toString().padLeft(2)} moves  '
-        '${totalGames.toString().padLeft(8)} games');
+    print(
+      '  [${(i + 1).toString().padLeft(2)}/${fens.length}] '
+      '${elapsed.toStringAsFixed(1).padLeft(7)}ms  '
+      'HTTP ${response.statusCode}  '
+      '${numMoves.toString().padLeft(2)} moves  '
+      '${totalGames.toString().padLeft(8)} games',
+    );
   }
 
   run.wallMs = wallSw.elapsedMilliseconds.toDouble();
@@ -208,7 +222,8 @@ Future<BenchmarkRun> runDfsSim({
       final moves = data?['moves'] as List? ?? [];
       int totalGames = 0;
       for (final m in moves) {
-        totalGames += (m['white'] as int? ?? 0) +
+        totalGames +=
+            (m['white'] as int? ?? 0) +
             (m['draws'] as int? ?? 0) +
             (m['black'] as int? ?? 0);
       }
@@ -216,18 +231,22 @@ Future<BenchmarkRun> runDfsSim({
       final fenParts = fen.split(' ');
       final turn = fenParts.length > 1 ? fenParts[1] : '?';
 
-      run.results.add(RequestResult(
-        elapsedMs: elapsed,
-        status: response.statusCode,
-        numMoves: moves.length,
-        totalGames: totalGames,
-        fenShort: fen.split(' ')[0].substring(0, 25),
-      ));
+      run.results.add(
+        RequestResult(
+          elapsedMs: elapsed,
+          status: response.statusCode,
+          numMoves: moves.length,
+          totalGames: totalGames,
+          fenShort: fen.split(' ')[0].substring(0, 25),
+        ),
+      );
 
-      print('  [${reqCount.toString().padLeft(2)}] d=$depth '
-          '${elapsed.toStringAsFixed(1).padLeft(7)}ms  '
-          '${moves.length.toString().padLeft(2)} moves  '
-          '${totalGames.toString().padLeft(8)} games  $turn');
+      print(
+        '  [${reqCount.toString().padLeft(2)}] d=$depth '
+        '${elapsed.toStringAsFixed(1).padLeft(7)}ms  '
+        '${moves.length.toString().padLeft(2)} moves  '
+        '${totalGames.toString().padLeft(8)} games  $turn',
+      );
     }
 
     if (data == null) continue;
@@ -263,12 +282,14 @@ Future<BenchmarkRun> runDfsSim({
       // Branch on all opponent replies above 1% play rate
       int totalGames = 0;
       for (final m in moves) {
-        totalGames += (m['white'] as int? ?? 0) +
+        totalGames +=
+            (m['white'] as int? ?? 0) +
             (m['draws'] as int? ?? 0) +
             (m['black'] as int? ?? 0);
       }
       for (final m in moves.take(5)) {
-        final mg = (m['white'] as int? ?? 0) +
+        final mg =
+            (m['white'] as int? ?? 0) +
             (m['draws'] as int? ?? 0) +
             (m['black'] as int? ?? 0);
         if (totalGames > 0 && mg / totalGames >= 0.01) {
@@ -303,17 +324,23 @@ void printSummary(List<BenchmarkRun> runs) {
   print('\n${'=' * 85}');
   print('  BENCHMARK SUMMARY (Dart)');
   print('=' * 85);
-  print('  ${'Test'.padRight(45)} ${'Reqs'.padLeft(5)} ${'Avg'.padLeft(8)} '
-      '${'Min'.padLeft(8)} ${'Max'.padLeft(8)} ${'Wall'.padLeft(10)}');
-  print('  ${'─' * 45} ${'─' * 5} ${'─' * 8} ${'─' * 8} ${'─' * 8} ${'─' * 10}');
+  print(
+    '  ${'Test'.padRight(45)} ${'Reqs'.padLeft(5)} ${'Avg'.padLeft(8)} '
+    '${'Min'.padLeft(8)} ${'Max'.padLeft(8)} ${'Wall'.padLeft(10)}',
+  );
+  print(
+    '  ${'─' * 45} ${'─' * 5} ${'─' * 8} ${'─' * 8} ${'─' * 8} ${'─' * 10}',
+  );
 
   for (final run in runs) {
     final n = run.results.length;
-    print('  ${run.label.padRight(45)} ${n.toString().padLeft(5)} '
-        '${run.avgMs.toStringAsFixed(0).padLeft(7)}ms '
-        '${run.minMs.toStringAsFixed(0).padLeft(7)}ms '
-        '${run.maxMs.toStringAsFixed(0).padLeft(7)}ms '
-        '${run.wallMs.toStringAsFixed(0).padLeft(9)}ms');
+    print(
+      '  ${run.label.padRight(45)} ${n.toString().padLeft(5)} '
+      '${run.avgMs.toStringAsFixed(0).padLeft(7)}ms '
+      '${run.minMs.toStringAsFixed(0).padLeft(7)}ms '
+      '${run.maxMs.toStringAsFixed(0).padLeft(7)}ms '
+      '${run.wallMs.toStringAsFixed(0).padLeft(9)}ms',
+    );
   }
   print('=' * 85);
 }
@@ -327,7 +354,9 @@ Future<void> main() async {
   // Explorer API doesn't need auth; expired tokens cause 401s.
   // Disable token for benchmarks unless explicitly set.
   final useToken = Platform.environment['BENCH_USE_AUTH'] == '1' ? token : null;
-  print('  Token: ${useToken != null ? "present" : "skipped (Explorer is public)"}');
+  print(
+    '  Token: ${useToken != null ? "present" : "skipped (Explorer is public)"}',
+  );
   print('  FENs: ${_testFens.length}');
   print('');
 
@@ -337,34 +366,40 @@ Future<void> main() async {
   print('─' * 85);
   print('  Test 1: No delay, persistent client (raw API latency)');
   print('─' * 85);
-  runs.add(await runSequential(
-    fens: _testFens,
-    delayMs: 0,
-    label: 'No delay (raw API latency)',
-    token: useToken,
-  ));
+  runs.add(
+    await runSequential(
+      fens: _testFens,
+      delayMs: 0,
+      label: 'No delay (raw API latency)',
+      token: useToken,
+    ),
+  );
 
   // Test 2: 100ms delay (Python production equivalent)
   print('\n${'─' * 85}');
   print('  Test 2: 100ms delay, persistent client (Python equivalent)');
   print('─' * 85);
-  runs.add(await runSequential(
-    fens: _testFens,
-    delayMs: 100,
-    label: '100ms delay (Python equivalent)',
-    token: useToken,
-  ));
+  runs.add(
+    await runSequential(
+      fens: _testFens,
+      delayMs: 100,
+      label: '100ms delay (Python equivalent)',
+      token: useToken,
+    ),
+  );
 
   // Test 3: 300ms delay (Flutter production)
   print('\n${'─' * 85}');
   print('  Test 3: 300ms delay, persistent client (Flutter production)');
   print('─' * 85);
-  runs.add(await runSequential(
-    fens: _testFens,
-    delayMs: 300,
-    label: '300ms delay (Flutter production)',
-    token: useToken,
-  ));
+  runs.add(
+    await runSequential(
+      fens: _testFens,
+      delayMs: 300,
+      label: '300ms delay (Flutter production)',
+      token: useToken,
+    ),
+  );
 
   printSummary(runs);
 }

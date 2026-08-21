@@ -99,7 +99,7 @@ class RepertoireLayout extends StatelessWidget {
             },
           ),
         ),
-        if (statusBar != null) statusBar!,
+        ?statusBar,
       ],
     );
   }

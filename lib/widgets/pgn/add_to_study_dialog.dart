@@ -164,15 +164,13 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
                             onTap: () => _createNew(query),
                           ),
                         if (filtered.isEmpty && query.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.all(24),
+                          const Padding(
+                            padding: EdgeInsets.all(24),
                             child: Text(
                               'No studies yet — type a name above to '
                               'create one.',
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: AppColors.onSurfaceMuted,
-                              ),
+                              style: TextStyle(color: AppColors.onSurfaceMuted),
                             ),
                           ),
                         for (final s in filtered)

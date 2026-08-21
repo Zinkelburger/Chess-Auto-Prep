@@ -8,6 +8,7 @@ library;
 import 'package:dartchess/dartchess.dart';
 
 import '../../models/repertoire_line.dart';
+import '../../utils/movetext_builder.dart';
 
 /// Full move number of the move at [moveIndex] within [line].
 ///
@@ -79,7 +80,7 @@ class MoveDisplayInfo {
 
   /// Formatted notation like "1. e4" or "1... e5"
   String get notation =>
-      isWhiteMove ? '$fullMoveNumber. $san' : '$fullMoveNumber... $san';
+      formatNumberedMove(san, moveNumber: fullMoveNumber, isWhite: isWhiteMove);
 
   /// Label like "Black's move 1... e5" or "White's move 2. Nf3"
   String get moveLabel {

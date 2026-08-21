@@ -564,8 +564,9 @@ class RepertoireAuditService {
         final content = await io.File(path).readAsString();
         allGames.addAll(pgn.splitPgnIntoGames(content));
       } catch (e) {
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint('[Audit] Failed to read clash PGN $path: $e');
+        }
       }
     }
     return OpeningTreeBuilder.buildTree(
@@ -675,7 +676,7 @@ class RepertoireAuditService {
   }
 
   bool _isWhiteTurnAtNode(OpeningTreeNode node) {
-    return node.fen.contains(' w ');
+    return isWhiteToMove(node.fen);
   }
 
   /// Strict conversion: the result is compared against repertoire SAN, so a

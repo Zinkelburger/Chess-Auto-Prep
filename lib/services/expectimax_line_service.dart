@@ -1,7 +1,9 @@
 /// Expectimax line generation for the ExpectimaxLinesPane.
 ///
-/// Walks a precomputed [BuildTree] to produce engine-style "best lines"
-/// using practical win probability (V) instead of raw engine eval.
+/// Walks a precomputed (cooked) [BuildTree] to produce engine-style "best
+/// lines" using practical win probability (V) instead of raw engine eval.
+/// Everything here is a pure read of values the build already stored —
+/// nothing runs the engine.
 library;
 
 import 'dart:collection' show Queue;
@@ -160,8 +162,43 @@ List<ExpectimaxLine> generateExpectimaxLines(
   required int topLines,
   required int maxPlies,
   FenMap? fenMap,
+}) => _linesFrom(
+  start,
+  config,
+  eca,
+  limit: topLines.clamp(1, TreeBuildConfig.maxOurCandidates),
+  maxPlies: maxPlies,
+  fenMap: fenMap,
+);
+
+/// One expectimax PV row for *every* move the tree holds at [start] — the
+/// position table the Expectimax pane shows.  Same ordering as
+/// [generateExpectimaxLines] (by value on our move, by probability on the
+/// opponent's), with no cap: the point is to see the whole candidate set,
+/// including the moves the build considered and passed over.
+List<ExpectimaxLine> expectimaxLinesForAllMoves(
+  BuildTreeNode start,
+  TreeBuildConfig config,
+  ExpectimaxCalculator eca, {
+  required int maxPlies,
+  FenMap? fenMap,
+}) => _linesFrom(
+  resolveTransposition(start, fenMap),
+  config,
+  eca,
+  limit: null,
+  maxPlies: maxPlies,
+  fenMap: fenMap,
+);
+
+List<ExpectimaxLine> _linesFrom(
+  BuildTreeNode start,
+  TreeBuildConfig config,
+  ExpectimaxCalculator eca, {
+  required int? limit,
+  required int maxPlies,
+  FenMap? fenMap,
 }) {
-  final limit = topLines.clamp(1, TreeBuildConfig.maxOurCandidates);
   if (start.children.isEmpty) return [];
 
   final isOurMove = start.isWhiteToMove == config.playAsWhite;
@@ -176,13 +213,17 @@ List<ExpectimaxLine> generateExpectimaxLines(
       );
     }
     scored.sort((a, b) => b.expectimaxValue.compareTo(a.expectimaxValue));
-    for (var i = 0; i < limit && i < scored.length; i++) {
+    for (var i = 0; (limit == null || i < limit) && i < scored.length; i++) {
       starters.add(scored[i].child);
     }
   } else {
-    final sorted = List<BuildTreeNode>.from(start.children)
+    // Same `hasExpectimax` gate as the our-move branch above.  A node the
+    // build never evaluated still carries the 0.0 default, which reads back
+    // as a lost position — on a paused or partial build every unexplored
+    // reply would otherwise be listed as a forced loss.
+    final sorted = start.children.where((c) => c.hasExpectimax).toList()
       ..sort((a, b) => b.moveProbability.compareTo(a.moveProbability));
-    for (var i = 0; i < limit && i < sorted.length; i++) {
+    for (var i = 0; (limit == null || i < limit) && i < sorted.length; i++) {
       starters.add(sorted[i]);
     }
   }
@@ -208,78 +249,6 @@ List<ExpectimaxLine> generateExpectimaxLines(
   }
 
   return lines;
-}
-
-/// Generate a single expectimax line starting with [firstChild].
-ExpectimaxLine? generateLineForFirstMove(
-  BuildTreeNode root,
-  BuildTreeNode firstChild,
-  TreeBuildConfig config,
-  ExpectimaxCalculator eca, {
-  required int maxPlies,
-  FenMap? fenMap,
-}) {
-  final continuation = followExpectimaxLine(
-    firstChild,
-    config,
-    eca,
-    maxPlies: maxPlies - 1,
-    fenMap: fenMap,
-  );
-  if (!firstChild.hasExpectimax) return null;
-  return ExpectimaxLine.fromPath(
-    root,
-    [firstChild, ...continuation],
-    config,
-    rank: 0,
-  );
-}
-
-/// True when [fen] exists in [tree] with expectimax and the subtree extends
-/// at least [targetPly] half-moves PAST the node (suitable for multi-move
-/// precomputed PV).  The comparison is relative to the node's own ply —
-/// comparing the absolute deepest ply would call any node deeper than
-/// [targetPly] "precomputed" even when it is one move from a leaf.
-bool hasPrecomputedExpectimaxAtPly(BuildTree tree, String fen, int targetPly) {
-  final node = findNodeByFen(tree, fen);
-  if (node == null || !node.hasExpectimax || node.children.isEmpty) {
-    return false;
-  }
-  return maxSubtreePly(node) - node.ply >= targetPly;
-}
-
-/// Deepest [BuildTreeNode.ply] in [node]'s subtree (including [node]).
-int maxSubtreePly(BuildTreeNode node) {
-  var max = node.ply;
-  for (final child in node.children) {
-    final childMax = maxSubtreePly(child);
-    if (childMax > max) max = childMax;
-  }
-  return max;
-}
-
-/// Whether [node]'s subtree has been fully explored up to [targetPly].
-bool isBranchCompleteToPly(BuildTreeNode node, int targetPly) {
-  if (node.ply >= targetPly) return true;
-  if (!node.explored && node.children.isEmpty) return false;
-  if (node.children.isEmpty) return node.explored;
-  return node.children.every((c) => isBranchCompleteToPly(c, targetPly));
-}
-
-/// Deepest ply [node]'s branch is fully explored to, capped at [cap]:
-/// the largest `p <= cap` with `isBranchCompleteToPly(node, p)`, computed in
-/// one DFS.  Explored leaves (depth-capped or pruned) are complete to any
-/// depth; an unexplored leaf bounds its branch at its own ply.
-int branchCompletePly(BuildTreeNode node, int cap) {
-  if (node.children.isEmpty) {
-    return node.explored ? cap : node.ply;
-  }
-  var minChild = cap;
-  for (final child in node.children) {
-    final p = branchCompletePly(child, cap);
-    if (p < minChild) minChild = p;
-  }
-  return minChild < node.ply ? node.ply : minChild;
 }
 
 /// Find a node in the tree by FEN (BFS — returns the shallowest match,

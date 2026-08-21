@@ -24,10 +24,9 @@ class ReviewProgressStore {
   ReviewProgressStore({
     required this.reviewService,
     required this.repertoireService,
-    required TrainingSettings Function() settings,
-    required String Function() repertoireId,
-  }) : _settings = settings,
-       _repertoireId = repertoireId;
+    required this._settings,
+    required this._repertoireId,
+  });
 
   final RepertoireReviewService reviewService;
   final RepertoireService repertoireService;

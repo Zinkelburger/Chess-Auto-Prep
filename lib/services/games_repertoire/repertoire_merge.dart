@@ -11,6 +11,7 @@
 library;
 
 import '../../models/move_tree.dart';
+import '../../utils/fen_utils.dart';
 
 /// A spot where the draft introduced a second candidate move at one of my
 /// decision points — needs a mainline/sideline choice.
@@ -99,9 +100,6 @@ class RepertoireMerge {
     return siblings.map((n) => n.san).toList();
   }
 
-  static bool _sideToMoveIsMine(String fen, bool isWhite) {
-    final parts = fen.split(' ');
-    final whiteToMove = parts.length < 2 || parts[1] == 'w';
-    return isWhite == whiteToMove;
-  }
+  static bool _sideToMoveIsMine(String fen, bool isWhite) =>
+      isWhite == isWhiteToMove(fen);
 }

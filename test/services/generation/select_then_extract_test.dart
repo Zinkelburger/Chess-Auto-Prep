@@ -16,7 +16,7 @@ void main() {
       final tree = t.toTree();
       // Wide eval window: in production the tree builder adjusts these
       // relative to root eval; for synthetic tests use permissive bounds.
-      final config = const TreeBuildConfig(
+      const config = TreeBuildConfig(
         startFen: _startFen,
         playAsWhite: true,
         selectionMode: SelectionMode.expectimax,
@@ -69,7 +69,7 @@ void main() {
     test('black repertoire produces lines > 0', () {
       final t = BlackRepertoireTree();
       final tree = t.toTree();
-      final config = const TreeBuildConfig(
+      const config = TreeBuildConfig(
         startFen: _startFen,
         playAsWhite: false,
         selectionMode: SelectionMode.expectimax,
@@ -113,7 +113,7 @@ void main() {
     test('engineOnly selection also produces extractable lines', () {
       final t = StandardTree();
       final tree = t.toTree();
-      final config = const TreeBuildConfig(
+      const config = TreeBuildConfig(
         startFen: _startFen,
         playAsWhite: true,
         selectionMode: SelectionMode.engineOnly,
@@ -144,7 +144,7 @@ void main() {
       t.e4c5nf3.setLichessStats(200, 300, 100);
 
       final tree = t.toTree();
-      final config = const TreeBuildConfig(
+      const config = TreeBuildConfig(
         startFen: _startFen,
         playAsWhite: true,
         selectionMode: SelectionMode.dbWinRateOnly,
@@ -177,7 +177,7 @@ void main() {
       t.d4nf6c4.myEase = 0.7;
 
       final tree = t.toTree();
-      final config = const TreeBuildConfig(
+      const config = TreeBuildConfig(
         startFen: _startFen,
         playAsWhite: true,
         selectionMode: SelectionMode.playable,

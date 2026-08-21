@@ -224,25 +224,9 @@ void main() {
       '$selected selected, ${p2.elapsedMilliseconds}ms',
     );
 
-    // Phase 3: the lines themselves, through the same extract → prune →
-    // write pass the app runs, so what gets reviewed is what a build would
-    // hand the user.  The raw extractor alone wrote every leaf — 602 lines
-    // for a tree the app's coverage pruning reduces to 149, three quarters
-    // of them siblings differing only in the opponent's last move.
     // The very lines the PGN is written from, so the improvement prober
     // judges what the user will actually see rather than every raw leaf.
     final exported = snapshotLines(tree: tree, config: config, fenMap: fenMap);
-    final entries = extractSnapshotLines(
-      tree: tree,
-      config: config,
-      fenMap: fenMap,
-      prefix: sans,
-      repertoireStartFen: kStandardStartFen,
-    );
-    File(
-      p.join(outDir.path, 'repertoire.pgn'),
-    ).writeAsStringSync(entries.join('\n\n'));
-    _say('phase3: ${entries.length} lines written to repertoire.pgn');
 
     // What the build threw away.  Both lists are gone from the tree by the
     // time it is returned, so without these files "was this line ever
@@ -277,8 +261,9 @@ void main() {
           'had no reply, and the position was under coverMinProb',
     );
 
-    // Phase 3.8 before 3.6 on purpose: the improvements decide which games
-    // get the reserved model-game slots.
+    // Phase 3.8 before 3.6 and before the PGN on purpose: the improvements
+    // decide which games get the reserved model-game slots, and the notes
+    // they carry belong in the written lines.
     final prober = MasterImprovementProber(
       config: config,
       book: book.bookMoves,
@@ -299,6 +284,27 @@ void main() {
         _say('  ${imp.note} (+${imp.gainCp}cp)');
       }
     }
+
+    // Phase 3: the lines themselves, through the same extract → prune →
+    // write pass the app runs, so what gets reviewed is what a build would
+    // hand the user.  The raw extractor alone wrote every leaf — 602 lines
+    // for a tree the app's coverage pruning reduces to 149, three quarters
+    // of them siblings differing only in the opponent's last move.
+    final entries = extractSnapshotLines(
+      tree: tree,
+      config: config,
+      fenMap: fenMap,
+      prefix: sans,
+      repertoireStartFen: kStandardStartFen,
+      improvements: improvements,
+    );
+    File(
+      p.join(outDir.path, 'repertoire.pgn'),
+    ).writeAsStringSync(entries.join('\n\n'));
+    _say(
+      'phase3: ${entries.length} lines written to repertoire.pgn, '
+      '${improvements.length} improvement notes attached',
+    );
 
     final modelGames = ModelGameSelector(playAsWhite: config.playAsWhite)
         .select(

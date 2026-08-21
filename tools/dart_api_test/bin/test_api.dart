@@ -15,7 +15,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 const _baseUrl = 'https://explorer.lichess.ovh/lichess';
-const _params = 'variant=standard&speeds=blitz,rapid,classical&ratings=1800,2000,2200,2500';
+const _params =
+    'variant=standard&speeds=blitz,rapid,classical&ratings=1800,2000,2200,2500';
 
 /// Same FENs from the user's generation log.
 const _testFens = [
@@ -50,7 +51,7 @@ Future<void> main(List<String> args) async {
   final client = http.Client();
 
   print('Sequential (persistent http.Client — mirrors ProbabilityService):');
-  print('${'─' * 70}');
+  print('─' * 70);
 
   final totalSw = Stopwatch()..start();
 
@@ -76,25 +77,30 @@ Future<void> main(List<String> args) async {
     final moves = (data['moves'] as List?)?.length ?? 0;
     int totalGames = 0;
     for (final m in data['moves'] ?? []) {
-      totalGames += (m['white'] as int) + (m['draws'] as int) + (m['black'] as int);
+      totalGames +=
+          (m['white'] as int) + (m['draws'] as int) + (m['black'] as int);
     }
     final parseMs = sw.elapsedMilliseconds;
 
     final fenShort = fen.split(' ')[0];
-    final short = fenShort.length > 30 ? '${fenShort.substring(0, 30)}…' : fenShort;
-    print('  [${i + 1}] headers=${headerMs}ms  http=${httpMs}ms  parse=${parseMs}ms  '
-        'total=${headerMs + httpMs + parseMs}ms  '
-        '$moves moves  $totalGames games  $short');
+    final short = fenShort.length > 30
+        ? '${fenShort.substring(0, 30)}…'
+        : fenShort;
+    print(
+      '  [${i + 1}] headers=${headerMs}ms  http=${httpMs}ms  parse=${parseMs}ms  '
+      'total=${headerMs + httpMs + parseMs}ms  '
+      '$moves moves  $totalGames games  $short',
+    );
   }
 
   final seqMs = totalSw.elapsedMilliseconds;
-  print('${'─' * 70}');
+  print('─' * 70);
   print('  Wall-clock: ${seqMs}ms\n');
 
   // --- Parallel test ---
   if (parallel) {
     print('Parallel (5 sibling FENs, concurrent futures):');
-    print('${'─' * 70}');
+    print('─' * 70);
 
     final parSw = Stopwatch()..start();
     final futures = <Future<String>>[];
@@ -108,7 +114,7 @@ Future<void> main(List<String> args) async {
     for (final r in results) {
       print('  $r');
     }
-    print('${'─' * 70}');
+    print('─' * 70);
     print('  Wall-clock (parallel): ${parMs}ms\n');
   }
 
@@ -128,10 +134,13 @@ Future<String> _fetchOne(http.Client client, String fen, int idx) async {
   final moves = (data['moves'] as List?)?.length ?? 0;
   int totalGames = 0;
   for (final m in data['moves'] ?? []) {
-    totalGames += (m['white'] as int) + (m['draws'] as int) + (m['black'] as int);
+    totalGames +=
+        (m['white'] as int) + (m['draws'] as int) + (m['black'] as int);
   }
 
   final fenShort = fen.split(' ')[0];
-  final short = fenShort.length > 30 ? '${fenShort.substring(0, 30)}…' : fenShort;
+  final short = fenShort.length > 30
+      ? '${fenShort.substring(0, 30)}…'
+      : fenShort;
   return '[${idx + 1}] http=${httpMs}ms  $moves moves  $totalGames games  $short';
 }

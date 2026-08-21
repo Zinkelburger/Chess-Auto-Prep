@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/services/game_analysis_controller.dart'
     show cpToWinningChance;
+import 'package:chess_auto_prep/utils/chess_utils.dart' show formatPackedEval;
 import 'package:chess_auto_prep/utils/ease_utils.dart';
 import 'package:chess_auto_prep/utils/eval_constants.dart';
 
@@ -60,6 +61,32 @@ void main() {
 
     test('null scores are treated as 0 cp', () {
       expect(cpToWinningChance(null, null), 0.0);
+    });
+  });
+
+  group('expectedCpFromWinProb never claims mate', () {
+    test('a hopeless probability saturates below the mate threshold', () {
+      expect(expectedCpFromWinProb(0.0).abs(), lessThan(kMateCpThreshold));
+      expect(isMateEval(expectedCpFromWinProb(0.0)), isFalse);
+    });
+
+    test('a winning probability saturates below the mate threshold', () {
+      expect(expectedCpFromWinProb(1.0).abs(), lessThan(kMateCpThreshold));
+      expect(isMateEval(expectedCpFromWinProb(1.0)), isFalse);
+    });
+
+    test('an unevaluated node does not render as mate in 1', () {
+      // BuildTreeNode.expectimaxValue defaults to 0.0 before evaluation.
+      expect(
+        formatPackedEval(expectedCpFromWinProb(0.0)),
+        isNot(contains('#')),
+      );
+    });
+
+    test('ordinary probabilities are unchanged', () {
+      expect(expectedCpFromWinProb(0.5), 0);
+      expect(expectedCpFromWinProb(0.75), greaterThan(0));
+      expect(expectedCpFromWinProb(0.25), lessThan(0));
     });
   });
 }

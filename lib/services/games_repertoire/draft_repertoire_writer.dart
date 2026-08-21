@@ -11,6 +11,7 @@
 library;
 
 import '../../models/move_tree.dart';
+import '../../utils/movetext_builder.dart';
 
 /// Enumerate every root-to-leaf line in [tree] as a SAN sequence.
 List<List<String>> enumerateLines(MoveTree tree) {
@@ -43,11 +44,8 @@ bool lineEndsWithMyMove(List<String> line, {required bool isWhite}) {
 
 /// Numbered label for the final move of [line], e.g. "6...Bg4" or "7.Nf3"
 /// (standard-start numbering — merge is blocked for custom-start repertoires).
-String lastMoveLabel(List<String> line) {
-  final depth = line.length;
-  final number = (depth + 1) ~/ 2;
-  return '$number${depth.isOdd ? '.' : '...'}${line.last}';
-}
+String lastMoveLabel(List<String> line) =>
+    formatMoveAtPly(line.length - 1, line.last, compact: true);
 
 /// Comment stamped on the final move of a gap line so the PGN pane explains
 /// why the line ends mid-conversation.

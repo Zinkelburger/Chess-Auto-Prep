@@ -55,6 +55,7 @@ import 'engine/inline_engine_bar.dart';
 import 'interactive_pgn_editor.dart';
 import 'study/add_to_study_flow.dart';
 import 'pgn_viewer_widget.dart';
+import '../utils/chess_utils.dart';
 
 part 'position_analysis_widget.scratch.dart';
 part 'position_analysis_widget.handoffs.dart';
@@ -828,10 +829,4 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
 // =====================================================================
 
 /// Parse a (possibly 4-field) FEN into a [Position] instance.
-Position? _parseFen(String fen) {
-  try {
-    return Chess.fromSetup(Setup.parseFen(expandFen(fen)));
-  } catch (_) {
-    return null;
-  }
-}
+Position? _parseFen(String fen) => tryParseFen(expandFen(fen));

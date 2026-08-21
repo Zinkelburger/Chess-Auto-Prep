@@ -236,8 +236,9 @@ extension TreeBuildServiceDbExplorer on TreeBuildService {
     node.totalGames = pos.reachCount;
 
     // Transposition detection
-    if (TreeBuildService._resolveTranspositionOrRegister(run, node, queue))
+    if (TreeBuildService._resolveTranspositionOrRegister(run, node, queue)) {
       return;
+    }
 
     final isOurMove = node.isWhiteToMove == config.playAsWhite;
     final basePri = effectiveSearchPriority(node);

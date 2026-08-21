@@ -67,7 +67,6 @@ class StudySidePane extends StatelessWidget {
             child: InteractivePgnEditor(
               tree: study.tree,
               currentPath: study.path,
-              currentRepertoireName: study.chapter.name,
               showAnnotationPanel: true,
               onJump: study.jump,
               onCommentChanged: study.setComment,

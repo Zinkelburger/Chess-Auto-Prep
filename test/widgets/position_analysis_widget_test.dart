@@ -10,13 +10,13 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
+      const MaterialApp(
         home: Scaffold(
           body: Center(
             child: SizedBox(
               width: 400,
               height: 800,
-              child: const PositionAnalysisWidget(playerIsWhite: true),
+              child: PositionAnalysisWidget(playerIsWhite: true),
             ),
           ),
         ),

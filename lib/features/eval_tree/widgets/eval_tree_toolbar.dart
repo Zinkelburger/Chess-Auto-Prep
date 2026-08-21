@@ -147,14 +147,10 @@ class EvalTreeToolbar extends StatelessWidget {
               SizedBox(
                 width: 132,
                 child: SliderTheme(
-                  data: SliderThemeData(
+                  data: const SliderThemeData(
                     trackHeight: 3,
-                    thumbShape: const RoundSliderThumbShape(
-                      enabledThumbRadius: 6,
-                    ),
-                    overlayShape: const RoundSliderOverlayShape(
-                      overlayRadius: 12,
-                    ),
+                    thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6),
+                    overlayShape: RoundSliderOverlayShape(overlayRadius: 12),
                     activeTrackColor: AppColors.info,
                     inactiveTrackColor: AppColors.outline,
                     thumbColor: AppColors.info,
@@ -184,8 +180,8 @@ class EvalTreeToolbar extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (hitDisplayCap)
-                Padding(
-                  padding: const EdgeInsets.only(right: 4),
+                const Padding(
+                  padding: EdgeInsets.only(right: 4),
                   child: Icon(
                     Icons.warning_amber,
                     size: 13,

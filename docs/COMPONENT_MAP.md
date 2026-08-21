@@ -382,7 +382,6 @@ UnifiedEnginePane (when lifecycle ≠ off)
   → Hover on MOVE or PV line → BoardPreviewController (floating) → FloatingBoardPreview overlay
 InlineEngineBar — Stockfish discovery writes best eval to EvalCache on completion
 ExpectimaxLinesPane — same floating preview on line hover
-OnTheFlyExpectimaxService (expectimax dock)
 ```
 
 ### Training
@@ -509,7 +508,7 @@ Used by:
 | File | Purpose | Dependencies |
 |------|---------|--------------|
 | `chess_constants.dart` | Shared chess literals (starting FEN helpers, ply limits) | — |
-| `engine_defaults.dart` | Defaults: interactive analysis depth (`kDefaultDepth` 15), **tree generation eval depth** (`kDefaultGenerationEvalDepth` 14), on-the-fly expectimax eval depth (`kDefaultExpEvalDepth` 12), MultiPV | — |
+| `engine_defaults.dart` | Defaults: interactive analysis depth (`kDefaultDepth` 15), **tree generation eval depth** (`kDefaultGenerationEvalDepth` 14), MultiPV | — |
 | `ui_breakpoints.dart` | Responsive layout width constants | — |
 
 ### `lib/core/`
@@ -766,8 +765,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 
 | File | Purpose |
 |------|---------|
-| `expectimax_line_service.dart` | `followExpectimaxLine`, `generateExpectimaxLines`, `hasPrecomputedExpectimaxAtPly` (`maxSubtreePly` ≥ on-the-fly depth), `isBranchCompleteToPly`, `ExpectimaxLine` model |
-| `on_the_fly_expectimax_service.dart` | Progressive BFS from current FEN, session cache |
+| `expectimax_line_service.dart` | `followExpectimaxLine`, `generateExpectimaxLines` (capped, used by hole/trick probes), `expectimaxLinesForAllMoves` (the pane's position table), `findNodeByFen`, `ExpectimaxLine` model. Pure reads of the cooked tree |
 | `line_metrics_helpers.dart` | Line-level quality/trap/coherence metrics for UI |
 | `coherence_service.dart` | FP-Growth coherence + browse hints; `compute()` runs mining in `Isolate.run` |
 | `fp_growth.dart` | FP-Growth algorithm |
@@ -825,7 +823,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `layout/repertoire_layout.dart` | 3-zone orchestrator (board / main / context) |
 | `layout/board_zone.dart` | Board wrapper; app-bar trap navigation via `BoardZoneControls` |
 | `layout/edit_main_zone.dart` | PGN editor column shell (clipboard + view-in-lines adapters) |
-| `layout/edit_context_zone.dart` | Edit context column: FilterChip visibility toggles; user-arrangeable **columns** (horizontal, draggable dividers) each with a **vertical stack** of panels (draggable dividers). Default layout: col1 = Browse+Engine+Expectimax+Tree stacked, col2 = Lines. **Arrange panes** sheet + long-press chip → assign column. Layout persisted via [EditContextLayoutPrefs] (`edit_context.layout_v1`). Panel shells use [AutomaticKeepAliveClientMixin] but **rebuild slot content** each parent update (tree/generation props must not freeze). Expectimax uses [ExpectimaxPanelHost] (on-the-fly when FEN lacks depth-complete precomputed expectimax, same as dock). `selectedViewsNotifier` mirrors visible set. |
+| `layout/edit_context_zone.dart` | Edit context column: FilterChip visibility toggles; user-arrangeable **columns** (horizontal, draggable dividers) each with a **vertical stack** of panels (draggable dividers). Default layout: col1 = Browse+Engine+Expectimax+Tree stacked, col2 = Lines. **Arrange panes** sheet + long-press chip → assign column. Layout persisted via [EditContextLayoutPrefs] (`edit_context.layout_v1`). Panel shells use [AutomaticKeepAliveClientMixin] but **rebuild slot content** each parent update (tree/generation props must not freeze). Expectimax uses [ExpectimaxPanelHost] (built-tree values only, same as dock). `selectedViewsNotifier` mirrors visible set. |
 | `layout/edit_context_tabs.dart` | `EditContextTabSpec`, `kEditContextTabs` chip descriptors |
 | `layout/edit_context_split_handle.dart` | Draggable horizontal/vertical pane dividers |
 | `layout/edit_context_layout_sheet.dart` | Bottom sheet: reorder stacks, move views between columns |
@@ -868,8 +866,8 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | File | Purpose |
 |------|---------|
 | `engine/unified_engine_pane.dart` | MultiPV table, hoverable PV via `ClickableMoveLineWidget`; FEN changes schedule analysis post-frame (avoids setState-during-build); DB column hidden; best eval persisted to `EvalCache` via `_persistBestEvalToCache()` |
-| `engine/expectimax_lines_pane.dart` | Precomputed + on-the-fly expectimax lines; floating hover preview |
-| `engine/expectimax_panel_host.dart` | Owns [OnTheFlyExpectimaxService] (or accepts external); auto-computes when [hasPrecomputedExpectimaxAtPly] is false at FEN (`onTheFlyMaxDepth`); used by [EditContextZone] and [RepertoireAnalysisDock] |
+| `engine/expectimax_lines_pane.dart` | Position table from the built tree: every move with practical (expectimax) value beside engine eval, ★ on the chosen move, continuation; honest empty states (no tree / not in tree / leaf). Never runs the engine |
+| `engine/expectimax_panel_host.dart` | Thin wrapper binding [ExpectimaxLinesPane] to a [RepertoireController] cursor (or `fenOverride`); used by [EditContextZone], [InlineExpectimaxBar] and [RepertoireAnalysisDock] |
 | `engine/inline_engine_bar.dart` | Compact engine for PGN viewer and tactics; settings button opens `AnalysisSettingsContext.tacticsEngine` (depth + multiPv only); writes Stockfish eval to `EvalCache` after discovery completes |
 | `engine/inline_expectimax_bar.dart` | Compact toggleable expectimax bar for right pane; wraps `ExpectimaxPanelHost(compact: true)` with toggle switch and settings gear |
 | `engine/engine_toggle_button.dart` | Legacy bolt toggle widget (unused; engine on/off is in Settings) |

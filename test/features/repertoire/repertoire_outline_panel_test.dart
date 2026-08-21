@@ -88,6 +88,29 @@ void main() {
     expect(find.textContaining('2 chapters · 3 lines'), findsOneWidget);
   });
 
+  testWidgets('clearing filters is not undone by a pending debounce', (
+    tester,
+  ) async {
+    await pump(tester);
+
+    // Filter down to nothing so the "Clear filters" action is on screen.
+    await tester.enterText(find.byType(TextField), 'zzz');
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('Nothing matches'), findsOneWidget);
+
+    // A fresh keystroke arms a 200ms debounce...
+    await tester.enterText(find.byType(TextField), 'qqq');
+    await tester.pump(const Duration(milliseconds: 50));
+
+    // ...and the user clears the filters before it can fire.
+    await tester.tap(find.text('Clear filters'));
+    await tester.pump(const Duration(milliseconds: 400));
+
+    // The in-flight timer must not resurrect the search just cleared.
+    expect(find.text('Nothing matches'), findsNothing);
+    expect(find.text('Main line'), findsOneWidget);
+  });
+
   testWidgets('expanding a folder reveals its chapters', (tester) async {
     await pump(tester);
     await tester.tap(find.text('Sidelines'));

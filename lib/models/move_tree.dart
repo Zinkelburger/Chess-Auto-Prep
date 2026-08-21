@@ -9,9 +9,10 @@ library;
 import 'package:dartchess/dartchess.dart';
 
 import '../constants/chess_constants.dart';
-import '../utils/chess_utils.dart' show playSanOrNullMove;
+import '../utils/chess_utils.dart' show playSanOrNullMove, tryParseFen;
 import '../utils/pgn_comment_utils.dart' show toggleQualityNag;
 import 'move_tree_node_view.dart';
+import '../utils/fen_utils.dart';
 
 // ---------------------------------------------------------------------------
 // TreePath
@@ -280,7 +281,7 @@ class MoveTree {
     final fens = <String>{};
     void walk(List<MoveNode> nodes) {
       for (final node in nodes) {
-        fens.add(node.fen.split(' ').take(4).join(' '));
+        fens.add(normalizeFen(node.fen));
         walk(node.children);
       }
     }
@@ -304,7 +305,7 @@ class MoveTree {
   /// Returns `null` if the SAN is illegal at the parent position.
   TreePath? addMove(TreePath parentPath, String san) {
     final parentFen = fenAt(parentPath);
-    final pos = _positionFromFen(parentFen);
+    final pos = tryParseFen(parentFen);
     if (pos == null) return null;
     final next = playSanOrNullMove(pos, san);
     if (next == null) return null;
@@ -384,7 +385,7 @@ class MoveTree {
       final fenHeader = game.headers['FEN'];
       final effectiveFen = startingFen ?? fenHeader ?? kStandardStartFen;
 
-      final rootPos = _positionFromFen(effectiveFen) ?? Chess.initial;
+      final rootPos = tryParseFen(effectiveFen) ?? Chess.initial;
       final roots = _convertDartchessNodes(game.moves.children, rootPos);
 
       return MoveTree(startingFen: effectiveFen, roots: roots);
@@ -396,7 +397,7 @@ class MoveTree {
   /// Build a [MoveTree] from a flat SAN list (no variations).
   factory MoveTree.fromMoves(List<String> moves, {String? startingFen}) {
     final fen = startingFen ?? kStandardStartFen;
-    var pos = _positionFromFen(fen) ?? Chess.initial;
+    var pos = tryParseFen(fen) ?? Chess.initial;
     final tree = MoveTree(startingFen: fen);
     var siblings = tree.roots;
 
@@ -447,14 +448,6 @@ class MoveTree {
 
   // ── Private helpers ────────────────────────────────────────────────
 
-  static Position? _positionFromFen(String fen) {
-    try {
-      return Chess.fromSetup(Setup.parseFen(fen));
-    } catch (_) {
-      return null;
-    }
-  }
-
   static List<MoveNode> _convertDartchessNodes(
     List<PgnChildNode<PgnNodeData>> nodes,
     Position parentPosition,
@@ -482,12 +475,8 @@ class MoveTree {
   }
 
   /// Extract move number and side-to-move from a FEN string.
-  static (int moveNumber, bool isWhite) moveNumberFromFen(String fen) {
-    final parts = fen.split(' ');
-    final isWhite = parts.length >= 2 ? parts[1] == 'w' : true;
-    final moveNumber = parts.length >= 6 ? (int.tryParse(parts[5]) ?? 1) : 1;
-    return (moveNumber, isWhite);
-  }
+  static (int moveNumber, bool isWhite) moveNumberFromFen(String fen) =>
+      (fullMoveNumber(fen), isWhiteToMove(fen));
 
   static void _writeNodes(
     StringBuffer buffer,

@@ -216,7 +216,6 @@ Traps are indexed by `TrapIndexService` for O(1) lookup by FEN and per-line quer
 | `candidateSourceOur` | `maia` | EngineSettings | Our candidate source |
 | `candidateSourceOpp` | `maia` | EngineSettings | Opponent candidate source |
 | `stockfishTopN` | 3 | EngineSettings | Stockfish MultiPV count |
-| `onTheFlyMaxDepth` | 5 | EngineSettings | On-the-fly BFS depth |
 | `minProbability` | 0.02 | TreeBuildConfig | Pruning probability threshold |
 | `maxEvalLossCp` | 80 | TreeBuildConfig | Max eval loss for our moves |
 | `bestFirst` | `true` | TreeBuildConfig | Priority frontier (anytime) vs FIFO BFS |
@@ -309,7 +308,7 @@ own PGN game, so training, browsing and per-line statistics are unchanged.
 - `lib/services/generation/opponent_prior.dart` — λ-smoothing with Maia prior
 - `lib/services/generation/repertoire_verifier.dart` — final deep-verification pass
 - `lib/services/generation/setup_bias.dart` — preferred-setup parsing/matching
-- `lib/services/on_the_fly_expectimax_service.dart` — on-the-fly computation
+- `lib/services/expectimax_line_service.dart` — reads stored expectimax values into lines for the Expectimax pane (no computation)
 - `lib/features/browse/services/candidate_service.dart` — candidate move generation
 - `lib/features/traps/services/trap_index_service.dart` — trap indexing and lookup
 - `lib/features/coverage/services/coverage_suggestion_service.dart` — coverage gap suggestions

@@ -70,7 +70,7 @@ void main() {
 
   group('structure features', () {
     test('PawnOnSquare(d5, ours) vetoes a position with our pawn on d5', () {
-      final f = const PawnOnSquare(square: 'd5');
+      const f = PawnOnSquare(square: 'd5');
       final withD5 = _after(
         '1.d4 d5',
       ); // black to move? no: white played d4, black d5 -> white to move
@@ -81,7 +81,7 @@ void main() {
     });
 
     test('EarlyQueenTrade vetoes when our queen is gone', () {
-      final f = const EarlyQueenTrade();
+      const f = EarlyQueenTrade();
       final traded = _after('1.d4 d5 2.Nc3 Nf6 3.e4 dxe4 4.d5 Qxd5 5.Nxd5');
       expect(f.score(traded, Side.black), -1.0);
       final normal = _after('1.d4 Nf6');

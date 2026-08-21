@@ -11,6 +11,8 @@
 /// is absent instead of inventing a neutral value.
 library;
 
+import '../../../utils/ease_utils.dart' show expectedCpFromWinProb;
+
 /// Where a move-likelihood number came from.
 enum MoveLikelihoodSource {
   /// Maia's predicted human policy.
@@ -74,6 +76,12 @@ class MoveAnnotation {
   /// Engine evaluation after the move, in centipawns from *our* perspective.
   final int? evalCp;
 
+  /// Expectimax value of the position after the move: our practical win
+  /// probability in [0, 1], folding in how often opponents go wrong from
+  /// here.  Read beside [evalCp] — the gap between the two is what the
+  /// repertoire is banking on.
+  final double? expectimaxValue;
+
   /// How easily the side to move finds a good move here, in [0, 1].  Low is
   /// good for us: the opponent is likely to go wrong.
   final double? opponentEase;
@@ -121,12 +129,21 @@ class MoveAnnotation {
   /// turned the metrics off still needs to know where preparation stopped.
   final String? note;
 
+  /// Set on the last move of a line that ends by transposing into a
+  /// position another line continues from: that line's moves from the
+  /// root to the shared position.  Written as `[%transposes Nf3 d5 d4 Nf6]`
+  /// so readers that follow move sequences (the game-deviation walker) can
+  /// graft this line's end onto the owner's continuation; the prose for the
+  /// human reader goes in [note].
+  final List<String>? transposesTo;
+
   const MoveAnnotation({
     this.likelihood,
     this.likelihoodSource,
     this.gameCount,
     this.practicalScore,
     this.evalCp,
+    this.expectimaxValue,
     this.opponentEase,
     this.myEase,
     this.isOnlyMove = false,
@@ -139,6 +156,7 @@ class MoveAnnotation {
     this.lastBookMove = false,
     this.lastPlayedYear,
     this.note,
+    this.transposesTo,
   });
 
   static const none = MoveAnnotation();
@@ -228,14 +246,17 @@ class MoveAnnotation {
     return parts.join(' ');
   }
 
-  /// This annotation with [note] set (a sentence such as "…improves on …
-  /// in <game>"), everything else unchanged.
+  /// This annotation with [note] added (a sentence such as "…improves on …
+  /// in <game>"), everything else unchanged.  A note already present is kept
+  /// and the new one follows it: the extractor's transposition note and the
+  /// composer's improvement note can land on the same move.
   MoveAnnotation withNote(String note) => MoveAnnotation(
     likelihood: likelihood,
     likelihoodSource: likelihoodSource,
     gameCount: gameCount,
     practicalScore: practicalScore,
     evalCp: evalCp,
+    expectimaxValue: expectimaxValue,
     opponentEase: opponentEase,
     myEase: myEase,
     isOnlyMove: isOnlyMove,
@@ -247,8 +268,75 @@ class MoveAnnotation {
     betterMoveSan: betterMoveSan,
     lastBookMove: lastBookMove,
     lastPlayedYear: lastPlayedYear,
-    note: note,
+    transposesTo: transposesTo,
+    note: this.note == null || this.note!.isEmpty ? note : '${this.note} $note',
   );
+
+  /// This annotation marked as the end of a line that transposes into
+  /// [ownerMoves]' position, with [note] added for the reader.
+  MoveAnnotation withTransposition(List<String> ownerMoves, String note) =>
+      MoveAnnotation(
+        likelihood: likelihood,
+        likelihoodSource: likelihoodSource,
+        gameCount: gameCount,
+        practicalScore: practicalScore,
+        evalCp: evalCp,
+        opponentEase: opponentEase,
+        myEase: myEase,
+        isOnlyMove: isOnlyMove,
+        onlyMoveLeadCp: onlyMoveLeadCp,
+        humanFrequency: humanFrequency,
+        naturalAlternativeSan: naturalAlternativeSan,
+        naturalAlternativeLossCp: naturalAlternativeLossCp,
+        mistakeCp: mistakeCp,
+        betterMoveSan: betterMoveSan,
+        lastBookMove: lastBookMove,
+        lastPlayedYear: lastPlayedYear,
+        transposesTo: List.unmodifiable(ownerMoves),
+        note: this.note == null || this.note!.isEmpty
+            ? note
+            : '${this.note} $note',
+      );
+
+  /// This annotation with its transposition marker undone — the exact inverse
+  /// of [withTransposition] for the same [note].
+  ///
+  /// Used when the move order the note named did not survive into the
+  /// exported book. "Transposes to 1. d4 ..." pointing at a line the reader
+  /// cannot find is worse than a line that simply ends, so the claim is
+  /// withdrawn rather than left standing.
+  MoveAnnotation withoutTransposition(String note) {
+    final current = this.note;
+    final String? restored;
+    if (current == null || current == note) {
+      restored = null;
+    } else if (current.endsWith(' $note')) {
+      restored = current.substring(0, current.length - note.length - 1);
+    } else {
+      // Not the note we appended; leave the prose alone and drop only the
+      // structured marker.
+      restored = current;
+    }
+    return MoveAnnotation(
+      likelihood: likelihood,
+      likelihoodSource: likelihoodSource,
+      gameCount: gameCount,
+      practicalScore: practicalScore,
+      evalCp: evalCp,
+      opponentEase: opponentEase,
+      myEase: myEase,
+      isOnlyMove: isOnlyMove,
+      onlyMoveLeadCp: onlyMoveLeadCp,
+      humanFrequency: humanFrequency,
+      naturalAlternativeSan: naturalAlternativeSan,
+      naturalAlternativeLossCp: naturalAlternativeLossCp,
+      mistakeCp: mistakeCp,
+      betterMoveSan: betterMoveSan,
+      lastBookMove: lastBookMove,
+      lastPlayedYear: lastPlayedYear,
+      note: restored != null && restored.isEmpty ? null : restored,
+    );
+  }
 
   /// This annotation flagged as the line's last move in master practice.
   MoveAnnotation withLastBookMove() => MoveAnnotation(
@@ -257,6 +345,7 @@ class MoveAnnotation {
     gameCount: gameCount,
     practicalScore: practicalScore,
     evalCp: evalCp,
+    expectimaxValue: expectimaxValue,
     opponentEase: opponentEase,
     myEase: myEase,
     isOnlyMove: isOnlyMove,
@@ -268,14 +357,17 @@ class MoveAnnotation {
     betterMoveSan: betterMoveSan,
     lastBookMove: true,
     lastPlayedYear: lastPlayedYear,
+    transposesTo: transposesTo,
     note: note,
   );
 
   bool get isEmpty =>
       note == null &&
+      transposesTo == null &&
       likelihood == null &&
       practicalScore == null &&
       evalCp == null &&
+      expectimaxValue == null &&
       opponentEase == null &&
       myEase == null &&
       lastPlayedYear == null &&
@@ -298,6 +390,10 @@ class MoveAnnotation {
     // switched the metrics off still wants to know a move is forced.
     final why = explanation;
     if (why.isNotEmpty) tokens.add(why);
+    // Machine-readable twin of the transposition note; survives like it.
+    if (transposesTo != null) {
+      tokens.add('[%transposes ${transposesTo!.join(' ')}]');
+    }
     if (likelihood != null && likelihoodSource != null) {
       tokens.add(
         '[%${likelihoodSource!.pgnTag} ${likelihood!.toStringAsFixed(3)}]',
@@ -306,6 +402,11 @@ class MoveAnnotation {
 
     if (detail.emitsMetrics) {
       if (evalCp != null) tokens.add('[%eval ${_formatPawns(evalCp!)}]');
+      if (expectimaxValue != null) {
+        tokens.add(
+          '[%expectimax ${_formatPawns(expectedCpFromWinProb(expectimaxValue!))}]',
+        );
+      }
       if (isOnlyMove) tokens.add('[%onlyMove]');
       if (myEase != null) {
         tokens.add('[%myEase ${myEase!.toStringAsFixed(2)}]');

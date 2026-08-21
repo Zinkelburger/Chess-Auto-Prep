@@ -19,6 +19,8 @@ import '../utils/pgn_comment_utils.dart';
 import '../utils/training_markers.dart' show hasPuzzleStart;
 import 'pgn_parsing_service.dart' as pgn;
 import 'storage/storage_factory.dart';
+import '../utils/chess_utils.dart';
+import '../utils/movetext_builder.dart';
 
 class RepertoireService {
   /// Parses a repertoire PGN file and extracts all trainable lines.
@@ -311,11 +313,7 @@ class RepertoireService {
       return Chess.initial;
     }
 
-    try {
-      return Chess.fromSetup(Setup.parseFen(fen));
-    } catch (_) {
-      return Chess.initial;
-    }
+    return tryParseFen(fen) ?? Chess.initial;
   }
 
   /// Extract cumulative line probability (0–1) from PGN headers or comments.
@@ -539,70 +537,6 @@ class RepertoireService {
     final raw = base64Url.encode(utf8.encode('${moves.join(' ')}|$index'));
     final trimmed = raw.replaceAll('=', '');
     return 'line_${trimmed.length > 22 ? trimmed.substring(0, 22) : trimmed}';
-  }
-
-  /// Creates training questions from repertoire lines for a specific color
-  List<TrainingQuestion> createTrainingQuestions(
-    List<RepertoireLine> lines, {
-    String? colorFilter,
-  }) {
-    final questions = <TrainingQuestion>[];
-
-    for (final line in lines) {
-      if (colorFilter != null && line.color != colorFilter) {
-        continue;
-      }
-
-      for (int moveIndex = 0; moveIndex < line.moves.length; moveIndex++) {
-        final isWhiteMove = moveIndex % 2 == 0;
-        final shouldIncludeMove =
-            (line.color == 'white' && isWhiteMove) ||
-            (line.color == 'black' && !isWhiteMove);
-
-        if (shouldIncludeMove) {
-          try {
-            questions.add(line.createTrainingQuestion(moveIndex));
-          } catch (e) {
-            if (kDebugMode) {
-              debugPrint(
-                'Error creating training question for ${line.name} '
-                'move $moveIndex: $e',
-              );
-            }
-          }
-        }
-      }
-    }
-
-    return questions;
-  }
-
-  /// Filters training questions based on difficulty or position type
-  List<TrainingQuestion> filterQuestions(
-    List<TrainingQuestion> questions, {
-    int? maxMoveDepth,
-    bool? openingOnly,
-  }) {
-    var filtered = questions;
-
-    if (maxMoveDepth != null) {
-      filtered = filtered.where((q) => q.moveIndex < maxMoveDepth).toList();
-    }
-
-    if (openingOnly == true) {
-      filtered = filtered
-          .where((q) => q.moveIndex < 20)
-          .toList(); // First 10 moves per side
-    }
-
-    return filtered;
-  }
-
-  /// Shuffles questions for training variety
-  List<TrainingQuestion> shuffleQuestions(List<TrainingQuestion> questions) {
-    final shuffled = List<TrainingQuestion>.from(questions);
-    shuffled.shuffle();
-    return shuffled;
   }
 
   /// Updates the [Event] header (title) for a specific line in a PGN file.
@@ -1079,14 +1013,6 @@ class RepertoireService {
     return [...headers, '', moveText].join('\n');
   }
 
-  static String _movesToPgnMoveText(List<String> moves) {
-    if (moves.isEmpty) return '';
-    final sb = StringBuffer();
-    for (int i = 0; i < moves.length; i++) {
-      if (i.isEven) sb.write('${(i ~/ 2) + 1}. ');
-      sb.write(moves[i]);
-      if (i < moves.length - 1) sb.write(' ');
-    }
-    return sb.toString();
-  }
+  static String _movesToPgnMoveText(List<String> moves) =>
+      buildNumberedMovetext(moves);
 }

@@ -10,7 +10,6 @@ import '../core/repertoire_controller.dart';
 import '../models/build_tree_node.dart';
 import '../models/move_tree.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
-import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
 import '../services/coherence_service.dart';
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
@@ -32,7 +31,6 @@ class PgnWithAnalysisPane extends StatefulWidget {
   final void Function(TreePath)? onDelete;
   final void Function(TreePath)? onPromote;
   final void Function(TreePath)? onMakeMainLine;
-  final String? repertoireName;
   final String repertoireColor;
   final bool isEditingExistingLine;
   final void Function(String updatedPgn)? onLineEdited;
@@ -46,10 +44,7 @@ class PgnWithAnalysisPane extends StatefulWidget {
   final BoardPreviewController boardPreview;
   final CoherenceResult? coherenceResult;
   final bool isAnalysisActive;
-  final bool isGenerating;
-  final bool isGenerationPaused;
   final bool embedAnalysisDock;
-  final TrapIndexService? trapIndex;
 
   /// Read-only header shown instead of the title field for ephemeral lines
   /// (e.g. "Trap #45 · Sicilian Defense").
@@ -66,7 +61,6 @@ class PgnWithAnalysisPane extends StatefulWidget {
     this.onDelete,
     this.onPromote,
     this.onMakeMainLine,
-    this.repertoireName,
     required this.repertoireColor,
     required this.isEditingExistingLine,
     this.onLineEdited,
@@ -80,10 +74,7 @@ class PgnWithAnalysisPane extends StatefulWidget {
     required this.boardPreview,
     this.coherenceResult,
     required this.isAnalysisActive,
-    this.isGenerating = false,
-    this.isGenerationPaused = false,
     this.embedAnalysisDock = true,
-    this.trapIndex,
     this.ephemeralTitle,
   });
 
@@ -167,8 +158,6 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
                       boardPreview: widget.boardPreview,
                       coherenceResult: widget.coherenceResult,
                       isActive: widget.isAnalysisActive,
-                      isGenerating: widget.isGenerating,
-                      isGenerationPaused: widget.isGenerationPaused,
                     ),
                   ),
                   _SplitHandle(
@@ -258,13 +247,10 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
       onDelete: widget.onDelete,
       onPromote: widget.onPromote,
       onMakeMainLine: widget.onMakeMainLine,
-      repertoireName: widget.repertoireName,
       repertoireColor: widget.repertoireColor,
       isEditingExistingLine: widget.isEditingExistingLine,
       onLineEdited: widget.onLineEdited,
       onViewInLines: widget.onViewInLines,
-      trapIndex: widget.trapIndex,
-      boardPreview: widget.boardPreview,
       ephemeralTitle: widget.ephemeralTitle,
     );
   }

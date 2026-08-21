@@ -155,12 +155,12 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
+                const Icon(
                   Icons.warning_amber_rounded,
                   size: 18,
                   color: AppColors.warning,
                 ),
-                SizedBox(width: 8),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     _unavailableReason ??

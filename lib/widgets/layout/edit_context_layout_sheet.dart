@@ -120,8 +120,8 @@ class _EditContextLayoutSheetState extends State<_EditContextLayoutSheet> {
               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
             ),
             if (col.views.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
                 child: Text(
                   'No views — assign from chips (long-press) or enable a panel.',
                   style: AppTextStyles.caption,

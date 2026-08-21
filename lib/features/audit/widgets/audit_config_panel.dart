@@ -20,6 +20,7 @@ import '../models/audit_result.dart';
 import '../services/audit_config.dart';
 import '../services/repertoire_audit_service.dart';
 import '../../../widgets/labeled_toggle.dart';
+import '../../../utils/movetext_builder.dart';
 
 class AuditConfigPanel extends StatefulWidget {
   final OpeningTree? openingTree;
@@ -246,15 +247,11 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
           const SizedBox(height: 8),
 
           // Uses Stockfish + Maia (always on)
-          Row(
+          const Row(
             children: [
-              const Icon(
-                Icons.memory,
-                size: 13,
-                color: AppColors.onSurfaceMuted,
-              ),
-              const SizedBox(width: 4),
-              const Text(
+              Icon(Icons.memory, size: 13, color: AppColors.onSurfaceMuted),
+              SizedBox(width: 4),
+              Text(
                 'Stockfish + Maia',
                 style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
               ),
@@ -396,8 +393,8 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
               ],
             ),
           ] else
-            Padding(
-              padding: const EdgeInsets.only(left: 20),
+            const Padding(
+              padding: EdgeInsets.only(left: 20),
               child: Text(
                 'Check against book & course lines',
                 style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
@@ -487,14 +484,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
     return Tooltip(message: tooltip, child: field);
   }
 
-  String _moveSequenceLabel(List<String> moves) {
-    if (moves.isEmpty) return 'Initial position';
-    final buf = StringBuffer();
-    for (int i = 0; i < moves.length; i++) {
-      if (i % 2 == 0) buf.write('${(i ~/ 2) + 1}.');
-      buf.write(moves[i]);
-      if (i < moves.length - 1) buf.write(' ');
-    }
-    return buf.toString();
-  }
+  String _moveSequenceLabel(List<String> moves) => moves.isEmpty
+      ? 'Initial position'
+      : buildNumberedMovetext(moves, compact: true);
 }

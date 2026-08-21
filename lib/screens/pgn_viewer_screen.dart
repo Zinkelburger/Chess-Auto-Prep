@@ -630,6 +630,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// Which side I played in a game, by matching the configured account
   /// usernames against the White/Black headers. Null when neither matches —
   /// then the game isn't mine and deviation is meaningless.
+  @override
   bool? _myColorIn(Map<String, String> headers) {
     final appState = context.read<AppState>();
     final names = <String>{
@@ -849,6 +850,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// copy the current game into a study and edit it there. (In-place study
   /// editing of a shared collection is deliberately not offered: Study
   /// autosave rewrites the whole file, which a games cache can't tolerate.)
+  @override
   Future<void> _editInStudy() async {
     final games = _controller.filteredGames;
     if (games.isEmpty) return;
@@ -893,6 +895,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// "Save filtered games as study…": promote the current slice (or the whole
   /// collection when unsliced) into a study of its own — the bridge from
   /// exploring a big collection to curating the interesting games.
+  @override
   Future<void> _saveSliceAsStudy() async {
     final games = _controller.filteredGames;
     if (games.isEmpty) return;

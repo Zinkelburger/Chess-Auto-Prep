@@ -68,7 +68,7 @@ class AuditStatusRow extends StatelessWidget {
           child: Row(
             children: [
               if (isAuditing) ...[
-                SizedBox(
+                const SizedBox(
                   width: 10,
                   height: 10,
                   child: CircularProgressIndicator(
@@ -88,7 +88,7 @@ class AuditStatusRow extends StatelessWidget {
                 ),
               ] else ...[
                 if (totalMatching > visibleCount) ...[
-                  Text(
+                  const Text(
                     'Top',
                     style: TextStyle(
                       fontSize: 11,

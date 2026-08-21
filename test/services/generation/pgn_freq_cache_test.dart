@@ -36,7 +36,7 @@ PgnFreqMap _sampleMap() {
     ..recordMove(_fenA, 'd2d4', 'd4', outcome: GameOutcome.blackWin)
     ..recordReach(_fenB);
   map.games.addAllUnchecked([
-    PgnGameRecord(
+    const PgnGameRecord(
       white: 'Nepomniachtchi, I',
       black: 'Ding, L',
       whiteElo: 2795,
@@ -44,7 +44,7 @@ PgnFreqMap _sampleMap() {
       event: 'World Championship',
       date: '2023.04.09',
       outcome: GameOutcome.blackWin,
-      movesSan: const ['e4', 'e5', 'Nf3'],
+      movesSan: ['e4', 'e5', 'Nf3'],
     ),
   ]);
   map.getOrCreate(_fenA).addGameRef(0);

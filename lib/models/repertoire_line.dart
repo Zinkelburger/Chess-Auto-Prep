@@ -4,7 +4,6 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 
-import '../utils/chess_utils.dart' show isNullMoveSan, playSanOrNullMove;
 import '../utils/pgn_comment_utils.dart' show filterDisplayComment;
 import '../utils/training_markers.dart' show hasPuzzleStart, hasPuzzleEnd;
 
@@ -91,41 +90,6 @@ class RepertoireLine {
     gameIndex: gameIndex,
   );
 
-  /// Creates a training question at the specified move index
-  /// Returns the position where the user needs to make their move
-  TrainingQuestion createTrainingQuestion(int moveIndex) {
-    if (moveIndex >= moves.length) {
-      throw ArgumentError('Move index out of range');
-    }
-
-    // Build position up to the move before the target move
-    Position position = startPosition;
-    final leadupMoves = <String>[];
-
-    for (int i = 0; i < moveIndex; i++) {
-      final next = playSanOrNullMove(position, moves[i]);
-      if (next == null) {
-        throw StateError('Invalid move in repertoire: ${moves[i]}');
-      }
-      if (!isNullMoveSan(moves[i])) leadupMoves.add(moves[i]);
-      position = next;
-    }
-
-    final correctMove = moves[moveIndex];
-    final isWhiteToMove = position.turn == Side.white;
-
-    return TrainingQuestion(
-      lineId: id,
-      lineName: name,
-      position: position,
-      leadupMoves: leadupMoves,
-      correctMove: correctMove,
-      isWhiteToMove: isWhiteToMove,
-      moveIndex: moveIndex,
-      comment: comments[moveIndex.toString()],
-    );
-  }
-
   /// Gets the total number of trainable moves in this line
   int get totalMoves => moves.length;
 
@@ -210,56 +174,4 @@ String formatLineMovesText(RepertoireLine line, {int start = 0, int? end}) {
     }
   }
   return parts.join(' ');
-}
-
-class TrainingQuestion {
-  final String lineId;
-  final String lineName;
-  final Position position;
-  final List<String> leadupMoves;
-  final String correctMove;
-  final bool isWhiteToMove;
-  final int moveIndex;
-  final String? comment;
-
-  TrainingQuestion({
-    required this.lineId,
-    required this.lineName,
-    required this.position,
-    required this.leadupMoves,
-    required this.correctMove,
-    required this.isWhiteToMove,
-    required this.moveIndex,
-    this.comment,
-  });
-
-  /// Creates a user-friendly question text
-  String get questionText {
-    final colorText = isWhiteToMove ? 'White' : 'Black';
-
-    if (leadupMoves.isEmpty) {
-      return 'Playing as $colorText: What is your opening move?';
-    } else {
-      final lastMoves = leadupMoves.length >= 2
-          ? leadupMoves.sublist(leadupMoves.length - 2).join(' ')
-          : leadupMoves.last;
-      return 'Playing as $colorText after $lastMoves: What do you play?';
-    }
-  }
-
-  /// Validates if the user's move matches the correct move
-  bool validateMove(String userMove) {
-    // Parse the user's move and check if it matches the correct move
-    final userParsed = position.parseSan(userMove);
-    final correctParsed = position.parseSan(correctMove);
-
-    if (userParsed == null || correctParsed == null) {
-      return false;
-    }
-
-    return userParsed == correctParsed;
-  }
-
-  @override
-  String toString() => 'TrainingQuestion($questionText -> $correctMove)';
 }

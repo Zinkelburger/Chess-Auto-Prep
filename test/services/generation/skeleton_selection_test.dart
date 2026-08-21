@@ -79,7 +79,7 @@ void main() {
   // Black to move after 1.d4 Nf6 2.Nf3 — a Benko player's node. Two candidate
   // replies: ...c5 (the consistent move) and ...d5 (a QGD-ish move) with a
   // slightly BETTER engine eval, so only a skeleton signal picks ...c5.
-  BuildTree _nf3Tree({required int c5Cp, required int d5Cp}) {
+  BuildTree nf3Tree({required int c5Cp, required int d5Cp}) {
     final rootFen = _fen('1.d4 Nf6 2.Nf3'); // black to move
     final root = _n(fen: rootFen, san: '', uci: '', ply: 2, whiteToMove: false);
     final c5 = _n(
@@ -107,7 +107,7 @@ void main() {
     return BuildTree(root: root);
   }
 
-  SkeletonPlan _benkoPlan() => SkeletonPlan(
+  SkeletonPlan benkoPlan() => SkeletonPlan(
     nodes: SkeletonPlan.parseLines(const [
       '1.d4 Nf6 2.c4 c5 3.Nf3 cxd4 4.Nxd4 e5',
       '1.d4 Nf6 2.c4 c5 3.d5 b5 4.cxb5 a6 5.bxa6 e6',
@@ -115,35 +115,35 @@ void main() {
   );
 
   test('with no plan, the better-expectimax move (d5) is chosen', () {
-    final tree = _nf3Tree(c5Cp: 10, d5Cp: 10);
-    final config = const TreeBuildConfig(startFen: _start, playAsWhite: false);
+    final tree = nf3Tree(c5Cp: 10, d5Cp: 10);
+    const config = TreeBuildConfig(startFen: _start, playAsWhite: false);
     expect(_selected(tree, config), ['d5']);
   });
 
   test('transfer bias picks ...c5 from the skeleton at 2.Nf3', () {
     // c5 and d5 both sound (within 50cp); default pick is d5. Skeleton played
     // ...c5 after 2.c4 (4 squares away) → transfer overrides to c5.
-    final tree = _nf3Tree(c5Cp: 10, d5Cp: 10);
-    final config = TreeBuildConfig(
+    final tree = nf3Tree(c5Cp: 10, d5Cp: 10);
+    final config = const TreeBuildConfig(
       startFen: _start,
       playAsWhite: false,
-    ).copyWith(skeletonPlan: _benkoPlan());
+    ).copyWith(skeletonPlan: benkoPlan());
     expect(_selected(tree, config), ['c5']);
   });
 
   test('transfer does not override when the transfer move is unsound', () {
     // ...c5 now loses 120cp vs ...d5 → outside the 50cp window → d5 stands.
-    final tree = _nf3Tree(c5Cp: 130, d5Cp: 10);
-    final config = TreeBuildConfig(
+    final tree = nf3Tree(c5Cp: 130, d5Cp: 10);
+    final config = const TreeBuildConfig(
       startFen: _start,
       playAsWhite: false,
-    ).copyWith(skeletonPlan: _benkoPlan());
+    ).copyWith(skeletonPlan: benkoPlan());
     expect(_selected(tree, config), ['d5']);
   });
 
   test('a pin is honoured even when it is the worse move', () {
     // Pin ...d5 at 2.Nf3 even though c5 is better — a pin is the user's call.
-    final tree = _nf3Tree(c5Cp: 40, d5Cp: 10);
+    final tree = nf3Tree(c5Cp: 40, d5Cp: 10);
     final pinFen = normalizeFen(_fen('1.d4 Nf6 2.Nf3'));
     final plan = SkeletonPlan(
       nodes: [
@@ -154,7 +154,7 @@ void main() {
         ),
       ],
     );
-    final config = TreeBuildConfig(
+    final config = const TreeBuildConfig(
       startFen: _start,
       playAsWhite: false,
     ).copyWith(skeletonPlan: plan);
@@ -164,8 +164,8 @@ void main() {
   test('structure veto drops ...d5 (pawn on d5) in favour of ...c5', () {
     // Both sound and NO transfer targets (empty node list) — only the veto
     // acts. ...d5 puts a black pawn on d5 → vetoed → c5 chosen.
-    final tree = _nf3Tree(c5Cp: 10, d5Cp: 25); // d5 better by eval
-    final config = TreeBuildConfig(startFen: _start, playAsWhite: false)
+    final tree = nf3Tree(c5Cp: 10, d5Cp: 25); // d5 better by eval
+    final config = const TreeBuildConfig(startFen: _start, playAsWhite: false)
         .copyWith(
           skeletonPlan: const SkeletonPlan(
             features: [PawnOnSquare(square: 'd5')],

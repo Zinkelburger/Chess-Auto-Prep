@@ -11,26 +11,23 @@ class TacticsBrowseHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: Row(
         children: [
           // Leading space of the rows: board preview + the action buttons.
-          const SizedBox(width: 168),
-          const SizedBox(width: 32, child: Text('Type', style: _headerStyle)),
-          const SizedBox(width: 8),
-          const SizedBox(width: 80, child: Text('Rating', style: _headerStyle)),
-          const SizedBox(width: 8),
-          const Expanded(flex: 3, child: Text('Game', style: _headerStyle)),
-          const SizedBox(width: 8),
-          const Expanded(flex: 2, child: Text('Context', style: _headerStyle)),
-          const SizedBox(width: 8),
-          const Expanded(
-            flex: 2,
-            child: Text('Played → Best', style: _headerStyle),
-          ),
-          const SizedBox(width: 8),
-          const SizedBox(
+          SizedBox(width: 168),
+          SizedBox(width: 32, child: Text('Type', style: _headerStyle)),
+          SizedBox(width: 8),
+          SizedBox(width: 80, child: Text('Rating', style: _headerStyle)),
+          SizedBox(width: 8),
+          Expanded(flex: 3, child: Text('Game', style: _headerStyle)),
+          SizedBox(width: 8),
+          Expanded(flex: 2, child: Text('Context', style: _headerStyle)),
+          SizedBox(width: 8),
+          Expanded(flex: 2, child: Text('Played → Best', style: _headerStyle)),
+          SizedBox(width: 8),
+          SizedBox(
             width: 60,
             child: Text(
               'Stats',

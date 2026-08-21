@@ -8,6 +8,7 @@ import 'package:dartchess/dartchess.dart';
 import '../constants/chess_constants.dart';
 import '../utils/chess_utils.dart' show isNullMoveSan, playSanOrNullMove;
 import '../utils/fen_utils.dart';
+import '../utils/movetext_builder.dart';
 
 /// How win/draw/loss stats should be colored when displayed.
 ///
@@ -165,10 +166,7 @@ class OpeningTreeNode {
   /// position *after* the move, so the mover is the side that is no longer to
   /// move. FEN-derived (rather than ply parity) so custom start positions and
   /// transposed paths stay correct.
-  bool get moverWasWhite {
-    final parts = fen.split(' ');
-    return parts.length > 1 && parts[1] == 'b';
-  }
+  bool get moverWasWhite => !isWhiteToMove(fen);
 
   /// How likely the protagonist (the player whose games built this tree,
   /// playing White when [protagonistIsWhite]) is to reach this node's
@@ -208,22 +206,7 @@ class OpeningTreeNode {
   String getMovePathString() {
     final moves = getMovePath();
     if (moves.isEmpty) return 'Starting position';
-
-    final buffer = StringBuffer();
-    for (int i = 0; i < moves.length; i++) {
-      if (i % 2 == 0) {
-        // White's move - add move number
-        buffer.write('${(i ~/ 2) + 1}.');
-        buffer.write(moves[i]);
-        buffer.write(' ');
-      } else {
-        // Black's move
-        buffer.write(moves[i]);
-        buffer.write(' ');
-      }
-    }
-
-    return buffer.toString().trim();
+    return buildNumberedMovetext(moves, compact: true);
   }
 
   @override
@@ -363,17 +346,9 @@ class OpeningTree {
 
   bool get canGoBack => _walkedSans.isNotEmpty;
 
-  String get currentMovePathString {
-    final moves = _walkedSans;
-    if (moves.isEmpty) return 'Starting position';
-    final buffer = StringBuffer();
-    for (int i = 0; i < moves.length; i++) {
-      if (i % 2 == 0) buffer.write('${(i ~/ 2) + 1}.');
-      buffer.write(moves[i]);
-      buffer.write(' ');
-    }
-    return buffer.toString().trim();
-  }
+  String get currentMovePathString => _walkedSans.isEmpty
+      ? 'Starting position'
+      : buildNumberedMovetext(_walkedSans, compact: true);
 
   /// Continuations from [currentFen]: moves actually played there, plus
   /// legal moves that land on a FEN the tree already has (one-ply

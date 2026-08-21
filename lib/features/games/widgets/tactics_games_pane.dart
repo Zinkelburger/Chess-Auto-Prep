@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_state.dart';
-import '../../../core/pending_handoff.dart' show PgnViewerTab;
 import '../../../screens/settings_screen.dart';
 import '../../../services/tactics/tactics_import_coordinator.dart';
 import '../../../services/tactics/tactics_session_controller.dart';

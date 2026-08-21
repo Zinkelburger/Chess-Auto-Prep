@@ -190,11 +190,7 @@ class EngineMoveRow extends StatelessWidget {
     final sanMoves = uciPvToSanCached(afterFirstMove, continuationUci);
     if (sanMoves.isEmpty) return const SizedBox.shrink();
 
-    final fenParts = afterFirstMove.split(' ');
-    final fullMoveNumber =
-        int.tryParse(fenParts.length >= 6 ? fenParts[5] : '1') ?? 1;
-    final isBlack = !isWhiteToMove(afterFirstMove);
-    final startPly = (fullMoveNumber - 1) * 2 + (isBlack ? 1 : 0);
+    final startPly = plyFromFen(afterFirstMove);
 
     return ClickableMoveLineWidget(
       sanMoves: sanMoves,

@@ -49,8 +49,15 @@ double winningChanceFromCp(int cp) =>
 
 /// Inverse of [winProbability]: converts a win probability V in (0,1) back
 /// to an approximate centipawn value.
+///
+/// The saturation cap sits one centipawn *below* [kMateCpThreshold] on
+/// purpose.  This is a heuristic score derived from a probability, never a
+/// proven mate, so it must not land in the range display code reads as one —
+/// saturating at ±9999 made every decided position render as `#1`/`-#1`, and
+/// made an unevaluated node (win probability 0.0) look like forced mate.
 int expectedCpFromWinProb(double v) {
-  if (v <= 0.01) return -9999;
-  if (v >= 0.99) return 9999;
-  return (-math.log((1.0 / v) - 1.0) / kWinProbK).round();
+  const cap = kMateCpThreshold - 1;
+  if (v <= 0.01) return -cap;
+  if (v >= 0.99) return cap;
+  return (-math.log((1.0 / v) - 1.0) / kWinProbK).round().clamp(-cap, cap);
 }

@@ -19,7 +19,7 @@ CompletedMove _move({required String uci, required String san}) =>
     );
 
 void main() {
-  final start = Chess.initial;
+  const start = Chess.initial;
 
   group('isCorrectUserMove', () {
     test('matches by resulting position, not by move text', () {

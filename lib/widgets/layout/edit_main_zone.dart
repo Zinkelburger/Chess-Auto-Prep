@@ -6,8 +6,6 @@ library;
 
 import 'package:flutter/material.dart';
 
-import 'package:chess_auto_prep/core/board_preview_controller.dart';
-import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
 import '../interactive_pgn_editor.dart';
@@ -23,7 +21,6 @@ class EditMainZone extends StatelessWidget {
     this.onDelete,
     this.onPromote,
     this.onMakeMainLine,
-    this.repertoireName,
     this.lineTitle,
     required this.repertoireColor,
     required this.isEditingExistingLine,
@@ -32,8 +29,6 @@ class EditMainZone extends StatelessWidget {
     this.onDirty,
     this.onCopyToClipboard,
     this.onViewInLines,
-    this.trapIndex,
-    this.boardPreview,
     this.ephemeralTitle,
   });
 
@@ -45,7 +40,6 @@ class EditMainZone extends StatelessWidget {
   final void Function(TreePath path)? onDelete;
   final void Function(TreePath path)? onPromote;
   final void Function(TreePath path)? onMakeMainLine;
-  final String? repertoireName;
   final String? lineTitle;
   final String repertoireColor;
   final bool isEditingExistingLine;
@@ -54,8 +48,6 @@ class EditMainZone extends StatelessWidget {
   final VoidCallback? onDirty;
   final void Function(String text, String successMessage)? onCopyToClipboard;
   final VoidCallback? onViewInLines;
-  final TrapIndexService? trapIndex;
-  final BoardPreviewController? boardPreview;
 
   /// Read-only header shown instead of the title field for ephemeral lines
   /// (e.g. "Trap #45 · Sicilian Defense").
@@ -72,7 +64,6 @@ class EditMainZone extends StatelessWidget {
       onDelete: onDelete,
       onPromote: onPromote,
       onMakeMainLine: onMakeMainLine,
-      currentRepertoireName: repertoireName,
       lineTitle: lineTitle,
       repertoireColor: repertoireColor,
       isEditingExistingLine: isEditingExistingLine,
@@ -84,8 +75,6 @@ class EditMainZone extends StatelessWidget {
           (text, message) =>
               copyToClipboard(context, text, successMessage: message),
       onViewInLines: onViewInLines,
-      trapIndex: trapIndex,
-      boardPreview: boardPreview,
       ephemeralTitle: ephemeralTitle,
     );
   }

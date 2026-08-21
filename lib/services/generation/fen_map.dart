@@ -48,14 +48,16 @@ class FenMap {
   /// Register a transposition leaf — a node that reached an already-expanded
   /// FEN via a different move order.  Idempotent: re-registering the same
   /// node (e.g. [populate] running again over a partially built tree) does
-  /// not grow the equivalence list.
-  void addTransposition(String fen, BuildTreeNode node) {
+  /// not grow the equivalence list.  Returns true when [node] was newly
+  /// registered — the moment its reach should be added to the canonical.
+  bool addTransposition(String fen, BuildTreeNode node) {
     _assertMutable();
     final list = _equivalents[_key(fen)] ??= [];
     for (final existing in list) {
-      if (identical(existing, node)) return;
+      if (identical(existing, node)) return false;
     }
     list.add(node);
+    return true;
   }
 
   /// Get all transposition leaves for a FEN (excludes the canonical node).
@@ -76,8 +78,8 @@ class FenMap {
   /// Walk a tree and register all nodes.  The canonical node for a FEN is an
   /// *expanded* one wherever the tree holds one; childless duplicates become
   /// transposition leaves that resolve through it.  Idempotent: safe to call
-  /// repeatedly on a growing tree (the on-the-fly service re-populates during
-  /// progressive deepening).
+  /// repeatedly on a growing tree (a resumed build re-populates as it
+  /// deepens).
   ///
   /// The expanded-wins rule is load-bearing, not a tidiness preference. This
   /// walk is a plain DFS, so "first node seen" is decided by child order, and
@@ -110,6 +112,73 @@ class FenMap {
     for (final child in node.children) {
       populate(child);
     }
+  }
+
+  /// Register every *expanded* node of a saved tree as canonical for its
+  /// position, first in tree order wins.  This is what a resumed build needs
+  /// from the previous session: which positions already have a subtree, so
+  /// a frontier leaf reaching one of them becomes a transposition leaf
+  /// instead of a second expansion.  Childless nodes are deliberately left
+  /// out *of the canonical map* — a fresh build registers a position only when
+  /// it processes it, and seeding an unexpanded frontier twin as canonical
+  /// would make its earlier-processed sibling defer to a node that may never
+  /// expand.  They are still re-registered as transposition *leaves* where
+  /// they were closed as such last session; see [_registerSavedTranspositions].
+  void registerExpanded(BuildTreeNode root) {
+    _assertMutable();
+    void walk(BuildTreeNode node) {
+      if (node.children.isEmpty) return;
+      if (node.fen.isNotEmpty) putCanonical(node.fen, node);
+      for (final child in node.children) {
+        walk(child);
+      }
+    }
+
+    walk(root);
+    _registerSavedTranspositions(root);
+  }
+
+  /// Second pass over a resumed tree: re-register the transposition leaves the
+  /// previous session closed, so chains of transpositions keep resolving
+  /// across a resume.
+  ///
+  /// Seeding [_canonical] alone is not enough. [addArrivalCumP] forwards a new
+  /// arrival's reach through a leaf only when the leaf is a *registered*
+  /// transposition, which it checks against [getTranspositions]. With that map
+  /// empty on resume, the walk stopped at every saved leaf instead of
+  /// forwarding into its canonical, so a canonical whose true reach now
+  /// cleared `minProbability` was never re-queued, and the coverage sweep's
+  /// `getTranspositions` under-counted reach and deleted holes it should have
+  /// answered.
+  ///
+  /// Only *explored* childless nodes qualify — that is exactly what
+  /// `_resolveTranspositionOrRegister` produced last session. A terminal or
+  /// depth-capped leaf is canonical for its own FEN and the identity check
+  /// skips it. Unexplored frontier leaves are deliberately excluded:
+  /// [addArrivalCumP] does not forward their increments, because they
+  /// contribute their full reach when the build finally processes them, and
+  /// registering them here would count that mass twice.
+  ///
+  /// This adds no reach of its own. Arrival mass is only ever added by
+  /// `_resolveTranspositionOrRegister`, and only when [addTransposition]
+  /// reports a leaf as *newly* registered — which, after this pass, it is not.
+  void _registerSavedTranspositions(BuildTreeNode root) {
+    void walk(BuildTreeNode node) {
+      if (node.children.isEmpty) {
+        if (node.explored && node.fen.isNotEmpty) {
+          final canonical = _canonical[_key(node.fen)];
+          if (canonical != null && !identical(canonical, node)) {
+            addTransposition(node.fen, node);
+          }
+        }
+        return;
+      }
+      for (final child in node.children) {
+        walk(child);
+      }
+    }
+
+    walk(root);
   }
 
   /// Drop [node] from the equivalence list for [fen], if it is there. Used

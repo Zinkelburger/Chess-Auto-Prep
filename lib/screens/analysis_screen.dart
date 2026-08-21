@@ -573,7 +573,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
           child: AlertDialog(
             content: ValueListenableBuilder<String>(
               valueListenable: progress,
-              builder: (_, message, __) => Column(
+              builder: (_, message, _) => Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const CircularProgressIndicator(),

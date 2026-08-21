@@ -168,8 +168,6 @@ mixin _RepertoireTabContent
             fenMap: _generationController.generatedTreeFenMap,
             boardPreview: _boardPreview,
             coherenceResult: _generationController.coherenceService.result,
-            isGenerating: _generationController.isGenerating,
-            isGenerationPaused: _generationController.isPaused,
             fenOverride: _isBuildSessionActive ? _buildSession.boardFen : null,
           ),
         ],
@@ -217,8 +215,6 @@ mixin _RepertoireTabContent
                   boardPreview: _boardPreview,
                   coherenceResult:
                       _generationController.coherenceService.result,
-                  isGenerating: _generationController.isGenerating,
-                  isGenerationPaused: _generationController.isPaused,
                   // Follow the scratchpad while a session explores.
                   fenOverride: _isBuildSessionActive
                       ? _buildSession.boardFen
@@ -326,7 +322,6 @@ mixin _RepertoireTabContent
       onDelete: (path) => _controller.deleteAtPath(path),
       onPromote: (path) => _controller.promoteVariation(path),
       onMakeMainLine: (path) => _controller.makeMainLine(path),
-      repertoireName: _controller.currentRepertoire?.name,
       repertoireColor: _controller.isRepertoireWhite ? 'White' : 'Black',
       isEditingExistingLine: _controller.selectedPgnLine != null,
       onLineEdited: (updatedPgn) {
@@ -342,10 +337,7 @@ mixin _RepertoireTabContent
       boardPreview: _boardPreview,
       coherenceResult: _generationController.coherenceService.result,
       isAnalysisActive: true,
-      isGenerating: _generationController.isGenerating,
-      isGenerationPaused: _generationController.isPaused,
       embedAnalysisDock: false,
-      trapIndex: _trapSession.index,
       ephemeralTitle: _controller.annotatedLineLabel,
     );
   }

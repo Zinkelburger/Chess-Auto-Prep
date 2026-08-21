@@ -142,7 +142,6 @@ class _UnifiedEnginePaneState extends _UnifiedEnginePaneStateBase
     _lastLifecycleState = EngineLifecycle.instance.state;
 
     if (_isActive) {
-      _analysis.beginEnginePaneAnalysis(widget.fen);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         unawaited(_startInitialAnalysis());
       });

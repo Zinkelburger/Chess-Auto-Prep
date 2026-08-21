@@ -102,12 +102,9 @@ Consolidated list of planned or incomplete capabilities (from `tree_builder/TODO
 | `ExpectimaxToggleButton` on board toolbar | **Not started** | Toggle via settings / analysis dock |
 | **Shift+click** add full line to repertoire | **Not started** | Click navigates; no bulk add |
 | **Ctrl+click** add-with-confirm for out-of-repertoire moves | **Not started** | |
-| **Merge on-the-fly subtree** into main `BuildTree` | **Not started** | `OnTheFlyExpectimaxService` caches per-FEN only |
 | Inline move **annotations** on lines (prob %, ★ repertoire, ⚠ trap) | **Not started** | `MoveAnnotation` model not on `ClickableMoveLineWidget` |
 | Side-by-side Engine + Expectimax panels | **Partial** | `RepertoireAnalysisDock` tabs; not simultaneous split |
 | Hover preview on **all** move surfaces | **Partial** | Engine, expectimax, browse, traps, suggestions, PGN trap dots, lines browser — **not** eval-tree explorer rows, all PGN moves |
-| Auto on-the-fly when entering unexplored FEN | **Not started** | Manual compute only |
-| Persist on-the-fly results to disk | **Not started** | Session cache only |
 | Independent persist of expectimax panel toggle | **Partial** | `showExpectimaxDock` persisted; not spec’s toolbar toggle semantics |
 
 ### Trap UI
@@ -205,7 +202,7 @@ These remain **undecided**; pick one before implementing dependent UI:
 1. **Engine crash recovery + background CPU** — stability
 2. **Accounts + training in Settings** — discoverability
 3. **Browse gap navigation + trainable lines** — completes manual prep loop
-4. **Expectimax toolbar toggle + merge on-the-fly** — differentiator polish
+4. **Expectimax toolbar toggle** — differentiator polish
 5. **Cluster-grouped lines + dream sort** — repertoire quality insight
 6. **Cloud eval import** — build-time speed (tree_builder scope)
 

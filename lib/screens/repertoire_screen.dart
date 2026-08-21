@@ -598,13 +598,19 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         _outlineChapterSeen != null &&
         p.equals(_outlineChapterSeen!, chapterPath);
     if (sameChapter && identical(pgn, _outlinePgnSeen)) return;
+
+    // Claim both halves of the cache key before awaiting. They used to be
+    // written on opposite sides of the await, so a notification arriving
+    // mid-flight saw a half-updated key, failed the early return and started
+    // a duplicate open() against the same chapter.
+    final pgnChanged = !identical(pgn, _outlinePgnSeen);
     _outlineChapterSeen = chapterPath;
+    _outlinePgnSeen = pgn;
+
     unawaited(() async {
       final root = await _repertoireRootFor(chapterPath);
       if (!mounted) return;
       final sameRoot = _outlineRoot != null && p.equals(_outlineRoot!, root);
-      final pgnChanged = !identical(pgn, _outlinePgnSeen);
-      _outlinePgnSeen = pgn;
       if (!sameRoot) {
         _outlineRoot = root;
         await _outline.open(
@@ -687,9 +693,8 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     await _openChapterPath(chapterPath);
     if (!mounted) return;
     // setRepertoire loads asynchronously; wait for the lines to be there.
-    for (var i = 0; i < 40 && _controller.isLoading; i++) {
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-    }
+    await _controller.awaitLoaded();
+    if (!mounted) return;
     final match = _controller.repertoireLines
         .where((l) => l.gameIndex == line.gameIndex)
         .firstOrNull;
@@ -709,9 +714,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
   Future<void> _generateIntoChapter(String chapterPath) async {
     await _openChapterPath(chapterPath);
     if (!mounted) return;
-    for (var i = 0; i < 40 && _controller.isLoading; i++) {
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-    }
+    await _controller.awaitLoaded();
     if (!mounted) return;
     _controller.loadMoveSequence(
       _commonPrefix(_controller.repertoireLines.map((l) => l.moves)),

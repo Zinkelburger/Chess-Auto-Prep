@@ -178,7 +178,7 @@ class TrapDetailCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'YOUR REPLY',
                   style: TextStyle(
                     fontSize: 10,

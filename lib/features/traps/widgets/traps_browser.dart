@@ -378,7 +378,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      const Text(
                         'Opponent replies:',
                         style: TextStyle(
                           fontSize: 10,

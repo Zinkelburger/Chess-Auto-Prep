@@ -45,11 +45,11 @@ class _ExpandedTrapListState extends State<ExpandedTrapList> {
   Widget build(BuildContext context) {
     final traps = _traps;
     if (traps.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 4),
         child: Text(
           'No trap details available',
-          style: const TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+          style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
         ),
       );
     }

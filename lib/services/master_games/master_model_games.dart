@@ -42,6 +42,9 @@ List<PgnGameRecord> masterGameCandidates(
         for (final m in moves) {
           if (m.uci != child.moveUci) continue;
           final ids = byDepth[node.ply] ??= {};
+          // The classical id first: it is the one a reader gets most from,
+          // and adding it widens the pool rather than narrowing it.
+          if (m.topClassicalGameId != 0) ids.add(m.topClassicalGameId);
           ids.add(m.topGameId);
           ids.add(m.recentGameId);
           break;

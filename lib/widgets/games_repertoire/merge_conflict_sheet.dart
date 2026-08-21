@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/games_repertoire/draft_merge_planner.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/movetext_builder.dart';
 
 class MergeConflictSheet extends StatefulWidget {
   const MergeConflictSheet({super.key, required this.conflicts});
@@ -190,12 +191,6 @@ class _MergeConflictSheetState extends State<MergeConflictSheet> {
     );
   }
 
-  String _lineLabel(List<String> sans) {
-    final buf = StringBuffer();
-    for (var i = 0; i < sans.length; i++) {
-      if (i.isEven) buf.write('${(i ~/ 2) + 1}.');
-      buf.write('${sans[i]} ');
-    }
-    return buf.toString().trim();
-  }
+  String _lineLabel(List<String> sans) =>
+      buildNumberedMovetext(sans, compact: true);
 }

@@ -88,26 +88,26 @@ class _SolitaireTrophyCabinetState extends State<SolitaireTrophyCabinet> {
                 child: CircularProgressIndicator(),
               )
             else if (_trophies.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(32),
+              const Padding(
+                padding: EdgeInsets.all(32),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.emoji_events_outlined,
                       size: 48,
                       color: AppColors.onSurfaceDim,
                     ),
-                    const SizedBox(height: 12),
-                    const Text(
+                    SizedBox(height: 12),
+                    Text(
                       'No trophies yet',
                       style: TextStyle(
                         color: AppColors.onSurfaceMuted,
                         fontSize: 14,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    const Text(
+                    SizedBox(height: 8),
+                    Text(
                       'Play a game in solitaire mode, leave solitaire, then '
                       'run the Analysis tab.\n'
                       'Every move you guessed that the engine likes better '

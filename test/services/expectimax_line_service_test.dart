@@ -8,7 +8,7 @@ void main() {
   late BuildTree tree;
   late TreeBuildConfig config;
 
-  BuildTreeNode _makeNode({
+  BuildTreeNode makeNode({
     required String fen,
     required String san,
     required String uci,
@@ -49,7 +49,7 @@ void main() {
     //         │       └── Nf3 (V=0.58, eval=+35)
     //         └── d4 (V=0.55, eval=+20)
     //             └── d5 (prob=0.50, V=0.52, eval=-15)
-    final root = _makeNode(
+    final root = makeNode(
       fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
       san: '',
       uci: '',
@@ -57,7 +57,7 @@ void main() {
       isWhiteToMove: true,
     );
 
-    final e4 = _makeNode(
+    final e4 = makeNode(
       fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
       san: 'e4',
       uci: 'e2e4',
@@ -68,7 +68,7 @@ void main() {
       isRepertoireMove: true,
     );
 
-    final c5 = _makeNode(
+    final c5 = makeNode(
       fen: 'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2',
       san: 'c5',
       uci: 'c7c5',
@@ -79,7 +79,7 @@ void main() {
       evalCp: -25,
     );
 
-    final nf3 = _makeNode(
+    final nf3 = makeNode(
       fen: 'rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2',
       san: 'Nf3',
       uci: 'g1f3',
@@ -89,7 +89,7 @@ void main() {
       evalCp: 35,
     );
 
-    final d4 = _makeNode(
+    final d4 = makeNode(
       fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
       san: 'd4',
       uci: 'd2d4',
@@ -99,7 +99,7 @@ void main() {
       evalCp: 20,
     );
 
-    final d5 = _makeNode(
+    final d5 = makeNode(
       fen: 'rnbqkbnr/ppp1pppp/8/3p4/3P4/8/PPP1PPPP/RNBQKBNR w KQkq d6 0 2',
       san: 'd5',
       uci: 'd7d5',
@@ -201,7 +201,7 @@ void main() {
 
     test('opponent-move node returns top opponent replies', () {
       final e4 = tree.root.children[0];
-      final e6 = _makeNode(
+      final e6 = makeNode(
         fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
         san: 'e6',
         uci: 'e7e6',
@@ -250,54 +250,73 @@ void main() {
     });
   });
 
-  group('hasPrecomputedExpectimaxAtPly', () {
-    test('false when subtree not explored to target ply', () {
-      expect(hasPrecomputedExpectimaxAtPly(tree, tree.root.fen, 10), isFalse);
+  group('expectimaxLinesForAllMoves', () {
+    test('lists every candidate on our move, best value first', () {
+      final eca = ExpectimaxCalculator(config: config);
+      final lines = expectimaxLinesForAllMoves(
+        tree.root,
+        config,
+        eca,
+        maxPlies: 10,
+      );
+
+      expect(lines.map((l) => l.movesSan.first), ['e4', 'd4']);
+      expect(lines.map((l) => l.rank), [1, 2]);
+      expect(lines[0].moveInfo.first.isRepertoireMove, isTrue);
+      expect(lines[1].moveInfo.first.isRepertoireMove, isFalse);
     });
 
-    test('true when subtree is complete to target ply', () {
-      expect(hasPrecomputedExpectimaxAtPly(tree, tree.root.fen, 3), isTrue);
-    });
-
-    test('depth is measured relative to the node, not absolute ply', () {
-      // e4 sits at ply 1 with a subtree reaching ply 3 — two half-moves of
-      // continuation.  Asking for three past e4 must fail even though the
-      // absolute deepest ply (3) equals the target.
-      final e4Fen = tree.root.children[0].fen;
-      expect(hasPrecomputedExpectimaxAtPly(tree, e4Fen, 2), isTrue);
-      expect(hasPrecomputedExpectimaxAtPly(tree, e4Fen, 3), isFalse);
-    });
-  });
-
-  group('branchCompletePly', () {
-    test('fully explored branch completes to the cap', () {
-      expect(branchCompletePly(tree.root, 8), 8);
-      expect(branchCompletePly(tree.root.children[0], 8), 8);
-    });
-
-    test('an unexplored leaf bounds its branch at its own ply', () {
-      final nf3 = tree.root.children[0].children[0].children[0];
-      nf3.explored = false;
-      final e4 = tree.root.children[0];
-      expect(branchCompletePly(e4, 8), 3);
-      expect(isBranchCompleteToPly(e4, 3), isTrue);
-      expect(isBranchCompleteToPly(e4, 4), isFalse);
-      // The sibling branch (d4) is unaffected.
-      expect(branchCompletePly(tree.root.children[1], 8), 8);
-    });
-
-    test('agrees with isBranchCompleteToPly at every ply', () {
-      tree.root.children[0].children[0].children[0].explored = false;
-      for (final node in [tree.root, ...tree.root.children]) {
-        final complete = branchCompletePly(node, 6);
-        for (var p = node.ply; p <= 6; p++) {
-          expect(
-            isBranchCompleteToPly(node, p),
-            p <= complete,
-            reason: '${node.moveSan.isEmpty ? "root" : node.moveSan} at ply $p',
-          );
-        }
+    test('is not capped like generateExpectimaxLines', () {
+      // Give the root more candidates than the per-node cap allows.
+      for (var i = 0; i < TreeBuildConfig.maxOurCandidates + 2; i++) {
+        final n = makeNode(
+          fen: 'extra$i',
+          san: 'x$i',
+          uci: 'x$i',
+          ply: 1,
+          isWhiteToMove: false,
+          expectimax: 0.1 + i * 0.001,
+        );
+        tree.root.children.add(n);
+        n.parent = tree.root;
       }
+      final eca = ExpectimaxCalculator(config: config);
+      final all = expectimaxLinesForAllMoves(
+        tree.root,
+        config,
+        eca,
+        maxPlies: 4,
+      );
+      final capped = generateExpectimaxLines(
+        tree.root,
+        config,
+        eca,
+        topLines: 100,
+        maxPlies: 4,
+      );
+      expect(all.length, tree.root.children.length);
+      expect(capped.length, TreeBuildConfig.maxOurCandidates);
+    });
+
+    test('lists every reply on the opponent move, most likely first', () {
+      final e4 = tree.root.children[0];
+      final e6 = makeNode(
+        fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+        san: 'e6',
+        uci: 'e7e6',
+        ply: 2,
+        isWhiteToMove: true,
+        moveProbability: 0.25,
+        expectimax: 0.58,
+        evalCp: -20,
+      );
+      e4.children.add(e6);
+      e6.parent = e4;
+
+      final eca = ExpectimaxCalculator(config: config);
+      final lines = expectimaxLinesForAllMoves(e4, config, eca, maxPlies: 10);
+      expect(lines.map((l) => l.movesSan.first), ['c5', 'e6']);
+      expect(lines[0].moveInfo.first.moveProbability, 0.41);
     });
   });
 

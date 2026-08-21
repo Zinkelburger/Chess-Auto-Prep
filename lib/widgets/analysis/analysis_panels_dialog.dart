@@ -1,16 +1,14 @@
 /// Analysis panels — which live-analysis surfaces are shown.
 ///
-/// Visibility toggles only: each panel's own knobs live behind its own gear
-/// (stockfish_settings_dialog.dart, expectimax_settings_dialog.dart) —
-/// deliberately three separate dialogs, not modes of one.
+/// Visibility toggles only: the engine panel's own knobs live behind its
+/// gear (stockfish_settings_dialog.dart) — deliberately a separate dialog,
+/// not a mode of this one.  The expectimax panel has no knobs: it shows what
+/// the build stored.
 library;
-
-import 'dart:async';
 
 import 'package:flutter/material.dart';
 
 import '../../models/engine_settings.dart';
-import '../../services/engine/engine_lifecycle.dart';
 import '../../theme/app_colors.dart';
 import '../settings/settings_widgets.dart';
 
@@ -59,19 +57,13 @@ class _AnalysisPanelsBody extends StatelessWidget {
               onChanged: (v) => settings.showEngineDock = v,
             ),
             SettingsSwitchRow(
-              label: 'Expectimax PV',
+              label: 'Expectimax',
               tooltip:
-                  'Show the Expectimax panel — best practical lines that '
-                  'account for likely human opponent replies.',
+                  'Show the Expectimax panel — every move at the current '
+                  'position with the practical value the build stored for '
+                  'it. Read from the built tree; does not run the engine.',
               value: settings.showExpectimaxDock,
-              onChanged: (v) {
-                settings.showExpectimaxDock = v;
-                // Explicitly enabling expectimax overrides the persisted
-                // engine kill switch — compute can't run without Stockfish.
-                if (v && EngineLifecycle.instance.state == EngineState.off) {
-                  unawaited(EngineLifecycle.instance.toggleOn());
-                }
-              },
+              onChanged: (v) => settings.showExpectimaxDock = v,
             ),
             SettingsSwitchRow(
               label: 'Show Maia % column',

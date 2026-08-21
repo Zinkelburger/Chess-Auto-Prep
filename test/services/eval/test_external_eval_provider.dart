@@ -36,7 +36,7 @@ void main() {
       final provider = InMemoryEvalProvider()
         ..put(canonicalizeFen4(startFen), const EvalHit(cp: 5, depth: 20));
 
-      final extended =
+      const extended =
           '$startFen 99'; // invalid extra field — key uses 4-field form
       final result = await provider.lookup(extended, minDepth: 10);
       expect(result.isHit, isTrue);

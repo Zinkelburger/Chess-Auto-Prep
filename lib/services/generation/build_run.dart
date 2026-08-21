@@ -173,10 +173,16 @@ class BuildRun {
   /// True once [TreeBuildConfig.timeBudgetMinutes] of active build time has
   /// elapsed (0 = no budget).  The stopwatch is paused with the pause gate,
   /// so a paused build does not burn its budget.
-  bool get budgetExhausted {
-    final minutes = config.timeBudgetMinutes;
+  bool get budgetExhausted =>
+      budgetSpent(stopwatch.elapsed, config.timeBudgetMinutes);
+
+  /// Whether [elapsed] has used up a [minutes]-long budget, plus [grace] of
+  /// it again.  Zero or negative [minutes] means no budget at all.
+  ///
+  /// Pure so the thresholds can be pinned without waiting on a real clock.
+  static bool budgetSpent(Duration elapsed, int minutes, {double grace = 0}) {
     if (minutes <= 0) return false;
-    return stopwatch.elapsed.inSeconds >= minutes * 60;
+    return elapsed.inSeconds >= minutes * 60 * (1 + grace);
   }
 
   /// The one "stop expanding, but still finish the run cleanly" check:
@@ -184,6 +190,28 @@ class BuildRun {
   /// Unlike [isCancelled] this still runs the coverage sweep, selection and
   /// export, and leaves the tree resumable.
   bool shouldFinish() => finishNow() || budgetExhausted;
+
+  /// Extra share of [TreeBuildConfig.timeBudgetMinutes] the coverage sweep
+  /// may spend after the search loop has stopped.
+  ///
+  /// The sweep runs *because* the budget ran out — it answers the holes the
+  /// search was cut off before reaching — so gating it on [budgetExhausted]
+  /// would skip it entirely on exactly the builds that need it.  It cannot be
+  /// unbounded either: an overnight Benko build stopped its search on time at
+  /// 300 minutes and then swept for 152 more, answering 4,590 holes, for a
+  /// run half again as long as asked for.  The overrun grows with whatever
+  /// frontier was left, so the tighter the budget the worse it gets.
+  static const double coverageSweepGrace = 0.2;
+
+  /// True once the budget *and* the coverage sweep's grace have elapsed.
+  /// Past this the sweep stops answering holes and just removes the leaves it
+  /// did not get to, which keeps the invariant it exists for — no line ends
+  /// on an opponent move we have no reply to — without more engine work.
+  bool get sweepBudgetExhausted => budgetSpent(
+    stopwatch.elapsed,
+    config.timeBudgetMinutes,
+    grace: coverageSweepGrace,
+  );
 
   void log(String msg) => runLog.add('[TreeBuild] $msg');
 

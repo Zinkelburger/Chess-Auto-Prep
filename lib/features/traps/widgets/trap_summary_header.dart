@@ -50,11 +50,11 @@ class TrapSummaryHeader extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 4),
-                Tooltip(
+                const Tooltip(
                   message:
                       'Average centipawns gained per game from opponent\n'
                       'blunders at trap positions',
-                  child: const Icon(
+                  child: Icon(
                     Icons.info_outline,
                     size: 14,
                     color: AppColors.onSurfaceMuted,

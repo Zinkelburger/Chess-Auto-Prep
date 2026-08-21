@@ -14,7 +14,6 @@ import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/core/generation_session_controller.dart';
 import 'package:chess_auto_prep/models/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
-import 'package:chess_auto_prep/services/jobs/generation_phase.dart';
 import 'package:chess_auto_prep/services/master_games/master_games_service.dart';
 import 'package:chess_auto_prep/services/master_games/twic_client.dart';
 import 'package:flutter_test/flutter_test.dart';

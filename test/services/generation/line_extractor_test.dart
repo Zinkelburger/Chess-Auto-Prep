@@ -387,7 +387,7 @@ void main() {
       test('the bar caps at 100cp however wide the window', () {
         final t = marked();
         addQh5(t, evalCp: 80); // -80 for us, 110cp behind Nf3
-        final config = TreeBuildConfig(
+        const config = TreeBuildConfig(
           startFen: _startFen,
           playAsWhite: true,
           minProbability: 0.01,

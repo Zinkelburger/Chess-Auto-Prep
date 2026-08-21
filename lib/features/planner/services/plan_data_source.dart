@@ -28,6 +28,7 @@ import '../../../services/maia/maia_factory.dart';
 import '../../../utils/chess_utils.dart';
 import '../models/plan_models.dart';
 import 'eco_trie.dart';
+import '../../../utils/fen_utils.dart';
 
 abstract class PlanDataSource {
   /// Candidates at [fen] (reached by [moves] from the start), ranked by
@@ -236,7 +237,7 @@ class DefaultPlanDataSource implements PlanDataSource {
       final pool = StockfishPool.instance;
       await pool.ensureWorkers(1);
       final result = await pool.evaluateFen(fen, engineDepth);
-      final whiteToMove = fen.split(' ').elementAtOrNull(1) != 'b';
+      final whiteToMove = isWhiteToMove(fen);
       final cp = whiteToMove ? result.effectiveCp : -result.effectiveCp;
       return (cp: cp, depth: result.depth);
     } catch (_) {

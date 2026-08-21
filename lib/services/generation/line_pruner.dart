@@ -119,8 +119,9 @@ class LinePruner {
         if (covered[id]) continue;
         covered[id] = true;
         for (final line in linesByUnit[id]) {
-          if (--uncoveredLeft[line] == 0)
+          if (--uncoveredLeft[line] == 0) {
             coveredMass += lines[line].probability;
+          }
         }
       }
       coveredMassAfter.add(coveredMass);
@@ -141,7 +142,100 @@ class LinePruner {
     // than none: a set with something to teach never comes back empty.
     if (take < cap) take++;
 
-    final selected = picks.take(take).toList()..sort();
-    return [for (final i in selected) lines[i]];
+    final keep = List<bool>.filled(lines.length, false);
+    for (final i in picks.take(take)) {
+      keep[i] = true;
+    }
+    _pinTranspositionOwners(lines, picks, keep);
+
+    return [
+      for (var i = 0; i < lines.length; i++)
+        if (keep[i]) lines[i],
+    ];
+  }
+
+  /// Pull back any line whose continuation a *kept* transposition stub points
+  /// at.
+  ///
+  /// A stub ends with "Transposes to 1. d4 ..." and deliberately does not
+  /// repeat the continuation — the owning move order carries it. The greedy
+  /// scores the two independently, so with `coverageTarget < 1.0` the prefix
+  /// can keep the stub and drop the owner. That leaves the book naming a move
+  /// order it does not contain, and the shared continuation taught nowhere at
+  /// all.
+  ///
+  /// Pinning can push the result past [prune]'s `targetCount` cap. That is
+  /// the intended trade: an owner teaches strictly more than the stub that
+  /// references it, so honouring the cap by leaving a dangling reference
+  /// would be the worse book.
+  ///
+  /// Iterates to a fixed point — a pinned owner may itself be a stub for a
+  /// further transposition. Each pass can only set flags, never clear them,
+  /// so the loop terminates in at most [lines] rounds.
+  static void _pinTranspositionOwners(
+    List<ExtractedLine> lines,
+    List<int> picks,
+    List<bool> keep,
+  ) {
+    var changed = true;
+    while (changed) {
+      changed = false;
+      for (var i = 0; i < lines.length; i++) {
+        if (!keep[i]) continue;
+        final target = lines[i].transposesInto;
+        if (target == null) continue;
+        if (_isCarriedBy(lines, keep, target, exclude: i)) continue;
+        final owner = _ownerIndexFor(lines, picks, target, exclude: i);
+        // No owner anywhere in the input: the note is dangling on arrival and
+        // there is nothing here to pin. `stripDanglingTranspositions` drops
+        // the claim rather than letting the export make it.
+        if (owner == null) continue;
+        keep[owner] = true;
+        changed = true;
+      }
+    }
+  }
+
+  /// Whether some kept line other than [exclude] plays [target]'s move order.
+  static bool _isCarriedBy(
+    List<ExtractedLine> lines,
+    List<bool> keep,
+    List<String> target, {
+    required int exclude,
+  }) {
+    for (var i = 0; i < lines.length; i++) {
+      if (i == exclude || !keep[i]) continue;
+      if (_startsWith(lines[i].movesSan, target)) return true;
+    }
+    return false;
+  }
+
+  /// The best line playing [target]'s move order: greedy order first, so the
+  /// owner pulled back in is the one that teaches the most.
+  static int? _ownerIndexFor(
+    List<ExtractedLine> lines,
+    List<int> picks,
+    List<String> target, {
+    required int exclude,
+  }) {
+    for (final i in picks) {
+      if (i == exclude) continue;
+      if (_startsWith(lines[i].movesSan, target)) return i;
+    }
+    // A line that teaches nothing new never enters the greedy, but it can
+    // still be the only carrier of a move order.
+    for (var i = 0; i < lines.length; i++) {
+      if (i == exclude) continue;
+      if (_startsWith(lines[i].movesSan, target)) return i;
+    }
+    return null;
+  }
+
+  static bool _startsWith(List<String> moves, List<String> prefix) {
+    if (prefix.length > moves.length) return false;
+    for (var i = 0; i < prefix.length; i++) {
+      if (moves[i] != prefix[i]) return false;
+    }
+    return true;
   }
 }

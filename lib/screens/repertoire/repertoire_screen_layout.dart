@@ -88,11 +88,11 @@ mixin _RepertoireLayout
         lineCount: _controller.repertoireLines.length,
         tabController: _sidePanelTabController,
         tabs: const [],
-        children: const [],
         stripLabel: 'Chapters',
         hideTooltip: 'Hide chapters (L)',
         showTooltip: 'Show chapters (L)',
         onCollapsedChanged: _layout.setOutlinePanelCollapsed,
+        children: const [],
       );
     }
     return SizedBox(
@@ -122,15 +122,15 @@ mixin _RepertoireLayout
         ),
         Tab(height: 30, child: Text('Tree', style: TextStyle(fontSize: 12))),
       ],
+      stripLabel: 'Analysis',
+      hideTooltip: 'Hide analysis panel',
+      showTooltip: 'Show analysis panel',
+      onCollapsedChanged: _layout.setLinesPanelCollapsed,
       children: [
         _buildEngineTabContent(),
         _buildDatabaseTabContent(),
         _buildTreeTabContent(),
       ],
-      stripLabel: 'Analysis',
-      hideTooltip: 'Hide analysis panel',
-      showTooltip: 'Show analysis panel',
-      onCollapsedChanged: _layout.setLinesPanelCollapsed,
     );
   }
 

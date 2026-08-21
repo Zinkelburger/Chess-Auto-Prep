@@ -10,6 +10,7 @@ import 'package:dartchess/dartchess.dart';
 import '../../../utils/fen_utils.dart';
 import '../../../utils/chess_utils.dart' show playSanOrNullMove;
 import '../../opening_book_service.dart';
+import '../../../utils/movetext_builder.dart';
 
 /// An ECO code and opening name, e.g. `B36` / `Sicilian Defense: Accelerated
 /// Dragon, Maroczy Bind`.
@@ -34,14 +35,12 @@ class OpeningLabel {
 /// cheap, and the alternative (threading positions through the planner) would
 /// couple grouping to chess rules for no benefit.
 class OpeningNamer {
-  OpeningNamer({required OpeningBook book, required String startFen})
-    : _book = book,
-      _startFen = startFen;
+  OpeningNamer({required this._book, required this._startFen});
 
   /// A namer that never resolves anything — used when the book failed to
   /// load, so naming degrades to move sequences instead of failing the run.
   factory OpeningNamer.unavailable({required String startFen}) =>
-      OpeningNamer(book: OpeningBook(const {}), startFen: startFen);
+      OpeningNamer(book: const OpeningBook({}), startFen: startFen);
 
   final OpeningBook _book;
   final String _startFen;
@@ -101,9 +100,12 @@ String formatMoveReference(
   required bool rootWhiteToMove,
   int startMoveNumber = 1,
 }) {
-  final absolutePly = ply + (rootWhiteToMove ? 0 : 1);
-  final moveNumber = startMoveNumber + absolutePly ~/ 2;
-  return absolutePly.isEven ? '$moveNumber.$san' : '$moveNumber...$san';
+  return formatMoveAtPly(
+    ply + (rootWhiteToMove ? 0 : 1),
+    san,
+    compact: true,
+    startMoveNumber: startMoveNumber,
+  );
 }
 
 /// Format a run of moves starting at [fromPly] as readable movetext,

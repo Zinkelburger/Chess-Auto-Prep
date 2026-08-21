@@ -13,13 +13,15 @@ void main() {
   group('MoveMetrics.parse', () {
     test('reads every token a full-detail export writes', () {
       final metrics = MoveMetrics.parse(
-        '[%maiaProbability 0.420] [%eval +0.31] [%onlyMove] [%myEase 0.81] '
-        '[%ease 0.42] [%score 54.2%] [%games 128] [%lastPlayed 2024]',
+        '[%maiaProbability 0.420] [%eval +0.31] [%expectimax +0.78] '
+        '[%onlyMove] [%myEase 0.81] [%ease 0.42] [%score 54.2%] '
+        '[%games 128] [%lastPlayed 2024]',
       );
 
       expect(metrics.likelihood, closeTo(0.42, 1e-9));
       expect(metrics.likelihoodSource, MoveLikelihoodSource.maia);
       expect(metrics.evalCp, 31);
+      expect(metrics.expectimaxCp, 78);
       expect(metrics.isOnlyMove, isTrue);
       expect(metrics.myEase, closeTo(0.81, 1e-9));
       expect(metrics.opponentEase, closeTo(0.42, 1e-9));
@@ -118,6 +120,15 @@ void main() {
       expect(
         MoveMetrics.parse('[%eval +0.31] [%onlyMove]').summary,
         'eval +0.31 · only move',
+      );
+    });
+
+    test('expectimax reads beside eval so the gap is visible at a glance', () {
+      final metrics = MoveMetrics.parse('[%eval +0.10] [%expectimax +0.45]');
+      expect(metrics.labels, ['eval +0.10', 'expectimax +0.45']);
+      expect(
+        MoveMetrics.parse('[%expectimax -0.30]').summary,
+        'expectimax -0.30',
       );
     });
   });

@@ -76,7 +76,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text(
+                      const Text(
                         'Settings for this machine. Search depth, number of lines, '
                         'expectimax tuning and panel visibility live on the gear '
                         '(⚙) next to each analysis panel instead, where you can '

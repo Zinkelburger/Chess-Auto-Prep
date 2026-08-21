@@ -30,6 +30,8 @@ import '../models/plan_models.dart';
 import '../services/plan_data_source.dart';
 import '../services/plan_knowledge.dart';
 import 'plan_candidate_table.dart';
+import '../../../utils/fen_utils.dart';
+import '../../../utils/movetext_builder.dart';
 
 /// Coverage floor for the walk: opponent replies below this share of games
 /// are the engine's business, not the plan's. Hidden on purpose — the user
@@ -416,15 +418,8 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
     });
   }
 
-  static String _movesLabel(List<String> moves) {
-    final buf = StringBuffer();
-    for (var i = 0; i < moves.length; i++) {
-      if (i.isEven) buf.write('${i ~/ 2 + 1}.');
-      buf.write(moves[i]);
-      if (i < moves.length - 1) buf.write(' ');
-    }
-    return buf.toString();
-  }
+  static String _movesLabel(List<String> moves) =>
+      buildNumberedMovetext(moves, compact: true);
 
   // ── Build ──────────────────────────────────────────────────────────────
 
@@ -758,14 +753,14 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Row(
+        const Row(
           children: [
-            const Text(
+            Text(
               'Where should this start?',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
-            const SizedBox(width: 6),
-            const Tooltip(
+            SizedBox(width: 6),
+            Tooltip(
               waitDuration: Duration(milliseconds: 300),
               message: 'Play or type moves · ← undo · → redo',
               child: Icon(
@@ -897,7 +892,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
       return _buildTranspositionCard(step);
     }
     final ours = step.kind == PlanStepKind.ourMove;
-    final whiteToMove = step.fen.split(' ')[1] != 'b';
+    final whiteToMove = isWhiteToMove(step.fen);
     final title = ours
         ? 'How do you play here?'
         : 'Which replies do you want to set up?';
@@ -1095,9 +1090,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
 
   /// The walk would stop here. Show what was set up on this path and ask.
   Widget _buildLeafCard(PlanStep step) {
-    final ours = step.fen.split(' ')[1] != 'b'
-        ? widget.isWhite
-        : !widget.isWhite;
+    final ours = isWhiteToMove(step.fen) ? widget.isWhite : !widget.isWhite;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(

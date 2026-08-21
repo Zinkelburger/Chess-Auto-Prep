@@ -8,6 +8,7 @@ import '../tree_colors.dart';
 import '../controllers/eval_tree_controller.dart';
 import '../models/eval_tree_snapshot.dart';
 import '../services/eval_tree_line_metrics.dart';
+import '../../../utils/movetext_builder.dart';
 
 /// Engine-style line browser for a generated repertoire [EvalTreeSnapshot].
 ///
@@ -636,18 +637,10 @@ String _formatMovePath(EvalTreeSnapshot snapshot, int nodeId) {
 
   if (allMoves.isEmpty) return 'Starting position';
 
-  final whiteFirst = snapshot.root.sideToMoveIsWhite;
-  final buffer = StringBuffer();
-  for (var i = 0; i < allMoves.length; i++) {
-    final ply = i + (whiteFirst ? 0 : 1);
-    if (ply.isEven) {
-      buffer.write('${(ply ~/ 2) + 1}. ');
-    } else if (i == 0 && !whiteFirst) {
-      buffer.write('${(ply ~/ 2) + 1}... ');
-    }
-    buffer.write('${allMoves[i]} ');
-  }
-  return buffer.toString().trim();
+  return buildNumberedMovetext(
+    allMoves,
+    whiteToMoveFirst: snapshot.root.sideToMoveIsWhite,
+  );
 }
 
 String _formatEval(int cpForUs) => formatPackedEval(cpForUs, decimals: 2);

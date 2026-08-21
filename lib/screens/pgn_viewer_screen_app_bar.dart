@@ -24,6 +24,7 @@ mixin _AppBarBuildersMixin
   Future<void> _pastePgn();
   Future<void> _loadFile(String path);
   void _closeFile();
+  @override
   void _reclaimFocus();
 
   PreferredSizeWidget _buildAppBar(ThemeData theme) {

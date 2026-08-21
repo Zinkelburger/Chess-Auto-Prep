@@ -71,7 +71,7 @@ class BuildTreeNode implements MoveTreeNodeView {
   /// and any move into master practice carries the master boost
   /// (`BuildRun.masterPriorityFactor`); an our-move alternative into a book
   /// position carries both, multiplied.  Lets a zero→positive
-  /// transposition rebuild ([propagateHigherCumP]) re-derive discounted
+  /// transposition rebuild ([addArrivalCumP]) re-derive discounted
   /// priorities instead of collapsing them to the raw cumulative probability.
   /// A transient search signal, not serialized: after a resume it defaults to
   /// 1.0, which degrades a rebuild to the undiscounted (pre-fix) behaviour.

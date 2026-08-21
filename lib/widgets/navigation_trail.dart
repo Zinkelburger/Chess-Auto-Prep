@@ -40,9 +40,9 @@ class NavigationTrail extends StatelessWidget {
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: stack.length,
-                  separatorBuilder: (_, __) => Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    child: const Icon(
+                  separatorBuilder: (_, _) => const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 2),
+                    child: Icon(
                       Icons.chevron_right,
                       size: 14,
                       color: AppColors.onSurfaceMuted,
@@ -93,9 +93,9 @@ class NavigationTrail extends StatelessWidget {
               InkWell(
                 borderRadius: BorderRadius.circular(4),
                 onTap: stack.clear,
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: const Icon(
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(
                     Icons.close,
                     size: 14,
                     color: AppColors.onSurfaceMuted,

@@ -80,6 +80,31 @@ void main() {
       expect(pool.discoverMultiPvCalls, hasLength(1));
     });
 
+    test('a line cut at a transposition gets no tail', () async {
+      // It did not stop where the build stopped; its continuation is the
+      // owning line's.  Searching it would spend engine time on a tail that
+      // reads as a continuation of "Transposes to …".
+      final pool = FakeStockfishPool()
+        ..discoveryByFen[_leaf] = _pv(['e7e5', 'g1f3']);
+
+      final tails = await computeEngineTails(
+        lines: [
+          const ExtractedLine(
+            movesSan: ['e4'],
+            movesUci: ['e2e4'],
+            probability: 1.0,
+            leafFen: _leaf,
+            transposesInto: ['d4'],
+          ),
+        ],
+        config: _config(),
+        pool: pool,
+      );
+
+      expect(tails, isEmpty);
+      expect(pool.discoverMultiPvCalls, isEmpty);
+    });
+
     test('searches run across the pool, not one at a time', () async {
       // Six workers and six positions: all six should be in flight, so the
       // slowest single search bounds the pass rather than their sum.

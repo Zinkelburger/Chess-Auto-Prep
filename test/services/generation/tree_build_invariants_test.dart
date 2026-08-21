@@ -133,7 +133,7 @@ void main() {
   });
 
   group('evalWindowPrune', () {
-    final config = TreeBuildConfig(
+    const config = TreeBuildConfig(
       startFen: kStandardStartFen,
       playAsWhite: true,
       minEvalCp: -50,
@@ -416,7 +416,7 @@ void main() {
         run: run,
         node: node,
         candidates: [
-          SmoothedMove(
+          const SmoothedMove(
             uci: 'e7e5',
             san: '',
             probability: 0.5,
@@ -584,6 +584,79 @@ void main() {
         expect(t.e4e5nf3.searchPriority, closeTo(0.55, 1e-9));
       },
     );
+  });
+
+  group('resume seeds the transposition table', () {
+    // Session 1 expanded e4e5 (via 1.e4 e5).  Session 2 resumes with a
+    // frontier leaf that reaches the same position by another move order.
+    // The resumed run must recognise it as a transposition of the expanded
+    // node rather than expand the position a second time.
+    test(
+      'a frontier twin of an expanded node becomes a transposition',
+      () async {
+        final t = StandardTree();
+        void markExplored(BuildTreeNode n) {
+          n.explored = true;
+          for (final c in n.children) {
+            markExplored(c);
+          }
+        }
+
+        markExplored(t.root);
+        // Frontier leaf under d4 whose position is e4e5's (fake move order).
+        final twin = makeNode(
+          fen: t.e4e5.fen,
+          san: 'e5',
+          uci: 'e7e5',
+          ply: 2,
+          isWhiteToMove: true,
+          evalCp: 30,
+          moveProbability: 0.1,
+          cumulativeProbability: 0.1,
+          parent: t.d4,
+        );
+        expect(twin.explored, isFalse);
+
+        final tree = BuildTree(
+          root: t.root,
+          totalNodes: 12,
+          configSnapshot: const {},
+        );
+        tree.computeMetadata();
+
+        final service = TreeBuildService();
+        await service.build(
+          config: _headlessConfig(),
+          isCancelled: () => false,
+          onProgress: (_) {},
+          existingTree: tree,
+        );
+
+        // Recognised: closed as a leaf without any expansion attempt.  (An
+        // expansion that finds nothing leaves `explored` false — see
+        // _processBuildNode — so this is what tells the two apart headlessly.)
+        expect(twin.explored, isTrue);
+        expect(twin.children, isEmpty);
+        expect(t.e4e5.children, hasLength(1));
+      },
+    );
+
+    test('registerExpanded registers expanded nodes only, first wins', () {
+      final t = StandardTree();
+      final twin = makeNode(
+        fen: t.e4e5.fen,
+        san: 'e5',
+        ply: 2,
+        isWhiteToMove: true,
+        parent: t.d4,
+      );
+      final map = FenMap()..registerExpanded(t.root);
+      expect(map.getCanonical(t.e4e5.fen), same(t.e4e5));
+      expect(map.getTranspositions(t.e4e5.fen), isEmpty);
+      expect(map.contains(twin.fen), isTrue); // via e4e5
+      // Childless nodes are not pre-registered.
+      expect(map.contains(t.e4e5nf3.fen), isFalse);
+    });
   });
 
   group('coverage sweep — no silent holes', () {

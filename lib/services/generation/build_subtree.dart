@@ -1,8 +1,8 @@
 /// Subtree surgery for reusing already-built tree fragments.
 ///
 /// When the analyzed position moves to a node that already exists inside a
-/// previously built [BuildTree] (on-the-fly session tree, cached result, or
-/// the main generated tree), the subtree under that node can seed the next
+/// previously built [BuildTree] (a probe tree, a cached result, or the main
+/// generated tree), the subtree under that node can seed the next
 /// build instead of starting from scratch.  [BuildTreeNode.ply] is final and
 /// [BuildTreeNode.cumulativeProbability] is path-dependent, so reuse means
 /// cloning with rebased bookkeeping, not re-parenting.

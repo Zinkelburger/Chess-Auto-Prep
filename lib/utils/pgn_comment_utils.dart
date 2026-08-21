@@ -12,6 +12,7 @@ import '../services/generation/export/move_annotation.dart'
     show MoveLikelihoodSource;
 import '../theme/app_colors.dart';
 import 'movetext_builder.dart';
+import '../utils/fen_utils.dart';
 
 export '../services/generation/export/move_annotation.dart'
     show MoveLikelihoodSource;
@@ -193,6 +194,19 @@ final cumProbCommentRe = RegExp(r'\[%cumProb\s+([\d.]+)%?\]');
 /// Legacy `[%importance 0.85]` — cumulative line probability (0–1 fraction).
 final importanceCommentRe = RegExp(r'\[%importance\s+(\d+\.?\d*)\]');
 
+/// Matches `[%transposes Nf3 d5 d4 Nf6]` — the move order a line cut at a
+/// transposition continues in.  Space-separated SAN from the game's start.
+final transposesCommentRe = RegExp(r'\[%transposes\s+([^\]]+)\]');
+
+/// The moves a `[%transposes …]` token names, or null when absent.
+List<String>? parseTransposesToken(String? comment) {
+  if (comment == null) return null;
+  final m = transposesCommentRe.firstMatch(comment);
+  if (m == null) return null;
+  final moves = m.group(1)!.trim().split(RegExp(r'\s+'));
+  return moves.where((s) => s.isNotEmpty).toList();
+}
+
 /// Matches `[%pv Nf3,Bb4,O-O,d5]`.
 final pvCommentRe = RegExp(r'\[%pv\s+([^\]]+)\]');
 
@@ -342,6 +356,12 @@ class MoveMetrics {
   /// Mate distance, when the eval is a mate score instead of centipawns.
   final int? evalMate;
 
+  /// Expectimax (practical) value after the move, in centipawns from the
+  /// repertoire owner's side — the engine eval folded with how often
+  /// opponents go wrong from here.  Written by the generator as
+  /// `[%expectimax +0.45]`.
+  final int? expectimaxCp;
+
   /// The move is far enough ahead of every alternative to be forced.
   final bool isOnlyMove;
 
@@ -368,6 +388,7 @@ class MoveMetrics {
   const MoveMetrics({
     this.evalCp,
     this.evalMate,
+    this.expectimaxCp,
     this.isOnlyMove = false,
     this.myEase,
     this.opponentEase,
@@ -390,6 +411,7 @@ class MoveMetrics {
 
     int? evalCp;
     int? evalMate;
+    int? expectimaxCp;
     var isOnlyMove = false;
     double? myEase;
     double? opponentEase;
@@ -408,6 +430,9 @@ class MoveMetrics {
           final parsed = parseEvalComment('[%eval $raw]');
           evalCp = parsed?.cp;
           evalMate = parsed?.mate;
+        case 'expectimax':
+          final pawns = double.tryParse(raw);
+          if (pawns != null) expectimaxCp = (pawns * 100).round();
         case 'onlyMove':
           isOnlyMove = true;
         case 'myEase':
@@ -439,6 +464,7 @@ class MoveMetrics {
     return MoveMetrics(
       evalCp: evalCp,
       evalMate: evalMate,
+      expectimaxCp: expectimaxCp,
       isOnlyMove: isOnlyMove,
       myEase: myEase,
       opponentEase: opponentEase,
@@ -456,6 +482,7 @@ class MoveMetrics {
   List<String> get labels => [
     if (evalMate != null) 'mate in ${evalMate!.abs()}',
     if (evalMate == null && evalCp != null) 'eval ${_signedPawns(evalCp!)}',
+    if (expectimaxCp != null) 'expectimax ${_signedPawns(expectimaxCp!)}',
     if (lossCp != null) 'costs ${(lossCp! / 100).toStringAsFixed(2)}',
     if (isOnlyMove) 'only move',
     if (likelihood != null && likelihoodSource != null)
@@ -515,6 +542,7 @@ String filterDisplayComment(String comment) {
   comment = comment.replaceAll(cumProbCommentRe, '');
   comment = comment.replaceAll(importanceCommentRe, '');
   comment = comment.replaceAll(pvCommentRe, '');
+  comment = comment.replaceAll(transposesCommentRe, '');
   comment = comment.replaceAll(maiaTopCommentRe, '');
   comment = comment.replaceAll(_anyPgnTokenRe, '');
   comment = comment.replaceAll(_scoreArrowRe, '');
@@ -859,7 +887,7 @@ bool _isValidFen(String fen) {
   if (fields.length < 6) return null;
   final fullmove = int.tryParse(fields[5]);
   if (fullmove == null) return null;
-  if (fields[1] == 'w') {
+  if (isWhiteToMove(fen)) {
     // White to move on `fullmove`: previous ply was Black's move fullmove-1.
     if (fullmove <= 1) return null;
     return (number: fullmove - 1, white: false);

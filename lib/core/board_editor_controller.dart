@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart';
 
 import '../utils/fen_utils.dart' show expandFen;
 import '../utils/safe_change_notifier.dart';
+import '../utils/chess_utils.dart';
 
 /// The palette tool currently in hand.
 sealed class EditorTool {
@@ -250,13 +251,7 @@ class BoardEditorController extends ChangeNotifier with SafeChangeNotifier {
 
   /// The validated position, or `null` when the setup is illegal (see
   /// [validationError]).
-  Position? get validPosition {
-    try {
-      return Chess.fromSetup(Setup.parseFen(fen));
-    } catch (_) {
-      return null;
-    }
-  }
+  Position? get validPosition => tryParseFen(fen);
 
   /// Human-readable reason the current setup is invalid, or `null` when it
   /// is fine.

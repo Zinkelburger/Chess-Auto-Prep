@@ -279,8 +279,9 @@ class StudyImportController extends ChangeNotifier with SafeChangeNotifier {
       final label = attempt == 0
           ? 'Game ${index + 1}/$total'
           : 'Rate-limited — retrying game ${index + 1}/$total';
-      if (!await _sleep(wait, label))
+      if (!await _sleep(wait, label)) {
         return (pgn: null, throttled: sawThrottle);
+      }
 
       _publishProgress(_done, total, 'Fetching game ${index + 1}/$total');
       final result = await fetchGamePgn(gid, client: client);

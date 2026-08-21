@@ -57,14 +57,14 @@ class EngineBusyNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (dense) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.hourglass_top, size: 16, color: AppColors.warning),
-            const SizedBox(width: 8),
-            const Flexible(
+            Icon(Icons.hourglass_top, size: 16, color: AppColors.warning),
+            SizedBox(width: 8),
+            Flexible(
               child: Text(
                 'Engine busy — building your repertoire.',
                 style: TextStyle(

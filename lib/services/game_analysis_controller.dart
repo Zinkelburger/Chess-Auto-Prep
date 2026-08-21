@@ -29,6 +29,7 @@ import 'engine/stockfish_pool.dart';
 import 'eval_cache.dart';
 import 'maia/maia_factory.dart';
 import '../utils/safe_change_notifier.dart';
+import '../utils/fen_utils.dart';
 
 // ---------------------------------------------------------------------------
 // Data models
@@ -437,7 +438,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
       _shareEval(
         startFen,
         startResult,
-        sideToMoveIsWhite: startFen.split(' ')[1] == 'w',
+        sideToMoveIsWhite: isWhiteToMove(startFen),
         depth: useDepth,
       );
       _startWinChance = cpToWinningChance(

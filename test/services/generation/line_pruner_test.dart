@@ -23,10 +23,83 @@ ExtractedLine _line(
   );
 }
 
+/// Line with a real move order, optionally cut at a transposition into
+/// [transposesInto]'s move order.
+ExtractedLine _lineAt(
+  List<String> movesSan,
+  double probability,
+  List<(String, double)> units, {
+  List<String>? transposesInto,
+}) {
+  return ExtractedLine(
+    movesSan: movesSan,
+    movesUci: movesSan,
+    probability: probability,
+    coverageUnits: [
+      for (final (key, value) in units)
+        LineCoverageUnit(key: key, value: value),
+    ],
+    transposesInto: transposesInto,
+  );
+}
+
 String _name(ExtractedLine l) => l.movesSan.single;
 
 void main() {
   group('LinePruner', () {
+    test('a kept transposition stub pins the line it points at', () {
+      // 'stub' transposes into the position 'owner' continues from. The
+      // greedy scores them independently, and a 50% coverage target keeps
+      // only the stub — which would name a move order the book no longer
+      // contains, and drop the shared continuation entirely.
+      final owner = _lineAt(['d4', 'Nf6', 'c4', 'e6'], 0.10, [('shared', 1.0)]);
+      final stub = _lineAt(
+        ['c4', 'e6', 'd4', 'Nf6'],
+        0.90,
+        [('stub-only', 9.0)],
+        transposesInto: ['d4', 'Nf6', 'c4', 'e6'],
+      );
+
+      final kept = LinePruner.prune([owner, stub], coverageTarget: 0.5);
+      final orders = kept.map((l) => l.movesSan.join(' ')).toList();
+
+      expect(orders, contains('c4 e6 d4 Nf6'));
+      expect(
+        orders,
+        contains('d4 Nf6 c4 e6'),
+        reason: 'the owner must come back with the stub that names it',
+      );
+    });
+
+    test('pinning an owner outranks the targetCount cap', () {
+      final owner = _lineAt(['d4', 'Nf6'], 0.10, [('shared', 1.0)]);
+      final stub = _lineAt(
+        ['Nf3', 'Nf6', 'd4'],
+        0.90,
+        [('stub-only', 9.0)],
+        transposesInto: ['d4', 'Nf6'],
+      );
+
+      // A cap of 1 would keep the stub alone; a dangling pointer is the
+      // worse book, so the owner is pinned back in over the cap.
+      final kept = LinePruner.prune([owner, stub], targetCount: 1);
+      expect(kept, hasLength(2));
+    });
+
+    test('a stub whose owner is already kept pins nothing extra', () {
+      final owner = _lineAt(['d4', 'Nf6', 'c4'], 0.50, [('shared', 5.0)]);
+      final stub = _lineAt(
+        ['c4', 'Nf6', 'd4'],
+        0.50,
+        [('stub-only', 5.0)],
+        transposesInto: ['d4', 'Nf6'],
+      );
+      final other = _lineAt(['e4', 'e5'], 0.10, [('unrelated', 1.0)]);
+
+      final kept = LinePruner.prune([owner, stub, other], coverageTarget: 1.0);
+      expect(kept, hasLength(3));
+    });
+
     test('targetCount <= 0 means no cap, not no pruning', () {
       // The old contract returned the input untouched here, which handed
       // callers back every exact duplicate. Pruning always runs now; 0 only

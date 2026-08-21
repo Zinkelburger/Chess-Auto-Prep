@@ -16,9 +16,11 @@ import 'package:dartchess/dartchess.dart';
 
 import '../generation/pgn_freq_parser.dart'
     show isResultToken, splitPgnGames, tokenToSan, tokenizeMovetext;
+import 'game_authority.dart';
 import 'master_games_db.dart';
 import 'movetext_codec.dart';
 import 'position_key.dart';
+import '../../utils/movetext_builder.dart';
 
 class MasterGamesImportRequest {
   final String dbPath;
@@ -107,13 +109,15 @@ MasterGamesImportResult _import(
 
   final insertGame = db.prepare(
     'INSERT INTO games(twic, event, site, date, round, white, black, result, '
-    'white_elo, black_elo, white_fide, black_fide, eco, ply_count, movetext) '
-    'VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+    'white_elo, black_elo, white_fide, black_fide, eco, ply_count, movetext, '
+    'authority) '
+    'VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
   );
   final upsertBook = db.prepare('''
     INSERT INTO book(pos, move, ply, games, white_wins, draws, black_wins,
-                     elo_sum, elo_n, max_elo, last_year, top_game, recent_game)
-    VALUES(?,?,?,1,?,?,?,?,?,?,?,?,?)
+                     elo_sum, elo_n, max_elo, last_year, top_game, recent_game,
+                     top_classical_game, classical_max_elo)
+    VALUES(?,?,?,1,?,?,?,?,?,?,?,?,?,?,?)
     ON CONFLICT(pos, move) DO UPDATE SET
       games = games + 1,
       white_wins = white_wins + excluded.white_wins,
@@ -127,6 +131,14 @@ MasterGamesImportResult _import(
       recent_game = CASE WHEN excluded.last_year >= last_year
                          THEN excluded.recent_game ELSE recent_game END,
       last_year = MAX(last_year, excluded.last_year),
+      -- The classical slot tracks its own maximum: an online game arriving
+      -- with a higher rating must not displace a citable one.
+      top_classical_game = CASE
+        WHEN excluded.top_classical_game != 0
+             AND (top_classical_game = 0
+                  OR excluded.classical_max_elo > classical_max_elo)
+        THEN excluded.top_classical_game ELSE top_classical_game END,
+      classical_max_elo = MAX(classical_max_elo, excluded.classical_max_elo),
       ply = MIN(ply, excluded.ply)
   ''');
 
@@ -163,6 +175,10 @@ MasterGamesImportResult _import(
       final blackElo = _int(h['BlackElo']);
       final year = _year(h['Date']) ?? _year(h['EventDate']) ?? 0;
 
+      final authority = classifyAuthority(
+        site: h['Site'] ?? '',
+        event: h['Event'] ?? '',
+      );
       insertGame.execute([
         issue,
         h['Event'] ?? '',
@@ -179,6 +195,7 @@ MasterGamesImportResult _import(
         h['ECO'] ?? '',
         sans.length,
         codec.encode(g.movetext),
+        authority.code,
       ]);
       final gameId = db.lastInsertRowId;
 
@@ -217,6 +234,10 @@ MasterGamesImportResult _import(
           year,
           gameId,
           gameId,
+          // Only a citable game claims the classical slot; everything else
+          // leaves it at 0 and falls back to `top_game`.
+          authority.isCitable ? gameId : 0,
+          authority.isCitable ? maxElo : 0,
         ]);
         pos = pos.play(move);
       }
@@ -265,16 +286,4 @@ int? _year(String? date) {
 }
 
 /// `1. d4 Nf6 2. c4 …` — numbered SAN, one space between tokens.
-String _compactMovetext(List<String> sans) {
-  final b = StringBuffer();
-  for (var i = 0; i < sans.length; i++) {
-    if (i.isEven) {
-      if (i > 0) b.write(' ');
-      b.write('${i ~/ 2 + 1}. ');
-    } else {
-      b.write(' ');
-    }
-    b.write(sans[i]);
-  }
-  return b.toString();
-}
+String _compactMovetext(List<String> sans) => buildNumberedMovetext(sans);

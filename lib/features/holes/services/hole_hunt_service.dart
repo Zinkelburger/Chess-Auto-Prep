@@ -36,6 +36,7 @@ import '../../audit/models/audit_finding.dart';
 import '../../audit/models/audit_result.dart';
 import 'hole_hunt_config.dart';
 import 'hole_scoring.dart';
+import '../../../utils/fen_utils.dart';
 
 enum HoleHuntPhase { walking, traps }
 
@@ -171,7 +172,7 @@ class HoleHuntService {
         );
       }
 
-      final isWhiteTurn = node.fen.contains(' w ');
+      final isWhiteTurn = isWhiteToMove(node.fen);
       final isOwnerTurn = isWhiteTurn == isWhiteRepertoire;
 
       if (node.children.isEmpty) {
@@ -285,7 +286,7 @@ class HoleHuntService {
         fen: node.fen,
         depth: config.discoveryDepth,
         multiPv: config.discoveryMultiPv,
-        isWhiteToMove: node.fen.contains(' w '),
+        isWhiteToMove: isWhiteToMove(node.fen),
       );
       if (discovery.lines.isEmpty) return;
 
@@ -355,7 +356,7 @@ class HoleHuntService {
         fen: node.fen,
         depth: config.discoveryDepth,
         multiPv: config.discoveryMultiPv,
-        isWhiteToMove: node.fen.contains(' w '),
+        isWhiteToMove: isWhiteToMove(node.fen),
       );
       cacheMisses++;
       if (discovery.lines.isEmpty) return (cacheHits, cacheMisses);
@@ -406,7 +407,7 @@ class HoleHuntService {
         // yields both a trustworthy eval and the concrete refutation line.
         final childFen = repEntry.value.fen;
         final verify = await _pool.evaluateFen(childFen, config.verifyDepth);
-        final childIsWhiteTurn = childFen.contains(' w ');
+        final childIsWhiteTurn = isWhiteToMove(childFen);
         final verifiedWhiteCp = childIsWhiteTurn
             ? (verify.scoreCp ?? 0)
             : -(verify.scoreCp ?? 0);
@@ -501,9 +502,8 @@ class HoleHuntService {
         maxPly: config.trapSearchPly,
         maxNodes: 800 * config.trapSearchPly,
         buildMode: BuildMode.stockfishExpectimax,
-        // 1 UCI thread per worker — same reasoning as the on-the-fly
-        // service: parallelism comes from pool workers, and >1 would
-        // reconfigure workers other features rely on.
+        // 1 UCI thread per worker: parallelism comes from pool workers,
+        // and >1 would reconfigure workers other features rely on.
         engineThreads: 1,
         minProbability: 0.02,
         evalDepth: config.trapEvalDepth,

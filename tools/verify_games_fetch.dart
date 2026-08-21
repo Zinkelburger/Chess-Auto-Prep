@@ -8,16 +8,21 @@ import 'package:http/http.dart' as http;
 import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 
 Future<String> fetchChesscom(String user) async {
-  final arch = await http.get(Uri.parse(
-      'https://api.chess.com/pub/player/${user.toLowerCase()}/games/archives'));
+  final arch = await http.get(
+    Uri.parse(
+      'https://api.chess.com/pub/player/${user.toLowerCase()}/games/archives',
+    ),
+  );
   if (arch.statusCode != 200) return '';
   final urls = List<String>.from(
-      (json.decode(arch.body) as Map<String, dynamic>)['archives'] as List);
+    (json.decode(arch.body) as Map<String, dynamic>)['archives'] as List,
+  );
   if (urls.isEmpty) return '';
   final last = await http.get(Uri.parse(urls.last));
   if (last.statusCode != 200) return '';
-  final games = (json.decode(last.body) as Map<String, dynamic>)['games']
-      as List<dynamic>;
+  final games =
+      (json.decode(last.body) as Map<String, dynamic>)['games']
+          as List<dynamic>;
   return games
       .map((g) => (g as Map<String, dynamic>)['pgn'] as String? ?? '')
       .where((p) => p.isNotEmpty)
@@ -36,7 +41,10 @@ void report(String label, String pgn) {
   final records = parseGameRecords(pgn);
   final blitzRapid = applySelection(
     records,
-    const GameSelection(maxGames: 10, speeds: {GameSpeed.blitz, GameSpeed.rapid}),
+    const GameSelection(
+      maxGames: 10,
+      speeds: {GameSpeed.blitz, GameSpeed.rapid},
+    ),
   );
   print('── $label ──');
   print('  raw games parsed : ${records.length}');
@@ -50,8 +58,10 @@ void report(String label, String pgn) {
   print('  after blitz/rapid + max 10 (newest first): ${blitzRapid.length}');
   if (blitzRapid.isNotEmpty) {
     final r = blitzRapid.first;
-    print('  newest kept      : ${r.white} vs ${r.black}  '
-        '${r.date?.toIso8601String()}  ${r.speed.name}');
+    print(
+      '  newest kept      : ${r.white} vs ${r.black}  '
+      '${r.date?.toIso8601String()}  ${r.speed.name}',
+    );
   }
 }
 

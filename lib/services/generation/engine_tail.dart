@@ -56,9 +56,14 @@ Future<Map<String, EngineTail>> computeEngineTails({
   final plies = config.engineTailPlies;
   if (plies <= 0) return const {};
 
+  // A line cut at a transposition did not stop where the build stopped —
+  // its continuation is another line's — so it gets no tail.
   final fens = <String>{
     for (final line in lines)
-      if (line.leafFen != null && line.leafFen!.isNotEmpty) line.leafFen!,
+      if (!line.isTransposition &&
+          line.leafFen != null &&
+          line.leafFen!.isNotEmpty)
+        line.leafFen!,
   };
   if (fens.isEmpty) return const {};
 

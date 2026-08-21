@@ -59,7 +59,7 @@ class TrickTarget {
     if (entry.ply > maxPly) continue;
     walked++;
 
-    final isWhiteTurn = node.fen.contains(' w ');
+    final isWhiteTurn = isWhiteToMove(node.fen);
     final isOwnerTurn = isWhiteTurn == playerIsWhite;
 
     if (!isOwnerTurn) {

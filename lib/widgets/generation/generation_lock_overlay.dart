@@ -138,12 +138,12 @@ class GenerationLockOverlay extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-                Text(
+                const Text(
                   'Pausing frees the engine and unlocks the tab.\n'
                   'You can resume it later — or discard it if you change '
                   'your mind.',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11.5,
                     color: AppColors.onSurfaceMuted,
                     height: 1.4,
@@ -192,8 +192,8 @@ class GenerationPausedBanner extends StatelessWidget {
               color: AppColors.warning,
             ),
             const SizedBox(width: 8),
-            Expanded(
-              child: const Text(
+            const Expanded(
+              child: Text(
                 'Build paused — board and engine are free. '
                 'Resume it when you like, or discard it if you don\'t want it.',
                 style: TextStyle(fontSize: 12.5, color: AppColors.inkSoft),

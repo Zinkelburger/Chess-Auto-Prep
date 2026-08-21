@@ -18,6 +18,7 @@ import '../../../utils/fen_utils.dart';
 import '../../engine/stockfish_pool.dart';
 import '../../eval/eval_canonicalize.dart';
 import '../../master_games/master_games_db.dart';
+import '../export/move_annotation.dart';
 import '../generation_config.dart';
 import '../line_extractor.dart';
 import '../pgn_freq_parser.dart'
@@ -196,7 +197,14 @@ class MasterImprovementProber {
     final gain = ourEvalForUs - masterEvalForUs;
     if (gain < config.improvementMinGainCp) return null;
 
-    final game = gameById(master.topGameId) ?? gameById(master.recentGameId);
+    // A citation is a claim about theory, so it wants the strongest
+    // over-the-board classical game — [BookMove.citeGameId] — ahead of the
+    // higher-rated blitz game `topGameId` so often points at in a TWIC
+    // corpus that is more than half online play.
+    final game =
+        gameById(master.citeGameId) ??
+        gameById(master.topGameId) ??
+        gameById(master.recentGameId);
     if (game == null) return null;
 
     final ourSan = uciToSanOrNull(site.fenBefore, ourUci);
@@ -277,4 +285,42 @@ class MasterImprovementProber {
     }
     return null;
   }
+}
+
+/// Improvements along [line], keyed by the index of the move of ours that
+/// earns one.
+///
+/// Shared by the course composer and the snapshot export so both say the same
+/// thing: an improvement the build found but the written PGN never mentions
+/// is a note nobody reads.
+Map<int, MasterImprovement> improvementsAlong(
+  ExtractedLine line,
+  ImprovementMap improvements,
+) {
+  if (improvements.isEmpty) return const {};
+  final out = <int, MasterImprovement>{};
+  for (final choice in line.choices) {
+    if (!choice.isOurMove) continue;
+    final found = improvements[choice.fenBefore];
+    if (found != null) out[choice.moveIndex] = found;
+  }
+  return out;
+}
+
+/// [line]'s annotations with `improves on … in <game>` notes attached to the
+/// moves that earned them.  Annotations are indexed by line move, so a line
+/// shorter on annotations than on moves is padded.
+List<MoveAnnotation> annotationsWithImprovements(
+  ExtractedLine line,
+  Map<int, MasterImprovement> along,
+) {
+  if (along.isEmpty) return line.moveAnnotations;
+  final out = List<MoveAnnotation>.of(line.moveAnnotations);
+  for (final entry in along.entries) {
+    while (out.length <= entry.key) {
+      out.add(MoveAnnotation.none);
+    }
+    out[entry.key] = out[entry.key].withNote(entry.value.note);
+  }
+  return out;
 }

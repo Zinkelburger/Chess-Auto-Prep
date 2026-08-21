@@ -15,16 +15,12 @@ export '../services/jobs/generation_phase.dart' show GenerationPhase;
 
 class GenerationProgress {
   GenerationProgress({
-    required void Function() notify,
-    required RepertoireJob? Function() job,
-    required bool Function() isRunning,
-    required bool Function() isPaused,
-    required Stopwatch Function() elapsed,
-  }) : _notify = notify,
-       _job = job,
-       _isRunning = isRunning,
-       _isPaused = isPaused,
-       _elapsed = elapsed;
+    required this._notify,
+    required this._job,
+    required this._isRunning,
+    required this._isPaused,
+    required this._elapsed,
+  });
 
   static const Duration _notifyThrottle = Duration(milliseconds: 100);
   static const Duration _elapsedTick = Duration(seconds: 1);

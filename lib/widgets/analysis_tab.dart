@@ -264,10 +264,10 @@ class _AnalysisTabState extends State<AnalysisTab> {
     final hasContent = hasBrowseSource || hasSuggestionPanel || _showTree;
 
     if (!hasContent) {
-      return Center(
+      return const Center(
         child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: const Text(
+          padding: EdgeInsets.all(24),
+          child: Text(
             'Generate a tree to see candidate moves here.\n'
             'Stockfish and expectimax are on the PGN tab.',
             textAlign: TextAlign.center,

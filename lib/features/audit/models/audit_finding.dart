@@ -1,6 +1,8 @@
 /// Data model for a single repertoire audit finding.
 library;
 
+import '../../../utils/movetext_builder.dart';
+
 enum AuditFindingType {
   mistake,
   inaccuracy,
@@ -138,15 +140,7 @@ class AuditFinding {
 
   String get movePathString {
     if (movePath.isEmpty) return '(root)';
-    final buf = StringBuffer();
-    for (int i = 0; i < movePath.length; i++) {
-      if (i % 2 == 0) {
-        buf.write('${(i ~/ 2) + 1}.');
-      }
-      buf.write(movePath[i]);
-      if (i < movePath.length - 1) buf.write(' ');
-    }
-    return buf.toString();
+    return buildNumberedMovetext(movePath, compact: true);
   }
 
   /// Cumulative probability formatted as a percentage string, or null.
@@ -160,10 +154,8 @@ class AuditFinding {
   }
 
   /// Format a SAN with its move number, e.g. "3. Nf3" or "3...Nd2".
-  String _sanWithMoveNumber(String san, int plyIndex) {
-    final moveNum = (plyIndex ~/ 2) + 1;
-    return plyIndex.isEven ? '$moveNum. $san' : '$moveNum...$san';
-  }
+  String _sanWithMoveNumber(String san, int plyIndex) =>
+      formatMoveAtPly(plyIndex, san);
 
   String get summary {
     switch (type) {

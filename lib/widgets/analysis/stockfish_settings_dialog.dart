@@ -1,9 +1,8 @@
 /// Stockfish settings — the dialog behind every Stockfish gear (⚙).
 ///
 /// One stable dialog wherever Stockfish analysis appears: the inline engine
-/// bar, the unified engine pane, and the analysis dock. Its siblings are
-/// expectimax_settings_dialog.dart (the on-the-fly expectimax pane) and
-/// analysis_panels_dialog.dart (panel visibility) — deliberately three
+/// bar, the unified engine pane, and the analysis dock. Its sibling is
+/// analysis_panels_dialog.dart (panel visibility) — deliberately two
 /// separate dialogs, not modes of one.
 library;
 

@@ -16,6 +16,7 @@ import '../../../services/repertoire_service.dart';
 import '../models/recent_game.dart';
 import 'game_deviation_service.dart';
 import 'game_moves.dart';
+import '../../../utils/movetext_builder.dart';
 
 /// One distinct deviation point, shared by every game in [games].
 ///
@@ -181,18 +182,4 @@ Future<List<RepertoireLine>> loadBookLines({
 }
 
 /// SANs from the initial position as numbered movetext ("1. e4 c5 2. Nf3").
-String formatNumberedSans(List<String> sans) {
-  final buf = StringBuffer();
-  for (var i = 0; i < sans.length; i++) {
-    if (i.isEven) buf.write('${i ~/ 2 + 1}. ');
-    buf
-      ..write(sans[i])
-      ..write(' ');
-  }
-  return buf.toString().trimRight();
-}
-
-/// One move with its number, White/Black aware ("3. d4" / "3... g6").
-/// [ply] is the 0-based ply index the move was played at.
-String formatMoveAtPly(int ply, String san) =>
-    '${ply ~/ 2 + 1}${ply.isEven ? '.' : '...'} $san';
+String formatNumberedSans(List<String> sans) => buildNumberedMovetext(sans);

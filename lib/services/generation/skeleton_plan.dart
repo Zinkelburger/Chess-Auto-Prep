@@ -34,7 +34,8 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 
-import '../../utils/chess_utils.dart' show sanToUci, uciToSanOrNull;
+import '../../utils/chess_utils.dart'
+    show sanToUci, tryParseFen, uciToSanOrNull;
 import '../../utils/fen_utils.dart' show normalizeFen;
 
 /// A board structure the user wants to steer toward (`avoid == false`) or
@@ -225,7 +226,7 @@ class SkeletonPlan {
   /// caller still eval-gates — transfer never overrides the eval-loss window.
   TransferMatch? transferFor(String beforeFen) {
     final placement = normalizeFen(beforeFen).split(' ').first;
-    final pos = _tryPos(beforeFen);
+    final pos = tryParseFen(beforeFen);
     if (pos == null) return null;
 
     TransferMatch? best;
@@ -353,14 +354,6 @@ class SkeletonPlan {
       }
       yield tok;
     }
-  }
-}
-
-Position? _tryPos(String fen) {
-  try {
-    return Chess.fromSetup(Setup.parseFen(fen));
-  } catch (_) {
-    return null;
   }
 }
 

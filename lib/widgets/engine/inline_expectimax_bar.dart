@@ -1,12 +1,10 @@
-/// Compact inline expectimax bar — toggleable display of expectimax PV lines.
+/// Compact inline expectimax bar — toggleable display of the built tree's
+/// expectimax values at the current position.
 ///
-/// Modeled on [InlineEngineBar]. Shows a toggle switch and live expectimax
-/// lines from the precomputed tree or on-the-fly computation. Delegates all
-/// computation to [ExpectimaxPanelHost]; the settings gear lives in the
-/// pane's own header.
+/// Modeled on [InlineEngineBar]: a toggle switch over [ExpectimaxPanelHost].
+/// Unlike the engine bar it never starts Stockfish — everything it shows was
+/// stored at build time.
 library;
-
-import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -14,7 +12,6 @@ import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../core/repertoire_controller.dart';
 import '../../models/build_tree_node.dart';
 import '../../services/coherence_service.dart';
-import '../../services/engine/engine_lifecycle.dart';
 import '../../services/generation/fen_map.dart';
 import '../../services/generation/generation_config.dart';
 import '../../theme/app_colors.dart';
@@ -27,10 +24,8 @@ class InlineExpectimaxBar extends StatefulWidget {
   final FenMap? fenMap;
   final BoardPreviewController boardPreview;
   final CoherenceResult? coherenceResult;
-  final bool isGenerating;
-  final bool isGenerationPaused;
 
-  /// Analyze this FEN instead of the controller cursor (e.g. the
+  /// Show this FEN instead of the controller cursor (e.g. the
   /// build-by-playing scratchpad position).
   final String? fenOverride;
 
@@ -42,8 +37,6 @@ class InlineExpectimaxBar extends StatefulWidget {
     this.fenMap,
     required this.boardPreview,
     this.coherenceResult,
-    this.isGenerating = false,
-    this.isGenerationPaused = false,
     this.fenOverride,
   });
 
@@ -61,18 +54,8 @@ class _InlineExpectimaxBarState extends State<InlineExpectimaxBar> {
 
   static void toggleExternal() {
     _enabled = !_enabled;
-    if (_enabled) _ensureEngineOn();
     for (final cb in _externalToggleNotifier) {
       cb();
-    }
-  }
-
-  /// Enabling expectimax is an explicit request to use Stockfish — it
-  /// overrides the persisted global engine kill switch, which would
-  /// otherwise silently block on-the-fly compute.
-  static void _ensureEngineOn() {
-    if (EngineLifecycle.instance.state == EngineState.off) {
-      unawaited(EngineLifecycle.instance.toggleOn());
     }
   }
 
@@ -92,10 +75,7 @@ class _InlineExpectimaxBarState extends State<InlineExpectimaxBar> {
     if (mounted) setState(() {});
   }
 
-  void _toggleEnabled(bool value) {
-    if (value) _ensureEngineOn();
-    setState(() => _enabled = value);
-  }
+  void _toggleEnabled(bool value) => setState(() => _enabled = value);
 
   @override
   Widget build(BuildContext context) {
@@ -114,10 +94,7 @@ class _InlineExpectimaxBarState extends State<InlineExpectimaxBar> {
               fenMap: widget.fenMap,
               boardPreview: widget.boardPreview,
               coherenceResult: widget.coherenceResult,
-              isGenerating: widget.isGenerating,
-              isGenerationPaused: widget.isGenerationPaused,
               compact: true,
-              autoComputeEnabled: _enabled,
               fenOverride: widget.fenOverride,
             ),
           ),
@@ -143,7 +120,7 @@ class _InlineExpectimaxBarState extends State<InlineExpectimaxBar> {
             ),
           ),
           const SizedBox(width: 4),
-          Expanded(
+          const Expanded(
             child: Tooltip(
               message: 'Toggle expectimax (X)',
               child: Text(

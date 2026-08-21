@@ -297,4 +297,76 @@ $mainChapter
       );
     });
   });
+
+  group('[%transposes] graft', () {
+    // A generated book: the Nf6 move order is cut where it transposes into
+    // the d5 line, which carries the continuation.
+    const transposing = '''
+// Color: White
+
+[Event "Main"]
+[Result "*"]
+
+1. Nf3 d5 2. d4 Nf6 3. c4 e6 4. Nc3 *
+
+[Event "Cut"]
+[Result "*"]
+
+1. Nf3 Nf6 2. d4 d5 3. c4 {Transposes to 1. Nf3 d5 2. d4 Nf6 3. c4. [%transposes Nf3 d5 d4 Nf6 c4]} *
+''';
+
+    test(
+      'a game following the cut move order stays in book past the cut',
+      () async {
+        await writeChapter('T.pgn', transposing);
+        await settings.setPaths(white: true, paths: [tempDir.path]);
+
+        final report = await service.analyzeGame(
+          gameSans: ['Nf3', 'Nf6', 'd4', 'd5', 'c4', 'e6', 'Nc3', 'Be7'],
+          meWhite: true,
+        );
+
+        expect(report, isNotNull);
+        // 4...Be7 is past the end of the owner line: book ended, no deviation
+        // was reported at 3...e6 or 4.Nc3.
+        expect(report!.matchedPlies, 7);
+        expect(report.bookEnded, isTrue);
+      },
+    );
+
+    test(
+      'a deviation after the cut names the owner\'s expected move',
+      () async {
+        await writeChapter('T.pgn', transposing);
+        await settings.setPaths(white: true, paths: [tempDir.path]);
+
+        final report = await service.analyzeGame(
+          gameSans: ['Nf3', 'Nf6', 'd4', 'd5', 'c4', 'e6', 'Nf3'],
+          meWhite: true,
+        );
+
+        expect(report!.matchedPlies, 6);
+        expect(report.byMe, isTrue);
+        expect(report.expectedSans, ['Nc3']);
+      },
+    );
+
+    test('a pointer to a line the chapter lacks is ignored', () async {
+      await writeChapter('T.pgn', '''
+// Color: White
+
+[Event "Cut"]
+[Result "*"]
+
+1. Nf3 Nf6 2. d4 d5 3. c4 {[%transposes Nf3 d5 d4 Nf6 c4]} *
+''');
+      await settings.setPaths(white: true, paths: [tempDir.path]);
+      final report = await service.analyzeGame(
+        gameSans: ['Nf3', 'Nf6', 'd4', 'd5', 'c4', 'e6'],
+        meWhite: true,
+      );
+      expect(report!.matchedPlies, 5);
+      expect(report.bookEnded, isTrue);
+    });
+  });
 }

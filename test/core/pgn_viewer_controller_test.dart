@@ -224,6 +224,30 @@ void main() {
       expect(c.boardFlipped, isFalse);
     });
 
+    test('the emptied allGames list is mutable too', () {
+      final c = _makeController();
+      _seed(c, [_game(white: 'A'), _game(white: 'B')]);
+
+      c.closeFile();
+
+      // A const [] would throw here. loadFile assigns allGames as given
+      // rather than copying, so the close path has to hand it a real list.
+      expect(() => c.allGames.add(_game()), returnsNormally);
+    });
+
+    test('clears the protagonist detected from the closed collection', () {
+      final c = _makeController();
+      _seed(c, [
+        _game(white: 'Carlsen', black: 'X'),
+        _game(white: 'Carlsen', black: 'Y'),
+      ]);
+
+      c.closeFile();
+
+      expect(c.sliceProtagonist, isNull);
+      expect(c.protagonistFixedSide, isNull);
+    });
+
     test('keeps the recent-files list — it is the way back in', () {
       final c = _makeController();
       c.recentFiles = ['/tmp/a.pgn', '/tmp/b.pgn'];

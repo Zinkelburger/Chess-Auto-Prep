@@ -13,6 +13,7 @@ library;
 
 import '../../models/build_tree_node.dart';
 import '../../utils/findability.dart';
+import 'course/master_improvements.dart';
 import 'eca_calculator.dart';
 import 'engine_tail.dart';
 import 'fen_map.dart';
@@ -163,12 +164,20 @@ List<ExtractedLine> snapshotLines({
     targetCount: config.targetLineCount,
     coverageTarget: config.lineCoverageTarget,
   );
+  // Last step before ranking: no line may point at a move order that did not
+  // survive the filtering above.
+  extractedLines = extractor.withdrawDanglingTranspositions(extractedLines);
   if (config.rankLinesByImportance) {
     extractedLines.sort((a, b) => b.probability.compareTo(a.probability));
   }
   return extractedLines;
 }
 
+/// [improvements] attaches the `improves on <game>` notes the master-practice
+/// prober found, keyed by the position our move is played from.  Probing needs
+/// the engine and happens after extraction, so it arrives here rather than on
+/// the lines themselves; without it a build finds improvements and then writes
+/// a PGN that never mentions them.
 List<String> extractSnapshotLines({
   required BuildTree tree,
   required TreeBuildConfig config,
@@ -176,6 +185,7 @@ List<String> extractSnapshotLines({
   required List<String> prefix,
   required String repertoireStartFen,
   Map<String, EngineTail> engineTails = const {},
+  ImprovementMap improvements = const {},
 }) {
   final extractedLines = snapshotLines(
     tree: tree,
@@ -195,7 +205,15 @@ List<String> extractSnapshotLines({
         detail: config.annotationDetail,
         annotationOffset: prefix.length,
         rankByImportance: config.rankLinesByImportance,
-        engineTail: engineTails[extractedLines[i].leafFen],
+        annotations: improvements.isEmpty
+            ? null
+            : annotationsWithImprovements(
+                extractedLines[i],
+                improvementsAlong(extractedLines[i], improvements),
+              ),
+        engineTail: extractedLines[i].isTransposition
+            ? null
+            : engineTails[extractedLines[i].leafFen],
       ),
   ];
 }

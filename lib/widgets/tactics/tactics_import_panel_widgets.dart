@@ -119,12 +119,9 @@ class _SessionSettingsForm extends StatelessWidget {
         const SizedBox(height: 12),
         Row(
           children: [
-            Text(
+            const Text(
               'Order:',
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.onSurfaceSoft,
-              ),
+              style: TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
             ),
             const SizedBox(width: 8),
             DropdownButton<TacticsSessionOrder>(
@@ -148,9 +145,9 @@ class _SessionSettingsForm extends StatelessWidget {
           onChanged: (v) => onChanged(settings.copyWith(groupByGame: v)),
         ),
         const SizedBox(height: 12),
-        Text(
+        const Text(
           'Mistake types to include:',
-          style: const TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
+          style: TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
         ),
         AppCheckbox(
           label: 'Blunders (??)',
@@ -177,9 +174,9 @@ class _SessionSettingsForm extends StatelessWidget {
                 _toggleMistakeType(TacticsSessionSettings.customMistakeType, v),
           ),
         const SizedBox(height: 8),
-        Text(
+        const Text(
           'Options:',
-          style: const TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
+          style: TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
         ),
         AppCheckbox(
           label: 'Unreviewed only',

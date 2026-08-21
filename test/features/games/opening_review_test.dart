@@ -9,6 +9,7 @@ import 'package:chess_auto_prep/features/games/services/opening_review.dart';
 import 'package:chess_auto_prep/models/repertoire_line.dart';
 import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:chess_auto_prep/services/games_library/games_library_service.dart';
+import 'package:chess_auto_prep/utils/movetext_builder.dart';
 import 'package:dartchess/dartchess.dart' show Chess, Position;
 import 'package:flutter_test/flutter_test.dart';
 
