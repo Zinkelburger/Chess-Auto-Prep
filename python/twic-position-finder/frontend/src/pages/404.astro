@@ -1,0 +1,33 @@
+---
+// A top-level 404.html is what tells Cloudflare Pages this is a static site
+// rather than a single-page app. Without one, Pages matches every unmatched
+// path to `/` and answers 200 with the home page — so a typo'd or retired URL
+// looked like a working page. See the "Not Found behaviour" note in
+// developers.cloudflare.com/pages/configuration/serving-pages/.
+import Base from '../layouts/Base.astro';
+---
+<Base title="Page Not Found">
+  <div class="card empty-state">
+    <p class="eyebrow">404</p>
+    <h1 class="empty-title">That page doesn't exist</h1>
+    <p class="empty-copy">
+      The link may be mistyped, or it may point at something that has since moved.
+      <span class="tag mono" id="path"></span>
+    </p>
+
+    <div class="form-actions" style="justify-content:center; margin-top:24px;">
+      <a href="/" class="btn btn-primary">Home</a>
+      <a href="/twic-notifications" class="btn btn-outline">TWIC Notifications</a>
+      <a href="/tactics" class="btn btn-outline">Tactics Trainer</a>
+      <a href="/charles-clock" class="btn btn-outline">Charles Clock</a>
+      <a href="/dashboard" class="btn btn-outline">Dashboard</a>
+    </div>
+  </div>
+</Base>
+
+<script>
+  // Shown client-side: the page is a static file, so the server cannot bake
+  // the requested path into it.
+  const el = document.getElementById('path');
+  if (el) el.textContent = window.location.pathname;
+</script>
