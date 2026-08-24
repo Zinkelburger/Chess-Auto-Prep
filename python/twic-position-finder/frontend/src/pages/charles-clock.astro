@@ -7,6 +7,13 @@
 // receive on every move. Heavier piece → bigger increment. Ported from the
 // Excel/VBA prototype ("EndGain Clock Update.xlsm").
 //
+// The workbook is the authority on the rules, and it settles two questions the
+// UI has to answer: the increment is a single shared counter (VBA mCumAddback,
+// one cell labelled "Total cumulative increment:", paid to whichever clock is
+// running at each hit — so both players receive every raise), and the ladder is
+// 2/4/6 for knight-or-bishop/rook/queen, per the sheet's own button captions.
+// Charles's original written prompt asked for 3/6/9; the workbook supersedes it.
+//
 // Phone ergonomics follow lichess mobile's clock tool: the whole half is the
 // tap target, hits fire on pointerdown, controls that could ruin a game are
 // disabled while the clock ticks, and the screen is kept awake. Two places we
@@ -67,7 +74,7 @@ const ICON = {
       <button class="ctl" data-action="settings" type="button" aria-label="Settings">
         <span class="ctl-icon" set:html={ICON.tune} /><span class="ctl-text">Setup</span>
       </button>
-      <button class="ctl" data-action="flip" type="button" aria-label="Flip clock orientation">
+      <button class="ctl" data-action="flip" type="button" aria-label="Swap the two players' sides">
         <span class="ctl-icon" set:html={ICON.flip} /><span class="ctl-text">Flip</span>
       </button>
       <button class="ctl" data-action="fullscreen" type="button" hidden aria-label="Toggle fullscreen">
@@ -81,12 +88,19 @@ const ICON = {
     <div class="sheet-backdrop" data-sheet hidden>
       <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <h2 id="settings-title">Charles Clock</h2>
-        <p class="help">
-          Blitz that ends in real endgames. Hit your own side to end your move.
-          If you <strong>captured</strong> a piece you may hit a capture button instead: it ends
-          your move <em>and</em> permanently raises the increment <strong>both</strong> players get
-          on every move from then on. Heavier piece, bigger bump. Or don't — it's optional.
-        </p>
+        <p class="help">Blitz that ends in a real endgame instead of a scramble.</p>
+        <ul class="rules">
+          <li><strong>Hit your own side</strong> to end your move.</li>
+          <li><strong>Captured a piece?</strong> Hit that piece's button instead. It ends
+            your move <em>and</em> raises the increment. Bigger piece, bigger raise.</li>
+          <li><strong>The increment is shared.</strong> Both players get it, on every move,
+            for the rest of the game.</li>
+          <li><strong>Raises stack and never come back down.</strong> Trade queens and
+            that is <span class="num">+<span data-queen-trade>12</span>s</span> a move from
+            then on — one raise each.</li>
+          <li><strong>The capture buttons are optional.</strong> You can always just hit
+            your own side instead.</li>
+        </ul>
 
         <form data-settings-form>
           <fieldset class="presets">
@@ -142,7 +156,7 @@ const ICON = {
         </form>
 
         <p class="credit">
-          Concept by Charles Woodruff. Keys: <kbd>space</kbd> pause · <kbd>↑</kbd><kbd>↓</kbd> hit · <kbd>u</kbd> undo.
+          Concept by Charles Woodruff. Keys: <kbd>space</kbd> pause · <kbd>↑</kbd><kbd>↓</kbd> hit · <kbd>u</kbd> undo · <kbd>f</kbd> swap sides.
           <a href="/">Chess Auto Prep</a>
         </p>
       </div>
@@ -215,6 +229,7 @@ const ICON = {
         moves: $('[data-moves]', root),
         cum: $('[data-cum]', root),
         flagChip: $('[data-flagchip]', root),
+        who: $('[data-who]', root),
         hint: $('[data-hint]', root),
         caps: $$('.cap', root),
       };
@@ -228,6 +243,7 @@ const ICON = {
       fullscreen: $('[data-action="fullscreen"]'),
     };
     const primaryLabel = $('[data-primary-label]');
+    const queenTrade = $('[data-queen-trade]');
     const sheet = $('[data-sheet]');
     const form = $('[data-settings-form]');
 
@@ -262,6 +278,7 @@ const ICON = {
       hit: () => tone(1000, 0.05, 0.13),
       capture: () => { tone(700, 0.05, 0.16); tone(1350, 0.09, 0.16, 0.05); },
       undo: () => { tone(900, 0.05, 0.11); tone(520, 0.08, 0.11, 0.05); },
+      swap: () => { tone(520, 0.05, 0.11); tone(900, 0.08, 0.11, 0.05); },
       low: () => { tone(460, 0.08, 0.2); tone(460, 0.08, 0.2, 0.17); tone(460, 0.08, 0.2, 0.34); },
       flag: () => tone(180, 0.55, 0.25, 0, 'sawtooth'),
     };
@@ -417,6 +434,10 @@ const ICON = {
           if (node.textContent !== v) node.textContent = v;
         }
       }
+      // Both players pay a queen bump in a queen trade, so the help text's
+      // example is twice the ladder's top rung.
+      const trade = String(settings.queen * 2);
+      if (queenTrade.textContent !== trade) queenTrade.textContent = trade;
     }
 
     function bumpIncrement() {
@@ -600,6 +621,40 @@ const ICON = {
       render();
     }
 
+    // Swap the two halves. That is what "flip" means on a clock sitting
+    // between two people: the phone stays put, the players change ends —
+    // you set it up backwards, or you genuinely swapped seats. Rotating the
+    // whole thing 180° would be a no-op in facing mode (the far half reads
+    // upside-down either way), so the flip lives in the state, not in the
+    // transform. Everything per-side travels, history included, or an undo
+    // taken after a flip would restore the pre-flip arrangement. cumInc is
+    // shared by both players and stays where it is.
+    const swap = (o) => { const t = o.top; o.top = o.bottom; o.bottom = t; };
+    function swapSides() {
+      swap(state.ms);
+      swap(state.moves);
+      swap(state.lowFired);
+      if (state.active) state.active = other(state.active);
+      if (state.flagged) state.flagged = other(state.flagged);
+      for (const s of state.history) {
+        swap(s.ms);
+        swap(s.moves);
+        swap(s.lowFired);
+        if (s.active) s.active = other(s.active);
+        if (s.flagged) s.flagged = other(s.flagged);
+      }
+      const who = el.top.who.textContent;
+      el.top.who.textContent = el.bottom.who.textContent;
+      el.bottom.who.textContent = who;
+      // Force a full repaint: both caches are keyed by side, and the side
+      // they describe just changed underneath them.
+      classSig = { top: '', bottom: '' };
+      painted.top = painted.bottom = '';
+      SFX.swap();
+      buzz(12);
+      render();
+    }
+
     // ── Events ──────────────────────────────────────────────────────
     for (const side of SIDES) {
       sideEls[side].addEventListener('pointerdown', (e) => {
@@ -622,11 +677,7 @@ const ICON = {
     btn.primary.addEventListener('click', () => (state.running ? pause() : start()));
     btn.undo.addEventListener('click', undo);
     btn.reset.addEventListener('click', reset);
-    btn.flip.addEventListener('click', () => {
-      settings.facing = !settings.facing;
-      saveSettings(settings);
-      layout();
-    });
+    btn.flip.addEventListener('click', swapSides);
 
     if (document.documentElement.requestFullscreen) {
       btn.fullscreen.hidden = false;
@@ -652,6 +703,11 @@ const ICON = {
 
     btn.settings.addEventListener('click', openSettings);
     $('[data-action="settings-cancel"]').addEventListener('click', closeSettings);
+    form.facing.addEventListener('change', () => {
+      settings.facing = form.facing.checked;
+      saveSettings(settings);
+      layout();
+    });
     sheet.addEventListener('click', (e) => { if (e.target === sheet) closeSettings(); });
 
     $$('[data-preset-min]').forEach((b) => b.addEventListener('click', () => {
@@ -934,8 +990,17 @@ const ICON = {
     overscroll-behavior: contain;
   }
   .sheet h2 { font-size: 1.3rem; margin-bottom: 8px; }
-  .help { color: var(--text-dim); font-size: 0.9rem; line-height: 1.5; margin-bottom: 18px; }
+  .help { color: var(--text-dim); font-size: 0.9rem; line-height: 1.5; margin-bottom: 12px; }
   .help strong { color: var(--text); }
+  .rules { list-style: none; color: var(--text-dim); font-size: 0.9rem; line-height: 1.5; margin-bottom: 18px; }
+  .rules li { position: relative; padding-left: 17px; margin-bottom: 9px; }
+  .rules li::before {
+    content: '';
+    position: absolute; left: 2px; top: 0.55em;
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--accent);
+  }
+  .rules strong { color: var(--text); font-weight: 600; }
   .sheet label { display: flex; flex-direction: column; gap: 4px; font-size: 0.82rem; color: var(--text-dim); margin-bottom: 14px; }
   .sheet input[type="number"] {
     font: inherit; font-family: var(--mono); font-size: 1.05rem;

@@ -29,7 +29,7 @@ const { side, name } = Astro.props;
     </div>
 
     <div class="meta">
-      <span class="who">{name}</span>
+      <span class="who" data-who>{name}</span>
       <span class="chip"><span class="eyebrow">move</span><span class="num" data-moves>0</span></span>
       <span class="chip chip-inc"><span class="eyebrow">inc</span><span class="num" data-cum>+0s</span></span>
       <span class="chip chip-flag" data-flagchip hidden>⚑ flag fell</span>
