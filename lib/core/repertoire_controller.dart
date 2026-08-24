@@ -11,14 +11,12 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
 import '../constants/chess_constants.dart';
-import '../constants/engine_defaults.dart';
 import '../models/move_tree.dart';
 import '../models/opening_tree.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../models/repertoire_line.dart';
 import '../models/repertoire_metadata.dart';
 import '../services/games_repertoire/draft_repertoire_writer.dart';
-import '../services/opening_tree_builder.dart';
 import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';
 import '../utils/fen_utils.dart';
@@ -26,47 +24,26 @@ import '../utils/movetext_builder.dart';
 import '../utils/san_token_utils.dart';
 import 'move_navigation.dart';
 import 'repertoire_authoring.dart';
+import 'repertoire_loader.dart';
 import 'repertoire_writer.dart';
 import '../utils/safe_change_notifier.dart';
 import '../utils/chess_utils.dart';
 
-part 'repertoire_controller_persistence.dart';
-
-// ---------------------------------------------------------------------------
-// Isolate-safe top-level helper for parsing repertoire lines (used by compute)
-// ---------------------------------------------------------------------------
-
-List<RepertoireLine> _parseRepertoireInIsolate(
-  ({String pgn, String color}) args,
-) {
-  final service = RepertoireService();
-  return service.parseRepertoirePgn(args.pgn, trainingColor: args.color);
-}
-
 /// Manages repertoire state and acts as the single source of truth.
 /// All UI components should derive their chess position from this class.
 class RepertoireController
-    with
-        ChangeNotifier,
-        MoveNavigation,
-        SafeChangeNotifier,
-        _RepertoirePersistence {
-  @override
+    with ChangeNotifier, MoveNavigation, SafeChangeNotifier {
   late final RepertoireWriter writer = RepertoireWriter(this);
 
   /// Pure PGN-authoring collaborator (game/line construction).
-  @override
   final RepertoireAuthoring _authoring = RepertoireAuthoring();
 
-  @override
   RepertoireMetadata? _currentRepertoire;
   RepertoireMetadata? get currentRepertoire => _currentRepertoire;
 
-  @override
   String? _repertoirePgn;
   String? get repertoirePgn => _repertoirePgn;
 
-  @override
   OpeningTree? _openingTree;
   OpeningTree? get openingTree => _openingTree;
 
@@ -79,24 +56,19 @@ class RepertoireController
   /// the lines browser and [OpeningTreeWidget] rebuild their display/search
   /// indexes only when the list *identity* changes, and an in-place `add` or
   /// `[i] =` would leave them showing stale rows.
-  @override
   List<RepertoireLine> get _repertoireLines => _lines;
-  @override
   set _repertoireLines(List<RepertoireLine> value) {
     _lines = List.unmodifiable(value);
   }
 
   List<RepertoireLine> get repertoireLines => _lines;
 
-  @override
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
-  @override
   String? _loadError;
   String? get loadError => _loadError;
 
-  @override
   bool _isRepertoireWhite = true;
   bool get isRepertoireWhite => _isRepertoireWhite;
 
@@ -122,7 +94,6 @@ class RepertoireController
   /// cursor and leave the opening-tree view pointing somewhere else.  Every
   /// assignment below sets [_tree] first, which the sync reads.
   TreePath get _path => _cursor;
-  @override
   set _path(TreePath value) {
     _cursor = value;
     _syncOpeningTree();
@@ -137,7 +108,6 @@ class RepertoireController
   List<String> get moveHistory => _tree.sanSequenceAt(_path);
 
   /// Alias — always identical to [moveHistory] now.
-  @override
   List<String> get currentMoveSequence => moveHistory;
 
   /// Ply index (replaces old _currentMoveIndex).
@@ -244,7 +214,6 @@ class RepertoireController
   }
 
   /// Atomically navigate to a specific position within a line.
-  @override
   void navigateToLineMove(List<String> fullPath, {int? targetIndex}) {
     _ensureMovesInTree(fullPath);
     final tp = _pathForMoveSequence(fullPath);
@@ -556,7 +525,6 @@ class RepertoireController
   List<String> _parsePgnMoveText(String movesStr) => cleanSanTokens(movesStr);
 
   /// If a root position is set, navigate to it so the tree starts there.
-  @override
   void _navigateToRootPosition() {
     if (_rootMoves.isEmpty) return;
     final sanMoves = _parsePgnMoveText(_rootMoves);
@@ -570,7 +538,6 @@ class RepertoireController
   /// Move numbering starts from the tree's starting position, so
   /// black-to-move / mid-game roots get correct `N...` numbering instead of
   /// the old (wrong) assumption of White to move at move 1.
-  @override
   String _movesToPgnMoveText(List<String> moves) {
     if (moves.isEmpty) return '';
     var startMoveNumber = 1;
@@ -776,5 +743,213 @@ class RepertoireController
       pgnForLine,
       updateTree: false,
     );
+  }
+
+  // ── Repertoire file lifecycle ────────────────────────────────────
+  //
+  // Loading is epoch-guarded: every entry point that replaces the repertoire
+  // claims a generation up front, and whatever it computed is thrown away if
+  // a newer claim landed while it was awaiting.  The derivation itself lives
+  // in [RepertoireLoader] precisely so the whole result can be discarded in
+  // one place — see the note there.
+
+  final RepertoireLoader _loader = RepertoireLoader();
+
+  int _loadGeneration = 0;
+
+  final List<Completer<void>> _loadCompleters = [];
+
+  /// Test hook: invoked after the PGN bytes are read, before anything is
+  /// derived from them, so overlapping loads can be sequenced.
+  @visibleForTesting
+  Future<void> Function()? debugAfterRepertoireRead;
+
+  /// Test hook: invoked after the load is fully derived and before it is
+  /// applied — the window a superseding load has to arrive in.
+  @visibleForTesting
+  Future<void> Function()? debugBeforeRepertoireApply;
+
+  /// Sets a new repertoire and triggers loading.
+  Future<void> setRepertoire(RepertoireMetadata repertoire) async {
+    _currentRepertoire = repertoire;
+    await loadRepertoire();
+  }
+
+  /// (Re)loads the PGN content for the current repertoire.
+  Future<void> loadRepertoire() async {
+    if (_currentRepertoire == null) return;
+    final generation = ++_loadGeneration;
+    writer.clearUndoStack();
+    _loadError = null;
+    _setLoading(true);
+
+    try {
+      final read = await _loader.read(_currentRepertoire!.filePath);
+      await debugAfterRepertoireRead?.call();
+      if (generation != _loadGeneration) return;
+
+      if (!read.exists) {
+        _applyLoaded(LoadedRepertoire.missing);
+        _resetTree();
+        return;
+      }
+
+      final loaded = await _loader.build(
+        read.pgn,
+        fallbackIsWhite: _isRepertoireWhite,
+      );
+      await debugBeforeRepertoireApply?.call();
+      if (generation != _loadGeneration) return;
+
+      _applyLoaded(loaded);
+      _resetTree();
+      _navigateToRootPosition();
+    } catch (e) {
+      if (generation != _loadGeneration) return;
+      _loadError = 'Failed to load repertoire: $e';
+      debugPrint(_loadError);
+      _applyLoaded(LoadedRepertoire.missing);
+      _resetTree();
+    } finally {
+      if (generation == _loadGeneration) {
+        _setLoading(false);
+      }
+    }
+  }
+
+  /// Restores repertoire state from a PGN snapshot (used by undo).
+  ///
+  /// Claims a load generation, so an in-flight [loadRepertoire] cannot land
+  /// its half of a different repertoire on top of the restored one.
+  Future<void> restoreRepertoireFromPgn(
+    String pgnContent, {
+    List<String>? syncPath,
+  }) async {
+    final generation = ++_loadGeneration;
+    try {
+      final loaded = await _loader.build(
+        pgnContent.isEmpty ? null : pgnContent,
+        fallbackIsWhite: _isRepertoireWhite,
+      );
+      await debugBeforeRepertoireApply?.call();
+      if (generation != _loadGeneration) return;
+
+      // Unlike a load this keeps the editable move tree: undo reverts the
+      // saved PGN, not the nodes the user has navigated into.
+      _applyLoaded(loaded);
+      if (syncPath != null) {
+        navigateToLineMove(syncPath);
+      } else {
+        _navigateToRootPosition();
+      }
+      notifyListeners();
+    } finally {
+      // Claiming the generation above suppressed the in-flight load's own
+      // release, so this call owes any `awaitLoaded()` waiters theirs.
+      if (generation == _loadGeneration && _isLoading) {
+        _setLoading(false);
+      }
+    }
+  }
+
+  /// Swap in one [LoadedRepertoire] wholesale.
+  ///
+  /// [LoadedRepertoire.headers] is null when the PGN never parsed far enough
+  /// to yield them (missing file, read failure, tree-build error); the current
+  /// headers are then kept rather than reset to a guess.
+  void _applyLoaded(LoadedRepertoire loaded) {
+    _repertoirePgn = loaded.pgn;
+    _openingTree = loaded.openingTree;
+    _repertoireLines = loaded.lines;
+
+    final headers = loaded.headers;
+    if (headers != null) {
+      _rootMoves = headers.rootMoves;
+      _needsColorSelection = headers.needsColorSelection;
+      _isRepertoireWhite = headers.isWhite;
+    }
+  }
+
+  /// Drop the editable move tree and park the cursor at the start.
+  void _resetTree() {
+    _tree = MoveTree();
+    _path = TreePath.empty;
+  }
+
+  /// Writes the color header to the PGN file and reloads.
+  Future<void> setRepertoireColor(bool isWhite) async {
+    if (_currentRepertoire == null) return;
+    final filePath = _currentRepertoire!.filePath;
+    final storage = StorageFactory.instance;
+    if (!await storage.fileExists(filePath)) return;
+
+    final colorLabel = isWhite ? 'White' : 'Black';
+    final existing = await storage.readFile(filePath);
+    if (existing == null) return;
+    final updated = upsertMetadataComment(existing, '// Color:', colorLabel);
+    await storage.writeFile(filePath, updated);
+    _needsColorSelection = false;
+    await loadRepertoire();
+  }
+
+  /// Sets the current move sequence as the root position and persists it.
+  Future<void> setRootPosition() async {
+    if (_currentRepertoire == null) return;
+    final filePath = _currentRepertoire!.filePath;
+    final storage = StorageFactory.instance;
+    if (!await storage.fileExists(filePath)) return;
+
+    final moveText = _movesToPgnMoveText(currentMoveSequence);
+    _rootMoves = moveText;
+
+    final existing = await storage.readFile(filePath);
+    if (existing == null) return;
+    final updated = upsertMetadataComment(existing, '// Root:', moveText);
+    await storage.writeFile(filePath, updated);
+    notifyListeners();
+  }
+
+  /// Imports PGN content into the current repertoire file.
+  Future<int> importPgnContent(String pgnContent) async {
+    if (_currentRepertoire == null) return 0;
+
+    final filePath = _currentRepertoire!.filePath;
+    final storage = StorageFactory.instance;
+    if (!await storage.fileExists(filePath)) return 0;
+
+    final gameCount = pgn.countPgnGames(pgnContent);
+
+    final existing = await storage.readFile(filePath);
+    if (existing == null) return 0;
+    final separator = existing.endsWith('\n\n')
+        ? ''
+        : existing.endsWith('\n')
+        ? '\n'
+        : '\n\n';
+    await storage.writeFile(filePath, '$existing$separator$pgnContent\n');
+
+    await loadRepertoire();
+
+    return gameCount > 0 ? gameCount : 1;
+  }
+
+  /// Returns a Future that completes when the current load finishes.
+  /// Resolves immediately if no load is in progress.
+  Future<void> awaitLoaded() {
+    if (!_isLoading) return Future.value();
+    final c = Completer<void>();
+    _loadCompleters.add(c);
+    return c.future;
+  }
+
+  void _setLoading(bool loading) {
+    _isLoading = loading;
+    if (!loading) {
+      for (final c in _loadCompleters) {
+        c.complete();
+      }
+      _loadCompleters.clear();
+    }
+    notifyListeners();
   }
 }

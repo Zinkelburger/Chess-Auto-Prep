@@ -750,3 +750,98 @@ timestamps mid-session, and one analyzer run went red on a half-written
 committed. Changes were kept to files with no in-flight diff; in particular the
 `RepertoireService` *parser* was left alone, because colour inference and
 model-game detection are being actively edited there.
+
+# Follow-up, 2026-08-24 — the repertoire load path
+
+The `_RepertoirePersistence` item the 2026-08-23 pass deferred, taken with the
+characterisation tests it was waiting on. Verified after every change:
+`dart format` clean, `flutter analyze lib test` 0 errors / 0 warnings,
+**2822 tests pass** (2796 before, +26 new).
+
+## Characterisation first
+
+`test/core/repertoire_load_test.dart` — 21 tests written and run **against the
+unchanged code** before anything moved, on an in-memory `StorageService` whose
+reads can be held open so two loads interleave deterministically. They pin what
+the load path actually did, including the parts that read like accidents and
+had to be preserved:
+
+- a **missing file** clears the PGN, opening tree and lines but *keeps the
+  `// Color:` / `// Root:` headers of the last load* — the missing-file branch
+  never re-derives them;
+- an **empty file** is not the same as a missing one: it yields an empty
+  `OpeningTree`, not a null one;
+- a **read failure** reports through `loadError`, and the next successful load
+  clears it;
+- `awaitLoaded()` resolves immediately when idle, is held for the duration of a
+  load, and — the guard that matters — is **not** released by a *superseded*
+  load, whose `finally` deliberately skips `_setLoading(false)`;
+- the `// Color:` / `// Root:` upsert rules: replace in place, collapse
+  duplicates, insert above the first `[Event ]`, prepend when there is none;
+- `importPgnContent`'s separator arithmetic and its 0-return on a missing file.
+
+Only then did anything move. All 21 still pass unchanged.
+
+## Extracted: `RepertoireLoader`
+
+`lib/core/repertoire_loader.dart` (259 lines) — `read()` (does the file exist,
+and what is in it) plus `build()` (opening tree, headers, parsed lines), both
+free of controller state. `build` returns a `LoadedRepertoire`; the controller
+applies it or drops it whole.
+
+That is not a tidiness argument. The derivation spans **two isolate hops** —
+`OpeningTreeBuilder.buildTree` and the `compute` line parse — and the old code
+wrote controller state as it went, so a repertoire switch during either hop let
+the losing load land its half anyway:
+
+- `_parseRepertoireLines` assigned `_repertoireLines = await compute(...)`
+  **before** checking the generation. A superseded load overwrote the winner's
+  lines with its own.
+- Its `catch` and `_buildOpeningTree`'s `catch` were unguarded too, so a
+  superseded load that *failed* cleared the winner's lines and opening tree.
+
+Now there is exactly one write point, `_applyLoaded`, behind one epoch check.
+Verified by reverting: moving `_applyLoaded` back above the guard fails
+`the winner keeps its lines, tree and headers`.
+
+**`headers` is nullable on purpose.** Null means "the PGN never parsed far
+enough to determine them" — missing file, read failure, tree-build error — and
+`_applyLoaded` then keeps the headers it has rather than resetting to a guess.
+That reproduces the old behaviour exactly; a non-nullable field with defaults
+would have silently flipped a Black repertoire to White on a failed reload.
+
+**`restoreRepertoireFromPgn` now claims a generation** (it did not before), so
+an undo cannot have a mid-flight load of a *different* repertoire land on top
+of it. That introduces a hazard worth naming: claiming the epoch suppresses the
+in-flight load's own `_setLoading(false)`, so the restore owes any
+`awaitLoaded()` waiters theirs — otherwise the completers never fire and
+`repertoire_screen`'s two `awaitLoaded()` call sites hang forever. The `finally`
+that pays that debt has its own test, verified to fail without it.
+
+## The `part` mixin is gone
+
+`repertoire_controller_persistence.dart` is deleted, not shrunk. Its 20 abstract
+host accessors — the re-declarations that existed only so a mixin could see the
+class's private state — went with it; the 14 now-meaningless `@override`
+annotations on the controller's own fields went too.
+
+`RepertoireController` is now **955 lines** and says so. It was 780 + a 336-line
+`part`, which is the point the audit made about parts hiding the real number.
+The reduction is real (1116 → 955 for the same responsibilities, with ~200 lines
+of derivation moved to a collaborator that has its own tests), but the class is
+still the largest thing in `core/` and still the next candidate. What is left in
+it is genuinely controller-shaped: cursor, tree, line list, file lifecycle.
+
+## Not attempted, again
+
+`tree_build_db_explorer` → a real `BuildAlgorithm`. Same reasons as the previous
+pass, plus the same working-tree caveat below.
+
+## Working-tree caveat
+
+Another session was committing to `main` throughout this pass — `HEAD` moved from
+`38f1995` to `951c6a5` (four commits) mid-run, and `lib/core/pgn_viewer_controller
+.dart`, `lib/features/tactics/widgets/` and `lib/features/games/widgets/` all
+changed under it. One of those commits swept an in-progress version of the new
+test file into `HEAD`. Nothing here was committed, and no file with an in-flight
+diff from that session was touched.

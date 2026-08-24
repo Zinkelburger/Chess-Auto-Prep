@@ -75,6 +75,15 @@ const _blackPgn = '''
 1. d4 Nf6 2. c4 e6 *
 ''';
 
+const _restoredPgn = '''
+// Color: White
+
+[Event "Undone"]
+[Result "*"]
+
+1. c4 e5 *
+''';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -391,6 +400,123 @@ void main() {
 
       expect(added, 0);
       expect(storage.files, isEmpty);
+    });
+  });
+
+  group('a superseded load applies nothing', () {
+    test('the winner keeps its lines, tree and headers', () async {
+      storage.files['/a.pgn'] = _whitePgn;
+      storage.files['/b.pgn'] = _blackPgn;
+      final controller = RepertoireController();
+
+      final reached = Completer<void>();
+      final gate = Completer<void>();
+      controller.debugBeforeRepertoireApply = () async {
+        if (!reached.isCompleted) reached.complete();
+        await gate.future;
+      };
+
+      final loadA = controller.setRepertoire(_meta('/a.pgn'));
+      await reached.future.timeout(const Duration(seconds: 5));
+      controller.debugBeforeRepertoireApply = null;
+
+      await controller.setRepertoire(_meta('/b.pgn'));
+      final winnerLines = controller.repertoireLines;
+      final winnerTree = controller.openingTree;
+
+      gate.complete();
+      await loadA;
+
+      // A had a full LoadedRepertoire in hand and had to drop all of it —
+      // not just the parts an epoch check happened to sit in front of.
+      expect(identical(controller.repertoireLines, winnerLines), isTrue);
+      expect(identical(controller.openingTree, winnerTree), isTrue);
+      expect(controller.repertoireLines.single.moves, [
+        'd4',
+        'Nf6',
+        'c4',
+        'e6',
+      ]);
+      expect(controller.repertoirePgn, contains('1. d4'));
+      expect(controller.isRepertoireWhite, isFalse);
+      expect(controller.rootMoves, '1. d4 Nf6');
+      expect(controller.moveHistory, ['d4', 'Nf6']);
+    });
+
+    test('a superseded failing load leaves no error behind', () async {
+      storage.files['/a.pgn'] = _whitePgn;
+      storage.files['/b.pgn'] = _blackPgn;
+      storage.failingReads.add('/a.pgn');
+      final controller = RepertoireController();
+
+      final gateA = Completer<void>();
+      storage.readGates['/a.pgn'] = gateA;
+
+      final loadA = controller.setRepertoire(_meta('/a.pgn'));
+      await pumpEventQueue();
+      await controller.setRepertoire(_meta('/b.pgn'));
+
+      gateA.complete();
+      await loadA;
+
+      expect(controller.loadError, isNull);
+      expect(controller.repertoirePgn, contains('1. d4'));
+    });
+  });
+
+  group('restoreRepertoireFromPgn against an in-flight load', () {
+    test('the restore wins and the load is discarded', () async {
+      storage.files['/a.pgn'] = _whitePgn;
+      final gateA = Completer<void>();
+      storage.readGates['/a.pgn'] = gateA;
+      final controller = RepertoireController();
+
+      final loadA = controller.setRepertoire(_meta('/a.pgn'));
+      await pumpEventQueue();
+      expect(controller.isLoading, isTrue);
+
+      await controller.restoreRepertoireFromPgn(_restoredPgn);
+
+      gateA.complete();
+      await loadA;
+
+      expect(controller.repertoirePgn, contains('1. c4'));
+      expect(controller.repertoireLines.single.moves, ['c4', 'e5']);
+    });
+
+    test('the restore releases the waiters of the discarded load', () async {
+      storage.files['/a.pgn'] = _whitePgn;
+      final gateA = Completer<void>();
+      storage.readGates['/a.pgn'] = gateA;
+      final controller = RepertoireController();
+
+      final loadA = controller.setRepertoire(_meta('/a.pgn'));
+      await pumpEventQueue();
+      var released = false;
+      unawaited(controller.awaitLoaded().then((_) => released = true));
+
+      await controller.restoreRepertoireFromPgn(_restoredPgn);
+      await pumpEventQueue();
+
+      // The load can no longer clear `isLoading` — it lost the epoch — so the
+      // restore owes the waiters their completion.
+      expect(released, isTrue);
+      expect(controller.isLoading, isFalse);
+
+      gateA.complete();
+      await loadA;
+      expect(controller.isLoading, isFalse);
+    });
+
+    test('a restore with no load in flight does not touch isLoading', () async {
+      final controller = RepertoireController();
+      var notifications = 0;
+      controller.addListener(() => notifications++);
+
+      await controller.restoreRepertoireFromPgn(_restoredPgn);
+
+      expect(controller.isLoading, isFalse);
+      expect(notifications, 1, reason: 'one notify for the restore itself');
     });
   });
 }
