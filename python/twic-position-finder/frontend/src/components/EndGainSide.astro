@@ -1,0 +1,41 @@
+---
+// One half of the EndGain clock. Both halves carry identical markup; which way
+// each one faces is decided at runtime by the --rot/--iw/--ih custom properties
+// the page sets on the <section>. Order within the half is deliberate: read
+// from the player's own edge inwards it goes time → meta → capture buttons, so
+// a natural slap on the near edge lands on the big digits and never on a
+// capture, which is the one irreversible action on this clock.
+interface Props {
+  side: 'top' | 'bottom';
+  name: string;
+}
+const { side, name } = Astro.props;
+---
+<section class={`side side-${side}`} data-side={side}>
+  <div class="side-inner">
+    <div class="captures">
+      <button class="cap" data-cap="minor" data-side={side} type="button" disabled aria-label="Hit the clock — captured a knight or bishop">
+        <span class="cap-piece">♘♗</span>
+        <span class="cap-add">+<span data-inc="minor">2</span>s</span>
+      </button>
+      <button class="cap" data-cap="rook" data-side={side} type="button" disabled aria-label="Hit the clock — captured a rook">
+        <span class="cap-piece">♖</span>
+        <span class="cap-add">+<span data-inc="rook">4</span>s</span>
+      </button>
+      <button class="cap" data-cap="queen" data-side={side} type="button" disabled aria-label="Hit the clock — captured a queen">
+        <span class="cap-piece">♕</span>
+        <span class="cap-add">+<span data-inc="queen">6</span>s</span>
+      </button>
+    </div>
+
+    <div class="meta">
+      <span class="who">{name}</span>
+      <span class="chip"><span class="eyebrow">move</span><span class="num" data-moves>0</span></span>
+      <span class="chip chip-inc"><span class="eyebrow">inc</span><span class="num" data-cum>+0s</span></span>
+      <span class="chip chip-flag" data-flagchip hidden>⚑ flag fell</span>
+    </div>
+
+    <div class="time num" data-time role="timer" aria-live="off">2:00</div>
+    <div class="hint" data-hint>tap to start opponent's clock</div>
+  </div>
+</section>

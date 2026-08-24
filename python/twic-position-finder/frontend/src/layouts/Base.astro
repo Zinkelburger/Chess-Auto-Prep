@@ -19,13 +19,13 @@ const currentPath = Astro.url.pathname;
   <title>{title} — Chess Auto Prep</title>
 </head>
 <body>
-  <a class="skip-link" href="#content">Skip to content</a>
   <nav class="site-nav">
     <div class="nav-inner">
       <a href="/" class="nav-logo">♟ Chess Auto Prep</a>
       <div class="nav-links">
         <a href="/twic-notifications" class:list={[{ active: currentPath === '/twic-notifications' || currentPath === '/twic-notifications/' }]}>TWIC Notifications</a>
         <a href="/tactics" class:list={[{ active: currentPath === '/tactics' || currentPath === '/tactics/' }]}>Tactics Trainer</a>
+        <a href="/charles-clock" class:list={[{ active: currentPath.startsWith('/charles-clock') }]}>EndGain Clock</a>
         <a href="/dashboard" class:list={[{ active: currentPath.startsWith('/dashboard') }]}>Dashboard</a>
       </div>
     </div>
@@ -91,19 +91,6 @@ const currentPath = Astro.url.pathname;
     outline-offset: 2px;
   }
 
-  .skip-link {
-    position: absolute;
-    left: 12px;
-    top: -40px;
-    z-index: 100;
-    background: var(--accent);
-    color: var(--accent-ink);
-    padding: 8px 12px;
-    border-radius: 6px;
-    font-weight: 600;
-    text-decoration: none;
-  }
-  .skip-link:focus { top: 12px; }
 
   /* ── Navigation ──────────────────────────────────── */
 

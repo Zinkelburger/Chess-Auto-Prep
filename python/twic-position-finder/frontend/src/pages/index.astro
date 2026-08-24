@@ -25,6 +25,15 @@ import Base from '../layouts/Base.astro';
       <p>Generate puzzles from your own <strong>Lichess</strong> and <strong>Chess.com</strong> games. Stockfish runs in your browser to find the moves you missed.</p>
       <span class="feature-cta">Start training &rarr;</span>
     </a>
+
+    <a href="/charles-clock" class="feature-card">
+      <div class="feature-icon">
+        <img src="/piece/wR.svg" alt="" width="48" height="48" />
+      </div>
+      <h2>EndGain Clock</h2>
+      <p>A blitz clock built for <strong>endgames</strong>: captures let you grow a shared increment, so games that reach the endgame actually have time to play it. Open it on your phone.</p>
+      <span class="feature-cta">Open the clock &rarr;</span>
+    </a>
   </div>
 </Base>
 
@@ -47,9 +56,9 @@ import Base from '../layouts/Base.astro';
 
   .features {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, 1fr);
     gap: 20px;
-    max-width: 760px;
+    max-width: 1000px;
     margin: 0 auto;
   }
 

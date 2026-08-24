@@ -1,0 +1,971 @@
+---
+// EndGain Clock — Charles Woodruff's "endgame blitz" chess clock.
+//
+// Both players start with a short time control. When you capture a piece you
+// may hit the clock with a capture button instead of the plain zone, which
+// permanently adds seconds to a cumulative increment that BOTH players then
+// receive on every move. Heavier piece → bigger increment. Ported from the
+// Excel/VBA prototype ("EndGain Clock Update.xlsm").
+//
+// Phone ergonomics follow lichess mobile's clock tool: the whole half is the
+// tap target, hits fire on pointerdown, controls that could ruin a game are
+// disabled while the clock ticks, and the screen is kept awake. Two places we
+// go further, because our capture hit is the one irreversible action: every
+// hit is undoable, and the capture buttons sit at the far edge of each half
+// (a natural slap lands on the big digits) and are `disabled` unless it is
+// that side's turn, so a stray tap falls through to a plain hit.
+
+import EndGainSide from '../components/EndGainSide.astro';
+
+const ICON = {
+  play: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.4z"/></svg>',
+  undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-4"/></svg>',
+  reset: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 3v5h-5"/></svg>',
+  tune: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 8h9M18.5 8H21M3 16h4.5M14 16h7"/><circle cx="15" cy="8" r="2.6"/><circle cx="10" cy="16" r="2.6"/></svg>',
+  flip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4 4 7l3 3"/><path d="M4 7h16"/><path d="m17 14 3 3-3 3"/><path d="M20 17H4"/></svg>',
+  full: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg>',
+};
+
+---
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="EndGain" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#171a1f" />
+  <meta name="description" content="EndGain Clock — blitz that ends in real endgames. Capturing a piece permanently raises the increment for both players." />
+  <link rel="manifest" href="/endgain.webmanifest" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⏱</text></svg>" />
+  <link rel="apple-touch-icon" href="/endgain-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;600;700&display=swap" rel="stylesheet" />
+  <title>EndGain Clock — Chess Auto Prep</title>
+</head>
+<body>
+  <div id="app" class="app">
+
+    <EndGainSide side="top" name="Player 1" />
+
+    <div class="bar">
+      <button class="ctl ctl-primary" data-action="startpause" type="button" aria-label="Start">
+        <span class="ctl-icon icon-play" set:html={ICON.play} />
+        <span class="ctl-icon icon-pause" set:html={ICON.pause} />
+        <span class="ctl-text" data-primary-label>Start</span>
+      </button>
+      <button class="ctl" data-action="undo" type="button" disabled aria-label="Undo last clock hit">
+        <span class="ctl-icon" set:html={ICON.undo} /><span class="ctl-text">Undo</span>
+      </button>
+      <button class="ctl" data-action="reset" type="button" aria-label="Reset the clock">
+        <span class="ctl-icon" set:html={ICON.reset} /><span class="ctl-text">Reset</span>
+      </button>
+      <button class="ctl" data-action="settings" type="button" aria-label="Settings">
+        <span class="ctl-icon" set:html={ICON.tune} /><span class="ctl-text">Setup</span>
+      </button>
+      <button class="ctl" data-action="flip" type="button" aria-label="Flip clock orientation">
+        <span class="ctl-icon" set:html={ICON.flip} /><span class="ctl-text">Flip</span>
+      </button>
+      <button class="ctl" data-action="fullscreen" type="button" hidden aria-label="Toggle fullscreen">
+        <span class="ctl-icon" set:html={ICON.full} /><span class="ctl-text">Full</span>
+      </button>
+    </div>
+
+    <EndGainSide side="bottom" name="Player 2" />
+
+    <!-- Settings sheet -->
+    <div class="sheet-backdrop" data-sheet hidden>
+      <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <h2 id="settings-title">EndGain Clock</h2>
+        <p class="help">
+          Blitz that ends in real endgames. Hit your own side to end your move.
+          If you <strong>captured</strong> a piece you may hit a capture button instead: it ends
+          your move <em>and</em> permanently raises the increment <strong>both</strong> players get
+          on every move from then on. Heavier piece, bigger bump. Or don't — it's optional.
+        </p>
+
+        <form data-settings-form>
+          <fieldset class="presets">
+            <legend>Start time</legend>
+            <div class="chips">
+              {[1, 2, 3, 5, 10].map((m) => (
+                <button type="button" class="preset" data-preset-min={m}>{m} min</button>
+              ))}
+            </div>
+          </fieldset>
+
+          <div class="grid2">
+            <label>Start time (minutes)
+              <input type="number" name="minutes" min="0.25" max="180" step="0.25" inputmode="decimal" required />
+            </label>
+            <label>Base increment (s)
+              <input type="number" name="base" min="0" max="60" step="1" inputmode="numeric" required />
+            </label>
+          </div>
+
+          <fieldset class="presets">
+            <legend>Capture ladder</legend>
+            <div class="chips">
+              <button type="button" class="preset" data-preset-ladder="1,2,3">Gentle 1/2/3</button>
+              <button type="button" class="preset" data-preset-ladder="2,4,6">Classic 2/4/6</button>
+              <button type="button" class="preset" data-preset-ladder="3,6,10">Steep 3/6/10</button>
+            </div>
+          </fieldset>
+
+          <div class="grid3">
+            <label>♘♗ adds
+              <input type="number" name="minor" min="0" max="60" step="1" inputmode="numeric" required />
+            </label>
+            <label>♖ adds
+              <input type="number" name="rook" min="0" max="60" step="1" inputmode="numeric" required />
+            </label>
+            <label>♕ adds
+              <input type="number" name="queen" min="0" max="60" step="1" inputmode="numeric" required />
+            </label>
+          </div>
+
+          <label class="check">
+            <input type="checkbox" name="sound" /> Sound on hit, low time &amp; flag
+          </label>
+          <label class="check">
+            <input type="checkbox" name="facing" /> Face the players (rotate the far side 180°)
+          </label>
+
+          <div class="sheet-actions">
+            <button type="button" class="ctl ctl-wide ctl-dim" data-action="settings-cancel">Cancel</button>
+            <button type="submit" class="ctl ctl-wide ctl-primary">Save &amp; reset</button>
+          </div>
+        </form>
+
+        <p class="credit">
+          Concept by Charles Woodruff. Keys: <kbd>space</kbd> pause · <kbd>↑</kbd><kbd>↓</kbd> hit · <kbd>u</kbd> undo.
+          <a href="/">Chess Auto Prep</a>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Config ──────────────────────────────────────────────────────
+    const STORAGE_KEY = 'endgain-clock-settings-v2';
+    const DEFAULTS = { minutes: 2, base: 0, minor: 2, rook: 4, queen: 6, sound: true, facing: true };
+    const SIDES = /** @type {const} */ (['top', 'bottom']);
+    const TENTHS_UNDER = 10_000;   // show tenths below this
+    const HIT_DEBOUNCE = 70;       // ms — swallow a bouncing double-slap
+    const HISTORY_MAX = 200;
+    const MIN_EMERGENCY = 5_000;   // never warn later than 5s left
+
+    function loadSettings() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) return { ...DEFAULTS, ...JSON.parse(raw) };
+      } catch {}
+      return { ...DEFAULTS };
+    }
+    function saveSettings(s) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch {}
+    }
+
+    let settings = loadSettings();
+
+    // ── State ───────────────────────────────────────────────────────
+    const state = {
+      ms: { top: 0, bottom: 0 },   // remaining time
+      active: null,                // side to move ('top' | 'bottom' | null)
+      started: false,
+      running: false,
+      cumInc: 0,                   // cumulative increment (s), shared by both
+      moves: { top: 0, bottom: 0 },
+      flagged: null,
+      lowFired: { top: false, bottom: false },
+      history: [],                 // snapshots, newest last
+      lastTick: 0,
+      raf: 0,
+    };
+    let lastHitAt = -1e9;
+
+    const other = (s) => (s === 'top' ? 'bottom' : 'top');
+    const snapshot = () => ({
+      ms: { ...state.ms },
+      active: state.active,
+      started: state.started,
+      running: state.running,
+      cumInc: state.cumInc,
+      moves: { ...state.moves },
+      flagged: state.flagged,
+      lowFired: { ...state.lowFired },
+    });
+
+    // ── DOM ─────────────────────────────────────────────────────────
+    const $ = (sel, root = document) => root.querySelector(sel);
+    const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+    const app = $('#app');
+    const sideEls = { top: $('.side-top'), bottom: $('.side-bottom') };
+    const el = { top: null, bottom: null };
+    for (const side of SIDES) {
+      const root = sideEls[side];
+      el[side] = {
+        root,
+        time: $('[data-time]', root),
+        moves: $('[data-moves]', root),
+        cum: $('[data-cum]', root),
+        flagChip: $('[data-flagchip]', root),
+        hint: $('[data-hint]', root),
+        caps: $$('.cap', root),
+      };
+    }
+    const btn = {
+      primary: $('[data-action="startpause"]'),
+      undo: $('[data-action="undo"]'),
+      reset: $('[data-action="reset"]'),
+      settings: $('[data-action="settings"]'),
+      flip: $('[data-action="flip"]'),
+      fullscreen: $('[data-action="fullscreen"]'),
+    };
+    const primaryLabel = $('[data-primary-label]');
+    const sheet = $('[data-sheet]');
+    const form = $('[data-settings-form]');
+
+    // ── Audio ───────────────────────────────────────────────────────
+    let ac = null;
+    function ensureAudio() {
+      try {
+        ac ||= new (window.AudioContext || window.webkitAudioContext)();
+        if (ac.state === 'suspended') ac.resume().catch(() => {});
+      } catch {}
+      return ac;
+    }
+    function tone(freq, dur, vol, delay = 0, type = 'square') {
+      if (!settings.sound) return;
+      const ctx = ensureAudio();
+      if (!ctx) return;
+      try {
+        const t0 = ctx.currentTime + delay;
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = type;
+        o.frequency.setValueAtTime(freq, t0);
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(vol, t0 + 0.008);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        o.connect(g).connect(ctx.destination);
+        o.start(t0);
+        o.stop(t0 + dur + 0.02);
+      } catch {}
+    }
+    const SFX = {
+      hit: () => tone(1000, 0.05, 0.13),
+      capture: () => { tone(700, 0.05, 0.16); tone(1350, 0.09, 0.16, 0.05); },
+      undo: () => { tone(900, 0.05, 0.11); tone(520, 0.08, 0.11, 0.05); },
+      low: () => { tone(460, 0.08, 0.2); tone(460, 0.08, 0.2, 0.17); tone(460, 0.08, 0.2, 0.34); },
+      flag: () => tone(180, 0.55, 0.25, 0, 'sawtooth'),
+    };
+    function buzz(pattern) {
+      try { navigator.vibrate?.(pattern); } catch {}
+    }
+
+    // ── Wake lock ───────────────────────────────────────────────────
+    let wakeLock = null;
+    async function acquireWakeLock() {
+      try {
+        if ('wakeLock' in navigator && !wakeLock) {
+          wakeLock = await navigator.wakeLock.request('screen');
+          wakeLock.addEventListener('release', () => { wakeLock = null; });
+        }
+      } catch {}
+    }
+    function releaseWakeLock() {
+      try { wakeLock?.release(); } catch {}
+      wakeLock = null;
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && state.running) acquireWakeLock();
+    });
+
+    // ── Layout: rotate each half so it faces its player ─────────────
+    // Both halves carry identical markup; rotation decides who reads what.
+    // Portrait facing → far half 180°. Landscape facing → ±90°, so the two
+    // players sit at the short ends of the phone. Sizes are swapped for the
+    // quarter turns, which CSS alone cannot do.
+    function rotFor(side, cols) {
+      if (!settings.facing) return 0;
+      if (cols) return side === 'top' ? 270 : 90;
+      return side === 'top' ? 180 : 0;
+    }
+    let lastLayout = '';
+    function layout() {
+      const cols = window.innerWidth > window.innerHeight;
+      app.classList.toggle('cols', cols);
+      let sig = cols ? 'c' : 'r';
+      for (const side of SIDES) {
+        const node = sideEls[side];
+        const rot = rotFor(side, cols);
+        const w = node.clientWidth;
+        const h = node.clientHeight;
+        const quarter = rot % 180 !== 0;
+        sig += `|${side}:${rot}:${w}x${h}`;
+        // A quarter turn maps the column's top→bottom onto the screen's
+        // left→right, which would land the capture buttons on the player's
+        // near edge. Reverse the column so the digits stay nearest them.
+        node.classList.toggle('quarter', quarter);
+        node.style.setProperty('--rot', `${rot}deg`);
+        node.style.setProperty('--iw', `${quarter ? h : w}px`);
+        node.style.setProperty('--ih', `${quarter ? w : h}px`);
+      }
+      lastLayout = sig;
+    }
+    const ro = new ResizeObserver(() => {
+      // Cheap guard: only re-layout when something actually moved.
+      const cols = window.innerWidth > window.innerHeight;
+      let sig = cols ? 'c' : 'r';
+      for (const side of SIDES) {
+        sig += `|${side}:${rotFor(side, cols)}:${sideEls[side].clientWidth}x${sideEls[side].clientHeight}`;
+      }
+      if (sig !== lastLayout) layout();
+    });
+    SIDES.forEach((s) => ro.observe(sideEls[s]));
+    window.addEventListener('resize', layout);
+    window.addEventListener('orientationchange', () => setTimeout(layout, 120));
+
+    // ── Formatting ──────────────────────────────────────────────────
+    function fmt(ms) {
+      ms = Math.max(0, ms);
+      if (ms < TENTHS_UNDER) {
+        const tenths = Math.ceil(ms / 100);
+        return `0:${String(Math.floor(tenths / 10)).padStart(2, '0')}.${tenths % 10}`;
+      }
+      const total = Math.ceil(ms / 1000);
+      const h = Math.floor(total / 3600);
+      const m = Math.floor((total % 3600) / 60);
+      const s = String(total % 60).padStart(2, '0');
+      return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+    }
+
+    const emergencyMs = () => Math.max(MIN_EMERGENCY, settings.minutes * 60_000 * 0.1);
+    const isLow = (side) => state.ms[side] > 0 && state.ms[side] <= emergencyMs();
+
+    // ── Painting ────────────────────────────────────────────────────
+    // paintTime() runs every animation frame and only writes when the string
+    // actually changed; render() runs on state transitions only.
+    const painted = { top: '', bottom: '' };
+    function paintTime() {
+      for (const side of SIDES) {
+        const t = fmt(state.ms[side]);
+        if (t !== painted[side]) {
+          painted[side] = t;
+          el[side].time.textContent = t;
+        }
+      }
+    }
+
+    let classSig = { top: '', bottom: '' };
+    function render() {
+      const idle = !state.started || !state.running || !!state.flagged;
+
+      for (const side of SIDES) {
+        const e = el[side];
+        const yourTurn = state.active === side && !state.flagged;
+        const ticking = yourTurn && state.running;
+        const low = isLow(side) && ticking;
+        const flagged = state.flagged === side;
+
+        const sig = `${yourTurn ? 1 : 0}${ticking ? 1 : 0}${low ? 1 : 0}${flagged ? 1 : 0}${state.started ? 1 : 0}`;
+        if (sig !== classSig[side]) {
+          classSig[side] = sig;
+          e.root.classList.toggle('turn', yourTurn);
+          e.root.classList.toggle('ticking', ticking);
+          e.root.classList.toggle('low', low);
+          e.root.classList.toggle('flagged', flagged);
+          e.flagChip.hidden = !flagged;
+          e.hint.hidden = state.started;
+        }
+
+        const canCapture = ticking;
+        for (const c of e.caps) if (c.disabled === canCapture) c.disabled = !canCapture;
+
+        const mv = String(state.moves[side]);
+        if (e.moves.textContent !== mv) e.moves.textContent = mv;
+        const inc = `+${state.cumInc}s`;
+        if (e.cum.textContent !== inc) e.cum.textContent = inc;
+      }
+      paintTime();
+
+      // Primary button
+      btn.primary.disabled = !!state.flagged;
+      // The play/pause glyphs both live in the markup; .app.running picks one.
+      const label = state.flagged ? 'Done' : state.running ? 'Pause' : state.started ? 'Resume' : 'Start';
+      if (primaryLabel.textContent !== label) {
+        primaryLabel.textContent = label;
+        btn.primary.setAttribute('aria-label', label);
+      }
+
+      btn.undo.disabled = state.history.length === 0;
+      btn.reset.disabled = !idle;
+      btn.settings.disabled = !idle;
+
+      app.classList.toggle('running', state.running);
+      app.classList.toggle('game-over', !!state.flagged);
+
+      for (const key of ['minor', 'rook', 'queen']) {
+        for (const node of $$(`[data-inc="${key}"]`)) {
+          const v = String(settings[key]);
+          if (node.textContent !== v) node.textContent = v;
+        }
+      }
+    }
+
+    function bumpIncrement() {
+      for (const side of SIDES) {
+        const node = el[side].cum;
+        node.classList.remove('bump');
+        void node.offsetWidth;
+        node.classList.add('bump');
+      }
+      btn.undo.classList.add('urgent');
+      clearTimeout(bumpIncrement._t);
+      bumpIncrement._t = setTimeout(() => btn.undo.classList.remove('urgent'), 5000);
+    }
+
+    // ── Clock loop ──────────────────────────────────────────────────
+    function loop() {
+      cancelAnimationFrame(state.raf);
+      state.raf = requestAnimationFrame(tick);
+    }
+
+    function tick(now) {
+      if (!state.running) return;
+      const side = state.active;
+      // Delta-based, so a backgrounded tab that stops firing frames still
+      // charges the right amount of time the moment it comes back.
+      const dt = now - state.lastTick;
+      state.lastTick = now;
+      const wasLow = isLow(side);
+      state.ms[side] = Math.max(0, state.ms[side] - dt);
+
+      if (state.ms[side] <= 0) return flag(side);
+
+      if (isLow(side)) {
+        if (!state.lowFired[side]) {
+          state.lowFired[side] = true;
+          SFX.low();
+          buzz([30, 60, 30]);
+        }
+        if (!wasLow) render();
+      }
+      paintTime();
+      state.raf = requestAnimationFrame(tick);
+    }
+
+    function flag(side) {
+      state.ms[side] = 0;
+      state.running = false;
+      state.flagged = side;
+      cancelAnimationFrame(state.raf);
+      releaseWakeLock();
+      SFX.flag();
+      buzz([200, 100, 200, 100, 400]);
+      render();
+    }
+
+    function pushHistory() {
+      state.history.push(snapshot());
+      if (state.history.length > HISTORY_MAX) state.history.shift();
+    }
+
+    // ── Actions ─────────────────────────────────────────────────────
+    function start() {
+      if (state.flagged) return;
+      ensureAudio();
+      if (!state.started) {
+        state.started = true;
+        state.active = 'bottom';   // bottom = "white", moves first
+      }
+      state.running = true;
+      state.lastTick = performance.now();
+      loop();
+      acquireWakeLock();
+      render();
+    }
+
+    function pause() {
+      if (!state.running) return;
+      state.running = false;
+      cancelAnimationFrame(state.raf);
+      releaseWakeLock();
+      render();
+    }
+
+    function reset() {
+      state.running = false;
+      cancelAnimationFrame(state.raf);
+      releaseWakeLock();
+      state.ms.top = state.ms.bottom = Math.round(settings.minutes * 60_000);
+      state.active = null;
+      state.started = false;
+      state.cumInc = settings.base;
+      state.moves.top = state.moves.bottom = 0;
+      state.flagged = null;
+      state.lowFired.top = state.lowFired.bottom = false;
+      state.history.length = 0;
+      classSig = { top: '', bottom: '' };
+      painted.top = painted.bottom = '';
+      render();
+    }
+
+    // Hit the clock. Mirrors the VBA: pay the cumulative increment to the side
+    // that just moved, THEN (optionally) arm more increment, THEN flip.
+    function hit(side, capture) {
+      if (state.flagged) return;
+      const now = performance.now();
+      if (now - lastHitAt < HIT_DEBOUNCE) return;
+      ensureAudio();
+
+      if (!state.started) {
+        // First tap means "I've moved, your clock runs now". Unlike a plain
+        // move it pays no increment and counts no move — a real clock does not
+        // hand the starting player a free bump.
+        if (capture) return;
+        pushHistory();
+        state.started = true;
+        state.running = true;
+        state.active = other(side);
+        state.lastTick = now;
+        lastHitAt = now;
+        SFX.hit();
+        buzz(12);
+        loop();
+        acquireWakeLock();
+        render();
+        return;
+      }
+
+      if (!state.running) return;         // paused → use Resume
+      if (state.active !== side) return;  // not your turn
+
+      pushHistory();
+      state.ms[side] += state.cumInc * 1000;
+      state.moves[side] += 1;
+      if (capture) {
+        state.cumInc += settings[capture];
+        SFX.capture();
+        buzz(35);
+      } else {
+        SFX.hit();
+        buzz(12);
+      }
+      // Gaining time can lift you back out of the danger zone; re-arm the
+      // warning so it fires again on the way down.
+      if (!isLow(side)) state.lowFired[side] = false;
+
+      state.active = other(side);
+      state.lastTick = now;
+      lastHitAt = now;
+      loop();
+      render();
+      if (capture) bumpIncrement();
+    }
+
+    // Undo restores the exact instant before the last hit and keeps ticking
+    // for whoever was on move, so a mis-tapped capture costs a second, not a
+    // game. This is the one thing lichess's clock has no need for.
+    function undo() {
+      const s = state.history.pop();
+      if (!s) return;
+      state.ms = { ...s.ms };
+      state.active = s.active;
+      state.started = s.started;
+      state.cumInc = s.cumInc;
+      state.moves = { ...s.moves };
+      state.flagged = s.flagged;
+      state.lowFired = { ...s.lowFired };
+      state.running = s.running && !s.flagged;
+      lastHitAt = -1e9;
+      cancelAnimationFrame(state.raf);
+      classSig = { top: '', bottom: '' };
+      painted.top = painted.bottom = '';
+      if (state.running) {
+        state.lastTick = performance.now();
+        loop();
+        acquireWakeLock();
+      } else {
+        releaseWakeLock();
+      }
+      SFX.undo();
+      btn.undo.classList.remove('urgent');
+      render();
+    }
+
+    // ── Events ──────────────────────────────────────────────────────
+    for (const side of SIDES) {
+      sideEls[side].addEventListener('pointerdown', (e) => {
+        if (e.target.closest('.cap:not(:disabled)')) return;
+        e.preventDefault();
+        hit(side, null);
+      }, { passive: false });
+    }
+    for (const side of SIDES) {
+      for (const c of el[side].caps) {
+        c.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          hit(c.dataset.side, c.dataset.cap);
+        }, { passive: false });
+        c.addEventListener('click', (e) => e.preventDefault());
+      }
+    }
+
+    btn.primary.addEventListener('click', () => (state.running ? pause() : start()));
+    btn.undo.addEventListener('click', undo);
+    btn.reset.addEventListener('click', reset);
+    btn.flip.addEventListener('click', () => {
+      settings.facing = !settings.facing;
+      saveSettings(settings);
+      layout();
+    });
+
+    if (document.documentElement.requestFullscreen) {
+      btn.fullscreen.hidden = false;
+      btn.fullscreen.addEventListener('click', () => {
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+        else document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+      });
+    }
+
+    // ── Settings sheet ──────────────────────────────────────────────
+    function openSettings() {
+      pause();
+      form.minutes.value = settings.minutes;
+      form.base.value = settings.base;
+      form.minor.value = settings.minor;
+      form.rook.value = settings.rook;
+      form.queen.value = settings.queen;
+      form.sound.checked = !!settings.sound;
+      form.facing.checked = !!settings.facing;
+      sheet.hidden = false;
+    }
+    function closeSettings() { sheet.hidden = true; }
+
+    btn.settings.addEventListener('click', openSettings);
+    $('[data-action="settings-cancel"]').addEventListener('click', closeSettings);
+    sheet.addEventListener('click', (e) => { if (e.target === sheet) closeSettings(); });
+
+    $$('[data-preset-min]').forEach((b) => b.addEventListener('click', () => {
+      form.minutes.value = b.dataset.presetMin;
+    }));
+    $$('[data-preset-ladder]').forEach((b) => b.addEventListener('click', () => {
+      const [minor, rook, queen] = b.dataset.presetLadder.split(',');
+      form.minor.value = minor;
+      form.rook.value = rook;
+      form.queen.value = queen;
+    }));
+
+    const clampInt = (v, lo, hi, dflt) => {
+      const n = parseInt(v, 10);
+      return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt;
+    };
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const mins = parseFloat(form.minutes.value);
+      settings = {
+        minutes: Number.isFinite(mins) ? Math.min(180, Math.max(0.25, mins)) : DEFAULTS.minutes,
+        base: clampInt(form.base.value, 0, 60, DEFAULTS.base),
+        minor: clampInt(form.minor.value, 0, 60, DEFAULTS.minor),
+        rook: clampInt(form.rook.value, 0, 60, DEFAULTS.rook),
+        queen: clampInt(form.queen.value, 0, 60, DEFAULTS.queen),
+        sound: form.sound.checked,
+        facing: form.facing.checked,
+      };
+      saveSettings(settings);
+      closeSettings();
+      layout();
+      reset();
+    });
+
+    // ── Keyboard (desktop testing) ──────────────────────────────────
+    document.addEventListener('keydown', (e) => {
+      if (!sheet.hidden) {
+        if (e.key === 'Escape') closeSettings();
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      switch (e.code) {
+        case 'Space': e.preventDefault(); state.running ? pause() : start(); break;
+        case 'ArrowUp': e.preventDefault(); hit('top', null); break;
+        case 'ArrowDown': e.preventDefault(); hit('bottom', null); break;
+        case 'KeyU': e.preventDefault(); undo(); break;
+        case 'KeyR': if (!btn.reset.disabled) { e.preventDefault(); reset(); } break;
+        case 'KeyF': e.preventDefault(); btn.flip.click(); break;
+      }
+    });
+
+    // Don't lose a live game to a stray back-swipe or pull-to-refresh.
+    window.addEventListener('beforeunload', (e) => {
+      if (!state.running) return;
+      e.preventDefault();
+      e.returnValue = '';
+    });
+    document.addEventListener('contextmenu', (e) => { if (e.target.closest('.side')) e.preventDefault(); });
+
+    // ── Go ──────────────────────────────────────────────────────────
+    reset();
+    layout();
+  </script>
+</body>
+</html>
+
+<style is:global>
+  :root {
+    --bg: #171a1f;
+    --bg-card: #1f242b;
+    --bg-input: #262c35;
+    --border: #39414c;
+    --text: #e6e9ee;
+    --text-dim: #9aa4b2;
+    --accent: #e0913f;
+    --accent-hover: #f0a45a;
+    --accent-ink: #1d2229;
+    --ok: #6cc79a;
+    --turn-bg: #26372a;
+    --low-bg: #4a2a24;
+    --low-bg-blink: #6d2f26;
+    --danger: #e08585;
+    --danger-bg: #3a2020;
+    --mono: 'Source Code Pro', ui-monospace, SFMono-Regular, monospace;
+    --sans: 'Source Sans 3', system-ui, -apple-system, sans-serif;
+    --radius: 12px;
+    --tap: 56px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { color-scheme: dark; -webkit-text-size-adjust: 100%; }
+  html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  .num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
+  .eyebrow {
+    font-size: 0.6rem; letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--text-dim); font-weight: 600;
+  }
+  [hidden] { display: none !important; }
+
+  .app {
+    height: 100vh;          /* fallback for browsers without dvh */
+    height: 100dvh;
+    display: grid;
+    grid-template-rows: 1fr auto 1fr;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .app.cols { grid-template-rows: none; grid-template-columns: 1fr auto 1fr; }
+
+  /* ── Player halves ─────────────────────────────── */
+  /* The half is the tap target. Its inner box is absolutely centred and
+     rotated to face its player; --iw/--ih are set from JS because a quarter
+     turn swaps the axes. */
+  .side {
+    position: relative;
+    overflow: hidden;
+    background: var(--bg-card);
+    cursor: pointer;
+    touch-action: none;
+    transition: background 0.18s ease;
+  }
+  .side-inner {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: var(--iw, 100%);
+    height: var(--ih, 100%);
+    transform: translate(-50%, -50%) rotate(var(--rot, 0deg));
+    container-type: size;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    gap: clamp(6px, 2cqh, 18px);
+    padding: 12px 14px;
+    padding: clamp(8px, 2cqh, 20px) 14px;
+  }
+  .side.quarter .side-inner { flex-direction: column-reverse; }
+
+  .time {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: clamp(44px, 13vmin, 150px);   /* fallback: no container units */
+    font-size: clamp(44px, min(30cqh, 19cqw), 150px);
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--text-dim);
+    transition: color 0.18s ease;
+  }
+
+  .meta {
+    display: flex; align-items: center; gap: 10px;
+    flex-wrap: wrap; justify-content: center;
+    min-height: 22px;
+  }
+  .who { font-weight: 700; font-size: 0.95rem; color: var(--text-dim); }
+  .chip { display: flex; align-items: baseline; gap: 5px; }
+  .chip .num { font-family: var(--mono); font-size: 0.95rem; font-weight: 600; color: var(--text-dim); }
+  .chip-inc .num { color: var(--accent); font-weight: 700; }
+  .chip-flag {
+    font-weight: 700; font-size: 0.85rem; color: var(--danger);
+    letter-spacing: 0.04em;
+  }
+  .hint { font-size: 0.75rem; color: var(--text-dim); opacity: 0.65; }
+
+  .side.turn .time { color: var(--text); }
+  .side.ticking { background: var(--turn-bg); }
+  .side.ticking .who { color: var(--ok); }
+  .side.ticking .time { color: #fff; }
+  .side.low { background: var(--low-bg); animation: blink 0.85s ease-in-out infinite alternate; }
+  .side.low .time { color: #ffc4b8; }
+  .side.flagged { background: var(--danger-bg); animation: none; }
+  .side.flagged .time { color: var(--danger); }
+  .side.flagged .who { color: var(--danger); }
+
+  @keyframes blink { from { background: var(--low-bg); } to { background: var(--low-bg-blink); } }
+  @media (prefers-reduced-motion: reduce) {
+    .side.low { animation: none; }
+  }
+
+  /* ── Capture buttons ──────────────────────────── */
+  /* Far edge of each half — a natural slap lands on the digits instead. */
+  .captures { display: flex; gap: 10px; width: 100%; max-width: 460px; }
+  .cap {
+    flex: 1;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    padding: 8px 6px;
+    min-height: 64px;
+    min-height: max(64px, 16cqh);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+    touch-action: none;
+    transition: opacity 0.15s, background 0.1s, transform 0.06s;
+  }
+  /* pointer-events:none, not just :disabled — a disabled button swallows the
+     tap instead of letting it reach the half underneath, which would leave
+     three dead zones in the middle of the slap area. */
+  .cap:disabled { opacity: 0.3; cursor: default; pointer-events: none; }
+  .cap:not(:disabled) { border-color: var(--accent); }
+  .cap:not(:disabled):active { transform: scale(0.95); background: var(--accent); color: var(--accent-ink); }
+  .cap-piece { font-size: 1.5rem; font-size: clamp(1.2rem, 4cqh, 1.8rem); line-height: 1.1; }
+  .cap-add { font-family: var(--mono); font-size: 0.8rem; font-weight: 700; color: var(--accent); }
+  .cap:not(:disabled):active .cap-add { color: var(--accent-ink); }
+
+  .chip-inc .num.bump { animation: bump 0.55s ease-out; }
+  @keyframes bump {
+    0% { transform: scale(1); }
+    30% { transform: scale(1.45); color: var(--accent-hover); }
+    100% { transform: scale(1); }
+  }
+
+  /* ── Control bar ──────────────────────────────── */
+  .bar {
+    display: flex; align-items: stretch; justify-content: space-evenly;
+    gap: 6px; padding: 8px 10px;
+    background: var(--bg);
+    border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  }
+  .app.cols .bar {
+    flex-direction: column;
+    border: none;
+    border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+    padding: 10px 8px;
+  }
+  .ctl {
+    flex: 1 1 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    min-height: var(--tap); min-width: var(--tap);
+    padding: 6px 4px;
+    background: var(--bg-input);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font: inherit;
+    cursor: pointer;
+    transition: background 0.12s, opacity 0.12s, transform 0.06s;
+  }
+  .ctl:active:not(:disabled) { transform: scale(0.96); background: var(--border); }
+  .ctl:disabled { opacity: 0.32; cursor: default; }
+  .ctl:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .ctl-primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
+  .ctl-primary:active:not(:disabled) { background: var(--accent-hover); }
+  .ctl-dim { background: var(--bg-input); }
+  .ctl-icon { display: block; width: 24px; height: 24px; }
+  .ctl-icon svg { width: 100%; height: 100%; display: block; }
+  .icon-pause { display: none; }
+  .app.running .ctl-primary .icon-play { display: none; }
+  .app.running .ctl-primary .icon-pause { display: block; }
+  .ctl-text { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.03em; }
+  .ctl.urgent { animation: urgent 0.9s ease-in-out infinite alternate; border-color: var(--accent); }
+  @keyframes urgent { from { box-shadow: 0 0 0 0 rgba(224,145,63,0); } to { box-shadow: 0 0 0 4px rgba(224,145,63,0.35); } }
+  @media (prefers-reduced-motion: reduce) { .ctl.urgent { animation: none; } }
+
+  /* ── Settings sheet ───────────────────────────── */
+  .sheet-backdrop {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(0,0,0,0.66);
+    display: flex; align-items: flex-end; justify-content: center;
+  }
+  .sheet {
+    width: 100%; max-width: 560px; max-height: 94dvh; overflow-y: auto;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 18px 18px 0 0;
+    padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+    -webkit-user-select: text; user-select: text;
+    overscroll-behavior: contain;
+  }
+  .sheet h2 { font-size: 1.3rem; margin-bottom: 8px; }
+  .help { color: var(--text-dim); font-size: 0.9rem; line-height: 1.5; margin-bottom: 18px; }
+  .help strong { color: var(--text); }
+  .sheet label { display: flex; flex-direction: column; gap: 4px; font-size: 0.82rem; color: var(--text-dim); margin-bottom: 14px; }
+  .sheet input[type="number"] {
+    font: inherit; font-family: var(--mono); font-size: 1.05rem;
+    padding: 12px;
+    background: var(--bg-input); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    min-height: 48px;
+  }
+  .sheet input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .presets { border: none; margin-bottom: 12px; }
+  .presets legend { font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); font-weight: 600; margin-bottom: 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .preset {
+    min-height: 44px; padding: 8px 14px;
+    background: var(--bg-input); color: var(--text);
+    border: 1px solid var(--border); border-radius: 999px;
+    font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+  }
+  .preset:active { background: var(--accent); color: var(--accent-ink); }
+  .check { flex-direction: row !important; align-items: center; gap: 10px !important; color: var(--text) !important; font-size: 0.9rem !important; min-height: 44px; }
+  .check input { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
+  .sheet-actions { display: flex; gap: 10px; margin-top: 14px; }
+  .ctl-wide { flex-direction: row; gap: 0; padding: 12px 18px; font-size: 0.95rem; font-weight: 700; }
+  .credit { margin-top: 18px; font-size: 0.75rem; line-height: 1.7; color: var(--text-dim); text-align: center; }
+  .credit a { color: var(--accent); }
+  kbd {
+    font-family: var(--mono); font-size: 0.72rem;
+    background: var(--bg-input); border: 1px solid var(--border);
+    border-radius: 4px; padding: 1px 5px;
+  }
+</style>
