@@ -149,25 +149,21 @@ class _BrowseFilterBar extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               _MistakeTypeChip(
-                type: '??',
                 label: 'Blunders',
                 enabled: filter.types.contains('??'),
                 onToggle: () => onFilterChanged(filter.toggleType('??')),
               ),
               _MistakeTypeChip(
-                type: '?',
                 label: 'Mistakes',
                 enabled: filter.types.contains('?'),
                 onToggle: () => onFilterChanged(filter.toggleType('?')),
               ),
               _MistakeTypeChip(
-                type: '?!',
                 label: 'Inaccuracies',
                 enabled: filter.types.contains('?!'),
                 onToggle: () => onFilterChanged(filter.toggleType('?!')),
               ),
               _MistakeTypeChip(
-                type: '✎',
                 label: 'Custom',
                 enabled: filter.types.contains('custom'),
                 onToggle: () => onFilterChanged(filter.toggleType('custom')),
@@ -225,31 +221,21 @@ class _BrowseFilterBar extends StatelessWidget {
 
 class _MistakeTypeChip extends StatelessWidget {
   const _MistakeTypeChip({
-    required this.type,
     required this.label,
     required this.enabled,
     required this.onToggle,
   });
 
-  final String type;
   final String label;
   final bool enabled;
   final VoidCallback onToggle;
 
   @override
   Widget build(BuildContext context) {
+    // The word alone. The chip used to lead with the notation ("?? Blunders")
+    // — a glyph and its own translation, side by side, saying one thing.
     return FilterChip(
-      label: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            type,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-          ),
-          const SizedBox(width: 4),
-          Text(label, style: const TextStyle(fontSize: 11)),
-        ],
-      ),
+      label: Text(label, style: const TextStyle(fontSize: 11)),
       selected: enabled,
       onSelected: (_) => onToggle(),
       visualDensity: VisualDensity.compact,

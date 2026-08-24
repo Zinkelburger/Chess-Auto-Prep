@@ -132,9 +132,12 @@ class _TrendEntry extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final delta = trend.delta;
+    // The sign is the direction; green-up/red-down only repeats it in a
+    // second channel, and a red number over your own rating is a judgement
+    // nobody asked for. One ink, emphasis where there is movement.
     final deltaColor = !trend.hasTrend || delta == 0
         ? AppColors.onSurfaceSoft
-        : (delta > 0 ? AppColors.success : AppColors.danger);
+        : AppColors.ink;
     final suffix = [
       '${trend.gameCount} ${trend.gameCount == 1 ? 'game' : 'games'}',
       if (showPlatform) trend.platformLabel,
@@ -222,9 +225,7 @@ class _MyBooksRowState extends State<MyBooksRow> {
                 overflow: TextOverflow.ellipsis,
                 style: AppTextStyles.body.copyWith(
                   fontSize: 13.5,
-                  color: white.isEmpty && black.isEmpty
-                      ? AppColors.warning
-                      : AppColors.onSurfaceSoft,
+                  color: AppColors.onSurfaceSoft,
                 ),
               ),
             ),

@@ -26,15 +26,14 @@ class PuzzleStatsDisplay extends StatelessWidget {
             ? '${pos.successCount}/${pos.reviewCount} ${(pos.successRate * 100).toStringAsFixed(0)}%'
             : 'new',
         textAlign: TextAlign.right,
+        // One ink. A green/amber/red success rate was a traffic light on a
+        // number that already says the same thing — and it graded the user on
+        // a column they scan past, which is the opposite of restful.
         style: TextStyle(
           fontSize: fontSize,
           color: pos.reviewCount == 0
               ? AppColors.onSurfaceMuted
-              : pos.successRate >= 0.7
-              ? AppColors.success
-              : pos.successRate >= 0.4
-              ? AppColors.warning
-              : AppColors.danger,
+              : AppColors.onSurfaceSoft,
         ),
       ),
     );

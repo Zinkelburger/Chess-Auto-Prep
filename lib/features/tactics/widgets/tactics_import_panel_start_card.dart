@@ -91,8 +91,9 @@ mixin _TacticsImportPanelStartCard on _TacticsImportPanelStateBase {
     } else {
       line = 'Ready to play: $_readyBreakdown';
       if (widget.isImporting) {
+        // Green said "well done" about a review that is merely still running.
+        // The sentence carries the news; the colour was decoration.
         line = '$line — more are added as the review finds them';
-        color = AppColors.success;
       }
     }
 

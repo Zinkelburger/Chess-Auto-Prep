@@ -17,13 +17,13 @@ class TacticsBrowseHeader extends StatelessWidget {
         children: [
           // Leading space of the rows: board preview + the action buttons.
           SizedBox(width: 168),
-          SizedBox(width: 32, child: Text('Type', style: _headerStyle)),
+          SizedBox(width: 72, child: Text('Type', style: _headerStyle)),
           SizedBox(width: 8),
           SizedBox(width: 80, child: Text('Rating', style: _headerStyle)),
           SizedBox(width: 8),
           Expanded(flex: 3, child: Text('Game', style: _headerStyle)),
           SizedBox(width: 8),
-          Expanded(flex: 2, child: Text('Context', style: _headerStyle)),
+          Expanded(flex: 2, child: Text('Position', style: _headerStyle)),
           SizedBox(width: 8),
           Expanded(flex: 2, child: Text('Played → Best', style: _headerStyle)),
           SizedBox(width: 8),
@@ -124,12 +124,14 @@ class TacticsBrowseRow extends StatelessWidget {
                 ),
                 IconButton(
                   onPressed: onDelete,
-                  // Deliberately subdued: a full-strength red X on every row
-                  // would shout louder than the content it deletes.
-                  icon: Icon(
+                  // Neutral, like every other icon in the row: a red X on
+                  // every line reads as a warning about the tactic rather
+                  // than as one of three equal-weight row actions. The
+                  // confirm dialog is what guards the delete.
+                  icon: const Icon(
                     Icons.close,
                     size: 16,
-                    color: AppColors.danger.withValues(alpha: 0.6),
+                    color: AppColors.onSurfaceMuted,
                   ),
                   tooltip: 'Delete tactic',
                   constraints: const BoxConstraints(
@@ -141,12 +143,15 @@ class TacticsBrowseRow extends StatelessWidget {
               ],
               const SizedBox(width: 4),
               SizedBox(
-                width: 32,
+                width: 72,
+                // The severity in words, matching the trainer's "You played
+                // h5 (blunder)". `??`/`?`/`?!` was one glyph the reader had
+                // to decode, and the column it saved was never needed.
                 child: Text(
-                  pos.mistakeType == 'custom' ? '✎' : pos.mistakeType,
+                  pos.mistakeType == 'custom' ? 'custom' : pos.mistakeLabel,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
+                    fontSize: 13,
                     color: AppColors.onSurfaceSoft,
                   ),
                 ),
@@ -171,10 +176,13 @@ class TacticsBrowseRow extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 flex: 2,
+                // Where the position sits, and nothing else. The flaw
+                // tags ("reversed · miss · middlegame · hasty") used to
+                // trail this line: taxonomy the miner needs and a solver
+                // never reads, four items wide on every row. They are still
+                // stored, and still filterable from the bar above.
                 child: Text(
-                  pos.flawTags.isEmpty
-                      ? pos.positionContext
-                      : '${pos.positionContext} · ${pos.flawTags.join(' · ')}',
+                  pos.positionContext,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 13),
                 ),

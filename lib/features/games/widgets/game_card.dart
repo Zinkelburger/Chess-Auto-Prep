@@ -128,7 +128,6 @@ class GameCard extends StatelessWidget {
           score: game.scorePair.$1,
           isWhitePiece: true,
           isMe: game.meWhite == true,
-          outcome: game.myOutcome,
         ),
         _PlayerLine(
           name: game.black,
@@ -136,7 +135,6 @@ class GameCard extends StatelessWidget {
           score: game.scorePair.$2,
           isWhitePiece: false,
           isMe: game.meWhite == false,
-          outcome: game.myOutcome,
         ),
         const SizedBox(height: 3),
         _buildOpeningLine(),
@@ -227,11 +225,17 @@ class GameCard extends StatelessWidget {
   };
 }
 
-/// My mistake counts for one game, as three coloured numbers: inaccuracies,
-/// mistakes, blunders. A "2 blunders" phrase told you the worst category and
-/// hid the rest; "1 2 0" is the whole game at a glance and takes less width.
-/// Zero counts stay visible but dim — the columns have to line up between rows
-/// for the numbers to be scannable at all.
+/// My mistake counts for one game, as three numbers: inaccuracies, mistakes,
+/// blunders. A "2 blunders" phrase told you the worst category and hid the
+/// rest; "1 2 0" is the whole game at a glance and takes less width. Zero
+/// counts stay visible but dim — the columns have to line up between rows for
+/// the numbers to be scannable at all.
+///
+/// Severity is carried by *value*, not hue: dim, soft, ink from left to
+/// right. The blue/amber/red version painted a traffic light onto every card
+/// in the list, which made the list itself look like a verdict on how you
+/// play. Which number is which is fixed by position, and spelled out in the
+/// tooltip.
 class MistakeCounts extends StatelessWidget {
   const MistakeCounts({super.key, required this.game, this.onOpen});
 
@@ -260,9 +264,9 @@ class MistakeCounts extends StatelessWidget {
     final counts = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _count(summary.inaccuracies, AppColors.info),
-        _count(summary.mistakes, AppColors.warning),
-        _count(summary.blunders, AppColors.danger),
+        _count(summary.inaccuracies, AppColors.onSurfaceDim),
+        _count(summary.mistakes, AppColors.onSurfaceSoft),
+        _count(summary.blunders, AppColors.ink),
       ],
     );
     return Tooltip(
@@ -286,8 +290,8 @@ class MistakeCounts extends StatelessWidget {
       textAlign: TextAlign.center,
       style: AppTextStyles.body.copyWith(
         fontSize: 14,
-        fontWeight: value > 0 ? FontWeight.w700 : FontWeight.w400,
-        color: value > 0 ? color : AppColors.onSurfaceMuted,
+        fontWeight: value > 0 ? FontWeight.w600 : FontWeight.w400,
+        color: value > 0 ? color : AppColors.onSurfaceDisabled,
       ),
     ),
   );
@@ -300,7 +304,6 @@ class _PlayerLine extends StatelessWidget {
     required this.score,
     required this.isWhitePiece,
     required this.isMe,
-    required this.outcome,
   });
 
   final String name;
@@ -308,18 +311,14 @@ class _PlayerLine extends StatelessWidget {
   final String score;
   final bool isWhitePiece;
   final bool isMe;
-  final MyGameOutcome outcome;
 
   @override
   Widget build(BuildContext context) {
-    final scoreColor = !isMe
-        ? AppColors.onSurfaceSoft
-        : switch (outcome) {
-            MyGameOutcome.win => AppColors.success,
-            MyGameOutcome.loss => AppColors.danger,
-            MyGameOutcome.draw ||
-            MyGameOutcome.unknown => AppColors.onSurfaceSoft,
-          };
+    // The score is already the result — "1" and "0" do not need to be green
+    // and red as well, and a card that turns red every time you lost is a
+    // scoreboard, not a list of games to review. Emphasis marks whose line is
+    // mine; the number says how it went.
+    final scoreColor = isMe ? AppColors.ink : AppColors.onSurfaceSoft;
     return Row(
       children: [
         Container(
@@ -391,25 +390,23 @@ class _DeviationLine extends StatelessWidget {
           const Icon(
             Icons.check_circle_outline,
             size: 14,
-            color: AppColors.successMuted,
+            color: AppColors.onSurfaceSoft,
           ),
           const SizedBox(width: 4),
           Text(
             'In book · ${report.chapterName}',
             overflow: TextOverflow.ellipsis,
-            style: AppTextStyles.body.copyWith(
-              fontSize: 12.5,
-              color: AppColors.successMuted,
-            ),
+            style: muted,
           ),
         ],
       );
     }
     final bookEnded = report.bookEnded;
     final byMe = report.byMe == true;
-    final color = bookEnded
-        ? AppColors.onSurfaceSoft
-        : (byMe ? AppColors.warning : AppColors.info);
+    // One ink for all three verdicts. Amber-for-me / blue-for-them made the
+    // card look like it was scoring the game, and the sentence beside the
+    // icon already says who left the book and when.
+    const color = AppColors.onSurfaceSoft;
     final text = bookEnded
         ? 'Book ends at move ${report.moveNumber}'
         : 'Left book at move ${report.moveNumber} '
@@ -447,7 +444,7 @@ class _DeviationLine extends StatelessWidget {
               'View line',
               style: AppTextStyles.body.copyWith(
                 fontSize: 12.5,
-                color: AppColors.info,
+                color: AppColors.onSurfaceMuted,
                 decoration: TextDecoration.underline,
                 decorationColor: AppColors.onSurfaceDim,
               ),

@@ -528,7 +528,7 @@ class _GameLine extends StatelessWidget {
     const move = TextStyle(fontWeight: FontWeight.bold);
     const soft = TextStyle(color: AppColors.onSurfaceSoft);
 
-    final severity = _mistakeLabel(position.mistakeType);
+    final severity = position.mistakeLabel;
     final note = TacticsNote.parse(position.mistakeAnalysis);
     final refutation = position.opponentBestResponse;
 
@@ -557,13 +557,3 @@ class _GameLine extends StatelessWidget {
     );
   }
 }
-
-/// The severity of a mined mistake in words. `??` / `?` / `?!` are notation a
-/// reader has to decode; the word is the same information without the decode
-/// step. Empty for custom puzzles, which record no severity.
-String _mistakeLabel(String mistakeType) => switch (mistakeType) {
-  '??' => 'blunder',
-  '?' => 'mistake',
-  '?!' => 'inaccuracy',
-  _ => '',
-};

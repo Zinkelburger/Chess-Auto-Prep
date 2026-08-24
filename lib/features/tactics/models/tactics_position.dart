@@ -150,6 +150,16 @@ class TacticsPosition {
   };
   String get gameSource => '$gameWhite vs $gameBlack';
 
+  /// The severity of a mined mistake in words. `??` / `?` / `?!` are notation
+  /// a reader has to decode; the word is the same information without the
+  /// decode step. Empty for custom puzzles, which record no severity.
+  String get mistakeLabel => switch (mistakeType) {
+    '??' => 'blunder',
+    '?' => 'mistake',
+    '?!' => 'inaccuracy',
+    _ => '',
+  };
+
   /// Where on the board this puzzle sits. All three read the FEN, which is
   /// the position — they used to re-parse an English sentence built from it
   /// ("Move 12, White to play"), so a puzzle could describe itself wrongly.
