@@ -25,7 +25,7 @@ const currentPath = Astro.url.pathname;
       <div class="nav-links">
         <a href="/twic-notifications" class:list={[{ active: currentPath === '/twic-notifications' || currentPath === '/twic-notifications/' }]}>TWIC Notifications</a>
         <a href="/tactics" class:list={[{ active: currentPath === '/tactics' || currentPath === '/tactics/' }]}>Tactics Trainer</a>
-        <a href="/charles-clock" class:list={[{ active: currentPath.startsWith('/charles-clock') }]}>EndGain Clock</a>
+        <a href="/charles-clock" class:list={[{ active: currentPath.startsWith('/charles-clock') }]}>Charles Clock</a>
         <a href="/dashboard" class:list={[{ active: currentPath.startsWith('/dashboard') }]}>Dashboard</a>
       </div>
     </div>

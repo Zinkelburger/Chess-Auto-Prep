@@ -1,5 +1,5 @@
 ---
-// EndGain Clock — Charles Woodruff's "endgame blitz" chess clock.
+// Charles Clock — Charles Woodruff's "endgame blitz" chess clock.
 //
 // Both players start with a short time control. When you capture a piece you
 // may hit the clock with a capture button instead of the plain zone, which
@@ -15,7 +15,7 @@
 // (a natural slap lands on the big digits) and are `disabled` unless it is
 // that side's turn, so a stray tap falls through to a plain hit.
 
-import EndGainSide from '../components/EndGainSide.astro';
+import ClockSide from '../components/ClockSide.astro';
 
 const ICON = {
   play: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>',
@@ -35,22 +35,22 @@ const ICON = {
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-title" content="EndGain" />
+  <meta name="apple-mobile-web-app-title" content="Charles Clock" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="theme-color" content="#171a1f" />
-  <meta name="description" content="EndGain Clock — blitz that ends in real endgames. Capturing a piece permanently raises the increment for both players." />
-  <link rel="manifest" href="/endgain.webmanifest" />
+  <meta name="description" content="Charles Clock — blitz that ends in real endgames. Capturing a piece permanently raises the increment for both players." />
+  <link rel="manifest" href="/charles-clock.webmanifest" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⏱</text></svg>" />
-  <link rel="apple-touch-icon" href="/endgain-192.png" />
+  <link rel="apple-touch-icon" href="/charles-clock-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;600;700&display=swap" rel="stylesheet" />
-  <title>EndGain Clock — Chess Auto Prep</title>
+  <title>Charles Clock — Chess Auto Prep</title>
 </head>
 <body>
   <div id="app" class="app">
 
-    <EndGainSide side="top" name="Player 1" />
+    <ClockSide side="top" name="Player 1" />
 
     <div class="bar">
       <button class="ctl ctl-primary" data-action="startpause" type="button" aria-label="Start">
@@ -75,12 +75,12 @@ const ICON = {
       </button>
     </div>
 
-    <EndGainSide side="bottom" name="Player 2" />
+    <ClockSide side="bottom" name="Player 2" />
 
     <!-- Settings sheet -->
     <div class="sheet-backdrop" data-sheet hidden>
       <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-        <h2 id="settings-title">EndGain Clock</h2>
+        <h2 id="settings-title">Charles Clock</h2>
         <p class="help">
           Blitz that ends in real endgames. Hit your own side to end your move.
           If you <strong>captured</strong> a piece you may hit a capture button instead: it ends
@@ -151,7 +151,7 @@ const ICON = {
 
   <script>
     // ── Config ──────────────────────────────────────────────────────
-    const STORAGE_KEY = 'endgain-clock-settings-v2';
+    const STORAGE_KEY = 'charles-clock-settings-v2';
     const DEFAULTS = { minutes: 2, base: 0, minor: 2, rook: 4, queen: 6, sound: true, facing: true };
     const SIDES = /** @type {const} */ (['top', 'bottom']);
     const TENTHS_UNDER = 10_000;   // show tenths below this
@@ -755,7 +755,7 @@ const ICON = {
   }
   .num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
   .eyebrow {
-    font-size: 0.6rem; letter-spacing: 0.09em; text-transform: uppercase;
+    font-size: 0.72rem; letter-spacing: 0.09em; text-transform: uppercase;
     color: var(--text-dim); font-weight: 600;
   }
   [hidden] { display: none !important; }
@@ -816,15 +816,15 @@ const ICON = {
     flex-wrap: wrap; justify-content: center;
     min-height: 22px;
   }
-  .who { font-weight: 700; font-size: 0.95rem; color: var(--text-dim); }
+  .who { font-weight: 700; font-size: 1.05rem; color: var(--text-dim); }
   .chip { display: flex; align-items: baseline; gap: 5px; }
-  .chip .num { font-family: var(--mono); font-size: 0.95rem; font-weight: 600; color: var(--text-dim); }
+  .chip .num { font-family: var(--mono); font-size: 1.05rem; font-weight: 600; color: var(--text-dim); }
   .chip-inc .num { color: var(--accent); font-weight: 700; }
   .chip-flag {
     font-weight: 700; font-size: 0.85rem; color: var(--danger);
     letter-spacing: 0.04em;
   }
-  .hint { font-size: 0.75rem; color: var(--text-dim); opacity: 0.65; }
+  .hint { font-size: 0.95rem; color: var(--text-dim); opacity: 0.85; }
 
   .side.turn .time { color: var(--text); }
   .side.ticking { background: var(--turn-bg); }
@@ -866,7 +866,7 @@ const ICON = {
   .cap:not(:disabled) { border-color: var(--accent); }
   .cap:not(:disabled):active { transform: scale(0.95); background: var(--accent); color: var(--accent-ink); }
   .cap-piece { font-size: 1.5rem; font-size: clamp(1.2rem, 4cqh, 1.8rem); line-height: 1.1; }
-  .cap-add { font-family: var(--mono); font-size: 0.8rem; font-weight: 700; color: var(--accent); }
+  .cap-add { font-family: var(--mono); font-size: 0.95rem; font-weight: 700; color: var(--accent); }
   .cap:not(:disabled):active .cap-add { color: var(--accent-ink); }
 
   .chip-inc .num.bump { animation: bump 0.55s ease-out; }
@@ -892,7 +892,7 @@ const ICON = {
   .ctl {
     flex: 1 1 0;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-    min-height: var(--tap); min-width: var(--tap);
+    min-height: var(--tap); min-width: 0;
     padding: 6px 4px;
     background: var(--bg-input);
     color: var(--text);
@@ -913,7 +913,7 @@ const ICON = {
   .icon-pause { display: none; }
   .app.running .ctl-primary .icon-play { display: none; }
   .app.running .ctl-primary .icon-pause { display: block; }
-  .ctl-text { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.03em; }
+  .ctl-text { font-size: 0.82rem; font-weight: 600; letter-spacing: 0.03em; }
   .ctl.urgent { animation: urgent 0.9s ease-in-out infinite alternate; border-color: var(--accent); }
   @keyframes urgent { from { box-shadow: 0 0 0 0 rgba(224,145,63,0); } to { box-shadow: 0 0 0 4px rgba(224,145,63,0.35); } }
   @media (prefers-reduced-motion: reduce) { .ctl.urgent { animation: none; } }

@@ -1,6 +1,6 @@
 {
-  "name": "EndGain Clock",
-  "short_name": "EndGain",
+  "name": "Charles Clock",
+  "short_name": "Charles",
   "description": "Blitz that ends in real endgames — capturing a piece permanently raises the increment for both players.",
   "id": "/charles-clock/",
   "start_url": "/charles-clock/",
@@ -12,8 +12,8 @@
   "theme_color": "#171a1f",
   "categories": ["games", "utilities"],
   "icons": [
-    { "src": "/endgain-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/endgain-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/endgain-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "/charles-clock-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/charles-clock-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/charles-clock-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
