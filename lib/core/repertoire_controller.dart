@@ -149,13 +149,14 @@ class RepertoireController
   /// Derived position (lazy; most callers only need [fen]).
   Position get position => tryParseFen(fen) ?? Chess.initial;
 
-  /// From/to squares of the last two half-moves at the cursor — the subtle
-  /// Chessable-style recent-move trail for [ChessBoardWidget]. Empty at the
-  /// starting position.
-  Set<String> get recentMoveSquares {
+  /// From/to squares of the last [lastN] half-moves at the cursor — the
+  /// recent-move trail for [ChessBoardWidget]. Empty at the starting
+  /// position. Defaults to the single move that produced the position; the
+  /// trainer asks for 2 so your move and the reply are both marked.
+  Set<String> recentMoveTrail({int lastN = 1}) {
     final len = _path.length;
     if (len == 0) return const {};
-    final baseIdx = len >= 2 ? len - 2 : 0;
+    final baseIdx = len > lastN ? len - lastN : 0;
     try {
       final base = Chess.fromSetup(
         Setup.parseFen(_tree.fenAt(_path.take(baseIdx))),
@@ -163,6 +164,7 @@ class RepertoireController
       return recentMoveTrailSquares(
         base,
         _tree.sanSequenceAt(_path).sublist(baseIdx),
+        lastN: lastN,
       );
     } catch (_) {
       return const {};

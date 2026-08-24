@@ -350,10 +350,10 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
     _inlineAnchorFen = null;
   }
 
-  /// From/to squares of the last two half-moves leading to the current
-  /// position — mainline, variation, or inline comment-line preview. Hosts
-  /// pass this to [ChessBoardWidget.recentMoveSquares] for the subtle
-  /// Chessable-style recent-move trail.
+  /// From/to squares of the single half-move leading to the current position
+  /// — mainline, variation, or inline comment-line preview. Hosts pass this
+  /// to [ChessBoardWidget.recentMoveSquares] for the subtle last-move
+  /// highlight.
   Set<String> _recentMoveSquares() {
     List<String> mainlineSans(int upTo) => [
       for (int i = 0; i < upTo && i < _moveHistory.length; i++)

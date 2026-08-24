@@ -22,8 +22,8 @@ class ChessBoardWidget extends StatefulWidget {
   final bool flipped;
   final Set<String> highlightedSquares;
 
-  /// From/to squares of the most recent half-moves, kept subtly tinted
-  /// (Chessable-style trail). Quieter than [highlightedSquares].
+  /// From/to squares of the most recent half-move (two, in the trainer), kept
+  /// subtly tinted. Quieter than [highlightedSquares].
   final Set<String> recentMoveSquares;
   final Function(String)? onSquareClicked;
   final Function(String)? onPieceSelected;

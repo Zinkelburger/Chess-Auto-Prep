@@ -161,6 +161,18 @@ class TrainingSettings {
   /// everything in the line name before its first occurrence.
   String chapterDelimiter;
 
+  /// How many untrained lines one "Learn" run works through before it calls
+  /// the sitting done. 0 = no limit.
+  ///
+  /// A bought course is hundreds of lines; without a cap the trainer opened
+  /// with "930 left in this run", which is not a session, it is a wall. Anki
+  /// caps new cards per day for the same reason — the limit is what makes the
+  /// backlog finishable.
+  int newLinesPerSession;
+
+  /// How many due lines one "Review" run works through. 0 = no limit.
+  int reviewsPerSession;
+
   TrainingSettings({
     this.correctStreakThreshold = 3,
     this.trainingDepth,
@@ -175,6 +187,8 @@ class TrainingSettings {
     this.introSpeedMs = 600,
     this.chapterGrouping = ChapterGroupingMode.auto,
     this.chapterDelimiter = '#',
+    this.newLinesPerSession = 10,
+    this.reviewsPerSession = 40,
   });
 
   static const _keyStreakThreshold = 'trainer_streak_threshold';
@@ -190,6 +204,8 @@ class TrainingSettings {
   static const _keyIntroSpeedMs = 'trainer_intro_speed_ms';
   static const _keyChapterGrouping = 'trainer_chapter_grouping';
   static const _keyChapterDelimiter = 'trainer_chapter_delimiter';
+  static const _keyNewPerSession = 'trainer_new_lines_per_session';
+  static const _keyReviewsPerSession = 'trainer_reviews_per_session';
 
   static Future<TrainingSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -211,6 +227,8 @@ class TrainingSettings {
         prefs.getString(_keyChapterGrouping),
       ),
       chapterDelimiter: prefs.getString(_keyChapterDelimiter) ?? '#',
+      newLinesPerSession: prefs.getInt(_keyNewPerSession) ?? 10,
+      reviewsPerSession: prefs.getInt(_keyReviewsPerSession) ?? 40,
     );
   }
 
@@ -235,5 +253,7 @@ class TrainingSettings {
     await prefs.setInt(_keyIntroSpeedMs, introSpeedMs);
     await prefs.setString(_keyChapterGrouping, chapterGrouping.storageValue);
     await prefs.setString(_keyChapterDelimiter, chapterDelimiter);
+    await prefs.setInt(_keyNewPerSession, newLinesPerSession);
+    await prefs.setInt(_keyReviewsPerSession, reviewsPerSession);
   }
 }

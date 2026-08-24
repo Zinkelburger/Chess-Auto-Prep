@@ -6,7 +6,12 @@ class RepertoireReviewEntry {
   final String repertoireId;
   final String lineId;
   String lineName;
-  double difficulty; // Higher = easier
+
+  /// SM-2 ease factor: how much the interval stretches on a "Good". Higher is
+  /// easier. Clamped to [RepertoireReviewService.minEase] ..
+  /// [RepertoireReviewService.maxEase] whenever it is used, which migrates the
+  /// values written before the scheduler read this field at all.
+  double difficulty;
   double intervalDays;
   DateTime? dueDateUtc;
   String lastRating;
@@ -18,7 +23,10 @@ class RepertoireReviewEntry {
     required this.repertoireId,
     required this.lineId,
     required this.lineName,
-    this.difficulty = 1.5,
+    // SM-2's starting ease. Was 1.5 here and 2.5 when seeded from PGN
+    // headers, which meant the same line scheduled differently depending on
+    // which path created its row.
+    this.difficulty = 2.5,
     this.intervalDays = 0,
     this.dueDateUtc,
     this.lastRating = '',
@@ -73,7 +81,7 @@ class RepertoireReviewEntry {
       repertoireId: cells[0],
       lineId: cells[1],
       lineName: cells[2],
-      difficulty: double.tryParse(cells[3]) ?? 1.5,
+      difficulty: double.tryParse(cells[3]) ?? 2.5,
       intervalDays: double.tryParse(cells[4]) ?? 0,
       dueDateUtc: due,
       lastRating: cells[6],

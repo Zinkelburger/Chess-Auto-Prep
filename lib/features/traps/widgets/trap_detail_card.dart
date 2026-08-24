@@ -229,20 +229,14 @@ class TrapDetailCard extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
       children: [
+        _StatChip(label: 'You gain', value: '+${trap.evalDiffCp}cp'),
         _StatChip(
-          label: 'YOU GAIN',
-          value: '+${trap.evalDiffCp}cp',
-          color: AppColors.success,
-        ),
-        _StatChip(
-          label: 'REACH',
+          label: 'Reach',
           value: '${(trap.cumulativeProb * 100).toStringAsFixed(2)}%',
-          color: theme.colorScheme.primary,
         ),
         _StatChip(
-          label: 'SURPLUS',
+          label: 'Surplus',
           value: '${(trap.trickSurplus * 100).toStringAsFixed(1)}%',
-          color: AppColors.warning,
         ),
       ],
     );
@@ -476,13 +470,8 @@ class _ComparisonBox extends StatelessWidget {
 class _StatChip extends StatelessWidget {
   final String label;
   final String value;
-  final Color color;
 
-  const _StatChip({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
+  const _StatChip({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -490,11 +479,7 @@ class _StatChip extends StatelessWidget {
       children: [
         Text(
           value,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         Text(
           label,

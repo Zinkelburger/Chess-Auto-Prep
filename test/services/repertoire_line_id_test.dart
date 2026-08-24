@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:chess_auto_prep/services/repertoire_line_ids.dart';
 import 'package:chess_auto_prep/services/repertoire_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -24,8 +25,8 @@ void main() {
     expect(ids.toSet().length, 3, reason: 'ids: $ids');
     // The first claimant keeps the legacy (truncated) id, so progress saved
     // under it survives; later collisions are re-derived.
-    expect(ids[0], service.generateLineId(lines[0].moves, 0));
-    expect(ids[1], isNot(service.generateLineId(lines[1].moves, 1)));
+    expect(ids[0], repertoireLineIds.stable(lines[0].moves, 0));
+    expect(ids[1], isNot(repertoireLineIds.stable(lines[1].moves, 1)));
     expect(lines.map((l) => l.gameIndex), [0, 1, 2]);
   });
 
@@ -70,7 +71,7 @@ void main() {
   test('a new in-memory line predicts the id a reload will give it', () {
     final lines = service.parseRepertoirePgn(pgn, trainingColor: 'black');
     final moves = [...lines[0].moves.sublist(0, 9), 'a5'];
-    final predicted = service.newLineId(
+    final predicted = repertoireLineIds.forNewLine(
       moves,
       3,
       existingIds: lines.map((l) => l.id),

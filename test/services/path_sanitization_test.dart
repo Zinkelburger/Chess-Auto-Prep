@@ -106,8 +106,12 @@ void main() {
 
       final libDir = await AppPaths.gamesLibraryDirectory();
       final files = await _allFiles(libDir);
-      expect(files, hasLength(1));
-      expect(p.basename(files.single), 'chesscom_hikaru.pgn');
+      // The cache, plus the sidecar recording when it was downloaded — both
+      // named off the same sanitized stem.
+      expect(files.map(p.basename).toSet(), {
+        'chesscom_hikaru.pgn',
+        'chesscom_hikaru.pgn.fetched',
+      });
 
       // A second call is served from cache without re-fetching.
       expect(await svc.hasFreshCache(GamesPlatform.chesscom, 'Hikaru'), isTrue);
@@ -155,9 +159,12 @@ void main() {
       // The benign cache is untouched; the hostile write landed in its own
       // separate sanitized slot (a different, flat filename).
       expect(await benignFile.readAsString(), before);
-      final files = await _allFiles(libDir);
-      expect(files, hasLength(2));
-      final hostileFile = files.firstWhere(
+      final caches = [
+        for (final f in await _allFiles(libDir))
+          if (p.extension(f) == '.pgn') f,
+      ];
+      expect(caches, hasLength(2));
+      final hostileFile = caches.firstWhere(
         (f) => p.canonicalize(f) != p.canonicalize(benignFile.path),
       );
       expect(await File(hostileFile).readAsString(), contains('attacker'));

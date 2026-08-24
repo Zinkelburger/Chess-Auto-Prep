@@ -10,8 +10,8 @@ import 'package:chess_auto_prep/features/games/services/home_review_runner.dart'
 import 'package:chess_auto_prep/features/games/widgets/review_strip.dart';
 import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:chess_auto_prep/services/games_library/games_library_service.dart';
-import 'package:chess_auto_prep/services/tactics/mining_settings.dart';
-import 'package:chess_auto_prep/services/tactics/tactics_import_coordinator.dart';
+import 'package:chess_auto_prep/features/tactics/services/mining_settings.dart';
+import 'package:chess_auto_prep/features/tactics/services/tactics_import_coordinator.dart';
 import 'package:chess_auto_prep/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,6 +26,7 @@ class _IdleLibrary extends GamesLibraryService {
     List<GameSelection> unionWith = const [],
     bool forceRefresh = false,
     void Function(String message)? onProgress,
+    void Function(DateTime fetchedAt)? onFetched,
   }) async => const [];
 
   @override
@@ -100,7 +101,7 @@ void main() {
     VoidCallback? onSettings,
     VoidCallback? onOpeningReview,
     ValueChanged<bool>? onAutoRunChanged,
-    bool autoRun = false,
+    bool autoRun = true,
     int unreviewed = 3,
     int ready = 12,
     int openingIssues = 4,
@@ -132,7 +133,7 @@ void main() {
     ),
   );
 
-  testWidgets('it starts paused: a play button and the work waiting', (
+  testWidgets('idle: a play button and the work waiting beside it', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -155,7 +156,15 @@ void main() {
     );
   });
 
-  testWidgets('the job button is gray, and auto-start sits on the strip', (
+  /// The transport button's fill, which is how the strip says whether this is
+  /// the thing to press.
+  Color? transportColor(WidgetTester tester) => tester
+      .widget<FilledButton>(find.byKey(const Key('review-transport-button')))
+      .style
+      ?.backgroundColor
+      ?.resolve({});
+
+  testWidgets('with games waiting the job button is green, not scenery', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -164,6 +173,7 @@ void main() {
     addTearDown(h.runner.dispose);
     final flips = <bool>[];
 
+    // 3 of 20 unanalysed: pressing it would do real work.
     await pump(
       tester,
       runner: h.runner,
@@ -171,18 +181,33 @@ void main() {
       onAutoRunChanged: flips.add,
     );
 
-    final button = tester.widget<FilledButton>(
-      find.byKey(const Key('review-transport-button')),
-    );
-    final bg = button.style?.backgroundColor?.resolve({});
+    expect(transportColor(tester), AppColors.successSurface);
+    // …and it glows while it asks. The glow is a shadow so the buttons under
+    // it never move.
     expect(
-      bg,
-      AppColors.surfaceInset,
-      reason: 'the job button is gray, not the green "press me" control',
+      find.ancestor(
+        of: find.byKey(const Key('review-transport-button')),
+        matching: find.byType(DecoratedBox),
+      ),
+      findsWidgets,
     );
 
     await tester.tap(find.text('Auto-start'));
-    expect(flips, [true]);
+    expect(flips, [false], reason: 'auto-start is on, so the tap turns it off');
+  });
+
+  testWidgets('with nothing to analyse it goes back to gray', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final h = build();
+    addTearDown(h.games.dispose);
+    addTearDown(h.runner.dispose);
+
+    // Every game in the window is analysed: the button only offers to check
+    // for new ones, which is not worth shouting about.
+    await pump(tester, runner: h.runner, coordinator: h.co, unreviewed: 0);
+
+    expect(transportColor(tester), AppColors.surfaceInset);
+    expect(find.text('Check for new games'), findsOneWidget);
   });
 
   testWidgets('the button offers to resume when only some games are analysed', (

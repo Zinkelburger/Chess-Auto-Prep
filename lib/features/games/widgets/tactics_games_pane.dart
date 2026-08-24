@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_state.dart';
-import '../../../screens/settings_screen.dart';
-import '../../../services/tactics/tactics_import_coordinator.dart';
-import '../../../services/tactics/tactics_session_controller.dart';
-import '../../../services/tactics/tactics_database.dart';
+import '../../tactics/services/tactics_import_coordinator.dart';
+import '../../tactics/controllers/tactics_session_controller.dart';
+import '../../tactics/services/tactics_database.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
+import '../../../widgets/accounts/accounts_dialog.dart';
 import '../../../widgets/common/list_search_field.dart';
 import '../../../widgets/engine/engine_gate.dart';
 import '../controllers/recent_games_controller.dart';
@@ -34,9 +34,9 @@ import 'review_strip.dart';
 /// Layout rule: the header and the review strip are always on screen — even
 /// with no account set. Only the *list* area shows loading and empty states;
 /// hiding the play button until games arrived meant the one control that
-/// fetches them was missing exactly when it was needed. The usernames are
-/// edited on the accounts card in the right pane (each box has a title
-/// there); this pane only *shows* whose games it lists.
+/// fetches them was missing exactly when it was needed. This pane only *shows*
+/// whose games it lists; the names are typed in the accounts dialog, which its
+/// empty state and the right pane's card both open.
 ///
 /// The [RecentGamesController] and [HomeReviewRunner] are provided by
 /// `_TacticsModeView` (they must outlive this widget: the pane is swapped out
@@ -54,8 +54,9 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
   HomeReviewRunner? _runner;
   AppState? _appState;
 
-  /// Guard so the opt-in auto-run fires at most once per app session, however
-  /// many times the pane is rebuilt or swapped back in.
+  /// Guard so the auto-run fires at most once per app session, however many
+  /// times the pane is rebuilt or swapped back in. Only a run that actually
+  /// started spends it — see [_maybeAutoRun].
   static bool _autoRunAttempted = false;
 
   /// Type-to-filter over the loaded games. Narrows the list only — the window
@@ -103,14 +104,24 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
     }
   }
 
-  /// Opt-in only: the review costs every core for minutes, so it starts itself
-  /// exactly when the user asked it to in the settings dialog.
+  /// Start the review as soon as there is something to review.
+  ///
+  /// On by default (see [GamesListFilters.autoRun]), which is what makes
+  /// setting a username enough: the save loads the list, the list's first
+  /// notification lands here, and the download-and-analyse run begins without
+  /// anyone pressing anything. Unchecking Auto-start on the strip stops that.
+  ///
+  /// The one-shot guard is only spent on a run that really starts. A pane that
+  /// loaded with no account, or while a run was already going, stays armed —
+  /// otherwise the very first visit (no username yet) would silently use up
+  /// the session's auto-run and typing a name would sit there doing nothing.
   void _maybeAutoRun() {
     final controller = _controller;
     final runner = _runner;
     if (controller == null || runner == null) return;
     if (!controller.hasLoadedOnce || controller.isLoading) return;
     if (!controller.filters.autoRun || _autoRunAttempted) return;
+    if (!runner.hasAnySource || runner.isRunning) return;
     _autoRunAttempted = true;
     unawaited(runner.start());
   }
@@ -166,22 +177,17 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
     if (controller == null) return;
     final result = await showDialog<HomeReviewSettingsResult>(
       context: context,
-      builder: (_) => HomeReviewSettingsDialog(filters: controller.filters),
+      builder: (_) => HomeReviewSettingsDialog(
+        filters: controller.filters,
+        window: controller.window,
+      ),
     );
     if (result != null) {
-      await controller.setFilters(result.filters);
+      await controller.setFilters(result.filters, window: result.window);
       // A different set of games means "review complete" was about the old
       // set — back to the resting state so the button reads honestly.
       _runner?.reset();
     }
-  }
-
-  void _openSettings() {
-    unawaited(
-      Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
-    );
   }
 
   /// Step two of the loop: play the puzzles the review found. The button is
@@ -189,7 +195,7 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
   /// job, so it is asked through the shared session controller (the two panes
   /// are siblings and can't call each other).
   void _studyTactics() {
-    context.read<TacticsSessionController>().onStartRequested?.call();
+    context.read<TacticsSessionController>().panel?.start?.call();
   }
 
   @override
@@ -282,10 +288,10 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
         icon: Icons.person_off,
         title: 'No accounts configured',
         message:
-            'Type your username on the My accounts card to the right — or in '
-            'Settings → Accounts — and your recent games will appear here.',
-        buttonLabel: 'Open Settings',
-        onPressed: _openSettings,
+            'Add your Lichess or Chess.com username and your recent games '
+            'appear here.',
+        buttonLabel: 'Set up my accounts',
+        onPressed: () => showAccountsDialog(context),
       );
     }
     if (controller.isLoading && controller.games.isEmpty) {

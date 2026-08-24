@@ -11,6 +11,8 @@
 /// matters (repaint before the disk write, not after).
 library;
 
+import 'dart:async';
+
 import '../../models/repertoire_line.dart';
 import '../../models/repertoire_move_progress.dart';
 import '../../models/repertoire_review_entry.dart'
@@ -50,12 +52,70 @@ class ReviewProgressStore {
   /// schedule on the next save.
   List<RepertoireReviewEntry> otherRepertoires = [];
 
+  // ── Deferred PGN header writes ───────────────────────────────────────
+  //
+  // A line's schedule is also mirrored into its game's PGN headers, so
+  // progress travels with the file. Doing that per rating meant reading a
+  // multi-megabyte course, re-deriving every game's id to find one of them,
+  // and writing the whole file back — a quarter-second stall between every
+  // line, on the UI isolate. The reviews CSV is written immediately and is
+  // the source of truth (headers only ever *seed* entries the CSV lacks), so
+  // the mirror can be batched and lose nothing worse than a few seconds of
+  // redundancy if the app dies mid-session.
+
+  /// How long a header write waits for company before going to disk.
+  static const headerFlushDelay = Duration(seconds: 4);
+
+  Timer? _headerFlushTimer;
+  final Map<String, RepertoireReviewEntry> _pendingHeaders = {};
+
+  /// The file [_pendingHeaders] belong to — not necessarily the one loaded
+  /// now, so a source switch flushes them where they came from.
+  String? _pendingHeadersPath;
+
+  void _queueHeaderWrite(String lineId, RepertoireReviewEntry entry) {
+    if (_pendingHeadersPath != null && _pendingHeadersPath != repertoireId) {
+      unawaited(flushHeaders());
+    }
+    _pendingHeadersPath = repertoireId;
+    _pendingHeaders[lineId] = entry;
+    _headerFlushTimer?.cancel();
+    _headerFlushTimer = Timer(
+      headerFlushDelay,
+      () => unawaited(flushHeaders()),
+    );
+  }
+
+  /// Write any deferred schedules into the PGN. Call when a run ends or the
+  /// source changes; harmless when there is nothing pending.
+  Future<void> flushHeaders() async {
+    _headerFlushTimer?.cancel();
+    _headerFlushTimer = null;
+    final path = _pendingHeadersPath;
+    final batch = Map.of(_pendingHeaders);
+    _pendingHeaders.clear();
+    _pendingHeadersPath = null;
+    // No file (nothing loaded) means nothing to mirror into; the reviews CSV
+    // already holds the schedule either way.
+    if (path == null || path.isEmpty || batch.isEmpty) return;
+    await repertoireService.updateManyLineReviewHeaders(path, batch);
+  }
+
+  /// Stop the pending flush timer. The batch itself is dropped: the CSV
+  /// already has it, and a disposed store has no business writing files.
+  void dispose() {
+    _headerFlushTimer?.cancel();
+    _headerFlushTimer = null;
+  }
+
   /// Install the state for a freshly loaded source.
   void adopt({
     required Map<String, RepertoireReviewEntry> byLine,
     required Map<String, RepertoireMoveProgress> moveProgress,
     required List<RepertoireReviewEntry> otherRepertoires,
   }) {
+    // Whatever the previous source owed its own file, it owes now.
+    unawaited(flushHeaders());
     this.byLine = byLine;
     this.moveProgress = moveProgress;
     this.otherRepertoires = otherRepertoires;
@@ -106,16 +166,7 @@ class ReviewProgressStore {
       ),
     ]);
 
-    await repertoireService.updateLineReviewHeaders(
-      repertoireId,
-      line.id,
-      lastReview: updated.lastReviewedUtc,
-      difficulty: updated.difficulty,
-      intervalDays: updated.intervalDays,
-      dueDate: updated.dueDateUtc,
-      passCount: updated.passCount,
-      failCount: updated.failCount,
-    );
+    _queueHeaderWrite(line.id, updated);
 
     return updated;
   }
@@ -229,6 +280,9 @@ class ReviewProgressStore {
 
     await reviewService.saveAll(_allEntries);
     await reviewService.appendHistory(history);
+    // Fold in anything still waiting so the two writes cannot race for the
+    // same file, then write once.
+    await flushHeaders();
     await repertoireService.updateManyLineReviewHeaders(
       repertoireId,
       headerUpdates,

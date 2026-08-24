@@ -5,20 +5,25 @@ import 'package:provider/provider.dart';
 
 import '../constants/ui_breakpoints.dart';
 import '../core/app_state.dart';
-import '../services/tactics/tactics_import_coordinator.dart';
-import '../services/tactics/tactics_session_controller.dart';
-import '../services/tactics/tactics_database.dart';
+import '../services/games_library/games_library_service.dart'
+    show GamesPlatform;
+import '../features/tactics/services/tactics_import_coordinator.dart';
+import '../features/tactics/controllers/tactics_session_controller.dart';
+import '../features/tactics/services/tactics_database.dart';
 import '../theme/app_colors.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/app_settings_button.dart';
-import '../widgets/tactics_control_panel.dart';
+import '../features/tactics/widgets/tactics_control_panel.dart';
 import '../widgets/training/move_input_widget.dart';
 
 import '../features/games/controllers/recent_games_controller.dart';
 import '../features/games/services/home_review_runner.dart';
+import '../features/engine_tournament/services/tournament_open_watcher.dart';
+import '../features/engine_tournament/widgets/engine_tournament_screen.dart';
 import '../features/games/widgets/tactics_games_pane.dart';
 import '../services/engine/engine_lifecycle.dart';
+import '../services/storage/app_paths.dart';
 import '../widgets/app_breadcrumb_trail.dart';
 import 'analysis_screen.dart';
 import 'pgn_viewer_screen.dart';
@@ -41,6 +46,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     AppMode.repertoireTrainer,
     AppMode.pgnViewer,
     AppMode.study,
+    AppMode.engineTournament,
   ];
 
   final Map<AppMode, Widget> _modeViews = <AppMode, Widget>{};
@@ -50,6 +56,11 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   AppState? _appState;
   AppMode? _lastMode;
+
+  /// Watches for "open this tournament" requests written by the MCP tools.
+  /// Lives here rather than in the tournament screen because the whole point
+  /// is to arrive from somewhere else — or from a cold start.
+  TournamentOpenWatcher? _tournamentOpenWatcher;
 
   /// True while the window is paused, hidden, or detaching. Mode switches
   /// must not resume Stockfish until the app is in the foreground again.
@@ -65,7 +76,29 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       _appState = appState;
       _lastMode = appState.currentMode;
       appState.addListener(_onAppStateChanged);
+      unawaited(_startTournamentOpenWatcher(appState));
     });
+  }
+
+  /// Never throws and never blocks the first frame: a widget test with no
+  /// path_provider, or a machine with no documents directory, simply gets no
+  /// watcher.
+  Future<void> _startTournamentOpenWatcher(AppState appState) async {
+    try {
+      final directory = await AppPaths.engineTournamentsDirectory();
+      if (!mounted) return;
+      final watcher = TournamentOpenWatcher(
+        directory: directory,
+        onRequest: (id) {
+          if (!mounted) return;
+          appState.switchToEngineTournament(tournamentId: id);
+        },
+      );
+      _tournamentOpenWatcher = watcher;
+      await watcher.start();
+    } catch (_) {
+      _tournamentOpenWatcher = null;
+    }
   }
 
   void _onAppStateChanged() {
@@ -93,6 +126,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     _appState?.removeListener(_onAppStateChanged);
+    unawaited(_tournamentOpenWatcher?.stop());
+    _tournamentOpenWatcher = null;
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -113,6 +148,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       case AppLifecycleState.resumed:
         if (!_appBackgrounded) return;
         _appBackgrounded = false;
+        // A request may have been written while the window was away, and the
+        // directory watch does not fire for events during that time on every
+        // platform.
+        unawaited(_tournamentOpenWatcher?.check());
         final mode = _lastMode;
         if (mode != null && mode.usesInteractiveEngine) {
           unawaited(EngineLifecycle.instance.resume());
@@ -174,6 +213,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         return const PgnViewerScreen();
       case AppMode.study:
         return const StudyScreen();
+      case AppMode.engineTournament:
+        return const EngineTournamentScreen();
     }
   }
 }
@@ -219,6 +260,12 @@ class _TacticsModeView extends StatelessWidget {
             return RecentGamesController(
               lichessUsername: () => appState.lichessUsername,
               chesscomUsername: () => appState.chesscomUsername,
+              // The one writer of "last downloaded": the loader that did the
+              // downloading tells AppState, and the accounts card reads it
+              // back. Both panes then describe the same event.
+              onFetched: (platform, at) => platform == GamesPlatform.lichess
+                  ? appState.setLichessLastFetch(at)
+                  : appState.setChesscomLastFetch(at),
             );
           },
         ),
@@ -328,7 +375,7 @@ class _TacticsModeScaffold extends StatelessWidget {
 /// Back arrow in the app bar next to the "Tactics" title: shown only while a
 /// puzzle is loaded, it leaves the puzzle (end session / back to browse). The
 /// action itself lives in the control panel — a focus-tree sibling — so it is
-/// routed through [TacticsSessionController.onBackRequested]. Watching the
+/// routed through [TacticsPanelHooks.back]. Watching the
 /// session here keeps rebuilds scoped to this tiny widget, preserving the
 /// scaffold's no-watch design.
 class _TacticsAppBarBackButton extends StatelessWidget {
@@ -339,7 +386,7 @@ class _TacticsAppBarBackButton extends StatelessWidget {
     final session = context.watch<TacticsSessionController>();
     if (!session.hasActivePosition) return const SizedBox.shrink();
     return IconButton(
-      onPressed: () => session.onBackRequested?.call(),
+      onPressed: () => session.panel?.back?.call(),
       icon: const Icon(Icons.arrow_back, size: 18),
       tooltip: session.playSource == TacticsPlaySource.browse
           ? 'Back to browse'
@@ -407,7 +454,8 @@ class _TacticsBoardPane extends StatelessWidget {
                 onNavigationKey: (event) =>
                     context
                         .read<TacticsSessionController>()
-                        .onTrainerNavigationKey
+                        .panel
+                        ?.navigationKey
                         ?.call(event.logicalKey) ??
                     false,
               ),

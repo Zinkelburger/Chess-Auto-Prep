@@ -154,10 +154,6 @@ class TrapNavigationButtons extends StatelessWidget {
         icon: const Icon(Icons.tour, size: 16),
         label: const Text('Tour'),
         style: FilledButton.styleFrom(
-          foregroundColor: tourActive ? AppColors.onWarning : AppColors.warning,
-          backgroundColor: tourActive
-              ? AppColors.warning
-              : AppColors.warning.withValues(alpha: 0.15),
           padding: const EdgeInsets.symmetric(horizontal: 12),
           textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
         ),
@@ -208,17 +204,12 @@ class TrapNavigationButtons extends StatelessWidget {
               description: 'Previous trap',
               shortcut: AppShortcut.previousTrapInLine,
               icon: const Icon(Icons.skip_previous, size: 20),
-              color: AppColors.warning,
               onPressed: canGoPrev
                   ? () => jumpToTrap(controller, traps[currentTrapIdx - 1])
                   : null,
             ),
-            Container(
+            Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: AppColors.warning.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
               child: Text(
                 '$displayIdx/${traps.length}',
                 style: const TextStyle(
@@ -231,7 +222,6 @@ class TrapNavigationButtons extends StatelessWidget {
               description: 'Next trap',
               shortcut: AppShortcut.nextTrapInLine,
               icon: const Icon(Icons.skip_next, size: 20),
-              color: AppColors.warning,
               onPressed: canGoNext
                   ? () => jumpToTrap(controller, traps[currentTrapIdx + 1])
                   : null,

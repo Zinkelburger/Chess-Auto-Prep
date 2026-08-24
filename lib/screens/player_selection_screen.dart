@@ -1,11 +1,19 @@
-/// Player selection screen for analysis.
+/// The player picker for Player Analysis.
 library;
 
 ///
-/// Pushed as a full-screen route from [AnalysisScreen]. Lists every cached
-/// player game-set — downloaded by username or imported from PGN files —
-/// and lets the user select one, re-download, or delete.
-/// Pops with the chosen [AnalysisPlayerInfo].
+/// Pushed as a full-screen route from [AnalysisScreen]. One job: choose whose
+/// games to analyse. It lists every saved game-set — downloaded from an
+/// account, opened from PGN files, or pulled in as a tournament field — and
+/// pops with the chosen [AnalysisPlayerInfo].
+///
+/// Adding a player goes through exactly one control: **Add player** in the
+/// app bar, whose menu names the three sources (see [AddPlayerSource]). On
+/// first run, with nothing to pick, those three are spelled out in the body
+/// instead of hidden behind the menu. The screen used to carry five
+/// overlapping buttons — three stacked FABs over the list plus two more in
+/// the empty state — whose labels ("Download New", "Download Games", "Import
+/// Opponents", "Load from disk") did not distinguish a download from a file.
 
 import 'dart:async';
 
@@ -16,22 +24,33 @@ import '../core/app_state.dart';
 import '../models/analysis_player_info.dart';
 import '../services/analysis_games_service.dart';
 import '../theme/app_colors.dart';
-import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
+import '../widgets/analysis/add_player_sources.dart';
+import '../widgets/analysis/player_downloads.dart';
 import '../widgets/analysis_download_dialog.dart';
 import '../widgets/analysis_import_dialog.dart';
 import '../widgets/common/list_search_field.dart';
 import '../widgets/opponent_list_import_dialog.dart';
 
 class PlayerSelectionScreen extends StatefulWidget {
-  const PlayerSelectionScreen({super.key});
+  const PlayerSelectionScreen({super.key, this.gamesService});
+
+  /// Injectable so a widget test can list players without real disk I/O —
+  /// `testWidgets` runs in a fake-async zone where a `dart:io` read never
+  /// completes, which would leave the screen spinning forever.
+  final AnalysisGamesService? gamesService;
 
   @override
   State<PlayerSelectionScreen> createState() => _PlayerSelectionScreenState();
 }
 
 class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
-  final AnalysisGamesService _gamesService = AnalysisGamesService();
+  late final AnalysisGamesService _gamesService =
+      widget.gamesService ?? AnalysisGamesService();
+  late final PlayerDownloadRunner _downloads = PlayerDownloadRunner(
+    _gamesService,
+  );
+
   List<AnalysisPlayerInfo> _cachedPlayers = [];
   bool _isLoading = true;
   String? _loadError;
@@ -87,119 +106,22 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: const Text('Select Player to Analyze'),
+        title: const Text('Choose a player'),
         actions: [
-          IconButton(
-            tooltip: 'Back',
-            onPressed: () => Navigator.of(context).maybePop(),
-            icon: const Icon(Icons.arrow_back),
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: AddPlayerButton(onSelected: _addPlayerFrom),
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _buildBody(),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          FloatingActionButton.extended(
-            heroTag: 'import_opponents',
-            onPressed: _showOpponentImportDialog,
-            icon: const Icon(Icons.groups),
-            label: const Text('Import Opponents'),
-          ),
-          const SizedBox(height: 12),
-          FloatingActionButton.extended(
-            heroTag: 'import_pgn',
-            onPressed: _showImportDialog,
-            icon: const Icon(Icons.file_open),
-            label: const Text('Load from disk'),
-          ),
-          const SizedBox(height: 12),
-          FloatingActionButton.extended(
-            heroTag: 'download_new',
-            onPressed: _showDownloadDialog,
-            icon: const Icon(Icons.add),
-            label: const Text('Download New'),
-          ),
-        ],
-      ),
+      body: _buildBody(),
     );
   }
 
   Widget _buildBody() {
-    if (_loadError != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.error_outline,
-                size: 64,
-                color: AppColors.danger,
-              ),
-              const SizedBox(height: 16),
-              Text(_loadError!, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: _loadCachedPlayers,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    if (_cachedPlayers.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.person_search,
-              size: 64,
-              color: AppColors.onSurfaceDim,
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'No Players Downloaded',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Download games for a player, or import PGN files,'
-              ' to get started',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: AppColors.onSurfaceMuted),
-            ),
-            const SizedBox(height: 32),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                FilledButton.icon(
-                  onPressed: _showDownloadDialog,
-                  icon: const Icon(Icons.download),
-                  label: const Text('Download Games'),
-                ),
-                const SizedBox(width: 12),
-                OutlinedButton.icon(
-                  onPressed: _showImportDialog,
-                  icon: const Icon(Icons.file_open),
-                  label: const Text('Load from disk'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
-    }
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_loadError != null) return _buildError(_loadError!);
+    if (_cachedPlayers.isEmpty) return _buildFirstRun();
 
     final visible = _visiblePlayers;
     return Column(
@@ -221,150 +143,69 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
                   ),
                 )
               : ListView.builder(
-                  // Room at the bottom for the two floating action buttons,
-                  // which otherwise sit on top of the last card.
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                   itemCount: visible.length,
-                  itemBuilder: (_, index) => _buildPlayerCard(visible[index]),
+                  itemBuilder: (_, i) => _PlayerTile(
+                    player: visible[i],
+                    onSelect: () => Navigator.of(context).pop(visible[i]),
+                    onAction: (action) => _runTileAction(visible[i], action),
+                  ),
                 ),
         ),
       ],
     );
   }
 
-  // ── Player card ──────────────────────────────────────────────────
+  Widget _buildError(String message) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: AppColors.danger),
+            const SizedBox(height: 16),
+            Text(message, textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _loadCachedPlayers,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try again'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-  Widget _buildPlayerCard(AnalysisPlayerInfo player) {
-    final isOpponent = player.accounts.isNotEmpty;
-    final platformIcon = isOpponent
-        ? Icons.person_search
-        : player.isImported
-        ? Icons.file_open
-        : player.platform == 'chesscom'
-        ? Icons.language
-        : Icons.bolt;
-    final platformColor = isOpponent
-        ? AppColors.platformImported
-        : player.isImported
-        ? AppColors.platformImported
-        : player.platform == 'chesscom'
-        ? AppColors.platformChessCom
-        : AppColors.platformLichess;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        onTap: () => _selectPlayer(player),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
+  /// Nothing saved yet. The three ways in are on the screen, not in a menu —
+  /// a first-run user has no reason to open a menu they cannot see the point
+  /// of, and "no players" without a next step is a dead end.
+  Widget _buildFirstRun() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Platform badge
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: platformColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(platformIcon, color: platformColor, size: 32),
+              Text(
+                'No players yet',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.headlineSmall,
               ),
-              const SizedBox(width: 16),
-
-              // Player info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      player.displayName,
-                      style: AppTextStyles.body.copyWith(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    if (player.accounts.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        [
-                          for (final a in player.accounts)
-                            '${a.username} (${_shortPlatform(a.platform)})',
-                          if (player.group != null) player.group!,
-                        ].join(' · '),
-                        style: AppTextStyles.caption,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                    const SizedBox(height: 4),
-                    Text(
-                      '${player.gameCount} games · ${player.platformDisplayName}'
-                      ' · ${player.rangeDescription}',
-                      style: AppTextStyles.body.copyWith(
-                        color: AppColors.onSurfaceMuted,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${player.isImported ? 'Imported' : 'Downloaded'} '
-                      '${player.downloadTimeAgo}',
-                      style: AppTextStyles.caption,
-                    ),
-                  ],
-                ),
+              const SizedBox(height: 8),
+              const Text(
+                'Add someone’s games — your own or an opponent’s — and the '
+                'app maps their openings, mistakes and the traps they walk '
+                'into.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.onSurfaceMuted),
               ),
-
-              // Overflow menu
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert),
-                onSelected: (value) {
-                  switch (value) {
-                    case 'delete':
-                      unawaited(_deletePlayer(player));
-                    case 'redownload':
-                      unawaited(_redownloadPlayer(player));
-                    case 'redownload_custom':
-                      unawaited(_redownloadPlayerCustom(player));
-                  }
-                },
-                itemBuilder: (_) => [
-                  // PGN-file imports have no source to re-download from.
-                  if (player.canRedownload) ...const [
-                    PopupMenuItem(
-                      value: 'redownload',
-                      child: Row(
-                        children: [
-                          Icon(Icons.refresh, size: 20),
-                          SizedBox(width: 12),
-                          Text('Re-download (last 6 months)'),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: 'redownload_custom',
-                      child: Row(
-                        children: [
-                          Icon(Icons.settings, size: 20),
-                          SizedBox(width: 12),
-                          Text('Re-download (custom)'),
-                        ],
-                      ),
-                    ),
-                  ],
-                  const PopupMenuItem(
-                    value: 'delete',
-                    child: Row(
-                      children: [
-                        Icon(Icons.delete, size: 20, color: AppColors.danger),
-                        SizedBox(width: 12),
-                        Text(
-                          'Delete',
-                          style: TextStyle(color: AppColors.danger),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+              const SizedBox(height: 24),
+              AddPlayerSourceList(onSelected: _addPlayerFrom),
             ],
           ),
         ),
@@ -372,77 +213,34 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     );
   }
 
-  // ── Actions ──────────────────────────────────────────────────────
+  // ── Adding a player ──────────────────────────────────────────────
 
-  void _selectPlayer(AnalysisPlayerInfo player) {
-    Navigator.of(context).pop(player);
-  }
-
-  Future<void> _deletePlayer(AnalysisPlayerInfo player) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Games'),
-        content: Text('Delete all games for ${player.displayName}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      await _gamesService.deletePlayerData(player.platform, player.username);
-      await _loadCachedPlayers();
+  void _addPlayerFrom(AddPlayerSource source) {
+    switch (source) {
+      case AddPlayerSource.download:
+        unawaited(_downloadNewPlayer());
+      case AddPlayerSource.pgnFiles:
+        unawaited(_openPgnFiles());
+      case AddPlayerSource.opponentList:
+        unawaited(_addTournamentField());
     }
   }
 
-  /// Re-download using the last 6 months as the default range.
-  Future<void> _redownloadPlayer(AnalysisPlayerInfo player) async {
-    await _downloadGames(
-      player.copyWith(monthsBack: 6, clearMonthsBack: false),
-    );
-  }
-
-  /// Re-download but let the user tweak the settings first.
-  Future<void> _redownloadPlayerCustom(AnalysisPlayerInfo player) async {
-    if (player.accounts.isNotEmpty) {
-      // A multi-account opponent has no single platform/username to edit;
-      // the range is what the user can change, so ask for that alone.
-      final months = await _askMonths(player);
-      if (months == null || !mounted) return;
-      await _downloadGames(player.copyWith(monthsBack: months));
-      return;
-    }
+  Future<void> _downloadNewPlayer() async {
     final appState = context.read<AppState>();
-
-    final result = await showDialog<AnalysisPlayerInfo>(
+    final config = await showDialog<AnalysisPlayerInfo>(
       context: context,
       builder: (_) => AnalysisDownloadDialog(
-        chesscomUsername: player.platform == 'chesscom'
-            ? player.username
-            : appState.chesscomUsername,
-        lichessUsername: player.platform == 'lichess'
-            ? player.username
-            : appState.lichessUsername,
-        initialPlatform: player.platform,
+        chesscomUsername: appState.chesscomUsername,
+        lichessUsername: appState.lichessUsername,
       ),
     );
-
-    if (result != null && mounted) {
-      _rememberFirstUsername(appState, result);
-      await _downloadGames(result);
-    }
+    if (config == null || !mounted) return;
+    _rememberFirstUsername(appState, config);
+    await _download(config);
   }
 
-  Future<void> _showImportDialog() async {
+  Future<void> _openPgnFiles() async {
     final result = await showDialog<AnalysisImportResult>(
       context: context,
       builder: (_) => const AnalysisImportDialog(),
@@ -456,30 +254,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
       result.playerName,
     );
     if (!mounted) return;
-    if (existing != null) {
-      final replace = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Replace Imported Games?'),
-          content: Text(
-            '"${existing.username}" already has ${existing.gameCount} '
-            'imported game${existing.gameCount == 1 ? '' : 's'}. Importing '
-            'will replace them and clear their cached analysis.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Replace'),
-            ),
-          ],
-        ),
-      );
-      if (replace != true || !mounted) return;
-    }
+    if (existing != null && !await _confirmReplace(existing)) return;
 
     try {
       await _gamesService.saveAnalysisGames(
@@ -497,21 +272,39 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     }
   }
 
-  Future<void> _showDownloadDialog() async {
-    final appState = context.read<AppState>();
-
-    final result = await showDialog<AnalysisPlayerInfo>(
+  Future<bool> _confirmReplace(AnalysisPlayerInfo existing) async {
+    final replace = await showDialog<bool>(
       context: context,
-      builder: (_) => AnalysisDownloadDialog(
-        chesscomUsername: appState.chesscomUsername,
-        lichessUsername: appState.lichessUsername,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Replace these games?'),
+        content: Text(
+          '"${existing.username}" already has ${existing.gameCount} '
+          'game${existing.gameCount == 1 ? '' : 's'} here. Opening these '
+          'files replaces them and clears their cached analysis.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Replace'),
+          ),
+        ],
       ),
     );
+    return replace == true && mounted;
+  }
 
-    if (result != null && mounted) {
-      _rememberFirstUsername(appState, result);
-      await _downloadGames(result);
-    }
+  Future<void> _addTournamentField() async {
+    final request = await showDialog<OpponentImportRequest>(
+      context: context,
+      builder: (_) => const OpponentListImportDialog(),
+    );
+    if (request == null || !mounted) return;
+    await _downloads.downloadList(context, request);
+    if (mounted) await _loadCachedPlayers();
   }
 
   /// Seed the app-wide default username, but only when none is saved yet:
@@ -529,234 +322,91 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     }
   }
 
-  // ── Download with live progress ──────────────────────────────────
+  Future<void> _download(AnalysisPlayerInfo config) async {
+    await _downloads.downloadOne(context, config);
+    if (mounted) await _loadCachedPlayers();
+  }
 
-  Future<void> _downloadGames(AnalysisPlayerInfo config) async {
-    final progress = ValueNotifier<String>('Downloading games…');
+  // ── Per-player actions ───────────────────────────────────────────
 
-    // Show a non-dismissible progress dialog.
-    unawaited(
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => PopScope(
-          canPop: false,
-          child: AlertDialog(
-            content: ValueListenableBuilder<String>(
-              valueListenable: progress,
-              builder: (_, message, _) => Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(),
-                  const SizedBox(height: 16),
-                  Text(message, textAlign: TextAlign.center),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    try {
-      final pgns = await _gamesService.downloadGamesFor(
-        config,
-        monthsBack: config.monthsBack,
-        onProgress: (msg) => progress.value = msg,
-      );
-
-      if (pgns.isEmpty) {
-        if (mounted) {
-          Navigator.of(context).pop(); // close progress dialog
-          showAppSnackBar(
-            context,
-            AppMessages.noGamesFound(config.displayName),
-          );
-        }
-        return;
-      }
-
-      progress.value = 'Saving…';
-
-      // Saves games and automatically clears stale cached analysis.
-      await _gamesService.saveAnalysisGames(
-        pgns,
-        platform: config.platform,
-        username: config.username,
-        maxGames: config.maxGames,
-        monthsBack: config.monthsBack,
-        accounts: config.accounts,
-        group: config.group,
-      );
-
-      await _loadCachedPlayers();
-
-      if (mounted) {
-        Navigator.of(context).pop(); // close progress dialog
-      }
-    } catch (e) {
-      debugPrint('Download failed: $e');
-      if (mounted) {
-        Navigator.of(context).pop(); // close progress dialog
-        showAppSnackBar(context, AppMessages.genericError, isError: true);
-      }
-    } finally {
-      progress.dispose();
+  Future<void> _runTileAction(
+    AnalysisPlayerInfo player,
+    _PlayerAction action,
+  ) async {
+    switch (action) {
+      case _PlayerAction.update:
+        // Re-uses the range this game-set was saved with, so "update" cannot
+        // quietly shrink a two-year set to six months.
+        await _download(player);
+      case _PlayerAction.changeRange:
+        await _changeRange(player);
+      case _PlayerAction.delete:
+        await _deletePlayer(player);
     }
   }
 
-  // ── Opponent list import ─────────────────────────────────────────
+  /// Download again with a different range. A multi-account opponent has no
+  /// single platform/username to edit, so it is asked only for the range.
+  Future<void> _changeRange(AnalysisPlayerInfo player) async {
+    if (player.accounts.isNotEmpty) {
+      final months = await _askMonths(player);
+      if (months == null || !mounted) return;
+      await _download(player.copyWith(monthsBack: months));
+      return;
+    }
 
-  Future<void> _showOpponentImportDialog() async {
-    final request = await showDialog<OpponentImportRequest>(
+    final appState = context.read<AppState>();
+    final config = await showDialog<AnalysisPlayerInfo>(
       context: context,
-      builder: (_) => const OpponentListImportDialog(),
-    );
-    if (request == null || !mounted) return;
-    await _importOpponents(request);
-  }
-
-  /// Download every opponent in turn behind one progress dialog. A failure on
-  /// one person is recorded and the loop moves on — a field of twenty must
-  /// not be abandoned because one account was renamed.
-  Future<void> _importOpponents(OpponentImportRequest request) async {
-    final opponents = request.list.downloadable;
-    final progress = ValueNotifier<String>('Starting…');
-    var cancelled = false;
-
-    unawaited(
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => PopScope(
-          canPop: false,
-          child: AlertDialog(
-            title: Text(request.list.event ?? 'Importing opponents'),
-            content: ValueListenableBuilder<String>(
-              valueListenable: progress,
-              builder: (_, message, _) => Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(),
-                  const SizedBox(height: 16),
-                  Text(message, textAlign: TextAlign.center),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  cancelled = true;
-                  progress.value = 'Stopping after the current opponent…';
-                },
-                child: const Text('Stop'),
-              ),
-            ],
-          ),
-        ),
+      builder: (_) => AnalysisDownloadDialog(
+        chesscomUsername: player.platform == 'chesscom'
+            ? player.username
+            : appState.chesscomUsername,
+        lichessUsername: player.platform == 'lichess'
+            ? player.username
+            : appState.lichessUsername,
+        initialPlatform: player.platform,
       ),
     );
-
-    var imported = 0;
-    var skipped = 0;
-    final failed = <String>[];
-
-    try {
-      for (var i = 0; i < opponents.length; i++) {
-        if (cancelled) break;
-        final opponent = opponents[i];
-        final info = opponent.toPlayerInfo(
-          group: request.list.event,
-          maxGames: 100,
-          monthsBack: request.monthsBack,
-        );
-        final label = '${opponent.name} (${i + 1}/${opponents.length})';
-
-        if (!request.redownloadExisting) {
-          final existing = await _gamesService.findExistingPlayer(
-            info.platform,
-            info.username,
-          );
-          if (existing != null) {
-            skipped++;
-            continue;
-          }
-        }
-
-        try {
-          progress.value = '$label\nDownloading…';
-          final pgns = await _gamesService.downloadGamesFor(
-            info,
-            monthsBack: request.monthsBack,
-            onProgress: (m) => progress.value = '$label\n$m',
-          );
-          if (pgns.trim().isEmpty) {
-            failed.add('${opponent.name}: no games found');
-            continue;
-          }
-          await _gamesService.saveAnalysisGames(
-            pgns,
-            platform: info.platform,
-            username: info.username,
-            maxGames: info.maxGames,
-            monthsBack: info.monthsBack,
-            accounts: info.accounts,
-            group: info.group,
-          );
-          imported++;
-        } catch (e) {
-          debugPrint('Opponent import failed for ${opponent.name}: $e');
-          failed.add('${opponent.name}: $e');
-        }
-      }
-    } finally {
-      progress.dispose();
-      if (mounted) Navigator.of(context).pop(); // close progress dialog
-    }
-
-    await _loadCachedPlayers();
-    if (!mounted) return;
-
-    final parts = <String>[
-      'Imported $imported opponent${imported == 1 ? '' : 's'}',
-      if (skipped > 0) '$skipped already saved',
-      if (failed.isNotEmpty) '${failed.length} failed',
-      if (cancelled) 'stopped early',
-    ];
-    showAppSnackBar(context, parts.join(' · '), isError: failed.isNotEmpty);
-    if (failed.isNotEmpty) {
-      unawaited(
-        showDialog<void>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Some opponents could not be imported'),
-            content: SizedBox(
-              width: 420,
-              child: SingleChildScrollView(
-                child: Text(failed.map((f) => '• $f').join('\n')),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+    if (config == null || !mounted) return;
+    await _download(config);
   }
 
-  /// Ask for a month range for a multi-account opponent. Returns null on
-  /// cancel.
+  Future<void> _deletePlayer(AnalysisPlayerInfo player) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Remove ${player.displayName}?'),
+        content: const Text(
+          'Deletes the saved games and their analysis. Nothing on '
+          'Chess.com or Lichess is touched.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _gamesService.deletePlayerData(player.platform, player.username);
+    await _loadCachedPlayers();
+  }
+
+  /// Ask for a month range for a multi-account opponent. Null on cancel.
   Future<int?> _askMonths(AnalysisPlayerInfo player) async {
     final controller = TextEditingController(text: '${player.monthsBack ?? 6}');
     try {
       return await showDialog<int>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text('Re-download ${player.displayName}'),
+          title: Text('Download ${player.displayName} again'),
           content: TextField(
             controller: controller,
             autofocus: true,
@@ -784,6 +434,106 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     } finally {
       controller.dispose();
     }
+  }
+}
+
+/// What the row's overflow menu offers.
+enum _PlayerAction { update, changeRange, delete }
+
+/// One saved game-set, as a plain [ListTile]: who, how many games, where from
+/// and how old — then get out of the way. Tapping the row picks the player,
+/// which is the only reason the screen exists.
+class _PlayerTile extends StatelessWidget {
+  const _PlayerTile({
+    required this.player,
+    required this.onSelect,
+    required this.onAction,
+  });
+
+  final AnalysisPlayerInfo player;
+  final VoidCallback onSelect;
+  final ValueChanged<_PlayerAction> onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final games = player.gameCount;
+    final facts = [
+      '$games game${games == 1 ? '' : 's'}',
+      player.platformDisplayName,
+      player.rangeDescription,
+    ].join(' · ');
+    final origin = [
+      '${player.isImported && player.accounts.isEmpty ? 'Opened' : 'Downloaded'}'
+          ' ${player.downloadTimeAgo}',
+      if (player.group != null && player.group!.isNotEmpty) player.group!,
+      for (final a in player.accounts)
+        '${a.username} (${_shortPlatform(a.platform)})',
+    ].join(' · ');
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        onTap: onSelect,
+        leading: Icon(_icon, color: _color),
+        title: Text(player.displayName),
+        isThreeLine: true,
+        subtitle: Text(
+          '$facts\n$origin',
+          style: const TextStyle(color: AppColors.onSurfaceMuted),
+        ),
+        trailing: PopupMenuButton<_PlayerAction>(
+          tooltip: 'More actions',
+          onSelected: onAction,
+          itemBuilder: (_) => [
+            // PGN-file imports have no source to fetch fresh games from.
+            if (player.canRedownload) ...const [
+              PopupMenuItem(
+                value: _PlayerAction.update,
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.refresh, size: 20),
+                  title: Text('Download the latest games'),
+                ),
+              ),
+              PopupMenuItem(
+                value: _PlayerAction.changeRange,
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.tune, size: 20),
+                  title: Text('Download a different range…'),
+                ),
+              ),
+            ],
+            const PopupMenuItem(
+              value: _PlayerAction.delete,
+              child: ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.delete_outline, size: 20),
+                title: Text('Remove from this list'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  bool get _isOpponent => player.accounts.isNotEmpty;
+
+  IconData get _icon {
+    if (_isOpponent) return Icons.groups_outlined;
+    if (player.isImported) return Icons.description_outlined;
+    return player.platform == 'chesscom' ? Icons.language : Icons.bolt;
+  }
+
+  Color get _color {
+    if (_isOpponent || player.isImported) return AppColors.platformImported;
+    return player.platform == 'chesscom'
+        ? AppColors.platformChessCom
+        : AppColors.platformLichess;
   }
 
   static String _shortPlatform(String platform) => switch (platform) {

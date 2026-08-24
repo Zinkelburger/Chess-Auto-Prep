@@ -613,3 +613,140 @@ arrivals stop and the continuation is emitted nowhere, with no "Transposes to"
 note either (merge requires `!cycle`). Silent coverage loss rather than a
 visible error. *A post-extraction assertion that every `transposesInto` move
 order matches an emitted line would catch this and R3 together.*
+
+---
+
+# Follow-up, 2026-08-23 — the repertoire builder
+
+A focused pass over the repertoire builder (generation pipeline, config, form,
+session controller, screen). Verified after every change: `dart format` clean,
+`flutter analyze lib test` 0 errors / 0 warnings, **2793 tests pass**
+(2730 before, +63 new).
+
+## The bug this pass was for: a 14-field hole in the config contract
+
+The audit counted `TreeBuildConfig`'s **five** in-class sites. It missed that a
+knob does not reach a build through JSON — it reaches it through the form,
+which adds **three more** hand-kept sites: a control in the state base, a line
+in `_applyInitialConfig`, a line in `toConfig`. Nothing guarded those three.
+
+`toConfig` constructed a **fresh** `TreeBuildConfig`, so:
+
+- a field missing from `toConfig` reverted to its constructor default on every
+  build started from the form;
+- a field missing from `_applyInitialConfig` reverted the moment the form was
+  reopened on a saved config, a preset, or `GenerationSessionController
+  .lastConfig` (which `repertoire_generation_tab.dart:285` passes as
+  `initialConfig` — the live path).
+
+**Fourteen fields were in that state.** Six had no mention in
+`lib/widgets/generation/` at all (`maxNodes`, `maiaMinProb`, `masterMinGames`,
+`engineTailDepth`, `improvementMinGainCp`, `rootReplyExclude`); eight more were
+published by `EvalSourcesSection` through getters that had **no matching
+setter**, so the section could report its eval-source settings into every built
+config but could never be told what they were (`enableLocalChessDb`,
+`localChessDbPath`, `enableChessDbApi`, `chessDbApiDailyQuota`,
+`chessDbApiConcurrency`, `enableExtEvalSubtreeSkip`, `minAcceptableEvalDepth`,
+`batchEvalLookups`).
+
+### Fixed by construction, not by listing
+
+`toConfig` now builds on a stored `_seedConfig` with `copyWith`. Every field
+with a control is passed explicitly and wins; every field without one is
+*carried*. That inverts the failure mode: a knob added to `TreeBuildConfig` and
+wired into the build but never given a widget is now preserved rather than
+reset. `EvalSourcesSection.applyConfig` supplies the missing setter half, seeded
+from the same post-frame callback the skeleton card already used (both are
+`Offstage` children whose state does not exist during `initState`).
+
+`rootReplyExclude` is the one field `toConfig` now clears **on purpose**:
+`PlanRunner` sets it per build point and `NodeExpander` reads it only at ply 0,
+so it describes one specific build root. Carrying a plan point's exclusions
+into a hand-started build on a different root would narrow it silently.
+
+### Guarded
+
+`test/widgets/generation/generation_config_form_roundtrip_test.dart` — 13
+tests. The lead test mutates every serialized field, drives it through a real
+mounted form, and requires it back; `_knownLossy` documents each deliberate
+transform with its reason (checkbox-quantised knobs, values owned by
+`EvalDatabaseSettings`, the host-clamped thread count, the derived `best_first`,
+the per-request `root_reply_exclude`, the JSON-blob skeleton plan). Each of
+those transforms also gets its own positive test, so "lossy" never means
+"unchecked".
+
+**Both halves were verified to fail against the old code**, independently:
+reverting the seed-based `copyWith` reports the five carried fields; reverting
+`applyConfig` reports six eval-source fields.
+
+### The blind spot that remains
+
+The generic JSON round-trip test drives the *serialized map*, so a field
+forgotten in `toJson` has no key to mutate and slips through every check — it
+runs the build, never persists, and reverts on the next resume.
+`tree_build_config_roundtrip_test.dart` now pins the exact serialized key set
+so that omission fails loudly. Dart has no reflection, so closing it *by
+construction* means codegen (`json_serializable`) — a real option, but a
+dependency decision rather than a refactor. A field-descriptor table was
+considered and rejected: Dart's named parameters mean it could only drive
+`toJson`, leaving the constructor, `fromJson` and `copyWith` untouched while
+adding a fourth parallel list.
+
+## Breakups landed
+
+- **`AdvancedSettingsDialog`** (`widgets/generation/advanced_settings_dialog
+  .dart`) — 176 lines of dialog chrome out of `_GenerationConfigAdvanced`
+  (940 → 764). It touched zero form state, so it is now a real widget taking
+  `List<AdvancedSection>`, with 11 tests covering what could not be reached
+  before: the 860px TOC breakpoint, that a refresh rebuilds *every* section
+  (a knob in one card enables a field in another), that cards stay mounted so
+  `Scrollable.ensureVisible` can reach an off-screen anchor, and that `show()`
+  completes only on dismissal.
+- **`RepertoireLineIds`** (`services/repertoire_line_ids.dart`) — the seven
+  scattered id functions out of `RepertoireService` (1018 → 987), with 22
+  tests. They had no service state and carried an invariant spanning them: the
+  id the parser assigns and the id a file edit looks a game up by must be the
+  same rule. The collision rule and its two appliers sat 400 lines apart.
+  **Non-obvious rule preserved:** `forNewLine` tries the stable id first (it
+  predicts what a reload will assign) while `resolveCollision` escalates
+  straight to the hash — because a colliding id may be a *header* id, in which
+  case the stable id was never tried and returning it would hand the line a
+  different id than the one already saved against it. These ids key training
+  progress; changing them is a data migration.
+- **17 `progressX` pass-through getters** deleted from
+  `GenerationSessionController` (1474 → ~1430). They forwarded to a field that
+  was already public, so a new progress field was invisible to the jobs panel
+  until someone added an eighteenth. 42 call sites now read `.progress.x`.
+  Note `progressEtaSec` was the one whose name differed from its target
+  (`etaDepthSec`).
+
+## Deliberately not attempted, with reasons
+
+- **`_RepertoirePersistence` → a real collaborator.** The clearest remaining
+  instance of the fake-`part` violation: 20 abstract host accessors re-declared
+  so a mixin can see private state. But its 336 lines make ~70 writes to host
+  state, and the load path has exactly **one** staleness/race test. The right
+  shape is a `RepertoireLoader` returning a `LoadedRepertoire` the controller
+  applies — it needs characterisation tests for the `_loadGeneration` guard and
+  `awaitLoaded()` first, and CLAUDE.md forbids running integration tests
+  locally.
+- **`tree_build_db_explorer` → a real `BuildAlgorithm`.** Still the right call
+  (two entry points, `buildFromPgnFreqMap` vs `build`, dispatched by an `if` on
+  `config.buildMode` in `_buildTreePhase:618`; the `maxNodes` cap is checked in
+  both). Left alone this pass: the audit rates it high risk, and the working
+  tree carries ~100 uncommitted files from other work.
+
+  Worth recording: `SearchAlgorithm` (fast/pure) is **not** what dispatches —
+  it is read once at `node_expander.dart:673`. `BuildMode` is. Two knobs read
+  as "algorithm" and neither is a polymorphic seam.
+
+## Working-tree caveat
+
+This pass ran against a tree with ~100 uncommitted files (a tactics→features
+migration and a new `engine_tournament` feature) and a **concurrent editor**:
+files under `lib/features/tactics/` and `lib/features/games/` changed
+timestamps mid-session, and one analyzer run went red on a half-written
+`eval_series_annotator.dart` before going clean again. Nothing here was
+committed. Changes were kept to files with no in-flight diff; in particular the
+`RepertoireService` *parser* was left alone, because colour inference and
+model-game detection are being actively edited there.

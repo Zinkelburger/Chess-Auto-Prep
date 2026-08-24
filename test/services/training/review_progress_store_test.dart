@@ -16,6 +16,10 @@ import 'package:flutter_test/flutter_test.dart';
 class _FakeRepertoireService extends RepertoireService {
   final headerUpdates = <String>[];
 
+  /// Which file each header write landed in — a batch queued before a source
+  /// switch has to be written back to the file it came from.
+  final headerPaths = <String>[];
+
   @override
   Future<bool> updateLineReviewHeaders(
     String filePath,
@@ -37,6 +41,7 @@ class _FakeRepertoireService extends RepertoireService {
     Map<String, RepertoireReviewEntry> entriesByLineId,
   ) async {
     headerUpdates.addAll(entriesByLineId.keys);
+    headerPaths.add(filePath);
     return true;
   }
 }
@@ -79,18 +84,22 @@ void main() {
   late _FakeRepertoireService repertoire;
   late TrainingSettings settings;
   late ReviewProgressStore store;
+  late String repertoireId;
 
   setUp(() {
     review = _FakeReviewService();
     repertoire = _FakeRepertoireService();
     settings = TrainingSettings();
+    repertoireId = '/rep.pgn';
     store = ReviewProgressStore(
       reviewService: review,
       repertoireService: repertoire,
       settings: () => settings,
-      repertoireId: () => '/rep.pgn',
+      repertoireId: () => repertoireId,
     );
   });
+
+  tearDown(() => store.dispose());
 
   group('recordRating', () {
     test('creates an entry for a line seen for the first time', () async {
@@ -123,9 +132,35 @@ void main() {
       expect(review.history.single.sessionType, 'trainer');
     });
 
-    test('pushes the schedule into the PGN headers', () async {
+    test('pushes the schedule into the PGN headers, batched', () async {
       await store.recordRating(line('A'), ReviewRating.good, hadMistake: false);
+      await store.recordRating(line('B'), ReviewRating.good, hadMistake: false);
+      expect(
+        repertoire.headerUpdates,
+        isEmpty,
+        reason:
+            'rewriting a multi-megabyte course between every line is a '
+            'quarter-second stall the user feels',
+      );
+
+      await store.flushHeaders();
+      expect(repertoire.headerUpdates, ['A', 'B']);
+
+      // Nothing pending means nothing written.
+      repertoire.headerUpdates.clear();
+      await store.flushHeaders();
+      expect(repertoire.headerUpdates, isEmpty);
+    });
+
+    test('a source switch flushes what the old file was owed', () async {
+      await store.recordRating(line('A'), ReviewRating.good, hadMistake: false);
+      final oldPath = repertoireId;
+      repertoireId = '/other.pgn';
+      store.adopt(byLine: {}, moveProgress: {}, otherRepertoires: []);
+      await pumpEventQueue();
+
       expect(repertoire.headerUpdates, ['A']);
+      expect(repertoire.headerPaths, [oldPath]);
     });
 
     test('saves other repertoires alongside this one', () async {

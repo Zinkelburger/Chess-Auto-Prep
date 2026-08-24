@@ -424,9 +424,7 @@ class RepertoireGenerationStatusChip extends StatelessWidget {
       padding: const EdgeInsets.only(right: 8),
       child: Center(
         child: Material(
-          color: isPaused
-              ? AppColors.warningSurface
-              : AppColors.warningSurface.withValues(alpha: 0.85),
+          color: AppColors.surfaceInset,
           borderRadius: BorderRadius.circular(12),
           child: InkWell(
             onTap: onTap,
@@ -440,23 +438,20 @@ class RepertoireGenerationStatusChip extends StatelessWidget {
                     const SizedBox(
                       width: 12,
                       height: 12,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppColors.onWarning,
-                      ),
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   else
                     const Icon(
                       Icons.pause,
                       size: 12,
-                      color: AppColors.onWarning,
+                      color: AppColors.onSurfaceSoft,
                     ),
                   const SizedBox(width: 6),
                   Text(
                     isPaused ? 'Paused' : 'Building...',
                     style: const TextStyle(
                       fontSize: 11,
-                      color: AppColors.onWarning,
+                      color: AppColors.onSurfaceSoft,
                     ),
                   ),
                 ],

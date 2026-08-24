@@ -61,7 +61,12 @@ class TrainingBoardPane extends StatelessWidget {
                   position: session.position,
                   flipped: boardFlipped,
                   enableUserMoves: waitingForUser,
-                  recentMoveSquares: session.recentMoveSquares,
+                  // Two half-moves while training (your move plus the reply);
+                  // the idle browse board gets plain single-move highlighting
+                  // like the rest of the app.
+                  recentMoveSquares: session.recentMoveTrail(
+                    lastN: showMoveInput ? 2 : 1,
+                  ),
                   onMove: onMove,
                 ),
               ),

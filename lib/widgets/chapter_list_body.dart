@@ -196,12 +196,12 @@ class _ChapterListBodyState extends State<ChapterListBody> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.1),
+                  color: AppColors.surfaceInset,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(
                   Icons.menu_book,
-                  color: Colors.orange,
+                  color: AppColors.onSurfaceSoft,
                   size: 32,
                 ),
               ),

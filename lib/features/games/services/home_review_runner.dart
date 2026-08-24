@@ -14,16 +14,18 @@
 /// "Carry on" is free rather than clever: fetching is cached, the book check is
 /// instant, and the engine pass already skips games it has finished — all
 /// except the ones the list still shows without mistake counts, which are
-/// looked at again however long ago they were mined (see [_needsCountsFor]).
+/// looked at again however long ago they were mined (see
+/// [_needsEnginePassFor]).
 library;
 
 import 'package:flutter/foundation.dart';
 
 import '../../../models/engine_settings.dart';
 import '../../../services/games_library/games_library_service.dart'
-    show GamesPlatform;
-import '../../../services/tactics/mining_settings.dart';
-import '../../../services/tactics/tactics_import_coordinator.dart';
+    show GamesLibraryService, GamesPlatform;
+import '../../../utils/log.dart';
+import '../../tactics/services/mining_settings.dart';
+import '../../tactics/services/tactics_import_coordinator.dart';
 import '../../../utils/safe_change_notifier.dart';
 import '../controllers/recent_games_controller.dart';
 import 'games_window.dart';
@@ -96,6 +98,12 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
   /// carried out as soon as it lets go.
   bool _resumeQueued = false;
 
+  /// `[%eval]`-annotated movetexts reported by the engine pass since the last
+  /// flush, keyed by games-library identity. Held rather than written one by
+  /// one because the write patches a whole cache file — see
+  /// [_flushAnnotations].
+  final Map<String, String> _annotations = {};
+
   HomeReviewStage get stage => _stage;
 
   /// Extra context for the current stage (an error message, or which site is
@@ -156,13 +164,30 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
   }
 
   Future<void> _drive() async {
+    final resuming = _stage == HomeReviewStage.paused;
     _paused = false;
+    // The engine pass scores every position it looks at; collect the series so
+    // [_review] can put them in the games cache, where the viewer's graph
+    // reads them instead of searching the same game again.
+    _import.onGameAnnotated = (dedupKey, movetext) =>
+        _annotations[dedupKey] = movetext;
     try {
       _to(HomeReviewStage.fetching);
-      // Not a forced re-download: the games cache has a TTL, and pressing play
-      // twenty seconds apart should not ask Lichess for the same games twice.
-      // The strip's refresh button is the deliberate "go and look again".
-      await _games.refresh();
+      // Whether this run needs to go and look depends on what it is for.
+      //
+      // A run with games still to analyse is carrying on with work already in
+      // hand; the download cache (12 hours) is exactly right there, and
+      // pressing play twice twenty seconds apart should not ask Lichess for
+      // the same games twice.
+      //
+      // A run with *nothing* left to analyse is the other question entirely —
+      // it is the user asking whether anything new has been played, which is
+      // what the button says when it reads "Check for new games". Served from
+      // the cache it cannot answer: the run reviews the games it already
+      // reviewed and reports that you are all caught up, an hour after you
+      // played three more. So that run fetches.
+      final lookingForNewGames = !resuming && _unanalysedCount() == 0;
+      await _games.refresh(force: lookingForNewGames);
       if (_stopHere()) return;
 
       // Cheap (no engine) and it changes whenever a book is edited, so it runs
@@ -182,6 +207,9 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
       } else {
         _to(HomeReviewStage.failed, detail: '$e');
       }
+    } finally {
+      _import.onGameAnnotated = null;
+      _annotations.clear();
     }
   }
 
@@ -204,6 +232,11 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
     _to(HomeReviewStage.idle);
   }
 
+  /// Games on the list that the engine has not reported counts for — the
+  /// same tally the strip puts in its headline and on the play button.
+  int _unanalysedCount() =>
+      _games.games.where((g) => g.meWhite != null && g.summary == null).length;
+
   bool _stopHere() {
     if (!_paused) return false;
     _to(HomeReviewStage.paused);
@@ -225,19 +258,25 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
         .join('\n\n');
   }
 
-  /// The games this site is showing with no mistake counts — exactly the ones
-  /// the play button counts and promises to analyse.
+  /// The games this site owes the engine something for, handed to the pass as
+  /// "look at these whatever you think you know".
   ///
-  /// They are handed to the engine pass as "look at these whatever you think
-  /// you know": a game mined by an older build is marked analyzed but was never
-  /// asked for its counts, so the pass's own skip-what's-analyzed filter would
-  /// walk straight past it and the count on the button would never move. This
-  /// is what makes "Resume engine analysis (12)" analyse twelve games.
-  Set<String> _needsCountsFor(TacticsImportSource source) {
+  /// Two debts, and a game marked analyzed can carry either. No mistake counts:
+  /// a game mined by an older build was never asked for them, so the pass's own
+  /// skip-what's-analyzed filter would walk straight past it and the count on
+  /// the button would never move — this is what makes "Resume engine analysis
+  /// (12)" analyse twelve games. No stored `[%eval]` series: the pass used to
+  /// compute every score in the game and keep only the counts, so those games
+  /// open on a blank graph until one pass writes the scores down. Re-mining
+  /// them is what fills the graph in, and it happens once — the run stores the
+  /// series, and [RecentGame.hasStoredEvals] is true on the next load.
+  Set<String> _needsEnginePassFor(TacticsImportSource source) {
     final platform = _platformOf(source);
     return {
       for (final g in _games.games)
-        if (g.platform == platform && g.meWhite != null && g.summary == null)
+        if (g.platform == platform &&
+            g.meWhite != null &&
+            (g.summary == null || !g.hasStoredEvals))
           g.record.dedupKey,
     };
   }
@@ -268,7 +307,7 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
       final completed = await _import.import(
         source: source,
         pgnContent: fetched.isEmpty ? null : fetched,
-        forceDedupKeys: _needsCountsFor(source),
+        forceDedupKeys: _needsEnginePassFor(source),
         params: TacticsImportParams(
           username: username,
           mode: window.isGameCount
@@ -280,6 +319,10 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
           cores: _engine.workers,
         ),
       );
+      // Written whether or not the pass finished: every game it did get to
+      // has its scores, and a stopped run must not throw them away any more
+      // than it throws away the counts.
+      await _flushAnnotations(_platformOf(source));
       // The pass can also be stopped from the puzzle panel's own status banner,
       // or refused because something else holds the coordinator. Either way it
       // did not finish, so this run is paused — carrying on to the next account
@@ -289,5 +332,51 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
         return;
       }
     }
+  }
+
+  /// Write the `[%eval]` series the pass produced into one site's games cache,
+  /// so opening any of those games shows its graph without an engine pass.
+  ///
+  /// One batched patch per site rather than one per game: the write rewrites
+  /// the whole cache file, so a per-game write would rewrite it once for every
+  /// game in the window. Best-effort — the scores are a bonus on top of the
+  /// counts, and a cache that cannot be written is not a reason to fail a
+  /// review that otherwise worked.
+  Future<void> _flushAnnotations(GamesPlatform platform) async {
+    if (_annotations.isEmpty) return;
+    // Only this site's games. The other site's are a different cache file and
+    // are patched on their own turn, so taking the whole map here would drop
+    // them on the floor.
+    final mine = {
+      for (final g in _games.games)
+        if (g.platform == platform &&
+            _annotations.containsKey(g.record.dedupKey))
+          g.record.dedupKey: _annotations[g.record.dedupKey]!,
+    };
+    for (final key in mine.keys) {
+      _annotations.remove(key);
+    }
+    if (mine.isEmpty) return;
+    // Non-null whenever [mine] is: the rows it was built from are the ones
+    // that name the file.
+    final cachePath = _cachePathFor(platform);
+    if (cachePath == null) return;
+    try {
+      await GamesLibraryService.patchGameMovetexts(
+        cachePath: cachePath,
+        movetextByDedupKey: mine,
+      );
+    } catch (e) {
+      log.w('Could not store analysis in the games cache: $e');
+    }
+  }
+
+  /// Where this site's games are cached, taken from the loaded rows — they
+  /// were read from that file. Null when the list has none from there.
+  String? _cachePathFor(GamesPlatform platform) {
+    for (final g in _games.games) {
+      if (g.platform == platform) return g.cachePath;
+    }
+    return null;
   }
 }

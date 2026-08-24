@@ -50,23 +50,23 @@ void main() {
       );
       await pumpNavigation();
 
-      expect(find.text('Select Player to Analyze'), findsNothing);
+      expect(find.text('Choose a player'), findsNothing);
 
       appState.setMode(AppMode.positionAnalysis);
       await pumpNavigation();
-      expect(find.text('Select Player to Analyze'), findsOneWidget);
+      expect(find.text('Choose a player'), findsOneWidget);
 
       await tester.tap(find.byTooltip('Back'));
       await pumpNavigation();
-      expect(find.text('No Player Selected'), findsOneWidget);
+      expect(find.text('No player selected'), findsOneWidget);
 
       appState.setMode(AppMode.tactics);
       await pumpNavigation();
       appState.setMode(AppMode.positionAnalysis);
       await pumpNavigation();
 
-      expect(find.text('Select Player to Analyze'), findsNothing);
-      expect(find.text('No Player Selected'), findsOneWidget);
+      expect(find.text('Choose a player'), findsNothing);
+      expect(find.text('No player selected'), findsOneWidget);
     },
   );
 }

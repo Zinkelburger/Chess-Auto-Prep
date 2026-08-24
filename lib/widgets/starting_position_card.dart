@@ -52,9 +52,9 @@ class StartingPositionCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: primary.withValues(alpha: 0.12),
+        color: AppColors.surfaceInset,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: primary, width: 1.5),
+        border: Border.all(color: AppColors.outline),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

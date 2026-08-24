@@ -69,6 +69,48 @@ void main() {
     });
   });
 
+  test('a batch patches every named game in one write', () async {
+    // The review runner finishes games one at a time but writes once: a patch
+    // per game would rewrite the whole cache file once per game.
+    final patched = await GamesLibraryService.patchGameMovetexts(
+      cachePath: cache.path,
+      movetextByDedupKey: {
+        'https://lichess.org/abc123': '1. e4 { [%eval 0.3,18] } e5 2. Nf3 1-0',
+        'https://lichess.org/def456': '1. d4 { [%eval 0.2,18] } d5 0-1',
+        // Named but not in this file — skipped, not an error.
+        'https://lichess.org/ghi789': '1. c4 1/2-1/2',
+      },
+    );
+    expect(patched, 2);
+
+    final games = splitPgnIntoGames(await cache.readAsString());
+    expect(games, hasLength(2));
+    expect(games[0], contains('[%eval 0.3,18]'));
+    expect(games[0], contains('[Site "https://lichess.org/abc123"]'));
+    expect(games[1], contains('[%eval 0.2,18]'));
+    expect(games[1], contains('[Site "https://lichess.org/def456"]'));
+  });
+
+  test('a batch that matches nothing leaves the file alone', () async {
+    final before = await cache.readAsString();
+    expect(
+      await GamesLibraryService.patchGameMovetexts(
+        cachePath: cache.path,
+        movetextByDedupKey: {'https://lichess.org/nope': '1. e4'},
+      ),
+      0,
+    );
+    expect(await cache.readAsString(), before);
+    expect(
+      await GamesLibraryService.patchGameMovetexts(
+        cachePath: cache.path,
+        movetextByDedupKey: const {},
+      ),
+      0,
+    );
+    expect(await cache.readAsString(), before);
+  });
+
   test('returns false for an unknown game or missing file', () async {
     expect(
       await GamesLibraryService.patchGameMovetext(

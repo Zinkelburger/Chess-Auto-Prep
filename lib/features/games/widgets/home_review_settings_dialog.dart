@@ -4,19 +4,24 @@ import 'package:flutter/material.dart';
 
 import '../../../models/engine_settings.dart';
 import '../../../services/games_library/game_filter.dart';
-import '../../../services/tactics/mining_settings.dart';
+import '../../tactics/services/mining_settings.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/system_info.dart';
 import '../../../widgets/labeled_toggle.dart';
 import '../controllers/recent_games_controller.dart';
+import '../services/games_window.dart';
+import 'games_window_picker.dart';
 
 /// What the user chose, handed back to the pane so one Apply produces one
 /// reload.
 class HomeReviewSettingsResult {
-  const HomeReviewSettingsResult({required this.filters});
+  const HomeReviewSettingsResult({required this.filters, required this.window});
 
   final GamesListFilters filters;
+
+  /// The shared games window as the dialog left it (see [GamesWindow]).
+  final GamesWindow window;
 }
 
 /// The dialog behind the review strip's gear — the only one there is. Which
@@ -38,19 +43,30 @@ class HomeReviewSettingsResult {
 /// depth is [MiningSettings.depth]. Turning either down here turns it down
 /// everywhere.
 ///
-/// Deliberately absent, each because it is already on screen:
+/// **How many games count** lives here too, as the first section: which games
+/// the analysis downloads is one question, and it was odd to answer half of it
+/// here (time controls) and half on a card in the other pane (last 20 games).
+/// The strip still *states* the window beside its button, the way it states
+/// cores and depth, so nothing has to be opened to read it.
 ///
-/// * **Usernames and how many games count as recent** — the accounts card in
-///   the right-hand pane, always visible. This dialog used to carry a second
-///   copy of both, which is how a screen ends up feeling like nothing but
-///   menus: four sections here, two of them duplicates of what you can see
-///   without opening anything.
+/// Deliberately absent, each because it has an owner elsewhere:
+///
+/// * **Usernames** — a once-per-install job, on the accounts card's button in
+///   the right-hand pane and in Settings, both onto the same dialog.
 /// * **How long mined puzzles stay trainable** — that is puzzle expiry, and it
 ///   lives on the Tactics card's Filters dialog next to the queue it governs.
 class HomeReviewSettingsDialog extends StatefulWidget {
-  const HomeReviewSettingsDialog({super.key, required this.filters});
+  const HomeReviewSettingsDialog({
+    super.key,
+    required this.filters,
+    required this.window,
+  });
 
   final GamesListFilters filters;
+
+  /// The shared window as it stands; edited as a draft here so Cancel leaves
+  /// it alone.
+  final GamesWindow window;
 
   @override
   State<HomeReviewSettingsDialog> createState() =>
@@ -59,6 +75,7 @@ class HomeReviewSettingsDialog extends StatefulWidget {
 
 class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
   late Set<GameSpeed> _speeds;
+  late GamesWindow _window;
   late final TextEditingController _cores;
   late final TextEditingController _depth;
   final int _maxCores = getLogicalCores();
@@ -76,6 +93,7 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
   void initState() {
     super.initState();
     _speeds = {...widget.filters.speeds};
+    _window = widget.window;
     _cores = TextEditingController(text: '${EngineSettings.instance.workers}');
     _depth = TextEditingController(text: '${MiningSettings.instance.depth}');
   }
@@ -107,6 +125,7 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
     Navigator.of(context).pop(
       HomeReviewSettingsResult(
         filters: widget.filters.copyWith(speeds: _speeds),
+        window: _window,
       ),
     );
   }
@@ -122,6 +141,11 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              _label('How many games to download'),
+              GamesWindowPicker(
+                window: _window,
+                onChanged: (w) => setState(() => _window = w),
+              ),
               _label('Time controls to download'),
               for (final entry in _speedLabels.entries)
                 AppCheckbox(

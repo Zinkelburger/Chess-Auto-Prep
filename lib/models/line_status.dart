@@ -63,6 +63,12 @@ class LineCounts {
   );
 }
 
+/// How many of [lines] sit in each status.
+///
+/// Model games are skipped: they are somebody else's game included as
+/// illustration, the trainer refuses to queue them, and counting them made
+/// "Learn — 930 untrained" promise twelve lines the run would then decline to
+/// show.
 LineCounts countLines(
   Iterable<RepertoireLine> lines,
   Map<String, RepertoireReviewEntry> reviewMap,
@@ -71,6 +77,7 @@ LineCounts countLines(
   int due = 0;
   int learned = 0;
   for (final line in lines) {
+    if (line.isModelGame) continue;
     switch (lineStatusOf(reviewMap[line.id])) {
       case LineStatus.untrained:
         untrained++;

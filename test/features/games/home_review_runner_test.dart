@@ -9,13 +9,16 @@ import 'package:chess_auto_prep/features/games/services/home_review_runner.dart'
 import 'package:chess_auto_prep/features/games/services/games_window.dart';
 import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:chess_auto_prep/services/games_library/games_library_service.dart';
-import 'package:chess_auto_prep/services/tactics/mining_settings.dart';
-import 'package:chess_auto_prep/services/tactics/tactics_import_coordinator.dart';
+import 'package:chess_auto_prep/features/tactics/services/mining_settings.dart';
+import 'package:chess_auto_prep/features/tactics/services/tactics_import_coordinator.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _EmptyLibrary extends GamesLibraryService {
   int fetches = 0;
+
+  /// Whether each load was told to bypass the 12-hour download cache.
+  final forcedFetches = <bool>[];
 
   @override
   Future<List<GameRecord>> getGames({
@@ -25,8 +28,10 @@ class _EmptyLibrary extends GamesLibraryService {
     List<GameSelection> unionWith = const [],
     bool forceRefresh = false,
     void Function(String message)? onProgress,
+    void Function(DateTime fetchedAt)? onFetched,
   }) async {
     fetches++;
+    forcedFetches.add(forceRefresh);
     return const [];
   }
 
@@ -50,6 +55,9 @@ const _pgn =
 
 /// One downloaded game, so the review has something already in hand.
 class _OneGameLibrary extends GamesLibraryService {
+  /// Whether each load was told to bypass the 12-hour download cache.
+  final forcedFetches = <bool>[];
+
   @override
   Future<List<GameRecord>> getGames({
     required GamesPlatform platform,
@@ -58,7 +66,11 @@ class _OneGameLibrary extends GamesLibraryService {
     List<GameSelection> unionWith = const [],
     bool forceRefresh = false,
     void Function(String message)? onProgress,
-  }) async => [GameRecord.parse(_pgn)];
+    void Function(DateTime fetchedAt)? onFetched,
+  }) async {
+    forcedFetches.add(forceRefresh);
+    return [GameRecord.parse(_pgn)];
+  }
 
   @override
   Future<String> cacheFilePath(GamesPlatform platform, String username) async =>
@@ -451,6 +463,84 @@ void main() {
 
     expect(coordinator.imports, 1, reason: 'the queued resume was called off');
     expect(runner.stage, HomeReviewStage.paused);
+  });
+
+  test(
+    'with nothing left to analyse the run goes and looks for new games',
+    () async {
+      // The button reads "Check for new games" in this state. Served from the
+      // download cache it could not check: the pass would re-read the games it
+      // already reviewed and report that you are all caught up, however many
+      // you played since.
+      SharedPreferences.setMockInitialValues({});
+      final h = build();
+      addTearDown(h.games.dispose);
+      addTearDown(h.runner.dispose);
+
+      await h.runner.start();
+
+      expect(h.library.forcedFetches, [true]);
+    },
+  );
+
+  test('a run with games still to analyse reuses the download cache', () async {
+    SharedPreferences.setMockInitialValues({});
+    final library = _OneGameLibrary();
+    final games = RecentGamesController(
+      lichessUsername: () => 'me',
+      chesscomUsername: () => null,
+      library: library,
+      windowSettings: GamesWindowSettings.forTest(),
+    );
+    final runner = HomeReviewRunner(
+      games: games,
+      importCoordinator: _RecordingCoordinator(),
+      lichessUsername: () => 'me',
+      chesscomUsername: () => null,
+      windowSettings: GamesWindowSettings.forTest(),
+      miningSettings: MiningSettings.forTest(),
+    );
+    addTearDown(games.dispose);
+    addTearDown(runner.dispose);
+
+    // The list already loaded the unanalysed game, so this run is work in
+    // hand — there is nothing to gain from asking the site again.
+    await games.refresh();
+    library.forcedFetches.clear();
+    await runner.start();
+
+    expect(library.forcedFetches, [false]);
+  });
+
+  test('a resumed run carries on rather than re-downloading', () async {
+    SharedPreferences.setMockInitialValues({});
+    final h = build();
+    addTearDown(h.games.dispose);
+    addTearDown(h.runner.dispose);
+
+    final run = h.runner.start();
+    h.runner.pause();
+    await run;
+    expect(h.runner.stage, HomeReviewStage.paused);
+
+    await h.runner.start();
+
+    expect(h.library.forcedFetches, [true, false]);
+  });
+
+  test('a forced load behind a cached one is not answered by it', () async {
+    // Pressing "Check for new games" while the screen's opening load is still
+    // running used to hand back that load — and quietly not check.
+    SharedPreferences.setMockInitialValues({});
+    final h = build();
+    addTearDown(h.games.dispose);
+    addTearDown(h.runner.dispose);
+
+    final opening = h.games.refresh();
+    final forced = h.games.refresh(force: true);
+    await Future.wait([opening, forced]);
+
+    expect(h.library.forcedFetches, [false, true]);
   });
 
   test('a second start() while one is going is ignored, not queued', () async {

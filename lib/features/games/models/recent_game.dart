@@ -54,6 +54,16 @@ class RecentGame {
   /// list load and again when the background auto-analysis finishes the game.
   GameReviewSummary? summary;
 
+  /// Whether the cached PGN carries a usable `[%eval]` series — which is to
+  /// say, whether opening this game draws its graph without running Stockfish.
+  ///
+  /// Not the same question as [summary] having a value: the review stores its
+  /// mistake counts separately (see `GameReviewStore`), so a game mined by a
+  /// build that reported counts but threw its scores away has counts and no
+  /// graph. That is exactly the game the engine pass must be told to look at
+  /// again — see `_needsEnginePassFor` in the home review runner.
+  bool hasStoredEvals = false;
+
   String get white => record.white;
   String get black => record.black;
   String? get whiteElo => record.headers['WhiteElo'];

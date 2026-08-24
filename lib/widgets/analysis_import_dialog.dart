@@ -208,7 +208,7 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return AlertDialog(
-      title: const Text('Load games from disk'),
+      title: const Text('Open PGN files'),
       content: SizedBox(
         width: 450,
         child: SingleChildScrollView(
@@ -217,9 +217,9 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Analyze games from PGN files instead of downloading them — '
-                'including repertoire files.',
-                style: TextStyle(fontSize: 14),
+                'Games you already have on this computer become a player '
+                'here, the same as a download. Repertoire exports work too.',
+                style: TextStyle(fontSize: 13),
               ),
               const SizedBox(height: 16),
               OutlinedButton.icon(
@@ -227,8 +227,8 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
                 icon: const Icon(Icons.file_open, size: 18),
                 label: Text(
                   _fileNames.isEmpty
-                      ? 'Choose PGN Files'
-                      : 'Choose Different Files',
+                      ? 'Choose PGN files…'
+                      : 'Choose different files…',
                 ),
               ),
               if (_fileNames.isNotEmpty) ...[
@@ -255,15 +255,12 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
               TextField(
                 controller: _nameController,
                 decoration: InputDecoration(
-                  labelText: 'Player name(s)',
+                  labelText: 'Whose games are these?',
                   helperText:
-                      'Matched against the White/Black headers to tell '
-                      'the player\'s colour per game. Separate several '
-                      'names or abbreviations with ";" (e.g. "Carlsen; '
-                      'DrNykterstein"). Games where no name matches either '
-                      'side count for both colours, so repertoire files '
-                      'work with any name.',
-                  helperMaxLines: 5,
+                      'Matched against the White/Black headers to work out '
+                      'which side they played. Separate spellings with ";" '
+                      '(e.g. "Carlsen; DrNykterstein").',
+                  helperMaxLines: 3,
                   border: const OutlineInputBorder(),
                   errorText: _nameError,
                 ),
@@ -288,7 +285,7 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        FilledButton(onPressed: _confirm, child: const Text('Import')),
+        FilledButton(onPressed: _confirm, child: const Text('Add player')),
       ],
     );
   }

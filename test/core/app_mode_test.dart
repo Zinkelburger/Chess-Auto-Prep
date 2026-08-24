@@ -9,5 +9,14 @@ void main() {
     expect(AppMode.pgnViewer.usesInteractiveEngine, isTrue);
     expect(AppMode.study.usesInteractiveEngine, isTrue);
     expect(AppMode.repertoireTrainer.usesInteractiveEngine, isFalse);
+    // The tournament runs its own engines; the analysis pool would only
+    // compete with them for cores.
+    expect(AppMode.engineTournament.usesInteractiveEngine, isFalse);
+  });
+
+  test('every mode has a label of its own', () {
+    final labels = AppMode.values.map((m) => m.label).toList();
+    expect(labels.toSet().length, labels.length);
+    expect(AppMode.engineTournament.label, 'Engine Tournament');
   });
 }

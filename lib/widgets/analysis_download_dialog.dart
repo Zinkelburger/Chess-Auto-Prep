@@ -1,3 +1,16 @@
+/// "Download a player's games" — the one form that turns a username into a
+/// saved game-set.
+library;
+
+///
+/// Three questions, in the order you would ask them out loud: which site,
+/// whose account, how much. Each answer is one control. It used to ask the
+/// same three things with a pair of radio tiles carrying identical
+/// subtitles, and a range picked by a slider *and* a number box *and* a
+/// running caption *and* a help line — four widgets for one integer.
+///
+/// Pops with an [AnalysisPlayerInfo], or `null` if the user cancels.
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -6,18 +19,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/analysis_player_info.dart';
 import '../theme/app_colors.dart';
-import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 
-/// How the download range is specified.
+/// How the amount to download is specified.
 enum _DownloadMode { months, games }
 
-/// Dialog for downloading games for analysis.
-///
-/// Lets the user choose between fetching the last N months of games or the
-/// last N games by count. Defaults to **6 months**.
-///
-/// Pops with an [AnalysisPlayerInfo], or `null` if the user cancels.
 class AnalysisDownloadDialog extends StatefulWidget {
   final String? chesscomUsername;
   final String? lichessUsername;
@@ -40,25 +46,25 @@ class AnalysisDownloadDialog extends StatefulWidget {
 }
 
 class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
-  String _selectedPlatform = 'chesscom';
+  String _platform = 'chesscom';
   late final TextEditingController _usernameController;
 
-  // ── Range controls ──
   _DownloadMode _mode = _DownloadMode.months;
-
-  int _months = 6;
-  late final TextEditingController _monthsController;
-
-  int _maxGames = 100;
-  late final TextEditingController _maxGamesController;
-
-  /// Slider range for the game count. 500 covers the drag range; a larger
-  /// typed count extends it rather than being rejected, so the number the
-  /// user typed is always the number that gets downloaded.
-  int get _sliderMax => _maxGames > 500 ? _maxGames : 500;
+  late final TextEditingController _amountController;
 
   String? _usernameError;
-  String? _rangeError;
+  String? _amountError;
+
+  static const _keyMode = 'analysis_download.mode';
+  static const _keyMonths = 'analysis_download.months';
+  static const _keyMaxGames = 'analysis_download.max_games';
+
+  /// Remembered separately per mode, so flipping the toggle back and forth
+  /// does not overwrite "24 months" with "100 games".
+  int _months = 6;
+  int _maxGames = 100;
+
+  int get _amount => _mode == _DownloadMode.months ? _months : _maxGames;
 
   @override
   void initState() {
@@ -68,30 +74,30 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
     // already has a username.
     if (widget.initialPlatform == 'chesscom' ||
         widget.initialPlatform == 'lichess') {
-      _selectedPlatform = widget.initialPlatform!;
-    } else if (widget.chesscomUsername != null &&
-        widget.chesscomUsername!.isNotEmpty) {
-      _selectedPlatform = 'chesscom';
-    } else if (widget.lichessUsername != null &&
-        widget.lichessUsername!.isNotEmpty) {
-      _selectedPlatform = 'lichess';
+      _platform = widget.initialPlatform!;
+    } else if (widget.chesscomUsername?.isNotEmpty == true) {
+      _platform = 'chesscom';
+    } else if (widget.lichessUsername?.isNotEmpty == true) {
+      _platform = 'lichess';
     }
 
-    final initialUsername = _selectedPlatform == 'chesscom'
-        ? (widget.chesscomUsername ?? widget.lichessUsername ?? '')
-        : (widget.lichessUsername ?? widget.chesscomUsername ?? '');
-    _usernameController = TextEditingController(text: initialUsername);
-    _monthsController = TextEditingController(text: _months.toString());
-    _maxGamesController = TextEditingController(text: _maxGames.toString());
-
+    _usernameController = TextEditingController(text: _usernameFor(_platform));
+    _amountController = TextEditingController(text: '$_amount');
     unawaited(_loadPrefs());
   }
 
-  static const _keyMode = 'analysis_download.mode';
-  static const _keyMonths = 'analysis_download.months';
-  static const _keyMaxGames = 'analysis_download.max_games';
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _amountController.dispose();
+    super.dispose();
+  }
 
-  /// Restore the user's last-used download range.
+  String _usernameFor(String platform) => platform == 'chesscom'
+      ? (widget.chesscomUsername ?? widget.lichessUsername ?? '')
+      : (widget.lichessUsername ?? widget.chesscomUsername ?? '');
+
+  /// Restore the user's last-used range.
   Future<void> _loadPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
@@ -99,18 +105,14 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
       _mode = prefs.getString(_keyMode) == 'games'
           ? _DownloadMode.games
           : _DownloadMode.months;
-      final months = prefs.getInt(_keyMonths);
-      if (months != null && months >= 1) {
-        _months = months;
-        _monthsController.text = '$months';
-      }
-      final maxGames = prefs.getInt(_keyMaxGames);
-      if (maxGames != null && maxGames >= 1) {
-        _maxGames = maxGames;
-        _maxGamesController.text = '$maxGames';
-      }
+      _months = _atLeastOne(prefs.getInt(_keyMonths)) ?? _months;
+      _maxGames = _atLeastOne(prefs.getInt(_keyMaxGames)) ?? _maxGames;
+      _amountController.text = '$_amount';
     });
   }
+
+  static int? _atLeastOne(int? value) =>
+      (value != null && value >= 1) ? value : null;
 
   Future<void> _savePrefs() async {
     final prefs = await SharedPreferences.getInstance();
@@ -122,59 +124,62 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
     await prefs.setInt(_keyMaxGames, _maxGames);
   }
 
-  @override
-  void dispose() {
-    _usernameController.dispose();
-    _monthsController.dispose();
-    _maxGamesController.dispose();
-    super.dispose();
-  }
-
   // ── Callbacks ────────────────────────────────────────────────────
 
-  void _onPlatformChanged(String? platform) {
-    if (platform == null) return;
+  void _onPlatformChanged(String platform) {
     setState(() {
-      _selectedPlatform = platform;
-      if (platform == 'chesscom' && widget.chesscomUsername != null) {
-        _usernameController.text = widget.chesscomUsername!;
-      } else if (platform == 'lichess' && widget.lichessUsername != null) {
-        _usernameController.text = widget.lichessUsername!;
+      _platform = platform;
+      // Only offer the saved name for the newly picked site; leave anything
+      // the user typed themselves alone.
+      final saved = platform == 'chesscom'
+          ? widget.chesscomUsername
+          : widget.lichessUsername;
+      if (saved != null && saved.isNotEmpty) {
+        _usernameController.text = saved;
+        _usernameError = null;
+      }
+    });
+  }
+
+  void _onModeChanged(_DownloadMode mode) {
+    setState(() {
+      _mode = mode;
+      _amountController.text = '$_amount';
+      _amountError = null;
+    });
+  }
+
+  void _onAmountChanged(String value) {
+    final parsed = int.tryParse(value.trim());
+    setState(() {
+      _amountError = null;
+      if (parsed == null || parsed < 1) return;
+      if (_mode == _DownloadMode.months) {
+        _months = parsed;
+      } else {
+        _maxGames = parsed;
       }
     });
   }
 
   void _onDownload() {
     final username = _usernameController.text.trim();
-    bool hasError = false;
+    final amount = int.tryParse(_amountController.text.trim());
 
-    if (username.isEmpty) {
-      _usernameError = AppMessages.enterUsername;
-      hasError = true;
-    } else {
-      _usernameError = null;
-    }
-
-    if (_mode == _DownloadMode.games && _maxGames < 1) {
-      _rangeError = AppMessages.invalidGameCount;
-      hasError = true;
-    } else if (_mode == _DownloadMode.months && _months < 1) {
-      _rangeError = AppMessages.invalidMonths;
-      hasError = true;
-    } else {
-      _rangeError = null;
-    }
-
-    if (hasError) {
-      setState(() {});
-      return;
-    }
+    setState(() {
+      _usernameError = username.isEmpty ? AppMessages.enterUsername : null;
+      _amountError = (amount == null || amount < 1)
+          ? (_mode == _DownloadMode.months
+                ? AppMessages.invalidMonths
+                : AppMessages.invalidGameCount)
+          : null;
+    });
+    if (_usernameError != null || _amountError != null) return;
 
     unawaited(_savePrefs());
-
     Navigator.of(context).pop(
       AnalysisPlayerInfo(
-        platform: _selectedPlatform,
+        platform: _platform,
         username: username,
         maxGames: _mode == _DownloadMode.games ? _maxGames : 100,
         monthsBack: _mode == _DownloadMode.months ? _months : null,
@@ -187,51 +192,35 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Download Games for Analysis'),
+      title: const Text('Download a player’s games'),
       content: SizedBox(
-        width: 450,
+        width: 420,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Select platform, enter username, and choose a download range:',
-                style: TextStyle(fontSize: 14),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'chesscom', label: Text('Chess.com')),
+                  ButtonSegment(value: 'lichess', label: Text('Lichess')),
+                ],
+                selected: {_platform},
+                onSelectionChanged: (s) => _onPlatformChanged(s.first),
               ),
-              const SizedBox(height: 16),
-
-              // ── Platform ──
-              RadioGroup<String>(
-                groupValue: _selectedPlatform,
-                onChanged: (value) => _onPlatformChanged(value),
-                child: const Column(
-                  children: [
-                    RadioListTile<String>(
-                      title: Text('Chess.com'),
-                      subtitle: Text('Download games (no bullet)'),
-                      value: 'chesscom',
-                    ),
-                    RadioListTile<String>(
-                      title: Text('Lichess'),
-                      subtitle: Text('Download games (no bullet)'),
-                      value: 'lichess',
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // ── Username ──
+              const SizedBox(height: 20),
               TextField(
                 controller: _usernameController,
+                autofocus: true,
                 decoration: InputDecoration(
                   labelText: 'Username',
-                  hintText: 'Enter username',
-                  helperText: _selectedPlatform == 'chesscom'
-                      ? 'Your Chess.com username'
-                      : 'Your Lichess username',
+                  hintText: _platform == 'chesscom'
+                      ? 'e.g. MagnusCarlsen'
+                      : 'e.g. DrNykterstein',
+                  helperText:
+                      'Their public '
+                      '${_platform == 'chesscom' ? 'Chess.com' : 'Lichess'}'
+                      ' username — yours or an opponent’s.',
                   border: const OutlineInputBorder(),
                   errorText: _usernameError,
                 ),
@@ -240,46 +229,59 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
                     setState(() => _usernameError = null);
                   }
                 },
+                onSubmitted: (_) => _onDownload(),
               ),
-
               const SizedBox(height: 24),
-
-              // ── Download range ──
               const Text(
-                'Download Range',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                'How many games',
+                style: TextStyle(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 8),
-
-              // Mode toggle
-              Center(
-                child: SegmentedButton<_DownloadMode>(
-                  segments: const [
-                    ButtonSegment(
-                      value: _DownloadMode.months,
-                      label: Text('By months'),
-                      icon: Icon(Icons.calendar_month, size: 18),
-                    ),
-                    ButtonSegment(
-                      value: _DownloadMode.games,
-                      label: Text('By game count'),
-                      icon: Icon(Icons.tag, size: 18),
-                    ),
-                  ],
-                  selected: {_mode},
-                  onSelectionChanged: (selection) {
-                    setState(() => _mode = selection.first);
-                  },
+              SegmentedButton<_DownloadMode>(
+                segments: const [
+                  ButtonSegment(
+                    value: _DownloadMode.months,
+                    label: Text('Recent months'),
+                  ),
+                  ButtonSegment(
+                    value: _DownloadMode.games,
+                    label: Text('Last N games'),
+                  ),
+                ],
+                selected: {_mode},
+                onSelectionChanged: (s) => _onModeChanged(s.first),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: 180,
+                child: TextField(
+                  controller: _amountController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: InputDecoration(
+                    labelText: _mode == _DownloadMode.months
+                        ? 'Months'
+                        : 'Games',
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    errorText: _amountError,
+                  ),
+                  onChanged: _onAmountChanged,
+                  onSubmitted: (_) => _onDownload(),
                 ),
               ),
-
-              const SizedBox(height: 12),
-
-              // Slider + text field for the active mode
-              if (_mode == _DownloadMode.months)
-                _buildMonthsControl()
-              else
-                _buildGamesControl(),
+              const SizedBox(height: 8),
+              Text(
+                _mode == _DownloadMode.months
+                    ? 'Every game they played in the last $_months '
+                          'month${_months == 1 ? '' : 's'}. Bullet is skipped.'
+                    : 'Their last $_maxGames game'
+                          '${_maxGames == 1 ? '' : 's'}. Bullet is skipped.',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.onSurfaceMuted,
+                ),
+              ),
             ],
           ),
         ),
@@ -290,153 +292,6 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(onPressed: _onDownload, child: const Text('Download')),
-      ],
-    );
-  }
-
-  // ── Months slider ────────────────────────────────────────────────
-
-  Widget _buildMonthsControl() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                children: [
-                  Slider(
-                    value: _months.toDouble().clamp(1, 120),
-                    min: 1,
-                    max: 120,
-                    divisions: 119,
-                    label: '$_months month${_months == 1 ? '' : 's'}',
-                    onChanged: (value) {
-                      setState(() {
-                        _months = value.round();
-                        _monthsController.text = _months.toString();
-                      });
-                    },
-                  ),
-                  Center(
-                    child: Text(
-                      'Last $_months month${_months == 1 ? '' : 's'}',
-                      style: const TextStyle(color: AppColors.onSurfaceMuted),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 16),
-            SizedBox(
-              width: 70,
-              child: TextField(
-                controller: _monthsController,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: InputDecoration(
-                  labelText: 'Months',
-                  border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 8,
-                  ),
-                  errorText: _mode == _DownloadMode.months ? _rangeError : null,
-                ),
-                onChanged: (value) {
-                  final parsed = int.tryParse(value);
-                  if (parsed != null && parsed >= 1) {
-                    setState(() {
-                      _months = parsed;
-                      _rangeError = null;
-                    });
-                  }
-                },
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          'Fetch all non-bullet games from the last N months (up to 10 years)',
-          style: AppTextStyles.caption,
-        ),
-      ],
-    );
-  }
-
-  // ── Games slider ─────────────────────────────────────────────────
-
-  Widget _buildGamesControl() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                children: [
-                  Slider(
-                    value: _maxGames.toDouble().clamp(
-                      1.0,
-                      _sliderMax.toDouble(),
-                    ),
-                    min: 1,
-                    max: _sliderMax.toDouble(),
-                    divisions: _sliderMax - 1,
-                    label: '$_maxGames game${_maxGames == 1 ? '' : 's'}',
-                    onChanged: (value) {
-                      setState(() {
-                        _maxGames = value.round();
-                        _maxGamesController.text = _maxGames.toString();
-                      });
-                    },
-                  ),
-                  Center(
-                    child: Text(
-                      'Last $_maxGames game${_maxGames == 1 ? '' : 's'}',
-                      style: const TextStyle(color: AppColors.onSurfaceMuted),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 16),
-            SizedBox(
-              width: 70,
-              child: TextField(
-                controller: _maxGamesController,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: InputDecoration(
-                  labelText: 'Games',
-                  border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 8,
-                  ),
-                  errorText: _mode == _DownloadMode.games ? _rangeError : null,
-                ),
-                onChanged: (value) {
-                  final parsed = int.tryParse(value);
-                  if (parsed != null && parsed >= 1) {
-                    setState(() {
-                      _maxGames = parsed;
-                      _rangeError = null;
-                    });
-                  }
-                },
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Download the last $_maxGames game'
-          '${_maxGames == 1 ? '' : 's'} (excluding bullet). '
-          'Drag the slider, or type any number.',
-          style: AppTextStyles.caption,
-        ),
       ],
     );
   }

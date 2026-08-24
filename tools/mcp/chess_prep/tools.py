@@ -5,10 +5,13 @@ shipped directory, the US Chess API, and a roster file. Opening-tree tools
 (`pgn_open`, `pgn_position`, `pgn_walk`, `pgn_eval`, `pgn_audit`) sit beside
 them and need `python-chess` (and Stockfish for eval/audit).
 
-The hand-off to the app for a tournament is a file: `opponents_export` writes
-an opponent list that Player Analysis imports. Opening-tree tools query a PGN
-in place so an agent can ask what a Colle (or any) repertoire plays against a
-given line, including transpositions.
+The hand-off to the app is always a file: `opponents_export` writes an opponent
+list that Player Analysis imports, and `tournament_open` writes a request that
+Engine Tournament mode honours. Opening-tree tools query a PGN in place so an
+agent can ask what a Colle (or any) repertoire plays against a given line,
+including transpositions. Engine-tournament tools (`tournament_run` and
+friends) shell out to `tools/run_engine_tournament.dart`, so the app and an
+agent play by exactly the same rules and quote the same numbers.
 """
 
 from __future__ import annotations
@@ -384,6 +387,10 @@ class Registry:
         from .app_games import register_app_games_tools
 
         register_app_games_tools(self)
+
+        from .engine_tournament import register_engine_tournament_tools
+
+        register_engine_tournament_tools(self)
 
     # ── Handlers ───────────────────────────────────────────────────────────
 

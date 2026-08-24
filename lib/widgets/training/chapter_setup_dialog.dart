@@ -39,8 +39,16 @@ class _ChapterSetupDialog extends StatelessWidget {
 
     return AlertDialog(
       title: Text('Looks like ${proposal.formatLabel}'),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520, maxHeight: 460),
+      // A *tight* width, not a max: [AlertDialog] wraps its content in an
+      // [IntrinsicWidth], and asking a lazy viewport for its intrinsic width
+      // throws ("RenderShrinkWrappingViewport does not support returning
+      // intrinsic dimensions"). RenderConstrainedBox short-circuits that query
+      // only when the width is tight, so a `maxWidth` here failed layout, left
+      // the dialog's render box sizeless, and every later hit test threw —
+      // which sticks MouseTracker in its device-update phase and kills pointer
+      // input app-wide. Same reason [AddToStudyDialog] sizes its content box.
+      content: SizedBox(
+        width: 520,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -53,7 +61,8 @@ class _ChapterSetupDialog extends StatelessWidget {
               style: theme.textTheme.titleSmall,
             ),
             const SizedBox(height: 10),
-            Flexible(
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 300),
               child: Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),

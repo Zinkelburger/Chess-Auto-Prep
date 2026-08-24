@@ -72,10 +72,10 @@ void main() {
     expect(controller.lastConfig, isNull);
     expect(controller.lastError, isNull);
     expect(controller.lastRunSummary, isEmpty);
-    expect(controller.progressPhase, GenerationPhase.idle);
-    expect(controller.progressStatus, isEmpty);
-    expect(controller.progressNodes, 0);
-    expect(controller.progressLines, 0);
+    expect(controller.progress.phase, GenerationPhase.idle);
+    expect(controller.progress.status, isEmpty);
+    expect(controller.progress.nodes, 0);
+    expect(controller.progress.lines, 0);
 
     controller.dispose();
   });
@@ -152,7 +152,7 @@ void main() {
         expect(controller.lastError, contains('Cannot resume'));
         expect(controller.lastRunSummary, contains('Cannot resume'));
         expect(controller.isGenerating, isFalse, reason: 'run never started');
-        expect(controller.progressPhase, GenerationPhase.idle);
+        expect(controller.progress.phase, GenerationPhase.idle);
         expect(notified, 1);
         controller.dispose();
       },
@@ -174,14 +174,14 @@ void main() {
         elapsedMs: 1234,
       );
 
-      expect(controller.progressNodes, 42);
-      expect(controller.progressDepth, 5);
-      expect(controller.progressMaxPlyConfig, 18);
-      expect(controller.progressUnexploredAtDepth, 7);
-      expect(controller.progressTotalAtDepth, 12);
-      expect(controller.progressLines, 3);
-      expect(controller.progressNodesPerMinute, 60.5);
-      expect(controller.progressElapsedMs, 1234);
+      expect(controller.progress.nodes, 42);
+      expect(controller.progress.depth, 5);
+      expect(controller.progress.maxPlyConfig, 18);
+      expect(controller.progress.unexploredAtDepth, 7);
+      expect(controller.progress.totalAtDepth, 12);
+      expect(controller.progress.lines, 3);
+      expect(controller.progress.nodesPerMinute, 60.5);
+      expect(controller.progress.elapsedMs, 1234);
       controller.dispose();
     });
 
@@ -194,7 +194,7 @@ void main() {
       expect(notified, 1, reason: 'first update notifies immediately');
 
       controller.updateProgress(nodes: 2);
-      expect(controller.progressNodes, 2, reason: 'state updates instantly');
+      expect(controller.progress.nodes, 2, reason: 'state updates instantly');
       expect(notified, 1, reason: 'second notify is deferred');
 
       await Future<void>.delayed(const Duration(milliseconds: 200));
@@ -265,7 +265,7 @@ void main() {
       // A straggling build callback landing after teardown must not throw:
       // SafeChangeNotifier drops the notification.
       controller.updateProgress(nodes: 99);
-      expect(controller.progressNodes, 99);
+      expect(controller.progress.nodes, 99);
       await Future<void>.delayed(const Duration(milliseconds: 200));
     });
   });
@@ -349,12 +349,12 @@ void main() {
       await until(() => controller.isAwaitingMasterGames);
 
       expect(controller.isGenerating, isTrue);
-      expect(controller.progressPhase, GenerationPhase.downloadingMasterGames);
+      expect(controller.progress.phase, GenerationPhase.downloadingMasterGames);
       expect(controller.canPause, isFalse, reason: 'nothing to pause yet');
       expect(svc.isSyncing, isTrue);
       // The service's own line is mirrored into the build status.
-      await until(() => controller.progressStatus.contains('TWIC'));
-      expect(controller.progressStatus, contains('TWIC'));
+      await until(() => controller.progress.status.contains('TWIC'));
+      expect(controller.progress.status, contains('TWIC'));
 
       controller.cancelBuild();
       await run;

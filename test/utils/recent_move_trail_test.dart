@@ -2,9 +2,10 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart';
 
-/// The Chessable-style recent-move trail: after each move the from/to squares
-/// of the last two half-moves stay marked, and the oldest pair drops off as
-/// new moves come in.
+/// The recent-move trail. By default only the from/to squares of the move
+/// that produced the position stay marked; with `lastN: 2` (the trainer) the
+/// last two half-moves stay marked and the oldest pair drops off as new moves
+/// come in.
 void main() {
   group('recentMoveTrailSquares', () {
     test('empty line yields no squares', () {
@@ -15,27 +16,34 @@ void main() {
       expect(recentMoveTrailSquares(Chess.initial, const ['e4']), {'e2', 'e4'});
     });
 
-    test('two moves mark both pairs', () {
+    test('only the newest move is marked by default', () {
       expect(recentMoveTrailSquares(Chess.initial, const ['e4', 'e5']), {
-        'e2',
-        'e4',
         'e7',
         'e5',
       });
     });
 
-    test('third move drops the first pair (Chessable rolling window)', () {
-      expect(recentMoveTrailSquares(Chess.initial, const ['e4', 'e5', 'Nf3']), {
-        'e7',
-        'e5',
-        'g1',
-        'f3',
-      });
+    test('lastN of 2 marks both pairs', () {
+      expect(
+        recentMoveTrailSquares(Chess.initial, const ['e4', 'e5'], lastN: 2),
+        {'e2', 'e4', 'e7', 'e5'},
+      );
+    });
+
+    test('third move drops the first pair (rolling window)', () {
+      expect(
+        recentMoveTrailSquares(Chess.initial, const [
+          'e4',
+          'e5',
+          'Nf3',
+        ], lastN: 2),
+        {'e7', 'e5', 'g1', 'f3'},
+      );
     });
 
     test('castling marks the king landing square, not the rook square', () {
       const sans = ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Bc5', 'O-O'];
-      expect(recentMoveTrailSquares(Chess.initial, sans), {
+      expect(recentMoveTrailSquares(Chess.initial, sans, lastN: 2), {
         'f8',
         'c5',
         'e1',
@@ -45,7 +53,11 @@ void main() {
 
     test('consecutive captures on one square dedupe into the set', () {
       const sans = ['e4', 'd5', 'exd5', 'Qxd5'];
-      expect(recentMoveTrailSquares(Chess.initial, sans), {'e4', 'd5', 'd8'});
+      expect(recentMoveTrailSquares(Chess.initial, sans, lastN: 2), {
+        'e4',
+        'd5',
+        'd8',
+      });
     });
 
     test('null-move tokens pass the turn without marking squares', () {
@@ -54,12 +66,14 @@ void main() {
         recentMoveTrailSquares(Chess.initial, const ['--', 'e4']),
         isEmpty,
       );
-      expect(recentMoveTrailSquares(Chess.initial, const ['d4', '--', 'Nf3']), {
-        'd2',
-        'd4',
-        'g1',
-        'f3',
-      });
+      expect(
+        recentMoveTrailSquares(Chess.initial, const [
+          'd4',
+          '--',
+          'Nf3',
+        ], lastN: 2),
+        {'d2', 'd4', 'g1', 'f3'},
+      );
       expect(
         recentMoveTrailSquares(Chess.initial, const ['e4', 'Qxh8', 'e5']),
         {'e2', 'e4'},

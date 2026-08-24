@@ -25,6 +25,7 @@ class _FakeGamesLibrary extends GamesLibraryService {
     List<GameSelection> unionWith = const [],
     bool forceRefresh = false,
     void Function(String message)? onProgress,
+    void Function(DateTime fetchedAt)? onFetched,
   }) async {
     calls++;
     onProgress?.call('Downloading $username…');

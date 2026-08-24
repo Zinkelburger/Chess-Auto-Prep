@@ -9,6 +9,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/solitaire_trophy.dart';
+import '../models/engine_settings.dart';
 import '../services/game_analysis_controller.dart';
 import '../utils/chess_utils.dart' show formatEvalDisplay;
 import 'clickable_move_line.dart';
@@ -194,6 +195,57 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
     super.dispose();
   }
 
+  /// The shallowest depth behind the graph on screen, or null when the stored
+  /// evals do not say (a Lichess download, or an older local pass).
+  int? _storedDepth(List<MoveEval> evals) {
+    int? shallowest;
+    for (final e in evals) {
+      final d = e.depth;
+      if (d == null) continue;
+      if (shallowest == null || d < shallowest) shallowest = d;
+    }
+    return shallowest;
+  }
+
+  /// An offer to search the game again, shown only when the graph came from a
+  /// shallower pass than the engine is currently set to.
+  ///
+  /// The review of your recent games searches at the mining depth, which is
+  /// usually below the Stockfish setting this tab would use — and it stores
+  /// what it found, so this tab now opens on a graph it did not draw. Without
+  /// this the only control that would deepen it is the one that appears when
+  /// there is no graph at all, which is to say: none.
+  Widget _buildDeepenBar(List<MoveEval> evals) {
+    final stored = _storedDepth(evals);
+    final target = EngineSettings.instance.depth;
+    if (stored == null || stored >= target) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Graph from the games review, at depth $stored.',
+              style: const TextStyle(
+                fontSize: 11.5,
+                color: AppColors.onSurfaceSoft,
+              ),
+            ),
+          ),
+          TextButton.icon(
+            onPressed: _startAnalysis,
+            icon: const Icon(Icons.analytics_outlined, size: 16),
+            label: Text('Re-analyze at depth $target'),
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              textStyle: const TextStyle(fontSize: 11.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _startAnalysis() {
     if (widget.gamePgnText == null) return;
     if (!EngineGate.ensureAvailable(context)) return;
@@ -347,6 +399,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
             currentPly: widget.currentPly,
             onPlySelected: _onChartPlySelected,
           ),
+          if (!isAnalyzing) _buildDeepenBar(evals),
           const Divider(height: 1),
           GameAnalysisSummary(evals: evals),
           const Divider(height: 1),
@@ -418,9 +471,9 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.starAccent.withValues(alpha: 0.12),
+        color: AppColors.surfaceInset,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.starAccent.withValues(alpha: 0.4)),
+        border: Border.all(color: AppColors.outline),
       ),
       child: Row(
         children: [
@@ -456,25 +509,14 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
     );
     final isNearest = index == nearestIdx;
 
-    final Color classColor;
-    final String classLabel;
-    switch (e.classification) {
-      case MoveClassification.blunder:
-        classColor = AppColors.moveClassBlunder;
-        classLabel = 'Blunder';
-      case MoveClassification.mistake:
-        classColor = AppColors.moveClassMistake;
-        classLabel = 'Mistake';
-      case MoveClassification.inaccuracy:
-        classColor = AppColors.moveClassInaccuracy;
-        classLabel = 'Inaccuracy';
-      case MoveClassification.interesting:
-        classColor = AppColors.moveClassInteresting;
-        classLabel = 'Interesting';
-      case MoveClassification.normal:
-        classColor = AppColors.onSurfaceMuted;
-        classLabel = '';
-    }
+    // The word carries the severity; no colour ramp, no pill.
+    final classLabel = switch (e.classification) {
+      MoveClassification.blunder => 'Blunder',
+      MoveClassification.mistake => 'Mistake',
+      MoveClassification.inaccuracy => 'Inaccuracy',
+      MoveClassification.interesting => 'Interesting',
+      MoveClassification.normal => '',
+    };
 
     final evalStr = _formatEval(e);
 
@@ -486,7 +528,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
         // the highlight must never shift the row's content sideways.
         border: Border(
           left: BorderSide(
-            color: isNearest ? classColor : Colors.transparent,
+            color: isNearest ? AppColors.accent : Colors.transparent,
             width: 3,
           ),
         ),
@@ -513,23 +555,12 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: classColor.withAlpha(30),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: classColor.withAlpha(80)),
-                    ),
-                    child: Text(
-                      classLabel,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: classColor,
-                        fontWeight: FontWeight.bold,
-                      ),
+                  Text(
+                    classLabel,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.onSurfaceSoft,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                   if (hasTrophy) ...[

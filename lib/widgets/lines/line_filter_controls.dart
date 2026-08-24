@@ -206,35 +206,30 @@ class _CoverageFilterRow extends StatelessWidget {
                 _chip(
                   'All',
                   CoverageFilter.all,
-                  null,
                   hasCoverageResult ? totalLineCount : null,
                 ),
                 const SizedBox(width: 6),
                 _chip(
                   'Covered',
                   CoverageFilter.covered,
-                  AppColors.coverageCovered,
                   hasCoverageResult ? countCoveredLines(lineCoverage) : null,
                 ),
                 const SizedBox(width: 6),
                 _chip(
                   'Too shallow',
                   CoverageFilter.tooShallow,
-                  AppColors.coverageShallow,
                   hasCoverageResult ? countShallowLines(lineCoverage) : null,
                 ),
                 const SizedBox(width: 6),
                 _chip(
                   'Too deep',
                   CoverageFilter.tooDeep,
-                  AppColors.coverageDeep,
                   hasCoverageResult ? countDeepLines(lineCoverage) : null,
                 ),
                 const SizedBox(width: 6),
                 _chip(
                   'Unaccounted',
                   CoverageFilter.unaccounted,
-                  AppColors.coverageUnaccounted,
                   hasCoverageResult
                       ? countUnaccountedLines(lineCoverage)
                       : null,
@@ -247,11 +242,10 @@ class _CoverageFilterRow extends StatelessWidget {
     );
   }
 
-  Widget _chip(String label, CoverageFilter filter, Color? color, int? count) {
+  Widget _chip(String label, CoverageFilter filter, int? count) {
     return _CoverageChip(
       label: label,
       filter: filter,
-      color: color,
       count: count,
       selected: coverageFilter,
       onChanged: onCoverageFilterChanged,
@@ -259,10 +253,12 @@ class _CoverageFilterRow extends StatelessWidget {
   }
 }
 
+/// One filter toggle. A chip shape is kept because this *is* a control —
+/// but selection is shown with weight and a neutral ring, not a hue per
+/// filter.
 class _CoverageChip extends StatelessWidget {
   final String label;
   final CoverageFilter filter;
-  final Color? color;
   final int? count;
   final CoverageFilter selected;
   final ValueChanged<CoverageFilter> onChanged;
@@ -270,7 +266,6 @@ class _CoverageChip extends StatelessWidget {
   const _CoverageChip({
     required this.label,
     required this.filter,
-    required this.color,
     required this.count,
     required this.selected,
     required this.onChanged,
@@ -279,58 +274,27 @@ class _CoverageChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isSelected = selected == filter;
-    // Outline, not fill: selection reads as a coloured ring plus a faint
-    // wash of the same hue. A saturated block of colour on a filter chip
-    // pulls the eye away from the line table it is filtering.
-    final accent = color ?? AppColors.onSurfaceSoft;
     return GestureDetector(
       onTap: () => onChanged(filter),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: isSelected
-              ? accent.withValues(alpha: 0.14)
+              ? AppColors.onSurfaceSoft.withValues(alpha: 0.12)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected
-                ? accent
-                : (color?.withValues(alpha: 0.35) ?? AppColors.outline),
+            color: isSelected ? AppColors.onSurfaceSoft : AppColors.outline,
             width: isSelected ? 1.5 : 1,
           ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
-                color: isSelected ? AppColors.ink : AppColors.onSurfaceSoft,
-              ),
-            ),
-            if (count != null) ...[
-              const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? accent.withValues(alpha: 0.22)
-                      : AppColors.outline.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '$count',
-                  style: const TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.ink,
-                  ),
-                ),
-              ),
-            ],
-          ],
+        child: Text(
+          count != null ? '$label $count' : label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
+            color: isSelected ? AppColors.ink : AppColors.onSurfaceSoft,
+          ),
         ),
       ),
     );

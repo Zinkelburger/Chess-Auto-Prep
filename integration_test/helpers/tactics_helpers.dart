@@ -51,25 +51,40 @@ Future<void> importAndWaitForPositions(
   Duration pollInterval = const Duration(seconds: 2),
   int maxPolls = 60,
 }) async {
-  // The username field lives on the accounts card in the right pane; found
-  // by key so its label text can change without breaking the test.
-  final lichessField = find.byKey(const Key('lichess-username-field'));
-  await tester.enterText(lichessField, username);
+  // How many games to fetch is a section of the review strip's analysis
+  // settings. Set it *before* the account exists: with auto-start on by
+  // default, saving a username begins the run immediately, and a window
+  // changed after that would apply to the next run instead of this one. The
+  // strip is on screen from boot, with no account, for exactly this kind of
+  // reason. The window defaults to "my last N games", so the count field is
+  // already the active one; it carries no label, hence the key.
+  await tester.tap(find.byTooltip('Analysis settings…'));
   await tester.pumpAndSettle();
-
-  // The shared games window defaults to "my last N games", so the count field
-  // is already the active one; it carries no label, hence the key.
   await tester.enterText(
     find.byKey(const Key('window-games-field')),
     gameCount,
   );
   await tester.pumpAndSettle();
+  await tester.tap(find.widgetWithText(FilledButton, 'Apply'));
+  await tester.pumpAndSettle();
 
-  // The username makes the left pane load, which is what brings the review
-  // strip on screen; wait for its button before pressing it. Found by key, not
-  // by label: the label says what pressing it will do ("Start engine analysis
-  // (5)", "Resume engine analysis (3)", "Check for new games"), so it depends
-  // on what is already downloaded and analysed.
+  // Usernames are typed in the accounts dialog now, behind the home card's
+  // one button; nothing is saved until Save is pressed.
+  await tester.tap(find.byKey(const Key('accounts-setup-button')));
+  await tester.pumpAndSettle();
+  await tester.enterText(
+    find.byKey(const Key('lichess-username-field')),
+    username,
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('accounts-save-button')));
+  await tester.pumpAndSettle();
+
+  // The username makes the left pane load, which is what starts the run:
+  // auto-start is on by default, so in the normal case nothing is pressed
+  // here at all. Wait for the strip's button either way — with the run under
+  // way it is Pause, and tapping it would stop the very work we are waiting
+  // for.
   final reviewButton = find.byKey(const Key('review-transport-button'));
   for (int i = 0; i < maxPolls && reviewButton.evaluate().isEmpty; i++) {
     await tester.pump(pollInterval);
@@ -77,8 +92,18 @@ Future<void> importAndWaitForPositions(
   if (reviewButton.evaluate().isEmpty) {
     fail('The review strip never appeared after setting a username');
   }
-  await tester.tap(reviewButton.first);
-  await tester.pump();
+
+  // Give the auto-start a few frames to take hold before deciding.
+  for (int i = 0; i < 5 && find.byIcon(Icons.pause).evaluate().isEmpty; i++) {
+    await tester.pump(pollInterval);
+    if (_studyButton().evaluate().isNotEmpty) return;
+  }
+  if (find.byIcon(Icons.pause).evaluate().isEmpty) {
+    // Auto-start did not take (turned off in a previous test's prefs, or the
+    // list arrived empty first): press it by hand.
+    await tester.tap(reviewButton.first);
+    await tester.pump();
+  }
 
   for (int i = 0; i < maxPolls; i++) {
     await tester.pump(pollInterval);
@@ -169,7 +194,7 @@ Future<void> playTacticMoves(WidgetTester tester, List<String> allMoves) async {
 
     // Wait for opponent response before next user move
     if (idx < userMoveIndices.length - 1) {
-      await tester.pump(const Duration(milliseconds: 700));
+      await tester.pump(const Duration(milliseconds: 1200));
       await tester.pumpAndSettle();
     }
   }

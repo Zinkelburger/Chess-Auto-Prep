@@ -243,10 +243,12 @@ class GenerationSessionController extends ChangeNotifier
     required bool verify,
   }) => snapshots.export(repertoireName: repertoireName, verify: verify);
 
-  String get progressStatus => progress.status;
-  GenerationPhase get progressPhase => progress.phase;
-
   /// Test and overlay helper — forwards to [progress.update].
+  ///
+  /// Everything else about progress is read straight off [progress]. There
+  /// used to be seventeen `progressX` getters forwarding to a field that was
+  /// already public, which meant a new progress field was invisible to the
+  /// jobs panel until someone remembered to add an eighteenth.
   void updateProgress({
     int? nodes,
     int? depth,
@@ -266,22 +268,6 @@ class GenerationSessionController extends ChangeNotifier
     nodesPerMinute: nodesPerMinute,
     elapsedMs: elapsedMs,
   );
-
-  int get progressNodes => progress.nodes;
-  int get progressDepth => progress.depth;
-  int get progressMaxPlyConfig => progress.maxPlyConfig;
-  int get progressUnexploredAtDepth => progress.unexploredAtDepth;
-  int get progressTotalAtDepth => progress.totalAtDepth;
-  int get progressLines => progress.lines;
-  double? get progressNodesPerMinute => progress.nodesPerMinute;
-  double? get progressEtaSec => progress.etaDepthSec;
-  int get progressElapsedMs => progress.elapsedMs;
-  bool get progressBestFirst => progress.bestFirst;
-  int get progressFrontier => progress.frontier;
-  double? get progressPriorityFraction => progress.priorityFraction;
-  int? get progressRunEtaSec => progress.runEtaSec;
-  List<int> get progressDepthTotals => progress.depthTotals;
-  List<int> get progressDepthExplored => progress.depthExplored;
 
   /// The current generated repertoire bundle, or null when none is loaded.
   GeneratedRepertoire? get current => _current;

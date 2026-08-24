@@ -449,8 +449,6 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
       scoreMate: line.scoreMate,
     );
 
-    final evalColor = AppColors.cpEval(line.effectiveCp);
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
       child: Row(
@@ -493,19 +491,13 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
               ),
             ),
           ),
-          Container(
+          SizedBox(
             width: 52,
-            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-            decoration: BoxDecoration(
-              color: evalColor.withAlpha(25),
-              borderRadius: BorderRadius.circular(4),
-            ),
             child: Text(
               evalStr,
-              style: TextStyle(
+              style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 13,
-                color: evalColor,
                 fontFamily: 'monospace',
               ),
               textAlign: TextAlign.center,

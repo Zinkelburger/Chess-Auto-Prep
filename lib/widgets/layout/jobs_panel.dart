@@ -165,45 +165,45 @@ class JobsPanel extends StatelessWidget {
 
   Widget _buildGenerationJobCard(BuildContext context, RepertoireJob job) {
     final gc = generationController;
-    final phase = gc.progressPhase;
+    final phase = gc.progress.phase;
     final config = gc.activeConfig ?? _configFromJob(job);
     final statParts = [
       ...buildGenerationStatParts(
         phase: phase,
-        nodes: gc.progressNodes,
-        currentDepth: gc.progressDepth,
-        maxPlyConfig: gc.progressMaxPlyConfig,
-        unexploredAtDepth: gc.progressUnexploredAtDepth,
-        totalAtDepth: gc.progressTotalAtDepth,
-        nodesPerMinute: gc.progressNodesPerMinute,
-        etaDepthSec: gc.progressEtaSec?.round(),
-        linesExtracted: gc.progressLines,
-        bestFirst: gc.progressBestFirst,
-        frontierSize: gc.progressFrontier,
-        etaRunSec: gc.progressRunEtaSec,
+        nodes: gc.progress.nodes,
+        currentDepth: gc.progress.depth,
+        maxPlyConfig: gc.progress.maxPlyConfig,
+        unexploredAtDepth: gc.progress.unexploredAtDepth,
+        totalAtDepth: gc.progress.totalAtDepth,
+        nodesPerMinute: gc.progress.nodesPerMinute,
+        etaDepthSec: gc.progress.etaDepthSec?.round(),
+        linesExtracted: gc.progress.lines,
+        bestFirst: gc.progress.bestFirst,
+        frontierSize: gc.progress.frontier,
+        etaRunSec: gc.progress.runEtaSec,
       ),
       if (gc.snapshotStatus != null) gc.snapshotStatus!,
     ];
     final fraction = generationProgressFraction(
       phase: phase,
-      currentDepth: gc.progressDepth,
-      maxPlyConfig: gc.progressMaxPlyConfig,
-      unexploredAtDepth: gc.progressUnexploredAtDepth,
-      totalAtDepth: gc.progressTotalAtDepth,
-      bestFirst: gc.progressBestFirst,
-      priorityProgress: gc.progressPriorityFraction,
+      currentDepth: gc.progress.depth,
+      maxPlyConfig: gc.progress.maxPlyConfig,
+      unexploredAtDepth: gc.progress.unexploredAtDepth,
+      totalAtDepth: gc.progress.totalAtDepth,
+      bestFirst: gc.progress.bestFirst,
+      priorityProgress: gc.progress.priorityFraction,
     );
     final depthBars =
         phase == GenerationPhase.buildingTree &&
-            gc.progressDepthTotals.isNotEmpty
+            gc.progress.depthTotals.isNotEmpty
         ? DepthProgressBars(
-            totals: gc.progressDepthTotals,
-            explored: gc.progressDepthExplored,
+            totals: gc.progress.depthTotals,
+            explored: gc.progress.depthExplored,
             accent: Theme.of(context).colorScheme.primary,
           )
         : null;
     final elapsed = formatJobDuration(
-      Duration(milliseconds: gc.progressElapsedMs),
+      Duration(milliseconds: gc.progress.elapsedMs),
     );
     final resourceLabel = generationResourceLabel(config);
     final configSummary = config?.summaryLabel;
@@ -653,7 +653,7 @@ class _ActiveJobCard extends StatelessWidget {
               ),
               if (resourceLabel != null) ...[
                 const SizedBox(width: 8),
-                _StatChip(label: resourceLabel!, color: accent),
+                _StatChip(label: resourceLabel!),
               ],
             ],
           ),
@@ -713,24 +713,15 @@ class _ActiveJobCard extends StatelessWidget {
 }
 
 class _StatChip extends StatelessWidget {
-  const _StatChip({required this.label, required this.color});
+  const _StatChip({required this.label});
 
   final String label;
-  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-      decoration: BoxDecoration(
-        color: color.withAlpha(32),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withAlpha(64)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(fontSize: 9, color: color.withAlpha(220)),
-      ),
+    return Text(
+      label,
+      style: const TextStyle(fontSize: 9, color: AppColors.onSurfaceMuted),
     );
   }
 }

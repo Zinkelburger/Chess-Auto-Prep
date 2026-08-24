@@ -10,6 +10,19 @@ abstract class _GenerationConfigFormStateBase
       GlobalKey<PgnSourcesPanelState>();
   bool _cdbDirectAvailable = false;
 
+  /// The config this form was last seeded from, and the base every
+  /// [toConfig] result is built on top of.
+  ///
+  /// The form owns fewer knobs than [TreeBuildConfig] has fields, and used to
+  /// construct its result from scratch — so every field without a control
+  /// silently reverted to a constructor default the moment a config passed
+  /// through the form. Building on the seed instead makes the round trip
+  /// lossless *by construction*: a field the form does not edit is carried,
+  /// and a knob added to the config without a control cannot be dropped.
+  ///
+  /// Null until the form is seeded, which is the "brand new config" case.
+  TreeBuildConfig? _seedConfig;
+
   final TextEditingController _cutoffCtrl = TextEditingController(text: '0.01');
   final TextEditingController _maxPlyCtrl = TextEditingController(text: '20');
   final TextEditingController _engineDepthCtrl = TextEditingController(

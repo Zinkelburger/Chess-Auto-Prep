@@ -14,6 +14,7 @@ import '../../services/master_games/master_games_service.dart';
 import '../../services/master_games/twic_client.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
+import 'advanced_settings_dialog.dart';
 import '../../utils/app_messages.dart';
 import '../labeled_toggle.dart';
 import '../pgn_sources_panel.dart';

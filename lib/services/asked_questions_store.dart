@@ -36,6 +36,12 @@ abstract final class AskedQuestion {
   /// "Looks like a course export — sort it into chapters?", per repertoire
   /// or study file.
   static const chapterLayout = 'chapterLayout';
+
+  /// "Which side does this file train?", per repertoire file. `true` means
+  /// White. Only ever recorded when the user sets it by hand — a file that
+  /// declares `// Color:` or whose move tree answers the question needs no
+  /// entry here, and the absence of one is what lets those keep winning.
+  static const trainingColor = 'trainingColor';
 }
 
 /// A recorded answer plus enough context to make the file self-explanatory.

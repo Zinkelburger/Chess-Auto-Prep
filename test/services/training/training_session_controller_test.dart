@@ -44,6 +44,7 @@ class _FakeRepertoireService extends RepertoireService {
     String filePath, {
     String? trainingColor,
     bool colorFromStartingSide = false,
+    bool inferColorWhenUnknown = false,
   }) async {
     if (parseError != null) throw parseError!;
     return List.of(lines);
@@ -502,10 +503,11 @@ void main() {
   group('drill phase transitions', () {
     test('correct move advances, wrong move records mistake, replay runs, '
         'rating counts the mistake', () async {
-      final controller = buildController();
+      final controller = buildController()..setRepertoire(meta());
       final line = _line('D', ['e4', 'e5', 'Nf3', 'Nc6']);
       controller.lines = [line];
-      controller.reviewMap['D'] = _entry('', 'D'); // reviewed → drilling
+      // reviewed → drilling
+      controller.reviewMap['D'] = _entry(repPath(), 'D');
 
       controller.startLine(line);
       await _waitFor(() => controller.waitingForUser);
@@ -553,6 +555,11 @@ void main() {
       expect(controller.reviewMap['D']!.lastRating, 'good');
       expect(reviewService.history, hasLength(1));
       expect(reviewService.history.single.hadMistake, isTrue);
+
+      // PGN headers are written in batches (rewriting a whole course between
+      // lines is a visible stall), so they land when the run ends.
+      expect(repService.headerUpdates, isEmpty);
+      await controller.progress.flushHeaders();
       expect(repService.headerUpdates, ['D']);
       controller.dispose();
     });
@@ -1081,6 +1088,101 @@ void main() {
         TrainingPhase.finished,
         reason: 'chapter One is untouched by a chapter Two run',
       );
+      controller.dispose();
+    });
+  });
+
+  group('session size cap', () {
+    /// Six untrained lines — more than any cap under test.
+    Future<TrainingSessionController> loadedController({
+      int newPerSession = 2,
+    }) async {
+      repService.lines = [
+        for (final id in ['A', 'B', 'C', 'D', 'E', 'F'])
+          _line(id, ['e4', 'e5']),
+      ];
+      final controller = buildController()
+        ..settings = (_fastSettings()..newLinesPerSession = newPerSession)
+        ..setRepertoire(meta());
+      await controller.loadRepertoire();
+      return controller;
+    }
+
+    test('a Learn run covers the cap, then calls the sitting done', () async {
+      final controller = await loadedController();
+      controller.startLearnSession();
+      expect(controller.currentLine!.id, 'A');
+      expect(controller.remainingInRun, 2, reason: 'the sitting, not the file');
+
+      // Learn A, then B; the third advance must end the run rather than
+      // reaching into the other four untrained lines.
+      controller.reviewMap['A'] = _entry(
+        repPath(),
+        'A',
+        due: DateTime.now().toUtc().add(const Duration(days: 1)),
+      );
+      controller.rebuildQueueAndAdvance();
+      expect(controller.currentLine!.id, 'B');
+
+      controller.reviewMap['B'] = _entry(
+        repPath(),
+        'B',
+        due: DateTime.now().toUtc().add(const Duration(days: 1)),
+      );
+      controller.rebuildQueueAndAdvance();
+
+      expect(controller.runComplete, isTrue);
+      expect(controller.feedback, contains('sitting'));
+      controller.dispose();
+    });
+
+    test(
+      'a line failed inside the sitting comes back before it ends',
+      () async {
+        final controller = await loadedController();
+        controller.startLearnSession();
+        expect(controller.currentLine!.id, 'A');
+
+        // "Again" leaves A due now — it is no longer *untrained*, so the strict
+        // intent match would have dropped it from the run.
+        await controller.rateLine(ReviewRating.again);
+        controller.rebuildQueueAndAdvance();
+        expect(controller.currentLine!.id, 'B');
+
+        controller.reviewMap['B'] = _entry(
+          repPath(),
+          'B',
+          due: DateTime.now().toUtc().add(const Duration(days: 1)),
+        );
+        controller.rebuildQueueAndAdvance();
+        expect(controller.currentLine!.id, 'A', reason: 'the failed line');
+        expect(controller.runComplete, isFalse);
+        controller.dispose();
+      },
+    );
+
+    test('picking a line off the list is not capped', () async {
+      final controller = await loadedController();
+      controller.startLine(controller.lines.firstWhere((l) => l.id == 'A'));
+
+      for (final id in ['A', 'B', 'C', 'D', 'E']) {
+        controller.reviewMap[id] = _entry(
+          repPath(),
+          id,
+          due: DateTime.now().toUtc().add(const Duration(days: 1)),
+        );
+      }
+      controller.rebuildQueueAndAdvance();
+
+      expect(controller.currentLine!.id, 'F');
+      expect(controller.runComplete, isFalse);
+      controller.dispose();
+    });
+
+    test('0 means no cap', () async {
+      final controller = await loadedController(newPerSession: 0);
+      controller.startLearnSession();
+      expect(controller.remainingInRun, 6);
       controller.dispose();
     });
   });

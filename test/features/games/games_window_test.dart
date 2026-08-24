@@ -21,6 +21,7 @@ class _RecordingLibrary extends GamesLibraryService {
     List<GameSelection> unionWith = const [],
     bool forceRefresh = false,
     void Function(String message)? onProgress,
+    void Function(DateTime fetchedAt)? onFetched,
   }) async {
     calls.add(selection);
     return const [];
@@ -200,15 +201,21 @@ void main() {
       expect(library.calls.last.since, DateTime(2026, 7, 27));
     });
 
-    test('auto-run is off by default and persists when turned on', () async {
+    test('auto-run is on by default and persists when turned off', () async {
       SharedPreferences.setMockInitialValues({});
       final library = _RecordingLibrary();
       final controller = build(library, GamesWindowSettings.forTest());
       addTearDown(controller.dispose);
       await controller.refresh();
-      expect(controller.filters.autoRun, isFalse);
+      expect(
+        controller.filters.autoRun,
+        isTrue,
+        reason:
+            'setting a username is the opt-in; nothing else has to be '
+            'pressed for the first analysis to happen',
+      );
 
-      await controller.setFilters(const GamesListFilters(autoRun: true));
+      await controller.setFilters(const GamesListFilters(autoRun: false));
 
       final reloaded = build(
         _RecordingLibrary(),
@@ -216,7 +223,7 @@ void main() {
       );
       addTearDown(reloaded.dispose);
       await reloaded.refresh();
-      expect(reloaded.filters.autoRun, isTrue);
+      expect(reloaded.filters.autoRun, isFalse, reason: 'the opt-out sticks');
     });
   });
 }

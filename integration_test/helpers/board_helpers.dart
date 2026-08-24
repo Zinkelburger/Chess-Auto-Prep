@@ -4,8 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:chess_auto_prep/core/app_state.dart';
-import 'package:chess_auto_prep/services/tactics/tactics_session_controller.dart';
-import 'package:chess_auto_prep/widgets/tactics_control_panel.dart';
+import 'package:chess_auto_prep/features/tactics/controllers/tactics_session_controller.dart';
+import 'package:chess_auto_prep/features/tactics/widgets/tactics_control_panel.dart';
 
 /// Parse a move string (UCI or SAN) to a UCI string (e.g. "b8d7").
 /// Returns null if the move can't be parsed.

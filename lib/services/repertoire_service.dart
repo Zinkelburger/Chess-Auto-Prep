@@ -2,13 +2,11 @@
 /// Extracts trainable lines from PGN files and manages training sessions
 library;
 
-import 'dart:convert';
 import 'dart:io' as io;
 import 'dart:isolate';
 
 import 'package:path/path.dart' as p;
 
-import 'package:crypto/crypto.dart' show sha256;
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 import '../models/repertoire_line.dart';
@@ -18,6 +16,8 @@ import '../utils/file_text_reader.dart';
 import '../utils/pgn_comment_utils.dart';
 import '../utils/training_markers.dart' show hasPuzzleStart;
 import 'pgn_parsing_service.dart' as pgn;
+import 'repertoire_color_inference.dart';
+import 'repertoire_line_ids.dart';
 import 'storage/storage_factory.dart';
 import '../utils/chess_utils.dart';
 import '../utils/movetext_builder.dart';
@@ -29,10 +29,13 @@ class RepertoireService {
   /// otherwise the colour is read from the file's `// Color:` comment.
   /// [colorFromStartingSide] derives each line's colour from its own start
   /// position instead (study puzzles: the solver is the side to move).
+  /// [inferColorWhenUnknown] lets a file with neither read its side off its
+  /// own move tree (see [inferTrainingColor]) instead of being assumed White.
   Future<List<RepertoireLine>> parseRepertoireFile(
     String filePath, {
     String? trainingColor,
     bool colorFromStartingSide = false,
+    bool inferColorWhenUnknown = false,
   }) async {
     final content = await StorageFactory.instance.readRepertoirePgn(filePath);
 
@@ -49,6 +52,7 @@ class RepertoireService {
         content,
         trainingColor: trainingColor,
         colorFromStartingSide: colorFromStartingSide,
+        inferColorWhenUnknown: inferColorWhenUnknown,
       ),
     );
   }
@@ -63,15 +67,24 @@ class RepertoireService {
   /// [colorFromStartingSide] overrides both: each game's colour is the side
   /// to move in its own start position ([FEN] header or standard start).
   /// Used for studies-as-puzzles, where the solver always moves first.
+  ///
+  /// [inferColorWhenUnknown] applies only when neither source answers — a
+  /// third-party course export carries no `// Color:` comment. The side is
+  /// then read off the move tree ([inferTrainingColor]) and only falls back
+  /// to 'white' when the file's shape says nothing. Off by default so the
+  /// callers that only walk moves (deviation checks, outlines) keep parsing
+  /// exactly as before.
   List<RepertoireLine> parseRepertoirePgn(
     String pgnContent, {
     String? trainingColor,
     bool colorFromStartingSide = false,
+    bool inferColorWhenUnknown = false,
   }) {
     pgnContent = pgn.stripBom(pgnContent);
     final lines = <RepertoireLine>[];
-    final resolvedColor =
-        trainingColor ?? pgn.extractRepertoireColor(pgnContent) ?? 'white';
+    final declaredColor =
+        trainingColor ?? pgn.extractRepertoireColor(pgnContent);
+    final resolvedColor = declaredColor ?? 'white';
 
     final games = pgn.splitPgnIntoGames(pgnContent);
 
@@ -173,7 +186,15 @@ class RepertoireService {
             headers: Map<String, String>.from(game.headers),
             importance: importance,
             chapter: chapter,
-            isModelGame: isModelGameHeaders(game.headers),
+            // In a chapter-titled export every repertoire line carries
+            // [Result "*"]; a game with a real result is a complete game the
+            // author included as illustration. Drilling forty moves of
+            // Bertok-Fischer is not training your repertoire, so it is marked
+            // the same way this app marks its own model games.
+            isModelGame:
+                isModelGameHeaders(game.headers) ||
+                (chapterTitles != null &&
+                    (game.headers['Result'] ?? '*').trim() != '*'),
             gameIndex: gameIndex,
           ),
         );
@@ -185,12 +206,27 @@ class RepertoireService {
       }
     }
 
-    return _withUniqueIds(lines);
+    final unique = _withUniqueIds(lines);
+
+    // The colour is a whole-file property, so it can only be read off the
+    // finished move tree — hence a second pass rather than a decision made
+    // while each game is built.
+    if (inferColorWhenUnknown &&
+        declaredColor == null &&
+        !colorFromStartingSide) {
+      final inferred = inferTrainingColor(unique);
+      if (inferred != null && inferred.colorName != resolvedColor) {
+        return [
+          for (final line in unique) line.copyWithColor(inferred.colorName),
+        ];
+      }
+    }
+    return unique;
   }
 
   /// Guarantees every line in a file has a distinct id.
   ///
-  /// The move-based fallback id ([_generateStableLineId]) is a truncated
+  /// The move-based fallback id ([RepertoireLineIds.stable]) is a truncated
   /// base64 of the moves, so two lines sharing a long opening prefix — the
   /// normal case in a repertoire — get the *same* id. Training progress is
   /// keyed by these ids and the file editors used to look games up by them,
@@ -212,20 +248,13 @@ class RepertoireService {
         continue;
       }
       changed = true;
-      var id = _fullLineId(line.moves, line.gameIndex);
-      // Astronomically unlikely, but keep the invariant absolute.
-      while (!seen.add(id)) {
-        id = _fullLineId([...line.moves, id], line.gameIndex);
-      }
-      out.add(line.copyWithId(id));
+      out.add(
+        line.copyWithId(
+          repertoireLineIds.resolveCollision(line.moves, line.gameIndex, seen),
+        ),
+      );
     }
     return changed ? out : lines;
-  }
-
-  /// A collision-free id: hash of the whole move list and file position.
-  String _fullLineId(List<String> moves, int index) {
-    final digest = sha256.convert(utf8.encode('${moves.join(' ')}|$index'));
-    return 'line_${digest.toString().substring(0, 22)}';
   }
 
   /// The id each game in [games] resolves to — null for games that do not
@@ -245,14 +274,10 @@ class RepertoireService {
         continue;
       }
       if (moves.isEmpty) continue;
-      var id = _extractLineId(game, moves, i);
-      if (!seen.add(id)) {
-        id = _fullLineId(moves, i);
-        while (!seen.add(id)) {
-          id = _fullLineId([...moves, id], i);
-        }
-      }
-      ids[i] = id;
+      final id = _extractLineId(game, moves, i);
+      ids[i] = seen.add(id)
+          ? id
+          : repertoireLineIds.resolveCollision(moves, i, seen);
     }
     return ids;
   }
@@ -451,37 +476,14 @@ class RepertoireService {
 
   /// Extract a stable line identifier, preferring a PGN header if present.
   String _extractLineId(PgnGame game, List<String> moves, int index) =>
-      lineIdFromHeaders(game.headers, moves, index);
-
-  /// The line id the trainer assigns to a game: a `LineID`/`Id`/… header when
-  /// present, else the stable move-based fallback.  Callers that want to
-  /// target a specific line (e.g. "Train this chapter") must derive the id
-  /// this way — the header-blind [generateLineId] silently mismatches any
-  /// PGN that carries such a header.
-  String lineIdFromHeaders(
-    Map<String, String> headers,
-    List<String> moves,
-    int index,
-  ) {
-    final headerId =
-        headers['LineID'] ??
-        headers['LineId'] ??
-        headers['Id'] ??
-        headers['Line'] ??
-        headers['Guid'];
-
-    if (headerId != null && headerId.trim().isNotEmpty) {
-      return headerId.trim();
-    }
-
-    // Stable fallback based on moves so it persists across sessions.
-    return _generateStableLineId(moves, index);
-  }
+      repertoireLineIds.fromHeaders(game.headers, moves, index);
 
   /// The line id the trainer will assign to the [index]-th game of [pgn].
-  /// Parses [pgn] through the same pipeline as the trainer ([PgnGame.parsePgn]
-  /// + [_extractLineId]) so the two agree regardless of how the source
-  /// serialized its headers.  Returns null when [pgn] doesn't parse.
+  ///
+  /// Lives here rather than on [RepertoireLineIds] because it has to *parse*
+  /// first, and it parses through the same pipeline as the trainer so the
+  /// two agree regardless of how the source serialized its headers. Returns
+  /// null when [pgn] does not parse.
   String? lineIdForGamePgn(String pgn, int index) {
     try {
       final game = PgnGame.parsePgn(pgn);
@@ -490,30 +492,6 @@ class RepertoireService {
     } catch (_) {
       return null;
     }
-  }
-
-  /// Public access to generate a stable line ID from moves.
-  String generateLineId(List<String> moves, int index) =>
-      _generateStableLineId(moves, index);
-
-  /// The id a line appended at file position [index] will resolve to once
-  /// the file is re-parsed: the legacy move-based id, unless a line already
-  /// in the file ([existingIds]) holds it, in which case the full-hash id —
-  /// the same rule as [_withUniqueIds]. Use this for in-memory lines so
-  /// they can be edited before a reload without hitting the wrong game.
-  String newLineId(
-    List<String> moves,
-    int index, {
-    required Iterable<String> existingIds,
-  }) {
-    final seen = existingIds.toSet();
-    var id = _generateStableLineId(moves, index);
-    if (!seen.contains(id)) return id;
-    id = _fullLineId(moves, index);
-    while (seen.contains(id)) {
-      id = _fullLineId([...moves, id], index);
-    }
-    return id;
   }
 
   /// Find the index of the game matching [lineId] within [games], resolving
@@ -531,12 +509,6 @@ class RepertoireService {
   String _reassembleDocument(String preamble, List<String> games) {
     final sections = <String>[if (preamble.isNotEmpty) preamble, ...games];
     return '${sections.join('\n\n').trimRight()}\n';
-  }
-
-  String _generateStableLineId(List<String> moves, int index) {
-    final raw = base64Url.encode(utf8.encode('${moves.join(' ')}|$index'));
-    final trimmed = raw.replaceAll('=', '');
-    return 'line_${trimmed.length > 22 ? trimmed.substring(0, 22) : trimmed}';
   }
 
   /// Updates the [Event] header (title) for a specific line in a PGN file.
@@ -788,9 +760,20 @@ class RepertoireService {
     final document = _splitPgnDocumentPreservingPreamble(content);
     final games = List<String>.from(document.games);
 
+    // Resolve every id in one pass. `_findGameIndexByLineId` re-derives the
+    // whole file's ids on each call, so looking each entry up separately
+    // re-parsed all N games N times — the bulk write was quadratic in exactly
+    // the case it exists to make cheap.
+    final idsByIndex = lineIdsForGames(games);
+    final indexById = <String, int>{};
+    for (var i = 0; i < idsByIndex.length; i++) {
+      final id = idsByIndex[i];
+      if (id != null) indexById.putIfAbsent(id, () => i);
+    }
+
     bool anyMatched = false;
     for (final entry in entriesByLineId.entries) {
-      final matchIndex = _findGameIndexByLineId(games, entry.key);
+      final matchIndex = indexById[entry.key];
       if (matchIndex == null) continue;
       final e = entry.value;
       games[matchIndex] = _gameWithReviewHeaders(

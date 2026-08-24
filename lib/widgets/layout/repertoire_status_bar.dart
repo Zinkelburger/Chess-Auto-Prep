@@ -75,12 +75,8 @@ class _StatusBadge extends StatelessWidget {
       cursor: onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
       child: GestureDetector(
         onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: color.withAlpha(25),
-            borderRadius: BorderRadius.circular(4),
-          ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [

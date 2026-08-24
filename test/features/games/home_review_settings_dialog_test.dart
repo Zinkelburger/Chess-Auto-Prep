@@ -3,9 +3,10 @@
 library;
 
 import 'package:chess_auto_prep/features/games/controllers/recent_games_controller.dart';
+import 'package:chess_auto_prep/features/games/services/games_window.dart';
 import 'package:chess_auto_prep/features/games/widgets/home_review_settings_dialog.dart';
 import 'package:chess_auto_prep/services/games_library/game_filter.dart';
-import 'package:chess_auto_prep/services/tactics/mining_settings.dart';
+import 'package:chess_auto_prep/features/tactics/services/mining_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,6 +19,7 @@ void main() {
   Future<List<HomeReviewSettingsResult?>> open(
     WidgetTester tester, {
     GamesListFilters filters = const GamesListFilters(),
+    GamesWindow window = const GamesWindow(),
   }) async {
     final closed = <HomeReviewSettingsResult?>[];
     await tester.pumpWidget(
@@ -28,7 +30,10 @@ void main() {
               onPressed: () async => closed.add(
                 await showDialog<HomeReviewSettingsResult>(
                   context: context,
-                  builder: (_) => HomeReviewSettingsDialog(filters: filters),
+                  builder: (_) => HomeReviewSettingsDialog(
+                    filters: filters,
+                    window: window,
+                  ),
                 ),
               ),
               child: const Text('open'),
@@ -96,6 +101,43 @@ void main() {
 
     expect(MiningSettings.instance.depth, before);
     expect(closed.single, isNull);
+  });
+
+  testWidgets('the games window is here, and comes back on Apply', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    restoreDepth();
+
+    final closed = await open(tester);
+    // It is the first thing in the dialog: which games, before how hard the
+    // engine works on them.
+    expect(find.text('How many games to download'), findsOneWidget);
+
+    await tester.enterText(find.byKey(const Key('window-games-field')), '35');
+    await tester.pump();
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+
+    expect(closed.single?.window.games, 35);
+    expect(closed.single?.window.isGameCount, isTrue);
+  });
+
+  testWidgets('switching to days keeps the game count typed', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    restoreDepth();
+
+    final closed = await open(tester);
+    await tester.enterText(find.byKey(const Key('window-games-field')), '35');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('window-days-field')));
+    await tester.pump();
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+
+    final window = closed.single?.window;
+    expect(window?.isGameCount, isFalse, reason: 'days mode was picked');
+    expect(window?.games, 35, reason: 'the other operand is not discarded');
   });
 
   testWidgets('the edited time controls come back on Apply', (tester) async {

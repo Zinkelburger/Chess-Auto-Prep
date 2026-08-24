@@ -258,7 +258,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       builder: (context, _) {
         final ctrl = widget.generationController;
         final statusText = ctrl.isGenerating
-            ? ctrl.progressStatus
+            ? ctrl.progress.status
             : ctrl.lastRunSummary;
         return Column(
           children: [

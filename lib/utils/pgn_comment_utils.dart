@@ -291,6 +291,31 @@ List<String> parsePvComment(String comment) {
 // Set / inject helpers
 // ---------------------------------------------------------------------------
 
+/// How many plies of a game may lack an `[%eval]` and still leave the game
+/// counting as analyzed.
+///
+/// Two, because a full pass legitimately leaves that many behind: the mating
+/// move carries no score (mate-0 has no sign — the reader derives the result
+/// from the board), and a pass that scores positions *between* moves has
+/// nothing to say about the very last one. Readers of stored evals and writers
+/// of them must agree on this number or a game one side wrote is a game the
+/// other side rejects — see `parseCachedEvals`.
+const int kMaxUnevaluatedPlies = 2;
+
+/// Format a White-normalized score as a Lichess-compatible `[%eval]` comment
+/// value, with optional depth suffix (e.g. `1.23,18` or `#3,20`).
+String formatEvalCommentValue({int? scoreCp, int? scoreMate, int? depth}) {
+  final String base;
+  if (scoreMate != null) {
+    base = '#$scoreMate';
+  } else if (scoreCp != null) {
+    base = (scoreCp / 100.0).toStringAsFixed(2);
+  } else {
+    base = '0.00';
+  }
+  return depth != null ? '$base,$depth' : base;
+}
+
 /// Replace or insert a `[%eval ...]` token in a comment string.
 String setEvalInComment(String comment, String evalValue) {
   final token = '[%eval $evalValue]';
@@ -523,6 +548,14 @@ final _clkRe = RegExp(r'\[%clk [^\]]+\]');
 /// arrows / `[%csl]` circles) so scraped PGNs never leak raw tokens into
 /// displayed prose.
 final _anyPgnTokenRe = RegExp(r'\[%[a-zA-Z]+[^\]]*\]');
+
+/// cutechess's per-move engine comment — `+0.31/24 2.001s`, `-M3/18 0.500s`,
+/// `book 0.010s` — which engine-vs-engine PGNs (this app's own tournaments,
+/// cutechess-cli, Arena) attach to *every* move. It is measurement, not prose,
+/// and a comment on every ply puts every move on its own row in the viewer.
+final _engineMoveCommentRe = RegExp(
+  r'(?:^|\s)(?:[+-]M?\d+(?:\.\d+)?|book)(?:/\d+)?\s+\d+(?:\.\d+)?s(?=$|[\s,])',
+);
 final _scoreArrowRe = RegExp(r'\([+-]?\d+\.?\d*\s*[→-]\s*[+-]?\d+\.?\d*\)');
 final _classificationRe = RegExp(
   r'(Inaccuracy|Mistake|Blunder|Good move|Excellent move|Best move)\.[^.]*\.',
@@ -531,8 +564,9 @@ final _wasBestRe = RegExp(r'[A-Za-z0-9+#-]+\s+was best\.?');
 final _whitespaceRe = RegExp(r'\s+');
 
 /// Strip engine annotation tokens (`[%eval]`, `[%clk]`, `[%maia]`, `[%pv]`),
-/// Lichess classification text, score arrows, and Chessable `@@...@@` wrapper
-/// markers from a PGN comment, leaving only human-readable prose.
+/// cutechess-style per-move engine readouts, Lichess classification text,
+/// score arrows, and Chessable `@@...@@` wrapper markers from a PGN comment,
+/// leaving only human-readable prose.
 String filterDisplayComment(String comment) {
   comment = comment.replaceAll(evalCommentRe, '');
   comment = comment.replaceAll(_clkRe, '');
@@ -545,6 +579,7 @@ String filterDisplayComment(String comment) {
   comment = comment.replaceAll(transposesCommentRe, '');
   comment = comment.replaceAll(maiaTopCommentRe, '');
   comment = comment.replaceAll(_anyPgnTokenRe, '');
+  comment = comment.replaceAll(_engineMoveCommentRe, ' ');
   comment = comment.replaceAll(_scoreArrowRe, '');
   comment = comment.replaceAll(_classificationRe, '');
   comment = comment.replaceAll(_wasBestRe, '');
@@ -621,6 +656,7 @@ String stripEngineTokens(String comment) {
   comment = comment.replaceAll(pvCommentRe, '');
   comment = comment.replaceAll(maiaTopCommentRe, '');
   comment = comment.replaceAll(_anyPgnTokenRe, '');
+  comment = comment.replaceAll(_engineMoveCommentRe, ' ');
   comment = comment.replaceAll(_scoreArrowRe, '');
   comment = comment.replaceAll(_classificationRe, '');
   comment = comment.replaceAll(_wasBestRe, '');

@@ -4,8 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/models/pgn_filter_models.dart';
 import 'package:chess_auto_prep/models/analysis_player_info.dart';
-import 'package:chess_auto_prep/models/tactics_session_settings.dart';
-import 'package:chess_auto_prep/models/tactics_position.dart';
+import 'package:chess_auto_prep/features/tactics/models/tactics_session_settings.dart';
+import 'package:chess_auto_prep/features/tactics/models/tactics_position.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
 
 /// Robustness coverage for the numeric-configuration surfaces on the pure
@@ -452,7 +452,6 @@ void main() {
         correctLine: const ['e4'],
         mistakeType: type,
         mistakeAnalysis: '',
-        positionContext: '',
         gameWhite: 'W',
         gameBlack: 'B',
         gameResult: '*',
@@ -533,7 +532,6 @@ void main() {
         correctLine: ['e4'],
         mistakeType: '??',
         mistakeAnalysis: '',
-        positionContext: '',
         gameWhite: 'W',
         gameBlack: 'B',
         gameResult: '*',
@@ -559,7 +557,6 @@ void main() {
       correctLine: const ['e4'],
       mistakeType: '??',
       mistakeAnalysis: '',
-      positionContext: '',
       gameWhite: 'W',
       gameBlack: 'B',
       gameResult: '*',

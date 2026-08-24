@@ -120,7 +120,7 @@ class _TrainingResultsPanelState extends State<TrainingResultsPanel> {
               Icon(
                 clean ? Icons.check_circle_outline : Icons.error_outline,
                 size: 20,
-                color: clean ? AppColors.success : AppColors.danger,
+                color: AppColors.onSurfaceSoft,
               ),
               const SizedBox(width: 8),
               Expanded(child: Text(message, style: theme.textTheme.titleSmall)),
@@ -243,6 +243,12 @@ class TrainingRunCompletePanel extends StatelessWidget {
   final VoidCallback onLearn;
   final VoidCallback onReview;
 
+  /// How many lines the next Learn / Review run will actually cover, or 0
+  /// when that run is uncapped. The follow-on buttons promise the batch and
+  /// mention the backlog, rather than promising the whole backlog.
+  final int learnBatchSize;
+  final int reviewBatchSize;
+
   const TrainingRunCompletePanel({
     super.key,
     required this.title,
@@ -254,7 +260,15 @@ class TrainingRunCompletePanel extends StatelessWidget {
     required this.onBackToList,
     required this.onLearn,
     required this.onReview,
+    this.learnBatchSize = 0,
+    this.reviewBatchSize = 0,
   });
+
+  /// "Learn 10 more · 920 left" when capped, "Learn 12 untrained" when not.
+  static String _batchLabel(String verb, int batch, int pool, String noun) {
+    if (batch <= 0 || batch >= pool) return '$verb $pool $noun';
+    return '$verb $batch more · $pool left';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -267,7 +281,7 @@ class TrainingRunCompletePanel extends StatelessWidget {
           const Icon(
             Icons.check_circle_outline,
             size: 48,
-            color: AppColors.success,
+            color: AppColors.onSurfaceSoft,
           ),
           const SizedBox(height: 12),
           Text(
@@ -294,7 +308,9 @@ class TrainingRunCompletePanel extends StatelessWidget {
             OutlinedButton.icon(
               onPressed: onReview,
               icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: Text('Review $dueCount due'),
+              label: Text(
+                _batchLabel('Review', reviewBatchSize, dueCount, 'due'),
+              ),
             ),
           ],
           if (untrainedCount > 0) ...[
@@ -302,7 +318,14 @@ class TrainingRunCompletePanel extends StatelessWidget {
             OutlinedButton.icon(
               onPressed: onLearn,
               icon: const Icon(Icons.play_arrow_rounded, size: 18),
-              label: Text('Learn $untrainedCount untrained'),
+              label: Text(
+                _batchLabel(
+                  'Learn',
+                  learnBatchSize,
+                  untrainedCount,
+                  'untrained',
+                ),
+              ),
             ),
           ],
         ],
@@ -348,7 +371,7 @@ class AllCaughtUpPanel extends StatelessWidget {
           const Icon(
             Icons.check_circle_outline,
             size: 56,
-            color: AppColors.success,
+            color: AppColors.onSurfaceSoft,
           ),
           const SizedBox(height: 16),
           Text(title, style: theme.textTheme.titleMedium),

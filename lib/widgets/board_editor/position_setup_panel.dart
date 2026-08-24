@@ -91,34 +91,32 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
         mainAxisSize: MainAxisSize.min,
         children: [
           // ── Side to move + board shortcuts ─────────────────────────
-          Row(
-            children: [
-              SegmentedButton<Side>(
-                segments: const [
-                  ButtonSegment(
-                    value: Side.white,
-                    label: Text('White to move'),
-                  ),
-                  ButtonSegment(
-                    value: Side.black,
-                    label: Text('Black to move'),
-                  ),
-                ],
-                selected: {_editor.turn},
-                onSelectionChanged: (sel) => _editor.setTurn(sel.first),
-                style: const ButtonStyle(visualDensity: VisualDensity.compact),
-              ),
-            ],
+          // The panel is the narrow half of the editor dialog (~380px), and
+          // a SegmentedButton will not shrink its own labels, so scale it
+          // down rather than overflow.
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: SegmentedButton<Side>(
+              segments: const [
+                ButtonSegment(value: Side.white, label: Text('White to move')),
+                ButtonSegment(value: Side.black, label: Text('Black to move')),
+              ],
+              selected: {_editor.turn},
+              onSelectionChanged: (sel) => _editor.setTurn(sel.first),
+              style: const ButtonStyle(visualDensity: VisualDensity.compact),
+            ),
           ),
           const SizedBox(height: 8),
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
               OutlinedButton.icon(
                 icon: const Icon(Icons.replay, size: 16),
                 label: const Text('Start position'),
                 onPressed: _editor.setStartPosition,
               ),
-              const SizedBox(width: 8),
               OutlinedButton.icon(
                 icon: const Icon(Icons.clear, size: 16),
                 label: const Text('Clear board'),

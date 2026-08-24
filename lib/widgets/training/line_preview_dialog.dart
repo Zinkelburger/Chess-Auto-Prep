@@ -76,9 +76,9 @@ class _LinePreviewDialogState extends State<LinePreviewDialog> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      widget.line.name,
+                      widget.line.qualifiedName,
                       style: theme.textTheme.titleMedium,
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),

@@ -7,16 +7,21 @@ import 'package:flutter_test/flutter_test.dart';
 
 const _ungrouped = '__trainer_ungrouped__';
 
-RepertoireLine _line(String id, {String? chapter, List<String>? moves}) =>
-    RepertoireLine(
-      id: id,
-      name: 'Line $id',
-      moves: moves ?? const ['e4', 'e5'],
-      color: 'white',
-      startPosition: Chess.initial,
-      fullPgn: '',
-      chapter: chapter,
-    );
+RepertoireLine _line(
+  String id, {
+  String? chapter,
+  List<String>? moves,
+  bool isModelGame = false,
+}) => RepertoireLine(
+  id: id,
+  name: 'Line $id',
+  moves: moves ?? const ['e4', 'e5'],
+  color: 'white',
+  startPosition: Chess.initial,
+  fullPgn: '',
+  chapter: chapter,
+  isModelGame: isModelGame,
+);
 
 RepertoireReviewEntry _entry(String lineId, {DateTime? due}) =>
     RepertoireReviewEntry(
@@ -125,6 +130,84 @@ void main() {
 
       await tester.tap(find.text('2 untrained'));
       expect(learned, 1);
+    });
+
+    testWidgets('the button says what the sitting covers, not the backlog', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _wrap(
+          TrainerBrowser(
+            title: 'Colle',
+            lines: [for (var i = 0; i < 30; i++) _line('L$i')],
+            reviewMap: const {},
+            ungroupedChapter: _ungrouped,
+            onLearn: () {},
+            onReview: () {},
+            learnBatchSize: 10,
+            onTrainLine: (_) {},
+          ),
+        ),
+      );
+
+      // "30 untrained" on a bought course reads as a threat; the button has
+      // to promise the ten it will actually show.
+      expect(find.text('10 now · 20 to go'), findsOneWidget);
+      expect(find.text('30 untrained'), findsNothing);
+      // The progress strip still tells the truth about the whole scope.
+      expect(find.text('0 learned · 0 due · 30 untrained'), findsOneWidget);
+    });
+
+    testWidgets('a model game is offered to read, never to drill', (
+      tester,
+    ) async {
+      RepertoireLine? trained;
+      RepertoireLine? previewed;
+      await tester.pumpWidget(
+        _wrap(
+          TrainerBrowser(
+            title: 'Colle',
+            lines: [_line('A'), _line('M', isModelGame: true)],
+            reviewMap: const {},
+            ungroupedChapter: _ungrouped,
+            onLearn: () {},
+            onReview: () {},
+            onTrainLine: (line) => trained = line,
+            onPreviewLine: (line) => previewed = line,
+          ),
+        ),
+      );
+
+      // Somebody else's whole game is not a line you are meant to reproduce,
+      // so it is not part of the untrained count either.
+      expect(find.text('1 untrained'), findsOneWidget);
+      expect(find.text('Model game'), findsOneWidget);
+      expect(find.text('Read'), findsOneWidget);
+
+      await tester.tap(find.text('Line M'));
+      expect(trained, isNull);
+      expect(previewed?.id, 'M');
+    });
+
+    testWidgets('the side the file trains is a header control', (tester) async {
+      var opened = 0;
+      await tester.pumpWidget(
+        _wrap(
+          TrainerBrowser(
+            title: 'Vigorito QGD',
+            lines: [_line('A')],
+            reviewMap: const {},
+            ungroupedChapter: _ungrouped,
+            onTrainLine: (_) {},
+            playingWhite: false,
+            onChangePlayingSide: () => opened++,
+          ),
+        ),
+      );
+
+      expect(find.text('You play Black'), findsOneWidget);
+      await tester.tap(find.text('You play Black'));
+      expect(opened, 1);
     });
 
     testWidgets('a due line enables Review and says when it fell due', (

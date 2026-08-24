@@ -102,10 +102,8 @@ class TrapTourBarState extends State<TrapTourBar> {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.warning.withValues(alpha: 0.07),
-        border: Border(
-          top: BorderSide(color: AppColors.warning.withValues(alpha: 0.45)),
-        ),
+        color: AppColors.surfaceInset,
+        border: const Border(top: BorderSide(color: AppColors.outline)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -114,29 +112,26 @@ class TrapTourBarState extends State<TrapTourBar> {
           LinearProgressIndicator(
             value: (_currentIndex + 1) / _sortedTraps.length,
             minHeight: 2,
-            color: AppColors.warning,
-            backgroundColor: AppColors.warning.withValues(alpha: 0.15),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(10, 4, 4, 6),
             child: Row(
               children: [
-                const Icon(Icons.tour, size: 16, color: AppColors.warning),
+                const Icon(
+                  Icons.tour,
+                  size: 16,
+                  color: AppColors.onSurfaceSoft,
+                ),
                 const SizedBox(width: 6),
                 const Text(
                   'Trap Tour',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.warning,
-                  ),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(width: 6),
                 ShortcutIconButton(
                   description: 'Previous trap',
                   shortcut: AppShortcut.previousItem,
                   icon: const Icon(Icons.chevron_left, size: 20),
-                  color: AppColors.warning,
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(
@@ -145,14 +140,10 @@ class TrapTourBarState extends State<TrapTourBar> {
                   ),
                   onPressed: _currentIndex > 0 ? previous : null,
                 ),
-                Container(
+                Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,
                     vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.warning.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
                     '${_currentIndex + 1} / ${_sortedTraps.length}',
@@ -166,7 +157,6 @@ class TrapTourBarState extends State<TrapTourBar> {
                   description: 'Next trap',
                   shortcut: AppShortcut.nextItem,
                   icon: const Icon(Icons.chevron_right, size: 20),
-                  color: AppColors.warning,
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(

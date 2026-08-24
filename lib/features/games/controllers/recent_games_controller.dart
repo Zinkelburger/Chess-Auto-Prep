@@ -29,14 +29,19 @@ class GamesListFilters {
       GameSpeed.rapid,
       GameSpeed.classical,
     },
-    this.autoRun = false,
+    this.autoRun = true,
   });
 
   final Set<GameSpeed> speeds;
 
   /// Whether the review run (analysis, deviations, mining) starts on its own
-  /// when the list loads. Off by default — it is minutes of every core, and
-  /// the user gets to decide when that happens by pressing Start.
+  /// once the list has games.
+  ///
+  /// **On by default.** It costs minutes of every core, so this was opt-in —
+  /// but the state it left behind was a home screen where nothing had
+  /// happened and the one button that would make something happen looked like
+  /// every other button. Setting a username is the opt-in; the checkbox on the
+  /// strip turns it off, and that choice persists.
   final bool autoRun;
 
   GamesListFilters copyWith({Set<GameSpeed>? speeds, bool? autoRun}) =>
@@ -53,12 +58,14 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
   RecentGamesController({
     required this._lichessUsername,
     required this._chesscomUsername,
+    void Function(GamesPlatform platform, DateTime fetchedAt)? onFetched,
     GamesLibraryService? library,
     GameDeviationService? deviationService,
     GamesWindowSettings? windowSettings,
     GameReviewStore? reviewStore,
     DateTime Function()? now,
-  }) : _library = library ?? GamesLibraryService(),
+  }) : _onFetched = onFetched,
+       _library = library ?? GamesLibraryService(),
        _deviation = deviationService ?? GameDeviationService.instance,
        _windowSettings = windowSettings ?? GamesWindowSettings.instance,
        _reviewStore = reviewStore ?? GameReviewStore.instance,
@@ -67,7 +74,7 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
     // the rows fill in during a run without this controller knowing the review
     // is happening.
     _reviewStore.addListener(_applyStoredSummaries);
-    // The window is edited on the accounts card, which writes straight through
+    // The window is edited in the analysis-settings dialog, which writes
     // to the shared setting. Without this the list kept its old slice until
     // something else reloaded it, while every label around it (they read the
     // setting live) already said "last 50 games" — the strip claiming
@@ -79,6 +86,13 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
   // and change when the user edits Settings → Accounts.
   final String? Function() _lichessUsername;
   final String? Function() _chesscomUsername;
+
+  /// Reported when a site's games are in hand — from the network or from a
+  /// cache that still holds them. The accounts card's "last downloaded" line
+  /// is this and nothing else; without it the card claims nothing has been
+  /// downloaded while the list beside it shows the games.
+  final void Function(GamesPlatform platform, DateTime fetchedAt)? _onFetched;
+
   final GamesLibraryService _library;
   final GameDeviationService _deviation;
 
@@ -150,10 +164,28 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
     unawaited(refresh());
   }
 
+  /// Whether the load in flight is bypassing the download cache.
+  bool _inFlightForced = false;
+
   /// Load the window's games. Concurrent callers share one load: the second
   /// caller gets the in-flight future rather than a no-op.
-  Future<void> refresh({bool force = false}) =>
-      _inFlight ??= _refresh(force: force).whenComplete(() => _inFlight = null);
+  ///
+  /// Except a forced load arriving behind a cached one, which chains a second
+  /// load after it instead of settling for the first. Handing back the weaker
+  /// future is how "Check for new games", pressed while the screen's opening
+  /// load was still running, quietly failed to check for new games.
+  Future<void> refresh({bool force = false}) {
+    final inFlight = _inFlight;
+    if (inFlight != null) {
+      if (!force || _inFlightForced) return inFlight;
+      return inFlight.then((_) => refresh(force: true));
+    }
+    _inFlightForced = force;
+    return _inFlight = _refresh(force: force).whenComplete(() {
+      _inFlight = null;
+      _inFlightForced = false;
+    });
+  }
 
   /// The window the loaded games were selected with, so a notification from
   /// [GamesWindowSettings] that changed nothing this list cares about (a
@@ -265,6 +297,7 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
               _statusMessage = message;
               notifyListeners();
             },
+            onFetched: (at) => _onFetched?.call(platform, at),
           );
           final cachePath = await _library.cacheFilePath(platform, username);
           final sansBatch = await compute(extractMainlineSansBatch, [
@@ -280,17 +313,22 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
             final record = records[i];
             collected.add(
               RecentGame(
-                record: record,
-                platform: platform,
-                cachePath: cachePath,
-                myUsername: username,
-                meWhite: _sideFor(record, username),
-                sans: sansBatch[i],
-                finalFen: finalFens[i],
-                // The review's own verdict wins over one derived from `[%eval]`
-                // comments: it is the pass that classified these moves, and it
-                // survives the evals being pruned from the cache.
-              )..summary = _storedSummary(record.dedupKey) ?? summaries[i],
+                  record: record,
+                  platform: platform,
+                  cachePath: cachePath,
+                  myUsername: username,
+                  meWhite: _sideFor(record, username),
+                  sans: sansBatch[i],
+                  finalFen: finalFens[i],
+                  // The review's own verdict wins over one derived from `[%eval]`
+                  // comments: it is the pass that classified these moves, and it
+                  // survives the evals being pruned from the cache.
+                )
+                ..summary = _storedSummary(record.dedupKey) ?? summaries[i]
+                // Kept even when the stored counts win above: this is the
+                // "is there a graph on disk" answer, and the counts cannot
+                // give it.
+                ..hasStoredEvals = summaries[i] != null,
             );
           }
         } catch (e) {

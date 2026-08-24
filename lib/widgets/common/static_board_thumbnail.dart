@@ -19,8 +19,8 @@ import '../../utils/chess_utils.dart' show roleChar;
 /// machinery and one SVG child per piece, which also needs a fully validated
 /// `Position` via `Chess.fromSetup`), this parses only the piece-placement
 /// field of the FEN and paints the entire board — squares and pieces — as a
-/// single `CustomPaint` using piece sprites rasterized once and shared by
-/// every thumbnail in the app.
+/// single `CustomPaint` using piece sprites rasterized to the resolution this
+/// board actually needs and shared by every thumbnail asking for that size.
 ///
 /// Oriented so the side to move is at the bottom (same perspective as
 /// training) when the FEN carries a turn field — pass [flipped] to override,
@@ -47,17 +47,19 @@ class _StaticBoardThumbnailState extends State<StaticBoardThumbnail> {
   Board? _board;
   bool _flipped = false;
 
+  /// Raster size, in device pixels, of the sprite set this thumbnail draws.
+  int _bucket = _PieceSprites.smallestBucket;
+
   @override
   void initState() {
     super.initState();
     _parse();
-    if (!_PieceSprites.isLoaded) {
-      unawaited(
-        _PieceSprites.ensureLoaded().then((_) {
-          if (mounted) setState(() {});
-        }),
-      );
-    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _ensureSprites();
   }
 
   @override
@@ -66,6 +68,30 @@ class _StaticBoardThumbnailState extends State<StaticBoardThumbnail> {
     if (oldWidget.fen != widget.fen || oldWidget.flipped != widget.flipped) {
       _parse();
     }
+    if (oldWidget.size != widget.size) _ensureSprites();
+  }
+
+  /// Pick the sprite resolution this thumbnail actually needs and load it.
+  ///
+  /// Runs from [didChangeDependencies] as well as on resize because the bucket
+  /// depends on `devicePixelRatio` — dragging the window to a monitor with a
+  /// different scale has to re-pick, or the board keeps drawing sprites cut for
+  /// the old display.
+  void _ensureSprites() {
+    final squareDevicePx =
+        widget.size / 8 * MediaQuery.devicePixelRatioOf(context);
+    final bucket = _PieceSprites.bucketFor(squareDevicePx);
+    if (bucket == _bucket && _PieceSprites.isLoaded(bucket)) return;
+    _bucket = bucket;
+    if (_PieceSprites.isLoaded(bucket)) {
+      setState(() {});
+      return;
+    }
+    unawaited(
+      _PieceSprites.ensureLoaded(bucket).then((_) {
+        if (mounted && _bucket == bucket) setState(() {});
+      }),
+    );
   }
 
   void _parse() {
@@ -101,7 +127,8 @@ class _StaticBoardThumbnailState extends State<StaticBoardThumbnail> {
           painter: _ThumbnailPainter(
             board: board,
             flipped: _flipped,
-            spritesLoaded: _PieceSprites.isLoaded,
+            bucket: _bucket,
+            spritesLoaded: _PieceSprites.isLoaded(_bucket),
           ),
           size: Size.square(widget.size),
         ),
@@ -114,11 +141,13 @@ class _ThumbnailPainter extends CustomPainter {
   _ThumbnailPainter({
     required this.board,
     required this.flipped,
+    required this.bucket,
     required this.spritesLoaded,
   });
 
   final Board board;
   final bool flipped;
+  final int bucket;
   final bool spritesLoaded;
 
   @override
@@ -148,7 +177,7 @@ class _ThumbnailPainter extends CustomPainter {
     if (spritesLoaded) {
       final piecePaint = Paint()..filterQuality = FilterQuality.medium;
       for (final (square, piece) in board.pieces) {
-        final sprite = _PieceSprites.spriteFor(piece);
+        final sprite = _PieceSprites.spriteFor(bucket, piece);
         if (sprite == null) continue;
         final col = flipped ? 7 - square.file : square.file;
         final row = flipped ? square.rank : 7 - square.rank;
@@ -184,18 +213,61 @@ class _ThumbnailPainter extends CustomPainter {
   bool shouldRepaint(covariant _ThumbnailPainter old) =>
       board != old.board ||
       flipped != old.flipped ||
+      bucket != old.bucket ||
       spritesLoaded != old.spritesLoaded;
 }
 
-/// Piece sprites rasterized from the bundled SVGs once per app session and
-/// shared by every [StaticBoardThumbnail].
-class _PieceSprites {
-  static const int _rasterSize = 48;
-  static final Map<String, ui.Image> _sprites = {};
-  static Future<void>? _pending;
-  static bool _loaded = false;
+/// Smallest sprite raster, in device pixels, that covers a square of
+/// [squareDevicePx] without being upscaled.
+///
+/// Exposed so a test can pin the property that actually matters: the chosen
+/// raster is never smaller than the square it has to fill.
+@visibleForTesting
+int spriteBucketFor(double squareDevicePx) =>
+    _PieceSprites.bucketFor(squareDevicePx);
 
-  /// True only once *every* sprite has been rasterized.
+/// The largest raster [spriteBucketFor] will hand out.
+@visibleForTesting
+int get maxSpriteBucket => _PieceSprites.largestBucket;
+
+/// Piece sprites rasterized from the bundled SVGs, one set per raster size,
+/// shared by every [StaticBoardThumbnail] that needs that size.
+class _PieceSprites {
+  /// Raster sizes we are willing to keep, in **device** pixels per square.
+  ///
+  /// A thumbnail takes the smallest bucket that covers its square, so a sprite
+  /// is only ever scaled *down*. The previous single hard-coded 48px raster
+  /// had no notion of `devicePixelRatio`: on a 2x display a 144px game-card
+  /// board wants 36 device pixels a square and got away with it, but anything
+  /// larger — or any display past 2.67x — was blowing a 48px bitmap up past
+  /// 1:1, which is genuine pixelation and looked exactly like it.
+  ///
+  /// The floor stays at that same 48 so nothing that looks right today gets a
+  /// *smaller* sprite than it already has; the larger buckets are what a
+  /// scaled display or a bigger preview now reaches for.
+  static const List<int> _buckets = [48, 96, 192, 384];
+
+  static int get smallestBucket => _buckets.first;
+
+  static int get largestBucket => _buckets.last;
+
+  static final Map<int, Map<String, ui.Image>> _sprites = {};
+  static final Map<int, Future<void>> _pending = {};
+  static final Set<int> _loaded = {};
+
+  /// Smallest raster that covers [squareDevicePx] without being upscaled.
+  ///
+  /// Past the largest bucket we stop growing rather than rasterize unbounded —
+  /// a square that big is a real board, not a thumbnail, and belongs in
+  /// `ChessBoardWidget`, which draws the SVGs as vectors at any size.
+  static int bucketFor(double squareDevicePx) {
+    for (final bucket in _buckets) {
+      if (bucket >= squareDevicePx) return bucket;
+    }
+    return _buckets.last;
+  }
+
+  /// True only once *every* sprite in [bucket] has been rasterized.
   ///
   /// Deliberately not `_sprites.isNotEmpty`. The sprites land one at a time,
   /// so any thumbnail built mid-load used to see this as `true`, paint the
@@ -203,48 +275,54 @@ class _PieceSprites {
   /// and — having decided the sprites were ready — never register for the
   /// repaint that would have fixed it. Black is rasterized after White, so
   /// what that produced was a board with no black pieces, permanently.
-  static bool get isLoaded => _loaded;
+  static bool isLoaded(int bucket) => _loaded.contains(bucket);
 
-  static ui.Image? spriteFor(Piece piece) {
+  static ui.Image? spriteFor(int bucket, Piece piece) {
     final color = piece.color == Side.white ? 'w' : 'b';
-    return _sprites['$color${roleChar(piece.role)}'];
+    return _sprites[bucket]?['$color${roleChar(piece.role)}'];
   }
 
-  static Future<void> ensureLoaded() => _pending ??= _loadAll();
+  static Future<void> ensureLoaded(int bucket) =>
+      _pending[bucket] ??= _loadAll(bucket);
 
   /// All twelve at once rather than one after another: each is an independent
   /// asset read, and doing them serially stretched the window in which a list
   /// paints boards with pieces missing from milliseconds to a visible beat.
-  static Future<void> _loadAll() async {
+  static Future<void> _loadAll(int bucket) async {
+    final into = _sprites[bucket] ??= {};
     await Future.wait([
       for (final color in const ['w', 'b'])
         for (final type in const ['K', 'Q', 'R', 'B', 'N', 'P'])
-          _rasterizeInto('$color$type'),
+          _rasterizeInto(into, '$color$type', bucket),
     ]);
-    _loaded = true;
+    _loaded.add(bucket);
   }
 
-  static Future<void> _rasterizeInto(String key) async {
+  static Future<void> _rasterizeInto(
+    Map<String, ui.Image> into,
+    String key,
+    int bucket,
+  ) async {
     try {
-      _sprites[key] = await _rasterize('assets/pieces/$key.svg');
+      into[key] = await _rasterize('assets/pieces/$key.svg', bucket);
     } catch (_) {
       // Missing/undecodable asset: thumbnails render without this piece.
     }
   }
 
-  static Future<ui.Image> _rasterize(String assetPath) async {
+  static Future<ui.Image> _rasterize(String assetPath, int rasterSize) async {
     final info = await vg.loadPicture(SvgAssetLoader(assetPath), null);
     try {
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
       final scale =
-          _rasterSize /
+          rasterSize /
           (info.size.width > info.size.height
               ? info.size.width
               : info.size.height);
       canvas.scale(scale);
       canvas.drawPicture(info.picture);
-      return await recorder.endRecording().toImage(_rasterSize, _rasterSize);
+      return await recorder.endRecording().toImage(rasterSize, rasterSize);
     } finally {
       info.picture.dispose();
     }

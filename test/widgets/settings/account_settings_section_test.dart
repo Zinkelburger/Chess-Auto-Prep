@@ -46,38 +46,72 @@ void main() {
     expect(find.text('Save token'), findsOneWidget);
   });
 
-  testWidgets('the usernames section carries no login controls', (
+  testWidgets('the usernames section is a summary and a button', (
     tester,
   ) async {
     await pumpSection(tester, const ChessUsernamesSection());
 
     expect(find.text('Log into Lichess'), findsNothing);
-    expect(find.text('Lichess username'), findsOneWidget);
-    expect(find.text('Chess.com username'), findsOneWidget);
+    expect(find.text('No usernames set'), findsOneWidget);
+    expect(find.text('Set up…'), findsOneWidget);
+    // The boxes are in the dialog, not on the settings page.
+    expect(find.byType(TextField), findsNothing);
   });
 
-  testWidgets('username fields commit to AppState on submit', (tester) async {
+  testWidgets('the dialog commits both usernames on Save', (tester) async {
     final appState = await pumpSection(tester, const ChessUsernamesSection());
 
-    // Index 0 = Lichess, index 1 = Chess.com.
-    await tester.enterText(find.byType(TextField).at(0), '  MyLichessName ');
-    await tester.testTextInput.receiveAction(TextInputAction.done);
-    await tester.pump();
+    await tester.tap(find.text('Set up…'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('lichess-username-field')),
+      '  MyLichessName ',
+    );
+    await tester.enterText(
+      find.byKey(const Key('chesscom-username-field')),
+      'MyChesscomName',
+    );
+    // Nothing is saved while typing — Save is the commit.
+    expect(appState.lichessUsername, isNull);
+
+    await tester.tap(find.byKey(const Key('accounts-save-button')));
+    await tester.pumpAndSettle();
+
     expect(appState.lichessUsername, 'MyLichessName');
-
-    await tester.enterText(find.byType(TextField).at(1), 'MyChesscomName');
-    await tester.testTextInput.receiveAction(TextInputAction.done);
-    await tester.pump();
     expect(appState.chesscomUsername, 'MyChesscomName');
+    expect(find.text('Lichess: MyLichessName'), findsNothing);
+    expect(
+      find.textContaining('MyLichessName'),
+      findsOneWidget,
+      reason: 'the tile now names what was saved',
+    );
 
-    // Clearing a field clears the saved default rather than storing ''.
-    await tester.enterText(find.byType(TextField).at(0), '');
-    await tester.testTextInput.receiveAction(TextInputAction.done);
-    await tester.pump();
+    // Clearing a box clears the saved default rather than storing ''.
+    await tester.tap(find.text('Change…'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('lichess-username-field')), '');
+    await tester.tap(find.byKey(const Key('accounts-save-button')));
+    await tester.pumpAndSettle();
     expect(appState.lichessUsername, isNull);
   });
 
-  testWidgets('fields prefill from AppState', (tester) async {
+  testWidgets('Cancel leaves the saved names alone', (tester) async {
+    final appState = await pumpSection(tester, const ChessUsernamesSection());
+
+    await tester.tap(find.text('Set up…'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('lichess-username-field')),
+      'typed-then-abandoned',
+    );
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(appState.lichessUsername, isNull);
+  });
+
+  testWidgets('the tile names what is already configured', (tester) async {
     SharedPreferences.setMockInitialValues({'lichess_username': 'prefilled'});
     final appState = AppState();
     await appState.loadUsernames();
@@ -93,6 +127,7 @@ void main() {
       ),
     );
 
-    expect(find.text('prefilled'), findsOneWidget);
+    expect(find.text('Lichess: prefilled'), findsOneWidget);
+    expect(find.text('Change…'), findsOneWidget);
   });
 }

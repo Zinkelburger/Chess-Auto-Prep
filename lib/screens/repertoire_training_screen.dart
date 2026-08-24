@@ -36,6 +36,7 @@ import '../widgets/training/training_board_controls.dart';
 import '../widgets/training/training_progress_panel.dart';
 import '../widgets/training/training_results_panel.dart';
 import '../widgets/training/training_settings_panel.dart';
+import '../widgets/training/training_side_dialog.dart';
 import 'repertoire_selection_screen.dart';
 
 // ---------------------------------------------------------------------------
@@ -331,7 +332,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
             if (repertoire != null)
               Text(
                 repertoire.name,
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.bodySmall,
               ),
@@ -464,6 +465,8 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       ungroupedChapter: TrainingSessionController.ungroupedChapter,
       onLearn: _training.startLearnSession,
       onReview: _training.startReviewSession,
+      learnBatchSize: _sessionCap(_training.settings.newLinesPerSession),
+      reviewBatchSize: _sessionCap(_training.settings.reviewsPerSession),
       onTrainLine: (line) => _training.startLine(line),
       onPreviewLine: _previewLine,
       onApplyLearnedSelection: _applyLearnedSelection,
@@ -472,24 +475,46 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       onOpenChapterSetup: dense || !_training.canOfferChapters
           ? null
           : _training.reopenChapterPrompt,
+      // A study's solver is per chapter, so there is no one side to set.
+      playingWhite: _training.sourceIsStudy ? null : !_training.sourceIsBlack,
+      onChangePlayingSide: _training.sourceIsStudy ? null : _chooseTrainingSide,
       onOpenSettings: dense ? null : _openSettingsDialog,
       introEnabled: _training.settings.skipToFirstComment,
       dense: dense,
     );
   }
 
-  /// "White · spaced repetition" — what the two buttons will actually do.
+  /// Lines one press of Learn/Review covers. Linear mode runs the whole set
+  /// by definition, so it never advertises a batch.
+  int _sessionCap(int setting) =>
+      _training.repetitionMode == RepetitionMode.linear ? 0 : setting;
+
+  /// "930 lines · spaced repetition" — what the two buttons will actually do.
+  /// The side is deliberately *not* here: it has its own header control, and
+  /// repeating it as grey text made it read as a label rather than a setting.
   String _browserSubtitle() {
     final parts = <String>[
-      if (_training.sourceIsStudy)
-        'Study'
-      else
-        _training.sourceIsBlack ? 'Black' : 'White',
+      if (_training.sourceIsStudy) 'Study',
       _training.repetitionMode == RepetitionMode.linear
           ? 'every line once'
           : 'spaced repetition',
     ];
     return parts.join(' · ');
+  }
+
+  /// Ask which side this file trains, and reload with the answer.
+  Future<void> _chooseTrainingSide() async {
+    final choice = await showTrainingSideDialog(
+      context,
+      currentIsWhite: !_training.sourceIsBlack,
+      overridden: _training.colorOverrideIsWhite != null,
+    );
+    if (choice == null) return;
+    await _training.setTrainingColor(switch (choice) {
+      TrainingSideChoice.white => true,
+      TrainingSideChoice.black => false,
+      TrainingSideChoice.fromFile => null,
+    });
   }
 
   /// Trainer settings as a dialog — the landing page has no tab bar, and
@@ -609,10 +634,17 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
                 TextButton.icon(
                   onPressed: _training.stopSession,
                   icon: const Icon(Icons.arrow_back, size: 16),
+                  // Name the chapter you would be going back to; "Chapter"
+                  // told you nothing about which one.
                   label: Text(
                     _training.activeChapter == null
-                        ? 'All chapters'
-                        : 'Chapter',
+                        ? 'All lines'
+                        : _training.activeChapter ==
+                              TrainingSessionController.ungroupedChapter
+                        ? 'Other lines'
+                        : _training.activeChapter!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   style: TextButton.styleFrom(
                     visualDensity: VisualDensity.compact,
@@ -644,25 +676,22 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
                 ),
               ],
             ),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _training.currentLine!.name,
-                    style: Theme.of(context).textTheme.titleSmall,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Text(
-                  _training.sessionIntent == TrainingIntent.learn
-                      ? 'Learning'
-                      : 'Reviewing',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.onSurfaceMuted,
-                  ),
-                ),
-              ],
+            // Chapter *and* variation, over as many lines as it takes: while
+            // drilling there is no list around the line to say which chapter
+            // it came from, and course titles are long.
+            Text(
+              _training.currentLine!.qualifiedName,
+              style: Theme.of(context).textTheme.titleSmall,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              _training.sessionIntent == TrainingIntent.learn
+                  ? 'Learning'
+                  : 'Reviewing',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: AppColors.onSurfaceMuted),
             ),
             const Divider(height: 16),
           ],
@@ -744,6 +773,12 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       onBackToList: _training.stopSession,
       onLearn: _training.startLearnSession,
       onReview: _training.startReviewSession,
+      learnBatchSize: _training.repetitionMode == RepetitionMode.linear
+          ? 0
+          : _training.settings.newLinesPerSession,
+      reviewBatchSize: _training.repetitionMode == RepetitionMode.linear
+          ? 0
+          : _training.settings.reviewsPerSession,
     );
   }
 
@@ -866,9 +901,9 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
             children: [
               Expanded(
                 child: Text(
-                  line.name,
+                  line.qualifiedName,
                   style: Theme.of(context).textTheme.titleSmall,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),

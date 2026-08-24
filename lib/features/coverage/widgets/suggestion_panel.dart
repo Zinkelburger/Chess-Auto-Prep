@@ -354,13 +354,9 @@ class _MetricChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceInset,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text('$label: $value', style: const TextStyle(fontSize: 10)),
+    return Text(
+      '$label: $value',
+      style: const TextStyle(fontSize: 10, color: AppColors.onSurfaceSoft),
     );
   }
 }

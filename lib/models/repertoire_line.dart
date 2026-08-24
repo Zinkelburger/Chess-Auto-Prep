@@ -74,11 +74,17 @@ class RepertoireLine {
   });
 
   /// The same line under a different id (collision resolution at parse time).
-  RepertoireLine copyWithId(String newId) => RepertoireLine(
-    id: newId,
+  RepertoireLine copyWithId(String newId) => _copyWith(id: newId);
+
+  /// The same line trained from the other side. Used when a file declares no
+  /// colour and the parser reads it off the move tree instead.
+  RepertoireLine copyWithColor(String newColor) => _copyWith(color: newColor);
+
+  RepertoireLine _copyWith({String? id, String? color}) => RepertoireLine(
+    id: id ?? this.id,
     name: name,
     moves: moves,
-    color: color,
+    color: color ?? this.color,
     startPosition: startPosition,
     fullPgn: fullPgn,
     comments: comments,
@@ -92,6 +98,22 @@ class RepertoireLine {
 
   /// Gets the total number of trainable moves in this line
   int get totalMoves => moves.length;
+
+  /// "6) Tartakower 8.Rc1 › 8.Rc1 Bb7 #3" — the name plus the chapter it sits
+  /// in, for the places that show one line with no chapter around it (the
+  /// Train tab, the preview dialog, a results summary). Inside a chapter's own
+  /// list the chapter is already the heading, so [name] is used there instead.
+  ///
+  /// Course exports often repeat the chapter inside the variation title; when
+  /// they do, saying it twice is noise, so the prefix is dropped.
+  String get qualifiedName {
+    final chapter = this.chapter?.trim();
+    if (chapter == null || chapter.isEmpty) return name;
+    final lower = name.toLowerCase();
+    final chapterLower = chapter.toLowerCase();
+    if (lower == chapterLower || lower.startsWith(chapterLower)) return name;
+    return '$chapter › $name';
+  }
 
   int? _uncommentedIntroLength;
 

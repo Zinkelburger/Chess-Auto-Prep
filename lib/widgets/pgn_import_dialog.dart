@@ -5,9 +5,15 @@
 /// screen uses inline popup menus instead (see PgnWithAnalysisPane).
 library;
 
+import 'dart:isolate';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+
 import '../services/pgn_parsing_service.dart' as pgn;
+import '../services/repertoire_color_inference.dart';
+import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';
 
 /// Result returned when the user confirms an import.
@@ -16,6 +22,82 @@ class PgnImportResult {
   final int gameCount;
 
   const PgnImportResult({required this.pgnContent, required this.gameCount});
+}
+
+/// Outcome of picking a `.pgn` off disk: either a parsed [result] with the
+/// file's name, or a human-readable [error]. Cancelling the picker returns
+/// null instead of an instance, so "cancelled" never looks like "failed".
+class PickedPgnImport {
+  const PickedPgnImport({
+    this.result,
+    this.error,
+    this.fileName,
+    this.suggestedName,
+    this.suggestedColor,
+  });
+
+  final PgnImportResult? result;
+  final String? error;
+  final String? fileName;
+
+  /// The file's base name, used to prefill the repertoire name so importing
+  /// "Caro-Kann.pgn" doesn't produce a repertoire called "Imported".
+  final String? suggestedName;
+
+  /// 'White' / 'Black' read off the file's own move tree, or null when it
+  /// does not say clearly. The colour picker starts here rather than always
+  /// on White: the chosen value is written into the new repertoire's
+  /// `// Color:` header, where it outranks every later guess — so a wrong
+  /// default is not a wrong default for one session, it is permanent.
+  final String? suggestedColor;
+}
+
+/// The side [pgnContent] looks like it trains, off the UI isolate — a course
+/// export is megabytes and replaying every game blocks a frame otherwise.
+Future<String?> inferImportColor(String pgnContent) async {
+  try {
+    return await Isolate.run(() {
+      final lines = RepertoireService().parseRepertoirePgn(pgnContent);
+      final guess = inferTrainingColor(lines);
+      return guess == null ? null : (guess.isWhite ? 'White' : 'Black');
+    });
+  } catch (_) {
+    // A file we cannot parse is one the picker will reject anyway; the colour
+    // picker just stays where it was.
+    return null;
+  }
+}
+
+Future<PickedPgnImport?> pickPgnImport() async {
+  try {
+    final picked = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: ['pgn', 'txt'],
+    );
+    if (picked == null) return null;
+
+    final path = picked.path;
+    if (path == null) return null;
+
+    final content = await StorageFactory.instance.readFile(path);
+    if (content == null) {
+      return const PickedPgnImport(error: 'Could not read that file.');
+    }
+
+    final count = pgn.countPgnGames(content);
+    final name = picked.name;
+    if (count == 0) {
+      return PickedPgnImport(error: 'No lines found in $name.', fileName: name);
+    }
+    return PickedPgnImport(
+      result: PgnImportResult(pgnContent: content, gameCount: count),
+      fileName: name,
+      suggestedName: p.basenameWithoutExtension(name),
+      suggestedColor: await inferImportColor(content),
+    );
+  } catch (e) {
+    return PickedPgnImport(error: 'Could not read file: $e');
+  }
 }
 
 /// Shows a compact dialog for importing PGN — from file or pasted text.

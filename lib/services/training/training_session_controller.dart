@@ -96,6 +96,12 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// always quizzes cold (a puzzle's solution must not be shown first).
   TrainingMode trainingMode = TrainingMode.repertoire;
 
+  /// The user's hand-set answer to "which side does this file train?", or
+  /// null when nobody has overridden the file's own answer. Non-null is what
+  /// makes the trainer stop trusting the `// Color:` header and the move-tree
+  /// inference for this file.
+  bool? colorOverrideIsWhite;
+
   /// Spaced repetition (due-queue + Again/Hard/Good/Easy) or linear (every
   /// line once, in order, no scheduling).
   RepetitionMode repetitionMode = RepetitionMode.spaced;
@@ -223,6 +229,10 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   void dispose() {
     _lineGeneration++;
     learn.cancelPending();
+    // Get the session's schedules into the PGN before the timer that would
+    // have done it is cancelled.
+    unawaited(progress.flushHeaders());
+    progress.dispose();
     session.removeListener(_onSessionChanged);
     session.dispose();
     super.dispose();
@@ -259,8 +269,40 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     trainingMode = mode;
     notifyListeners();
     if (currentLine != null && phase != TrainingPhase.finished) {
-      startLine(currentLine);
+      startLine(currentLine, intent: sessionIntent, keepRunScope: true);
     }
+  }
+
+  /// Record that this file trains [isWhite]'s side and reload with it.
+  ///
+  /// Getting the side wrong makes every line quiz the opponent's moves, and a
+  /// third-party course export says nothing about which side it is for — so
+  /// this override has to exist, has to survive a restart, and has to be
+  /// reachable while looking at the wrong-side lines. Passing null forgets the
+  /// override and hands the question back to the file.
+  Future<void> setTrainingColor(bool? isWhite) async {
+    if (sourceIsStudy || colorOverrideIsWhite == isWhite) return;
+    colorOverrideIsWhite = isWhite;
+    final filePath = repertoire?.filePath;
+    // Reload before the write: the user should see the board flip now, not
+    // after a file round-trip.
+    final reloaded = loadRepertoire();
+    if (filePath != null) {
+      if (isWhite == null) {
+        await askedQuestions.forget(
+          AskedQuestion.trainingColor,
+          subject: filePath,
+        );
+      } else {
+        await askedQuestions.record(
+          AskedQuestion.trainingColor,
+          subject: filePath,
+          answer: isWhite,
+          note: 'set by hand in the trainer',
+        );
+      }
+    }
+    await reloaded;
   }
 
   /// Switch between spaced repetition and linear scheduling.  Rebuilds the
@@ -291,10 +333,25 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
 
     try {
       final filePath = repertoire!.filePath;
+      // A hand-set colour beats everything: it exists precisely because the
+      // file and the inference between them got it wrong.
+      colorOverrideIsWhite = loadIsStudy
+          ? null
+          : await askedQuestions.boolAnswerFor(
+              AskedQuestion.trainingColor,
+              subject: filePath,
+            );
+      if (generation != _loadGeneration) return;
       final parsedLines = await repertoireService.parseRepertoireFile(
         filePath,
+        trainingColor: colorOverrideIsWhite == null
+            ? null
+            : (colorOverrideIsWhite! ? 'white' : 'black'),
         // Study puzzles: the solver is whoever moves first in each chapter.
         colorFromStartingSide: loadIsStudy,
+        // Imported courses declare no `// Color:`; without this every Black
+        // repertoire would quiz the user on White's moves.
+        inferColorWhenUnknown: !loadIsStudy,
       );
       if (generation != _loadGeneration) return; // superseded mid-parse
       if (parsedLines.isEmpty) {
@@ -559,43 +616,91 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// Start working through the lines that are due in the active chapter.
   void startReviewSession() => _startSession(TrainingIntent.review);
 
+  /// Line ids this sitting will work through, or null for an uncapped run.
+  ///
+  /// Fixed when the run starts, so finishing a line cannot pull a fresh one in
+  /// behind it and a session over a 900-line course actually ends. A line
+  /// failed mid-run stays in scope until it comes back clean.
+  Set<String>? _runScope;
+
+  /// Whether the sitting stopped because it hit its own cap rather than
+  /// because the chapter ran out — a different sentence, and a different
+  /// offer, at the end.
+  bool _runWasCapped = false;
+
   void _startSession(TrainingIntent intent) {
     dueQueue = _buildQueue();
+    _runScope = _scopeForRun(intent);
     final line = _nextForIntent(intent);
     if (line == null) {
       // Nothing to do in this scope: say so instead of dropping the user into
       // an unrelated line (the old buttons fell back to dueQueue.first, which
       // threw on an empty queue).
+      _runScope = null;
       feedback = _sessionCompleteMessage(intent);
       notifyListeners();
       return;
     }
-    startLine(line, intent: intent);
+    startLine(line, intent: intent, keepRunScope: true);
+  }
+
+  /// The first [TrainingSettings.newLinesPerSession] / [reviewsPerSession]
+  /// lines of the queue, or null when the cap is off or the mode has no cap.
+  ///
+  /// Linear mode is uncapped on purpose: "every line once, in order" is what
+  /// the mode *is*, and stopping it a tenth of the way through would make its
+  /// "Set complete!" a lie.
+  Set<String>? _scopeForRun(TrainingIntent intent) {
+    if (repetitionMode == RepetitionMode.linear) return null;
+    final cap = intent == TrainingIntent.learn
+        ? settings.newLinesPerSession
+        : settings.reviewsPerSession;
+    if (cap <= 0) return null;
+
+    final picked = <String>{};
+    for (final line in dueQueue) {
+      if (!_matchesIntent(line, intent)) continue;
+      picked.add(line.id);
+      if (picked.length >= cap) break;
+    }
+    _runWasCapped = picked.length >= cap;
+    return picked;
   }
 
   /// The next line matching [intent], starting after [afterLineId] in queue
   /// order and wrapping around. Null when the scope holds no such line.
   RepertoireLine? _nextForIntent(TrainingIntent intent, {String? afterLineId}) {
     if (dueQueue.isEmpty) return null;
-    // Linear mode runs every queued line once, in order — there is no
-    // untrained/due split to honour.
-    bool matches(RepertoireLine line) =>
-        repetitionMode == RepetitionMode.linear || _matchesIntent(line, intent);
 
     final startIndex = afterLineId == null
         ? -1
         : dueQueue.indexWhere((l) => l.id == afterLineId);
     if (startIndex < 0) {
       for (final line in dueQueue) {
-        if (matches(line)) return line;
+        if (_inRun(line, intent)) return line;
       }
       return null;
     }
     for (int step = 1; step <= dueQueue.length; step++) {
       final line = dueQueue[(startIndex + step) % dueQueue.length];
-      if (matches(line)) return line;
+      if (_inRun(line, intent)) return line;
     }
     return null;
+  }
+
+  /// Whether [line] is still part of the run in progress.
+  bool _inRun(RepertoireLine line, TrainingIntent intent) {
+    // Linear mode runs every queued line once, in order — there is no
+    // untrained/due split to honour.
+    if (repetitionMode == RepetitionMode.linear) return true;
+    final scope = _runScope;
+    if (scope == null) return _matchesIntent(line, intent);
+    if (!scope.contains(line.id)) return false;
+    // Inside the sitting's own set, "not learned yet" is the test. Rating a
+    // new line Again moves it out of *untrained*, so the strict intent match
+    // would have dropped it from the run you are in the middle of — exactly
+    // the line you most need to see again.
+    return lineStatusOf(reviewMap[line.id]) != LineStatus.learned;
   }
 
   bool _matchesIntent(RepertoireLine line, TrainingIntent intent) {
@@ -608,10 +713,15 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// Lines still ahead in this run — what the Train tab counts down.
   int get remainingInRun => repetitionMode == RepetitionMode.linear
       ? dueQueue.length
-      : dueQueue.where((line) => _matchesIntent(line, sessionIntent)).length;
+      : dueQueue.where((line) => _inRun(line, sessionIntent)).length;
 
   String _sessionCompleteMessage(TrainingIntent intent) {
     if (repetitionMode == RepetitionMode.linear) return 'Set complete!';
+    if (_runWasCapped) {
+      return intent == TrainingIntent.learn
+          ? 'That is this sitting\'s new lines — nicely done.'
+          : 'Review session done.';
+    }
     return intent == TrainingIntent.learn
         ? 'Nothing left to learn here.'
         : 'All caught up!';
@@ -620,8 +730,21 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// Start [line] now. [intent] is what the rest of the run should work
   /// through; by default it follows the line's own status, so clicking an
   /// untrained line starts a Learn run and clicking a due one a Review run.
-  void startLine(RepertoireLine? line, {TrainingIntent? intent}) {
+  ///
+  /// [keepRunScope] is for the Learn/Review buttons, which have just decided
+  /// what this sitting covers. Picking a line off the list instead is a
+  /// deliberate "train this one", so it drops the cap rather than refusing to
+  /// continue past a set the user never asked for.
+  void startLine(
+    RepertoireLine? line, {
+    TrainingIntent? intent,
+    bool keepRunScope = false,
+  }) {
     if (line == null) return;
+    if (!keepRunScope) {
+      _runScope = null;
+      _runWasCapped = false;
+    }
     sessionIntent =
         intent ??
         (_isLineNew(line) ? TrainingIntent.learn : TrainingIntent.review);
@@ -770,15 +893,20 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// line is still new).
   void restartLine() {
     if (currentLine == null) return;
-    startLine(currentLine);
+    startLine(currentLine, intent: sessionIntent, keepRunScope: true);
   }
 
   /// Leave the active line and return to the line browser. Nothing is rated
   /// or persisted; the queue is refreshed.
   void stopSession() {
     learn.cancelPending();
+    // Leaving the line is the natural moment to pay off the batched PGN
+    // writes: the user has stopped answering, so the pause costs nothing.
+    unawaited(progress.flushHeaders());
     _lineGeneration++;
     runComplete = false;
+    _runScope = null;
+    _runWasCapped = false;
     currentLine = null;
     phase = TrainingPhase.drilling;
     waitingForUser = false;
@@ -1032,10 +1160,12 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
       phase = TrainingPhase.finished;
       runComplete = true;
       feedback = _sessionCompleteMessage(sessionIntent);
+      _runScope = null;
+      unawaited(progress.flushHeaders());
       notifyListeners();
       return;
     }
-    startLine(next, intent: sessionIntent);
+    startLine(next, intent: sessionIntent, keepRunScope: true);
   }
 
   /// Rebuild the due queue after a settings change (review order, depth…).

@@ -12,6 +12,7 @@ class AppPaths {
   static const String tacticsSetsDirectoryName = 'tactics_sets';
   static const String studiesDirectoryName = 'studies';
   static const String chessgamesCacheDirectoryName = 'chessgames_pgn_cache';
+  static const String engineTournamentsDirectoryName = 'engine_tournaments';
 
   static Future<Directory> documentsDirectory() async {
     return getApplicationDocumentsDirectory();
@@ -86,6 +87,19 @@ class AppPaths {
   }) async {
     final support = await supportDirectory();
     final dir = Directory(p.join(support.path, chessgamesCacheDirectoryName));
+    if (create && !await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    return dir;
+  }
+
+  /// Engine-vs-engine tournaments: one sub-directory each, plus the
+  /// registry of user-supplied UCI binaries (`engines.json`).
+  static Future<Directory> engineTournamentsDirectory({
+    bool create = false,
+  }) async {
+    final docs = await documentsDirectory();
+    final dir = Directory(p.join(docs.path, engineTournamentsDirectoryName));
     if (create && !await dir.exists()) {
       await dir.create(recursive: true);
     }

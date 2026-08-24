@@ -14,6 +14,7 @@ import 'package:provider/provider.dart';
 import '../../core/app_state.dart';
 import '../../services/lichess_auth_service.dart';
 import '../../theme/app_colors.dart';
+import '../accounts/accounts_dialog.dart';
 import 'settings_widgets.dart';
 
 class LichessLoginSection extends StatelessWidget {
@@ -43,7 +44,7 @@ class ChessUsernamesSection extends StatelessWidget {
       subtitle:
           'Whose games the app downloads — for the home game review, tactics '
           'mining and every "fetch games" form. No login needed.',
-      children: [_DefaultUsernameFields()],
+      children: [_UsernamesTile()],
     );
   }
 }
@@ -270,97 +271,52 @@ class _LichessLoginTileState extends State<_LichessLoginTile> {
 // Default usernames
 // ═══════════════════════════════════════════════════════════════════════════
 
-class _DefaultUsernameFields extends StatefulWidget {
-  const _DefaultUsernameFields();
-
-  @override
-  State<_DefaultUsernameFields> createState() => _DefaultUsernameFieldsState();
-}
-
-class _DefaultUsernameFieldsState extends State<_DefaultUsernameFields> {
-  late final TextEditingController _lichessCtrl;
-  late final TextEditingController _chesscomCtrl;
-
-  @override
-  void initState() {
-    super.initState();
-    final app = context.read<AppState>();
-    _lichessCtrl = TextEditingController(text: app.lichessUsername ?? '');
-    _chesscomCtrl = TextEditingController(text: app.chesscomUsername ?? '');
-  }
-
-  @override
-  void dispose() {
-    _lichessCtrl.dispose();
-    _chesscomCtrl.dispose();
-    super.dispose();
-  }
-
-  // Commit on focus loss / submit, not per keystroke: AppState notifies the
-  // whole app, and half-typed names shouldn't land in other screens' prefills.
-  void _commitLichess() {
-    final value = _lichessCtrl.text.trim();
-    context.read<AppState>().setLichessUsername(value.isEmpty ? null : value);
-  }
-
-  void _commitChesscom() {
-    final value = _chesscomCtrl.text.trim();
-    context.read<AppState>().setChesscomUsername(value.isEmpty ? null : value);
-  }
+/// What is configured, and one button onto the form.
+///
+/// The boxes themselves live in [AccountsDialog], which the tactics home's
+/// accounts card also opens: one form, whichever door you came through. There
+/// used to be two copies of the same two fields with different commit rules —
+/// this one saving on focus loss, the home card's per keystroke — which is how
+/// "what did I set my username to" became a question with two answers.
+class _UsernamesTile extends StatelessWidget {
+  const _UsernamesTile();
 
   @override
   Widget build(BuildContext context) {
+    final app = context.watch<AppState>();
+    final lichess = app.lichessUsername?.trim() ?? '';
+    final chesscom = app.chesscomUsername?.trim() ?? '';
+    final configured = [
+      if (lichess.isNotEmpty) 'Lichess: $lichess',
+      if (chesscom.isNotEmpty) 'Chess.com: $chesscom',
+    ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: _usernameField(
-                  controller: _lichessCtrl,
-                  label: 'Lichess username',
-                  onCommit: _commitLichess,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _usernameField(
-                  controller: _chesscomCtrl,
-                  label: 'Chess.com username',
-                  onCommit: _commitChesscom,
-                ),
-              ),
-            ],
+          Icon(
+            configured.isEmpty
+                ? Icons.person_off_outlined
+                : Icons.check_circle_outline,
+            size: 18,
+            color: configured.isEmpty
+                ? AppColors.onSurfaceMuted
+                : AppColors.success,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              configured.isEmpty
+                  ? 'No usernames set'
+                  : configured.join('   ·   '),
+              style: const TextStyle(fontSize: 13),
+            ),
+          ),
+          OutlinedButton(
+            onPressed: () => showAccountsDialog(context),
+            child: Text(configured.isEmpty ? 'Set up…' : 'Change…'),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _usernameField({
-    required TextEditingController controller,
-    required String label,
-    required VoidCallback onCommit,
-  }) {
-    return Focus(
-      onFocusChange: (hasFocus) {
-        if (!hasFocus) onCommit();
-      },
-      child: TextField(
-        controller: controller,
-        style: const TextStyle(fontSize: 13),
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: const TextStyle(fontSize: 12),
-          // Pinned small on the border, never full-size inside the box — an
-          // empty field showing its own label as if typed reads as a value.
-          floatingLabelBehavior: FloatingLabelBehavior.always,
-          border: const OutlineInputBorder(),
-          isDense: true,
-        ),
-        onSubmitted: (_) => onCommit(),
       ),
     );
   }

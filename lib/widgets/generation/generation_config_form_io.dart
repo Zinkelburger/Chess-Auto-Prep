@@ -3,6 +3,7 @@ part of 'generation_config_form.dart';
 mixin _GenerationConfigIo
     on _GenerationConfigFormStateBase, _GenerationConfigDescriptions {
   void _applyInitialConfig(TreeBuildConfig config) {
+    _seedConfig = config;
     _cutoffCtrl.text = (config.minProbability * 100).toString();
     _maxPlyCtrl.text = config.maxPly.toString();
     _engineDepthCtrl.text = config.evalDepth.toString();
@@ -64,13 +65,16 @@ mixin _GenerationConfigIo
     _pgnFilePaths
       ..clear()
       ..addAll(config.pgnFilePaths);
-    // The skeleton card is mounted (Offstage) but its state may not exist yet
-    // on the first apply; load it after the frame. Auto-expand when non-empty
-    // so a resumed/preset plan is visible, not silently carried.
+    // The skeleton card and the eval-sources section are mounted (Offstage)
+    // but their states may not exist yet on the first apply; seed them after
+    // the frame. Auto-expand the skeleton when non-empty so a resumed/preset
+    // plan is visible, not silently carried.
     final plan = config.skeletonPlan;
     _showSkeleton = !plan.isEmpty;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _skeletonKey.currentState?.loadPlan(plan);
+      if (!mounted) return;
+      _skeletonKey.currentState?.loadPlan(plan);
+      _evalSourcesKey.currentState?.applyConfig(config);
     });
   }
 
@@ -154,6 +158,14 @@ mixin _GenerationConfigIo
     return null;
   }
 
+  /// The config the form's controls currently describe.
+  ///
+  /// Built on top of [_seedConfig] rather than from scratch: every field with
+  /// a control below is passed explicitly and wins, and every field without
+  /// one is carried from the seed. That inversion is the whole point — a
+  /// knob added to [TreeBuildConfig] and wired into the build but never given
+  /// a widget is now *preserved* through the form instead of being reset to
+  /// its constructor default on the next build.
   TreeBuildConfig toConfig({
     required String startFen,
     required bool playAsWhite,
@@ -179,9 +191,19 @@ mixin _GenerationConfigIo
     // offset from the root's own eval, and an offset has no colour.
     final userMinEval = int.tryParse(_minEvalCtrl.text.trim()) ?? -100;
 
-    return TreeBuildConfig(
+    final seed =
+        _seedConfig ??
+        TreeBuildConfig(startFen: startFen, playAsWhite: playAsWhite);
+
+    return seed.copyWith(
       startFen: startFen,
       playAsWhite: playAsWhite,
+      // Not a form knob, and not carried from the seed either: PlanRunner
+      // sets this per build point and NodeExpander only reads it at ply 0,
+      // so it describes one specific build root. A hand-started build gets
+      // its own root, and inheriting a plan point's exclusions would narrow
+      // it silently.
+      rootReplyExclude: const [],
       minProbability: _parsePercentToFraction(
         _cutoffCtrl.text,
         fallbackPercent: 0.01,

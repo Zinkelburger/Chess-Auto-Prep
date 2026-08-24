@@ -41,9 +41,13 @@ class EngineMoveRow extends StatelessWidget {
     final lineMuted = settings.isAnalysisColumnMuted(EngineSettings.colLine);
     final maiaMuted = settings.isAnalysisColumnMuted(EngineSettings.colMaia);
 
-    final evalColor = move.hasStockfish
-        ? AppColors.cpEval(move.effectiveCp, muted: evalMuted)
-        : AppColors.onSurfaceDim;
+    // Eval reads as a plain number; muted only when the column is dimmed or
+    // the engine hasn't scored the move yet.
+    final evalColor = !move.hasStockfish
+        ? AppColors.onSurfaceDim
+        : evalMuted
+        ? AppColors.onSurfaceMuted
+        : null;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -100,21 +104,8 @@ class EngineMoveRow extends StatelessWidget {
                     );
                   },
                 ),
-                Container(
+                SizedBox(
                   width: evalWidth,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: move.hasStockfish
-                        ? AppColors.cpEvalBg(
-                            move.effectiveCp,
-                            muted: evalMuted,
-                          ).withValues(alpha: evalMuted ? 0.5 : 0.85)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
                   child: Text(
                     move.evalString,
                     style: TextStyle(

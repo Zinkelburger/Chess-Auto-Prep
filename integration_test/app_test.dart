@@ -24,18 +24,20 @@ void main() {
       // Left pane: the recent-games home. A fresh environment has no
       // usernames configured, so its empty-state card shows.
       expect(find.text('No accounts configured'), findsOneWidget);
-      expect(find.text('Open Settings'), findsOneWidget);
       // Idle Tactics shows the games home instead of a decorative board;
       // the board returns only when a puzzle session starts.
       expect(find.byType(ChessBoardWidget), findsNothing);
 
-      // Right pane: who you are — both platforms' username fields, each with
-      // a visible label — which games to fetch, and what is in the puzzle
-      // database.
-      expect(find.text('My accounts'), findsOneWidget);
-      expect(find.byKey(const Key('lichess-username-field')), findsOneWidget);
-      expect(find.byKey(const Key('chesscom-username-field')), findsOneWidget);
-      expect(find.text('Games to download'), findsOneWidget);
+      // With nothing set up, both panes offer the same one thing to do — the
+      // accounts button — and neither shows a username box: those live in the
+      // dialog it opens.
+      expect(find.text('Set up my accounts'), findsNWidgets(2));
+      expect(find.byKey(const Key('accounts-setup-button')), findsOneWidget);
+      expect(find.byKey(const Key('lichess-username-field')), findsNothing);
+      expect(find.byKey(const Key('chesscom-username-field')), findsNothing);
+      // The games window is not on this pane either — it is a section of the
+      // review strip's analysis-settings dialog.
+      expect(find.text('Games to download'), findsNothing);
       expect(find.text('My tactics'), findsOneWidget);
       // The engine-settings gear is gone: cores and depth are steppers on the
       // review strip, and downloading is the review's play button, so this card
@@ -45,6 +47,22 @@ void main() {
       // Nor a play button of its own: both live on the review strip in the left
       // pane, one under the other.
       expect(find.textContaining('Start Practice Session'), findsNothing);
+    });
+
+    testWidgets('the accounts button opens the username form', (tester) async {
+      await pumpApp(tester);
+
+      await tester.tap(find.byKey(const Key('accounts-setup-button')));
+      await tester.pumpAndSettle();
+
+      // One form, both sites, and no login anywhere in it.
+      expect(find.text('My accounts'), findsOneWidget);
+      expect(find.byKey(const Key('lichess-username-field')), findsOneWidget);
+      expect(find.byKey(const Key('chesscom-username-field')), findsOneWidget);
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('lichess-username-field')), findsNothing);
     });
   });
 
@@ -82,6 +100,13 @@ void main() {
         find.descendant(
           of: find.byType(PopupMenuItem<AppMode>),
           matching: find.text('Repertoire Trainer'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(PopupMenuItem<AppMode>),
+          matching: find.text('Engine Tournament'),
         ),
         findsOneWidget,
       );

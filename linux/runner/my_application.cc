@@ -84,6 +84,25 @@ static void my_application_activate(GApplication* application) {
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(project, self->dart_entrypoint_arguments);
 
+  // Render with Skia, not Impeller.
+  //
+  // Bumping the Flutter pin 3.44.2 -> 3.47.1 (780cb7a) also handed Linux a new
+  // default renderer, and Impeller draws the piece SVGs with far coarser edge
+  // antialiasing: rendering the opening position at 600px produces 833 distinct
+  // colours under Skia and 27 under Impeller. Twenty-seven is a board with no
+  // smoothing left on it, which is why every piece went jagged at every board
+  // size — the boards are line art on flat colour, so they show it first.
+  //
+  // Setting this here rather than passing --no-enable-impeller to `flutter run`
+  // is deliberate: `flutter build linux --release` never sees that flag, so a
+  // shipped build would keep the bad renderer. Skia is still in the engine, so
+  // this is the pre-upgrade behaviour rather than anything exotic. Revisit when
+  // Impeller's path antialiasing on Linux catches up — set
+  // CHESS_AUTO_PREP_IMPELLER=1 to compare the two without rebuilding.
+  const gchar* want_impeller = g_getenv("CHESS_AUTO_PREP_IMPELLER");
+  fl_dart_project_set_enable_impeller(project,
+                                      g_strcmp0(want_impeller, "1") == 0);
+
   FlView* view = fl_view_new(project);
   GdkRGBA background_color;
   // Background defaults to black, override it here if necessary, e.g. #00000000 for transparent.

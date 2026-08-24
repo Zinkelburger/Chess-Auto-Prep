@@ -84,19 +84,11 @@ class MoveEval {
 
   /// Format as a Lichess-compatible `[%eval]` comment value, with optional
   /// depth suffix (e.g. `1.23,18` or `#3,20`).
-  String toEvalComment() {
-    String base;
-    if (scoreMate != null) {
-      base = '#$scoreMate';
-    } else if (scoreCp != null) {
-      final v = scoreCp! / 100.0;
-      base = v.toStringAsFixed(2);
-    } else {
-      base = '0.00';
-    }
-    if (depth != null) return '$base,$depth';
-    return base;
-  }
+  String toEvalComment() => formatEvalCommentValue(
+    scoreCp: scoreCp,
+    scoreMate: scoreMate,
+    depth: depth,
+  );
 }
 
 enum MoveClassification { normal, interesting, inaccuracy, mistake, blunder }
@@ -127,7 +119,8 @@ MoveClassification classifyMove(double delta) {
 // ---------------------------------------------------------------------------
 
 /// Restore per-move evals from a game's stored `[%eval]` comments, or null
-/// when the game does not count as analyzed (more than 2 plies lack an eval).
+/// when the game does not count as analyzed (more than
+/// [kMaxUnevaluatedPlies] plies lack an eval).
 /// Public because the games list derives its review summaries from the same
 /// parse (see `features/games/services/game_review_summary.dart`).
 ({List<MoveEval> evals, double startWinChance, int totalMoves})?
@@ -204,7 +197,7 @@ parseCachedEvals(String pgnText) {
 
     if (evalData == null) {
       missingCount++;
-      if (missingCount > 2) return null;
+      if (missingCount > kMaxUnevaluatedPlies) return null;
       continue;
     }
 
@@ -227,7 +220,7 @@ parseCachedEvals(String pgnText) {
     );
   }
 
-  if (results.length < realPlies - 2) return null;
+  if (results.length < realPlies - kMaxUnevaluatedPlies) return null;
 
   final startWinChance = cpToWinningChance(0, null);
   double prevWinChance = startWinChance;

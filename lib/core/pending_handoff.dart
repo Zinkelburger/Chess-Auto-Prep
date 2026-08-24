@@ -196,3 +196,23 @@ final class OpenPgnViewer extends PendingHandoff {
   @override
   String get defaultHistoryLabel => 'PGN: ${_displayName(pgnPath)}';
 }
+
+/// Open Engine Tournament, optionally on one tournament.
+///
+/// Fired from inside the app (a link to a match) and from outside it: the MCP
+/// tools drop an open-request file that the app turns into one of these, so
+/// "run me a tournament and show it to me" is one instruction to an agent.
+final class OpenEngineTournament extends PendingHandoff {
+  const OpenEngineTournament({this.tournamentId});
+
+  /// Directory name of the tournament to select, or null for whichever the
+  /// screen would show anyway (the most recent).
+  final String? tournamentId;
+
+  @override
+  AppMode get targetMode => AppMode.engineTournament;
+
+  @override
+  String get defaultHistoryLabel =>
+      tournamentId == null ? 'Engine Tournament' : 'Tournament: $tournamentId';
+}

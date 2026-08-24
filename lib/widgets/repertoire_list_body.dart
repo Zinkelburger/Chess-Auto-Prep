@@ -8,12 +8,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/repertoire_metadata.dart';
 import '../screens/repertoire_chapters_screen.dart';
-import '../services/pgn_parsing_service.dart' as pgn;
+import '../services/repertoire_creation.dart';
 import '../services/storage/storage_factory.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
@@ -224,6 +223,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
       initialImport: picked.result,
       initialName: picked.suggestedName,
       initialFileName: picked.fileName,
+      initialColor: picked.suggestedColor,
     );
   }
 
@@ -257,12 +257,12 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.infoTint,
+                  color: AppColors.surfaceInset,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(
                   Icons.menu_book_outlined,
-                  color: AppColors.info,
+                  color: AppColors.onSurfaceSoft,
                   size: 32,
                 ),
               ),
@@ -324,12 +324,12 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.warningTint,
+                  color: AppColors.surfaceInset,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(
                   Icons.library_books,
-                  color: AppColors.warning,
+                  color: AppColors.onSurfaceSoft,
                   size: 32,
                 ),
               ),
@@ -408,9 +408,14 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
     PgnImportResult? initialImport,
     String? initialName,
     String? initialFileName,
+    String? initialColor,
   }) async {
     final nameController = TextEditingController(text: initialName ?? '');
-    String selectedColor = 'White';
+    // An imported file's own move tree names the side far more reliably than
+    // "White by default" does, and the choice made here is written into the
+    // chapter's `// Color:` header, which outranks every later guess.
+    String selectedColor = initialColor ?? 'White';
+    bool colorFromFile = initialColor != null;
     String? nameError;
     PgnImportResult? importResult = initialImport;
 
@@ -454,15 +459,35 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
                 ],
                 selected: {selectedColor},
                 onSelectionChanged: (Set<String> newSelection) {
-                  setState(() => selectedColor = newSelection.first);
+                  setState(() {
+                    selectedColor = newSelection.first;
+                    colorFromFile = false;
+                  });
                 },
               ),
+              if (colorFromFile) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Read from the moves in the file you picked.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.onSurfaceMuted,
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
               _InlinePgnAttach(
                 importResult: importResult,
                 initialFileName: initialFileName,
-                onChanged: (result) {
-                  setState(() => importResult = result);
+                onChanged: (result, suggestedColor) {
+                  setState(() {
+                    importResult = result;
+                    if (suggestedColor != null) {
+                      selectedColor = suggestedColor;
+                      colorFromFile = true;
+                    } else if (result == null) {
+                      colorFromFile = false;
+                    }
+                  });
                   if (result != null && nameController.text.trim().isEmpty) {
                     nameController.text = 'Imported Repertoire';
                   }
@@ -522,9 +547,6 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
     PgnImportResult? pgnImport,
   }) async {
     try {
-      final storage = StorageFactory.instance;
-      final dirPath = await storage.repertoireDirectoryPath(name);
-
       if (_repertoires.any((r) => r.name.toLowerCase() == name.toLowerCase())) {
         if (mounted) {
           showAppSnackBar(context, AppMessages.repertoireExists(name));
@@ -533,30 +555,21 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
       }
 
       // New repertoires start with a single "Main" chapter; imported PGN lands
-      // there. Additional chapters are added from the chapter list.
-      final chapterPath = storage.chapterFilePath(dirPath, 'Main');
-      final header =
-          '// Main\n'
-          '// Color: $color\n'
-          '// Created on ${DateTime.now().toString().split('.')[0]}\n\n';
-
-      int gameCount = 0;
-      if (pgnImport != null) {
-        await storage.writeFile(
-          chapterPath,
-          '$header${pgnImport.pgnContent}\n',
-        );
-        gameCount = pgnImport.gameCount;
-      } else {
-        await storage.writeFile(chapterPath, header);
-      }
+      // there. Additional chapters are added from the chapter list. The
+      // designation panel creates them the same way — see [createRepertoire].
+      final created = await createRepertoire(
+        name: name,
+        color: color,
+        pgnContent: pgnImport?.pgnContent,
+        gameCount: pgnImport?.gameCount ?? 0,
+      );
 
       if (mounted) {
         widget.onSelected(
           RepertoireMetadata(
-            filePath: chapterPath,
+            filePath: created.chapterPath,
             name: 'Main',
-            gameCount: gameCount,
+            gameCount: created.gameCount,
             lastModified: DateTime.now(),
           ),
         );
@@ -698,57 +711,6 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
-/// Outcome of picking a `.pgn` off disk: either a parsed [result] with the
-/// file's name, or a human-readable [error]. Cancelling the picker returns
-/// null instead of an instance, so "cancelled" never looks like "failed".
-class PickedPgnImport {
-  const PickedPgnImport({
-    this.result,
-    this.error,
-    this.fileName,
-    this.suggestedName,
-  });
-
-  final PgnImportResult? result;
-  final String? error;
-  final String? fileName;
-
-  /// The file's base name, used to prefill the repertoire name so importing
-  /// "Caro-Kann.pgn" doesn't produce a repertoire called "Imported".
-  final String? suggestedName;
-}
-
-Future<PickedPgnImport?> pickPgnImport() async {
-  try {
-    final picked = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: ['pgn', 'txt'],
-    );
-    if (picked == null) return null;
-
-    final path = picked.path;
-    if (path == null) return null;
-
-    final content = await StorageFactory.instance.readFile(path);
-    if (content == null) {
-      return const PickedPgnImport(error: 'Could not read that file.');
-    }
-
-    final count = pgn.countPgnGames(content);
-    final name = picked.name;
-    if (count == 0) {
-      return PickedPgnImport(error: 'No lines found in $name.', fileName: name);
-    }
-    return PickedPgnImport(
-      result: PgnImportResult(pgnContent: content, gameCount: count),
-      fileName: name,
-      suggestedName: p.basenameWithoutExtension(name),
-    );
-  } catch (e) {
-    return PickedPgnImport(error: 'Could not read file: $e');
-  }
-}
-
 String _truncateFilename(String name, {int maxLength = 24}) {
   if (name.length <= maxLength) return name;
   final ext = p.extension(name);
@@ -764,7 +726,11 @@ class _InlinePgnAttach extends StatefulWidget {
   /// Name of a file already attached by the import-first path, so the chip
   /// shows what was picked instead of an empty "Add PGN".
   final String? initialFileName;
-  final ValueChanged<PgnImportResult?> onChanged;
+
+  /// The attached PGN, plus the side its moves suggest ('White'/'Black', or
+  /// null when the file does not say clearly enough to move the picker).
+  final void Function(PgnImportResult? result, String? suggestedColor)
+  onChanged;
 
   const _InlinePgnAttach({
     required this.importResult,
@@ -793,7 +759,7 @@ class _InlinePgnAttachState extends State<_InlinePgnAttach> {
       _fileName = picked.fileName;
       _error = picked.error;
     });
-    widget.onChanged(picked.result);
+    widget.onChanged(picked.result, picked.suggestedColor);
   }
 
   void _clear() {
@@ -801,7 +767,7 @@ class _InlinePgnAttachState extends State<_InlinePgnAttach> {
       _fileName = null;
       _error = null;
     });
-    widget.onChanged(null);
+    widget.onChanged(null, null);
   }
 
   @override

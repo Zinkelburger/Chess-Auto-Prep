@@ -210,4 +210,143 @@ void main() {
       );
     });
   });
+
+  group('the serialized key set', () {
+    test('is exactly this list', () {
+      // The round-trip test above drives the *serialized map*, so it can only
+      // see fields toJson already writes. A field added to the class, the
+      // constructor, fromJson and copyWith but forgotten in toJson has no key
+      // to mutate, so it slips through every check above and simply never
+      // persists — the build runs with it, the saved config does not have it,
+      // and the next resume silently reverts to its default.
+      //
+      // Dart has no reflection to close that by construction, so this pins
+      // the key set instead. Adding a knob means adding it here, which is the
+      // moment to notice whether toJson writes it.
+      const keys = <String>{
+        'alternative_lines',
+        'annotate_move_probabilities',
+        'annotation_detail',
+        'batch_eval_lookups',
+        'best_first',
+        'build_mode',
+        'cdbdirect_path',
+        'cdbdirect_read_ahead',
+        'chessdb_api_concurrency',
+        'chessdb_api_daily_quota',
+        'cover_min_prob',
+        'db_min_games',
+        'db_min_prob',
+        'download_master_games_if_missing',
+        'enable_cdbdirect',
+        'enable_chessdb_api',
+        'enable_ext_eval_subtree_skip',
+        'enable_local_chessdb',
+        'engine_tail_depth',
+        'engine_tail_plies',
+        'engine_threads',
+        'eval_depth',
+        'fast_alt_gap_cp',
+        'improvement_min_gain_cp',
+        'leaf_confidence',
+        'line_coverage_target',
+        'local_chessdb_path',
+        'maia_elo',
+        'maia_min_prob',
+        'maia_prior_games',
+        'master_depth_bonus_plies',
+        'master_min_games',
+        'master_priority_weight',
+        'max_depth',
+        'max_eval_cp',
+        'max_eval_loss_cp',
+        'max_lines_per_chapter',
+        'max_nodes',
+        'memorability_tolerance_cp',
+        'min_acceptable_eval_depth',
+        'min_elo',
+        'min_eval_cp',
+        'min_lines_per_chapter',
+        'min_probability',
+        'model_game_count',
+        'model_game_min_elo',
+        'novelty_weight',
+        'off_book_opp_max_children',
+        'opening_width_plies',
+        'opp_mass_target',
+        'opp_max_children',
+        'opp_policy_temperature',
+        'organize_into_chapters',
+        'our_alt_discount',
+        'our_multipv',
+        'pgn_file_paths',
+        'play_as_white',
+        'rank_lines_by_importance',
+        'refutation_lines',
+        'relative_eval',
+        'search_algorithm',
+        'selection_mode',
+        'setup_moves',
+        'setup_tolerance_cp',
+        'skeleton_plan',
+        'target_line_count',
+        'time_budget_minutes',
+        'traps_only',
+        'use_master_games',
+        'verify_depth',
+        'verify_final',
+      };
+
+      const config = TreeBuildConfig(startFen: _startFen, playAsWhite: true);
+      final actual = config.toJson().keys.toSet();
+
+      expect(
+        actual.difference(keys),
+        isEmpty,
+        reason:
+            'New key(s) in toJson. Add them to this list, and check the same '
+            'field is read by fromJson and carried by copyWith.',
+      );
+      expect(
+        keys.difference(actual),
+        isEmpty,
+        reason:
+            'Key(s) vanished from toJson. Renaming a persisted key without a '
+            'migration silently resets that field for every saved config.',
+      );
+    });
+
+    test('root_reply_exclude is written only when it has something to say', () {
+      // The one conditionally-written key, which is why it is absent from the
+      // set pinned above: an empty exclusion list is the overwhelmingly
+      // common case and writing `[]` into every saved config is noise.
+      // fromJson defaults a missing key to const [], so the two agree.
+      final empty = const TreeBuildConfig(
+        startFen: _startFen,
+        playAsWhite: true,
+      ).toJson();
+      expect(empty.containsKey('root_reply_exclude'), isFalse);
+
+      final populated = const TreeBuildConfig(
+        startFen: _startFen,
+        playAsWhite: true,
+        rootReplyExclude: ['e5', 'c5'],
+      ).toJson();
+      expect(populated['root_reply_exclude'], ['e5', 'c5']);
+
+      // And it survives, so a paused plan build resumes with its own
+      // exclusions rather than a widened root.
+      expect(
+        TreeBuildConfig.fromJson(
+          populated,
+          startFen: _startFen,
+        ).rootReplyExclude,
+        ['e5', 'c5'],
+      );
+      expect(
+        TreeBuildConfig.fromJson(empty, startFen: _startFen).rootReplyExclude,
+        isEmpty,
+      );
+    });
+  });
 }

@@ -112,9 +112,9 @@ class PgnViewerWidgetController implements PgnViewerHandle {
   List<String> get mainLineMoves =>
       _state?._moveHistory.map((m) => m.san).toList() ?? const [];
 
-  /// From/to squares of the last two half-moves at the current position
-  /// (mainline, variation, or inline preview) — for the subtle Chessable-style
-  /// trail via [ChessBoardWidget.recentMoveSquares]. Empty at game start.
+  /// From/to squares of the half-move that produced the current position
+  /// (mainline, variation, or inline preview) — for the subtle last-move
+  /// highlight via [ChessBoardWidget.recentMoveSquares]. Empty at game start.
   Set<String> get recentMoveSquares => _state?._recentMoveSquares() ?? const {};
 
   /// Number of moves deep into the current variation (0 if on mainline).

@@ -1,229 +1,52 @@
 part of 'generation_config_form.dart';
 
-/// One entry in the advanced dialog: a title, the anchor used by the table
-/// of contents, and the builder for its controls.
-class _AdvancedSection {
-  _AdvancedSection(this.title, this.icon, this.build);
-
-  final String title;
-  final IconData icon;
-  final List<Widget> Function(VoidCallback refresh) build;
-  final GlobalKey anchor = GlobalKey();
-}
-
-/// The advanced gear dialog: every remaining knob, grouped by concept into
-/// titled cards with a table of contents down the left so nothing has to be
-/// hunted for.  Knobs shown on the main form are NOT repeated here.
+/// The advanced gear dialog's *content*: the knobs themselves, grouped into
+/// the sections the dialog arranges. Knobs shown on the main form are NOT
+/// repeated here.
 ///
 /// All values live in the form state (controllers and fields), so closing
 /// the dialog loses nothing and the main form stays in sync.  Only
 /// [EvalSourcesSection] is NOT here — its widget state is read through a
 /// GlobalKey at build time, so it must stay mounted in the main tree.
+///
+/// The dialog chrome (layout, table of contents, section cards) is
+/// [AdvancedSettingsDialog], which knows nothing about generation and can be
+/// tested on its own.
 mixin _GenerationConfigAdvanced
     on
         _GenerationConfigFormStateBase,
         _GenerationConfigDescriptions,
         _GenerationConfigFields {
   Future<void> _openAdvancedDialog() async {
-    final scrollController = ScrollController();
-    final sections = <_AdvancedSection>[
-      _AdvancedSection(
-        'Opponent model',
-        Icons.person_outline,
-        (r) => _opponentModelSection(r),
-      ),
-      _AdvancedSection('Move choice', Icons.alt_route, _moveChoiceSection),
-      _AdvancedSection('Search tuning', Icons.tune, _searchBudgetSection),
-      _AdvancedSection(
-        'Verification',
-        Icons.verified_outlined,
-        (r) => _verificationSection(r),
-      ),
-      _AdvancedSection(
-        'PGN export',
-        Icons.description_outlined,
-        (r) => _exportSection(r),
-      ),
-      _AdvancedSection(
-        'PGN source filters',
-        Icons.filter_alt_outlined,
-        (r) => _pgnFilterSection(r),
-      ),
-    ];
-
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialog) {
-          void refresh() => setDialog(() {});
-          final wide = MediaQuery.sizeOf(ctx).width >= 860;
-          return Dialog(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: wide ? 880 : 660,
-                maxHeight: MediaQuery.of(ctx).size.height * 0.85,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 8, 8),
-                    child: Row(
-                      children: [
-                        Text(
-                          'Advanced generation settings',
-                          style: Theme.of(ctx).textTheme.titleMedium,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Everything on the main form stays in sync with '
-                            'these.',
-                            style: AppTextStyles.caption.copyWith(fontSize: 11),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          tooltip: 'Close',
-                          onPressed: () => Navigator.of(ctx).pop(),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 1),
-                  Flexible(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (wide) ...[
-                          _advancedToc(sections, scrollController),
-                          const VerticalDivider(width: 1),
-                        ],
-                        Expanded(
-                          // Not a ListView: every card must stay mounted so
-                          // the TOC's Scrollable.ensureVisible can reach any
-                          // anchor, on or off screen.
-                          child: SingleChildScrollView(
-                            controller: scrollController,
-                            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                for (final section in sections)
-                                  _advancedCard(section, refresh),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
+    await AdvancedSettingsDialog.show(
+      context,
+      sections: [
+        AdvancedSection(
+          'Opponent model',
+          Icons.person_outline,
+          _opponentModelSection,
+        ),
+        AdvancedSection('Move choice', Icons.alt_route, _moveChoiceSection),
+        AdvancedSection('Search tuning', Icons.tune, _searchBudgetSection),
+        AdvancedSection(
+          'Verification',
+          Icons.verified_outlined,
+          _verificationSection,
+        ),
+        AdvancedSection(
+          'PGN export',
+          Icons.description_outlined,
+          _exportSection,
+        ),
+        AdvancedSection(
+          'PGN source filters',
+          Icons.filter_alt_outlined,
+          _pgnFilterSection,
+        ),
+      ],
     );
-    scrollController.dispose();
     // The main form's summary projects these values — repaint it.
     if (mounted) setState(() {});
-  }
-
-  /// Jump links down the left edge of the dialog.
-  Widget _advancedToc(
-    List<_AdvancedSection> sections,
-    ScrollController controller,
-  ) {
-    return SizedBox(
-      width: 190,
-      child: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: Text(
-              'SECTIONS',
-              style: AppTextStyles.caption.copyWith(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.8,
-              ),
-            ),
-          ),
-          for (final section in sections)
-            ListTile(
-              dense: true,
-              visualDensity: VisualDensity.compact,
-              leading: Icon(section.icon, size: 18),
-              title: Text(
-                section.title,
-                style: const TextStyle(fontSize: 12),
-                overflow: TextOverflow.ellipsis,
-              ),
-              onTap: () {
-                final target = section.anchor.currentContext;
-                if (target == null) return;
-                unawaited(
-                  Scrollable.ensureVisible(
-                    target,
-                    duration: const Duration(milliseconds: 220),
-                    alignment: 0.02,
-                  ),
-                );
-              },
-            ),
-        ],
-      ),
-    );
-  }
-
-  /// One bordered, titled block. The rule + heading is what makes the
-  /// dialog scannable instead of one long column of fields.
-  Widget _advancedCard(_AdvancedSection section, VoidCallback refresh) {
-    return Container(
-      key: section.anchor,
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.outline),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: const BoxDecoration(
-              color: AppColors.surfaceContainer,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(9)),
-            ),
-            child: Row(
-              children: [
-                Icon(section.icon, size: 16, color: AppColors.onSurfaceSoft),
-                const SizedBox(width: 8),
-                Text(
-                  section.title,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: section.build(refresh),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   List<Widget> _opponentModelSection(VoidCallback refresh) {

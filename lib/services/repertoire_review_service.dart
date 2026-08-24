@@ -187,14 +187,20 @@ class RepertoireReviewService {
 
     switch (order) {
       case ReviewOrder.byImportance:
-        due.sort((a, b) {
-          final ai = a.importance;
-          final bi = b.importance;
-          if (ai == null && bi == null) return 0;
-          if (ai == null) return 1;
-          if (bi == null) return -1;
-          return bi.compareTo(ai);
-        });
+        // Imported courses carry no CumProb, so every comparison returned 0 —
+        // and Dart's sort is not stable, so "most likely first" shuffled the
+        // course into an arbitrary order that changed between loads. With
+        // nothing to sort by, file order is the honest answer.
+        if (due.any((line) => line.importance != null)) {
+          due.sort((a, b) {
+            final ai = a.importance;
+            final bi = b.importance;
+            if (ai == null && bi == null) return 0;
+            if (ai == null) return 1;
+            if (bi == null) return -1;
+            return bi.compareTo(ai);
+          });
+        }
       case ReviewOrder.random:
         due.shuffle(Random());
       case ReviewOrder.weakestFirst:
@@ -232,68 +238,110 @@ class RepertoireReviewService {
     return entry.failCount / attempts;
   }
 
+  /// Smallest and largest ease a line can reach. [RepertoireReviewEntry.
+  /// difficulty] *is* the ease factor — "higher = easier" — and SM-2 keeps it
+  /// off the floor so a line you keep failing still eventually stretches out.
+  static const double minEase = 1.3;
+  static const double maxEase = 3.0;
+
+  /// An opening line is not worth a five-year interval; past a year you have
+  /// either played it or forgotten it, and a cap keeps the schedule honest.
+  static const double maxIntervalDays = 365;
+
+  /// "Again" puts the line back in the queue you are working through right
+  /// now, the way Anki's first learning step does.
+  ///
+  /// Zero, not "in an hour": the due-queue filter only keeps lines that are
+  /// actually due, so any positive interval dropped a just-failed line out of
+  /// the session — the one line you most need to see again was the one the
+  /// run refused to show you.
+  static const double againIntervalDays = 0;
+
+  /// Spread applied to a scheduled interval, Anki-style, so a course learned
+  /// in one weekend does not come back as one 900-line day. Injectable so
+  /// tests can pin it.
+  final Random _fuzz;
+
+  RepertoireReviewService({Random? fuzz}) : _fuzz = fuzz ?? Random();
+
   RepertoireReviewEntry applyRating(
     RepertoireReviewEntry entry,
     ReviewRating rating,
   ) {
     final now = DateTime.now().toUtc();
-    double difficulty = entry.difficulty;
-    double interval = entry.intervalDays;
+    // Legacy rows stored eases outside the SM-2 range (the old default was
+    // 1.5 and the old ceiling 5.0); clamping on read migrates them in place.
+    double ease = entry.difficulty.clamp(minEase, maxEase);
 
     switch (rating) {
       case ReviewRating.again:
-        difficulty = max(1.0, difficulty - 0.3);
-        interval = 0.05; // ~1 hour
-        break;
+        ease = max(minEase, ease - 0.20);
       case ReviewRating.hard:
-        difficulty = max(1.0, difficulty - 0.1);
-        interval = interval <= 0 ? 1.0 : max(1.0, interval * 0.8 + 0.2);
-        break;
+        ease = max(minEase, ease - 0.15);
       case ReviewRating.good:
-        difficulty = min(5.0, difficulty + 0.1);
-        interval = interval <= 0 ? 1.5 : interval * 1.6;
         break;
       case ReviewRating.easy:
-        difficulty = min(5.0, difficulty + 0.25);
-        interval = interval <= 0 ? 2.5 : interval * 2.3;
-        break;
+        ease = min(maxEase, ease + 0.15);
     }
 
+    final interval = _fuzzed(_nextInterval(entry.intervalDays, rating, ease));
     final millis = (interval * 24 * 60 * 60 * 1000).round();
-    final dueDate = now.add(Duration(milliseconds: millis));
 
     return entry.copyWith(
-      difficulty: difficulty,
+      difficulty: ease,
       intervalDays: interval,
-      dueDateUtc: dueDate,
+      dueDateUtc: now.add(Duration(milliseconds: millis)),
       lastRating: rating.name,
       lastReviewedUtc: now,
     );
   }
 
+  /// The scheduled interval for [rating], before fuzz.
+  ///
+  /// The ease is what makes Hard/Good/Easy diverge over time rather than at
+  /// one review: a line answered Good repeatedly stretches by its own ease,
+  /// which Easy raises and Again/Hard lower. Before this the ease was stored
+  /// and never read, so every line grew at the same fixed 1.6x.
+  double _nextInterval(double current, ReviewRating rating, double ease) {
+    if (rating == ReviewRating.again) return againIntervalDays;
+    // A line rated for the first time (or after an Again) has no interval to
+    // multiply, so it graduates onto a fixed first step.
+    final isFirst = current < 1;
+    final next = switch (rating) {
+      ReviewRating.again => againIntervalDays,
+      // Hard has to move: `current * 1.2` on a 1-day interval rounds back to
+      // roughly a day forever, which is how a line becomes a leech.
+      ReviewRating.hard => isFirst ? 1.0 : max(current + 1, current * 1.2),
+      ReviewRating.good => isFirst ? 1.0 : current * ease,
+      ReviewRating.easy => isFirst ? 3.0 : current * ease * 1.3,
+    };
+    return min(next, maxIntervalDays);
+  }
+
+  /// Anki's interval fuzz: up to ±5% (at least a day either way once the
+  /// interval is more than a couple of days), so lines learned together stop
+  /// arriving together. Never applied to sub-day intervals.
+  double _fuzzed(double interval) {
+    if (interval < 2) return interval;
+    final spread = max(1.0, interval * 0.05);
+    final jittered = interval + (_fuzz.nextDouble() * 2 - 1) * spread;
+    return jittered.clamp(1.0, maxIntervalDays);
+  }
+
   /// Dry-run of [applyRating] that returns the predicted interval without
-  /// persisting anything.  Used to show "Again (1h)" / "Good (4d)" previews.
+  /// persisting anything or fuzzing it.  Used to show "Again (5m)" /
+  /// "Good (4d)" previews, which should read as round numbers.
   double previewInterval(RepertoireReviewEntry entry, ReviewRating rating) {
-    double interval = entry.intervalDays;
-    switch (rating) {
-      case ReviewRating.again:
-        interval = 0.05;
-        break;
-      case ReviewRating.hard:
-        interval = interval <= 0 ? 1.0 : max(1.0, interval * 0.8 + 0.2);
-        break;
-      case ReviewRating.good:
-        interval = interval <= 0 ? 1.5 : interval * 1.6;
-        break;
-      case ReviewRating.easy:
-        interval = interval <= 0 ? 2.5 : interval * 2.3;
-        break;
-    }
-    return interval;
+    final ease = entry.difficulty.clamp(minEase, maxEase);
+    return _nextInterval(entry.intervalDays, rating, ease);
   }
 
   /// Human-readable label for a review interval in days.
   static String formatInterval(double intervalDays) {
+    // "Again" schedules zero days on purpose — the line comes back inside the
+    // session you are in — and "<1m" reads as a rounding artefact rather than
+    // as the promise it is.
+    if (intervalDays <= 0) return 'now';
     if (intervalDays < 1 / 24) return '<1m';
     if (intervalDays < 1) {
       final hours = (intervalDays * 24).round();

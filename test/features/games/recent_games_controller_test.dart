@@ -24,6 +24,7 @@ class _ThrowingLibrary extends GamesLibraryService {
     List<GameSelection> unionWith = const [],
     bool forceRefresh = false,
     void Function(String message)? onProgress,
+    void Function(DateTime fetchedAt)? onFetched,
   }) async {
     calls++;
     throw StateError('network down');
@@ -44,6 +45,7 @@ class _GatedLibrary extends GamesLibraryService {
     List<GameSelection> unionWith = const [],
     bool forceRefresh = false,
     void Function(String message)? onProgress,
+    void Function(DateTime fetchedAt)? onFetched,
   }) {
     calls.add(selection);
     return gate.future;
@@ -71,8 +73,39 @@ class _PgnLibrary extends GamesLibraryService {
     List<GameSelection> unionWith = const [],
     bool forceRefresh = false,
     void Function(String message)? onProgress,
+    void Function(DateTime fetchedAt)? onFetched,
   }) async {
     loads++;
+    return GamesLibraryService.selectFromPgnUnion(pgn, [
+      selection,
+      ...unionWith,
+    ]);
+  }
+
+  @override
+  Future<String> cacheFilePath(GamesPlatform platform, String username) async =>
+      '/tmp/${platform.name}_$username.pgn';
+}
+
+/// Serves a fixed PGN and reports a fixed download time, standing in for the
+/// real library's fetch stamp.
+class _StampingLibrary extends GamesLibraryService {
+  _StampingLibrary(this.pgn, this.at);
+
+  final String pgn;
+  final DateTime at;
+
+  @override
+  Future<List<GameRecord>> getGames({
+    required GamesPlatform platform,
+    required String username,
+    GameSelection selection = const GameSelection(),
+    List<GameSelection> unionWith = const [],
+    bool forceRefresh = false,
+    void Function(String message)? onProgress,
+    void Function(DateTime fetchedAt)? onFetched,
+  }) async {
+    onFetched?.call(at);
     return GamesLibraryService.selectFromPgnUnion(pgn, [
       selection,
       ...unionWith,
@@ -256,5 +289,30 @@ void main() {
     expect(library.calls.last.maxGames, 5);
     expect(library.calls.last.speeds, {GameSpeed.blitz});
     expect(controller.isLoading, isFalse);
+  });
+
+  // Regression: the accounts card read a "last downloaded" date that no code
+  // path ever wrote, so it said "Not downloaded yet" beside a list of the
+  // games it had just downloaded.
+  test("a load reports when each site's games came down", () async {
+    SharedPreferences.setMockInitialValues({});
+    final at = DateTime(2026, 8, 22, 9, 30);
+    final reported = <(GamesPlatform, DateTime)>[];
+    final controller = RecentGamesController(
+      lichessUsername: () => 'me',
+      chesscomUsername: () => 'me_too',
+      onFetched: (platform, fetchedAt) => reported.add((platform, fetchedAt)),
+      library: _StampingLibrary(_threeGames, at),
+      windowSettings: GamesWindowSettings.forTest(),
+      now: () => DateTime(2026, 8, 4, 12),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.refresh();
+
+    expect(reported, [
+      (GamesPlatform.chesscom, at),
+      (GamesPlatform.lichess, at),
+    ]);
   });
 }

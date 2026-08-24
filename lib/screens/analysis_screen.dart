@@ -315,7 +315,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
           onRun: _boardActions.openGamesInPgnViewer,
         ),
         AppMenuEntry(
-          label: 'Select player…',
+          label: 'Choose a player…',
           icon: Icons.person_search,
           dividerAbove: true,
           onRun: _showPlayerSelection,
@@ -441,14 +441,19 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
             ),
             const SizedBox(height: 24),
             Text(
-              'No Player Selected',
+              'No player selected',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 8),
+            const Text(
+              'Pick whose games to analyze — yours or an opponent’s.',
+              style: TextStyle(color: AppColors.onSurfaceMuted),
+            ),
+            const SizedBox(height: 24),
             FilledButton.icon(
               onPressed: _showPlayerSelection,
               icon: const Icon(Icons.person_search),
-              label: const Text('Select Player'),
+              label: const Text('Choose a player…'),
             ),
           ],
         ),

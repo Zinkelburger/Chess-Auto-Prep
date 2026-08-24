@@ -324,7 +324,6 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                   const Spacer(),
                 _buildStatBadge(
                   '${(trap.cumulativeProb * 100).toStringAsFixed(1)}% reach',
-                  AppColors.engineLine,
                   tooltip: 'Probability of reaching this position',
                 ),
                 const SizedBox(width: 4),
@@ -417,13 +416,11 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                 _buildStatBadge(
                   '${(trap.popularProb * 100).toStringAsFixed(0)}% play '
                   '${trap.popularMove}',
-                  _trapScoreColor(trap.trapScore),
                   tooltip:
                       'Share of opponents who play ${trap.popularMove} here',
                 ),
                 _buildStatBadge(
                   '+${_expectedGainCp(trap)}cp expected',
-                  AppColors.evalPositive,
                   tooltip:
                       'Expected gain: +${trap.evalDiffCp}cp × '
                       '${(trap.popularProb * 100).toStringAsFixed(0)}% '
@@ -431,7 +428,6 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                 ),
                 _buildStatBadge(
                   '+${(trap.trickSurplus * 100).toStringAsFixed(1)}% surplus',
-                  AppColors.warning,
                   tooltip: 'Practical advantage beyond raw eval',
                 ),
               ],
@@ -514,30 +510,20 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
   }
 
   Widget _buildClassBadge(TrapReplyClass cls) {
-    final (label, color) = switch (cls) {
-      TrapReplyClass.blunder => ('BLUNDER', AppColors.replyBlunder),
-      TrapReplyClass.mistake => ('MISTAKE', AppColors.replyMistake),
-      TrapReplyClass.inaccuracy => ('INACCURACY', AppColors.replyInaccuracy),
-      TrapReplyClass.acceptable => ('OK', AppColors.replyAcceptable),
-      TrapReplyClass.good => ('BEST', AppColors.replyGood),
+    // The word alone; no colour ramp, no pill.
+    final label = switch (cls) {
+      TrapReplyClass.blunder => 'blunder',
+      TrapReplyClass.mistake => 'mistake',
+      TrapReplyClass.inaccuracy => 'inaccuracy',
+      TrapReplyClass.acceptable => 'ok',
+      TrapReplyClass.good => 'best',
     };
-    // Same contrast rule as _buildStatBadge: near-white text, colour only in
-    // the tint/border.
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(3),
-        border: Border.all(color: color.withValues(alpha: 0.6), width: 0.5),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.bold,
-          color: Color(0xFFE8E8E8),
-          letterSpacing: 0.3,
-        ),
+    return Text(
+      label,
+      style: const TextStyle(
+        fontSize: 10,
+        fontWeight: FontWeight.bold,
+        color: AppColors.onSurfaceSoft,
       ),
     );
   }
@@ -545,22 +531,14 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
   /// Near-white text on a dim tint of [color]; the colour carries meaning via
   /// the tint/border only. (Coloured text on a same-colour wash — red on red,
   /// amber on amber — was unreadable.)
-  Widget _buildStatBadge(String text, Color color, {String? tooltip}) {
-    final badge = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withValues(alpha: 0.6), width: 0.5),
-      ),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          color: Color(0xFFE8E8E8),
-          fontFamily: 'monospace',
-        ),
+  Widget _buildStatBadge(String text, {String? tooltip}) {
+    final badge = Text(
+      text,
+      style: const TextStyle(
+        fontSize: 10,
+        fontWeight: FontWeight.w600,
+        color: AppColors.onSurfaceSoft,
+        fontFamily: 'monospace',
       ),
     );
     return tooltip != null ? Tooltip(message: tooltip, child: badge) : badge;
@@ -645,6 +623,4 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
     }
     return depth;
   }
-
-  Color _trapScoreColor(double score) => AppColors.trapScore(score);
 }

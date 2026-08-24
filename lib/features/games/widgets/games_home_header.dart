@@ -13,10 +13,10 @@ import 'my_repertoires_panel.dart';
 /// The top of the recent-games home: who you are, what your rating did, what
 /// is left to look at, and which books your games are being checked against.
 ///
-/// The name is a read-only label, not a field. The usernames are *edited* on
-/// the accounts card in the right pane, where each box has a visible title;
-/// an editable underline-box up here had no label saying what it was, on a
-/// pane that already carries the rating, the counts, the books and the list.
+/// The name is a read-only label, not a field. The usernames are *edited* in
+/// the accounts dialog, opened from the right pane's card (or Settings); an
+/// editable underline-box up here had no label saying what it was, on a pane
+/// that already carries the rating, the counts, the books and the list.
 ///
 /// No encouragement, no coaching voice, no exclamation marks. This screen is
 /// opened to train, and a greeting that congratulates you on your rating is

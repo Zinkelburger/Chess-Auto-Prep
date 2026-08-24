@@ -279,5 +279,25 @@ void main() {
       );
       expect(result, 'Title fen');
     });
+
+    test('drops cutechess per-move engine readouts', () {
+      // Engine-vs-engine PGNs annotate every ply; the viewer puts each
+      // comment on its own row, so these have to not reach it.
+      expect(filterDisplayComment('+0.31/24 2.001s'), '');
+      expect(filterDisplayComment('-M3/18 0.500s'), '');
+      expect(filterDisplayComment('book 0.010s'), '');
+      expect(filterDisplayComment('+0.31 2.0s'), '');
+      expect(
+        filterDisplayComment('-1.53/12 0.98s, Black mates'),
+        ', Black mates',
+      );
+    });
+
+    test('keeps prose that merely mentions a number', () {
+      expect(
+        filterDisplayComment('White is a clear pawn up here.'),
+        'White is a clear pawn up here.',
+      );
+    });
   });
 }

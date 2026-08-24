@@ -61,10 +61,22 @@ claude mcp add chess-prep -- python3 /abs/path/to/tools/mcp/chess_prep/__main__.
 | `my_games_at` | The user's / an analysed opponent's games reaching a position |
 | `my_games_by_player` | Games in the user's database by player |
 | `my_game` | One of those games, as PGN |
+| `tournament_run` | Play engine vs engine from a position, and open the app on it |
+| `tournament_status` | Progress, results and endings so far, still running? |
+| `tournament_list` | Every saved tournament, newest first |
+| `tournament_crosstable` | Standings, Elo ± interval, LOS, head-to-head grid |
+| `tournament_games` / `tournament_game_pgn` | The games, and one game's PGN |
+| `tournament_stop` | Stop cleanly after the game in flight |
+| `tournament_open` | Open the app on a tournament |
+| `tournament_engines` / `tournament_add_engine` | List engines; verify and register a UCI binary |
 
 Working files live in `~/.local/share/chess-prep/` (macOS: `~/Library/
 Application Support/chess-prep/`; override with `CHESS_PREP_DATA_DIR`, or the
 roster alone with `CHESS_PREP_ROSTER`).
+
+The tournament tools need the Flutter SDK's `dart` on PATH (or
+`CHESS_PREP_DART`), because they run the app's own tournament code rather than
+a second copy of it. See [ENGINE_TOURNAMENT.md](ENGINE_TOURNAMENT.md).
 
 ### PGN opening tree
 

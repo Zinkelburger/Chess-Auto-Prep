@@ -422,8 +422,10 @@ Position? playSanOrNullMove(Position pos, String san) {
 }
 
 /// From/to squares of the last [lastN] half-moves of [sans] played from
-/// [start] — the Chessable-style trail that keeps each side's most recent
-/// move subtly marked on the board.
+/// [start] — the subtle trail marking the move that produced the position.
+///
+/// Single-move highlighting is the default everywhere; only the trainer asks
+/// for [lastN] 2, where seeing your move and the reply together is the point.
 ///
 /// Castling is reported on the king's visual destination (e1→g1), not
 /// dartchess's king→rook encoding. Null-move tokens pass the turn without
@@ -431,7 +433,7 @@ Position? playSanOrNullMove(Position pos, String san) {
 Set<String> recentMoveTrailSquares(
   Position start,
   List<String> sans, {
-  int lastN = 2,
+  int lastN = 1,
 }) {
   var pos = start;
   // Flat from,to pairs, trimmed so only the newest [lastN] moves remain.

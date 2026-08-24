@@ -19,8 +19,8 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
-import 'package:chess_auto_prep/services/tactics/tactics_database.dart';
-import 'package:chess_auto_prep/services/tactics/tactics_import_service.dart';
+import 'package:chess_auto_prep/features/tactics/services/tactics_database.dart';
+import 'package:chess_auto_prep/features/tactics/services/tactics_import_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;

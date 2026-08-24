@@ -154,25 +154,3 @@ List<Shadow> nodeTextOutline(Color fillColor) {
     ),
   ];
 }
-
-Color roleBadgeColor(bool isOurTurn) {
-  return isOurTurn ? kNodeColorOurMove : kNodeColorOpponentMove;
-}
-
-// ── Eval color (stats panel) ──────────────────────────────────────────────
-
-Color evalColor(int cpForUs) => AppColors.cpEval(cpForUs);
-
-Color evalBgColor(int cpForUs) => AppColors.cpEvalBg(cpForUs);
-
-Color evalTextColor(int cpForUs) => AppColors.cpEval(cpForUs);
-
-// ── Other metric colors ───────────────────────────────────────────────────
-
-Color easeColor(double ease) => AppColors.ease(ease);
-
-Color cplColor(double cpl) => AppColors.cpl(cpl);
-
-Color trapColor(double trap) => AppColors.trapScore(trap);
-
-Color vColor(double v) => AppColors.winProbability(v);

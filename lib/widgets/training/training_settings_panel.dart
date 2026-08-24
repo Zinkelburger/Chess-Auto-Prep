@@ -92,6 +92,39 @@ class TrainingSettingsPanel extends StatelessWidget {
                 onRepetitionModeChanged(selection.first),
           ),
           const Divider(height: 32),
+          Text('Session size', style: theme.textTheme.titleSmall),
+          const SizedBox(height: 4),
+          Text(
+            'How much one press of Learn or Review covers before calling it a '
+            'sitting. A bought course is hundreds of lines; the cap is what '
+            'turns it into something you can finish. 0 means no limit.',
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _SessionSizeField(
+                label: 'New lines',
+                value: settings.newLinesPerSession,
+                onChanged: (n) {
+                  settings.newLinesPerSession = n;
+                  settings.saveSoon();
+                  onSettingsChanged();
+                },
+              ),
+              const SizedBox(width: 16),
+              _SessionSizeField(
+                label: 'Reviews',
+                value: settings.reviewsPerSession,
+                onChanged: (n) {
+                  settings.reviewsPerSession = n;
+                  settings.saveSoon();
+                  onSettingsChanged();
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
           Text('Repetitions to memorize', style: theme.textTheme.titleSmall),
           const SizedBox(height: 4),
           Text(
@@ -411,6 +444,55 @@ class TrainingSettingsPanel extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// One "lines per sitting" number. Stateful so typing "1" on the way to "12"
+/// does not immediately rewrite the field from the clamped setting.
+class _SessionSizeField extends StatefulWidget {
+  final String label;
+  final int value;
+  final ValueChanged<int> onChanged;
+
+  const _SessionSizeField({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  State<_SessionSizeField> createState() => _SessionSizeFieldState();
+}
+
+class _SessionSizeFieldState extends State<_SessionSizeField> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.value.toString(),
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 120,
+      child: TextField(
+        controller: _controller,
+        keyboardType: TextInputType.number,
+        decoration: InputDecoration(
+          isDense: true,
+          border: const OutlineInputBorder(),
+          labelText: widget.label,
+        ),
+        onChanged: (value) {
+          final n = int.tryParse(value.trim());
+          if (n != null && n >= 0 && n <= 500) widget.onChanged(n);
+        },
       ),
     );
   }

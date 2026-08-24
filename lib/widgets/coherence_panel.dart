@@ -90,21 +90,12 @@ class CoherencePanel extends StatelessWidget {
         subtitle: Text('$lineCount lines, $probPct% of games'),
         trailing: isUnclustered
             ? null
-            : Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _coherenceColor(
-                    cluster.signature.support,
-                  ).withAlpha(30),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '${(cluster.signature.support * 100).round()}%',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: _coherenceColor(cluster.signature.support),
-                  ),
+            : Text(
+                '${(cluster.signature.support * 100).round()}%',
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.onSurfaceSoft,
                 ),
               ),
         children: [
@@ -149,19 +140,12 @@ class CoherencePanel extends StatelessWidget {
 
   Widget _lineCoherenceBadge(String lineId) {
     final score = result.lineCoherenceById[lineId] ?? 0;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: _coherenceColor(score).withAlpha(30),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        score.toStringAsFixed(2),
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-          color: _coherenceColor(score),
-        ),
+    return Text(
+      score.toStringAsFixed(2),
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.bold,
+        color: AppColors.onSurfaceSoft,
       ),
     );
   }

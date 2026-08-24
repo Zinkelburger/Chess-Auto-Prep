@@ -12,6 +12,7 @@ import 'package:dartchess/dartchess.dart';
 
 import '../models/repertoire_line.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
+import '../services/repertoire_line_ids.dart';
 import '../services/repertoire_service.dart';
 
 class RepertoireAuthoring {
@@ -80,7 +81,11 @@ class RepertoireAuthoring {
     required bool isWhite,
     Iterable<String> existingIds = const [],
   }) {
-    final id = _service.newLineId(moves, index, existingIds: existingIds);
+    final id = repertoireLineIds.forNewLine(
+      moves,
+      index,
+      existingIds: existingIds,
+    );
     final name = title.isNotEmpty && title != 'Repertoire Line'
         ? title
         : (moves.length >= 3

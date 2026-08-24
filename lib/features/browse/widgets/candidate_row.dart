@@ -128,6 +128,7 @@ class CandidateRow extends StatelessWidget {
   }
 }
 
+/// Eval as plain text — the number says which way it leans; no tinted pill.
 class _EvalChip extends StatelessWidget {
   final int cp;
   const _EvalChip(this.cp);
@@ -136,19 +137,12 @@ class _EvalChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final pawns = cp / 100.0;
     final text = '${pawns >= 0 ? "+" : ""}${pawns.toStringAsFixed(2)}';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-      decoration: BoxDecoration(
-        color: AppColors.cpEvalBg(cp),
-        borderRadius: BorderRadius.circular(3),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-          color: AppColors.cpEval(cp),
-        ),
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        fontFamily: 'monospace',
       ),
     );
   }
@@ -193,28 +187,26 @@ class _TrapBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final badge = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-      decoration: BoxDecoration(
-        color: AppColors.warning.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(4),
-      ),
+    // Plain text; the count is a fact. The chevron (when tappable) is the
+    // only decoration, because expanding is the one action here.
+    final badge = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.bolt, size: 10, color: AppColors.warning),
           Text(
-            '$count',
-            style: const TextStyle(fontSize: 10, color: AppColors.warning),
+            '$count trap${count == 1 ? '' : 's'}',
+            style: const TextStyle(
+              fontSize: 10,
+              color: AppColors.onSurfaceSoft,
+            ),
           ),
-          if (onExpandTraps != null) ...[
-            const SizedBox(width: 2),
+          if (onExpandTraps != null)
             Icon(
               isExpanded ? Icons.expand_less : Icons.expand_more,
               size: 12,
-              color: AppColors.warning,
+              color: AppColors.onSurfaceSoft,
             ),
-          ],
         ],
       ),
     );
@@ -242,24 +234,10 @@ class _CoherenceChip extends StatelessWidget {
         : hint.score.toStringAsFixed(2);
     return Tooltip(
       message: 'Coherence ${hint.score.toStringAsFixed(2)}',
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-        decoration: BoxDecoration(
-          color: AppColors.maia.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.hub, size: 10, color: AppColors.maia),
-            const SizedBox(width: 2),
-            Text(
-              label,
-              style: const TextStyle(fontSize: 10, color: AppColors.maia),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 10, color: AppColors.onSurfaceSoft),
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }
@@ -275,7 +253,7 @@ class _CoverageDelta extends StatelessWidget {
       '+${delta.toStringAsFixed(1)}%',
       style: const TextStyle(
         fontSize: 10,
-        color: AppColors.success,
+        color: AppColors.onSurfaceSoft,
         fontWeight: FontWeight.w500,
       ),
     );

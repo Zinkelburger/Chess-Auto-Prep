@@ -12,7 +12,11 @@ class _BrowserHeader extends StatelessWidget {
   final VoidCallback? onBack;
   final VoidCallback? onLearn;
   final VoidCallback? onReview;
+  final int learnBatchSize;
+  final int reviewBatchSize;
   final VoidCallback? onOpenChapterSetup;
+  final bool? playingWhite;
+  final VoidCallback? onChangePlayingSide;
   final VoidCallback? onOpenSettings;
 
   const _BrowserHeader({
@@ -23,7 +27,11 @@ class _BrowserHeader extends StatelessWidget {
     this.onBack,
     this.onLearn,
     this.onReview,
+    this.learnBatchSize = 0,
+    this.reviewBatchSize = 0,
     this.onOpenChapterSetup,
+    this.playingWhite,
+    this.onChangePlayingSide,
     this.onOpenSettings,
   });
 
@@ -55,7 +63,7 @@ class _BrowserHeader extends StatelessWidget {
                       style: dense
                           ? theme.textTheme.titleSmall
                           : theme.textTheme.titleLarge,
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (subtitle != null && subtitle!.isNotEmpty)
@@ -70,6 +78,12 @@ class _BrowserHeader extends StatelessWidget {
                   ],
                 ),
               ),
+              if (playingWhite != null)
+                _PlayingSideButton(
+                  playingWhite: playingWhite!,
+                  dense: dense,
+                  onPressed: onChangePlayingSide,
+                ),
               if (onOpenChapterSetup != null)
                 TextButton.icon(
                   onPressed: onOpenChapterSetup,
@@ -104,6 +118,7 @@ class _BrowserHeader extends StatelessWidget {
                   icon: Icons.play_arrow_rounded,
                   color: AppColors.srsNew,
                   count: counts.untrained,
+                  batchSize: learnBatchSize,
                   dense: dense,
                   onPressed: counts.untrained > 0 ? onLearn : null,
                   emptyHint: 'Nothing left to learn',
@@ -117,6 +132,7 @@ class _BrowserHeader extends StatelessWidget {
                   icon: Icons.refresh_rounded,
                   color: AppColors.srsDue,
                   count: counts.due,
+                  batchSize: reviewBatchSize,
                   dense: dense,
                   onPressed: counts.due > 0 ? onReview : null,
                   emptyHint: 'Nothing due',
@@ -125,6 +141,48 @@ class _BrowserHeader extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// "You play Black" — which side of the loaded file is being trained.
+///
+/// A header control, not a settings-screen row, because for an imported course
+/// this is a *guess*: the file says nothing, so the trainer reads it off the
+/// move tree. When the guess is wrong every line asks for the opponent's move,
+/// and the only place the user is looking is this list.
+class _PlayingSideButton extends StatelessWidget {
+  final bool playingWhite;
+  final bool dense;
+  final VoidCallback? onPressed;
+
+  const _PlayingSideButton({
+    required this.playingWhite,
+    required this.dense,
+    this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final side = playingWhite ? 'White' : 'Black';
+    return Tooltip(
+      message:
+          'This file trains $side — you are asked for '
+          "${playingWhite ? "White's" : "Black's"} moves.\n"
+          'Click to change which side it trains.',
+      waitDuration: const Duration(milliseconds: 400),
+      child: TextButton.icon(
+        onPressed: onPressed,
+        icon: Icon(
+          playingWhite ? Icons.circle_outlined : Icons.circle,
+          size: 13,
+        ),
+        label: Text(dense ? side : 'You play $side'),
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.onSurfaceSoft,
+          visualDensity: VisualDensity.compact,
+        ),
       ),
     );
   }
@@ -139,6 +197,9 @@ class _PrimaryAction extends StatelessWidget {
   final IconData icon;
   final Color color;
   final int count;
+
+  /// Lines this press will cover, or 0 when uncapped.
+  final int batchSize;
   final bool dense;
   final VoidCallback? onPressed;
 
@@ -149,9 +210,17 @@ class _PrimaryAction extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.count,
+    required this.batchSize,
     required this.dense,
     this.onPressed,
   });
+
+  /// "10 now · 920 to go" when the sitting is capped, "12 untrained" when the
+  /// whole pool fits in one run.
+  String get _subtitle {
+    if (batchSize <= 0 || batchSize >= count) return '$count $hint';
+    return '$batchSize now · ${count - batchSize} to go';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -194,7 +263,7 @@ class _PrimaryAction extends StatelessWidget {
                               ),
                     ),
                     Text(
-                      enabled ? '$count $hint' : emptyHint,
+                      enabled ? _subtitle : emptyHint,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: ink,
                         fontSize: 11,
@@ -354,12 +423,18 @@ class _ListToolbar extends StatelessWidget {
 class _ChapterCard extends StatelessWidget {
   final String title;
   final LineCounts counts;
+
+  /// Rows in the chapter, which is not [LineCounts.total]: model games are
+  /// listed but never trained, so a "Model games" chapter counted zero and
+  /// announced itself as "0 lines".
+  final int lineCount;
   final bool dense;
   final VoidCallback onTap;
 
   const _ChapterCard({
     required this.title,
     required this.counts,
+    required this.lineCount,
     required this.dense,
     required this.onTap,
   });
@@ -392,7 +467,7 @@ class _ChapterCard extends StatelessWidget {
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 8),
@@ -402,7 +477,10 @@ class _ChapterCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 Text(
-                  '${counts.total} line${counts.total == 1 ? '' : 's'}',
+                  counts.isEmpty && lineCount > 0
+                      ? '$lineCount model game'
+                            '${lineCount == 1 ? '' : 's'}'
+                      : '$lineCount line${lineCount == 1 ? '' : 's'}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: AppColors.onSurfaceMuted,
                   ),
@@ -474,8 +552,17 @@ class _LineCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final trainedText = formatLineMovesText(line, start: introLength);
+    // Every line in a course chapter shares its whole opening, so printing
+    // the intro in full made twenty rows read identically for the first sixty
+    // characters — and the moves that actually tell them apart sat off the
+    // right edge. Show just enough of it to land the reader in the position.
+    const introTailPlies = 4;
+    final introFrom = introLength > introTailPlies
+        ? introLength - introTailPlies
+        : 0;
     final introText = introLength > 0
-        ? formatLineMovesText(line, end: introLength)
+        ? '${introFrom > 0 ? '… ' : ''}'
+              '${formatLineMovesText(line, start: introFrom, end: introLength)}'
         : '';
     const moveStyle = TextStyle(
       fontFamily: 'monospace',
@@ -520,26 +607,25 @@ class _LineCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              line.name,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            _statusText,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: AppColors.onSurfaceMuted,
-                            ),
-                          ),
-                        ],
+                      // The name gets the whole row and up to two lines.
+                      // Course exports already truncate their titles at ~30
+                      // characters; ellipsising them again turned
+                      // "10.Bd2 Be4 11.Qc1 c6 12.a4 #3" into a row of lines
+                      // that all read the same.
+                      Text(
+                        line.name,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        line.isModelGame ? 'Model game' : _statusText,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: AppColors.onSurfaceMuted,
+                        ),
                       ),
                       const SizedBox(height: 3),
                       Text.rich(
@@ -555,7 +641,7 @@ class _LineCard extends StatelessWidget {
                             TextSpan(text: trainedText, style: moveStyle),
                           ],
                         ),
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
@@ -573,7 +659,9 @@ class _LineCard extends StatelessWidget {
                       color: AppColors.onSurfaceMuted,
                     ),
                   const SizedBox(width: 2),
-                  _ActionPill(label: status.actionLabel),
+                  _ActionPill(
+                    label: line.isModelGame ? 'Read' : status.actionLabel,
+                  ),
                 ],
               ],
             ),
@@ -586,6 +674,11 @@ class _LineCard extends StatelessWidget {
 
 /// The "Learn ›" affordance on a line row. Visual only — the whole card is
 /// the tap target, so there is no second, smaller thing to aim at.
+///
+/// Full-strength ink on the verb, not the muted grey the rest of the row uses.
+/// A grey-outlined pill with grey text is exactly what Material draws for a
+/// *disabled* outlined button, so a list of them read as a page where nothing
+/// could be clicked. The card stays neutral; only the verb carries weight.
 class _ActionPill extends StatelessWidget {
   final String label;
 
@@ -598,7 +691,7 @@ class _ActionPill extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(10, 5, 4, 5),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.outline),
+        border: Border.all(color: theme.colorScheme.outline),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -606,14 +699,14 @@ class _ActionPill extends StatelessWidget {
           Text(
             label,
             style: theme.textTheme.labelMedium?.copyWith(
-              color: AppColors.onSurfaceSoft,
+              color: theme.colorScheme.onSurface,
               fontWeight: FontWeight.w600,
             ),
           ),
-          const Icon(
+          Icon(
             Icons.chevron_right,
             size: 16,
-            color: AppColors.onSurfaceMuted,
+            color: theme.colorScheme.onSurface,
           ),
         ],
       ),

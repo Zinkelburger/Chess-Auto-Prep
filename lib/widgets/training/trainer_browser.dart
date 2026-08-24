@@ -80,6 +80,12 @@ class TrainerBrowser extends StatefulWidget {
   final VoidCallback? onLearn;
   final VoidCallback? onReview;
 
+  /// How many lines one press of each button actually covers, or 0 when the
+  /// run is uncapped. The buttons say what the sitting is, not how big the
+  /// backlog is — "930 untrained" on a bought course reads as a threat.
+  final int learnBatchSize;
+  final int reviewBatchSize;
+
   /// Train one specific line now.
   final void Function(RepertoireLine line) onTrainLine;
 
@@ -92,6 +98,16 @@ class TrainerBrowser extends StatefulWidget {
 
   /// Re-opens the "sort into chapters?" prompt.
   final VoidCallback? onOpenChapterSetup;
+
+  /// Side the loaded file trains, or null when the question doesn't apply
+  /// (a study, where each chapter has its own solver). Shown as a header
+  /// control rather than buried in settings: a course export declares no
+  /// colour, so this is a guess the user has to be able to see and correct —
+  /// getting it wrong quizzes them on the opponent's moves, every line.
+  final bool? playingWhite;
+
+  /// Opens the "which side does this file train?" chooser.
+  final VoidCallback? onChangePlayingSide;
 
   /// Opens the trainer settings.
   final VoidCallback? onOpenSettings;
@@ -115,10 +131,14 @@ class TrainerBrowser extends StatefulWidget {
     required this.ungroupedChapter,
     this.onLearn,
     this.onReview,
+    this.learnBatchSize = 0,
+    this.reviewBatchSize = 0,
     required this.onTrainLine,
     this.onPreviewLine,
     this.onApplyLearnedSelection,
     this.onOpenChapterSetup,
+    this.playingWhite,
+    this.onChangePlayingSide,
     this.onOpenSettings,
     this.introEnabled = false,
     this.dense = false,
@@ -271,7 +291,11 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
               : () => _openChapter(null),
           onLearn: _selecting ? null : widget.onLearn,
           onReview: _selecting ? null : widget.onReview,
+          learnBatchSize: widget.learnBatchSize,
+          reviewBatchSize: widget.reviewBatchSize,
           onOpenChapterSetup: _selecting ? null : widget.onOpenChapterSetup,
+          playingWhite: widget.playingWhite,
+          onChangePlayingSide: _selecting ? null : widget.onChangePlayingSide,
           onOpenSettings: _selecting ? null : widget.onOpenSettings,
         ),
         const Divider(height: 1),
@@ -354,6 +378,7 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
           _ChapterCard(
             title: chapter,
             counts: countLines(grouped[chapter]!, widget.reviewMap),
+            lineCount: grouped[chapter]!.length,
             dense: widget.dense,
             onTap: () => _openChapter(chapter),
           ),
@@ -361,6 +386,7 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
           _ChapterCard(
             title: 'Other lines',
             counts: countLines(ungrouped, widget.reviewMap),
+            lineCount: ungrouped.length,
             dense: widget.dense,
             onTap: () => _openChapter(widget.ungroupedChapter),
           ),
@@ -403,10 +429,14 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
           onPreview: _selecting || widget.onPreviewLine == null
               ? null
               : () => widget.onPreviewLine!(line),
+          // A model game is not yours to reproduce; the row opens the book
+          // view instead of starting a drill the queue would refuse anyway.
           onTap: _selecting
               ? () => setState(() {
                   if (!_checked.remove(line.id)) _checked.add(line.id);
                 })
+              : line.isModelGame
+              ? () => widget.onPreviewLine?.call(line)
               : () => widget.onTrainLine(line),
         );
       },

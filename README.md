@@ -9,11 +9,13 @@ A cross-platform chess app: opening repertoire builder/trainer, tactics, positio
 - **Tactics Trainer**: Practice chess tactics from Lichess games
 - **Position Analysis**: Analyze weak positions from your games
 - **PGN Viewer**: Load and navigate through chess games
+- **Engine Tournament**: Engine-vs-engine matches from any position, with a crosstable and PGN output — the one place you can point the app at your own UCI binary
 - **Cross-platform**: Runs on iOS, Android, and Desktop
 
 ## Documentation
 
 Current implementation map: **[docs/COMPONENT_MAP.md](docs/COMPONENT_MAP.md)**  
+Engine-vs-engine matches (in the app, headless, or from an agent): [docs/ENGINE_TOURNAMENT.md](docs/ENGINE_TOURNAMENT.md)  
 Planned / incomplete work: [docs/FUTURE_FEATURES.md](docs/FUTURE_FEATURES.md)
 
 ## Getting Started

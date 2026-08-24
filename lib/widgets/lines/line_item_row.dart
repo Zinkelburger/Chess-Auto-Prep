@@ -391,16 +391,9 @@ class _TrapBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: AppColors.warning.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(
-        '${metrics.trapCount} trap${metrics.trapCount == 1 ? '' : 's'}',
-        style: const TextStyle(fontSize: 11, color: AppColors.warning),
-      ),
+    return Text(
+      '${metrics.trapCount} trap${metrics.trapCount == 1 ? '' : 's'}',
+      style: const TextStyle(fontSize: 11, color: AppColors.onSurfaceSoft),
     );
   }
 }

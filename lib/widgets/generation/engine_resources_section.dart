@@ -98,12 +98,8 @@ class EngineResourcesSection extends StatelessWidget {
               ),
               _ConfigStatChip(
                 label: '$clamped thread${clamped == 1 ? '' : 's'} active',
-                color: scheme.primary,
               ),
-              _ConfigStatChip(
-                label: '$kPoolHashPerWorkerMb MB hash',
-                color: scheme.secondary,
-              ),
+              _ConfigStatChip(label: '$kPoolHashPerWorkerMb MB hash'),
             ],
           ),
           if (!enabled) ...[
@@ -126,24 +122,15 @@ class EngineResourcesSection extends StatelessWidget {
 }
 
 class _ConfigStatChip extends StatelessWidget {
-  const _ConfigStatChip({required this.label, required this.color});
+  const _ConfigStatChip({required this.label});
 
   final String label;
-  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withAlpha(32),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withAlpha(64)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(fontSize: 11, color: color.withAlpha(220)),
-      ),
+    return Text(
+      label,
+      style: const TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
     );
   }
 }

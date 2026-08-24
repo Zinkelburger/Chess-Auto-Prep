@@ -6,11 +6,11 @@ library;
 import 'dart:io';
 
 import 'package:chess_auto_prep/core/study_controller.dart';
-import 'package:chess_auto_prep/models/tactics_position.dart';
-import 'package:chess_auto_prep/models/tactics_session_settings.dart';
+import 'package:chess_auto_prep/features/tactics/models/tactics_position.dart';
+import 'package:chess_auto_prep/features/tactics/models/tactics_session_settings.dart';
 import 'package:chess_auto_prep/services/repertoire_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
-import 'package:chess_auto_prep/services/tactics/tactics_pgn_codec.dart';
+import 'package:chess_auto_prep/features/tactics/services/tactics_pgn_codec.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
@@ -40,7 +40,6 @@ TacticsPosition _puzzle({String note = '', int rating = 0}) => TacticsPosition(
   correctLine: _solutionSan,
   mistakeType: TacticsSessionSettings.customMistakeType,
   mistakeAnalysis: note,
-  positionContext: 'Move 30, Black to play',
   gameWhite: '',
   gameBlack: '',
   gameResult: '*',

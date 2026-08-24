@@ -12,6 +12,7 @@ import '../constants/ui_breakpoints.dart';
 import '../core/app_state.dart';
 import '../core/study_controller.dart';
 import '../models/move_tree.dart' show TreePath;
+import '../services/repertoire_line_ids.dart';
 import '../services/repertoire_service.dart';
 import '../services/study_import/study_import_controller.dart';
 import '../services/study_import/study_import_exception.dart';
@@ -500,7 +501,7 @@ class _StudyScreenState extends State<StudyScreen> {
             _study.chapter.toPgn(),
             _study.chapterIndex,
           ) ??
-          service.generateLineId(
+          repertoireLineIds.stable(
             _study.tree.sanSequenceAt(
               _study.tree.mainlineEndFrom(TreePath.empty),
             ),

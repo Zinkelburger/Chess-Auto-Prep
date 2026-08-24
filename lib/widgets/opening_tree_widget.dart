@@ -561,7 +561,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
           decoration: branchTip == null
               ? null
               : BoxDecoration(
-                  color: AppColors.infoTint,
+                  color: AppColors.surfaceInset,
                   borderRadius: BorderRadius.circular(3),
                 ),
           child: Text(

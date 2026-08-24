@@ -42,12 +42,17 @@ Two layouts coexist. Both are intentional; the rule for choosing is:
 
 - **`lib/features/<name>/`** — everything owned by one feature, in
   `controllers/ models/ services/ widgets/`. Use this for new features and
-  when growing an existing one (`audit`, `browse`, `coverage`, `eval_tree`,
-  `holes`, `traps`).
+  when growing an existing one (`audit`, `browse`, `coverage`, `engine_tournament`,
+  `eval_tree`, `games`, `holes`, `planner`, `repertoire`, `tactics`, `traps`,
+  `tricks`).
 - **`lib/core/ models/ services/ widgets/`** — genuinely cross-cutting code
   used by three or more features or screens. `TrapLineInfo` lives in
   `lib/models/` for exactly this reason: 27 files across four layers use it,
-  so it is a shared domain model rather than a `traps` internal.
+  so it is a shared domain model rather than a `traps` internal. The mirror
+  case: `TacticsSetMetadata` stays in `lib/models/` even though everything
+  else tactical moved into `features/tactics/`, because it is what
+  `StorageService.listTacticsSets()` returns — the storage layer's own type,
+  sitting beside `RepertoireMetadata` for the same reason.
 
 A feature's *pipeline* code can stay in `lib/services/` when it belongs to
 that pipeline rather than to the feature UI — `services/generation/

@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../models/eval_database_settings.dart';
 import '../../services/eval/chessdb_api_provider.dart';
 import '../../services/eval/sqlite_eval_provider.dart';
+import '../../services/generation/generation_config.dart';
 import '../../theme/app_colors.dart';
 import '../labeled_toggle.dart';
 
@@ -61,6 +62,42 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
   bool get enableExtEvalSubtreeSkip => _enableExtEvalSubtreeSkip;
   String get minAcceptableEvalDepthRaw =>
       _minAcceptableEvalDepthCtrl.text.trim();
+
+  /// Seeds every control from [config] — the exact inverse of the getters
+  /// above, which is what `GenerationConfigFormState.toConfig` reads.
+  ///
+  /// Without this the section was write-only from the config's point of
+  /// view: it published eight fields into every built config but had no way
+  /// to be told what they were, so reopening the form on a saved config or a
+  /// preset silently reset all eight to these defaults. `_applyInitialConfig`
+  /// calls this, and `generation_config_form_roundtrip_test.dart` pins the
+  /// two halves against each other.
+  void applyConfig(TreeBuildConfig config) {
+    void assign() {
+      _batchEvalLookups = config.batchEvalLookups;
+      _enableLocalChessDb = config.enableLocalChessDb;
+      _localChessDbPathCtrl.text = config.localChessDbPath;
+      // Re-validated lazily; the path came from a config that was built with
+      // it, not from the picker, so nothing has checked this file yet.
+      _localChessDbValid = null;
+      _enableChessDbApi = config.enableChessDbApi;
+      _chessDbQuotaCtrl.text = config.chessDbApiDailyQuota.toString();
+      _chessDbConcurrencyCtrl.text = config.chessDbApiConcurrency.toString();
+      _enableExtEvalSubtreeSkip = config.enableExtEvalSubtreeSkip;
+      // 0 means "no floor", which the field shows as empty rather than "0".
+      _minAcceptableEvalDepthCtrl.text = config.minAcceptableEvalDepth > 0
+          ? config.minAcceptableEvalDepth.toString()
+          : '';
+    }
+
+    // Callable before the first build (from a post-frame seed) as well as
+    // after, so it must not assume an element is mounted.
+    if (mounted) {
+      setState(assign);
+    } else {
+      assign();
+    }
+  }
 
   @override
   void initState() {

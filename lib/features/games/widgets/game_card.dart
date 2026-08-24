@@ -38,7 +38,8 @@ class GameCard extends StatelessWidget {
   /// the pieces read as smudges, which makes the board cost height and pay
   /// nothing back. This is deliberately larger than a list thumbnail wants to
   /// be, and only here: hover previews and engine boards keep their own sizes.
-  /// The sprites are rasterized at 48px, so they stay sharp well past this.
+  /// Piece sprites are rasterized to fit the square at the display's own
+  /// pixel ratio, so this size carries no sharpness ceiling of its own.
   static const double boardSize = 144;
 
   final RecentGame game;

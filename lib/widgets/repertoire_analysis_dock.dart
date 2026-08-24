@@ -207,11 +207,7 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
             Tooltip(
               message:
                   'Best engine evaluation at this position (raw Stockfish).',
-              child: _SummaryChip(
-                label: 'Engine',
-                value: engineLabel,
-                color: AppColors.stockfishColor(),
-              ),
+              child: _SummaryChip(label: 'Engine', value: engineLabel),
             ),
             const SizedBox(width: 16),
             Tooltip(
@@ -225,11 +221,7 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
                   : 'Practical value of this position from the built tree:\n'
                         'the engine eval folded with how often opponents go\n'
                         'wrong from here.',
-              child: _SummaryChip(
-                label: 'Expectimax',
-                value: exLabel,
-                color: AppColors.expectimaxColor(),
-              ),
+              child: _SummaryChip(label: 'Expectimax', value: exLabel),
             ),
           ],
         ),
@@ -302,9 +294,8 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
 class _SummaryChip extends StatelessWidget {
   final String label;
   final String value;
-  final Color? color;
 
-  const _SummaryChip({required this.label, required this.value, this.color});
+  const _SummaryChip({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -314,11 +305,10 @@ class _SummaryChip extends StatelessWidget {
         Text('$label ', style: AppTextStyles.caption.copyWith(fontSize: 11)),
         Text(
           value,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.bold,
             fontFamily: 'monospace',
-            color: color,
           ),
         ),
       ],

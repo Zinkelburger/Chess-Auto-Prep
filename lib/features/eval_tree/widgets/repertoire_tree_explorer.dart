@@ -158,19 +158,12 @@ class _RoleBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: roleBadgeColor(isOurTurn),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        isOurTurn ? 'Our move' : 'Opponent',
-        style: const TextStyle(
-          fontSize: 10,
-          color: AppColors.ink,
-          fontWeight: FontWeight.w600,
-        ),
+    return Text(
+      isOurTurn ? 'Our move' : 'Opponent',
+      style: const TextStyle(
+        fontSize: 11,
+        color: AppColors.onSurfaceSoft,
+        fontWeight: FontWeight.w600,
       ),
     );
   }
@@ -187,22 +180,12 @@ class _PositionStatsBar extends StatelessWidget {
 
     final evalCp = currentNode.evalForUsCp;
     if (evalCp != null) {
-      chips.add(
-        _StatChip(
-          label: 'Eval',
-          value: _formatEval(evalCp),
-          color: evalColor(evalCp),
-        ),
-      );
+      chips.add(_StatChip(label: 'Eval', value: _formatEval(evalCp)));
     }
 
     if (currentNode.ease != null) {
       chips.add(
-        _StatChip(
-          label: 'Ease',
-          value: currentNode.ease!.toStringAsFixed(2),
-          color: easeColor(currentNode.ease!),
-        ),
+        _StatChip(label: 'Ease', value: currentNode.ease!.toStringAsFixed(2)),
       );
     }
 
@@ -211,7 +194,6 @@ class _PositionStatsBar extends StatelessWidget {
         _StatChip(
           label: 'V',
           value: '${(currentNode.expectimaxValue! * 100).toStringAsFixed(1)}%',
-          color: vColor(currentNode.expectimaxValue!),
         ),
       );
     }
@@ -221,7 +203,6 @@ class _PositionStatsBar extends StatelessWidget {
         label: 'Reach',
         value:
             '${(currentNode.cumulativeProbability * 100).toStringAsFixed(1)}%',
-        color: AppColors.info,
       ),
     );
 
@@ -410,7 +391,7 @@ class _CandidateRow extends StatelessWidget {
                 width: 40,
                 child: _MetricText(
                   value: positionEase?.toStringAsFixed(2),
-                  color: positionEase != null ? easeColor(positionEase) : null,
+                  color: null,
                   align: TextAlign.right,
                 ),
               ),
@@ -420,7 +401,7 @@ class _CandidateRow extends StatelessWidget {
                   value: node.myEase != null
                       ? '${(node.myEase! * 100).toStringAsFixed(0)}%'
                       : null,
-                  color: node.myEase != null ? easeColor(node.myEase!) : null,
+                  color: null,
                   align: TextAlign.right,
                   tooltip: 'How natural this move is for a human to find',
                 ),
@@ -428,7 +409,7 @@ class _CandidateRow extends StatelessWidget {
               Expanded(
                 child: _MetricText(
                   value: deepEase?.toStringAsFixed(2),
-                  color: deepEase != null ? easeColor(deepEase) : null,
+                  color: null,
                   align: TextAlign.right,
                   tooltip: isOurTurn
                       ? 'Minimum opponent ease deeper in this line\n(lower = harder for them)'
@@ -463,21 +444,13 @@ class _EvalBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-      decoration: BoxDecoration(
-        color: evalBgColor(evalCp),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        _formatEval(evalCp),
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-          color: evalTextColor(evalCp),
-          fontFamily: 'monospace',
-        ),
+    return Text(
+      _formatEval(evalCp),
+      textAlign: TextAlign.center,
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.bold,
+        fontFamily: 'monospace',
       ),
     );
   }
@@ -504,7 +477,7 @@ class _MetricText extends StatelessWidget {
       style: TextStyle(
         fontSize: 11,
         fontFamily: 'monospace',
-        color: color ?? AppColors.onSurfaceMuted,
+        color: color ?? AppColors.onSurfaceSoft,
         fontWeight: value != null ? FontWeight.w600 : FontWeight.normal,
       ),
     );
@@ -529,31 +502,17 @@ class _TrapCountBadge extends StatelessWidget {
       );
     }
 
-    final color = count >= 3
-        ? AppColors.danger
-        : count >= 2
-        ? AppColors.mistakeMistake
-        : AppColors.warning;
-
     return Tooltip(
       message: '$count trappy position${count == 1 ? '' : 's'} in this line',
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.warning_amber_rounded, size: 12, color: color),
-          const SizedBox(width: 2),
-          Text(
-            '$count',
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              fontSize: 11,
-              color: color,
-              fontWeight: FontWeight.w600,
-              fontFamily: 'monospace',
-            ),
-          ),
-        ],
+      child: Text(
+        '$count',
+        textAlign: TextAlign.right,
+        style: const TextStyle(
+          fontSize: 11,
+          color: AppColors.onSurfaceSoft,
+          fontWeight: FontWeight.w600,
+          fontFamily: 'monospace',
+        ),
       ),
     );
   }
@@ -597,16 +556,12 @@ class _LeafPlaceholder extends StatelessWidget {
   }
 }
 
+/// "Label value" as plain text — the label is muted, the value is ink.
 class _StatChip extends StatelessWidget {
   final String label;
   final String value;
-  final Color color;
 
-  const _StatChip({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
+  const _StatChip({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -619,11 +574,7 @@ class _StatChip extends StatelessWidget {
         ),
         Text(
           value,
-          style: TextStyle(
-            fontSize: 11,
-            color: color,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
         ),
       ],
     );

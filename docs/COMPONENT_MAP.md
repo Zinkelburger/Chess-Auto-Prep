@@ -103,6 +103,7 @@ main.dart
 | `repertoireTrainer` | `RepertoireTrainingScreen` | Spaced repetition training |
 | `pgnViewer` | `PgnViewerScreen` | Standalone game PGN + inline engine |
 | `study` | `StudyScreen` | Multi-chapter studies |
+| `engineTournament` | `EngineTournamentScreen` | Engine-vs-engine matches, crosstable, per-game PGN |
 
 Mode switcher: `widgets/app_mode_menu_button.dart`.
 
@@ -670,6 +671,55 @@ AuditSessionController._launchAuditConfig() (via screen)
 
 Implements principles from `docs/tree-display-architecture.md` (focused window, flat index, pre-sorted children).
 
+### `lib/features/engine_tournament/`
+
+Engine-vs-engine play. **The only place the app runs a binary that is not the
+bundled Stockfish** — a user-supplied UCI engine has to pass
+`verifyUciEngine` (start → `uciok` → `readyok` → a *legal* move from the
+standard position) before it can be added, so a wrong pick is reported as a
+sentence rather than as a match of silent forfeits.
+
+The whole core is Flutter-free `dart:io`, which is what lets
+`tools/run_engine_tournament.dart` drive the identical code path headlessly
+into the same `Documents/engine_tournaments/` tree the app reads. That tool is
+also how the MCP server runs matches, verifies binaries (`--verify`) and reads
+standings (`--show`) — there is exactly one implementation of the arbiter and
+of the Elo/SB/LOS maths, and everything else reaches it through that script.
+
+The screen keeps a directory watch, so a match an agent starts fills in live
+rather than waiting for someone to press Refresh.
+
+Output is deliberately plain: one directory per tournament holding
+`tournament.json` (config + per-game results) and `games.pgn` (the games, in
+schedule order). Clicking a row in the games table hands that PGN to the PGN
+Viewer with a game index, so the viewer's own Prev/Next then walks the match.
+
+| File | Purpose |
+|------|---------|
+| **models/time_control.dart** | `TimeControl` — per-move, clock (base+inc, optional moves/session), fixed depth, fixed nodes; labels, PGN `TimeControl` tag, hang-guard ceilings, and the preset list |
+| **models/engine_spec.dart** | `EngineSpec` — one competitor: binary path (null = bundled), name, Hash/Threads/Ponder, extra `setoption` pairs |
+| **models/adjudication_rules.dart** | cutechess-shaped `-draw` / `-resign` knobs plus the move ceiling and the fifty-move/threefold toggles |
+| **models/tournament_config.dart** | Snapshot of a tournament's setup; owns pairing generation (round robin / gauntlet) and `totalGames` |
+| **models/tournament_game.dart** | `GameResult`, `TerminationReason` (with PGN `Termination` vocabulary), and the per-game record |
+| **models/crosstable.dart** | Standings row + head-to-head grid data |
+| **models/stored_tournament.dart** | What lives on disk: config, status, games, paths |
+| **services/uci_engine.dart** | UCI process driver for *play* — handshake, options, clock-aware `go`, `bestmove` with score/depth/time, hang guard. Exposes the narrow `PlayingEngine` interface the arbiter uses |
+| **services/engine_verification.dart** | The gate on user-supplied binaries; never throws, always reports |
+| **services/engine_registry.dart** | `engines.json`; the bundled engine's *settings* persist but its path never does (it is resolved at launch) |
+| **services/engine_game_runner.dart** | The arbiter: clocks, repetition/fifty-move, draw & resign adjudication, illegal-move and crash handling, and the PGN writer. Per-move cutechess-style `{+0.31/24 2.0s}` comments are opt-in (`TournamentConfig.annotateMoves`) — on by default they put every move on its own row in the viewer |
+| **services/engine_tournament_runner.dart** | Schedule building, concurrent lanes with per-lane engine processes, persist-after-every-game |
+| **services/tournament_store.dart** | `Documents/engine_tournaments/<slug>/` — atomic writes, listing, deletion |
+| **services/tournament_open_request.dart** | The cross-process "open the app on this tournament" file (`open_request.json`), written by the MCP tools and consumed — read-and-cleared in one step — by the app. Requests older than a day are dropped so a forgotten one cannot hijack a launch |
+| **services/tournament_open_watcher.dart** | Checks for a waiting request on start (which is what makes a request written while the app was closed work), then watches the directory. Timer-free on purpose: a poll in the always-mounted host screen would leak into every widget test that pumps it |
+| **services/crosstable_builder.dart** | Points, W/D/L, Sonneborn-Berger, Elo ± 95% interval, likelihood of superiority |
+| **services/tournament_summary.dart** | One-line readings for the history rail: match score (`Alpha 5½–4½ Beta`), leader of a field, duplicate-name disambiguation, day grouping and run duration. Pure — the arithmetic is `buildCrosstable`'s |
+| **controllers/engine_tournament_controller.dart** | Screen state: list, selection, engine registry, live run (board + last move + progress) |
+| **widgets/engine_tournament_screen.dart** | The mode screen; hands games to the PGN Viewer, and honours an `OpenEngineTournament` handoff (breadcrumb, or an agent's open request) |
+| **widgets/new_tournament_dialog.dart** | Engines, position (FEN / current board / paste), time control, schedule, adjudication |
+| **widgets/engine_manager_dialog.dart** | Add / verify / configure / remove engines |
+| **widgets/tournament_list_pane.dart** | The history rail: every saved run, newest first, grouped by day, each row carrying its score; filter box appears past six runs |
+| **widgets/crosstable_view.dart**, **tournament_games_table.dart**, **tournament_detail_pane.dart** | The results UI |
+
 ### `lib/features/holes/`
 
 Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.dart`), which keys results per player + colour. **Different from Analyze with Engine** (raw Stockfish eval coloring of most-played positions): this walks the loaded tree from the ATTACKER's side (opposite the tree's colour) and emits exploitable findings — `uncoveredStrongMove` (engine-strong attacker moves with no reply on file), `refutation` (owner moves that concretely lose, with verified Stockfish PV), `practicalTrap` (**only** the second pass: top leaves get a short Maia expectimax build where practical eval beats raw engine eval for the attacker). Ranked by `exploitScore` (reach × gain) into a short killer list, not a breadth checklist. Reuses the audit's `AuditFinding` model and shared `EvalCache`/`StockfishPool`.
@@ -1001,6 +1051,18 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `test/features/holes/hole_finding_json_test.dart` | Hole finding JSON round-trip |
 | `test/features/holes/exploit_ranking_test.dart` | Exploit-score ranking/capping |
 | `test/features/holes/hole_walk_probability_test.dart` | Reach-probability propagation in the attacker walk |
+| `test/features/engine_tournament/engine_game_runner_test.dart` | The arbiter, against scripted engines: mate, threefold, fifty-move, draw/resign adjudication, move ceiling, illegal move, engine death, per-move and clock forfeits, PGN numbering from a FEN start |
+| `test/features/engine_tournament/crosstable_builder_test.dart` | Points from both sides, head-to-head order, SB tiebreak, Elo/LOS edge cases |
+| `test/features/engine_tournament/tournament_summary_test.dart` | History-rail wording: match score and leader, level match, field leader while running, self-match name numbering, day grouping and run duration |
+| `test/features/engine_tournament/tournament_schedule_test.dart` | Colour alternation, round-major order, round robin vs gauntlet |
+| `test/features/engine_tournament/tournament_store_test.dart` | Slug allocation, JSON round trip, corrupt-file tolerance, and that `games.pgn` reparses as the viewer's collection |
+| `test/features/engine_tournament/engine_verification_test.dart` | Real-process gate: missing/dir/non-executable, silent binary, UCI-but-illegal-move, and a passing toy engine |
+| `test/features/engine_tournament/time_control_test.dart` | Labels, PGN `TimeControl` tags, hang-guard ceilings, JSON round trip |
+| `test/features/engine_tournament/uci_score_test.dart` | Mate-to-centipawn collapsing (including `mate 0`), no-move answers, `go` command spelling |
+| `test/features/engine_tournament/crosstable_view_test.dart` | Crosstable and games-table rendering, empty states, row click carries the game index |
+| `test/features/engine_tournament/engine_tournament_screen_test.dart` | Screen boots empty and populated, a games-row click hands the viewer the match PGN parked on that game, and an `OpenEngineTournament` handoff selects the named tournament (or leaves the screen intact and says so when it is gone); the history rail's score line and its filter |
+| `test/features/engine_tournament/tournament_open_request_test.dart` | The request file the MCP side writes and the app consumes: round trip, read-and-clear, malformed and stale requests, and the watcher's already-waiting / written-live / stopped paths |
+| `test/features/engine_tournament/engine_registry_test.dart` | Bundled-first ordering, bundled settings persisted without its path, update/remove, corrupt-file tolerance |
 | `test/features/eval_tree/eval_tree_controller_test.dart` | Graph controller |
 | `test/features/eval_tree/eval_tree_tab_test.dart` | Tab widget |
 | `test/features/eval_tree/eval_tree_line_metrics_test.dart` | Line metrics |
@@ -1046,7 +1108,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `tree_builder/` | C expectimax tree builder (`--eval-depth` default 14), CdbDirect reader; MultiPV line-0 PV reply stash + opponent injection (`engine_injected`, PGN `{engine-injected}`). **Build modes** (`--build-mode` in `tree.h`): `stockfish-expectimax` (default interleaved BFS), `maia-db-explore`, `db-explorer`, `trap-finder` (unimplemented). **SQLite cache** (`database.c`): explorer/eval/Maia/repertoire tables plus `build_metadata`. **`cli_args` persistence:** each run calls `save_config_to_db()` → `rdb_save_cli_config()` with the effective CLI as JSON (color, depth, build mode, PGN paths, eval sources, presets, etc.). **`--resume`:** `load_config_from_db()` in `main.c` restores from `cli_args`; `CliExplicit` records flags passed on the command line — saved values apply only for options *not* explicitly set (e.g. `--resume --threads 8` overrides stored thread count). Restores `-c` when omitted; DBs without `cli_args` fail with a clear error. **`--resume` skips** the legacy `check_build_metadata` color/ratings/speeds gate; without `--resume`, reopening an existing `.db` still **refuses** on mismatch (prints stored vs current settings and example `--resume` / fresh / `--input-db` commands). Legacy DBs with data but no metadata get a one-time note and recorded settings. **`--input-db` / `-I`:** copy eval/explorer cache tables (`evaluations`, `explorer_positions`/`explorer_moves`, `multipv_cache`, `maia_cache`) from another DB into a new/empty target via `rdb_import_cache_from` (ATTACH + INSERT OR IGNORE); not `repertoire_moves`. **Threads:** `-t` / `--threads` default is `default_thread_count()` — half of `_SC_NPROCESSORS_ONLN`, minimum 1 (not a fixed 4). **Build progress (TTY):** live line via `progress_line.c` — `[Depth N] X new + Y transpositions | total | rate/min | ~ETA`; depth-complete line uses unique node count at that ply (`g_nodes_created_at_depth`). **Tree resume** (stockfish-expectimax / maia-db-explore): if `<name>.tree.json` exists and `build_complete` is false, stage 1 continues BFS from unexplored frontier leaves (`resume_prepare_frontier` in `tree.c`); only `build_complete: true` skips building. SIGINT saves partial trees; nodes interrupted mid-expansion stay `explored: false` and are retried. **Engine pool:** Stockfish children call `setsid()` (Ctrl+C does not kill engines); `engine_pool_request_stop` from the signal handler sets `shutting_down` and wakes waiters so batch/single eval exits without spamming "all Stockfish engines are dead". `--build-now` / `--skip-build` still export without expanding. **DB explorer:** `--build-mode db-explorer --pgn <file>` (repeatable) → `pgn_freq.c` replays each game from the standard start position; when `--fen` or `--moves` defines a target, counting starts only after the canonical 4-field FEN matches (not SAN-prefix string matching). `--min-elo` (default 2100) skips games where both `[WhiteElo]` and `[BlackElo]` are present and below threshold; missing or partial Elo tags are kept. Games that never reach the target are skipped (aggregate log). Parallel per-file parse when multiple PGNs; binary cache `<name>.freq.bin` with manifest incl. `min_elo`, `--no-freq-cache` to force reparse; OOM aborts parse → `tree_build_from_freqmap` → deferred Stockfish pool start → `tree_enrich_evals` (project DB → external chain → Stockfish; abort if >50% nodes still unevaluated, else warn) → expectimax + PGN export. `fen_map_put` / PGN hash tables propagate resize OOM. Opponent `move_probability` = count/reach; our-move children = 1.0; `tree_recalculate_probabilities` chains cumulative probability. See `tree_builder/ALGORITHM.md`. |
 | `python/twic-position-finder/` | TWIC Position Finder — the live site/API at `api.chessautoprep.com` (FastAPI + Astro frontend, weekly ingest cron, lesson booking). Dashboard lists matched games per TWIC issue with a Lichess link on each game. Independent of the Flutter app. |
 | `tools/fetch_assets.py` | Stdlib fetch of pinned Stockfish (`sf_18`) into `assets/executables/*.gz` (gitignored). Default is **host OS/arch only**. Linux/Windows CMake and macOS Assemble invoke it when the `.gz` is missing; Release CI always `--only`s the job’s target. In-app fallback is `StockfishBundle`. Checksums in `tools/assets.lock.json`. |
-| `tools/mcp/chess_prep/` | Local MCP server (`python3 tools/mcp/chess_prep/__main__.py`). **Opponent prep** (zero extra deps): directory, USCF, roster, Swiss sim, `opponents_export`. **PGN opening tree** (`pgn_open` / `pgn_position` / `pgn_walk` / `pgn_eval` / `pgn_audit`): FEN-keyed graph so transpositions merge; needs `python-chess` (`pip install -r tools/mcp/requirements.txt`) and Stockfish for eval. See [`OPPONENT_PREP.md`](OPPONENT_PREP.md). Tests: `python3 tools/mcp/test_chess_prep.py`, `python3 tools/mcp/test_opening_tree.py`. |
+| `tools/mcp/chess_prep/` | Local MCP server (`python3 tools/mcp/chess_prep/__main__.py`). **Opponent prep** (zero extra deps): directory, USCF, roster, Swiss sim, `opponents_export`. **PGN opening tree** (`pgn_open` / `pgn_position` / `pgn_walk` / `pgn_eval` / `pgn_audit`): FEN-keyed graph so transpositions merge; needs `python-chess` (`pip install -r tools/mcp/requirements.txt`) and Stockfish for eval. **Engine tournaments** (`tournament_run` / `_status` / `_list` / `_crosstable` / `_games` / `_game_pgn` / `_stop` / `_open` / `_engines` / `_add_engine`): starts a match from any FEN and opens the app on it. Needs the Flutter SDK's `dart` (`CHESS_PREP_DART` overrides) because it shells out to `tools/run_engine_tournament.dart` rather than re-implementing the chess or the standings maths. `tournament_run` returns as soon as the runner prints its `TOURNAMENT {…}` handshake line and leaves the games playing detached, recording the pid in `run.json` so `tournament_stop` can SIGINT it. See [`OPPONENT_PREP.md`](OPPONENT_PREP.md). Tests: `python3 tools/mcp/test_chess_prep.py`, `python3 tools/mcp/test_opening_tree.py`, `python3 tools/mcp/test_engine_tournament.py`. |
 | `packages/cdbdirect_flutter_libs/` | Native ChessDB bindings |
 | `scripts/` | One-off data/analysis scripts (chess.com titled-player stats, USCF mapping, epub/pdf game extraction) |
 

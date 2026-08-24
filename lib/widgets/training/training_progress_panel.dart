@@ -71,18 +71,18 @@ class SessionStatsBar extends StatelessWidget {
           _StatItem(
             Icons.check_circle_outline,
             '$sessionCorrect',
-            AppColors.success,
+            AppColors.onSurfaceSoft,
           ),
           _StatItem(
             Icons.cancel_outlined,
             '$sessionIncorrect',
-            AppColors.danger,
+            AppColors.onSurfaceSoft,
           ),
-          _StatItem(Icons.percent, '$accuracy%', theme.colorScheme.onSurface),
+          _StatItem(Icons.percent, '$accuracy%', AppColors.onSurfaceSoft),
           _StatItem(
             Icons.local_fire_department,
             '$sessionStreak',
-            AppColors.starAccent,
+            AppColors.onSurfaceSoft,
           ),
         ],
       ),

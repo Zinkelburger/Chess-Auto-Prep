@@ -87,6 +87,52 @@ class GamesLibraryService {
   Future<String> cacheFilePath(GamesPlatform platform, String username) async =>
       (await _cacheFile(platform, username)).path;
 
+  /// Sidecar recording when this player's cache was last *downloaded*.
+  ///
+  /// Not the PGN's own mtime: the background engine pass rewrites the cache
+  /// in place ([patchGameMovetext]) to store `[%eval]` annotations, so the
+  /// file's timestamp answers "last analysed", not "last fetched" — and the
+  /// accounts card that reports it would drift a little further from the
+  /// truth with every game reviewed.
+  File _fetchStampFile(File cache) => File('${cache.path}.fetched');
+
+  Future<void> _writeFetchStamp(File cache, DateTime at) async {
+    try {
+      await writeTextFileAtomically(
+        _fetchStampFile(cache),
+        '${at.millisecondsSinceEpoch}',
+      );
+    } catch (_) {
+      // A missing stamp costs a label, never a load.
+    }
+  }
+
+  /// When [cache]'s games came down, or null if this player has none yet.
+  ///
+  /// Falls back to the cache file's mtime for players whose games were
+  /// downloaded before the sidecar existed: an over-estimate at worst (an
+  /// analysis pass may have touched it since), and it self-corrects on the
+  /// next real fetch.
+  Future<DateTime?> _readFetchStamp(File cache) async {
+    try {
+      final stamp = _fetchStampFile(cache);
+      if (await stamp.exists()) {
+        final ms = int.tryParse((await stamp.readAsString()).trim());
+        if (ms != null) return DateTime.fromMillisecondsSinceEpoch(ms);
+      }
+      if (await cache.exists()) return await cache.lastModified();
+    } catch (_) {
+      // Fall through: no date is better than a wrong one.
+    }
+    return null;
+  }
+
+  /// When this player's games were last downloaded, or null if never.
+  Future<DateTime?> lastFetched(
+    GamesPlatform platform,
+    String username,
+  ) async => _readFetchStamp(await _cacheFile(platform, username));
+
   /// Whether a usable cache file already exists (within TTL when
   /// [respectTtl]).
   Future<bool> hasFreshCache(
@@ -118,9 +164,11 @@ class GamesLibraryService {
     List<GameSelection> unionWith = const [],
     bool forceRefresh = false,
     void Function(String message)? onProgress,
+    void Function(DateTime fetchedAt)? onFetched,
   }) async {
     final file = await _cacheFile(platform, username);
     String pgn;
+    DateTime? fetchedNow;
 
     final cacheUsable =
         !forceRefresh &&
@@ -146,11 +194,22 @@ class GamesLibraryService {
           );
         }
         await writeTextFileAtomically(file, pgn);
+        fetchedNow = DateTime.now();
+        await _writeFetchStamp(file, fetchedNow);
       } else if (await file.exists()) {
         // Network gave nothing — fall back to the stale cache rather than
         // wiping the user's data.
         pgn = await file.readAsString();
       }
+    }
+
+    // Reported on every load, not only on a download: served from a fresh
+    // cache the games are still *there*, and a caller that only heard about
+    // network fetches would tell the user "not downloaded yet" while showing
+    // them the games.
+    if (onFetched != null) {
+      final at = fetchedNow ?? await _readFetchStamp(file);
+      if (at != null) onFetched(at);
     }
 
     await _mirrorToStore(platform, username, file, pgn);
@@ -202,11 +261,33 @@ class GamesLibraryService {
     required String dedupKey,
     required String updatedMovetext,
   }) async {
+    final patched = await patchGameMovetexts(
+      cachePath: cachePath,
+      movetextByDedupKey: {dedupKey: updatedMovetext},
+    );
+    return patched == 1;
+  }
+
+  /// [patchGameMovetext] for a whole batch: one read, one write, however many
+  /// games are being patched. Returns how many were found and replaced.
+  ///
+  /// A batch, because the caller is a review run that finishes games one at a
+  /// time — patching each on its own would re-read and rewrite the entire
+  /// cache file once per game, which is quadratic in the size of the window
+  /// for no gain. Games named here but absent from the file are skipped.
+  static Future<int> patchGameMovetexts({
+    required String cachePath,
+    required Map<String, String> movetextByDedupKey,
+  }) async {
+    if (movetextByDedupKey.isEmpty) return 0;
     final file = File(cachePath);
-    if (!await file.exists()) return false;
+    if (!await file.exists()) return 0;
     final chunks = splitPgnIntoGames(await file.readAsString());
+    var patched = 0;
     for (var i = 0; i < chunks.length; i++) {
-      if (dedupKeyForHeaders(extractHeaders(chunks[i])) != dedupKey) continue;
+      final key = dedupKeyForHeaders(extractHeaders(chunks[i]));
+      final updatedMovetext = movetextByDedupKey[key];
+      if (updatedMovetext == null) continue;
       // The header block is the leading run of `[Tag "value"]` lines. Found
       // by scanning, not by a last-`]`-before-newline regex: wrapped movetext
       // can legitimately end a line on `]` (e.g. after a clock comment).
@@ -217,16 +298,17 @@ class GamesLibraryService {
         if (!t.startsWith('[') || !t.endsWith(']')) break;
         headerCount++;
       }
-      if (headerCount == 0) return false;
+      if (headerCount == 0) continue;
       final headers = lines.sublist(0, headerCount).join('\n');
       chunks[i] = '$headers\n\n${updatedMovetext.trim()}';
-      await writeTextFileAtomically(
-        file,
-        '${chunks.map((c) => c.trim()).join('\n\n')}\n',
-      );
-      return true;
+      patched++;
     }
-    return false;
+    if (patched == 0) return 0;
+    await writeTextFileAtomically(
+      file,
+      '${chunks.map((c) => c.trim()).join('\n\n')}\n',
+    );
+    return patched;
   }
 
   // ── Default fetchers ────────────────────────────────────────────────

@@ -129,7 +129,7 @@ class _OpponentListImportDialogState extends State<OpponentListImportDialog> {
     final parsed = _parsed;
 
     return AlertDialog(
-      title: const Text('Import Opponents'),
+      title: const Text('Add a whole tournament field'),
       content: SizedBox(
         width: 480,
         child: SingleChildScrollView(
@@ -138,9 +138,9 @@ class _OpponentListImportDialogState extends State<OpponentListImportDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Add a whole field at once. Each opponent becomes a player '
-                'here, with games from every account listed.',
-                style: TextStyle(fontSize: 14),
+                'Every entrant in the list becomes a player here, with their '
+                'games downloaded from each account it names.',
+                style: TextStyle(fontSize: 13),
               ),
               const SizedBox(height: 4),
               Text(
@@ -156,8 +156,8 @@ class _OpponentListImportDialogState extends State<OpponentListImportDialog> {
                     icon: const Icon(Icons.file_open, size: 18),
                     label: Text(
                       _fileName == null
-                          ? 'Choose File'
-                          : 'Choose Different File',
+                          ? 'Choose a list file…'
+                          : 'Choose a different file…',
                     ),
                   ),
                   if (_fileName != null) ...[

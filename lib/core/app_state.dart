@@ -16,6 +16,7 @@ enum AppMode {
   repertoireTrainer,
   pgnViewer,
   study,
+  engineTournament,
 }
 
 extension AppModeLabel on AppMode {
@@ -28,6 +29,7 @@ extension AppModeLabel on AppMode {
     AppMode.repertoireTrainer => 'Repertoire Trainer',
     AppMode.pgnViewer => 'PGN Viewer',
     AppMode.study => 'Study',
+    AppMode.engineTournament => 'Engine Tournament',
   };
 }
 
@@ -41,7 +43,9 @@ extension AppModeEngine on AppMode {
     AppMode.repertoire ||
     AppMode.pgnViewer ||
     AppMode.study => true,
-    AppMode.repertoireTrainer => false,
+    // Two engines are already playing each other in there; the analysis pool
+    // would only compete with them for the same cores.
+    AppMode.repertoireTrainer || AppMode.engineTournament => false,
   };
 }
 
@@ -218,6 +222,16 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
     historyLabel: historyLabel,
   );
 
+  /// Switch to Engine Tournament, optionally selecting one tournament.
+  ///
+  /// [tournamentId] is its directory name under
+  /// `Documents/engine_tournaments` — the same id the MCP tools report.
+  void switchToEngineTournament({String? tournamentId, String? historyLabel}) =>
+      handOff(
+        OpenEngineTournament(tournamentId: tournamentId),
+        historyLabel: historyLabel,
+      );
+
   /// Switch to trainer with a specific repertoire and optional line.
   void switchToTrainer({
     required String repertoirePath,
@@ -257,17 +271,31 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
   );
 
   void setLichessUsername(String? username) {
+    // A different account has a different download history; keeping the old
+    // date would date the new name's games to a fetch that never happened.
+    if (username?.trim() != _lichessUsername?.trim()) {
+      _lichessLastFetch = null;
+      unawaited(_saveLastFetch('lichess_last_fetch_ms', null));
+    }
     _lichessUsername = username;
     unawaited(_saveLichessUsername(username));
     notifyListeners();
   }
 
   void setChesscomUsername(String? username) {
+    if (username?.trim() != _chesscomUsername?.trim()) {
+      _chesscomLastFetch = null;
+      unawaited(_saveLastFetch('chesscom_last_fetch_ms', null));
+    }
     _chesscomUsername = username;
     unawaited(_saveChesscomUsername(username));
     notifyListeners();
   }
 
+  /// Recorded by the games loader when a site's games are in hand — see
+  /// [RecentGamesController]'s `onFetched`. Nothing else writes these: a
+  /// second writer is how the accounts card and the games list came to
+  /// disagree in the first place.
   void setLichessLastFetch(DateTime? date) {
     _lichessLastFetch = date;
     unawaited(_saveLastFetch('lichess_last_fetch_ms', date));

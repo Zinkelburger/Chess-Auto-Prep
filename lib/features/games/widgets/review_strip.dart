@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/engine_settings.dart';
-import '../../../services/tactics/mining_settings.dart';
-import '../../../services/tactics/tactics_import_coordinator.dart';
+import '../../tactics/services/mining_settings.dart';
+import '../../tactics/services/tactics_import_coordinator.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/system_info.dart';
@@ -25,8 +25,11 @@ import '../services/home_review_runner.dart';
 /// * **The vocabulary keeps them apart.** The top button says "analysis" and
 ///   never "review", because *Opening review* is one of the buttons below it.
 ///   (It used to read "Resume review", one word away from "Opening review".)
-/// * **It starts paused.** Nothing about opening the app commits every core to
-///   minutes of Stockfish; the button is the whole opt-in.
+/// * **It starts itself.** Setting a username is the opt-in: once the list has
+///   games, the run begins (see [GamesListFilters.autoRun]). A home screen
+///   where nothing has happened until you find the right gray button is a
+///   screen that looks broken. Auto-start is a checkbox on this strip for
+///   anyone who wants the old behaviour, and turning it off sticks.
 /// * **Pause is the same button, and there is no cancel.** A run you can stop
 ///   and carry on is one control with two states; nothing you have already
 ///   waited for is ever thrown away.
@@ -36,10 +39,13 @@ import '../services/home_review_runner.dart';
 ///   is in. The *count* of waiting work is not in the button — it is the
 ///   headline right beside it ("12 unanalysed games"), so the button stays
 ///   short. The two result buttons below still carry their counts.
-/// * **The job button is gray, not green.** It is the biggest control on the
-///   screen already; painted green it read as "the thing to press", when it is
-///   really "the thing that costs minutes of CPU". Amber only while running,
-///   as Pause.
+/// * **The job button asks to be pressed when there is work.** With unanalysed
+///   games waiting and nothing running, it is green and breathes — a slow
+///   glow, stopped for anyone who has asked the system for reduced motion. It
+///   goes back to gray the moment there is nothing to do but check for new
+///   games, and amber while running, as Pause. It was gray in every state,
+///   on the theory that a control costing minutes of CPU should not beg; the
+///   result was that the one thing to press looked like scenery.
 /// * **Cores and depth are stated, not steppered.** How much of the laptop goes
 ///   away and how long the wait is belong on screen, but as a sentence you read
 ///   in passing; changing them is a trip to the strip's one gear.
@@ -154,8 +160,10 @@ class ReviewStrip extends StatelessWidget {
               AppCheckbox(
                 label: 'Auto-start',
                 tooltip:
-                    'Start the engine analysis by itself when the app opens. '
-                    'It puts your CPU cores on Stockfish for several minutes.',
+                    'Start the engine analysis by itself as soon as there are '
+                    'games to analyse. On by default; it puts your CPU cores '
+                    'on Stockfish for several minutes. Uncheck to start every '
+                    'run by hand.',
                 value: autoRun,
                 onChanged: onAutoRunChanged,
               ),
@@ -202,12 +210,18 @@ class ReviewStrip extends StatelessWidget {
   }
 
   /// The job: the one control here that costs minutes and every core, so the
-  /// one control here that is filled and a size larger than the rest. Gray,
-  /// not green — see the class doc.
+  /// one control here that is filled and a size larger than the rest.
   Widget _buildTransportButton(bool running) {
     final enabled = running || runner.hasAnySource;
-    return Tooltip(
-      message: runner.hasAnySource
+    return _TransportButton(
+      label: _transportLabel(running),
+      running: running,
+      enabled: enabled,
+      // Green and breathing only when pressing it would actually do work:
+      // games waiting to be analysed, or nothing downloaded yet.
+      attention:
+          !running && enabled && (unreviewedCount > 0 || gamesInWindow == 0),
+      tooltip: runner.hasAnySource
           ? (running
                 ? 'Stop after the game being analysed; press again to carry on'
                 : _isResume
@@ -218,24 +232,7 @@ class ReviewStrip extends StatelessWidget {
                 : 'Download your $windowLabel, run Stockfish over them, and '
                       'check them against your books')
           : 'Set a username first',
-      child: FilledButton.icon(
-        key: const Key('review-transport-button'),
-        onPressed: enabled ? (running ? onPause : onStart) : null,
-        icon: Icon(running ? Icons.pause : Icons.play_arrow, size: 22),
-        label: Text(
-          _transportLabel(running),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-        ),
-        style: FilledButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          backgroundColor: running
-              ? AppColors.warningSurface
-              : AppColors.surfaceInset,
-          foregroundColor: AppColors.ink,
-        ),
-      ),
+      onPressed: enabled ? (running ? onPause : onStart) : null,
     );
   }
 
@@ -402,6 +399,166 @@ class ReviewStrip extends StatelessWidget {
 /// The two buttons below the rule, which have to be identical to each other and
 /// visibly lighter than the job button above it: same outline, same height,
 /// same type size, only the icon and the label differ.
+/// The strip's job button, in three moods: gray when there is nothing much to
+/// do, green and slowly glowing when work is waiting, amber while running.
+///
+/// The glow is a shadow, not a scale or a size change — the strip's button
+/// column is a fixed width and the two buttons under it must not move while
+/// this one breathes. It stops entirely when the platform asks for reduced
+/// motion, and whenever the button is not the thing to press.
+class _TransportButton extends StatefulWidget {
+  const _TransportButton({
+    required this.label,
+    required this.tooltip,
+    required this.running,
+    required this.enabled,
+    required this.attention,
+    required this.onPressed,
+  });
+
+  final String label;
+  final String tooltip;
+  final bool running;
+  final bool enabled;
+
+  /// Whether pressing it right now would actually start work.
+  final bool attention;
+
+  final VoidCallback? onPressed;
+
+  @override
+  State<_TransportButton> createState() => _TransportButtonState();
+}
+
+class _TransportButtonState extends State<_TransportButton>
+    with SingleTickerProviderStateMixin {
+  static const _shape = RoundedRectangleBorder(
+    borderRadius: BorderRadius.all(Radius.circular(10)),
+  );
+
+  /// Half-cycles of glow when work appears. A burst, not a permanent
+  /// animation: it is there to catch the eye on arrival, and a control that
+  /// pulses forever is both a battery cost and, after ten seconds, wallpaper.
+  /// (It also keeps every `pumpAndSettle` in the test suite terminating.)
+  static const _burstCycles = 5;
+
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  )..addStatusListener(_onPulseStatus);
+
+  int _cyclesLeft = 0;
+
+  bool _startedOnce = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Not initState: the burst asks MediaQuery whether animation is wanted,
+    // and inherited widgets are off-limits until here.
+    if (widget.attention && !_startedOnce) {
+      _startedOnce = true;
+      _startBurst();
+    }
+  }
+
+  @override
+  void didUpdateWidget(_TransportButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Restart on every fresh arrival of work — a paused run that still has
+    // games waiting should ask again, not sit there gray-green and silent.
+    if (widget.attention && !oldWidget.attention) {
+      _startedOnce = true;
+      _startBurst();
+    } else if (!widget.attention && oldWidget.attention) {
+      _startedOnce = false;
+      _stopBurst();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  void _startBurst() {
+    if (MediaQuery.disableAnimationsOf(context)) return;
+    _cyclesLeft = _burstCycles;
+    _pulse.forward(from: 0);
+  }
+
+  void _stopBurst() {
+    _cyclesLeft = 0;
+    _pulse.stop();
+    _pulse.value = 0;
+  }
+
+  void _onPulseStatus(AnimationStatus status) {
+    if (status == AnimationStatus.completed) {
+      _pulse.reverse();
+    } else if (status == AnimationStatus.dismissed && _cyclesLeft > 1) {
+      _cyclesLeft--;
+      _pulse.forward();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final background = widget.running
+        ? AppColors.warningSurface
+        : widget.attention
+        ? AppColors.successSurface
+        : AppColors.surfaceInset;
+
+    final button = FilledButton.icon(
+      key: const Key('review-transport-button'),
+      onPressed: widget.onPressed,
+      icon: Icon(widget.running ? Icons.pause : Icons.play_arrow, size: 22),
+      label: Text(
+        widget.label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+      ),
+      style: FilledButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        backgroundColor: background,
+        foregroundColor: AppColors.ink,
+        shape: _shape,
+      ),
+    );
+
+    return Tooltip(
+      message: widget.tooltip,
+      child: widget.attention
+          ? AnimatedBuilder(
+              animation: _pulse,
+              builder: (context, child) {
+                final t = _pulse.value;
+                return DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: _shape.borderRadius,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.accent.withValues(
+                          alpha: 0.16 + 0.30 * t,
+                        ),
+                        blurRadius: 6 + 16 * t,
+                        spreadRadius: 0.5 + 1.5 * t,
+                      ),
+                    ],
+                  ),
+                  child: child,
+                );
+              },
+              child: button,
+            )
+          : button,
+    );
+  }
+}
+
 class _SecondaryButton extends StatelessWidget {
   const _SecondaryButton({
     required this.buttonKey,

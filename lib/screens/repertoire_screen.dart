@@ -1086,7 +1086,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
                     if (_generationController.isGenerating &&
                         !_generationController.isPaused)
                       GenerationLockOverlay(
-                        statusText: _generationController.progressStatus,
+                        statusText: _generationController.progress.status,
                         canPause: _generationController.canPause,
                         isCancelling: _generationController.isCancelling,
                         onPause: _generationController.pauseBuild,
