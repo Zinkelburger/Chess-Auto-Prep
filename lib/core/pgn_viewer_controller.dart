@@ -86,6 +86,17 @@ class PgnViewerController extends ChangeNotifier
   // File state
   @override
   String? filePath;
+
+  /// Modification time of [filePath] as it was when this collection was read,
+  /// or null for a collection with no backing file.
+  ///
+  /// Held so a caller can ask whether the loaded copy is still the file: the
+  /// games cache is written behind this controller's back — the review of your
+  /// recent games patches every game it analyses with the scores it found —
+  /// and a screen that reuses an already-loaded collection would otherwise
+  /// show the pre-patch text, graph and all missing.
+  @override
+  DateTime? loadedFileModified;
   @override
   List<PgnGameEntry> allGames = [];
   @override
@@ -318,6 +329,10 @@ class PgnViewerController extends ChangeNotifier
     required Perspective newPerspective,
   }) {
     filePath = path;
+    // Whoever adopted a collection knows the mtime if there is one; a
+    // from-memory collection has none. Cleared here so it can never outlive
+    // the file it described.
+    loadedFileModified = null;
     allGames = entries;
     _detectProtagonist(entries);
     filteredGames = List.of(entries);
@@ -409,6 +424,7 @@ class PgnViewerController extends ChangeNotifier
       entries: entries,
       newPerspective: _perspectiveFor(entries),
     );
+    loadedFileModified = (await storage.fileStat(path))?.modified;
     notifyListeners();
 
     await addToRecentFiles(path);

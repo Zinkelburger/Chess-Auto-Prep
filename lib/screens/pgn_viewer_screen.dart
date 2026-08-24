@@ -249,7 +249,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         gameId != null &&
         handoff.pgnPath == _controller.filePath &&
         _controller.errorMessage == null &&
-        _controller.allGames.isNotEmpty;
+        _controller.allGames.isNotEmpty &&
+        // ...and the loaded copy is still what is on disk. The review of your
+        // recent games writes the scores it found back into the games cache,
+        // so a collection read before a run is a collection whose games have
+        // no graph — reusing it would draw a blank chart over evals that are
+        // sitting in the file.
+        await _loadedCopyIsCurrent(handoff.pgnPath);
     if (sameFileLoaded) {
       if (_currentGameIs(gameId)) {
         _applyHandoffTab(handoff);
@@ -306,6 +312,19 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         _tabController.animateTo(_analysisTabIndex);
     }
     if (handoff.autoAnalyze) _startAutoAnalysisForCurrentGame();
+  }
+
+  /// Whether the open collection still matches its file on disk.
+  ///
+  /// True when the mtimes agree, and true when either is unavailable: an
+  /// unreadable stat is not evidence of a change, and treating it as one would
+  /// re-parse the whole games cache on every handoff.
+  Future<bool> _loadedCopyIsCurrent(String path) async {
+    final loadedAt = _controller.loadedFileModified;
+    if (loadedAt == null) return true;
+    final stat = await StorageFactory.instance.fileStat(path);
+    if (stat == null) return true;
+    return stat.modified == loadedAt;
   }
 
   /// Whether the currently displayed game is [gameId].

@@ -3,11 +3,13 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:chess_auto_prep/features/games/controllers/recent_games_controller.dart';
 import 'package:chess_auto_prep/features/games/services/home_review_runner.dart';
 import 'package:chess_auto_prep/features/games/services/games_window.dart';
 import 'package:chess_auto_prep/services/games_library/game_filter.dart';
+import 'package:chess_auto_prep/services/games_library/game_review_store.dart';
 import 'package:chess_auto_prep/services/games_library/games_library_service.dart';
 import 'package:chess_auto_prep/features/tactics/services/mining_settings.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_import_coordinator.dart';
@@ -53,8 +55,36 @@ const _pgn =
     // and this one has to look unreviewed.
     '1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 1-0';
 
+/// The same game after a pass that stored what it found: every ply carries an
+/// `[%eval]`, so its graph is already on disk.
+const _analyzedPgn =
+    '[Event "Rated blitz game"]\n'
+    '[Site "https://lichess.org/abc123"]\n'
+    '[White "me"]\n'
+    '[Black "opp"]\n'
+    '[TimeControl "180+2"]\n'
+    '[Result "1-0"]\n'
+    '\n'
+    '1. e4 {[%eval 0.30,18]} c5 {[%eval 0.20,18]} '
+    '2. Nf3 {[%eval 0.25,18]} d6 {[%eval 0.35,18]} '
+    '3. d4 {[%eval 0.30,18]} cxd4 {[%eval 0.28,18]} '
+    '4. Nxd4 {[%eval 0.32,18]} Nf6 {[%eval 0.30,18]} 1-0';
+
+/// Prefs holding one game's stored mistake counts, as the review files them.
+Map<String, Object> _prefsWithCounts(String dedupKey) => {
+  'game_review.counts': json.encode({
+    dedupKey: [1, 0, 0],
+  }),
+};
+
 /// One downloaded game, so the review has something already in hand.
 class _OneGameLibrary extends GamesLibraryService {
+  _OneGameLibrary({this.pgn = _pgn});
+
+  /// The one game this library hands back. Overridden by the tests that care
+  /// whether the cached game already carries `[%eval]` annotations.
+  final String pgn;
+
   /// Whether each load was told to bypass the 12-hour download cache.
   final forcedFetches = <bool>[];
 
@@ -69,7 +99,7 @@ class _OneGameLibrary extends GamesLibraryService {
     void Function(DateTime fetchedAt)? onFetched,
   }) async {
     forcedFetches.add(forceRefresh);
-    return [GameRecord.parse(_pgn)];
+    return [GameRecord.parse(pgn)];
   }
 
   @override
@@ -372,6 +402,71 @@ void main() {
     expect(coordinator.forced, [
       {'https://lichess.org/abc123'},
     ]);
+  });
+
+  test('a game with counts but no stored graph is analysed again', () async {
+    // The pass computed every score in this game and kept only the counts, so
+    // the row shows mistakes and opening it draws nothing. Counts alone used
+    // to be enough to call a game done, which left those games with no way
+    // back to the engine — and no graph, ever.
+    SharedPreferences.setMockInitialValues(
+      _prefsWithCounts('https://lichess.org/abc123'),
+    );
+    final games = RecentGamesController(
+      lichessUsername: () => 'me',
+      chesscomUsername: () => null,
+      library: _OneGameLibrary(),
+      windowSettings: GamesWindowSettings.forTest(),
+      reviewStore: GameReviewStore.forTest(),
+    );
+    final coordinator = _RecordingCoordinator();
+    final runner = HomeReviewRunner(
+      games: games,
+      importCoordinator: coordinator,
+      lichessUsername: () => 'me',
+      chesscomUsername: () => null,
+      windowSettings: GamesWindowSettings.forTest(),
+      miningSettings: MiningSettings.forTest(),
+    );
+    addTearDown(games.dispose);
+    addTearDown(runner.dispose);
+
+    await runner.start();
+
+    expect(coordinator.forced, [
+      {'https://lichess.org/abc123'},
+    ]);
+  });
+
+  test('a game whose graph is already stored is left alone', () async {
+    // The other half of the rule: re-mining is a one-off debt, not a tax. Once
+    // the scores are in the cache the pass must skip the game like any other
+    // finished one, or every run would re-analyse the whole list.
+    SharedPreferences.setMockInitialValues(
+      _prefsWithCounts('https://lichess.org/abc123'),
+    );
+    final games = RecentGamesController(
+      lichessUsername: () => 'me',
+      chesscomUsername: () => null,
+      library: _OneGameLibrary(pgn: _analyzedPgn),
+      windowSettings: GamesWindowSettings.forTest(),
+      reviewStore: GameReviewStore.forTest(),
+    );
+    final coordinator = _RecordingCoordinator();
+    final runner = HomeReviewRunner(
+      games: games,
+      importCoordinator: coordinator,
+      lichessUsername: () => 'me',
+      chesscomUsername: () => null,
+      windowSettings: GamesWindowSettings.forTest(),
+      miningSettings: MiningSettings.forTest(),
+    );
+    addTearDown(games.dispose);
+    addTearDown(runner.dispose);
+
+    await runner.start();
+
+    expect(coordinator.forced, [isEmpty]);
   });
 
   test('with nothing downloaded the engine pass fetches for itself', () async {

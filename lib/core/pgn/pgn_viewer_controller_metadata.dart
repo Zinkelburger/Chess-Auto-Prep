@@ -12,6 +12,8 @@ mixin _MetadataOps on ChangeNotifier {
   bool Function() get isActive;
   VoidCallback? get onReclaimFocus;
   String? get filePath;
+  DateTime? get loadedFileModified;
+  set loadedFileModified(DateTime? value);
   List<PgnGameEntry> get allGames;
   List<PgnGameEntry> get filteredGames;
   int get currentGameIndex;
@@ -55,6 +57,12 @@ mixin _MetadataOps on ChangeNotifier {
         filePath!,
         '${result.join('\n\n')}\n',
       );
+      // This write is ours, and the in-memory copy above already matches it.
+      // Re-stamping keeps a caller comparing mtimes from reading our own save
+      // as somebody else's edit and reloading the whole file for nothing.
+      loadedFileModified = (await StorageFactory.instance.fileStat(
+        filePath!,
+      ))?.modified;
       await _fenIndex.persist(filePath: filePath, gameTotal: allGames.length);
     } catch (e) {
       debugPrint('Failed to persist metadata: $e');
