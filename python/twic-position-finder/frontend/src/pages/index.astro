@@ -1,121 +1,68 @@
 ---
 import Base from '../layouts/Base.astro';
+const FEATURES = [
+  {
+    href: '/twic-notifications',
+    icon: '/piece/wN.svg',
+    title: 'TWIC Alerts',
+    copy: 'Get an email when <strong>The Week in Chess</strong> publishes games that reach your positions, feature your players, or open with your ECO codes.',
+    cta: 'Set up an alert',
+  },
+  {
+    href: '/tactics',
+    icon: '/piece/bQ.svg',
+    title: 'Tactics Trainer',
+    copy: 'Puzzles from your own <strong>Lichess</strong> and <strong>Chess.com</strong> games. Stockfish runs in your browser and finds the moves you missed.',
+    cta: 'Start training',
+  },
+  {
+    href: '/charles-clock',
+    icon: '/piece/wR.svg',
+    title: 'Charles Clock',
+    copy: 'A blitz clock built for <strong>endgames</strong>: captures grow a shared increment, so games that reach the endgame have time to play it.',
+    cta: 'Open the clock',
+  },
+];
 ---
-<Base title="Home">
+<Base title="Home" wide>
   <div class="hero">
     <h1>Chess Auto Prep</h1>
-    <p class="subtitle">Tools to sharpen your chess preparation.</p>
+    <p class="lede">Three small tools for serious preparation. No accounts, no passwords — just your email or your username.</p>
   </div>
 
   <div class="features">
-    <a href="/twic-notifications" class="feature-card">
-      <div class="feature-icon">
-        <img src="/piece/wN.svg" alt="" width="48" height="48" />
-      </div>
-      <h2>TWIC Notifications</h2>
-      <p>Get email notifications when games from <strong>The Week in Chess</strong> reach positions you care about. Filter by player, Elo, or ECO code.</p>
-      <span class="feature-cta">Set up notifications &rarr;</span>
-    </a>
-
-    <a href="/tactics" class="feature-card">
-      <div class="feature-icon">
-        <img src="/piece/bQ.svg" alt="" width="48" height="48" />
-      </div>
-      <h2>Tactics Trainer</h2>
-      <p>Generate puzzles from your own <strong>Lichess</strong> and <strong>Chess.com</strong> games. Stockfish runs in your browser to find the moves you missed.</p>
-      <span class="feature-cta">Start training &rarr;</span>
-    </a>
-
-    <a href="/charles-clock" class="feature-card">
-      <div class="feature-icon">
-        <img src="/piece/wR.svg" alt="" width="48" height="48" />
-      </div>
-      <h2>Charles Clock</h2>
-      <p>A blitz clock built for <strong>endgames</strong>: captures let you grow a shared increment, so games that reach the endgame actually have time to play it. Open it on your phone.</p>
-      <span class="feature-cta">Open the clock &rarr;</span>
-    </a>
+    {FEATURES.map((f) => (
+      <a href={f.href} class="feature-card">
+        <img class="feature-icon" src={f.icon} alt="" width="44" height="44" />
+        <h2>{f.title}</h2>
+        <p set:html={f.copy} />
+        <span class="feature-cta">{f.cta} <span aria-hidden="true">→</span></span>
+      </a>
+    ))}
   </div>
 </Base>
 
 <style>
-  .hero {
-    text-align: center;
-    padding: 56px 0 36px;
-  }
-
-  .hero h1 {
-    font-size: 2.4rem;
-    letter-spacing: -0.03em;
-    margin-bottom: 8px;
-  }
-
-  .hero .subtitle {
-    font-size: 1.1rem;
-    margin-bottom: 0;
-  }
-
-  .features {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 20px;
-    max-width: 1000px;
-    margin: 0 auto;
-  }
-
-  @media (max-width: 640px) {
+  .hero { text-align: center; padding: 40px 0 36px; }
+  .hero h1 { font-size: 2.4rem; letter-spacing: -0.03em; margin-bottom: 10px; }
+  .hero .lede { margin: 0 auto; }
+  .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  @media (max-width: 720px) {
     .features { grid-template-columns: 1fr; }
-    .hero { padding: 32px 0 28px; }
+    .hero { padding: 20px 0 28px; }
     .hero h1 { font-size: 2rem; }
   }
-
   .feature-card {
-    display: flex;
-    flex-direction: column;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 28px 24px;
-    text-decoration: none;
-    color: var(--text);
+    display: flex; flex-direction: column;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    padding: 28px 24px; text-decoration: none; color: var(--text);
     transition: border-color 0.2s, transform 0.15s, box-shadow 0.2s;
   }
-
-  .feature-card:hover {
-    border-color: var(--accent);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow);
-  }
-
-  .feature-icon {
-    margin-bottom: 16px;
-  }
-
-  .feature-card h2 {
-    font-size: 1.25rem;
-    margin-bottom: 10px;
-  }
-
-  .feature-card p {
-    color: var(--text-dim);
-    font-size: 0.92rem;
-    line-height: 1.55;
-    flex: 1;
-  }
-
-  .feature-card strong {
-    color: var(--text);
-    font-weight: 600;
-  }
-
-  .feature-cta {
-    display: inline-block;
-    margin-top: 16px;
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: var(--accent);
-  }
-
-  .feature-card:hover .feature-cta {
-    color: var(--accent-hover);
-  }
+  .feature-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow); color: var(--text); }
+  .feature-icon { margin-bottom: 16px; filter: drop-shadow(0 3px 8px rgba(0,0,0,0.35)); }
+  .feature-card h2 { font-size: 1.2rem; margin-bottom: 8px; }
+  .feature-card p { color: var(--text-dim); font-size: 0.92rem; line-height: 1.55; flex: 1; }
+  .feature-card :global(strong) { color: var(--text); font-weight: 600; }
+  .feature-cta { display: inline-block; margin-top: 18px; font-size: 0.9rem; font-weight: 600; color: var(--accent); }
+  .feature-card:hover .feature-cta { color: var(--accent-hover); }
 </style>

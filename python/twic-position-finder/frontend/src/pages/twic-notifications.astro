@@ -1,71 +1,120 @@
 ---
 import Base from '../layouts/Base.astro';
-import AlertOptions from '../components/AlertOptions.astro';
+import AlertFields from '../components/AlertFields.astro';
+import '../styles/alerts.css';
+const TURNSTILE = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
 ---
-<Base title="TWIC Notifications">
-  <header class="page-header">
-    <div>
-      <h1>TWIC Notifications</h1>
-      <p class="lede">
-        Get an email every Tuesday when
-        <a href="https://theweekinchess.com/" target="_blank" rel="noopener">The Week in Chess</a>
-        publishes games that match your filters.
-      </p>
+<Base
+  title="TWIC Alerts"
+  description="Get an email when The Week in Chess publishes games that reach your positions, feature your players, or open with your ECO codes."
+>
+  <!-- Boot: shown until the session is resolved; replaced by an error panel if the link is bad. -->
+  <div id="boot" class="status-panel">
+    <div class="boot-spinner"><span class="spinner" aria-hidden="true"></span></div>
+    <p class="lede">Loading…</p>
+  </div>
+
+  <!-- Anonymous: create an alert / get a login link -->
+  <div id="anon" hidden>
+    <header class="page-header">
+      <div>
+        <h1>TWIC Alerts</h1>
+        <p class="lede">
+          Every Monday <a href="https://theweekinchess.com/" target="_blank" rel="noopener">The Week in Chess</a>
+          publishes the week's tournament games. Tell us what to look for and we email you the games that match —
+          with one-click analysis on Lichess.
+        </p>
+      </div>
+    </header>
+
+    <div class="how-it-works" aria-label="How it works">
+      <div class="how-step"><span class="how-num">1</span><div><strong>Describe the games</strong>A position, a player, an opening — or any mix.</div></div>
+      <div class="how-step"><span class="how-num">2</span><div><strong>Confirm your email</strong>One link, no password. Alerts live in your inbox.</div></div>
+      <div class="how-step"><span class="how-num">3</span><div><strong>Get matches weekly</strong>Each new TWIC issue is scanned the day it lands.</div></div>
     </div>
-  </header>
 
-  <section class="card">
-    <h2>Create an alert</h2>
-    <div id="subscribe-alert" hidden></div>
-    <form id="subscribe-form">
-      <div class="form-row">
-        <label for="sub-email">Email</label>
-        <input type="email" id="sub-email" name="email" required autocomplete="email" />
-      </div>
-      <div class="form-row">
-        <label for="sub-label">Label <span class="optional">optional</span></label>
-        <input type="text" id="sub-label" placeholder="e.g. Najdorf, Carlsen with Black" />
-      </div>
-
-      <div class="filters-section">
-        <div class="filters-header">
-          <span class="filters-title">Filters</span>
-          <span class="filters-hint">At least one of FEN, player, or ECO</span>
+    <section class="card" aria-labelledby="create-title">
+      <h2 id="create-title">Create an alert</h2>
+      <div id="subscribe-alert" hidden></div>
+      <form id="subscribe-form" novalidate>
+        <div class="form-row">
+          <label for="sub-email">Email</label>
+          <input type="email" id="sub-email" name="email" required autocomplete="email" placeholder="you@example.com" />
         </div>
-        <div id="filters-container"></div>
-        <div class="add-filter-wrap">
-          <button type="button" class="btn btn-outline btn-sm" id="add-filter-btn">Add filter</button>
-          <div id="filter-menu" class="filter-menu" hidden></div>
+        <AlertFields prefix="sub" />
+        {TURNSTILE && (
+          <div class="cf-turnstile" data-sitekey={TURNSTILE} data-appearance="interaction-only"></div>
+        )}
+        <div class="subscribe-footer">
+          <button type="submit" class="btn btn-primary" id="subscribe-submit">Create alert</button>
+          <p class="hint">We only email you about matches. Every email has an unsubscribe link.</p>
+        </div>
+      </form>
+    </section>
+
+    <section class="card" aria-labelledby="login-title">
+      <h2 id="login-title">Already have alerts?</h2>
+      <p class="card-lead">We'll email you a link to manage them — no password needed.</p>
+      <form id="login-form" class="inline-form" novalidate>
+        <div class="form-row grow">
+          <label for="login-email">Email</label>
+          <input type="email" id="login-email" required autocomplete="email" placeholder="you@example.com" />
+        </div>
+        <button type="submit" class="btn btn-outline">Email me a login link</button>
+      </form>
+      <div id="login-alert" hidden style="margin-top:14px"></div>
+    </section>
+  </div>
+
+  <!-- Signed in: the list -->
+  <div id="account" hidden>
+    <header class="page-header">
+      <div>
+        <h1>Your TWIC alerts</h1>
+        <div class="account-meta">
+          <span id="account-email"></span>
+          <span class="sep" aria-hidden="true">·</span>
+          <span id="alert-count"></span>
+          <span class="sep" aria-hidden="true">·</span>
+          <button type="button" class="btn btn-text" id="logout" style="padding:2px 6px">Sign out</button>
         </div>
       </div>
-
-      <AlertOptions idPrefix="sub" excludeId="sub-exclude-online" />
-
-      {import.meta.env.PUBLIC_TURNSTILE_SITE_KEY && (
-        <div class="cf-turnstile" data-sitekey={import.meta.env.PUBLIC_TURNSTILE_SITE_KEY} data-appearance="interaction-only"></div>
-      )}
-
-      <button type="submit" class="btn btn-primary" id="submit-btn">Subscribe</button>
-    </form>
-  </section>
-
-  <section class="card">
-    <h2>Already subscribed?</h2>
-    <p class="card-lead">We’ll email you a link to manage your alerts.</p>
-    <form id="login-form" class="inline-form">
-      <div class="form-row grow">
-        <label for="login-email">Email</label>
-        <input type="email" id="login-email" required autocomplete="email" />
+      <div class="page-header-actions">
+        <button type="button" class="btn btn-primary" id="new-alert">+ New alert</button>
       </div>
-      <button type="submit" class="btn btn-outline">Send login link</button>
-    </form>
-    <div id="login-alert" hidden></div>
-  </section>
+    </header>
+
+    <div id="account-flash" hidden></div>
+
+    <section id="alert-form-card" class="card" hidden aria-labelledby="alert-form-title">
+      <h2 id="alert-form-title">New alert</h2>
+      <div id="alert-form-alert" hidden></div>
+      <form id="alert-form" novalidate>
+        <AlertFields prefix="acct" />
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="alert-form-submit">Create alert</button>
+          <button type="button" class="btn btn-outline" id="alert-form-cancel">Cancel</button>
+        </div>
+      </form>
+    </section>
+
+    <div id="alerts-list"></div>
+
+    <div id="alerts-empty" class="card empty-state" hidden>
+      <p class="empty-title">No alerts yet</p>
+      <p class="empty-copy">Create one to get an email when The Week in Chess publishes games that reach a position, feature a player, or open with an ECO code.</p>
+    </div>
+  </div>
 </Base>
 
-<script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+{TURNSTILE && <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>}
+
+<style>
+  .boot-spinner { display: flex; justify-content: center; margin-bottom: 14px; }
+  .boot-spinner .spinner { width: 22px; height: 22px; }
+</style>
 
 <script>
-  import { initSubscribePage } from '../lib/subscribe-page';
-  initSubscribePage();
+  import { initAlertsPage } from '../lib/alerts-page';
+  initAlertsPage();
 </script>

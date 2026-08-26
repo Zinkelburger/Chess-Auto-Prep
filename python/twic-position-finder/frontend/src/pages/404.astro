@@ -6,21 +6,19 @@
 // developers.cloudflare.com/pages/configuration/serving-pages/.
 import Base from '../layouts/Base.astro';
 ---
-<Base title="Page Not Found">
-  <div class="card empty-state">
+<Base title="Page not found">
+  <div class="status-panel">
     <p class="eyebrow">404</p>
-    <h1 class="empty-title">That page doesn't exist</h1>
-    <p class="empty-copy">
+    <h1>That page doesn't exist</h1>
+    <p class="lede">
       The link may be mistyped, or it may point at something that has since moved.
-      <span class="tag mono" id="path"></span>
+      <span class="tag" id="path"></span>
     </p>
-
-    <div class="form-actions" style="justify-content:center; margin-top:24px;">
+    <div class="btn-row">
       <a href="/" class="btn btn-primary">Home</a>
-      <a href="/twic-notifications" class="btn btn-outline">TWIC Notifications</a>
+      <a href="/twic-notifications" class="btn btn-outline">TWIC Alerts</a>
       <a href="/tactics" class="btn btn-outline">Tactics Trainer</a>
       <a href="/charles-clock" class="btn btn-outline">Charles Clock</a>
-      <a href="/dashboard" class="btn btn-outline">Dashboard</a>
     </div>
   </div>
 </Base>

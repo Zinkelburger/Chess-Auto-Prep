@@ -1,0 +1,51 @@
+---
+// The body of an alert form: label, the filter builder, and the match
+// options. `prefix` namespaces every id so two forms can share a page; the
+// AlertForm class in lib/alert-form.ts reads and writes these ids.
+interface Props {
+  prefix: string;
+}
+const { prefix } = Astro.props;
+---
+<div class="form-row">
+  <label for={`${prefix}-label`}>Name <span class="optional">optional</span></label>
+  <input type="text" id={`${prefix}-label`} placeholder="Najdorf as Black, Carlsen's games, …" maxlength="80" autocomplete="off" />
+</div>
+
+<div class="filters-section">
+  <div class="filters-header">
+    <span class="filters-title">Match games that…</span>
+    <span class="filters-hint">reach a position, involve a player, or open with an ECO code — add Elo or event to narrow it down.</span>
+  </div>
+  <div id={`${prefix}-filters`} class="filters-container"></div>
+  <div class="add-filter-wrap">
+    <button type="button" class="btn btn-outline btn-sm" id={`${prefix}-add-filter`}>+ Add filter</button>
+    <div id={`${prefix}-filter-menu`} class="filter-menu" hidden></div>
+  </div>
+</div>
+
+<div class="options-grid">
+  <div class="form-row">
+    <span class="field-label">Time control</span>
+    <div class="choice-row" role="group" aria-label="Time control">
+      <label class="choice"><input type="checkbox" id={`${prefix}-tc-classical`} checked /><span>Classical</span></label>
+      <label class="choice"><input type="checkbox" id={`${prefix}-tc-rapid`} checked /><span>Rapid</span></label>
+      <label class="choice"><input type="checkbox" id={`${prefix}-tc-blitz`} checked /><span>Blitz</span></label>
+    </div>
+  </div>
+  <div class="form-row">
+    <span class="field-label">Result</span>
+    <div class="choice-row" role="group" aria-label="Result">
+      <label class="choice"><input type="checkbox" id={`${prefix}-res-white`} checked /><span>1–0</span></label>
+      <label class="choice"><input type="checkbox" id={`${prefix}-res-black`} checked /><span>0–1</span></label>
+      <label class="choice"><input type="checkbox" id={`${prefix}-res-draw`} checked /><span>½–½</span></label>
+    </div>
+  </div>
+</div>
+
+<div class="form-row">
+  <label class="checkbox-label">
+    <input type="checkbox" id={`${prefix}-exclude-online`} checked />
+    <span>Skip online events (chess.com)</span>
+  </label>
+</div>

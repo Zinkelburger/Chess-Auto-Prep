@@ -1,67 +1,21 @@
 ---
+// The dashboard merged into /twic-notifications (one page decides between the
+// front door and the signed-in list). This shim keeps old bookmarks and any
+// still-unopened login emails working: it forwards to the alerts page with
+// the query string intact, so `?token=` login links keep exchanging.
 import Base from '../layouts/Base.astro';
-import AlertOptions from '../components/AlertOptions.astro';
 ---
-<Base title="Dashboard">
-  <div id="auth-gate" class="auth-panel">
-    <h1>Loading dashboard…</h1>
-    <p class="subtitle">Signing you in</p>
-  </div>
-
-  <div id="dashboard" hidden>
-    <header class="page-header">
-      <div>
-        <h1>Alerts</h1>
-        <p class="lede" id="user-email"></p>
-      </div>
-      <div class="page-header-actions">
-        <button type="button" class="btn btn-primary" id="show-add-form">New alert</button>
-        <button type="button" class="btn-text" id="logout-btn">Log out</button>
-      </div>
-    </header>
-
-    <div id="dash-flash" hidden></div>
-
-    <section id="add-form" class="card" hidden>
-      <h2>New alert</h2>
-      <div id="add-alert" hidden></div>
-      <form id="sub-form">
-        <div class="form-row">
-          <label for="dash-label">Label</label>
-          <input type="text" id="dash-label" placeholder="e.g. Najdorf, Carlsen with Black" />
-        </div>
-
-        <div class="filters-section">
-          <div class="filters-header">
-            <span class="filters-title">Filters</span>
-            <span class="filters-hint">At least one of FEN, player, or ECO</span>
-          </div>
-          <div id="dash-filters-container"></div>
-          <div class="add-filter-wrap">
-            <button type="button" class="btn btn-outline btn-sm" id="dash-add-filter-btn">Add filter</button>
-            <div id="dash-filter-menu" class="filter-menu" hidden></div>
-          </div>
-        </div>
-
-        <AlertOptions idPrefix="dash" excludeId="dash-exclude-online" />
-
-        <div class="form-actions">
-          <button type="submit" class="btn btn-primary">Create alert</button>
-          <button type="button" class="btn btn-outline" id="cancel-add">Cancel</button>
-        </div>
-      </form>
-    </section>
-
-    <div id="subs-list"></div>
-
-    <div id="empty-state" class="card empty-state" hidden>
-      <p class="empty-title">No alerts yet</p>
-      <p class="empty-copy">Create an alert to get an email when The Week in Chess publishes games that match a position, player, or opening.</p>
-    </div>
+<Base title="TWIC Alerts">
+  <div class="status-panel">
+    <p class="lede">Taking you to your alerts…</p>
+    <a class="btn btn-primary" id="go" href="/twic-notifications">Open TWIC Alerts</a>
   </div>
 </Base>
 
-<script>
-  import { initDashboard } from '../lib/dashboard';
-  initDashboard();
+<script is:inline>
+  (function () {
+    var target = '/twic-notifications' + window.location.search;
+    document.getElementById('go').setAttribute('href', target);
+    window.location.replace(target);
+  })();
 </script>

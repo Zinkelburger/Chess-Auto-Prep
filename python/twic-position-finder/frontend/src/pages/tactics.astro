@@ -1,386 +1,315 @@
 ---
 import Base from '../layouts/Base.astro';
+import '../styles/alerts.css';
 ---
-<Base title="Tactics Trainer">
-  <div id="tactics-app" x-data="tacticsApp()" x-init="init()">
-    <!-- Setup panel -->
-    <div class="tactics-panel" x-show="!training">
-      <h1>Tactics Trainer</h1>
-      <p class="subtitle" style="margin-bottom:0;">Generate puzzles from your own games.</p>
+<Base
+  title="Tactics Trainer"
+  description="Puzzles mined from your own Lichess and Chess.com games. Stockfish runs in your browser and finds the moves you missed."
+  wide
+>
+  <!-- ── Setup ─────────────────────────────────────────────────── -->
+  <div id="view-setup">
+    <header class="page-header">
+      <div>
+        <h1>Tactics Trainer</h1>
+        <p class="lede">
+          Puzzles from your own games. Stockfish runs in your browser, replays each game, and turns every
+          mistake into a position to solve — nothing is uploaded anywhere.
+        </p>
+      </div>
+    </header>
 
-      <div class="card card-form" style="margin-top:24px;">
+    <div class="setup-wrap">
+      <form id="setup-form" class="card setup-card" novalidate>
+        <div id="setup-alert" class="alert alert-error" hidden></div>
+
         <div class="form-grid">
           <div class="form-row">
-            <label for="lichess-user">Lichess username</label>
-            <input type="text" id="lichess-user"
-                   x-model="lichessUser"
-                   placeholder="username" />
+            <label for="f-lichess">Lichess username</label>
+            <input type="text" id="f-lichess" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="e.g. DrNykterstein" />
           </div>
           <div class="form-row">
-            <label for="chesscom-user">Chess.com username</label>
-            <input type="text" id="chesscom-user"
-                   x-model="chesscomUser"
-                   placeholder="username" />
+            <label for="f-chesscom">Chess.com username</label>
+            <input type="text" id="f-chesscom" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="e.g. Hikaru" />
           </div>
         </div>
-        <div class="num-games-row">
-          <div class="form-row" style="margin-bottom:0; max-width:200px;">
-            <label for="num-games">Number of games</label>
-            <input type="text" inputmode="numeric" id="num-games"
-                   x-model.number="numGames" />
+
+        <div class="form-row">
+          <span class="field-label">Time controls</span>
+          <div id="f-timeclasses" class="choice-row" role="group" aria-label="Time controls"></div>
+        </div>
+
+        <div class="form-grid setup-numbers">
+          <div class="form-row">
+            <label for="f-games">Number of games</label>
+            <input type="number" id="f-games" min="1" max="200" inputmode="numeric" />
           </div>
-          <button class="settings-btn" @click="settingsOpen = true" title="Settings">⚙</button>
+          <div class="form-row">
+            <label for="f-severity">Include</label>
+            <select id="f-severity">
+              <option value="mistake">Mistakes and blunders</option>
+              <option value="inaccuracy">Inaccuracies too</option>
+            </select>
+          </div>
         </div>
 
-        <button class="btn btn-primary" style="width:100%; margin-top:8px;"
-                @click="loadTactics()"
-                :disabled="loading">
-          <span x-text="loading ? 'Loading...' : 'Load Tactics'"></span>
-        </button>
+        <details class="advanced">
+          <summary>Engine settings</summary>
+          <div class="form-grid">
+            <div class="form-row">
+              <label for="f-depth">Search depth <span class="tooltip-trigger" title="Deeper is more accurate and slower. 14 is fine for blitz; 18 if you want to trust the lines." aria-label="Depth help">?</span></label>
+              <input type="number" id="f-depth" min="8" max="22" inputmode="numeric" />
+            </div>
+            <div class="form-row">
+              <label for="f-workers">Engine workers <span class="dim">(up to <span id="f-workers-max"></span>)</span></label>
+              <input type="number" id="f-workers" min="1" inputmode="numeric" />
+            </div>
+          </div>
+          <p class="hint">Each worker is an independent Stockfish; positions are shared across them. Results are cached on this device, so re-running the same account only analyses new games.</p>
+          <button type="button" class="btn btn-text" id="btn-clear-cache">Clear cached analysis</button>
+        </details>
 
-        <div class="engine-note" x-show="engineLoading">
-          Engine loading in background...
+        <div class="setup-actions">
+          <button type="submit" class="btn btn-primary btn-lg" id="btn-start">Find my mistakes</button>
+          <span id="engine-status" class="engine-status">Engine loading…</span>
         </div>
+      </form>
 
-        <div class="status-line"
-             :class="{ 'status-error': statusType === 'error', 'status-success': statusType === 'success' }">
-          <div class="spinner" x-show="loading"></div>
-          <span x-text="status"></span>
-        </div>
+    </div>
+  </div>
 
-        <div class="tactics-found" x-show="loading && tacticsFound > 0">
-          Found: <strong x-text="tacticsFound"></strong> tactics
+  <!-- ── Analysing ─────────────────────────────────────────────── -->
+  <div id="view-analysis" hidden>
+    <div class="card analysis-card">
+      <div class="analysis-head">
+        <div>
+          <h2 id="an-title">Fetching games…</h2>
+          <p class="dim" id="an-sub"></p>
         </div>
+        <span class="num dim" id="an-elapsed">0s</span>
+      </div>
+      <div id="an-progress" class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div id="an-bar" class="progress-bar"></div>
+      </div>
+      <dl class="stats">
+        <div><dt>Games</dt><dd class="num" id="an-games">0 / 0</dd></div>
+        <div><dt>Puzzles found</dt><dd class="num" id="an-found">0</dd></div>
+        <div title="Positions settled from the cache, from the game's own server analysis, or because you played the engine's move — no search needed."><dt>Already known</dt><dd class="num" id="an-shortcuts">0</dd></div>
+        <div><dt>Engine</dt><dd class="num" id="an-engine">—</dd></div>
+      </dl>
+      <p class="dim analysis-current" id="an-current"></p>
+      <div class="alert alert-warn" id="an-note" hidden></div>
+      <div class="btn-row">
+        <button type="button" class="btn btn-primary" id="btn-train-now" disabled>Start training now</button>
+        <button type="button" class="btn btn-outline" id="btn-cancel">Cancel</button>
       </div>
     </div>
+  </div>
 
-    <!-- Training panel -->
-    <div x-show="training" x-cloak>
-      <div class="training-bar">
-        <button class="btn btn-outline btn-sm" @click="backToSetup()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="vertical-align:-3px;">
-            <path d="M19 12H5M12 19l-7-7 7-7"/>
-          </svg>
-          Back
-        </button>
-        <span class="training-counter" x-text="`${currentIndex + 1} / ${tactics.length}`"></span>
+  <!-- ── Training ──────────────────────────────────────────────── -->
+  <div id="view-train" hidden>
+    <div class="train-bar">
+      <button type="button" class="btn btn-outline btn-sm" id="btn-back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        Setup
+      </button>
+      <div class="train-bar-mid">
+        <span class="num train-counter" id="tr-counter">0 / 0</span>
+        <span class="dim num" id="tr-session-score"></span>
+      </div>
+      <label class="checkbox-label" title="Auto-advance to the next puzzle after a solve (J)">
+        <input type="checkbox" id="chk-autonext" />
+        <span>Auto-advance</span>
+      </label>
+    </div>
+
+    <div class="alert alert-info analysing-banner" id="tr-analysing" hidden>
+      <span class="spinner" aria-hidden="true"></span>
+      <span></span>
+    </div>
+
+    <div class="train-layout">
+      <div class="board-col">
+        <div id="board" class="trainer-board"></div>
       </div>
 
-      <div class="training-layout">
-        <div class="board-col">
-          <div id="board" class="tactics-board"></div>
+      <div class="side-col">
+        <div class="turn-box turn-turn" id="tr-turn" aria-live="polite">
+          <img class="turn-icon" id="tr-turn-icon" src="/piece/wK.svg" alt="" width="44" height="44" />
+          <div class="turn-text">
+            <div class="turn-title" id="tr-turn-title">Your move</div>
+            <div class="turn-sub" id="tr-turn-sub">Find the best move.</div>
+          </div>
         </div>
 
-        <div class="info-col">
-          <div class="card tactic-meta">
-            <div class="game-players" x-text="`${currentTactic?.game_white} vs ${currentTactic?.game_black}`"></div>
-            <div class="you-played" x-show="currentTactic?.user_move">
-              You played: <span x-text="currentTactic?.user_move + currentTactic?.mistake_type"></span>
+        <div class="card side-card">
+          <div class="played-row">
+            <span id="tr-played" class="played"></span>
+            <span id="tr-severity" class="badge"></span>
+          </div>
+
+          <div class="line" id="tr-line" hidden>
+            <span class="eyebrow">Best line</span>
+            <div class="line-moves" id="tr-line-moves"></div>
+            <div class="line-nav" id="tr-line-nav" hidden>
+              <button type="button" class="btn btn-outline btn-sm btn-icon" id="btn-line-prev" aria-label="Previous move in line" title="Previous move in the line (←)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+              </button>
+              <button type="button" class="btn btn-outline btn-sm btn-icon" id="btn-line-next" aria-label="Next move in line" title="Next move in the line (→)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+              </button>
             </div>
           </div>
 
-          <div class="feedback-area">
-            <span x-show="message && !solved" x-text="message"></span>
-            <span x-show="solved && !solutionShown" style="color:var(--accent);">Correct!</span>
-            <span x-show="solutionShown" x-text="'Best: ' + getSolutionSan()"></span>
-            <span x-show="!message && !solved && !solutionShown">Find the best move.</span>
-          </div>
-
-          <div class="controls-grid">
-            <button class="btn btn-secondary"
-                    @click="prevTactic()"
-                    :disabled="currentIndex === 0">Prev</button>
-            <button class="btn btn-secondary"
-                    @click="showSolution()">Solution</button>
-            <button class="btn btn-secondary"
-                    @click="nextTactic()">Next</button>
-          </div>
-
-          <div class="controls-extra">
-            <label class="checkbox-label auto-next-label">
-              <input type="checkbox" x-model="autoNext" style="width:16px; height:16px;" />
-              <span>Auto-next</span>
-            </label>
-            <a class="link-btn"
-               :href="currentTactic?.game_url"
-               target="_blank"
-               x-show="currentTactic?.game_url">
-              Original Game
-            </a>
-            <button class="link-btn"
-                    @click="openAnalysis()"
-                    x-show="currentTactic?.game_url">
-              Analyze on Lichess
+          <div class="controls">
+            <button type="button" class="btn btn-outline" id="btn-prev" title="Previous puzzle (P or ↑)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+              Previous
+            </button>
+            <button type="button" class="btn btn-outline" id="btn-solution" title="Show the solution (space)">View solution</button>
+            <button type="button" class="btn btn-outline" id="btn-retry" title="Reset the position">Retry</button>
+            <button type="button" class="btn btn-primary" id="btn-next" title="Next puzzle (S or ↓)">
+              Next
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
             </button>
           </div>
         </div>
-      </div>
-    </div>
 
-    <!-- Settings modal -->
-    <div class="modal-overlay" x-show="settingsOpen" x-transition.opacity x-cloak @click.self="settingsOpen = false">
-      <div class="card modal-card" @click.stop>
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-          <h2 style="margin-bottom:0;">Settings</h2>
-          <button class="settings-btn" @click="settingsOpen = false" style="font-size:1.2rem;">✕</button>
+        <div class="card side-card game-card">
+          <div class="game-head">
+            <span class="eyebrow">From your game</span>
+            <div class="game-links">
+              <a id="tr-game-link" class="link-ext" target="_blank" rel="noopener" href="#">Open game ↗</a>
+              <a id="tr-analyse-link" class="link-ext" target="_blank" rel="noopener" href="#">Analyse position ↗</a>
+            </div>
+          </div>
+          <div class="game-players"><span id="tr-players"></span> <span class="game-result num" id="tr-result"></span></div>
+          <div class="game-sub" id="tr-game-sub"></div>
         </div>
-        <div class="form-grid">
-          <div class="form-row">
-            <label>Analysis Depth</label>
-            <input type="number" x-model.number="analysisDepth" min="1" max="25" style="text-align:center;" />
-          </div>
-          <div class="form-row">
-            <label x-text="`Threads (${maxThreads} available)`">Threads</label>
-            <input type="number" x-model.number="threads" min="1" :max="maxThreads" style="text-align:center;" />
-          </div>
-        </div>
-        <div>
-          <label style="margin-bottom:10px;">Time Controls</label>
-          <div class="chip-row">
-            <template x-for="tc in timeControls" :key="tc.id">
-              <label class="chip" :class="{ 'chip-active': tc.enabled }">
-                <input type="checkbox" x-model="tc.enabled" style="display:none;" />
-                <span x-text="tc.name"></span>
-              </label>
-            </template>
-          </div>
+
+        <div class="session">
+          <span class="eyebrow">Session</span>
+          <div class="session-strip" id="tr-session" role="list"></div>
         </div>
       </div>
     </div>
-
   </div>
 </Base>
 
-<style>
-  [x-cloak] { display: none !important; }
+<!-- Global on purpose: the move tokens and session cells are created by
+     app.ts at runtime, so Astro's scoped selectors would never match them. -->
+<style is:global>
+  /* ── Setup ─────────────────────────────────────────────────── */
+  .setup-wrap { max-width: 720px; }
+  .setup-card { margin-bottom: 0; }
+  .setup-numbers { max-width: 520px; }
+  .advanced { border-top: 1px solid var(--border); padding-top: 14px; margin: 4px 0 18px; }
+  .advanced summary { cursor: pointer; font-size: 0.9rem; font-weight: 600; color: var(--text-dim); margin-bottom: 14px; list-style: none; display: flex; align-items: center; gap: 8px; }
+  .advanced summary::-webkit-details-marker { display: none; }
+  .advanced summary::before { content: '▸'; font-size: 0.7rem; transition: transform 0.15s; }
+  .advanced[open] summary::before { transform: rotate(90deg); }
+  .advanced summary:hover { color: var(--text); }
+  .advanced .hint { margin-bottom: 8px; }
+  .setup-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .engine-status { font-size: 0.82rem; color: var(--text-dim); }
 
-  .num-games-row {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
+  /* ── Analysing ─────────────────────────────────────────────── */
+  .analysis-card { max-width: 640px; margin: 24px auto; }
+  .analysis-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
+  .analysis-head h2 { margin-bottom: 4px; }
+  .progress { height: 8px; background: var(--bg-input); border-radius: 999px; overflow: hidden; margin-bottom: 18px; }
+  .progress-bar { height: 100%; width: 0; background: var(--accent); border-radius: 999px; transition: width 0.25s ease-out; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
+  @media (max-width: 560px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stats dt { font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); font-weight: 600; }
+  .stats dd { font-size: 1.15rem; font-weight: 600; }
+  .analysis-current { font-size: 0.85rem; min-height: 1.4em; margin-bottom: 14px; }
+
+  /* ── Training ──────────────────────────────────────────────── */
+  .train-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .train-bar-mid { display: flex; align-items: baseline; gap: 12px; }
+  .train-counter { font-family: var(--mono); font-weight: 600; font-size: 1rem; }
+  .analysing-banner { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .train-layout { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 1fr); gap: 24px; align-items: start; }
+  @media (max-width: 800px) { .train-layout { grid-template-columns: 1fr; } }
+  .board-col { width: 100%; }
+  .trainer-board { width: 100%; aspect-ratio: 1; border-radius: 4px; overflow: hidden; box-shadow: var(--shadow); }
+  .side-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .side-card { margin-bottom: 0; padding: 18px 20px; }
+
+  /* lila's "your turn" box */
+  .turn-box {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 18px; border-radius: var(--radius);
+    background: var(--bg-card); border: 1px solid var(--border);
+    transition: background 0.2s, border-color 0.2s;
   }
+  .turn-icon { width: 44px; height: 44px; flex: none; }
+  .turn-title { font-size: 1.15rem; font-weight: 700; line-height: 1.2; }
+  .turn-sub { font-size: 0.9rem; color: var(--text-dim); margin-top: 2px; }
+  .turn-good, .turn-win { background: var(--ok-bg); border-color: var(--ok); }
+  .turn-good .turn-title, .turn-win .turn-title { color: var(--ok); }
+  .turn-bad, .turn-fail { background: var(--danger-bg); border-color: var(--danger); }
+  .turn-bad .turn-title, .turn-fail .turn-title { color: var(--danger); }
 
-  .settings-btn {
-    font-size: 1.4rem;
-    line-height: 1;
-    background: none;
-    border: none;
-    color: var(--text-dim);
-    cursor: pointer;
-    padding: 6px;
-    margin-bottom: 2px;
-    border-radius: 4px;
-    transition: color 0.15s;
+  .played-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .played { display: inline-flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .win-shift { font-size: 0.85rem; color: var(--text-dim); }
+
+  .san-token {
+    font-family: var(--mono); font-size: 0.98rem; font-weight: 600;
+    background: none; border: none; color: var(--text);
+    border-radius: 4px; padding: 3px 6px; line-height: 1.3; cursor: pointer;
+    transition: background 0.12s, color 0.12s;
   }
-  .settings-btn:hover { color: var(--text); }
+  .san-token.played { cursor: default; padding-left: 0; }
+  button.san-token:hover, button.san-token:focus-visible { background: var(--bg-raised); color: var(--text); outline: none; }
+  .san-token.best { color: var(--ok); }
+  .san-token.active { background: var(--pick-bg); color: var(--text); }
 
-  /* ── Settings modal ──────────────────────────── */
+  .line { margin-bottom: 16px; }
+  .line-moves { display: flex; flex-wrap: wrap; gap: 2px; margin: 6px 0 8px; }
+  .line-nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 
-  .modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.65);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 1rem;
-    z-index: 100;
+  .controls { display: grid; grid-template-columns: auto 1fr auto auto; gap: 8px; }
+  .controls .btn { justify-content: center; }
+  @media (max-width: 480px) { .controls { grid-template-columns: 1fr 1fr; } }
+
+  .game-card { padding: 14px 20px; }
+  .game-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+  .game-links { display: flex; gap: 14px; }
+  .game-players { font-size: 0.95rem; }
+  .game-result { font-weight: 600; margin-left: 6px; color: var(--text-dim); }
+  .game-sub { font-size: 0.8rem; color: var(--text-dim); margin-top: 2px; }
+
+  .session { padding: 0 2px; }
+  .session-strip { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .session-cell {
+    width: 14px; height: 14px; border-radius: 3px; padding: 0; border: 1px solid var(--border);
+    background: var(--bg-input); cursor: pointer; transition: transform 0.1s;
   }
+  .session-cell:hover { transform: scale(1.25); }
+  .session-cell.win { background: var(--ok); border-color: var(--ok); }
+  .session-cell.fail { background: var(--danger); border-color: var(--danger); }
+  .session-cell.current { outline: 2px solid var(--text); outline-offset: 1px; }
+</style>
 
-  .modal-card {
-    width: auto;
-    min-width: 280px;
-    max-width: 360px;
-  }
-
-  .engine-note {
-    font-size: 0.82rem;
-    color: var(--text-dim);
-    margin-top: 8px;
-    text-align: center;
-  }
-
-  .status-line {
-    text-align: center;
-    margin-top: 12px;
-    font-size: 0.85rem;
-    color: var(--text-dim);
-    min-height: 1.5em;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-  }
-  .status-error { color: var(--danger); }
-  .status-success { color: var(--accent); }
-
-  .spinner {
-    width: 14px;
-    height: 14px;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .tactics-found {
-    text-align: center;
-    margin-top: 6px;
-    font-size: 0.9rem;
-    color: var(--accent);
-  }
-
-  /* ── Training ──────────────────────────────────── */
-
-  .training-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 20px;
-  }
-
-  .training-counter {
-    font-family: var(--mono);
-    font-size: 0.9rem;
-    color: var(--text-dim);
-  }
-
-  .training-layout {
-    display: grid;
-    grid-template-columns: minmax(280px, 440px) 1fr;
-    gap: 24px;
-    align-items: start;
-  }
-
-  @media (max-width: 720px) {
-    .training-layout {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  .board-col {
-    width: 100%;
-  }
-
-  .tactics-board {
-    width: 100%;
-    aspect-ratio: 1;
-    border-radius: 6px;
-    overflow: hidden;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-  }
-
-  .info-col {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .tactic-meta {
-    margin-bottom: 0;
-    padding: 16px 20px;
-  }
-
-  .game-players {
-    font-size: 0.9rem;
-    color: var(--text-dim);
-    margin-bottom: 4px;
-  }
-
-  .you-played {
-    font-size: 0.9rem;
-    color: var(--text-dim);
-  }
-
-  .feedback-area {
-    text-align: center;
-    padding: 10px;
-    font-size: 0.95rem;
-    color: var(--text-dim);
-    min-height: 2em;
-  }
-
-  .controls-grid {
-    display: flex;
-    gap: 8px;
-  }
-  .controls-grid button { flex: 1; }
-
-  .controls-extra {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-    padding-top: 8px;
-  }
-
-  .auto-next-label {
-    font-size: 0.82rem !important;
-    color: var(--text-dim);
-  }
-  .auto-next-label input[type="checkbox"] {
-    accent-color: var(--text-dim);
-  }
-
-  .link-btn {
-    background: none;
-    border: none;
-    font-family: var(--sans);
-    font-size: 0.82rem;
-    color: var(--text-dim);
-    cursor: pointer;
-    text-decoration: none;
-    transition: color 0.15s;
-  }
-  .link-btn:hover { color: var(--text); }
-
-  .chip-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .chip {
-    cursor: pointer;
-  }
-
-  .chip span {
-    display: inline-block;
-    padding: 5px 12px;
-    background: var(--bg-input);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    font-size: 0.82rem;
-    color: var(--text-dim);
-    transition: all 0.15s;
-  }
-
-  .chip:hover span {
-    border-color: var(--text-dim);
-  }
-
-  .chip-active span {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: #fff;
-  }
+<style is:global>
+  /* Chessground theme: base + brown board + cburnett pieces, tinted to the site. */
+  @import 'chessground/assets/chessground.base.css';
+  @import 'chessground/assets/chessground.brown.css';
+  @import 'chessground/assets/chessground.cburnett.css';
+  .trainer-board cg-container, .trainer-board .cg-wrap { width: 100%; height: 100%; }
+  /* Lichess's actual default board: lila ships 'brown' as a textured webp
+     (public/images/board/brown.webp) with per-square coordinate colours,
+     not chessground's flat two-colour fallback. */
+  .trainer-board cg-board { background-image: url('/board/brown.webp'); }
+  .trainer-board coords { text-shadow: none; }
+  .trainer-board coords .coord-light { color: #946f51; }
+  .trainer-board coords .coord-dark { color: #f0d9b5; }
 </style>
 
 <script>
-  import Alpine from 'alpinejs';
-  import { tacticsApp } from '../tactics/app.js';
-  import { Chess } from '../tactics/chess.js';
-
-  import 'chessground/assets/chessground.base.css';
-  import 'chessground/assets/chessground.brown.css';
-  import 'chessground/assets/chessground.cburnett.css';
-
-  (window as any).Chess = Chess;
-
-  document.addEventListener('DOMContentLoaded', () => {
-    (window as any).Alpine = Alpine;
-    Alpine.data('tacticsApp', tacticsApp);
-    Alpine.start();
-  });
+  import { TacticsApp } from '../tactics/app';
+  new TacticsApp();
 </script>

@@ -13,11 +13,5 @@ export default defineConfig({
         process.env.PUBLIC_TURNSTILE_SITE_KEY || ''
       ),
     },
-    server: {
-      headers: {
-        'Cross-Origin-Opener-Policy': 'same-origin',
-        'Cross-Origin-Embedder-Policy': 'require-corp',
-      },
-    },
   },
 });

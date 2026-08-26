@@ -1,87 +1,88 @@
-import { previewBoard } from './api';
+/** ECO opening picker: a searchable modal over /eco.json. */
+import { renderBoard } from './board-preview';
 
+/** [code, name, pgn, fen] */
 type EcoEntry = [string, string, string, string];
 
 let ecoData: EcoEntry[] = [];
-let ecoLoaded = false;
+let ecoLoading: Promise<void> | null = null;
+/** True once a load finished, successfully or not — an empty list is an answer. */
+let ecoSettled = false;
 
-export async function loadEcoData(): Promise<void> {
-  if (ecoLoaded) return;
-  try {
-    const res = await fetch('/eco.json');
-    ecoData = await res.json();
-    ecoLoaded = true;
-  } catch {
-    /* picker still opens; list stays empty */
-  }
+export function loadEcoData(): Promise<void> {
+  if (ecoLoading) return ecoLoading;
+  ecoLoading = fetch('/eco.json')
+    // Not `r.ok ? … : []` — a 404 from a bad deploy has to reject, or the
+    // resolved promise below is cached forever and no reopen ever re-fetches.
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`eco.json: ${r.status}`))))
+    .then((d: unknown) => {
+      if (Array.isArray(d)) ecoData = d as EcoEntry[];
+      ecoSettled = true;
+    })
+    .catch(() => {
+      ecoLoading = null; // allow a retry on the next open
+    });
+  return ecoLoading;
 }
 
-function fuzzyMatch(entry: EcoEntry, query: string): boolean {
-  const [code, name] = entry;
-  const words = query.toLowerCase().split(/\s+/).filter((w) => w.length > 0);
-  const haystack = `${code} ${name}`.toLowerCase();
+function matches(entry: EcoEntry, words: string[]): boolean {
+  const haystack = `${entry[0]} ${entry[1]}`.toLowerCase();
   return words.every((w) => haystack.includes(w));
 }
 
-function lichessAnalysisUrl(pgn: string): string {
-  return `https://lichess.org/analysis/pgn/${encodeURIComponent(pgn)}`;
-}
+const PAGE = 100;
 
 export function openEcoModal(targetInput: HTMLInputElement): void {
-  void loadEcoData();
-
   const backdrop = document.createElement('div');
-  backdrop.className = 'eco-modal-backdrop';
+  backdrop.className = 'modal-backdrop';
 
   const modal = document.createElement('div');
-  modal.className = 'eco-modal';
+  modal.className = 'modal eco-modal';
   modal.setAttribute('role', 'dialog');
   modal.setAttribute('aria-modal', 'true');
-  modal.setAttribute('aria-label', 'Select ECO opening');
+  modal.setAttribute('aria-labelledby', 'eco-modal-title');
   modal.innerHTML = `
-    <div class="eco-modal-header">
-      <h3>Select opening</h3>
-      <button class="eco-modal-close" type="button" aria-label="Close">&times;</button>
+    <div class="modal-header">
+      <h3 id="eco-modal-title">Choose an opening</h3>
+      <button class="modal-close" type="button" aria-label="Close">&times;</button>
     </div>
     <div class="eco-modal-search">
-      <input type="search" placeholder="Search by code or name — B90, Sicilian, Najdorf" autocomplete="off" />
-      <p class="eco-search-hint">Type to filter 3,300+ openings. Click a row, then Select.</p>
+      <input type="search" placeholder="Code or name — B90, Sicilian, Najdorf…" autocomplete="off" aria-label="Search openings" />
     </div>
-    <div class="eco-modal-list"></div>
-    <div class="eco-modal-footer">
-      <span class="eco-selected-count"></span>
-      <div class="eco-modal-actions">
+    <div class="eco-modal-list scroll-thin" role="listbox"></div>
+    <div class="modal-footer">
+      <span class="eco-selected-count dim"></span>
+      <div class="btn-row" style="margin:0">
         <button type="button" class="btn btn-outline btn-sm eco-modal-cancel">Cancel</button>
-        <button type="button" class="btn btn-primary btn-sm eco-modal-confirm">Select</button>
+        <button type="button" class="btn btn-primary btn-sm eco-modal-confirm">Use opening</button>
       </div>
     </div>
   `;
-
   backdrop.appendChild(modal);
   document.body.appendChild(backdrop);
 
-  const searchInput = modal.querySelector('.eco-modal-search input') as HTMLInputElement;
-  const listEl = modal.querySelector('.eco-modal-list')!;
-  const countEl = modal.querySelector('.eco-selected-count')!;
+  const searchInput = modal.querySelector<HTMLInputElement>('.eco-modal-search input')!;
+  const listEl = modal.querySelector<HTMLElement>('.eco-modal-list')!;
+  const countEl = modal.querySelector<HTMLElement>('.eco-selected-count')!;
+  const confirmBtn = modal.querySelector<HTMLButtonElement>('.eco-modal-confirm')!;
   let selectedCode = targetInput.value.trim().toUpperCase();
+  const previouslyFocused = document.activeElement as HTMLElement | null;
 
-  function onKey(e: KeyboardEvent) {
-    if (e.key === 'Escape') close();
-  }
-
-  function close() {
+  function close(): void {
     backdrop.remove();
     document.removeEventListener('keydown', onKey);
+    previouslyFocused?.focus();
   }
-
-  modal.querySelector('.eco-modal-close')!.addEventListener('click', close);
+  function onKey(e: KeyboardEvent): void {
+    if (e.key === 'Escape') close();
+  }
+  document.addEventListener('keydown', onKey);
+  modal.querySelector('.modal-close')!.addEventListener('click', close);
   modal.querySelector('.eco-modal-cancel')!.addEventListener('click', close);
   backdrop.addEventListener('click', (e) => {
     if (e.target === backdrop) close();
   });
-  document.addEventListener('keydown', onKey);
-
-  modal.querySelector('.eco-modal-confirm')!.addEventListener('click', () => {
+  confirmBtn.addEventListener('click', () => {
     if (selectedCode) {
       targetInput.value = selectedCode;
       targetInput.dispatchEvent(new Event('input'));
@@ -89,13 +90,25 @@ export function openEcoModal(targetInput: HTMLInputElement): void {
     close();
   });
 
-  function renderList(query: string) {
-    const filtered = query
-      ? ecoData.filter((e) => fuzzyMatch(e, query)).slice(0, 100)
-      : ecoData.slice(0, 100);
+  function updateCount(): void {
+    countEl.textContent = selectedCode ? `Selected: ${selectedCode}` : '';
+    confirmBtn.disabled = !selectedCode;
+  }
 
-    if (filtered.length === 0) {
-      listEl.textContent = '';
+  function renderList(query: string): void {
+    listEl.replaceChildren();
+    if (ecoData.length === 0) {
+      const msg = document.createElement('div');
+      msg.className = 'eco-no-results';
+      msg.textContent = ecoSettled || !ecoLoading ? 'Opening list unavailable.' : 'Loading openings…';
+      listEl.appendChild(msg);
+      return;
+    }
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const all = words.length ? ecoData.filter((e) => matches(e, words)) : ecoData;
+    const shown = all.slice(0, PAGE);
+
+    if (shown.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'eco-no-results';
       empty.textContent = 'No openings match your search';
@@ -103,92 +116,76 @@ export function openEcoModal(targetInput: HTMLInputElement): void {
       return;
     }
 
-    listEl.replaceChildren();
     const frag = document.createDocumentFragment();
-
-    for (const [code, name, pgn, fen] of filtered) {
+    for (const [code, name, pgn, fen] of shown) {
       const item = document.createElement('div');
       item.className = 'eco-item' + (code === selectedCode ? ' selected' : '');
+      item.setAttribute('role', 'option');
+      item.setAttribute('aria-selected', String(code === selectedCode));
 
-      const mainRow = document.createElement('div');
+      const mainRow = document.createElement('button');
+      mainRow.type = 'button';
       mainRow.className = 'eco-item-main';
-
-      const toggle = document.createElement('span');
-      toggle.className = 'eco-item-toggle';
-      toggle.textContent = '▸';
-
-      const codeEl = document.createElement('span');
-      codeEl.className = 'eco-item-code';
-      codeEl.textContent = code;
-
-      const nameEl = document.createElement('span');
-      nameEl.className = 'eco-item-name';
-      nameEl.textContent = name;
-
-      const check = document.createElement('span');
-      check.className = 'eco-item-check';
-      check.textContent = '✓';
-
-      mainRow.append(toggle, codeEl, nameEl, check);
+      mainRow.innerHTML = `
+        <span class="eco-item-toggle" aria-hidden="true">▸</span>
+        <span class="eco-item-code mono"></span>
+        <span class="eco-item-name"></span>
+        <span class="eco-item-check" aria-hidden="true">✓</span>`;
+      mainRow.querySelector('.eco-item-code')!.textContent = code;
+      mainRow.querySelector('.eco-item-name')!.textContent = name;
 
       const details = document.createElement('div');
       details.className = 'eco-item-details';
-
+      details.hidden = true;
       const moves = document.createElement('div');
-      moves.className = 'eco-item-moves';
+      moves.className = 'eco-item-moves mono';
       moves.textContent = pgn;
-
       const boardEl = document.createElement('div');
-      boardEl.className = 'eco-item-board';
-
+      boardEl.className = 'board-preview board-preview-sm';
       const lichess = document.createElement('a');
-      lichess.href = lichessAnalysisUrl(pgn);
+      lichess.href = `https://lichess.org/analysis/pgn/${encodeURIComponent(pgn)}`;
       lichess.target = '_blank';
       lichess.rel = 'noopener';
-      lichess.className = 'eco-lichess-btn';
-      lichess.textContent = 'Analyze on Lichess ↗';
-
+      lichess.className = 'link-ext';
+      lichess.textContent = 'Analyse on Lichess ↗';
       details.append(moves, boardEl, lichess);
       item.append(mainRow, details);
 
       mainRow.addEventListener('click', () => {
         selectedCode = code;
-        listEl.querySelectorAll('.eco-item.selected').forEach((el) => el.classList.remove('selected'));
+        listEl.querySelectorAll('.eco-item.selected').forEach((el) => {
+          el.classList.remove('selected');
+          el.setAttribute('aria-selected', 'false');
+        });
         item.classList.add('selected');
+        item.setAttribute('aria-selected', 'true');
         updateCount();
-        const expanded = item.classList.toggle('expanded');
-        toggle.textContent = expanded ? '▾' : '▸';
-        if (expanded && !boardEl.hasChildNodes()) {
-          previewBoard(fen, boardEl, null);
-          boardEl.style.display = 'grid';
-        }
+        const expanded = details.hidden;
+        details.hidden = !expanded;
+        mainRow.querySelector('.eco-item-toggle')!.textContent = expanded ? '▾' : '▸';
+        if (expanded && !boardEl.hasChildNodes()) renderBoard(fen, boardEl);
       });
-
+      mainRow.addEventListener('dblclick', () => confirmBtn.click());
       frag.appendChild(item);
     }
-
     listEl.appendChild(frag);
 
-    const total = query ? ecoData.filter((e) => fuzzyMatch(e, query)).length : ecoData.length;
-    if (total > 100) {
+    if (all.length > PAGE) {
       const more = document.createElement('div');
       more.className = 'eco-no-results';
-      more.textContent = `Showing 100 of ${total} — refine your search`;
+      more.textContent = `Showing ${PAGE} of ${all.length} — refine your search`;
       listEl.appendChild(more);
     }
   }
 
-  function updateCount() {
-    countEl.textContent = selectedCode ? `Selected: ${selectedCode}` : '';
-  }
-
-  let searchTimer: ReturnType<typeof setTimeout>;
+  let searchTimer: ReturnType<typeof setTimeout> | undefined;
   searchInput.addEventListener('input', () => {
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => renderList(searchInput.value.trim()), 150);
+    searchTimer = setTimeout(() => renderList(searchInput.value.trim()), 120);
   });
 
-  renderList('');
+  renderList(searchInput.value);
   updateCount();
-  setTimeout(() => searchInput.focus(), 50);
+  void loadEcoData().then(() => renderList(searchInput.value.trim()));
+  setTimeout(() => searchInput.focus(), 30);
 }

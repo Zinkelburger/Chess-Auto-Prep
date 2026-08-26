@@ -124,7 +124,7 @@ def build_email_html(subscription: dict, games: list[dict],
         game_cards += _game_card_html(g, url)
 
     manage_qs = f"?token={manage_token}" if manage_token else ""
-    manage_link = f'{SITE_URL}/dashboard{manage_qs}'
+    manage_link = f'{SITE_URL}/twic-notifications{manage_qs}'
 
     unsub_link = ""
     if unsub_token:
@@ -143,7 +143,7 @@ def build_email_html(subscription: dict, games: list[dict],
     <p style="color:#aaa;font-size:13px;margin-bottom:16px;text-align:center;">
       Showing top {len(games)} by rating.
       <a href="{manage_link}" style="color:#629924;text-decoration:underline;">
-        Download all {total_matches} games from your dashboard
+        Download all {total_matches} games from your alerts page
       </a>
     </p>'''
 
@@ -171,7 +171,7 @@ def build_email_html(subscription: dict, games: list[dict],
       <p style="margin-top:12px;">
         <a href="{manage_link}" target="_blank"
            style="color:#629924;text-decoration:underline;font-size:13px;">
-          Edit this filter in the dashboard
+          Edit this filter on your alerts page
         </a>
       </p>
     </div>
@@ -223,7 +223,7 @@ def build_email_text(subscription: dict, games: list[dict],
 
     if total_matches > len(games):
         lines.append(f"Showing top {len(games)} by rating. "
-                     f"Download all {total_matches} from your dashboard.\n")
+                     f"Download all {total_matches} from your alerts page.\n")
 
     for g in games:
         elo_w = f" ({g['white_elo']})" if g.get('white_elo') else ""
@@ -237,7 +237,7 @@ def build_email_text(subscription: dict, games: list[dict],
         lines.append("")
 
     manage_qs = f"?token={manage_token}" if manage_token else ""
-    lines.append(f"Manage subscriptions: {SITE_URL}/dashboard{manage_qs}")
+    lines.append(f"Manage subscriptions: {SITE_URL}/twic-notifications{manage_qs}")
 
     if unsub_token:
         unsub_url = (f"{SITE_URL}/unsubscribe?token={unsub_token}"
@@ -299,7 +299,7 @@ def build_no_matches_html(subscription: dict, twic_label: str,
     sub_desc = " &middot; ".join(sub_desc_parts)
 
     manage_qs = f"?token={manage_token}" if manage_token else ""
-    manage_link = f'{SITE_URL}/dashboard{manage_qs}'
+    manage_link = f'{SITE_URL}/twic-notifications{manage_qs}'
 
     unsub_link = ""
     if unsub_token:
@@ -386,7 +386,7 @@ def build_no_matches_text(subscription: dict, twic_label: str,
     lines.append("")
 
     manage_qs = f"?token={manage_token}" if manage_token else ""
-    lines.append(f"Adjust your filters: {SITE_URL}/dashboard{manage_qs}")
+    lines.append(f"Adjust your filters: {SITE_URL}/twic-notifications{manage_qs}")
 
     if unsub_token:
         unsub_url = (f"{SITE_URL}/unsubscribe?token={unsub_token}"
@@ -424,7 +424,7 @@ def send_verification_email(to: str, verify_token: str) -> bool:
 
 def send_login_email(to: str, login_token: str) -> bool:
     """Send a magic login link containing a one-time token."""
-    login_url = f"{SITE_URL}/dashboard?token={login_token}"
+    login_url = f"{SITE_URL}/twic-notifications?token={login_token}"
     html = f'''<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
@@ -432,7 +432,7 @@ def send_login_email(to: str, login_token: str) -> bool:
              Roboto,Helvetica,Arial,sans-serif;padding:24px;margin:0;">
   <div style="max-width:500px;margin:0 auto;text-align:center;">
     <h1 style="color:#fff;font-size:22px;">Your Login Link</h1>
-    <p style="color:#aaa;">Click to access your TWIC Position Finder dashboard.</p>
+    <p style="color:#aaa;">Click to manage your TWIC alerts.</p>
     <a href="{login_url}" style="display:inline-block;background:#629924;color:#fff;
        padding:14px 32px;border-radius:6px;text-decoration:none;font-weight:bold;
        font-size:16px;margin:20px 0;">

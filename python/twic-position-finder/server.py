@@ -206,7 +206,7 @@ def subscribe(req: SubscribeRequest, request: Request, conn=Depends(db)):
     if existing and existing.get("verified"):
         if count_user_subscriptions(conn, existing["id"]) >= MAX_SUBSCRIPTIONS:
             raise HTTPException(400, f"Maximum of {MAX_SUBSCRIPTIONS} subscriptions reached. "
-                                     "Use your dashboard to manage existing ones.")
+                                     "Manage existing ones on your alerts page.")
         add_subscription(
             conn, existing["id"],
             label=req.label, fen=req.fen, player=req.player,
@@ -252,7 +252,7 @@ def verify(req: VerifyRequest, request: Request, conn=Depends(db)):
     auth_token = rotate_auth_token(conn, user["id"])
     return {"status": "verified", "email": user["email"],
             "auth_token": auth_token,
-            "message": "Email verified! Redirecting to your dashboard..."}
+            "message": "Email verified! Taking you to your alerts…"}
 
 
 class LoginRequest(BaseModel):
@@ -502,7 +502,7 @@ if DEBUG:
             activate_user_subscriptions(conn, user["id"])
             conn.commit()
         login_token = create_email_token(conn, user["id"], "login")
-        return {"login_url": f"{FRONTEND_ORIGIN}/dashboard?token={login_token}",
+        return {"login_url": f"{FRONTEND_ORIGIN}/twic-notifications?token={login_token}",
                 "token": login_token}
 
 

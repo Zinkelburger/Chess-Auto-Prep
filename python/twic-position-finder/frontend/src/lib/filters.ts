@@ -1,12 +1,20 @@
-import { previewBoard, type Subscription } from './api';
+/**
+ * The "Filters" block of an alert form: a list of typed rows (FEN, player,
+ * ECO, Elo bounds, event) the user adds from a menu, plus the values they
+ * hold. FEN is repeatable; everything else appears at most once.
+ */
+import type { Subscription } from './api';
 import { setupAutocomplete } from './autocomplete';
+import { bindFenPreview } from './board-preview';
 import { loadEcoData, openEcoModal } from './eco-picker';
 
+export type FilterKey = 'fen' | 'player' | 'eco' | 'min_elo' | 'max_elo' | 'event';
+
 export interface FilterDef {
-  key: string;
+  key: FilterKey;
   label: string;
-  inputType: string;
-  inputMode?: 'numeric' | 'text' | 'decimal' | 'tel' | 'search' | 'email' | 'url';
+  placeholder?: string;
+  inputMode?: 'numeric' | 'text';
   pattern?: string;
   mono?: boolean;
   repeatable?: boolean;
@@ -17,29 +25,37 @@ export interface FilterDef {
 }
 
 export const FILTER_DEFS: FilterDef[] = [
-  { key: 'fen', label: 'FEN', inputType: 'text', mono: true, hasBoardPreview: true, repeatable: true },
-  { key: 'player', label: 'Player name', inputType: 'text', autocomplete: 'player' },
-  { key: 'eco', label: 'ECO code', inputType: 'text', hasEcoPicker: true },
+  {
+    key: 'fen',
+    label: 'Position (FEN)',
+    placeholder: 'rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2',
+    mono: true,
+    hasBoardPreview: true,
+    repeatable: true,
+    tooltip: 'Alert when a game reaches exactly this position. Paste a FEN from Lichess or Chess Auto Prep.',
+  },
+  { key: 'player', label: 'Player', placeholder: 'Carlsen, M', autocomplete: 'player' },
+  { key: 'eco', label: 'Opening (ECO)', placeholder: 'B90', hasEcoPicker: true },
   {
     key: 'min_elo',
     label: 'Minimum Elo',
-    inputType: 'text',
+    placeholder: '2500',
     inputMode: 'numeric',
     pattern: '[0-9]*',
-    tooltip: 'At least one player must be at or above this rating',
+    tooltip: 'At least one player must be rated at or above this.',
   },
   {
     key: 'max_elo',
     label: 'Maximum Elo',
-    inputType: 'text',
+    placeholder: '2200',
     inputMode: 'numeric',
     pattern: '[0-9]*',
-    tooltip: 'Both players must be at or below this rating',
+    tooltip: 'Both players must be rated at or below this.',
   },
-  { key: 'event', label: 'Event name', inputType: 'text', autocomplete: 'event' },
+  { key: 'event', label: 'Event', placeholder: 'Tata Steel', autocomplete: 'event' },
 ];
 
-const AUTOCOMPLETE: Record<string, { url: string; label: string }> = {
+const AUTOCOMPLETE: Record<'player' | 'event', { url: string; label: string }> = {
   player: { url: '/players.json', label: 'player' },
   event: { url: '/events.json', label: 'event' },
 };
@@ -53,90 +69,81 @@ export interface FilterValues {
   event?: string;
 }
 
-export interface FilterBuilderOptions {
-  container: HTMLElement;
-  addBtn: HTMLElement;
-  menu: HTMLElement;
-  idPrefix: string;
-  enableAutocomplete?: boolean;
+/** True when at least one filter that the server accepts as a match key is set. */
+export function hasMatchKey(v: FilterValues): boolean {
+  return v.fens.length > 0 || Boolean(v.player) || Boolean(v.eco);
 }
 
-function slug(key: string): string {
-  return key.replaceAll('_', '-');
+export interface FilterBuilderOptions {
+  container: HTMLElement;
+  addBtn: HTMLButtonElement;
+  menu: HTMLElement;
+  idPrefix: string;
 }
 
 export class FilterBuilder {
   private readonly container: HTMLElement;
-  private readonly addBtn: HTMLElement;
+  private readonly addBtn: HTMLButtonElement;
   private readonly menu: HTMLElement;
   private readonly idPrefix: string;
-  private readonly enableAutocomplete: boolean;
-  private readonly active = new Set<string>();
+  private readonly rows = new Map<string, HTMLElement>();
   private fenCounter = 0;
-  private readonly onDocClick: (e: MouseEvent) => void;
 
   constructor(opts: FilterBuilderOptions) {
     this.container = opts.container;
     this.addBtn = opts.addBtn;
     this.menu = opts.menu;
     this.idPrefix = opts.idPrefix;
-    this.enableAutocomplete = Boolean(opts.enableAutocomplete);
+
+    this.addBtn.setAttribute('aria-haspopup', 'menu');
+    this.addBtn.setAttribute('aria-expanded', 'false');
+    this.menu.setAttribute('role', 'menu');
 
     this.addBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (this.menu.hidden) {
-        this.updateMenu();
-        this.menu.hidden = false;
-      } else {
-        this.menu.hidden = true;
+      this.toggleMenu(this.menu.hidden);
+    });
+    document.addEventListener('click', (e) => {
+      if (!(e.target as Element).closest('.add-filter-wrap')) this.toggleMenu(false);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !this.menu.hidden) {
+        this.toggleMenu(false);
+        this.addBtn.focus();
       }
     });
-
-    this.onDocClick = (e) => {
-      if (!(e.target as Element).closest('.add-filter-wrap')) this.menu.hidden = true;
-    };
-    document.addEventListener('click', this.onDocClick);
 
     void loadEcoData();
   }
 
-  add(key: string, prefill?: string): void {
+  /** Add a row for [key]; returns its input, or null if the key is already present. */
+  add(key: FilterKey, prefill?: string): HTMLInputElement | null {
     const def = FILTER_DEFS.find((d) => d.key === key);
-    if (!def) return;
+    if (!def) return null;
 
-    let instanceId: string | undefined;
-    if (def.repeatable) {
-      instanceId = `${key}-${this.fenCounter++}`;
-    } else if (this.active.has(key)) {
-      return;
-    }
+    let rowKey: string = key;
+    if (def.repeatable) rowKey = `${key}-${this.fenCounter++}`;
+    else if (this.rows.has(key)) return null;
 
-    const rowKey = instanceId || key;
-    this.active.add(rowKey);
-    const row = this.buildRow(def, instanceId);
+    const { row, input } = this.buildRow(def, rowKey);
+    this.rows.set(rowKey, row);
     this.container.appendChild(row);
-
-    const input = this.inputFor(instanceId || key);
-    if (prefill && input) input.value = prefill;
-
-    if (def.hasBoardPreview && input) {
-      const board = row.querySelector('.board-preview') as HTMLElement;
-      const error = row.querySelector('.board-invalid') as HTMLElement;
-      input.addEventListener('input', () => previewBoard(input.value, board, error));
-      if (prefill) previewBoard(prefill, board, error);
+    if (prefill) {
+      input.value = prefill;
+      input.dispatchEvent(new Event('input'));
     }
-
     this.updateMenu();
-    this.menu.hidden = true;
+    return input;
   }
 
   clear(): void {
-    this.active.clear();
+    this.rows.clear();
     this.fenCounter = 0;
     this.container.replaceChildren();
     this.updateMenu();
   }
 
+  /** The empty-form default: one FEN row. */
   resetDefault(): void {
     this.clear();
     this.add('fen');
@@ -144,7 +151,7 @@ export class FilterBuilder {
 
   setFromSubscription(sub: Subscription): void {
     this.clear();
-    const fens = sub.fens || (sub.fen ? [sub.fen] : []);
+    const fens = sub.fens ?? (sub.fen ? [sub.fen] : []);
     for (const fen of fens) this.add('fen', fen);
     for (const key of ['player', 'eco', 'min_elo', 'max_elo', 'event'] as const) {
       const value = sub[key];
@@ -158,19 +165,13 @@ export class FilterBuilder {
       const v = el.value.trim();
       if (v) fens.push(v);
     });
-
-    const text = (key: string) => {
-      const el = this.inputFor(key);
-      const v = el?.value.trim();
-      return v || undefined;
-    };
-    const num = (key: string) => {
+    const text = (key: FilterKey) => this.inputFor(key)?.value.trim() || undefined;
+    const num = (key: FilterKey) => {
       const v = text(key);
       if (!v) return undefined;
-      const n = parseInt(v, 10);
+      const n = Number.parseInt(v, 10);
       return Number.isFinite(n) ? n : undefined;
     };
-
     return {
       fens,
       player: text('player'),
@@ -182,11 +183,17 @@ export class FilterBuilder {
   }
 
   private inputFor(rowKey: string): HTMLInputElement | null {
-    return document.getElementById(`${this.idPrefix}-${slug(rowKey)}`) as HTMLInputElement | null;
+    return this.rows.get(rowKey)?.querySelector<HTMLInputElement>('input') ?? null;
   }
 
-  private buildRow(def: FilterDef, instanceId?: string): HTMLElement {
-    const rowKey = instanceId || def.key;
+  private toggleMenu(open: boolean): void {
+    if (open) this.updateMenu();
+    this.menu.hidden = !open;
+    this.addBtn.setAttribute('aria-expanded', String(open));
+    if (open) this.menu.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+  }
+
+  private buildRow(def: FilterDef, rowKey: string): { row: HTMLElement; input: HTMLInputElement } {
     const row = document.createElement('div');
     row.className = 'filter-row';
     row.dataset.filterKey = rowKey;
@@ -194,7 +201,7 @@ export class FilterBuilder {
     const body = document.createElement('div');
     body.className = 'filter-body';
 
-    const inputId = `${this.idPrefix}-${slug(rowKey)}`;
+    const inputId = `${this.idPrefix}-${rowKey.replaceAll('_', '-')}`;
     const lbl = document.createElement('label');
     lbl.htmlFor = inputId;
     lbl.textContent = def.label;
@@ -203,6 +210,7 @@ export class FilterBuilder {
       tip.className = 'tooltip-trigger';
       tip.title = def.tooltip;
       tip.textContent = '?';
+      tip.setAttribute('aria-label', def.tooltip);
       lbl.append(' ', tip);
     }
     body.appendChild(lbl);
@@ -211,44 +219,46 @@ export class FilterBuilder {
     inputWrap.className = 'filter-input-wrap';
 
     const input = document.createElement('input');
-    input.type = def.inputType;
+    input.type = 'text';
     input.id = inputId;
     if (def.mono) input.className = 'mono';
     if (def.inputMode) input.inputMode = def.inputMode;
     if (def.pattern) input.pattern = def.pattern;
+    if (def.placeholder) input.placeholder = def.placeholder;
     input.autocomplete = 'off';
-    if (def.repeatable) input.dataset.filterType = def.key;
+    input.spellcheck = false;
+    input.dataset.filterType = def.key;
     inputWrap.appendChild(input);
+    body.appendChild(inputWrap);
 
-    if (this.enableAutocomplete && def.autocomplete) {
+    if (def.autocomplete) {
       const status = document.createElement('span');
       status.className = 'ac-status';
       status.hidden = true;
       inputWrap.appendChild(status);
-
       const matches = document.createElement('div');
-      matches.className = 'ac-matches';
+      matches.className = 'ac-matches scroll-thin';
       matches.hidden = true;
-
-      body.append(inputWrap, matches);
+      body.appendChild(matches);
       const spec = AUTOCOMPLETE[def.autocomplete];
       setupAutocomplete(spec.url, input, status, matches, spec.label);
-    } else {
-      body.appendChild(inputWrap);
     }
 
     if (def.hasBoardPreview) {
       const board = document.createElement('div');
       board.className = 'board-preview';
+      board.hidden = true;
       const err = document.createElement('div');
       err.className = 'board-invalid';
+      err.hidden = true;
       body.append(board, err);
+      bindFenPreview(input, board, err);
     }
 
     if (def.hasEcoPicker) {
       const browseBtn = document.createElement('button');
       browseBtn.type = 'button';
-      browseBtn.className = 'eco-trigger-btn';
+      browseBtn.className = 'btn btn-text eco-trigger-btn';
       browseBtn.textContent = 'Browse openings…';
       browseBtn.addEventListener('click', () => openEcoModal(input));
       body.appendChild(browseBtn);
@@ -263,13 +273,14 @@ export class FilterBuilder {
     removeBtn.addEventListener('click', () => this.remove(rowKey));
 
     row.append(body, removeBtn);
-    return row;
+    return { row, input };
   }
 
   private remove(rowKey: string): void {
-    this.active.delete(rowKey);
-    this.container.querySelector(`[data-filter-key="${CSS.escape(rowKey)}"]`)?.remove();
+    this.rows.get(rowKey)?.remove();
+    this.rows.delete(rowKey);
     this.updateMenu();
+    this.addBtn.focus();
   }
 
   private updateMenu(): void {
@@ -279,12 +290,17 @@ export class FilterBuilder {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'filter-menu-item';
+      btn.setAttribute('role', 'menuitem');
       btn.textContent = def.label;
-      if (!def.repeatable && this.active.has(def.key)) {
+      if (!def.repeatable && this.rows.has(def.key)) {
         btn.disabled = true;
       } else {
         anyAvailable = true;
-        btn.addEventListener('click', () => this.add(def.key));
+        btn.addEventListener('click', () => {
+          const input = this.add(def.key);
+          this.toggleMenu(false);
+          input?.focus();
+        });
       }
       this.menu.appendChild(btn);
     }

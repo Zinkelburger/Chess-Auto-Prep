@@ -1,0 +1,192 @@
+/* TWIC Alerts page — the alert form, filter rows, ECO picker, alert cards.
+   Imported by the pages that render an AlertFields form or an alerts list. */
+
+/* ── Filter rows ─────────────────────────────────────────────────── */
+.filters-section { margin-bottom: 8px; }
+.filters-header { margin-bottom: 12px; }
+.filters-title { display: block; font-size: 0.92rem; font-weight: 600; color: var(--text); }
+.filters-hint { display: block; font-size: 0.8rem; color: var(--text-dim); margin-top: 2px; }
+.filters-container:empty + .add-filter-wrap { margin-top: 0; }
+.filter-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+  animation: filterIn 0.15s ease-out;
+}
+@keyframes filterIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .filter-row { animation: none; } }
+.filter-body { flex: 1; min-width: 0; }
+.filter-body label { margin-bottom: 4px; }
+.filter-input-wrap { position: relative; }
+.filter-remove {
+  background: none; border: none; color: var(--text-dim);
+  cursor: pointer; font-size: 1.25rem; line-height: 1;
+  width: 32px; height: 32px; margin-top: 24px; border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+}
+.filter-remove:hover { color: var(--danger); background: var(--danger-bg); }
+.add-filter-wrap { position: relative; margin-top: 4px; }
+.filter-menu {
+  position: absolute; top: 100%; left: 0; margin-top: 4px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 4px 0; min-width: 200px; z-index: 100; box-shadow: var(--shadow);
+}
+.filter-menu-item {
+  display: block; width: 100%; text-align: left;
+  background: none; border: none; color: var(--text);
+  font-size: 0.88rem; font-weight: 500; padding: 8px 14px; cursor: pointer; border-radius: 0;
+}
+.filter-menu-item:hover:not(:disabled), .filter-menu-item:focus-visible { background: rgba(255,255,255,0.05); outline: none; }
+.filter-menu-item:disabled { color: var(--text-faint); cursor: not-allowed; }
+.eco-trigger-btn { margin-top: 4px; padding-left: 0; }
+
+.options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; }
+@media (max-width: 560px) { .options-grid { grid-template-columns: 1fr; } }
+
+/* ── Autocomplete ────────────────────────────────────────────────── */
+.ac-status {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  font-size: 0.95rem; line-height: 1; pointer-events: none;
+}
+.ac-status-ok { color: var(--ok); }
+.ac-status-miss { color: var(--danger); }
+.ac-matches {
+  margin-top: 6px; font-size: 0.85rem; color: var(--text-dim);
+  max-height: 160px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--bg-input); padding: 4px 0;
+}
+.ac-item {
+  display: block; width: 100%; text-align: left;
+  background: none; border: none; color: var(--text);
+  font-size: 0.85rem; padding: 6px 12px; cursor: pointer; border-radius: 0;
+}
+.ac-item:hover, .ac-item:focus-visible { background: rgba(255,255,255,0.05); outline: none; }
+.ac-hint { padding: 8px 12px; color: var(--text-dim); font-size: 0.82rem; }
+.ac-more { padding: 6px 12px; font-style: italic; color: var(--text-faint); font-size: 0.8rem; }
+
+/* ── Board previews ──────────────────────────────────────────────── */
+.board-preview {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  width: 240px; max-width: 100%;
+  border: 1px solid var(--border); border-radius: 4px; overflow: hidden;
+  margin-top: 10px;
+  background: var(--bg-input);
+}
+.board-preview-sm { width: 176px; margin-top: 0; }
+.board-sq { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; user-select: none; position: relative; }
+.board-sq img { width: 100%; height: 100%; display: block; }
+.board-sq.light { background: #d9dee6; }
+.board-sq.dark { background: #8b97a8; }
+.board-sq.hl.light { background: #cdd26a; }
+.board-sq.hl.dark { background: #aaa23a; }
+.board-invalid { font-family: var(--mono); font-size: 0.78rem; color: var(--danger); margin-top: 6px; }
+
+.hover-board {
+  position: fixed; z-index: 9500; pointer-events: none;
+  background: var(--bg-card); border: 1px solid var(--border-strong);
+  border-radius: var(--radius); padding: 6px; box-shadow: var(--shadow-lg);
+}
+.hover-board-caption { font-size: 0.68rem; color: var(--text-dim); margin-top: 5px; max-width: 176px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── ECO picker ──────────────────────────────────────────────────── */
+.eco-modal { max-height: 76vh; }
+.eco-modal-search { padding: 12px 20px; border-bottom: 1px solid var(--border); }
+.eco-modal-list { flex: 1; overflow-y: auto; padding: 6px 0; min-height: 220px; }
+.eco-item { padding: 0 12px; }
+.eco-item-main {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 8px 8px; border: none; background: none; text-align: left;
+  cursor: pointer; border-radius: 6px;
+}
+.eco-item-main:hover, .eco-item-main:focus-visible { background: rgba(255,255,255,0.04); outline: none; }
+.eco-item.selected .eco-item-main { background: var(--pick-bg); }
+.eco-item-toggle { font-size: 0.65rem; color: var(--text-dim); width: 12px; text-align: center; flex: none; }
+.eco-item-code { font-size: 0.82rem; font-weight: 600; color: var(--accent); min-width: 36px; }
+.eco-item-name { font-size: 0.88rem; color: var(--text); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.eco-item-check { font-size: 1rem; color: var(--pick); opacity: 0; flex: none; }
+.eco-item.selected .eco-item-check { opacity: 1; }
+.eco-item-details { padding: 4px 8px 12px 38px; display: grid; gap: 8px; justify-items: start; }
+.eco-item-moves { font-size: 0.78rem; color: var(--text-dim); line-height: 1.6; word-break: break-word; }
+.eco-no-results { padding: 28px 20px; text-align: center; color: var(--text-dim); font-size: 0.85rem; }
+
+/* ── Anonymous front door ────────────────────────────────────────── */
+.how-it-works {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+  margin-bottom: 28px;
+}
+@media (max-width: 640px) { .how-it-works { grid-template-columns: 1fr; } }
+.how-step { display: flex; gap: 12px; align-items: flex-start; font-size: 0.9rem; color: var(--text-dim); }
+.how-step strong { color: var(--text); display: block; margin-bottom: 2px; font-weight: 600; }
+.how-num {
+  flex: none; width: 26px; height: 26px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent-bg); color: var(--accent); font-weight: 700; font-size: 0.82rem;
+  font-family: var(--mono);
+}
+.cf-turnstile { margin-bottom: 16px; }
+.cf-turnstile:empty { margin: 0; }
+.subscribe-footer { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 8px; }
+.subscribe-footer .hint { margin: 0; }
+
+/* ── Account header ──────────────────────────────────────────────── */
+.account-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: var(--text-dim); font-size: 0.92rem; }
+.account-meta .sep { color: var(--text-faint); }
+
+/* ── Alert cards ─────────────────────────────────────────────────── */
+.sub-card { padding: 0; overflow: hidden; }
+.sub-card-body { padding: 18px 22px 16px; }
+.sub-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.sub-card-title { font-size: 1.05rem; font-weight: 600; margin: 0; line-height: 1.35; }
+.sub-card-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.sub-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.sub-filter {
+  display: inline-flex; align-items: center; gap: 0;
+  border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
+  font-size: 0.8rem; line-height: 1.4;
+}
+.sub-filter-kind { padding: 3px 8px; background: var(--bg-input); color: var(--text-dim); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.sub-filter-value { padding: 3px 9px; color: var(--text); max-width: 26em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub-filter-fen { cursor: pointer; }
+.sub-filter-fen:hover, .sub-filter-fen:focus-visible { border-color: var(--accent); }
+.sub-filter-fen .sub-filter-value { color: var(--accent); }
+.sub-filter-board { flex-basis: 100%; }
+.sub-card-footer {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 22px; border-top: 1px solid var(--border);
+  background: rgba(0,0,0,0.18);
+}
+.sub-matches { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sub-no-match { font-size: 0.8rem; color: var(--text-dim); }
+.issue-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: transparent; color: var(--text);
+  border: 1px solid var(--border); font-size: 0.8rem; font-weight: 600;
+  padding: 6px 12px; border-radius: 6px; cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.issue-toggle:hover { border-color: var(--text-dim); }
+.issue-toggle[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-bg); }
+.issue-chevron { font-size: 0.7rem; color: var(--text-dim); width: 0.85em; }
+.game-panel { border-top: 1px solid var(--border); background: rgba(0,0,0,0.12); }
+.game-panel > .sub-no-match { display: block; padding: 12px 22px; }
+.game-panel-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 12px 6px 22px; font-size: 0.82rem; font-weight: 600; color: var(--text-dim);
+}
+.game-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 11px 22px; border-top: 1px solid var(--border);
+}
+.game-info { min-width: 0; flex: 1; }
+.game-players { font-size: 0.9rem; }
+.game-sub { font-size: 0.78rem; color: var(--text-dim); margin-top: 2px; }
+/* No hue on a result: 1-0 is not "good" and 0-1 is not "danger" — these are
+   other people's master games. Decisive stands out by weight, a draw recedes. */
+.game-result { font-weight: 600; margin-left: 8px; }
+.result-draw { font-weight: 500; color: var(--text-dim); }
+@media (max-width: 600px) {
+  .game-row { flex-direction: column; align-items: flex-start; }
+  .sub-card-header { flex-direction: column; }
+}

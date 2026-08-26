@@ -22,7 +22,7 @@ python/twic-position-finder/
   server.py          # FastAPI backend (registration, subscriptions, queries)
   booking.py         # Lesson booking routes (SQLite bookings.db)
   weekly.py          # Weekly cron job: ingest -> match -> import -> email
-  frontend/          # Astro static site (Cloudflare Pages)
+  frontend/          # Astro static site (Cloudflare Pages) — see frontend/README.md
 ```
 
 ## CLI Usage
@@ -101,6 +101,13 @@ npm run build   # static build to dist/
 ```
 
 Deploy `dist/` to Cloudflare Pages. Set `PUBLIC_API_URL` to `https://api.chessautoprep.com`.
+
+Routes: `/twic-notifications` is the one alerts page (anonymous: create an
+alert / request a login link; signed in: manage alerts — login emails link
+here with `?token=`), `/tactics` the in-browser tactics trainer, and
+`/charles-clock` the clock. `/dashboard` only forwards to `/twic-notifications`.
+Architecture and the trainer's engine pipeline are documented in
+`frontend/README.md`.
 
 ### Lesson booking (`/book`)
 

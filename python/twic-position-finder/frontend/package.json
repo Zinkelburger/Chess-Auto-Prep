@@ -13,9 +13,13 @@
     "astro": "astro"
   },
   "dependencies": {
-    "alpinejs": "^3.15.8",
     "astro": "^6.1.0",
     "chess.js": "^1.4.0",
     "chessground": "^9.2.1"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "puppeteer-core": "^25.9.0",
+    "typescript": "^5.9.3"
   }
 }

@@ -1,6 +1,8 @@
-/*
-  Cross-Origin-Opener-Policy: same-origin
-  Cross-Origin-Embedder-Policy: require-corp
-
 /stockfish/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/piece/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/board/*
   Cache-Control: public, max-age=31536000, immutable
