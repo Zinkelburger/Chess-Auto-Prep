@@ -163,6 +163,16 @@ class BuildRun {
   /// depth follows the book and nothing else.
   int plyCapAt(String fen, int ply) {
     final base = config.maxPly;
+
+    // The ChessDB book inverts the usual bargain. [maxPly] caps *branching*
+    // there and nothing else — [ChessDbBookExpander.expandOpponentMove]
+    // enforces it by taking a single database move past that depth. Every
+    // line then costs a node per ply rather than a fan-out, so depth is
+    // cheap and the mainline runs on until ChessDB stops answering. Capping
+    // it here as well would truncate exactly the deepest theory the book
+    // exists to carry.
+    if (config.isChessDbBook) return config.resolvedBookTailMaxPly;
+
     final bonus = config.masterDepthBonusPlies;
     if (bonus <= 0 || ply < base || masterBook == null) return base;
     if (!isMasterPractice(fen)) return base;

@@ -64,7 +64,7 @@ void showAppSnackBar(
   VoidCallback? onAction,
   Duration? duration,
 }) {
-  final screenWidth = MediaQuery.of(context).size.width;
+  final screenWidth = MediaQuery.sizeOf(context).width;
   ScaffoldMessenger.of(context).clearSnackBars();
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(

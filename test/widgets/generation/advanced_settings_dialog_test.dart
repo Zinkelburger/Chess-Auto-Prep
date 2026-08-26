@@ -19,13 +19,14 @@ AdvancedSection _section(
   IconData icon = Icons.tune,
   List<String> Function()? body,
   void Function()? onBuilt,
+  String? Function()? unavailable,
 }) => AdvancedSection(title, icon, (refresh) {
   onBuilt?.call();
   return [
     for (final label in body?.call() ?? const <String>[]) Text(label),
     TextButton(onPressed: refresh, child: Text('refresh $title')),
   ];
-});
+}, unavailable: unavailable);
 
 Future<void> _open(
   WidgetTester tester,
@@ -238,5 +239,76 @@ void main() {
 
     expect(find.byType(AdvancedSettingsDialog), findsOneWidget);
     expect(find.text('Advanced generation settings'), findsOneWidget);
+  });
+
+  group('a section that cannot apply', () {
+    testWidgets('shows its reason instead of its knobs', (tester) async {
+      var built = 0;
+      await _open(tester, [
+        _section(
+          'PGN source filters',
+          body: () => ['Min games per move'],
+          onBuilt: () => built++,
+          unavailable: () => 'Set Build from to My PGN files to use them.',
+        ),
+      ]);
+
+      expect(
+        find.text('Set Build from to My PGN files to use them.'),
+        findsOneWidget,
+      );
+      expect(find.text('Min games per move'), findsNothing);
+      expect(
+        built,
+        0,
+        reason: 'an unavailable section must not build its controls at all',
+      );
+    });
+
+    testWidgets('keeps its card and its jump link', (tester) async {
+      await _open(tester, [
+        _section('Verification', unavailable: () => 'Never runs here.'),
+        _section('Move choice'),
+      ]);
+
+      // Title appears twice on a wide window: the card heading and the TOC
+      // entry. Losing either would make the section unfindable.
+      expect(find.text('Verification'), findsNWidgets(2));
+    });
+
+    testWidgets('becomes available again without reopening', (tester) async {
+      var blocked = true;
+      await _open(tester, [
+        _section(
+          'Verification',
+          body: () => ['Verification depth'],
+          unavailable: () => blocked ? 'Never runs here.' : null,
+        ),
+        _section('Move choice'),
+      ]);
+
+      expect(find.text('Verification depth'), findsNothing);
+
+      // Nothing in an unavailable section is tappable — not even its own
+      // refresh — so what unblocks it is always a knob somewhere else.
+      blocked = false;
+      await tester.tap(find.text('refresh Move choice'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Verification depth'), findsOneWidget);
+      expect(find.text('Never runs here.'), findsNothing);
+    });
+
+    testWidgets('a null reason leaves the section untouched', (tester) async {
+      await _open(tester, [
+        _section(
+          'Move choice',
+          body: () => ['Setup tolerance'],
+          unavailable: () => null,
+        ),
+      ]);
+
+      expect(find.text('Setup tolerance'), findsOneWidget);
+    });
   });
 }

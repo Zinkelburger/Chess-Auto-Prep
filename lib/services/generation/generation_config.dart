@@ -32,6 +32,16 @@ enum BuildMode {
 
   /// Maia × eval surprise highlights — not yet implemented in Flutter.
   trapFinder,
+
+  /// ChessDB mainline book: our move is whatever the database ranks best,
+  /// their replies are master practice, and off master practice the line
+  /// continues as a single mainline until the database runs out.
+  ///
+  /// No Maia, no expectimax, no practicality weighting — the tree has one
+  /// child at every one of our nodes, so there is nothing for a valuation
+  /// to choose between.  Stockfish is a fallback only, for positions no
+  /// ChessDB source has ever seen.
+  chessDbBook,
 }
 
 // ── Search algorithm (frontier discipline + pruning preset) ─────────────
@@ -315,6 +325,15 @@ class TreeBuildConfig {
   /// rare sideline does not become a chapter of its own.
   final int minLinesPerChapter;
 
+  /// Cut chapters by ECO code instead of by the tree's branch points.
+  ///
+  /// Branch-point cutting names chapters after where *this* repertoire
+  /// divides, which is the right answer for a book about one opening. A book
+  /// that spans the whole encyclopedia divides everywhere, and the reader is
+  /// looking for a code — so the top-level cut follows the classification and
+  /// branch-point cutting runs inside each code.
+  final bool chaptersByEco;
+
   /// Model games appended as trailing chapters — real games by strong
   /// players that follow the repertoire out of the opening.  Requires a game
   /// database (DB Explorer); 0 disables.
@@ -386,12 +405,62 @@ class TreeBuildConfig {
   /// indexed to move 15, which bounds the bonus naturally.  0 disables.
   final int masterDepthBonusPlies;
 
+  /// Master-book games that make a reply immune to the probability floor.
+  ///
+  /// The floor ([maiaMinProb]) exists to keep Maia policy noise out of the
+  /// tree, where a 4% entry really is noise. A move with a thousand recorded
+  /// master games is not noise at 4%, and gating both on the same number is
+  /// how the Four Pawns Attack (1159 games, 4.2% after 4...d6) came to be
+  /// dropped from a King's Indian book with no chess judgement involved at
+  /// all. Recorded practice is evidence of a different kind from a policy
+  /// head's opinion, so it gets its own threshold, counted in games.
+  ///
+  /// This exempts a move from the *probability* floor only. The fan-out caps
+  /// ([oppMaxChildren], [oppMassTarget]) still bind, except at the root —
+  /// see [NodeExpander]. 0 disables the exemption.
+  final int masterMinMoveGames;
+
   /// Opponent fan-out cap at off-book positions when a master book is in
   /// use (0 = same as [oppMaxChildren]).  Where no master has been, wide
   /// fan-out buys breadth nobody plays; narrowing it here spends the node
   /// budget on depth in the lines that are practice.  The coverage floor
   /// ([coverMinProb]) still bypasses it, so a likely reply is never dropped.
   final int offBookOppMaxChildren;
+
+  // ── ChessDB mainline book ([BuildMode.chessDbBook]) ──
+
+  /// How deep the off-book mainline tail runs, in plies.
+  ///
+  /// [maxPly] caps *branching* and nothing else: it is where the book stops
+  /// answering new opponent choices and follows a single line.  Once a line
+  /// has stopped branching — past that depth, or past master practice,
+  /// whichever comes first — it costs one node per ply instead of a fan-out,
+  /// so stopping it at the branching depth would cut off exactly the deepest
+  /// theory the book exists to carry.  Every line therefore runs to this cap
+  /// instead, or until ChessDB runs out, whichever comes first.  Values below
+  /// [maxPly] are ignored.
+  final int bookTailMaxPly;
+
+  /// Whether the engine finishes a line ChessDB has stopped answering
+  /// ([BuildMode.chessDbBook] only).
+  ///
+  /// Off by default, which makes a line end exactly where the database's
+  /// knowledge does. On, a position no ChessDB source has seen is searched
+  /// at [evalDepth] and the line continues — truer to "give me the whole
+  /// line", but the deep tail is then Stockfish's book rather than ChessDB's,
+  /// and it is expensive: at depth 30 each such position costs seconds where
+  /// a database hit costs a request, so a build with a wide unknown tail
+  /// spends most of its wall clock in the engine and covers far less ground.
+  final bool bookEngineFallback;
+
+  /// Centipawn window inside which master practice breaks a tie between our
+  /// candidate moves ([BuildMode.chessDbBook] only).
+  ///
+  /// 0 — the default — means only moves the database scores *exactly* equal
+  /// are tied, and the more-played one wins.  Raising it trades a little
+  /// objectivity for the better-known move; it is the one place in this mode
+  /// where anything but the database's own ranking has a vote.
+  final int bookTieBreakWindowCp;
 
   /// Minimum engine gain (centipawns, for us) over the master move before a
   /// repertoire move is annotated as an improvement on a cited game.
@@ -408,6 +477,7 @@ class TreeBuildConfig {
   final String localChessDbPath;
   final bool enableChessDbApi;
   final int chessDbApiDailyQuota;
+
   final int chessDbApiConcurrency;
   final bool enableExtEvalSubtreeSkip;
   final int minAcceptableEvalDepth;
@@ -455,6 +525,7 @@ class TreeBuildConfig {
     this.organizeIntoChapters = true,
     this.maxLinesPerChapter = 40,
     this.minLinesPerChapter = 5,
+    this.chaptersByEco = false,
     this.modelGameCount = 6,
     this.modelGameMinElo = 2200,
     this.refutationLines = true,
@@ -467,9 +538,13 @@ class TreeBuildConfig {
     this.useMasterGames = true,
     this.downloadMasterGamesIfMissing = true,
     this.masterMinGames = 3,
+    this.masterMinMoveGames = 10,
     this.masterDepthBonusPlies = 10,
     this.masterPriorityWeight = 0.35,
     this.offBookOppMaxChildren = 2,
+    this.bookTailMaxPly = 40,
+    this.bookEngineFallback = false,
+    this.bookTieBreakWindowCp = 0,
     this.improvementMinGainCp = 40,
     this.dbMinProb = 0.05,
     this.minElo = 0,
@@ -551,6 +626,7 @@ class TreeBuildConfig {
       maxLinesPerChapter:
           (json['max_lines_per_chapter'] as num?)?.toInt() ?? 40,
       minLinesPerChapter: (json['min_lines_per_chapter'] as num?)?.toInt() ?? 5,
+      chaptersByEco: json['chapters_by_eco'] as bool? ?? false,
       modelGameCount: (json['model_game_count'] as num?)?.toInt() ?? 6,
       modelGameMinElo: (json['model_game_min_elo'] as num?)?.toInt() ?? 2200,
       refutationLines: json['refutation_lines'] as bool? ?? true,
@@ -566,6 +642,8 @@ class TreeBuildConfig {
       downloadMasterGamesIfMissing:
           json['download_master_games_if_missing'] as bool? ?? true,
       masterMinGames: (json['master_min_games'] as num?)?.toInt() ?? 3,
+      masterMinMoveGames:
+          (json['master_min_move_games'] as num?)?.toInt() ?? 10,
       masterPriorityWeight:
           (json['master_priority_weight'] as num?)?.toDouble() ?? 0.35,
       masterDepthBonusPlies:
@@ -591,17 +669,52 @@ class TreeBuildConfig {
           json['enable_ext_eval_subtree_skip'] as bool? ?? true,
       minAcceptableEvalDepth:
           (json['min_acceptable_eval_depth'] as num?)?.toInt() ?? 0,
+      bookTailMaxPly: (json['book_tail_max_ply'] as num?)?.toInt() ?? 40,
+      bookEngineFallback: json['book_engine_fallback'] as bool? ?? false,
+      bookTieBreakWindowCp:
+          (json['book_tie_break_window_cp'] as num?)?.toInt() ?? 0,
     );
   }
 
   /// Whether this build uses Stockfish during BFS tree construction.
   /// DB Explorer defers engine startup to the eval enrichment phase.
-  bool get usesStockfish => buildMode == BuildMode.stockfishExpectimax;
+  ///
+  /// The ChessDB book counts only when [bookEngineFallback] is on — its moves
+  /// come from the database, and the engine is there purely as a floor under
+  /// positions the database has never seen. With the floor off it needs no
+  /// engine at all.
+  bool get usesStockfish =>
+      buildMode == BuildMode.stockfishExpectimax ||
+      (isChessDbBook && bookEngineFallback);
+
+  /// Whether the expander resolves an our-move node's own eval, so the build
+  /// loop must not resolve one first.
+  ///
+  /// Stockfish MultiPV and the ChessDB book both learn a position's eval from
+  /// the very call that gives them its moves. Pre-evaluating would pay for
+  /// that twice — and for the book, "twice" is a second network request per
+  /// position, which is the difference between a build that fits in a quota
+  /// and one that does not.
+  bool get expanderSuppliesOurMoveEval =>
+      buildMode == BuildMode.stockfishExpectimax || isChessDbBook;
 
   /// Whether the build needs Stockfish at any phase (build or enrichment).
-  bool get needsStockfish =>
-      buildMode == BuildMode.stockfishExpectimax ||
-      buildMode == BuildMode.dbExplorer;
+  bool get needsStockfish => usesStockfish || buildMode == BuildMode.dbExplorer;
+
+  /// True while building a single-move-per-side mainline book.
+  bool get isChessDbBook => buildMode == BuildMode.chessDbBook;
+
+  /// Whether Phase 2.5 has anything to re-check.
+  ///
+  /// The ChessDB book never verifies. Its moves are the database's, and
+  /// re-ranking them by a local search at verification depth would quietly
+  /// substitute Stockfish's opinion for ChessDB's — which is the one thing
+  /// this mode exists not to do.
+  bool get runsVerification => verifyFinal && needsStockfish && !isChessDbBook;
+
+  /// Ply cap for the off-book mainline tail, never below [maxPly].
+  int get resolvedBookTailMaxPly =>
+      bookTailMaxPly > maxPly ? bookTailMaxPly : maxPly;
 
   /// Clamped engine thread count (defaults to half of logical cores).
   int get resolvedEngineThreads => engineThreads > 0
@@ -614,6 +727,7 @@ class TreeBuildConfig {
     BuildMode.maiaDbExplore => 'Maia DB explore',
     BuildMode.dbExplorer => 'DB Explorer',
     BuildMode.trapFinder => 'Trap finder',
+    BuildMode.chessDbBook => 'ChessDB mainline book',
   };
 
   /// Compact one-line summary for Jobs panel and status displays.
@@ -630,7 +744,9 @@ class TreeBuildConfig {
       parts.add('${pgnFilePaths.length} PGN');
     }
     parts.add('Maia $maiaElo');
-    if (organizeIntoChapters) parts.add('chapters');
+    if (organizeIntoChapters) {
+      parts.add(chaptersByEco ? 'ECO chapters' : 'chapters');
+    }
     return parts.join(' · ');
   }
 
@@ -823,6 +939,7 @@ class TreeBuildConfig {
     'organize_into_chapters': organizeIntoChapters,
     'max_lines_per_chapter': maxLinesPerChapter,
     'min_lines_per_chapter': minLinesPerChapter,
+    'chapters_by_eco': chaptersByEco,
     'model_game_count': modelGameCount,
     'model_game_min_elo': modelGameMinElo,
     'refutation_lines': refutationLines,
@@ -835,9 +952,13 @@ class TreeBuildConfig {
     'use_master_games': useMasterGames,
     'download_master_games_if_missing': downloadMasterGamesIfMissing,
     'master_min_games': masterMinGames,
+    'master_min_move_games': masterMinMoveGames,
     'master_priority_weight': masterPriorityWeight,
     'master_depth_bonus_plies': masterDepthBonusPlies,
     'off_book_opp_max_children': offBookOppMaxChildren,
+    'book_tail_max_ply': bookTailMaxPly,
+    'book_engine_fallback': bookEngineFallback,
+    'book_tie_break_window_cp': bookTieBreakWindowCp,
     'improvement_min_gain_cp': improvementMinGainCp,
     'db_min_prob': dbMinProb,
     'min_elo': minElo,
@@ -946,6 +1067,7 @@ class TreeBuildConfig {
     bool? organizeIntoChapters,
     int? maxLinesPerChapter,
     int? minLinesPerChapter,
+    bool? chaptersByEco,
     int? modelGameCount,
     int? modelGameMinElo,
     bool? refutationLines,
@@ -958,9 +1080,13 @@ class TreeBuildConfig {
     bool? useMasterGames,
     bool? downloadMasterGamesIfMissing,
     int? masterMinGames,
+    int? masterMinMoveGames,
     double? masterPriorityWeight,
     int? masterDepthBonusPlies,
     int? offBookOppMaxChildren,
+    int? bookTailMaxPly,
+    bool? bookEngineFallback,
+    int? bookTieBreakWindowCp,
     int? improvementMinGainCp,
     double? dbMinProb,
     int? minElo,
@@ -1021,6 +1147,7 @@ class TreeBuildConfig {
       organizeIntoChapters: organizeIntoChapters ?? this.organizeIntoChapters,
       maxLinesPerChapter: maxLinesPerChapter ?? this.maxLinesPerChapter,
       minLinesPerChapter: minLinesPerChapter ?? this.minLinesPerChapter,
+      chaptersByEco: chaptersByEco ?? this.chaptersByEco,
       modelGameCount: modelGameCount ?? this.modelGameCount,
       modelGameMinElo: modelGameMinElo ?? this.modelGameMinElo,
       refutationLines: refutationLines ?? this.refutationLines,
@@ -1034,11 +1161,15 @@ class TreeBuildConfig {
       downloadMasterGamesIfMissing:
           downloadMasterGamesIfMissing ?? this.downloadMasterGamesIfMissing,
       masterMinGames: masterMinGames ?? this.masterMinGames,
+      masterMinMoveGames: masterMinMoveGames ?? this.masterMinMoveGames,
       masterPriorityWeight: masterPriorityWeight ?? this.masterPriorityWeight,
       masterDepthBonusPlies:
           masterDepthBonusPlies ?? this.masterDepthBonusPlies,
       offBookOppMaxChildren:
           offBookOppMaxChildren ?? this.offBookOppMaxChildren,
+      bookTailMaxPly: bookTailMaxPly ?? this.bookTailMaxPly,
+      bookEngineFallback: bookEngineFallback ?? this.bookEngineFallback,
+      bookTieBreakWindowCp: bookTieBreakWindowCp ?? this.bookTieBreakWindowCp,
       improvementMinGainCp: improvementMinGainCp ?? this.improvementMinGainCp,
       dbMinProb: dbMinProb ?? this.dbMinProb,
       minElo: minElo ?? this.minElo,
@@ -1107,6 +1238,9 @@ BuildMode _parseBuildMode(String? value) {
       return BuildMode.dbExplorer;
     case 'trapFinder':
       return BuildMode.trapFinder;
+    case 'chessdb_book':
+    case 'chessDbBook':
+      return BuildMode.chessDbBook;
     default:
       return BuildMode.stockfishExpectimax;
   }

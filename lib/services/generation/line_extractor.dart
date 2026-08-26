@@ -203,6 +203,11 @@ class LineExtractor {
     : _annotator = MoveAnnotator(
         playAsWhite: config.playAsWhite,
         maxEvalLossCp: config.maxEvalLossCp,
+        postBook: config.isChessDbBook
+            ? PostBookContinuation.chessDb
+            : PostBookContinuation.engineAndMaia,
+        movesFromPositionDatabase: config.isChessDbBook,
+        bookMinGames: config.masterMinGames > 0 ? config.masterMinGames : 1,
       );
 
   /// Everything said *about* a move, as opposed to which moves a line holds.

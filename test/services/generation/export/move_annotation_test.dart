@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/services/generation/export/move_annotation.dart';
+import 'package:chess_auto_prep/services/generation/export/move_annotator.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -162,6 +163,71 @@ void main() {
         MoveAnnotationDetail.fromLegacyFlags(annotate: false),
         MoveAnnotationDetail.none,
       );
+    });
+  });
+
+  group('naming the source honestly', () {
+    // The export used to assert Maia and the engine wrote the continuation
+    // whatever had actually produced it. In a ChessDB book neither ever
+    // runs, so both claims were plain falsehoods in the file.
+    test('the theory boundary names what really continues the line', () {
+      const ann = MoveAnnotation(gameCount: 8355);
+      expect(
+        ann
+            .withLastBookMove(PostBookContinuation.engineAndMaia)
+            .toPgnComment(MoveAnnotationDetail.full),
+        contains('from here the line is engine and Maia'),
+      );
+      expect(
+        ann
+            .withLastBookMove(PostBookContinuation.chessDb)
+            .toPgnComment(MoveAnnotationDetail.full),
+        contains('from here the line is ChessDB'),
+      );
+    });
+
+    test('a position-database move is not labelled as Maia policy', () {
+      const ann = MoveAnnotation(
+        likelihood: 1.0,
+        likelihoodSource: MoveLikelihoodSource.positionDatabase,
+      );
+      final out = ann.toPgnComment(MoveAnnotationDetail.full)!;
+      expect(out, contains('chessDbMove'));
+      expect(out, isNot(contains('maiaProbability')));
+    });
+  });
+
+  group('theory boundary threshold', () {
+    const annotator = MoveAnnotator(
+      playAsWhite: true,
+      maxEvalLossCp: 50,
+      bookMinGames: 3,
+    );
+
+    List<MoveAnnotation> withCounts(List<int?> counts) => [
+      for (final n in counts) MoveAnnotation(gameCount: n),
+    ];
+
+    test(
+      'marks the last move still in practice, not the last with any game',
+      () {
+        // 2 games is a curiosity; the line left practice after the 40-game move.
+        final marked = annotator.markTheoryBoundary(
+          withCounts([500, 120, 40, 2, null, null]),
+        );
+        expect(marked[2].lastBookMove, isTrue);
+        expect(marked[3].lastBookMove, isFalse);
+      },
+    );
+
+    test('a line still in practice at its leaf is left unmarked', () {
+      final marked = annotator.markTheoryBoundary(withCounts([500, 120, 40]));
+      expect(marked.every((a) => !a.lastBookMove), isTrue);
+    });
+
+    test('a line that was never in practice is left alone', () {
+      final marked = annotator.markTheoryBoundary(withCounts([null, 1, null]));
+      expect(marked.every((a) => !a.lastBookMove), isTrue);
     });
   });
 }

@@ -60,7 +60,7 @@ class _PositionPreviewIconState extends State<PositionPreviewIcon> {
   }
 
   Widget _buildBoard(Position position, Offset anchor) {
-    final screenSize = MediaQuery.of(context).size;
+    final screenSize = MediaQuery.sizeOf(context);
     var left = anchor.dx - _boardSize / 2;
     var top = anchor.dy + _anchorGap;
 

@@ -359,7 +359,7 @@ class RepertoireLinesBrowserDialog extends StatelessWidget {
       insetPadding: const EdgeInsets.all(24),
       child: Container(
         width: double.maxFinite,
-        height: MediaQuery.of(context).size.height * 0.8,
+        height: MediaQuery.sizeOf(context).height * 0.8,
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(12),

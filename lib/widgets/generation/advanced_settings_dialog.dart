@@ -12,11 +12,24 @@ import '../../theme/app_text_styles.dart';
 /// object, which is what lets the section builders live in the form while the
 /// dialog that arranges them lives here.
 class AdvancedSection {
-  AdvancedSection(this.title, this.icon, this.build);
+  AdvancedSection(this.title, this.icon, this.build, {this.unavailable});
 
   final String title;
   final IconData icon;
   final List<Widget> Function(VoidCallback refresh) build;
+
+  /// Why none of this section's knobs can apply right now, or null when they
+  /// can.
+  ///
+  /// A section every one of whose fields would be greyed out is noise: the
+  /// reader still has to scan five dead controls to learn the section is not
+  /// for them. Returning a reason here shows that one sentence instead, so
+  /// the section stays discoverable — and stays in the table of contents —
+  /// without spending screen space on knobs that cannot be touched.
+  ///
+  /// Evaluated on every dialog build, so it tracks changes made in the
+  /// dialog itself.
+  final String? Function()? unavailable;
 
   /// Scroll anchor, shared between this section's card and its table-of-
   /// contents entry. Held by the section rather than the dialog so the two
@@ -72,7 +85,7 @@ class _AdvancedSettingsDialogState extends State<AdvancedSettingsDialog> {
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxWidth: wide ? 880 : 660,
-          maxHeight: MediaQuery.of(context).size.height * 0.85,
+          maxHeight: MediaQuery.sizeOf(context).height * 0.85,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -200,6 +213,7 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final reason = section.unavailable?.call();
     return Container(
       key: section.anchor,
       margin: const EdgeInsets.only(bottom: 16),
@@ -236,7 +250,14 @@ class _SectionCard extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: section.build(refresh),
+              children: reason != null
+                  ? [
+                      Text(
+                        reason,
+                        style: AppTextStyles.caption.copyWith(fontSize: 12),
+                      ),
+                    ]
+                  : section.build(refresh),
             ),
           ),
         ],

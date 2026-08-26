@@ -100,7 +100,10 @@ class DefaultPlanDataSource implements PlanDataSource {
       if (!settings.isLoaded) {
         try {
           await settings.load();
-        } catch (_) {}
+        } catch (_) {
+          // Unreadable settings just mean no local database; the API and
+          // engine paths below still work.
+        }
       }
       if (settings.enableCdbDirect &&
           settings.cdbDirectPath.isNotEmpty &&
@@ -113,7 +116,10 @@ class DefaultPlanDataSource implements PlanDataSource {
             evalSourceLabel = 'ChessDB (local)';
             return;
           }
-        } catch (_) {}
+        } catch (_) {
+          // A missing or corrupt dump is not fatal — fall through to the
+          // API provider below.
+        }
       }
       try {
         final api = ChessDbApiProvider(dailyQuota: 800, concurrency: 3);
@@ -181,7 +187,10 @@ class DefaultPlanDataSource implements PlanDataSource {
             maiaProb: e.value,
           );
         }
-      } catch (_) {}
+      } catch (_) {
+        // Maia is an optional overlay on the candidate list; without it the
+        // rows simply carry no predicted-reply share.
+      }
     }
 
     // Names for database-only moves that are still in book.

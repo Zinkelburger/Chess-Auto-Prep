@@ -1,6 +1,12 @@
-/// ChessDB cloud API client (queryscore).
+/// ChessDB cloud API client.
 ///
-/// Endpoint: `http://www.chessdb.cn/cdb.php?action=queryscore&board=[FEN]`
+/// Two questions, two endpoints:
+///   * `action=queryscore` — one number for the position (the eval chain).
+///   * `action=queryall&json=1` — every move ChessDB knows, scored and ranked
+///     (the mainline-book builder). One request answers a whole fan-out, so a
+///     book build costs a request per *position*, not per move.
+///
+/// Endpoint base: `http://www.chessdb.cn/cdb.php`
 library;
 
 import 'dart:async';
@@ -10,8 +16,9 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../utils/eval_constants.dart';
 import '../../utils/fen_utils.dart';
+import 'chessdb_score.dart';
+import 'db_move_list.dart';
 import 'eval_canonicalize.dart';
 import 'external_eval_provider.dart';
 
@@ -79,22 +86,56 @@ EvalHit? parseChessDbQueryScoreBody(String body, String fen) {
   int raw, {
   required bool isWhiteToMove,
 }) {
-  int stmCp;
-  int? mate;
-
-  if (raw.abs() > kMateCpBase) {
-    final ply = 30000 - raw.abs();
-    mate = raw > 0 ? ply : -ply;
-    stmCp = raw > 0 ? (kMateCpBase - ply) : (-kMateCpBase - ply);
-  } else {
-    stmCp = raw;
-  }
-
-  final whiteCp = isWhiteToMove ? stmCp : -stmCp;
-  return (whiteCp, mate);
+  final decoded = mapChessDbRawScoreStm(raw);
+  final whiteCp = isWhiteToMove ? decoded.stmCp : -decoded.stmCp;
+  return (whiteCp, decoded.mate);
 }
 
-class ChessDbApiProvider implements ExternalEvalProvider {
+/// Parse a `queryall&json=1` body into a ranked move list.
+///
+/// Returns an empty list for `unknown`, an invalid board, a rate-limit reply,
+/// or anything that is not the JSON shape this endpoint documents — a book
+/// build treats "no moves" as the end of the book, so a garbled answer must
+/// not read like a scored one.
+List<DbMove> parseChessDbQueryAllBody(String body) {
+  final trimmed = body.trim();
+  if (trimmed.isEmpty) return const [];
+
+  final dynamic decoded;
+  try {
+    decoded = jsonDecode(trimmed);
+  } catch (_) {
+    return const [];
+  }
+  if (decoded is! Map<String, dynamic>) return const [];
+  if ((decoded['status']?.toString() ?? '') != 'ok') return const [];
+
+  final rawMoves = decoded['moves'];
+  if (rawMoves is! List) return const [];
+
+  final moves = <DbMove>[];
+  for (final entry in rawMoves) {
+    if (entry is! Map<String, dynamic>) continue;
+    final uci = entry['uci']?.toString() ?? '';
+    final score = (entry['score'] as num?)?.toInt();
+    if (uci.isEmpty || score == null) continue;
+    final mapped = mapChessDbRawScoreStm(score);
+    final note = entry['note']?.toString().trim();
+    moves.add(
+      DbMove(
+        uci: uci,
+        san: entry['san']?.toString() ?? '',
+        stmCp: mapped.stmCp,
+        mate: mapped.mate,
+        rank: (entry['rank'] as num?)?.toInt(),
+        note: (note == null || note.isEmpty) ? null : note,
+      ),
+    );
+  }
+  return DbMoveList.sorted(moves);
+}
+
+class ChessDbApiProvider implements ExternalEvalProvider, ExternalMoveProvider {
   final int dailyQuota;
   final int concurrency;
   final ChessDbHttpFetch? httpFetch;
@@ -111,6 +152,12 @@ class ChessDbApiProvider implements ExternalEvalProvider {
   // pushes back, then cool down for a growing window; after enough
   // consecutive limits we stand down for the rest of the day and let the
   // engine take over. Reset on any successful reply.
+  //
+  // For reference, measured 2026-08-25: 30 sequential `queryall` requests
+  // spaced 1s apart all returned 200, median latency 0.84s. No throttling
+  // was observed at that rate, so the backoff below has never actually been
+  // seen to fire against the real server — treat its constants as a
+  // precaution, not as a fitted model of anything.
   int _consecutiveLimits = 0;
   DateTime? _cooldownUntil;
 
@@ -203,13 +250,105 @@ class ChessDbApiProvider implements ExternalEvalProvider {
     }
   }
 
-  /// Whether [response] is the server telling us to slow down (HTTP 429 or a
-  /// rate-limit body), as opposed to a normal miss.
+  /// Every move ChessDB knows from [fen], best first; empty on a miss.
+  ///
+  /// Shares the quota counter and rate-limit backoff with [lookup] — it is
+  /// the same server and the same budget. Unlike [lookup] there is no depth
+  /// gate: `queryall` reports no depth, and a book build wants the database's
+  /// ranking whatever confidence sits behind it.
+  @override
+  Future<DbMoveList> lookupMoves(String fen) async {
+    await init();
+    if (!quotaRemaining) return DbMoveList.empty;
+
+    final board = Uri.encodeComponent(canonicalizeFen4(fen));
+    final uri = Uri.parse(
+      '$_defaultBaseUrl?action=queryall&json=1&board=$board',
+    );
+
+    for (var attempt = 0; attempt < _bookRetries; attempt++) {
+      if (!await _awaitCooldown()) return DbMoveList.empty;
+      if (!quotaRemaining) return DbMoveList.empty;
+
+      await _acquireSlot();
+      final http.Response response;
+      try {
+        response = await (httpFetch ?? http.get)(uri);
+      } catch (e) {
+        if (kDebugMode) debugPrint('[ChessDbApiProvider] queryall failed: $e');
+        return DbMoveList.empty;
+      } finally {
+        _releaseSlot();
+      }
+
+      // Being throttled is not an answer about the position — it is the
+      // server asking for a pause. Take the pause and ask again rather than
+      // reporting a miss the caller will answer with an engine search.
+      if (_isRateLimitResponse(response)) {
+        _noteRateLimited();
+        continue;
+      }
+
+      _consecutiveLimits = 0;
+      _cooldownUntil = null;
+
+      final moves = parseChessDbQueryAllBody(response.body);
+      if (moves.isEmpty) return DbMoveList.empty;
+
+      _usedToday++;
+      unawaited(flushQuota());
+      return DbMoveList(moves: moves, source: DbMoveSource.chessDbApi);
+    }
+
+    return DbMoveList.empty;
+  }
+
+  /// Whether [response] is the server refusing to answer, as opposed to
+  /// answering that it does not know the position.
+  ///
+  /// **Any non-200 status counts.** ChessDB reports a position it has never
+  /// seen as `200` with `{"status":"unknown"}`, so a non-200 is never an
+  /// answer about the position — it is a transport or server problem, and
+  /// the two need opposite handling. Reading one as a miss is expensive in a
+  /// way that is easy to overlook: the caller shrugs and asks the engine
+  /// instead, so a run of them quietly stops the build being a ChessDB build
+  /// at all, and says so nowhere.
+  ///
+  /// Checking only for 429 was too narrow to catch that. (It also made a
+  /// Flutter test binding look exactly like a healthy miss:
+  /// `TestWidgetsFlutterBinding` installs an `HttpOverrides` mock answering
+  /// every request with an empty 400, which is why anything driving a real
+  /// build headlessly has to clear `HttpOverrides.global` first.)
   bool _isRateLimitResponse(http.Response response) {
-    if (response.statusCode == 429) return true;
+    if (response.statusCode != 200) return true;
     final body = response.body.toLowerCase();
     return body.contains('rate limit') || body.contains('too many');
   }
+
+  /// Wait out an active cooldown, up to [_maxWaitForCooldown].
+  ///
+  /// Returns false when the provider has stood down for the day, or the wait
+  /// would be longer than a caller should be asked to hold for.
+  Future<bool> _awaitCooldown() async {
+    final until = _cooldownUntil;
+    if (until == null) return true;
+    final remaining = until.difference(DateTime.now());
+    if (remaining <= Duration.zero) return true;
+    if (remaining > _maxWaitForCooldown) return false;
+    await Future<void>.delayed(remaining);
+    return true;
+  }
+
+  static const Duration _maxWaitForCooldown = Duration(seconds: 90);
+
+  /// Attempts a refused book lookup gets before giving up on the position.
+  ///
+  /// Worth retrying where a single eval is not: the caller's alternative is a
+  /// full-depth engine search, which costs far more than sitting out a
+  /// backoff — and answers a different question. Kept small (about 3s of
+  /// waiting in total) so one unlucky position cannot walk the provider into
+  /// its own [_standDownAfter] stand-down.
+  static const int _bookRetries = 3;
 
   /// Record a rate-limit and extend the cooldown. Exponential in the number
   /// of consecutive limits (1s, 2s, 4s, …) capped at 60s; after

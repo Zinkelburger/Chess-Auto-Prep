@@ -4,11 +4,14 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import '../../models/build_tree_node.dart';
 import '../../utils/fen_utils.dart';
 import '../engine/stockfish_pool.dart';
 import '../eval/cdbdirect_eval_provider.dart';
 import '../eval/chessdb_api_provider.dart';
+import '../eval/db_move_list.dart';
 import '../eval/eval_chain.dart';
 import '../eval/sqlite_eval_provider.dart';
 import '../eval_cache.dart';
@@ -24,6 +27,12 @@ class TreeEvalResolver {
   late BuildStats stats;
 
   ChessDbApiProvider? get chessDbApiProvider => _chessDbApi;
+
+  /// Test seam: a move source that stands in for the whole ChessDB chain in
+  /// [lookupBookMoves].  Production installs providers through
+  /// [initProviders]; nothing else may set this.
+  @visibleForTesting
+  ExternalMoveProvider? bookMovesOverride;
 
   Future<void> initProviders(TreeBuildConfig config) async {
     await teardownProviders();
@@ -63,6 +72,46 @@ class TreeEvalResolver {
       await _chessDbApi!.flushQuota();
       _chessDbApi = null;
     }
+  }
+
+  /// ChessDB's whole ranked move list for [fen] — local dump first, then the
+  /// cloud API.  [DbMoveList.empty] when neither knows the position; the
+  /// caller decides whether that ends the line or the engine takes over.
+  ///
+  /// Deliberately *not* part of [resolveEvalChain]: the sqlite eval database
+  /// stores scores, not move lists, and the project eval cache is keyed by
+  /// position rather than by fan-out, so neither has an answer to give here.
+  /// One lookup returns the score of every child, which is what makes a book
+  /// build cost a request per position instead of per move.
+  Future<DbMoveList> lookupBookMoves(String fen, TreeBuildConfig config) async {
+    final override = bookMovesOverride;
+    if (override != null) return override.lookupMoves(fen);
+
+    final direct = _cdbDirect;
+    if (config.enableCdbDirect && direct != null) {
+      final hit = await direct.lookupMoves(fen);
+      if (hit.isNotEmpty) {
+        stats.cdbDirectHits++;
+        return hit;
+      }
+      stats.cdbDirectHardMisses++;
+    }
+
+    final api = _chessDbApi;
+    if (config.enableChessDbApi && api != null) {
+      if (!api.quotaRemaining) {
+        stats.chessDbApiQuotaBlocked++;
+      } else {
+        final hit = await api.lookupMoves(fen);
+        if (hit.isNotEmpty) {
+          stats.chessDbApiHits++;
+          return hit;
+        }
+        stats.chessDbApiMisses++;
+      }
+    }
+
+    return DbMoveList.empty;
   }
 
   /// DB-chain lookup returning white-normalized cp, or null on miss.

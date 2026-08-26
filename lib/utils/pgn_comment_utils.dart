@@ -480,6 +480,9 @@ class MoveMetrics {
         case 'engineReply':
           likelihood = double.tryParse(raw);
           likelihoodSource = MoveLikelihoodSource.engine;
+        case 'chessDbMove':
+          likelihood = double.tryParse(raw);
+          likelihoodSource = MoveLikelihoodSource.positionDatabase;
         case 'loss':
           final pawns = double.tryParse(raw);
           if (pawns != null) lossCp = (pawns * 100).round();
@@ -515,6 +518,9 @@ class MoveMetrics {
         MoveLikelihoodSource.maia => '${_percent(likelihood!)} likely',
         MoveLikelihoodSource.gameDatabase => 'played ${_percent(likelihood!)}',
         MoveLikelihoodSource.engine => 'engine reply',
+        // No percentage: this is the database's choice of move, not a claim
+        // about how often anyone plays it.
+        MoveLikelihoodSource.positionDatabase => 'ChessDB move',
       },
     if (gameCount != null && gameCount! > 0) '$gameCount games',
     if (practicalScore != null) 'you score ${_percent(practicalScore!)}',

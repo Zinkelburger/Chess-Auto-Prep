@@ -5,6 +5,87 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import 'chessdb_score.dart';
+import 'db_move_list.dart';
+
+/// Every move in a cdbdirect response, best first.
+///
+/// Two wire formats exist and both appear in real dumps: the verbose
+/// `move:e2e4,score:30,rank:0,note:!,winrate:0.515|…` records, and the
+/// compact `e2e4:30|d2d4:25` pairs.  A bare `eval:42` carries no moves and
+/// yields an empty list — the position is scored but the dump has no move
+/// breakdown for it.
+List<DbMove> parseCdbDirectMoveList(String? response) {
+  if (response == null || response.isEmpty) return const [];
+  final lower = response.toLowerCase();
+  if (lower == 'unknown' ||
+      lower.startsWith('error') ||
+      lower.startsWith('invalid')) {
+    return const [];
+  }
+  if (response.startsWith('eval:') && !response.contains('|')) {
+    return const [];
+  }
+
+  final moves = <DbMove>[];
+  for (final raw in response.split('|')) {
+    final seg = raw.trim();
+    if (seg.isEmpty) continue;
+
+    if (seg.contains('move:') || seg.contains('score:')) {
+      String? move;
+      int? score;
+      int? rank;
+      String? note;
+      for (final field in seg.split(',')) {
+        if (field.startsWith('move:')) {
+          move = field.substring(5);
+        } else if (field.startsWith('score:')) {
+          score = int.tryParse(field.substring(6));
+        } else if (field.startsWith('rank:')) {
+          rank = int.tryParse(field.substring(5));
+        } else if (field.startsWith('note:')) {
+          final value = field.substring(5).trim();
+          if (value.isNotEmpty) note = value;
+        }
+      }
+      if (move == null || move.isEmpty || score == null) continue;
+      final mapped = mapChessDbRawScoreStm(score);
+      moves.add(
+        DbMove(
+          uci: move,
+          stmCp: mapped.stmCp,
+          mate: mapped.mate,
+          rank: rank,
+          note: note,
+        ),
+      );
+      continue;
+    }
+
+    // Compact `uci:score` pair.  `ply:12` and other bookkeeping segments use
+    // the same shape, so anything whose key is not move-like is skipped.
+    final colon = seg.indexOf(':');
+    if (colon <= 0) continue;
+    final move = seg.substring(0, colon);
+    if (!_looksLikeUci(move)) continue;
+    final score = int.tryParse(seg.substring(colon + 1));
+    if (score == null) continue;
+    final mapped = mapChessDbRawScoreStm(score);
+    moves.add(DbMove(uci: move, stmCp: mapped.stmCp, mate: mapped.mate));
+  }
+
+  return DbMoveList.sorted(moves);
+}
+
+/// `e2e4`, `e7e8q` — four coordinate characters plus an optional promotion.
+bool _looksLikeUci(String s) {
+  if (s.length < 4 || s.length > 5) return false;
+  bool file(int i) => s.codeUnitAt(i) >= 0x61 && s.codeUnitAt(i) <= 0x68;
+  bool rank(int i) => s.codeUnitAt(i) >= 0x31 && s.codeUnitAt(i) <= 0x38;
+  return file(0) && rank(1) && file(2) && rank(3);
+}
+
 /// Returns STM-perspective centipawns and optional best move, or null on miss.
 ({int cp, int depth, String? bestMove})? parseCdbDirectResponse(
   String? response,

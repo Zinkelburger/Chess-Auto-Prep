@@ -6,11 +6,14 @@
 /// branch points where the repertoire actually divides, so every chapter is
 /// "what to do against one opponent system".
 ///
-/// Pure: no engine, no I/O, no book lookups — naming happens separately in
+/// Pure: no engine, no I/O.  Where chapters follow ECO codes the book lookup
+/// arrives as a callback ([ChapterPlanner.ecoOf]) rather than as a dependency,
+/// so the cutting stays testable with a map.  Naming happens separately in
 /// `chapter_titles.dart`.
 library;
 
 import '../line_extractor.dart';
+import 'opening_namer.dart';
 
 /// Lines that share an opening move prefix and will become one chapter.
 class ChapterGroup {
@@ -23,6 +26,14 @@ class ChapterGroup {
   /// their own.  Such a group is a grab-bag, not a variation, and is named
   /// and ordered accordingly.
   final bool isMisc;
+
+  /// The ECO opening this group belongs to, when chapters follow ECO codes.
+  ///
+  /// Set by the planner, not derived from [prefixSan]: lines reaching one ECO
+  /// by different move orders share a shorter prefix than the code's own
+  /// defining position, and naming the chapter from that prefix would lose
+  /// the code the grouping was built on.
+  final OpeningLabel? ecoLabel;
 
   /// Ply at which this group parted from its sibling chapters, or null for a
   /// group that was never split.
@@ -38,7 +49,18 @@ class ChapterGroup {
     required this.lines,
     this.isMisc = false,
     this.splitPly,
+    this.ecoLabel,
   });
+
+  /// This group with [ecoLabel] attached — the planner stamps a whole ECO
+  /// bucket, including the sub-chapters an oversized one was cut into.
+  ChapterGroup withEco(OpeningLabel? label) => ChapterGroup(
+    prefixSan: prefixSan,
+    lines: lines,
+    isMisc: isMisc,
+    splitPly: splitPly,
+    ecoLabel: label,
+  );
 
   /// Total reach probability of the group — how much of the opponent's play
   /// this chapter accounts for.  Chapter order follows it.
@@ -61,8 +83,22 @@ class ChapterGroup {
 /// Splits lines into chapters by descending to branch points until every
 /// chapter is small enough to study.
 class ChapterPlanner {
-  const ChapterPlanner({required this.maxLines, required this.minLines})
-    : assert(maxLines > 0, 'maxLines must be positive');
+  const ChapterPlanner({
+    required this.maxLines,
+    required this.minLines,
+    this.ecoOf,
+  }) : assert(maxLines > 0, 'maxLines must be positive');
+
+  /// The ECO opening a line belongs to, or null to cut at branch points
+  /// instead.
+  ///
+  /// With it set, the top-level cut follows the classification rather than
+  /// the tree's shape: every line whose deepest ECO hit is B90 is one
+  /// chapter, however many move orders reach it.  That is what a reader
+  /// looking for "the Najdorf chapter" expects, and it is the only cut that
+  /// survives a book wide enough to span whole codes.  Branch-point cutting
+  /// still runs *inside* each code, so a 300-line B90 is not one chapter.
+  final OpeningLabel? Function(List<String> movesSan)? ecoOf;
 
   /// Split a group larger than this at its next branch point.
   final int maxLines;
@@ -74,7 +110,7 @@ class ChapterPlanner {
 
   List<ChapterGroup> plan(List<ExtractedLine> lines) {
     if (lines.isEmpty) return const [];
-    final groups = _split(lines, 0);
+    final groups = ecoOf == null ? _split(lines, 0) : _planByEco(lines);
 
     // Most-played first, with the leftovers bucket always last: a course
     // opens with what you will actually face.
@@ -83,6 +119,53 @@ class ChapterPlanner {
       return b.weight.compareTo(a.weight);
     });
     return groups;
+  }
+
+  /// Bucket by ECO code first, then cut each bucket at its branch points.
+  ///
+  /// A code too small to be a chapter joins the misc bucket, exactly as a
+  /// too-small branch does — a two-line ECO does not get equal billing with
+  /// the main system just because the encyclopedia gave it a number.
+  List<ChapterGroup> _planByEco(List<ExtractedLine> lines) {
+    final resolve = ecoOf!;
+
+    // Insertion order is the tree's own child order, which selection already
+    // sorted by importance.
+    final buckets = <String, List<ExtractedLine>>{};
+    final labels = <String, OpeningLabel>{};
+    final unclassified = <ExtractedLine>[];
+
+    for (final line in lines) {
+      final label = resolve(line.movesSan);
+      if (label == null || label.eco.isEmpty) {
+        unclassified.add(line);
+        continue;
+      }
+      (buckets[label.eco] ??= []).add(line);
+      labels.putIfAbsent(label.eco, () => label);
+    }
+
+    final chapters = <ChapterGroup>[];
+    final leftovers = <ExtractedLine>[...unclassified];
+    for (final entry in buckets.entries) {
+      if (entry.value.length < minLines) {
+        leftovers.addAll(entry.value);
+        continue;
+      }
+      final label = labels[entry.key];
+      for (final group in _split(entry.value, 0)) {
+        chapters.add(group.withEco(label));
+      }
+    }
+
+    // No code cleared the bar. Falling back to branch-point cutting beats
+    // emitting one giant misc chapter that happens to be the whole book.
+    if (chapters.isEmpty) return _split(lines, 0);
+
+    if (leftovers.isNotEmpty) {
+      chapters.add(_group(leftovers, isMisc: true));
+    }
+    return chapters;
   }
 
   List<ChapterGroup> _split(

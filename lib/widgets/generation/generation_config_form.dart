@@ -1,12 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../../constants/engine_defaults.dart';
 import '../../models/eval_database_settings.dart';
-import '../../models/pgn_source.dart';
 import '../../services/eval/cdbdirect_eval_provider.dart';
 import '../../services/generation/generation_config.dart';
 import '../../services/generation/generation_presets.dart';
@@ -14,13 +12,16 @@ import '../../services/master_games/master_games_service.dart';
 import '../../services/master_games/twic_client.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
-import 'advanced_settings_dialog.dart';
 import '../../utils/app_messages.dart';
 import '../labeled_toggle.dart';
+import '../pgn_sources_controller.dart';
 import '../pgn_sources_panel.dart';
+import 'advanced_settings_dialog.dart';
 import 'engine_resources_section.dart';
+import 'eval_sources_controller.dart';
 import 'eval_sources_section.dart';
 import 'skeleton_plan_card.dart';
+import 'skeleton_plan_controller.dart';
 
 part 'generation_config_form_state_base.dart';
 part 'generation_config_form_descriptions.dart';
@@ -35,6 +36,10 @@ part 'generation_config_form_advanced.dart';
 /// build, Search (Fast/Pure plus four budgets) — plus saved presets and a
 /// live plain-language summary. Every other knob lives in the Advanced
 /// dialog; both layers edit the same controllers, so they cannot disagree.
+///
+/// The three sub-editors — eval sources, the skeleton plan, the PGN sources
+/// panel — are views over controllers this state owns, so what the user typed
+/// survives their widgets being collapsed or switched away from.
 class GenerationConfigForm extends StatefulWidget {
   final TreeBuildConfig? initialConfig;
   final bool isGenerating;
@@ -61,15 +66,6 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
   @override
   void initState() {
     super.initState();
-    _engineThreadsCtrl = TextEditingController(
-      text: defaultEngineThreads().toString(),
-    );
-    _minEvalCtrl = TextEditingController(
-      text: widget.playAsWhite ? '0' : '-100',
-    );
-    _maxEvalCtrl = TextEditingController(
-      text: widget.playAsWhite ? '200' : '100',
-    );
     if (widget.initialConfig != null) {
       _applyInitialConfig(widget.initialConfig!);
     }
@@ -79,6 +75,8 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
         setState(() => _cdbDirectAvailable = available);
       }),
     );
+    // The usage line reads today's spend even while the section is collapsed.
+    unawaited(_evalSources.refreshApiUsage());
     unawaited(_reloadPresets());
   }
 
@@ -89,46 +87,6 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
         widget.initialConfig != null) {
       _applyInitialConfig(widget.initialConfig!);
     }
-  }
-
-  @override
-  void dispose() {
-    _cutoffCtrl.dispose();
-    _maxPlyCtrl.dispose();
-    _engineDepthCtrl.dispose();
-    _engineThreadsCtrl.dispose();
-    _evalGuardCtrl.dispose();
-    _minEvalCtrl.dispose();
-    _maxEvalCtrl.dispose();
-    _maiaEloCtrl.dispose();
-    _oppPolicyTempCtrl.dispose();
-    _maxLinesPerChapterCtrl.dispose();
-    _minLinesPerChapterCtrl.dispose();
-    _modelGameCountCtrl.dispose();
-    _modelGameMinEloCtrl.dispose();
-    _masterDepthBonusCtrl.dispose();
-    _masterPriorityWeightCtrl.dispose();
-    _offBookOppMaxChildrenCtrl.dispose();
-    _dbMinGamesCtrl.dispose();
-    _dbMinProbCtrl.dispose();
-    _minEloCtrl.dispose();
-    _multipvCtrl.dispose();
-    _oppMaxChildrenCtrl.dispose();
-    _oppMassTargetCtrl.dispose();
-    _leafConfidenceCtrl.dispose();
-    _ourAltDiscountCtrl.dispose();
-    _fastAltGapCtrl.dispose();
-    _maiaPriorGamesCtrl.dispose();
-    _coverMinProbCtrl.dispose();
-    _verifyDepthCtrl.dispose();
-    _setupMovesCtrl.dispose();
-    _setupToleranceCtrl.dispose();
-    _timeBudgetCtrl.dispose();
-    _memorabilityToleranceCtrl.dispose();
-    _engineTailCtrl.dispose();
-    _lineCoverageCtrl.dispose();
-    _targetLinesCtrl.dispose();
-    super.dispose();
   }
 
   @override
@@ -158,9 +116,6 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
         const SizedBox(height: 8),
         _summary(),
         const SizedBox(height: 8),
-        // Evaluation databases stay mounted while collapsed (Offstage, not
-        // conditional build): toConfig/validateBeforeStart and mid-build
-        // quota updates reach the section through its GlobalKey.
         InkWell(
           onTap: () => setState(() => _showEvalSources = !_showEvalSources),
           child: Row(
@@ -194,17 +149,15 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
             ],
           ),
         ),
-        Offstage(
-          offstage: !_showEvalSources,
-          child: Padding(
+        if (_showEvalSources)
+          Padding(
             padding: const EdgeInsets.only(top: 8),
             child: EvalSourcesSection(
-              key: _evalSourcesKey,
+              controller: _evalSources,
               isGenerating: widget.isGenerating,
               cdbDirectAvailable: _cdbDirectAvailable,
             ),
           ),
-        ),
       ],
     );
   }

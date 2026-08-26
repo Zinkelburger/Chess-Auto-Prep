@@ -316,7 +316,12 @@ bool chessdb_api_query_score(ChessDBAPI *api, const char *fen,
     release_slot(api);
 
     if (!ok) return false;
-    if (http_code == 429) return false;
+    /* Any non-200 means the server did not answer, which is not the same as
+       answering that it does not know the position: ChessDB reports an
+       unknown position as 200 with status:"unknown".  Checking only for 429
+       let every other refusal read as a clean miss and sent the caller to
+       the engine instead. */
+    if (http_code != 200) return false;
 
     bool unknown = false;
     int cp = 0, depth = 0;
@@ -398,7 +403,7 @@ bool chessdb_api_query_pv(ChessDBAPI *api, const char *fen,
     long http_code = 0;
     if (!chessdb_api_fetch(api, "querypv", fen4, body, sizeof(body), &http_code))
         return false;
-    if (http_code == 429) return false;
+    if (http_code != 200) return false; /* see chessdb_api_query_score */
     if (strstr(body, "unknown") || strstr(body, "invalid board"))
         return false;
 

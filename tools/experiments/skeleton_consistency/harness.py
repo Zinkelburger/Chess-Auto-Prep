@@ -64,17 +64,29 @@ def maia_policy(fen, elo=1800):
 
 # ─── chessdb ────────────────────────────────────────────────────────────
 def chessdb(fen):
+    """Every move chessdb.cn knows from `fen`, or {} if it knows none.
+
+    urlopen raises on any non-200, so a server that refused to answer and a
+    position chessdb genuinely does not know arrive looking identical -- and
+    caching the refusal would record "chessdb knows nothing here"
+    permanently.  So: back off and retry, and only ever cache an answer the
+    server actually gave.
+    """
     key = f"cdb|{fen}"
     c = _get(key)
     if c is not None: return c
     url = "https://www.chessdb.cn/cdb.php?action=queryall&json=1&board=" + urllib.parse.quote(fen)
-    for _ in range(3):
+    d = None
+    for attempt in range(5):
         try:
-            with urllib.request.urlopen(url, timeout=15) as r:
+            with urllib.request.urlopen(url, timeout=20) as r:
                 d = json.load(r)
             break
-        except Exception as e:
-            d = {"status": "error", "err": str(e)}; time.sleep(1)
+        except Exception:
+            time.sleep(min(2 ** attempt, 30))
+    if d is None:
+        # Never reached the server. Uncached, so a later call can try again.
+        return {}
     moves = {}
     if d.get("status") == "ok":
         for m in d["moves"]:

@@ -278,8 +278,17 @@ RepertoireGenerationTab (config UI + build orchestration)
 - `stockfishExpectimax` ("Stockfish Expectimax (recommended)") — default; Stockfish MultiPV + Maia opponent, traps auto-detected
 - `maiaDbExplore` ("DB Win Rate Only (no Stockfish)") — Maia moves, DB evals only, no engine at build time
 - `dbExplorer` ("From Added PGN Files") — requires PGN files added via `PgnSourcesPanel` (file picker or paste); does **not** use lines already in the repertoire PGN; parsing → frequency map → BFS tree → eval enrichment
+- `chessDbBook` ("ChessDB mainline book") — one move per position, whichever ChessDB ranks best (exact ties to the more-played master move); opponent replies from master practice only, unsmoothed; off practice (or past `maxPly`) the line continues as a single ChessDB mainline to `bookTailMaxPly`; a line ends where ChessDB's knowledge ends unless `bookEngineFallback` puts the engine underneath as a floor (off by default — it is what makes the mode need Stockfish at all, and it is slow); Phase 2.5 never runs. Needs the local TerarkDB dump or the ChessDB API. See the mode's section in `lib/services/generation/README.md`
 
-**Generation config simplification:** Only "Max Depth (ply)" and "Engine Depth" shown by default. Selection mode, thresholds, opponent model, novelties, PGN export options, and eval sources are under an "Advanced settings" section. A trap detection info banner appears below the build mode dropdown. "Finish Now" button stops Phase 1 BFS and proceeds to Phase 2 on the partial tree.
+**Generation config, two layers.** The always-visible form is three titled blocks — Opponent (rating), What to build (build source, novelties, traps-only, PGN sources), Search (Fast/Pure plus engine depth, max line length, candidate moves, time budget) — then the collapsed skeleton-plan and eval-database expanders, a saved-preset menu, and a live one-line summary of the whole config.
+
+Everything else is in the **Advanced** dialog (`AdvancedSettingsDialog`), ten focused sections in build order: Opponent model · Move choice · Search tuning · Master games · ChessDB book · Verification · Coverage & line order · Chapters · Explanatory variations · PGN source filters. Both layers edit the same controllers, so they cannot disagree.
+
+A section whose knobs cannot apply to the current build source renders one sentence saying why instead of a card of greyed-out controls (`AdvancedSection.unavailable`); it keeps its table-of-contents entry so it stays findable. ChessDB book, Verification and PGN source filters use this. The main form's `PgnSourcesPanel` is simply absent unless the source is My PGN files — the attached files live in `PgnSourcesController`, so they survive a round trip through another build source.
+
+**Where the form's sub-editor state lives.** The three sub-editors are views over controllers `GenerationConfigFormState` owns — `EvalSourcesController`, `SkeletonPlanController`, `PgnSourcesController` — not `GlobalKey`-addressed widget state. Each of their widgets sits behind an expander or a build-source switch, so none is guaranteed to be mounted when the form seeds it (`_applyInitialConfig`) or reads it back (`toConfig`); owning the state lets the widgets be built conditionally and removes the post-frame seeding hop. `EvalSourcesController` pairs `applyConfig` with `applyTo`, the two halves of the config round trip, in one file.
+
+"Finish Now" stops Phase 1 BFS and proceeds to Phase 2 on the partial tree; discarding an unfinished build asks for confirmation first.
 - `trapFinder` — not yet implemented
 
 See `docs/ALGORITHM.md` for algorithm detail.
@@ -478,7 +487,9 @@ for contexts that manage multiple PGN sources (generation, batch import). Archit
 
 ```
 PgnSourcesPanel (lib/widgets/pgn_sources_panel.dart)
-  ├─ List<PgnSource> — each with name, filePath/paste, color, sliceConfig
+  ├─ PgnSourcesController (lib/widgets/pgn_sources_controller.dart)
+  │    └─ List<PgnSource> — each with name, filePath/paste, color, sliceConfig;
+  │       owned by the host so the list outlives the panel's mount
   ├─ "+ Add PGN" popover → file picker (multi) or compact paste dialog
   └─ Per-source row:
        ├─ Color badge, name, filename, game count
@@ -776,6 +787,8 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `eval/sqlite_eval_provider.dart` | Local SQLite cache |
 | `eval/in_memory_eval_provider.dart` | Session hash |
 | `eval/external_eval_provider.dart` | Remote eval abstraction |
+| `eval/db_move_list.dart` | `ExternalMoveProvider` — a database's whole ranked move list (`DbMove`/`DbMoveList`), not just a score; what `BuildMode.chessDbBook` builds from |
+| `eval/chessdb_score.dart` | ChessDB's raw score encoding (plain cp, mate as ±(30000−ply)), decoded once for both ChessDB faces |
 | `eval_cache.dart` | Eval cache facade (SQLite v2): Stockfish evals + `maia_cache` table keyed by `(fen, elo)` (policy JSON, win prob); `MaiaCache` get/put with L1 in-memory mirror; get/put await idempotent `init()` so background warm-up in `main` cannot leave early writes memory-only; fire-and-forget writes use `putEvalCpWhiteSoon`; shared by generation, audit, and interactive engine panes |
 | `eval/eval_canonicalize.dart` | FEN normalization for lookup |
 
@@ -900,7 +913,9 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `repertoire/repertoire_analyze_pane.dart` | Wires analyze zones (lines, coverage, traps) |
 | `repertoire/repertoire_analyze_props.dart` | Prop bag for analyze pane |
 | `repertoire/repertoire_lines_with_traps.dart` | Lines tab with trap + coherence panels |
-| `generation/generation_config_form.dart` | `GenerationConfigForm` — settings form (controllers, build mode, advanced thresholds, eval sources); prominent **Engine resources** section (threads, hash MB, logical core count) when Stockfish is used; `toConfig({startFen, playAsWhite})`, `validateBeforeStart()`, `seedDbExplorer()`, optional `initialConfig`; DB Explorer mode shows `PgnSourcesPanel` + tuning fields |
+| `generation/generation_config_form.dart` | `GenerationConfigForm` — settings form (controllers, build mode, advanced thresholds, eval sources); prominent **Engine resources** section (threads, hash MB, logical core count) when Stockfish is used; `toConfig({startFen, playAsWhite})`, `validateBeforeStart()`, `seedDbExplorer()`, optional `initialConfig`; DB Explorer mode shows `PgnSourcesPanel` + tuning fields; owns `EvalSourcesController` / `SkeletonPlanController` / `PgnSourcesController`, which hold the three sub-editors' state |
+| `generation/eval_sources_controller.dart` | `EvalSourcesController` — the eval lookup chain's settings (local ChessDB file, ChessDB API quota/concurrency, subtree skip, depth floor) plus today's API spend; `applyConfig` ↔ `applyTo` are the two halves of the config round trip |
+| `generation/skeleton_plan_controller.dart` | `SkeletonPlanController` + `kStructureVetoes` — the typed lines and active vetoes behind `SkeletonPlanCard`; `loadPlan` / `currentPlan(playAsWhite:)` |
 | `repertoire_generation_tab.dart` | Build orchestration + progress UI; embeds `GenerationConfigForm` via `GlobalKey`; receives `GenerationSessionController`; sets `controller.setPartialSaveContext()` at build start so pause/cancel from any source saves partial tree |
 | `repertoire_analysis_dock.dart` | Resizable Engine/Expectimax dock above PGN |
 | `repertoire_lines_browser.dart` | Filter/sort/group lines; 300 ms search debounce; typed `LineSortBy`/`LineMetricsFilter`; filter reset uses single `setState` |

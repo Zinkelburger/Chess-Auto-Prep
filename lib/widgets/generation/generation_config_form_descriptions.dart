@@ -13,6 +13,8 @@ mixin _GenerationConfigDescriptions on _GenerationConfigFormStateBase {
         return 'From Added PGN Files';
       case BuildMode.trapFinder:
         return 'Trap Finder';
+      case BuildMode.chessDbBook:
+        return 'ChessDB Mainline Book';
     }
   }
 
@@ -22,15 +24,19 @@ mixin _GenerationConfigDescriptions on _GenerationConfigFormStateBase {
         return 'Stockfish evaluates every position; Maia predicts opponent '
             'moves. Thorough but slower.';
       case BuildMode.maiaDbExplore:
-        return 'Uses Maia neural-net moves + database win rates only — '
-            'fast, no engine needed. Requires an evaluation database (see '
-            'the section at the bottom of this form).';
+        return 'Maia moves and database win rates only — fast, no engine '
+            'needed. Requires an evaluation database, enabled below.';
       case BuildMode.dbExplorer:
-        return 'Builds from PGN files you add below—not from lines already '
-            'in your repertoire. Uses move frequencies from those games; '
-            'engine evals added after.';
+        return 'Builds from the PGN files you add below, not from your '
+            'existing repertoire. Move frequencies come from those games; '
+            'engine evals are added afterwards.';
       case BuildMode.trapFinder:
         return 'Not yet available.';
+      case BuildMode.chessDbBook:
+        return 'Plays whatever ChessDB ranks best: one move per position, no '
+            'engine search, no human model. Branches only where masters have '
+            'branched, then runs on as a single mainline. Needs the ChessDB '
+            'dump or API, enabled below.';
     }
   }
 
@@ -57,10 +63,9 @@ mixin _GenerationConfigDescriptions on _GenerationConfigFormStateBase {
         return 'Balances strength (60%) with ease of play (40%) — prefers '
             'moves that are both sound and natural to find over the board.';
       case SelectionMode.trappy:
-        return 'Picks the lines where opponents are most likely to go '
-            'wrong, using their expected centipawn loss instead of win '
-            'probability. Eval tolerances widen automatically so trickier '
-            'positions stay reachable.';
+        return 'Picks the lines where opponents are most likely to go wrong, '
+            'scoring by their expected centipawn loss rather than win '
+            'probability. Eval tolerances widen automatically.';
     }
   }
 }

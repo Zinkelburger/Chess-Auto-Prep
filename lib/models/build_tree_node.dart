@@ -439,6 +439,18 @@ class BuildStats {
   int transpositionEvalHits = 0;
   int extEvalSubtreeSkips = 0;
 
+  /// ChessDB book: positions answered by a database move list (dump or API).
+  int bookDbMoveHits = 0;
+
+  /// ChessDB book: positions no ChessDB source knew, where the engine had to
+  /// pick the move instead.  The honest measure of how much of a "ChessDB
+  /// book" is actually ChessDB.
+  int bookEngineFallbacks = 0;
+
+  /// ChessDB book: lines that stopped because neither a database nor the
+  /// engine could name a move (the engine is off, or the position is mate).
+  int bookDeadEnds = 0;
+
   Map<String, dynamic> toJson() => {
     'lichess_queries': lichessQueries,
     'lichess_cache_hits': lichessCacheHits,
@@ -479,5 +491,8 @@ class BuildStats {
     'master_depth_bonus_grants': masterDepthBonusGrants,
     'transposition_eval_hits': transpositionEvalHits,
     'ext_eval_subtree_skips': extEvalSubtreeSkips,
+    'book_db_move_hits': bookDbMoveHits,
+    'book_engine_fallbacks': bookEngineFallbacks,
+    'book_dead_ends': bookDeadEnds,
   };
 }

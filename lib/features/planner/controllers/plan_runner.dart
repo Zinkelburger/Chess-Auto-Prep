@@ -20,6 +20,7 @@ import '../../../services/generation/generation_config.dart';
 import '../../../utils/chess_utils.dart';
 import '../../repertoire/services/repertoire_outline_service.dart';
 import '../models/plan_models.dart';
+import '../../../utils/safe_change_notifier.dart';
 
 enum PlanChapterStatus { pending, creating, building, done, skipped, failed }
 
@@ -31,7 +32,7 @@ class PlanChapterProgress {
   PlanChapterProgress(this.chapter) : status = PlanChapterStatus.pending;
 }
 
-class PlanRunner extends ChangeNotifier {
+class PlanRunner extends ChangeNotifier with SafeChangeNotifier {
   PlanRunner({required this.generation, RepertoireOutlineService? outline})
     : _outline = outline ?? RepertoireOutlineService();
 

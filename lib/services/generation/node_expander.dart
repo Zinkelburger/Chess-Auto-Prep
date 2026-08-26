@@ -11,6 +11,9 @@
 ///   - [MaiaDbExpander] (`BuildMode.maiaDbExplore`): our moves from Maia's
 ///     policy filtered to positions with database evals; same opponent
 ///     sources.
+///   - [ChessDbBookExpander] (`BuildMode.chessDbBook`): one move per position
+///     — whatever ChessDB ranks best — with opponent replies from master
+///     practice only, and a single-mainline tail once practice runs out.
 ///
 /// Adding a build mode means adding a subclass, not another copy of the
 /// expansion plumbing.  The opponent-children loop in particular exists
@@ -24,12 +27,14 @@ import '../../utils/fen_utils.dart';
 import '../maia/maia_factory.dart';
 import '../../models/analysis/discovery_result.dart';
 import '../maia/maia_service.dart';
+import '../eval/db_move_list.dart';
 import 'build_run.dart';
 import 'frontier_queue.dart';
 import 'generation_config.dart';
 import 'opponent_prior.dart';
 import 'setup_bias.dart';
 
+part 'chessdb_book_expander.dart';
 part 'maia_db_expander.dart';
 part 'stockfish_expander.dart';
 
@@ -97,8 +102,15 @@ bool evalWindowPrune(BuildTreeNode node, TreeBuildConfig config) {
 ///   3. Noise filter: fewer than [minGames] observations (skipped while
 ///      Dirichlet smoothing is on — the prior replaces it).
 ///   4. Per-move probability floor [minMoveProb].
+///   4b. Well-played exemption: a move with at least [wellPlayedGames]
+///      recorded games skips the [minMoveProb] floor. That floor is tuned to
+///      Maia policy noise; a move masters have actually played hundreds of
+///      times is evidence of a different kind and must not be filtered as
+///      though it were a weak policy entry.
 ///   5. Fan-out caps: [maxChildren] count and [massTarget] cumulative
-///      probability mass, both stopping the fan-out.
+///      probability mass, both stopping the fan-out.  Pass 0 for either to
+///      lift it — the root does, because breadth at one position is nearly
+///      free and it is where "cover every system" is decided.
 ///   6. Reach floor: cumulative probability below
 ///      [TreeBuildConfig.minProbability] skips the move.
 ///
@@ -114,6 +126,7 @@ void addOpponentChildren({
   required bool smoothing,
   int minGames = 0,
   double minMoveProb = 0.0,
+  int wellPlayedGames = 0,
   int maxChildren = 0,
   double massTarget = 0.0,
   bool respectMaxNodes = false,
@@ -143,6 +156,9 @@ void addOpponentChildren({
     final prob = move.probability;
     final newCumul = node.cumulativeProbability * prob;
     final covered = config.coverMinProb > 0.0 && prob >= config.coverMinProb;
+    // Recorded practice, not a share of the position: a move masters have
+    // played this often is never dropped for being a small slice.
+    final wellPlayed = wellPlayedGames > 0 && move.games >= wellPlayedGames;
     if (!covered) {
       if (respectMaxNodes &&
           config.maxNodes > 0 &&
@@ -150,7 +166,7 @@ void addOpponentChildren({
         break;
       }
       if (!smoothing && move.games < minGames) continue;
-      if (prob < minMoveProb) continue;
+      if (prob < minMoveProb && !wellPlayed) continue;
       if (maxChildren > 0 && childrenAdded >= maxChildren) break;
       if (massTarget > 0.0 && massCovered >= massTarget) break;
       if (newCumul < config.minProbability) continue;
@@ -229,6 +245,7 @@ abstract class NodeExpander {
   /// driven by the PGN frequency map rather than per-node move sources.
   factory NodeExpander.forRun(BuildRun run) => switch (run.config.buildMode) {
     BuildMode.maiaDbExplore => MaiaDbExpander(run),
+    BuildMode.chessDbBook => ChessDbBookExpander(run),
     _ => StockfishExpander(run),
   };
 
@@ -285,7 +302,14 @@ abstract class NodeExpander {
   /// Master-games book source.  Returns false when the run has no book, the
   /// position is unknown, or the sample is too thin to use without Maia —
   /// the caller then falls back to the Maia-only source.
-  Future<bool> _addOpponentChildrenFromMasterBook(BuildTreeNode node) async {
+  ///
+  /// [smoothWithMaia] off makes the frequencies literal — the ChessDB book
+  /// wants recorded practice and nothing else, and the Dirichlet prior adds
+  /// moves that are merely plausible.
+  Future<bool> _addOpponentChildrenFromMasterBook(
+    BuildTreeNode node, {
+    bool smoothWithMaia = true,
+  }) async {
     if (run.masterBook == null) return false;
     final book = run.bookAt(node.fen);
     if (book.isEmpty) return false;
@@ -302,8 +326,11 @@ abstract class NodeExpander {
     }
     if (total <= 0) return false;
 
-    final maia = await maiaPolicyForSmoothing(run, node.fen, total);
-    if (maia.isEmpty &&
+    final maia = smoothWithMaia
+        ? await maiaPolicyForSmoothing(run, node.fen, total)
+        : const <String, double>{};
+    if (smoothWithMaia &&
+        maia.isEmpty &&
         total < _minBookGamesWithoutMaia &&
         MaiaFactory.isAvailable) {
       return false;
@@ -329,16 +356,23 @@ abstract class NodeExpander {
       priorGames: config.maiaPriorGames,
     );
     final yearByUci = {for (final m in book) m.uci: m.lastYear};
+    // The root fans out uncapped. It is a single position, so breadth costs
+    // one extra subtree rather than one per node of the tree, and it is
+    // where the course decides which systems it covers at all — a cap there
+    // does not save a budget, it silently drops a chapter. Everywhere else
+    // an extra reply multiplies, so the caps stand.
+    final atRoot = node.ply == 0;
     addOpponentChildren(
       run: run,
       node: node,
       candidates: smoothed,
       smoothing: true,
       minMoveProb: config.maiaMinProb,
-      maxChildren: config.effectiveOppMaxChildren(
-        effectiveSearchPriority(node),
-      ),
-      massTarget: config.oppMassTarget,
+      wellPlayedGames: config.masterMinMoveGames,
+      maxChildren: atRoot
+          ? 0
+          : config.effectiveOppMaxChildren(effectiveSearchPriority(node)),
+      massTarget: atRoot ? 0.0 : config.oppMassTarget,
       attachStats: true,
       onChild: (child) {
         final y = yearByUci[child.moveUci];
@@ -347,7 +381,9 @@ abstract class NodeExpander {
         if (p != null) child.maiaFrequency = p;
       },
     );
-    await _maybeInjectPvContinuation(node, maiaPolicy: maia);
+    if (smoothWithMaia) {
+      await _maybeInjectPvContinuation(node, maiaPolicy: maia);
+    }
     return true;
   }
 

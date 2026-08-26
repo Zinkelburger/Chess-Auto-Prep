@@ -13,7 +13,7 @@ The Dart implementation ports a proven C `tree_builder`; comments saying
 
 | Phase | What | Where |
 |---|---|---|
-| 1 | Build the tree: engine/DB/Maia expansion, eval-window pruning, transpositions, coverage sweep | `tree_build_service.dart`, `node_expander.dart` (+ `stockfish_expander.dart`, `maia_db_expander.dart` parts), `build_run.dart`, `frontier_queue.dart` |
+| 1 | Build the tree: engine/DB/Maia expansion, eval-window pruning, transpositions, coverage sweep | `tree_build_service.dart`, `node_expander.dart` (+ `stockfish_expander.dart`, `maia_db_expander.dart`, `chessdb_book_expander.dart` parts), `build_run.dart`, `frontier_queue.dart` |
 | 2 | Value + select: ease, expectimax, CPL, trap scores, selection | `tree_ease.dart`, `tree_my_ease.dart`, `eca_calculator.dart`, `repertoire_selector.dart`, `node_selection.dart` |
 | 2.5 | Deep verification of the selected moves | `repertoire_verifier.dart` |
 | 3 | Extract lines, prune similar ones, export PGN / snapshots / traps | `line_extractor.dart`, `line_pruner.dart`, `pgn_export.dart`, `snapshot_export.dart`, `trap_extractor.dart` |
@@ -146,6 +146,28 @@ games (`BuildRun.isMasterPractice`), and:
   alone, capped at `offBookOppMaxChildren` (`NodeExpander._offBookCap`) so
   the node budget goes to depth where there is practice rather than breadth
   where there is none — the coverage floor still bypasses the cap;
+- a book reply with at least `masterMinMoveGames` games is exempt from the
+  probability floor. That floor (`maiaMinProb`) is tuned to Maia policy
+  noise, where a 4% entry really is noise; a move with a thousand recorded
+  master games is not, and gating both on one number is how the Four Pawns
+  Attack (1159 games, 4.2% after 1.d4 Nf6 2.c4 g6 3.Nc3 Bg7 4.e4 d6) was
+  dropped from a King's Indian book without anything having judged it. The
+  exemption lifts the probability floor only — the fan-out caps still bind;
+- **the book is read past the branching cap.** `maxPly` stops it *choosing*
+  replies; it must not stop it being *read*. Reading is a local SQLite
+  lookup, nothing like the ChessDB request that picks the move, so
+  `ChessDbBookExpander._attachBookStats` keeps stamping position totals and
+  per-move counts on every node past the cap. Tying the two together made the
+  export announce the branching cap as the end of theory — "Last move seen in
+  master games (281 games)" on move 10 of a main-line Orthodox King's Indian,
+  with hundreds of games still to come. The boundary itself is
+  `masterMinGames` games, the same number the search uses for "is this master
+  practice", so note and tree cannot disagree;
+- **the root fans out uncapped** (`oppMaxChildren` and `oppMassTarget` are
+  both lifted at `ply == 0`). One position's breadth costs one extra subtree
+  rather than one per node, and the root is where a course decides which
+  systems it covers at all, so a cap there does not save budget — it drops a
+  chapter silently;
 - our-move nodes always get the book's `kMasterCandidateCount` most-played
   moves as eval-gated candidates (`injectMasterCandidates`), so selection
   can choose what masters play even when MultiPV omits it — it still
@@ -176,6 +198,62 @@ a stale or corrupt cache is a miss, never a wrong answer.
 pause gate). `TreeBuildService._startRun` must stay **synchronous up to the
 re-entrancy guard** so overlapping `build()` calls fail loudly instead of
 racing.
+
+## The ChessDB mainline book (`BuildMode.chessDbBook`)
+
+A mode with a different bargain from every other one: the database decides,
+and nothing in the app is allowed to second-guess it.
+
+- **Our move** is whatever ChessDB ranks best — one child per node, no
+  MultiPV, no alternatives, nothing for Phase 2 to choose between. Exact
+  score ties (very common: ChessDB scores whole clusters of opening moves 0
+  or 25) go to the move with more master games, widened by
+  `bookTieBreakWindowCp` if the user asks. That tie-break is the only vote
+  anything but the database gets.
+- **Their move** is master practice, unsmoothed — `_addOpponentChildrenFrom
+  MasterBook(smoothWithMaia: false)`. The Dirichlet prior would add moves
+  that are merely plausible, and this book's opponent model is recorded
+  practice or nothing.
+- **Off master practice, or past `maxPly`,** the fan-out stops entirely and
+  the line continues as a single ChessDB mainline. Branching answers a
+  *choice*; past practice nobody has recorded a choice, and past the
+  branching depth the budget says stop taking them. Either way a
+  non-branching line costs one node per ply instead of a fan-out, so `maxPly`
+  caps **branching only** — enforced in `expandOpponentMove` — and every line
+  runs on to `bookTailMaxPly` (`BuildRun.plyCapAt`). Capping the length at
+  the branching depth would cut off exactly the deepest theory the mode
+  exists to carry.
+- **A line ends where ChessDB's knowledge ends.** That is the default and the
+  honest one: the mode promises a database's book, and a move the database did
+  not supply is not part of it. `bookEngineFallback` puts the engine
+  underneath as a floor for callers who would rather have the line finished —
+  it is the only thing that makes `usesStockfish` true here, and it is
+  expensive: at depth 30 one unknown position costs seconds where a database
+  hit costs a request, so a build with a wide unknown tail spends most of its
+  wall clock in the engine and covers far less ground. `BuildStats.
+  bookDbMoveHits` vs `bookEngineFallbacks` makes the mix visible and the run
+  summary says it out loud, because a book the engine mostly wrote is a
+  different artifact and the PGN cannot tell you which you have.
+- **Phase 2.5 never runs** (`TreeBuildConfig.runsVerification`). Re-ranking a
+  database move by a local search at verify depth would quietly substitute
+  Stockfish's opinion for ChessDB's.
+
+The move lists come from `eval/db_move_list.dart` — `ExternalMoveProvider`,
+implemented by both ChessDB faces (`lookupMoves`), resolved through
+`TreeEvalResolver.lookupBookMoves` (dump → API). That is deliberately a
+*separate* chain from `resolveEvalChain`: the sqlite eval database stores
+scores rather than move lists and has no answer to give. One lookup returns
+the score of every child, so a book build costs one request per **position**,
+not per move — the difference between an overnight API run and an impossible
+one. The local TerarkDB dump (`tree_builder/CDBDIRECT_SETUP.md`) has no quota
+at all and is what a full-encyclopedia build wants.
+
+Chapters for such a book are cut by ECO code rather than by branch point
+(`TreeBuildConfig.chaptersByEco`, `ChapterPlanner.ecoOf`): a book spanning the
+encyclopedia branches everywhere, and the reader is looking for a code. The
+group carries its own `OpeningLabel` because lines reaching one code by
+different move orders share a shorter prefix than the code's defining
+position.
 
 ## The two numbers on every node
 
@@ -333,6 +411,9 @@ All in `test/services/generation/` unless noted:
 
 - Build loop control flow (headless, real `TreeBuildService.build`):
   `tree_build_invariants_test.dart`
+- ChessDB mainline book (move choice, tie-breaks, engine floor, tail depth):
+  `chessdb_book_expander_test.dart`; move-list parsing for both ChessDB wire
+  formats: `test/services/eval/test_db_move_list.dart`
 - Expanders + fan-out with scripted engine/Maia fakes (`engine_fakes.dart`,
   `MaiaFactory.testOverride`): `node_expander_test.dart`
 - Verifier demote/re-select loop: `repertoire_verifier_test.dart`
@@ -352,8 +433,9 @@ All in `test/services/generation/` unless noted:
   `test/tools/analyze_lines.dart`, `test/tools/analyze_transpositions.dart`
 - Session controller progress/dispose:
   `test/core/generation_session_controller_test.dart`
-- Chapter cutting, naming, model games, and the composed PGN (including the
-  round-trip back through `RepertoireService`): `course/` subdirectory
+- Chapter cutting (branch-point and ECO), naming, model games, and the
+  composed PGN (including the round-trip back through `RepertoireService`):
+  `course/` subdirectory
 - Annotation rendering: `export/move_annotation_test.dart`
 - Frequency-map scanning (results, ratings, recency, game retention):
   `pgn_freq_map_test.dart`; cache round trip and every invalidation path:

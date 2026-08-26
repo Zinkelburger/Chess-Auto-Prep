@@ -306,7 +306,7 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                   height: math
                       .min(
                         _visibleRows * _resultRowHeight,
-                        MediaQuery.of(context).size.height - 220,
+                        MediaQuery.sizeOf(context).height - 220,
                       )
                       .clamp(_resultRowHeight, _visibleRows * _resultRowHeight),
                   child: results.isEmpty

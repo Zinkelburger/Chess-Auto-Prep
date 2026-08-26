@@ -35,6 +35,7 @@ import '../models/plan_models.dart';
 import '../services/plan_data_source.dart';
 import '../services/plan_knowledge.dart';
 import '../../../utils/movetext_builder.dart';
+import '../../../utils/safe_change_notifier.dart';
 
 enum PlanPhase { start, walking, review }
 
@@ -51,7 +52,7 @@ class _Snapshot {
   );
 }
 
-class PlanController extends ChangeNotifier {
+class PlanController extends ChangeNotifier with SafeChangeNotifier {
   PlanController({
     required this.source,
     required this.isWhite,
@@ -624,7 +625,7 @@ class PlanController extends ChangeNotifier {
         final after = _fenAfter([...path, c.san]);
         if (after == null) return;
         final hit = await source.dbEval(after);
-        if (hit == null || epoch != _epoch) return;
+        if (hit == null || epoch != _epoch || isDisposed) return;
         _patchCandidate(
           path,
           c.san,
@@ -636,14 +637,15 @@ class PlanController extends ChangeNotifier {
         );
       }),
     );
-    if (epoch != _epoch) return;
+    if (epoch != _epoch || isDisposed) return;
     final missing = (_step?.moves == path ? _step!.candidates : const [])
         .where((c) => c.evalCp == null)
         .take(engineFillLimit)
         .map((c) => c.san)
         .toList();
     for (final san in missing) {
-      if (epoch != _epoch || _step == null || _step!.moves != path) return;
+      if (epoch != _epoch || isDisposed) return;
+      if (_step == null || _step!.moves != path) return;
       await evaluateCandidate(san);
     }
   }

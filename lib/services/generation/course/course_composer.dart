@@ -159,6 +159,13 @@ class CourseComposer {
         ? ChapterPlanner(
             maxLines: config.maxLinesPerChapter,
             minLines: config.minLinesPerChapter,
+            // Chapter prefixes are relative to the build root; the ECO book
+            // is keyed from the repertoire file's start position, so the
+            // lookup needs both halves of the path.
+            ecoOf: config.chaptersByEco
+                ? (movesSan) =>
+                      namer.namer.label([...repertoirePrefix, ...movesSan])
+                : null,
           ).plan(lines)
         : [ChapterGroup(prefixSan: const [], lines: lines)];
 

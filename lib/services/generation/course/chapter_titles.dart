@@ -72,9 +72,14 @@ class CourseNamer {
   List<ChapterTitle> nameChapters(List<ChapterGroup> groups) {
     if (groups.isEmpty) return const [];
 
+    // A group cut by ECO code carries its own label: its lines may reach the
+    // code by several move orders, so their common prefix names something
+    // shallower than the chapter actually is. Sub-chapters of one code share
+    // that label and are told apart by [_disambiguate]'s defining move.
     final labels = [
       for (final group in groups)
-        namer.label([...repertoirePrefix, ...group.prefixSan]),
+        group.ecoLabel ??
+            namer.label([...repertoirePrefix, ...group.prefixSan]),
     ];
     final shared = _sharedLeadingSegments(labels);
 

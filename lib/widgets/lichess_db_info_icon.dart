@@ -113,7 +113,7 @@ class _InfoPopupOverlayState extends State<_InfoPopupOverlay> {
         Positioned(
           left: (widget.anchor.left - 180).clamp(
             8.0,
-            MediaQuery.of(context).size.width - 280,
+            MediaQuery.sizeOf(context).width - 280,
           ),
           top: widget.anchor.bottom + 4,
           child: Material(

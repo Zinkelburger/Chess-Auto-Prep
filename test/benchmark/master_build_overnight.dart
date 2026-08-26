@@ -94,6 +94,10 @@ void main() {
   setUpAll(() {
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
     SharedPreferences.setMockInitialValues({});
+    // No HttpOverrides reset here on purpose: this build reaches no network
+    // (see the config below). A harness that does needs `HttpOverrides.global
+    // = null`, or the binding's mock answers every request with an empty 400
+    // — see `chessdb_book_build.dart`.
   });
 
   test('build with the master book', () async {

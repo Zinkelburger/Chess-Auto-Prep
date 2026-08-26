@@ -95,7 +95,7 @@ class BottomPaneState extends State<BottomPane>
   Widget build(BuildContext context) {
     if (_controller.isCollapsed) return const SizedBox.shrink();
 
-    final screenHeight = MediaQuery.of(context).size.height;
+    final screenHeight = MediaQuery.sizeOf(context).height;
     final maxHeight = screenHeight * BottomPaneController.maxHeightFraction;
     final desiredHeight = screenHeight * _controller.heightFraction;
     final clampedHeight = desiredHeight.clamp(
@@ -122,7 +122,7 @@ class BottomPaneState extends State<BottomPane>
   }
 
   Widget _buildDragHandle(BuildContext context, double maxHeight) {
-    final screenHeight = MediaQuery.of(context).size.height;
+    final screenHeight = MediaQuery.sizeOf(context).height;
     return GestureDetector(
       onVerticalDragUpdate: (details) {
         final currentPx = screenHeight * _controller.heightFraction;

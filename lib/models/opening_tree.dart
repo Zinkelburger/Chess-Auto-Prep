@@ -759,7 +759,10 @@ List<({String san, String fen})> _legalSanDestinations(String fen) {
           try {
             final (next, san) = position.makeSan(move);
             out.add((san: san, fen: next.fen));
-          } catch (_) {}
+          } catch (_) {
+            // Square pairs are enumerated, not generated, so most are not
+            // legal moves. Rejection is the normal path here, not an error.
+          }
         }
       }
     }

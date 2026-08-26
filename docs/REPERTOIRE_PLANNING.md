@@ -240,8 +240,9 @@ UI (`lib/widgets/generation/`):
 - **`SkeletonPlanCard`** — a collapsible "Your lines & structures" section in
   the generation form: a monospace multi-line field for the lines (live
   feedback: pins counted, illegal-move lines flagged) and veto chips. Writes
-  `config.skeletonPlan`; kept mounted so its state is readable at build time
-  and auto-expands when a resumed/preset plan is non-empty.
+  `config.skeletonPlan`, and auto-expands when a resumed/preset plan is
+  non-empty. A pure view over `SkeletonPlanController`, which the form owns,
+  so collapsing the section does not lose what was typed.
 
 Eval sources:
 

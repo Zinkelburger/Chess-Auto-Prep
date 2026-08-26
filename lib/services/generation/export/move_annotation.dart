@@ -23,13 +23,35 @@ enum MoveLikelihoodSource {
 
   /// Injected from the engine's principal variation because no human source
   /// offered the move.
-  engine;
+  engine,
+
+  /// The move a position database (ChessDB) ranks best here — not a
+  /// prediction of what a human would play, and not a frequency. A book
+  /// built from one of these has no human model behind it at all, so
+  /// labelling its moves as Maia's policy would be a plain falsehood.
+  positionDatabase;
 
   /// PGN token used for this source's likelihood value.
   String get pgnTag => switch (this) {
     MoveLikelihoodSource.maia => 'maiaProbability',
     MoveLikelihoodSource.gameDatabase => 'humanFrequency',
     MoveLikelihoodSource.engine => 'engineReply',
+    MoveLikelihoodSource.positionDatabase => 'chessDbMove',
+  };
+}
+
+/// What carries a line on once master practice ends.
+///
+/// Named rather than assumed: "from here the line is engine and Maia" is
+/// false in a build where neither ever ran, and a reader who trusts that
+/// sentence would misjudge where the preparation actually comes from.
+enum PostBookContinuation {
+  engineAndMaia,
+  chessDb;
+
+  String get label => switch (this) {
+    PostBookContinuation.engineAndMaia => 'engine and Maia',
+    PostBookContinuation.chessDb => 'ChessDB',
   };
 }
 
@@ -116,8 +138,12 @@ class MoveAnnotation {
   final String? betterMoveSan;
 
   /// This is the last move of the line seen in master games — from here on
-  /// the line is engine and Maia, not practice.
+  /// the line is [postBook], not practice.
   final bool lastBookMove;
+
+  /// What continues the line past [lastBookMove].  Only meaningful when that
+  /// is set.
+  final PostBookContinuation postBook;
 
   /// Most recent year this move appears in the database.
   final int? lastPlayedYear;
@@ -154,6 +180,7 @@ class MoveAnnotation {
     this.mistakeCp,
     this.betterMoveSan,
     this.lastBookMove = false,
+    this.postBook = PostBookContinuation.engineAndMaia,
     this.lastPlayedYear,
     this.note,
     this.transposesTo,
@@ -235,12 +262,12 @@ class MoveAnnotation {
     if (lastBookMove) {
       final n = gameCount ?? 0;
       final games = n == 1 ? '1 game' : '$n games';
+      final from = postBook.label;
       parts.add(
         n > 0
             ? 'Last move seen in master games ($games); from here the line '
-                  'is engine and Maia.'
-            : 'Last move seen in master games; from here the line is '
-                  'engine and Maia.',
+                  'is $from.'
+            : 'Last move seen in master games; from here the line is $from.',
       );
     }
     return parts.join(' ');
@@ -267,6 +294,7 @@ class MoveAnnotation {
     mistakeCp: mistakeCp,
     betterMoveSan: betterMoveSan,
     lastBookMove: lastBookMove,
+    postBook: postBook,
     lastPlayedYear: lastPlayedYear,
     transposesTo: transposesTo,
     note: this.note == null || this.note!.isEmpty ? note : '${this.note} $note',
@@ -291,6 +319,7 @@ class MoveAnnotation {
         mistakeCp: mistakeCp,
         betterMoveSan: betterMoveSan,
         lastBookMove: lastBookMove,
+        postBook: postBook,
         lastPlayedYear: lastPlayedYear,
         transposesTo: List.unmodifiable(ownerMoves),
         note: this.note == null || this.note!.isEmpty
@@ -333,33 +362,36 @@ class MoveAnnotation {
       mistakeCp: mistakeCp,
       betterMoveSan: betterMoveSan,
       lastBookMove: lastBookMove,
+      postBook: postBook,
       lastPlayedYear: lastPlayedYear,
       note: restored != null && restored.isEmpty ? null : restored,
     );
   }
 
   /// This annotation flagged as the line's last move in master practice.
-  MoveAnnotation withLastBookMove() => MoveAnnotation(
-    likelihood: likelihood,
-    likelihoodSource: likelihoodSource,
-    gameCount: gameCount,
-    practicalScore: practicalScore,
-    evalCp: evalCp,
-    expectimaxValue: expectimaxValue,
-    opponentEase: opponentEase,
-    myEase: myEase,
-    isOnlyMove: isOnlyMove,
-    onlyMoveLeadCp: onlyMoveLeadCp,
-    humanFrequency: humanFrequency,
-    naturalAlternativeSan: naturalAlternativeSan,
-    naturalAlternativeLossCp: naturalAlternativeLossCp,
-    mistakeCp: mistakeCp,
-    betterMoveSan: betterMoveSan,
-    lastBookMove: true,
-    lastPlayedYear: lastPlayedYear,
-    transposesTo: transposesTo,
-    note: note,
-  );
+  MoveAnnotation withLastBookMove(PostBookContinuation continuation) =>
+      MoveAnnotation(
+        likelihood: likelihood,
+        likelihoodSource: likelihoodSource,
+        gameCount: gameCount,
+        practicalScore: practicalScore,
+        evalCp: evalCp,
+        expectimaxValue: expectimaxValue,
+        opponentEase: opponentEase,
+        myEase: myEase,
+        isOnlyMove: isOnlyMove,
+        onlyMoveLeadCp: onlyMoveLeadCp,
+        humanFrequency: humanFrequency,
+        naturalAlternativeSan: naturalAlternativeSan,
+        naturalAlternativeLossCp: naturalAlternativeLossCp,
+        mistakeCp: mistakeCp,
+        betterMoveSan: betterMoveSan,
+        lastBookMove: true,
+        postBook: continuation,
+        lastPlayedYear: lastPlayedYear,
+        transposesTo: transposesTo,
+        note: note,
+      );
 
   bool get isEmpty =>
       note == null &&

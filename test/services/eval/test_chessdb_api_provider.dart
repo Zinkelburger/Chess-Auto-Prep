@@ -42,6 +42,71 @@ void main() {
     });
   });
 
+  group('throttling', () {
+    // chessdb.cn throttles with an empty-bodied HTTP 400, not a 429. Reading
+    // that as a miss is what silently turned a ChessDB book build into a
+    // Stockfish one.
+    test('an empty 400 is pushback, not a miss', () async {
+      var calls = 0;
+      final provider = ChessDbApiProvider(
+        httpFetch: (_) async {
+          calls++;
+          return http.Response('', 400);
+        },
+      );
+
+      final result = await provider.lookup(fen, minDepth: 0);
+      expect(result.isHit, isFalse);
+      expect(calls, 1);
+      // Backed off rather than shrugged: the next caller is told to wait.
+      expect(provider.isRateLimited, isTrue);
+      // And no quota was spent on a request that answered nothing.
+      expect(provider.usedToday, 0);
+    });
+
+    test('a 200 "unknown" is a real miss and does not back off', () async {
+      final provider = ChessDbApiProvider(
+        httpFetch: (_) async => http.Response('{"status":"unknown"}', 200),
+      );
+
+      expect((await provider.lookup(fen, minDepth: 0)).isHit, isFalse);
+      expect(provider.isRateLimited, isFalse);
+    });
+
+    test('a throttled book lookup retries instead of giving up', () async {
+      var calls = 0;
+      final provider = ChessDbApiProvider(
+        httpFetch: (_) async {
+          calls++;
+          if (calls < 3) return http.Response('', 400);
+          return http.Response(
+            '{"status":"ok","moves":[{"uci":"e2e4","san":"e4","score":30}]}',
+            200,
+          );
+        },
+      );
+
+      final moves = await provider.lookupMoves(fen);
+      expect(calls, 3);
+      expect(moves.moves.single.uci, 'e2e4');
+      // A success clears the backoff for whoever comes next.
+      expect(provider.isRateLimited, isFalse);
+    });
+
+    test('a book lookup gives up rather than retrying forever', () async {
+      var calls = 0;
+      final provider = ChessDbApiProvider(
+        httpFetch: (_) async {
+          calls++;
+          return http.Response('', 400);
+        },
+      );
+
+      expect((await provider.lookupMoves(fen)).isEmpty, isTrue);
+      expect(calls, lessThanOrEqualTo(4));
+    });
+  });
+
   group('ChessDbApiProvider', () {
     test('lookup increments quota on hit', () async {
       final provider = ChessDbApiProvider(

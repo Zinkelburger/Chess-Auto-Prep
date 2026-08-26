@@ -714,10 +714,7 @@ class GenerationSessionController extends ChangeNotifier
     TreeBuildConfig config, {
     required bool finishedEarly,
   }) async {
-    if (!config.verifyFinal ||
-        !config.needsStockfish ||
-        finishedEarly ||
-        _cancelRequested) {
+    if (!config.runsVerification || finishedEarly || _cancelRequested) {
       return;
     }
 
@@ -1200,12 +1197,33 @@ class GenerationSessionController extends ChangeNotifier
         '${analysis.selectedCount} repertoire moves, '
         '${extracted.lines.length} lines$pruneNote'
         '${_courseNote()}.${extracted.trapsOnlyNote}$lastModelGameNote';
-    if (finishedEarly && config.verifyFinal && config.needsStockfish) {
+    if (config.isChessDbBook) {
+      lastRunSummary = '$lastRunSummary ${_bookSourceNote()}';
+    }
+    if (finishedEarly && config.runsVerification) {
       lastRunSummary =
           '$lastRunSummary '
           'Verification skipped (finished early).';
     }
     progress.setStatus(lastRunSummary, GenerationPhase.extractingLines);
+  }
+
+  /// How much of a ChessDB book actually came from ChessDB.
+  ///
+  /// A book built mostly by the engine fallback is a different artifact from
+  /// one the database wrote, and the difference is invisible in the PGN — so
+  /// it is said out loud rather than left to be inferred from the node count.
+  String _bookSourceNote() {
+    final stats = buildService.buildStats;
+    final db = stats.bookDbMoveHits;
+    final engine = stats.bookEngineFallbacks;
+    final total = db + engine;
+    if (total == 0) return '';
+    final share = (100 * db / total).round();
+    final dead = stats.bookDeadEnds;
+    return 'ChessDB named $db positions and the engine $engine ($share% '
+        'ChessDB)'
+        '${dead > 0 ? ', $dead lines ended with no move available' : ''}.';
   }
 
   /// ` in 7 chapters plus 6 model games`, or empty when the export was flat.

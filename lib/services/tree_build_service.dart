@@ -559,9 +559,11 @@ class TreeBuildService {
     if (node.explored) return;
 
     // Opponent-move nodes: ensure eval + window prune BEFORE expansion.
-    // Our-move nodes skip this in stockfish mode — eval comes from MultiPV.
-    // In maiaDbExplore mode, both sides need a DB eval before expanding.
-    if (!isOurMove || !config.usesStockfish) {
+    // Our-move nodes skip this wherever the expander resolves the eval itself
+    // (Stockfish MultiPV, the ChessDB book) — see
+    // [TreeBuildConfig.expanderSuppliesOurMoveEval]. In maiaDbExplore mode,
+    // both sides need a DB eval before expanding.
+    if (!isOurMove || !config.expanderSuppliesOurMoveEval) {
       final gotEval = await _evalResolver.ensureEval(
         node,
         config,

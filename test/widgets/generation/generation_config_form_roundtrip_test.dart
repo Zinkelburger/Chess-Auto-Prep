@@ -15,8 +15,8 @@
 /// missing from step 2 reverted the moment the form was reopened on a saved
 /// config, a preset, or `GenerationSessionController.lastConfig`. Fourteen
 /// fields were in that state when this test was written: six with no mention
-/// in the form at all, and eight published by [EvalSourcesSection] through
-/// getters that had no matching setter.
+/// in the form at all, and eight published by the eval-sources section
+/// through getters that had no matching setter.
 ///
 /// `toConfig` now builds on the seed config with `copyWith`, so a field with
 /// no control is *carried* rather than reset. These tests pin that, and pin
@@ -138,9 +138,9 @@ TreeBuildConfig _fullyMutatedConfig() {
 
 /// Mounts the form on [config] and returns what it reads back out.
 ///
-/// `pumpAndSettle` matters: the skeleton card and the eval-sources section
-/// are seeded from a post-frame callback, because both are `Offstage`
-/// children whose state does not exist during `initState`.
+/// The sub-editors (skeleton plan, eval sources, PGN sources) are seeded
+/// straight from `_applyInitialConfig` into controllers the form owns, so
+/// their values are readable whether or not their widgets ever mount.
 Future<TreeBuildConfig> _throughForm(
   WidgetTester tester,
   TreeBuildConfig config, {

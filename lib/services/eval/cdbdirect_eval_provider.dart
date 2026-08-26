@@ -14,6 +14,7 @@ import 'package:path/path.dart' as p;
 
 import '../../utils/fen_utils.dart';
 import 'cdbdirect_parse.dart';
+import 'db_move_list.dart';
 import 'eval_canonicalize.dart';
 import 'external_eval_provider.dart';
 
@@ -52,7 +53,8 @@ class CdbDirectLibraryStatus {
   final bool usedBundledLibrary;
 }
 
-class CdbDirectEvalProvider implements ExternalEvalProvider {
+class CdbDirectEvalProvider
+    implements ExternalEvalProvider, ExternalMoveProvider {
   static bool? _libraryLoadable;
 
   DynamicLibrary? _lib;
@@ -251,6 +253,29 @@ class CdbDirectEvalProvider implements ExternalEvalProvider {
       return respPtr.toDartString();
     } finally {
       malloc.free(fenPtr);
+    }
+  }
+
+  /// Every move the dump knows from [fen], best first; empty on a miss.
+  ///
+  /// The same native call [lookup] makes — the dump answers with the whole
+  /// ranked list and the eval path keeps only the top score. No [minDepth]
+  /// gate: the dump reports no per-move depth, and a book build wants the
+  /// database's ranking regardless.
+  @override
+  Future<DbMoveList> lookupMoves(String fen) async {
+    if (!isReady) return DbMoveList.empty;
+    try {
+      final moves = parseCdbDirectMoveList(
+        _nativeLookup(canonicalizeFen4(fen)),
+      );
+      if (moves.isEmpty) return DbMoveList.empty;
+      return DbMoveList(moves: moves, source: DbMoveSource.cdbDirect);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[CdbDirectEvalProvider] move lookup failed: $e');
+      }
+      return DbMoveList.empty;
     }
   }
 

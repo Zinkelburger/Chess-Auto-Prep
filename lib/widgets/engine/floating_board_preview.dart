@@ -96,7 +96,7 @@ class _FloatingBoardPreviewState extends State<FloatingBoardPreview> {
       return const SizedBox.shrink();
     }
 
-    final screenSize = MediaQuery.of(context).size;
+    final screenSize = MediaQuery.sizeOf(context);
     const bs = FloatingBoardPreview.boardSize;
     const gap = FloatingBoardPreview.anchorGap;
     final anchor = ctrl.anchorGlobal!;

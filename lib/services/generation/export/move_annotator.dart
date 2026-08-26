@@ -15,7 +15,30 @@ import 'move_annotation.dart';
 
 /// Turns [BuildTreeNode]s into [MoveAnnotation]s.
 class MoveAnnotator {
-  const MoveAnnotator({required this.playAsWhite, required this.maxEvalLossCp});
+  const MoveAnnotator({
+    required this.playAsWhite,
+    required this.maxEvalLossCp,
+    this.postBook = PostBookContinuation.engineAndMaia,
+    this.movesFromPositionDatabase = false,
+    this.bookMinGames = 1,
+  });
+
+  /// Games at a move below which the line counts as out of master practice,
+  /// for the theory-boundary note.
+  ///
+  /// Mirrors [TreeBuildConfig.masterMinGames], the number the *search* uses
+  /// to decide the same thing, so the note and the tree cannot disagree about
+  /// where practice ended. A handful of master games is still practice — the
+  /// bar is for telling "nobody has been here" from "few have".
+  final int bookMinGames;
+
+  /// What carries a line on past master practice, for the boundary note.
+  final PostBookContinuation postBook;
+
+  /// Whether this build's moves come from a position database rather than
+  /// from a human model.  Decides how an opponent move with no game count is
+  /// labelled: Maia's policy, or the database's own choice.
+  final bool movesFromPositionDatabase;
 
   /// The side the repertoire is for — every eval is reported from here.
   final bool playAsWhite;
@@ -96,18 +119,22 @@ class MoveAnnotator {
     return best;
   }
 
-  /// Flag the last move with master games when the line then leaves them, so
-  /// the reader sees where practice ends and the engine continuation starts.
+  /// Flag the last move still in master practice when the line then leaves
+  /// it, so the reader sees where practice ends and what carries the line on.
+  ///
+  /// "Still in practice" is [bookMinGames] games, not one: a move played
+  /// twice in the whole database is a curiosity, and calling the line
+  /// prepared up to it overstates what is known.
   /// A line still in book at its leaf, or never in book, is left alone.
   List<MoveAnnotation> markTheoryBoundary(List<MoveAnnotation> annotations) {
     var last = -1;
     for (var i = 0; i < annotations.length; i++) {
-      if ((annotations[i].gameCount ?? 0) > 0) last = i;
+      if ((annotations[i].gameCount ?? 0) >= bookMinGames) last = i;
     }
     if (last < 0 || last == annotations.length - 1) return annotations;
     return [
       for (var i = 0; i < annotations.length; i++)
-        i == last ? annotations[i].withLastBookMove() : annotations[i],
+        i == last ? annotations[i].withLastBookMove(postBook) : annotations[i],
     ];
   }
 
@@ -164,12 +191,21 @@ class MoveAnnotator {
 
   /// Move likelihood and where it came from.  Real game frequencies win over
   /// Maia's prediction; an engine-injected reply has no human number at all.
+  ///
+  /// The final fallback used to be Maia unconditionally, which is a
+  /// falsehood in a build Maia never ran in: a ChessDB book's off-book
+  /// continuations came out as `[%maiaProbability 1.000]`, naming a source
+  /// that was not consulted and dressing a forced database move as a
+  /// certainty about human choice.
   (double?, MoveLikelihoodSource?) _likelihoodOf(BuildTreeNode child) {
     if (child.engineInjected) {
       return (child.moveProbability, MoveLikelihoodSource.engine);
     }
     if (child.totalGames > 0) {
       return (child.moveProbability, MoveLikelihoodSource.gameDatabase);
+    }
+    if (movesFromPositionDatabase) {
+      return (child.moveProbability, MoveLikelihoodSource.positionDatabase);
     }
     if (child.maiaFrequency >= 0) {
       return (child.maiaFrequency, MoveLikelihoodSource.maia);

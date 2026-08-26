@@ -51,6 +51,7 @@ mixin _GenerationConfigIo
     _rankLinesByImportance = config.rankLinesByImportance;
     _annotationDetail = config.annotationDetail;
     _organizeIntoChapters = config.organizeIntoChapters;
+    _chaptersByEco = config.chaptersByEco;
     _maxLinesPerChapterCtrl.text = config.maxLinesPerChapter.toString();
     _minLinesPerChapterCtrl.text = config.minLinesPerChapter.toString();
     _modelGameCountCtrl.text = config.modelGameCount.toString();
@@ -62,20 +63,23 @@ mixin _GenerationConfigIo
     _masterDepthBonusCtrl.text = config.masterDepthBonusPlies.toString();
     _masterPriorityWeightCtrl.text = config.masterPriorityWeight.toString();
     _offBookOppMaxChildrenCtrl.text = config.offBookOppMaxChildren.toString();
-    _pgnFilePaths
-      ..clear()
-      ..addAll(config.pgnFilePaths);
-    // The skeleton card and the eval-sources section are mounted (Offstage)
-    // but their states may not exist yet on the first apply; seed them after
-    // the frame. Auto-expand the skeleton when non-empty so a resumed/preset
-    // plan is visible, not silently carried.
-    final plan = config.skeletonPlan;
-    _showSkeleton = !plan.isEmpty;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _skeletonKey.currentState?.loadPlan(plan);
-      _evalSourcesKey.currentState?.applyConfig(config);
-    });
+    _bookTailMaxPlyCtrl.text = config.bookTailMaxPly.toString();
+    _bookTieBreakCtrl.text = config.bookTieBreakWindowCp.toString();
+    // The three sub-editors keep their state in controllers this form owns,
+    // so seeding them needs neither a mounted widget nor a post-frame hop.
+    //
+    // An empty path list is "this config says nothing about PGN files" —
+    // every config built outside DB Explorer has one — rather than "drop the
+    // files the user attached", so applying a preset does not empty the
+    // panel.
+    if (config.pgnFilePaths.isNotEmpty) {
+      _pgnSources.seedFromPaths(config.pgnFilePaths);
+    }
+    _evalSources.applyConfig(config);
+    _skeleton.loadPlan(config.skeletonPlan);
+    // Auto-expand the skeleton when non-empty so a resumed/preset plan is
+    // visible, not silently carried.
+    _showSkeleton = !config.skeletonPlan.isEmpty;
   }
 
   /// Pre-configure DB Explorer mode with the given PGN file paths and
@@ -83,53 +87,18 @@ mixin _GenerationConfigIo
   void seedDbExplorer({required List<String> pgnPaths, int minGames = 1}) {
     setState(() {
       _buildMode = BuildMode.dbExplorer;
-      _pgnFilePaths
-        ..clear()
-        ..addAll(pgnPaths);
       _dbMinGamesCtrl.text = minGames.toString();
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final panelState = _pgnSourcesKey.currentState;
-      if (panelState != null) {
-        final sources = pgnPaths
-            .map(
-              (path) => PgnSource(
-                id: PgnSource.generateId(),
-                name: p.basenameWithoutExtension(path),
-                filePath: path,
-              ),
-            )
-            .toList();
-        panelState.seedSources(sources);
-      }
-    });
+    _pgnSources.seedFromPaths(pgnPaths);
   }
 
   void setMaxPly(int maxPly) {
     _maxPlyCtrl.text = maxPly.toString();
   }
 
+  /// A build is starting: the ChessDB usage line counts this run, from zero.
   void resetChessDbApiUsageForBuild(int quota) {
-    _evalSourcesKey.currentState?.resetChessDbApiUsageForBuild(quota);
-  }
-
-  void updateChessDbApiUsage(int usedToday, int quotaLimit) {
-    _evalSourcesKey.currentState?.updateChessDbApiUsage(usedToday, quotaLimit);
-  }
-
-  /// Whether the current configuration is ready to start a build.
-  bool get canStart => validateBeforeStart() == null;
-
-  /// PGN file paths for DB Explorer mode: the synced list when populated,
-  /// else whatever the sources panel currently holds (covers seeding races
-  /// where the panel state lands a frame later).
-  List<String> _effectivePgnPaths() {
-    if (_pgnFilePaths.isNotEmpty) return List.unmodifiable(_pgnFilePaths);
-    final sources = _pgnSourcesKey.currentState?.sources ?? const [];
-    return [
-      for (final s in sources)
-        if (s.filePath != null) s.filePath!,
-    ];
+    _evalSources.resetApiUsageForBuild(quota);
   }
 
   /// Returns an error message when the current settings cannot start a build.
@@ -137,23 +106,31 @@ mixin _GenerationConfigIo
     if (_buildMode == BuildMode.trapFinder) {
       return '${_buildModeLabel(_buildMode)} is not yet available in the app.';
     }
-    if (_buildMode == BuildMode.dbExplorer && _effectivePgnPaths().isEmpty) {
-      final sources = _pgnSourcesKey.currentState?.sources ?? const [];
-      return sources.isEmpty
+    if (_buildMode == BuildMode.dbExplorer && _pgnSources.filePaths.isEmpty) {
+      return _pgnSources.isEmpty
           ? 'Add at least one PGN file first. Use the picker above to '
                 'attach .pgn files with your games.'
           : 'The added PGN sources have no local files. Re-add them as '
                 '.pgn files from disk.';
     }
-    final evalSources = _evalSourcesKey.currentState;
     if (_buildMode == BuildMode.maiaDbExplore &&
-        !(evalSources?.enableLocalChessDb ?? false) &&
-        !(evalSources?.enableChessDbApi ?? false) &&
+        !_evalSources.enableLocalChessDb &&
+        !_evalSources.enableChessDbApi &&
         !EvalDatabaseSettings.instance.enableCdbDirect) {
       setState(() => _showEvalSources = true);
       return '"Database win rates" needs at least one evaluation database. '
           'Expand "Evaluation databases" at the bottom of the form and '
           'enable a local ChessDB file or the ChessDB API.';
+    }
+    if (_buildMode == BuildMode.chessDbBook &&
+        !_evalSources.enableChessDbApi &&
+        !EvalDatabaseSettings.instance.enableCdbDirect) {
+      setState(() => _showEvalSources = true);
+      return 'The ChessDB mainline book needs ChessDB itself. Expand '
+          '"Evaluation databases" at the bottom of the form and enable the '
+          'local ChessDB dump (fastest, no quota) or the ChessDB API. The '
+          'local eval database holds scores, not move lists, so it cannot '
+          'drive this mode on its own.';
     }
     return null;
   }
@@ -166,6 +143,10 @@ mixin _GenerationConfigIo
   /// knob added to [TreeBuildConfig] and wired into the build but never given
   /// a widget is now *preserved* through the form instead of being reset to
   /// its constructor default on the next build.
+  ///
+  /// The eval-source half is delegated to [EvalSourcesController.applyTo],
+  /// which sits beside its own `applyConfig` so the two halves of that round
+  /// trip cannot drift apart.
   TreeBuildConfig toConfig({
     required String startFen,
     required bool playAsWhite,
@@ -177,13 +158,6 @@ mixin _GenerationConfigIo
     final engineThreads = rawThreads != null
         ? clampEngineThreads(rawThreads)
         : defaultEngineThreads();
-    final eval = _evalSourcesKey.currentState;
-    final minAcceptableRaw = eval?.minAcceptableEvalDepthRaw ?? '';
-    final minAcceptableDepth = minAcceptableRaw.isEmpty
-        ? 0
-        : (int.tryParse(minAcceptableRaw) ?? evalDepth);
-
-    final dbSettings = EvalDatabaseSettings.instance;
 
     final isTrappyMode = _selectionMode == SelectionMode.trappy;
     final userMaxEvalLoss = int.tryParse(_evalGuardCtrl.text.trim()) ?? 30;
@@ -195,7 +169,7 @@ mixin _GenerationConfigIo
         _seedConfig ??
         TreeBuildConfig(startFen: startFen, playAsWhite: playAsWhite);
 
-    return seed.copyWith(
+    final config = seed.copyWith(
       startFen: startFen,
       playAsWhite: playAsWhite,
       // Not a form knob, and not carried from the seed either: PlanRunner
@@ -210,10 +184,10 @@ mixin _GenerationConfigIo
       ),
       maxPly: int.tryParse(_maxPlyCtrl.text.trim()) ?? 20,
       buildMode: _buildMode,
-      // The sources panel stays mounted in every mode; only db-explorer
-      // builds may consume its files.
+      // The sources panel keeps its files across a trip through another
+      // build source; only db-explorer builds may consume them.
       pgnFilePaths: _buildMode == BuildMode.dbExplorer
-          ? _effectivePgnPaths()
+          ? _pgnSources.filePaths
           : const [],
       dbMinGames: int.tryParse(_dbMinGamesCtrl.text.trim()) ?? 5,
       dbMinProb: double.tryParse(_dbMinProbCtrl.text.trim()) ?? 0.05,
@@ -252,6 +226,7 @@ mixin _GenerationConfigIo
       rankLinesByImportance: _rankLinesByImportance,
       annotationDetail: _annotationDetail,
       organizeIntoChapters: _organizeIntoChapters,
+      chaptersByEco: _chaptersByEco,
       maxLinesPerChapter:
           (int.tryParse(_maxLinesPerChapterCtrl.text.trim()) ?? 40).clamp(
             1,
@@ -280,6 +255,10 @@ mixin _GenerationConfigIo
             0,
             20,
           ),
+      bookTailMaxPly: (int.tryParse(_bookTailMaxPlyCtrl.text.trim()) ?? 40)
+          .clamp(0, 200),
+      bookTieBreakWindowCp: (int.tryParse(_bookTieBreakCtrl.text.trim()) ?? 0)
+          .clamp(0, 200),
       ourMultipv: int.tryParse(_multipvCtrl.text.trim()) ?? 4,
       oppMaxChildren: int.tryParse(_oppMaxChildrenCtrl.text.trim()) ?? 4,
       oppMassTarget: double.tryParse(_oppMassTargetCtrl.text.trim()) ?? 0.80,
@@ -300,14 +279,16 @@ mixin _GenerationConfigIo
       maiaPriorGames: double.tryParse(_maiaPriorGamesCtrl.text.trim()) ?? 30.0,
       coverMinProb: (double.tryParse(_coverMinProbCtrl.text.trim()) ?? 0.05)
           .clamp(0.0, 1.0),
-      verifyFinal: _verifyFinal,
+      // Verification is not merely off in these modes, it is meaningless:
+      // the move came from a database, and re-ranking it by a local search
+      // would replace the answer with a different one.
+      verifyFinal: _verifyFinal && !_noVerifyMode,
       verifyDepth: (int.tryParse(_verifyDepthCtrl.text.trim()) ?? 0).clamp(
         0,
         40,
       ),
       setupMoves: _setupMovesCtrl.text.trim(),
-      skeletonPlan:
-          _skeletonKey.currentState?.currentPlan() ?? const SkeletonPlan(),
+      skeletonPlan: _skeleton.currentPlan(playAsWhite: playAsWhite),
       setupToleranceCp: (int.tryParse(_setupToleranceCtrl.text.trim()) ?? 30)
           .clamp(0, 500),
       // Novelties and the natural-move bias pull in opposite directions;
@@ -319,21 +300,21 @@ mixin _GenerationConfigIo
               500,
             ),
       relativeEval: _relativeEval,
-      selectionMode: _selectionMode,
+      // A ChessDB book has one child at each of our nodes, so every
+      // selection mode picks the same move — but trappy would widen the
+      // eval tolerances and change which nodes exist. Pin it.
+      selectionMode: _buildMode == BuildMode.chessDbBook
+          ? SelectionMode.engineOnly
+          : _selectionMode,
       noveltyWeight: _preferNovelties ? 60 : 0,
       leafConfidence: double.tryParse(_leafConfidenceCtrl.text.trim()) ?? 1.0,
-      enableCdbDirect: _cdbDirectAvailable && dbSettings.enableCdbDirect,
-      cdbDirectPath: _cdbDirectAvailable ? dbSettings.cdbDirectPath : '',
-      cdbDirectReadAhead: _cdbDirectAvailable && dbSettings.cdbDirectReadAhead,
-      batchEvalLookups:
-          _cdbDirectAvailable && (eval?.batchEvalLookups ?? false),
-      enableLocalChessDb: eval?.enableLocalChessDb ?? false,
-      localChessDbPath: eval?.localChessDbPath ?? '',
-      enableChessDbApi: eval?.enableChessDbApi ?? false,
-      chessDbApiDailyQuota: eval?.chessDbApiDailyQuota ?? 5000,
-      chessDbApiConcurrency: eval?.chessDbApiConcurrency ?? 2,
-      enableExtEvalSubtreeSkip: eval?.enableExtEvalSubtreeSkip ?? true,
-      minAcceptableEvalDepth: minAcceptableDepth,
+    );
+
+    return _evalSources.applyTo(
+      config,
+      databases: EvalDatabaseSettings.instance,
+      cdbDirectAvailable: _cdbDirectAvailable,
+      engineEvalDepth: evalDepth,
     );
   }
 

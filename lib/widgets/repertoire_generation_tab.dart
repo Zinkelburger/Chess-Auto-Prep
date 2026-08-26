@@ -179,6 +179,39 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     }
   }
 
+  /// Confirms before throwing away an unfinished build.
+  ///
+  /// The file is the only copy of a search that may have run for hours, and
+  /// deleting it is not undoable — so this asks first and says what is being
+  /// lost, the way deleting a saved preset does.
+  Future<void> _confirmDiscardPartialTree(BuildTree tree) async {
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Discard unfinished build?'),
+        content: Text(
+          '${tree.totalNodes} nodes explored to depth ${tree.maxPlyReached} '
+          'will be deleted. This cannot be undone, and the search would have '
+          'to start again from the beginning.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Keep'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (discard != true) return;
+    await _deletePartialTree();
+    if (mounted) setState(() => _savedPartialTree = null);
+  }
+
   /// Whether the saved partial tree can resume safely: either it recorded
   /// its line prefix, or the board is at the position it was built from.
   bool _canResumeSavedTree(BuildTree tree) =>
@@ -423,10 +456,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                 ),
               ),
               OutlinedButton.icon(
-                onPressed: () {
-                  unawaited(_deletePartialTree());
-                  setState(() => _savedPartialTree = null);
-                },
+                onPressed: () => unawaited(_confirmDiscardPartialTree(tree)),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.danger,
                   side: const BorderSide(color: AppColors.danger),

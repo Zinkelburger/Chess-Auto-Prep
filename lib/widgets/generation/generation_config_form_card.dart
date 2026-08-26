@@ -50,9 +50,8 @@ mixin _GenerationConfigCard
         defaultText: '2200',
         onEdited: () => setState(() {}),
         tooltip:
-            'The rating the opponent model plays at. Everything about how '
-            'likely a reply is comes from this number. Set it to the '
-            'rating of opponents you usually face.',
+            'The rating the opponent model plays at — every reply likelihood '
+            'comes from this number. Set it to the rating you actually face.',
       ),
       _caption(
         _buildMode == BuildMode.dbExplorer
@@ -89,14 +88,10 @@ mixin _GenerationConfigCard
         _downloadMasterGamesIfMissing,
         (v) => setState(() => _downloadMasterGamesIfMissing = v),
         tooltip:
-            'The master-games database is empty. Ticked, the build waits '
-            'while the last $years years of The Week in Chess download and '
-            'import, then builds on master practice: opponent replies from '
-            'titled-player games, real model games, and "improves on … in '
-            '<game>" notes. You can start the build without them at any '
-            'point while it downloads. Unticked: build now from Maia and '
-            'the engine alone. Either way the download is also available '
-            'in Settings → Master games, where the number of years lives.',
+            'The database is empty. Ticked, the build waits for the last '
+            '$years years of The Week in Chess to download, then builds on '
+            'master practice. Unticked, it builds now from Maia and the engine '
+            'alone. Also in Settings → Master games.',
       ),
       _caption(
         service.isSyncing
@@ -222,10 +217,10 @@ mixin _GenerationConfigCard
             defaultText: '0',
             onEdited: () => setState(() {}),
             tooltip:
-                '0 = no limit. With a limit the build stops expanding when '
-                'time runs out, still answers every covered reply, and can '
-                'be resumed later. Eval enrichment and verification run '
-                'afterwards and are not counted against the limit.',
+                '0 = no limit. Otherwise the build stops expanding when time '
+                'runs out, still answers every covered reply, and can be '
+                'resumed later. Enrichment and verification run afterwards and '
+                'are not counted against it.',
           ),
         ],
       ),
@@ -260,6 +255,13 @@ mixin _GenerationConfigCard
             ),
           ),
           DropdownMenuItem(
+            value: BuildMode.chessDbBook,
+            child: Text(
+              'ChessDB mainline book',
+              style: TextStyle(fontSize: 13),
+            ),
+          ),
+          DropdownMenuItem(
             value: BuildMode.dbExplorer,
             child: Text('My PGN files', style: TextStyle(fontSize: 13)),
           ),
@@ -267,7 +269,15 @@ mixin _GenerationConfigCard
         onChanged: widget.isGenerating
             ? null
             : (v) {
-                if (v != null) setState(() => _buildMode = v);
+                if (v == null) return;
+                setState(() {
+                  _buildMode = v;
+                  // A book spanning the whole encyclopedia wants chapters
+                  // cut by code, not by where it happens to branch. Set
+                  // here rather than derived from the mode so the checkbox
+                  // shows what will happen and can be turned back off.
+                  if (v == BuildMode.chessDbBook) _chaptersByEco = true;
+                });
               },
       ),
       _caption(_buildModeDescription()),
@@ -277,48 +287,30 @@ mixin _GenerationConfigCard
         _preferNovelties,
         (v) => setState(() => _preferNovelties = v),
         tooltip:
-            'Boost sound-but-rare moves so opponents leave their '
-            'preparation sooner. While on, the Natural-move tolerance '
-            '(Advanced → Move choice) is ignored.',
+            'Boosts sound-but-rare moves so opponents leave their preparation '
+            'sooner. While on, the Natural-move tolerance (Advanced → Move '
+            'choice) is ignored.',
       ),
       _labeledCheckbox(
         'Only traps',
         _trapsOnly,
         (v) => setState(() => _trapsOnly = v),
         tooltip:
-            'Export only the lines that run through a trap — a position '
-            'where the opponent has a tempting move that loses. The search '
-            'is unchanged; everything that teaches no trap is dropped from '
-            'the PGN, so you get a trap collection, not a repertoire.',
+            'Exports only the lines that run through a trap — a position where '
+            'the opponent has a tempting move that loses. The search is '
+            'unchanged; you get a trap collection, not a repertoire.',
       ),
-      const SizedBox(height: 8),
-      _caption(
-        isDb
-            ? 'PGN files used for this build:'
-            : 'Used only when "Build from" is My PGN files.',
-      ),
-      const SizedBox(height: 4),
-      // Always mounted so the sources list survives mode switches; toConfig
-      // only consumes it in db-explorer mode.
-      IgnorePointer(
-        ignoring: !isDb,
-        child: Opacity(
-          opacity: isDb ? 1 : 0.45,
-          child: PgnSourcesPanel(
-            key: _pgnSourcesKey,
-            initialSources: null,
-            onSourcesChanged: (sources) {
-              _pgnFilePaths
-                ..clear()
-                ..addAll(
-                  sources
-                      .where((s) => s.filePath != null)
-                      .map((s) => s.filePath!),
-                );
-            },
-          ),
-        ),
-      ),
+      // The picker used to sit here greyed out at 45% opacity whatever the
+      // build source was — a dead half-screen of UI for the three sources
+      // that never read it. Now it is simply absent outside DB Explorer: the
+      // attached files live in _pgnSources, so a trip through another build
+      // source and back still finds them.
+      if (isDb) ...[
+        const SizedBox(height: 8),
+        _caption('PGN files used for this build:'),
+        const SizedBox(height: 4),
+        PgnSourcesPanel(controller: _pgnSources),
+      ],
     ]);
   }
 
@@ -424,16 +416,14 @@ mixin _GenerationConfigCard
             ],
           ),
         ),
-        Offstage(
-          offstage: !_showSkeleton,
-          child: Padding(
+        if (_showSkeleton)
+          Padding(
             padding: const EdgeInsets.only(top: 8),
             child: SkeletonPlanCard(
-              key: _skeletonKey,
+              controller: _skeleton,
               playAsWhite: widget.playAsWhite,
             ),
           ),
-        ),
       ],
     );
   }
@@ -538,6 +528,7 @@ mixin _GenerationConfigCard
       BuildMode.maiaDbExplore => 'database win rates',
       BuildMode.dbExplorer => 'your PGN files',
       BuildMode.trapFinder => 'trap finder',
+      BuildMode.chessDbBook => 'ChessDB mainlines',
     };
     final parts = [
       _searchAlgorithm == SearchAlgorithm.fast ? 'Fast search' : 'Pure search',
@@ -550,7 +541,7 @@ mixin _GenerationConfigCard
       ).replaceAll(' (recommended)', '').toLowerCase(),
       if (_preferNovelties) 'novelties',
       if (_trapsOnly) 'traps only',
-      if (_verifyFinal && _buildMode != BuildMode.maiaDbExplore) 'verified',
+      if (_verifyFinal && !_noVerifyMode) 'verified',
       if (budget > 0) 'stops after ${budget}m',
     ];
     return parts.join(' · ');

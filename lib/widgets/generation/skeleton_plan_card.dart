@@ -7,102 +7,46 @@
 /// structure vetoes (see `docs/REPERTOIRE_PLANNING.md`). It is deliberately the
 /// simplest surface that makes the feature usable; the fuller board workbench
 /// is a later phase.
+///
+/// A pure view over [SkeletonPlanController], which the form owns: the card
+/// may be built only while its expander is open without losing what is typed.
 library;
 
 import 'package:flutter/material.dart';
 
 import '../../services/generation/skeleton_plan.dart';
 import '../../theme/app_colors.dart';
+import 'skeleton_plan_controller.dart';
 
-/// One toggleable structure veto offered in the UI, with the feature it emits.
-class _VetoOption {
-  final String label;
-  final String tooltip;
-  final StructureFeature Function() build;
-  const _VetoOption(this.label, this.tooltip, this.build);
-}
+class SkeletonPlanCard extends StatelessWidget {
+  final SkeletonPlanController controller;
 
-const List<_VetoOption> _vetoPalette = [
-  _VetoOption(
-    'Avoid a pawn on d5',
-    'Drops lines where we end up with a pawn on d5 — the symmetric, QGD-ish '
-        'structures. Chosen for a fighting, asymmetric repertoire (e.g. Benko).',
-    _pawnD5,
-  ),
-  _VetoOption(
-    'Avoid a pawn on e5',
-    'Drops lines where we commit a pawn to e5.',
-    _pawnE5,
-  ),
-  _VetoOption(
-    'Avoid an early queen trade',
-    'Drops lines where the queens come off early (e.g. the dry 4.Qxd4 d5 '
-        '5.cxd5 Qxd5 lines) — the trade leaves little to play for.',
-    _earlyQueens,
-  ),
-];
-
-StructureFeature _pawnD5() => const PawnOnSquare(square: 'd5');
-StructureFeature _pawnE5() => const PawnOnSquare(square: 'e5');
-StructureFeature _earlyQueens() => const EarlyQueenTrade();
-
-class SkeletonPlanCard extends StatefulWidget {
   /// Which side the repertoire is for — decides whose moves become pins.
   final bool playAsWhite;
 
-  const SkeletonPlanCard({super.key, required this.playAsWhite});
-
-  @override
-  State<SkeletonPlanCard> createState() => SkeletonPlanCardState();
-}
-
-class SkeletonPlanCardState extends State<SkeletonPlanCard> {
-  final TextEditingController _linesCtrl = TextEditingController();
-  final Set<int> _activeVetoes = {};
-
-  @override
-  void dispose() {
-    _linesCtrl.dispose();
-    super.dispose();
-  }
-
-  /// Load an existing plan back into the editor (resume / preset).
-  void loadPlan(SkeletonPlan plan) {
-    _linesCtrl.text = plan.sourceLines.join('\n');
-    _activeVetoes
-      ..clear()
-      ..addAll(_matchVetoes(plan.features));
-    if (mounted) setState(() {});
-  }
-
-  /// The plan the form should build with. Empty text and no vetoes → empty
-  /// plan (the classic build).
-  SkeletonPlan currentPlan() {
-    final lines = _linesCtrl.text.split('\n');
-    final features = [
-      for (final i in _activeVetoes)
-        if (i >= 0 && i < _vetoPalette.length) _vetoPalette[i].build(),
-    ];
-    return SkeletonPlan.fromLines(
-      lines,
-      playAsWhite: widget.playAsWhite,
-      features: features,
-    );
-  }
+  const SkeletonPlanCard({
+    super.key,
+    required this.controller,
+    required this.playAsWhite,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final plan = currentPlan();
-    final lineCount = _linesCtrl.text
-        .split('\n')
-        .where((l) => l.trim().isNotEmpty)
-        .length;
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) => _body(),
+    );
+  }
+
+  Widget _body() {
+    final plan = controller.currentPlan(playAsWhite: playAsWhite);
+    final lineCount = _nonEmptyLines.length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          widget.playAsWhite
+          playAsWhite
               ? 'Paste the lines you already know you want (White to move on '
                     'odd plies). One line per row — move numbers optional.'
               : 'Paste the lines you already know you want, from Black’s '
@@ -111,8 +55,7 @@ class SkeletonPlanCardState extends State<SkeletonPlanCard> {
         ),
         const SizedBox(height: 8),
         TextField(
-          controller: _linesCtrl,
-          onChanged: (_) => setState(() {}),
+          controller: controller.lines,
           minLines: 3,
           maxLines: 8,
           style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
@@ -147,19 +90,13 @@ class SkeletonPlanCardState extends State<SkeletonPlanCard> {
           spacing: 8,
           runSpacing: 8,
           children: [
-            for (var i = 0; i < _vetoPalette.length; i++)
+            for (var i = 0; i < kStructureVetoes.length; i++)
               Tooltip(
-                message: _vetoPalette[i].tooltip,
+                message: kStructureVetoes[i].tooltip,
                 child: FilterChip(
-                  label: Text(_vetoPalette[i].label),
-                  selected: _activeVetoes.contains(i),
-                  onSelected: (on) => setState(() {
-                    if (on) {
-                      _activeVetoes.add(i);
-                    } else {
-                      _activeVetoes.remove(i);
-                    }
-                  }),
+                  label: Text(kStructureVetoes[i].label),
+                  selected: controller.isVetoed(i),
+                  onSelected: (on) => controller.setVeto(i, on: on),
                 ),
               ),
           ],
@@ -176,7 +113,7 @@ class SkeletonPlanCardState extends State<SkeletonPlanCard> {
       );
     }
     final pins = plan.nodes.length;
-    final partial = _partiallyParsedLines(lineCount, plan);
+    final partial = _partiallyParsedLines();
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -208,16 +145,17 @@ class SkeletonPlanCardState extends State<SkeletonPlanCard> {
     );
   }
 
+  List<String> get _nonEmptyLines => [
+    for (final raw in controller.lines.text.split('\n'))
+      if (raw.trim().isNotEmpty) raw.trim(),
+  ];
+
   /// How many non-empty lines produced fewer pins than their move count would
   /// suggest — a cheap "this line stopped early" signal for the user.
-  int _partiallyParsedLines(int lineCount, SkeletonPlan plan) {
+  int _partiallyParsedLines() {
     var partial = 0;
-    for (final raw in _linesCtrl.text.split('\n')) {
-      final line = raw.trim();
-      if (line.isEmpty) continue;
-      final single = SkeletonPlan.parseLines([
-        line,
-      ], playAsWhite: widget.playAsWhite);
+    for (final line in _nonEmptyLines) {
+      final single = SkeletonPlan.parseLines([line], playAsWhite: playAsWhite);
       // Count SAN tokens in the line (ignoring move numbers) and compare to how
       // deep parsing actually got. A fully-parsed line consumes all tokens.
       final tokens = line
@@ -249,22 +187,5 @@ class SkeletonPlanCardState extends State<SkeletonPlanCard> {
       }
     }
     return partial;
-  }
-
-  Set<int> _matchVetoes(List<StructureFeature> features) {
-    final out = <int>{};
-    for (final f in features) {
-      for (var i = 0; i < _vetoPalette.length; i++) {
-        if (_sameFeature(_vetoPalette[i].build(), f)) out.add(i);
-      }
-    }
-    return out;
-  }
-
-  bool _sameFeature(StructureFeature a, StructureFeature b) {
-    if (a is PawnOnSquare && b is PawnOnSquare) {
-      return a.square == b.square && a.ours == b.ours && a.avoid == b.avoid;
-    }
-    return a is EarlyQueenTrade && b is EarlyQueenTrade;
   }
 }

@@ -1,156 +1,30 @@
-import 'dart:async';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/eval_database_settings.dart';
-import '../../services/eval/chessdb_api_provider.dart';
 import '../../services/eval/sqlite_eval_provider.dart';
-import '../../services/generation/generation_config.dart';
 import '../../theme/app_colors.dart';
 import '../labeled_toggle.dart';
+import 'eval_sources_controller.dart';
 
 /// Advanced eval-source controls for repertoire tree generation.
-class EvalSourcesSection extends StatefulWidget {
+///
+/// A pure view over [EvalSourcesController]: every value it shows and every
+/// edit it makes belongs to the controller, which the form owns. The section
+/// may therefore be built only while its expander is open — collapsing it
+/// destroys no state.
+class EvalSourcesSection extends StatelessWidget {
+  final EvalSourcesController controller;
   final bool isGenerating;
   final bool cdbDirectAvailable;
-  final VoidCallback? onChanged;
 
   const EvalSourcesSection({
     super.key,
+    required this.controller,
     required this.isGenerating,
     required this.cdbDirectAvailable,
-    this.onChanged,
   });
-
-  @override
-  State<EvalSourcesSection> createState() => EvalSourcesSectionState();
-}
-
-class EvalSourcesSectionState extends State<EvalSourcesSection> {
-  bool _batchEvalLookups = false;
-  bool _enableLocalChessDb = false;
-  final TextEditingController _localChessDbPathCtrl = TextEditingController();
-  bool? _localChessDbValid;
-  // On by default: the ChessDB cloud is a fallback consulted *before* the
-  // engine, so it only speeds things up when no local dump is configured, and
-  // the provider now backs off on server rate-limiting. The user can turn it
-  // off. (See docs/REPERTOIRE_PLANNING.md, 'Eval sources when the user has no
-  // database'.)
-  bool _enableChessDbApi = true;
-  final TextEditingController _chessDbQuotaCtrl = TextEditingController(
-    text: '5000',
-  );
-  final TextEditingController _chessDbConcurrencyCtrl = TextEditingController(
-    text: '2',
-  );
-  bool _enableExtEvalSubtreeSkip = true;
-  final TextEditingController _minAcceptableEvalDepthCtrl =
-      TextEditingController(text: '');
-  int _chessDbApiUsedToday = 0;
-  int _chessDbApiQuotaLimit = 5000;
-
-  bool get batchEvalLookups => _batchEvalLookups;
-  bool get enableLocalChessDb => _enableLocalChessDb;
-  String get localChessDbPath => _localChessDbPathCtrl.text.trim();
-  bool get enableChessDbApi => _enableChessDbApi;
-  int get chessDbApiDailyQuota =>
-      (int.tryParse(_chessDbQuotaCtrl.text.trim()) ?? 5000).clamp(1, 50000);
-  int get chessDbApiConcurrency =>
-      (int.tryParse(_chessDbConcurrencyCtrl.text.trim()) ?? 2).clamp(1, 16);
-  bool get enableExtEvalSubtreeSkip => _enableExtEvalSubtreeSkip;
-  String get minAcceptableEvalDepthRaw =>
-      _minAcceptableEvalDepthCtrl.text.trim();
-
-  /// Seeds every control from [config] — the exact inverse of the getters
-  /// above, which is what `GenerationConfigFormState.toConfig` reads.
-  ///
-  /// Without this the section was write-only from the config's point of
-  /// view: it published eight fields into every built config but had no way
-  /// to be told what they were, so reopening the form on a saved config or a
-  /// preset silently reset all eight to these defaults. `_applyInitialConfig`
-  /// calls this, and `generation_config_form_roundtrip_test.dart` pins the
-  /// two halves against each other.
-  void applyConfig(TreeBuildConfig config) {
-    void assign() {
-      _batchEvalLookups = config.batchEvalLookups;
-      _enableLocalChessDb = config.enableLocalChessDb;
-      _localChessDbPathCtrl.text = config.localChessDbPath;
-      // Re-validated lazily; the path came from a config that was built with
-      // it, not from the picker, so nothing has checked this file yet.
-      _localChessDbValid = null;
-      _enableChessDbApi = config.enableChessDbApi;
-      _chessDbQuotaCtrl.text = config.chessDbApiDailyQuota.toString();
-      _chessDbConcurrencyCtrl.text = config.chessDbApiConcurrency.toString();
-      _enableExtEvalSubtreeSkip = config.enableExtEvalSubtreeSkip;
-      // 0 means "no floor", which the field shows as empty rather than "0".
-      _minAcceptableEvalDepthCtrl.text = config.minAcceptableEvalDepth > 0
-          ? config.minAcceptableEvalDepth.toString()
-          : '';
-    }
-
-    // Callable before the first build (from a post-frame seed) as well as
-    // after, so it must not assume an element is mounted.
-    if (mounted) {
-      setState(assign);
-    } else {
-      assign();
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_refreshChessDbQuotaDisplay());
-  }
-
-  @override
-  void dispose() {
-    _localChessDbPathCtrl.dispose();
-    _chessDbQuotaCtrl.dispose();
-    _chessDbConcurrencyCtrl.dispose();
-    _minAcceptableEvalDepthCtrl.dispose();
-    super.dispose();
-  }
-
-  void updateChessDbApiUsage(int usedToday, int quotaLimit) {
-    if (!mounted) return;
-    if (_chessDbApiUsedToday == usedToday &&
-        _chessDbApiQuotaLimit == quotaLimit) {
-      return;
-    }
-    setState(() {
-      _chessDbApiUsedToday = usedToday;
-      _chessDbApiQuotaLimit = quotaLimit;
-    });
-  }
-
-  void resetChessDbApiUsageForBuild(int quotaLimit) {
-    if (!mounted) return;
-    setState(() {
-      _chessDbApiQuotaLimit = quotaLimit;
-      _chessDbApiUsedToday = 0;
-    });
-  }
-
-  Future<void> _refreshChessDbQuotaDisplay() async {
-    final quota = int.tryParse(_chessDbQuotaCtrl.text.trim()) ?? 5000;
-    final api = ChessDbApiProvider(dailyQuota: quota);
-    await api.init();
-    if (!mounted) return;
-    setState(() {
-      _chessDbApiUsedToday = api.usedToday;
-      _chessDbApiQuotaLimit = api.quotaLimit;
-    });
-  }
-
-  void _notifyChanged() => widget.onChanged?.call();
-
-  void _update(VoidCallback fn) {
-    setState(fn);
-    _notifyChanged();
-  }
 
   Future<void> _pickLocalChessDbFile() async {
     final file = await FilePicker.pickFile(
@@ -159,28 +33,25 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
       allowedExtensions: ['db'],
       lockParentWindow: true,
     );
-    if (file == null || file.path == null) return;
-    final path = file.path!;
-    final valid = await validateChessDbEvalFile(path);
-    if (!mounted) return;
-    _update(() {
-      _localChessDbPathCtrl.text = path;
-      _localChessDbValid = valid;
-      if (valid) _enableLocalChessDb = true;
-    });
+    final path = file?.path;
+    if (path == null) return;
+    controller.setLocalChessDbFile(
+      path,
+      valid: await validateChessDbEvalFile(path),
+    );
   }
 
   Widget _numField(
-    TextEditingController controller,
+    TextEditingController field,
     String label, {
     String? tooltip,
     bool enabled = true,
   }) {
-    final field = SizedBox(
+    final input = SizedBox(
       width: 210,
       child: TextField(
-        controller: controller,
-        enabled: enabled && !widget.isGenerating,
+        controller: field,
+        enabled: enabled && !isGenerating,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         decoration: InputDecoration(
           labelText: label,
@@ -189,8 +60,8 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
         ),
       ),
     );
-    if (tooltip == null) return field;
-    return Tooltip(message: tooltip, child: field);
+    if (tooltip == null) return input;
+    return Tooltip(message: tooltip, child: input);
   }
 
   /// [AppCheckbox] with the isGenerating lock folded in — these are all
@@ -206,80 +77,42 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
       value: value,
       onChanged: onChanged,
       tooltip: tooltip,
-      enabled: !widget.isGenerating,
+      enabled: !isGenerating,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final localFieldsEnabled = _enableLocalChessDb && !widget.isGenerating;
-    final apiFieldsEnabled = _enableChessDbApi && !widget.isGenerating;
-    final path = _localChessDbPathCtrl.text;
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) => _body(context),
+    );
+  }
 
-    Widget? pathStatusIcon;
-    if (path.isNotEmpty && _localChessDbValid != null) {
-      pathStatusIcon = Tooltip(
-        message: _localChessDbValid!
-            ? 'Valid ChessDB database'
-            : 'Not a valid ChessDB eval database (missing chessdb_evals table)',
-        child: Icon(
-          _localChessDbValid! ? Icons.check_circle : Icons.warning_amber,
-          size: 18,
-          color: _localChessDbValid!
-              ? AppColors.evalPositive
-              : AppColors.danger,
-        ),
-      );
-    }
+  Widget _body(BuildContext context) {
+    final localFieldsEnabled = controller.enableLocalChessDb && !isGenerating;
+    final apiFieldsEnabled = controller.enableChessDbApi && !isGenerating;
+    final path = controller.localChessDbPathField.text;
+    final valid = controller.localChessDbFileValid;
 
     // No header of its own: the expander row in the form carries the title
     // and the lookup-chain info tooltip.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (widget.cdbDirectAvailable)
-          Builder(
-            builder: (context) {
-              final dbSettings = context.watch<EvalDatabaseSettings>();
-              return ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(
-                  dbSettings.enableCdbDirect
-                      ? Icons.storage
-                      : Icons.storage_outlined,
-                  color: dbSettings.enableCdbDirect
-                      ? AppColors.evalPositive
-                      : AppColors.onSurfaceMuted,
-                ),
-                title: const Text(
-                  'Local ChessDB (full dump)',
-                  style: TextStyle(fontSize: 13),
-                ),
-                subtitle: Text(
-                  dbSettings.enableCdbDirect &&
-                          dbSettings.cdbDirectPath.isNotEmpty
-                      ? dbSettings.cdbDirectPath
-                      : 'Not set up — enable it in App settings → '
-                            'Evaluation database',
-                  style: const TextStyle(fontSize: 11),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                dense: true,
-              );
-            },
-          ),
-        if (widget.cdbDirectAvailable)
+        if (cdbDirectAvailable) ...[
+          _cdbDirectTile(context),
           _check(
             'Batch eval lookups',
-            _batchEvalLookups,
-            (v) => _update(() => _batchEvalLookups = v),
+            controller.batchEvalLookups,
+            (v) => controller.batchEvalLookups = v,
           ),
-        if (widget.cdbDirectAvailable) const SizedBox(height: 12),
+          const SizedBox(height: 12),
+        ],
         _check(
           'Local ChessDB file',
-          _enableLocalChessDb,
-          (v) => _update(() => _enableLocalChessDb = v),
+          controller.enableLocalChessDb,
+          (v) => controller.enableLocalChessDb = v,
           tooltip:
               'Use a local ChessDB SQLite slice for eval lookups.\n'
               'Positions missing from the file can trigger subtree skip.',
@@ -291,14 +124,16 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
             Expanded(
               child: TextField(
                 readOnly: true,
-                enabled: !widget.isGenerating,
-                controller: _localChessDbPathCtrl,
+                enabled: !isGenerating,
+                controller: controller.localChessDbPathField,
                 decoration: InputDecoration(
                   labelText: 'Database path (.db)',
                   hintText: 'No file selected',
                   border: const OutlineInputBorder(),
                   isDense: true,
-                  suffixIcon: pathStatusIcon,
+                  suffixIcon: path.isEmpty || valid == null
+                      ? null
+                      : _pathStatusIcon(valid),
                 ),
               ),
             ),
@@ -314,12 +149,9 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
               Tooltip(
                 message: 'Clear path',
                 child: IconButton(
-                  onPressed: widget.isGenerating
+                  onPressed: isGenerating
                       ? null
-                      : () => _update(() {
-                          _localChessDbPathCtrl.clear();
-                          _localChessDbValid = null;
-                        }),
+                      : controller.clearLocalChessDbFile,
                   icon: const Icon(Icons.clear),
                 ),
               ),
@@ -328,8 +160,8 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
         const SizedBox(height: 12),
         _check(
           'ChessDB API',
-          _enableChessDbApi,
-          (v) => _update(() => _enableChessDbApi = v),
+          controller.enableChessDbApi,
+          (v) => controller.enableChessDbApi = v,
           tooltip:
               'Query chessdb.cn for positions not in the local cache — a fast,\n'
               'free cloud eval source, consulted before the engine. On by\n'
@@ -342,19 +174,20 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             _numField(
-              _chessDbQuotaCtrl,
+              controller.dailyQuotaField,
               'Daily quota',
               tooltip: 'Maximum ChessDB API requests per day (1–50000)',
               enabled: apiFieldsEnabled,
             ),
             _numField(
-              _chessDbConcurrencyCtrl,
+              controller.concurrencyField,
               'Concurrency',
               tooltip: 'Parallel ChessDB API requests during build (1–16)',
               enabled: apiFieldsEnabled,
             ),
             Text(
-              '$_chessDbApiUsedToday / $_chessDbApiQuotaLimit requests used today',
+              '${controller.apiUsedToday} / ${controller.apiQuotaLimit} '
+              'requests used today',
               style: const TextStyle(
                 fontSize: 12,
                 color: AppColors.onSurfaceSoft,
@@ -365,22 +198,62 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
         const SizedBox(height: 12),
         _check(
           'Skip external eval for off-book subtrees',
-          _enableExtEvalSubtreeSkip,
-          (v) => _update(() => _enableExtEvalSubtreeSkip = v),
+          controller.enableExtEvalSubtreeSkip,
+          (v) => controller.enableExtEvalSubtreeSkip = v,
           tooltip:
               'When a position is absent from the local ChessDB file,\n'
               'skip further external lookups for that subtree and use Stockfish.',
         ),
         const SizedBox(height: 8),
         _numField(
-          _minAcceptableEvalDepthCtrl,
+          controller.minEvalDepthField,
           'Min eval depth (0 = engine depth)',
           tooltip:
               'Minimum search depth required from external sources.\n'
               'Shallower hits fall through to the next source.',
-          enabled: !widget.isGenerating,
+          enabled: !isGenerating,
         ),
       ],
+    );
+  }
+
+  Widget _pathStatusIcon(bool valid) {
+    return Tooltip(
+      message: valid
+          ? 'Valid ChessDB database'
+          : 'Not a valid ChessDB eval database (missing chessdb_evals table)',
+      child: Icon(
+        valid ? Icons.check_circle : Icons.warning_amber,
+        size: 18,
+        color: valid ? AppColors.evalPositive : AppColors.danger,
+      ),
+    );
+  }
+
+  /// Read-only status of the cdb-direct full dump, which App settings owns.
+  Widget _cdbDirectTile(BuildContext context) {
+    final dbSettings = context.watch<EvalDatabaseSettings>();
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(
+        dbSettings.enableCdbDirect ? Icons.storage : Icons.storage_outlined,
+        color: dbSettings.enableCdbDirect
+            ? AppColors.evalPositive
+            : AppColors.onSurfaceMuted,
+      ),
+      title: const Text(
+        'Local ChessDB (full dump)',
+        style: TextStyle(fontSize: 13),
+      ),
+      subtitle: Text(
+        dbSettings.enableCdbDirect && dbSettings.cdbDirectPath.isNotEmpty
+            ? dbSettings.cdbDirectPath
+            : 'Not set up — enable it in App settings → Evaluation database',
+        style: const TextStyle(fontSize: 11),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      dense: true,
     );
   }
 }

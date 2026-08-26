@@ -5,9 +5,9 @@ part of 'generation_config_form.dart';
 /// repeated here.
 ///
 /// All values live in the form state (controllers and fields), so closing
-/// the dialog loses nothing and the main form stays in sync.  Only
-/// [EvalSourcesSection] is NOT here — its widget state is read through a
-/// GlobalKey at build time, so it must stay mounted in the main tree.
+/// the dialog loses nothing and the main form stays in sync.  The
+/// eval-sources section is not repeated here either: it is an expander on
+/// the main form, one section down.
 ///
 /// The dialog chrome (layout, table of contents, section cards) is
 /// [AdvancedSettingsDialog], which knows nothing about generation and can be
@@ -29,19 +29,52 @@ mixin _GenerationConfigAdvanced
         AdvancedSection('Move choice', Icons.alt_route, _moveChoiceSection),
         AdvancedSection('Search tuning', Icons.tune, _searchBudgetSection),
         AdvancedSection(
+          'Master games',
+          Icons.workspace_premium_outlined,
+          _masterGamesSection,
+        ),
+        AdvancedSection(
+          'ChessDB book',
+          Icons.menu_book_outlined,
+          _chessDbBookSection,
+          unavailable: () => _buildMode == BuildMode.chessDbBook
+              ? null
+              : 'These shape the ChessDB mainline book. Set Build from to '
+                    'ChessDB mainline book to use them.',
+        ),
+        AdvancedSection(
           'Verification',
           Icons.verified_outlined,
           _verificationSection,
+          unavailable: () => _noVerifyMode
+              ? 'This build source takes its moves from a database, so there '
+                    'is no search for a deeper pass to second-guess. '
+                    'Verification never runs.'
+              : null,
         ),
         AdvancedSection(
-          'PGN export',
-          Icons.description_outlined,
-          _exportSection,
+          'Coverage & line order',
+          Icons.playlist_add_check,
+          _coverageSection,
+        ),
+        AdvancedSection(
+          'Chapters',
+          Icons.auto_stories_outlined,
+          _chaptersSection,
+        ),
+        AdvancedSection(
+          'Explanatory variations',
+          Icons.alt_route_outlined,
+          _variationsSection,
         ),
         AdvancedSection(
           'PGN source filters',
           Icons.filter_alt_outlined,
           _pgnFilterSection,
+          unavailable: () => _buildMode == BuildMode.dbExplorer
+              ? null
+              : 'These filter the games a build reads from your PGN files. '
+                    'Set Build from to My PGN files to use them.',
         ),
       ],
     );
@@ -247,16 +280,13 @@ mixin _GenerationConfigAdvanced
             onEdited: refresh,
             tooltip: _relativeEval
                 ? 'How much worse than the starting position you will still '
-                      'prepare.\nThe floor moves with the root: at a root of '
-                      '0.00 a value of -100 floors\nat -1.00, and at a root of '
-                      '+0.60 the same value floors at -0.40. One\nsetting, '
-                      'whatever position you hand the builder.\n\n'
-                      'This judges positions *you* chose to enter. A position '
-                      'the opponent\nforces on you is never dropped for being '
-                      'bad — you need an answer\nmost precisely when you are '
-                      'worse.\n\n0 means "never accept anything worse than '
-                      'the start", which rules out\nnormal opening play and '
-                      'every gambit.'
+                      'prepare. The floor moves with the root, so one setting '
+                      'works from any position.\n\n'
+                      'Only positions you chose to enter are judged — a '
+                      'position the opponent forces on you always gets an '
+                      'answer.\n\n'
+                      '0 accepts nothing worse than the start, which rules '
+                      'out normal opening play and every gambit.'
                 : 'Lines evaluated below this (for us) are abandoned as '
                       'lost causes.',
           ),
@@ -269,9 +299,8 @@ mixin _GenerationConfigAdvanced
             onEdited: refresh,
             tooltip: _relativeEval
                 ? 'How much better than the starting position is far enough. '
-                      'Past this the\nline stops as already winning — no need '
-                      'to memorise conversions. Measured\nfrom the root the '
-                      'same way the floor is.'
+                      'Past this a line stops as already winning. Measured '
+                      'from the root, the same way the floor is.'
                 : 'Lines evaluated above this are abandoned as already '
                       'winning — no need to memorize conversions.',
           ),
@@ -302,11 +331,10 @@ mixin _GenerationConfigAdvanced
           refresh();
         },
         tooltip:
-            'On (recommended): the two limits above are offsets from the '
-            'root position\'s\nown eval, so the same numbers mean the same '
-            'thing whatever position you\nbuild from. Off: they are absolute '
-            'centipawn scores, and you have to\nre-pick them per position and '
-            'per colour.',
+            'On: the two limits above are offsets from the root position\'s '
+            'own eval, so the same numbers mean the same thing from any '
+            'position. Off: they are absolute centipawn scores, re-picked '
+            'per position and per colour.',
       ),
     ];
   }
@@ -380,13 +408,13 @@ mixin _GenerationConfigAdvanced
         isDbExplorer: isDb,
         enabled:
             _buildMode == BuildMode.stockfishExpectimax ||
-            _buildMode == BuildMode.dbExplorer,
+            _buildMode == BuildMode.dbExplorer ||
+            _buildMode == BuildMode.chessDbBook,
       ),
     ];
   }
 
   List<Widget> _verificationSection(VoidCallback refresh) {
-    final noVerify = _buildMode == BuildMode.maiaDbExplore;
     return [
       _labeledCheckbox(
         'Verify final repertoire',
@@ -395,8 +423,6 @@ mixin _GenerationConfigAdvanced
           _verifyFinal = v;
           refresh();
         },
-        enabled: !noVerify,
-        disabledReason: 'Verification never runs in this build source',
         tooltip:
             'Re-check every selected move at a deeper engine depth '
             'after selection and replace the ones that fail. Slower, '
@@ -408,10 +434,8 @@ mixin _GenerationConfigAdvanced
         'Verification depth (0 = auto)',
         defaultText: '0',
         onEdited: refresh,
-        enabled: _verifyFinal && !noVerify,
-        disabledReason: noVerify
-            ? 'Verification never runs in this build source'
-            : 'Verification is off',
+        enabled: _verifyFinal,
+        disabledReason: 'Verification is off',
         tooltip:
             'Engine depth for the verification pass. 0 = automatic '
             '(engine depth + 6, at least 20).',
@@ -419,22 +443,9 @@ mixin _GenerationConfigAdvanced
     ];
   }
 
-  /// Everything that shapes the exported PGN.
-  ///
-  /// Five unrelated domains used to share one 257-line list literal.
-  /// They are still presented as one section — the reader thinks of them
-  /// together as "what comes out" — but each is now edited on its own.
-  List<Widget> _exportSection(VoidCallback refresh) => [
-    ..._exportCoverageFields(refresh),
-    ..._exportChapterFields(refresh),
-    ..._exportMasterGameFields(refresh),
-    ..._exportRefutationFields(refresh),
-    ..._exportAlternativeFields(refresh),
-  ];
-
   /// How much of the tree reaches the PGN: the coverage target, engine
   /// continuations for lines the ply cap cut off, and line order.
-  List<Widget> _exportCoverageFields(VoidCallback refresh) {
+  List<Widget> _coverageSection(VoidCallback refresh) {
     return [
       _numField(
         _lineCoverageCtrl,
@@ -442,17 +453,10 @@ mixin _GenerationConfigAdvanced
         defaultText: '92',
         onEdited: refresh,
         tooltip:
-            'How much of what you will actually face the exported lines '
-            'should cover.\nLines are kept in order of how much new ground '
-            'each one breaks — a position\nyou reach and the move you play '
-            'there — and the export stops once this\nshare of the reachable '
-            'probability is covered. Lines that only repeat\ndecisions '
-            'already covered, including ones that transpose in from another\n'
-            'move order, are never kept at any setting.\n\n'
-            '100% keeps everything that teaches anything new. The last few '
-            'percent\ncost the most lines: on a real Benko tree 92% was 300 '
-            'lines and 100%\nwas 530, the extra ones splitting hairs at move '
-            '14.',
+            'Share of what you will actually face that the export has to '
+            'cover. Lines are kept in order of how much new ground each '
+            'breaks, and lines that only repeat covered decisions are never '
+            'kept. 100% keeps everything that teaches something new.',
       ),
       const SizedBox(height: 8),
       _numField(
@@ -461,13 +465,9 @@ mixin _GenerationConfigAdvanced
         defaultText: '6',
         onEdited: refresh,
         tooltip:
-            'A line that stops because the build hit its ply cap ends mid-'
-            'position.\nThis walks the final position with the engine at the '
-            'verification depth\nand appends that many plies of best play to '
-            'the line.\n\nThe appended moves are part of the line and get '
-            'trained with the rest.\nThey are engine best play rather than '
-            'moves selection vouched for, so the\nfirst one carries a note '
-            'in the PGN saying where preparation stopped.',
+            'Appends this many plies of engine best play, at the verification '
+            'depth, to lines the ply cap cut off mid-position. The first '
+            'appended move is marked in the PGN as where preparation stopped.',
       ),
       const SizedBox(height: 8),
       _numField(
@@ -477,7 +477,7 @@ mixin _GenerationConfigAdvanced
         onEdited: refresh,
         tooltip:
             'Stops the export at this many lines even if the coverage target '
-            'is not met.\nLeave at 0 and let coverage decide.',
+            'is not met. Leave at 0 to let coverage decide.',
       ),
       const SizedBox(height: 4),
       _labeledCheckbox(
@@ -528,9 +528,8 @@ mixin _GenerationConfigAdvanced
 
   /// Whether the export is one flat list or named chapters cut at branch
   /// points, and how those chapters are sized.
-  List<Widget> _exportChapterFields(VoidCallback refresh) {
+  List<Widget> _chaptersSection(VoidCallback refresh) {
     return [
-      const SizedBox(height: 12),
       _labeledCheckbox(
         'Group lines into named chapters',
         _organizeIntoChapters,
@@ -542,6 +541,22 @@ mixin _GenerationConfigAdvanced
             'Cuts the export at the branch points where your repertoire '
             'divides and names each chapter from the opening database, the '
             'way a published course is laid out.',
+      ),
+      _labeledCheckbox(
+        'One chapter per ECO code',
+        _chaptersByEco,
+        (v) {
+          _chaptersByEco = v;
+          refresh();
+        },
+        enabled: _organizeIntoChapters,
+        disabledReason: 'Chapters are off',
+        tooltip:
+            'Cuts the top level by ECO code instead of by where your '
+            'repertoire branches: every line classified B90 lands in the '
+            'Najdorf chapter. Oversized codes still split at their branch '
+            'points, and sparse ones join the leftovers chapter. Best for a '
+            'book spanning many openings.',
       ),
       const SizedBox(height: 8),
       Wrap(
@@ -576,10 +591,10 @@ mixin _GenerationConfigAdvanced
             defaultText: '6',
             onEdited: refresh,
             tooltip:
-                'Strong games that follow this repertoire out of the '
-                'opening, appended as a final chapter — from your PGN '
-                'database when that is the build source, else from the '
-                'master games database (Settings) when it is downloaded.',
+                'Strong games that follow this repertoire out of the opening, '
+                'appended as a final chapter. Taken from your PGN files when '
+                'those are the build source, else from the master games '
+                'database.',
           ),
           _numField(
             _modelGameMinEloCtrl,
@@ -597,9 +612,8 @@ mixin _GenerationConfigAdvanced
 
   /// The master-games database: whether to consult it, and what it may
   /// contribute to the book.
-  List<Widget> _exportMasterGameFields(VoidCallback refresh) {
+  List<Widget> _masterGamesSection(VoidCallback refresh) {
     return [
-      const SizedBox(height: 12),
       _labeledCheckbox(
         'Use the master games database',
         _useMasterGames,
@@ -608,15 +622,11 @@ mixin _GenerationConfigAdvanced
           refresh();
         },
         tooltip:
-            'When the master games database is downloaded (Settings → Master '
-            'games), master practice guides the build: opponent replies come '
-            'from titled-player practice blended with Maia, the moves '
-            'masters play most are always candidates for your side, lines '
-            'that stay in master practice run deeper, model games are real '
-            'master games, and a repertoire move that beats what masters '
-            'played is annotated "improves on … in <game>". Positions no '
-            'master has reached fall back to Maia and the engine. Off: Maia '
-            'and the engine alone.',
+            'Guides the build with titled-player practice: opponent replies, '
+            'candidate moves for your side, deeper lines where practice '
+            'continues, real model games, and "improves on …" notes. Positions '
+            'no master has reached fall back to Maia and the engine. Needs the '
+            'database (Settings → Master games).',
       ),
       const SizedBox(height: 8),
       Wrap(
@@ -631,15 +641,10 @@ mixin _GenerationConfigAdvanced
             enabled: _useMasterGames,
             disabledReason: 'Master games are off',
             tooltip:
-                'How much a position masters have played jumps the search '
-                'queue. The frontier is otherwise ordered on how likely a '
-                'line is, which spends the budget on what is probable '
-                'rather than on what is known — so under a time limit the '
-                'book changed which moves were considered but not which '
-                'ones got looked at first. Applied as 1 + weight x ln(1 + '
-                'games): two master games already earn a nudge, a 400-game '
-                'main line earns roughly triple, and off-book positions are '
-                'untouched. 0: pure reach probability, as before.',
+                'How far a position masters have played jumps the search '
+                'queue, which is otherwise ordered on how likely a line is. '
+                'Applied as 1 + weight × ln(1 + games), so off-book positions '
+                'are untouched. 0: order by reach probability alone.',
           ),
           _numField(
             _masterDepthBonusCtrl,
@@ -649,11 +654,10 @@ mixin _GenerationConfigAdvanced
             enabled: _useMasterGames,
             disabledReason: 'Master games are off',
             tooltip:
-                'A line may run this many plies past the depth limit while '
-                'every position along it is master practice (at least a few '
-                'master games). The book is indexed to move 15, so this '
-                'never goes past there. 0: all lines stop at the depth '
-                'limit.',
+                'Lets a line run this many plies past the depth limit while '
+                'every position along it is master practice. The book is '
+                'indexed to move 15, so it never goes past there. 0: every '
+                'line stops at the depth limit.',
           ),
           _numField(
             _offBookOppMaxChildrenCtrl,
@@ -663,23 +667,78 @@ mixin _GenerationConfigAdvanced
             enabled: _useMasterGames,
             disabledReason: 'Master games are off',
             tooltip:
-                'Fan-out cap for opponent replies at positions no master has '
-                'reached (Maia-only). Narrower here keeps the tree from '
-                'spending its budget on sidelines nobody plays and puts it '
-                'into depth where there is practice. Replies likely enough '
-                'to need an answer are always kept. 0: same cap as in-book '
-                'positions.',
+                'Cap on opponent replies at positions no master has reached, '
+                'so the budget goes into depth where there is practice rather '
+                'than sidelines nobody plays. Replies likely enough to need an '
+                'answer are always kept. 0: the same cap as in-book positions.',
           ),
         ],
       ),
     ];
   }
 
-  /// Punishing a losing reply — showing, as a sideline, why the move the
-  /// opponent just played loses.
-  List<Widget> _exportRefutationFields(VoidCallback refresh) {
+  /// The ChessDB mainline book's own knobs.
+  ///
+  /// These sat in the master-games group, where they were dead weight for
+  /// every other build source: three controls greyed out with three
+  /// different reasons, none of which had anything to do with master games.
+  List<Widget> _chessDbBookSection(VoidCallback refresh) {
     return [
-      const SizedBox(height: 12),
+      Wrap(
+        spacing: 16,
+        runSpacing: 8,
+        children: [
+          _numField(
+            _bookTailMaxPlyCtrl,
+            'Book tail depth (plies)',
+            defaultText: '40',
+            onEdited: refresh,
+            tooltip:
+                'How far a ChessDB mainline runs after it leaves master '
+                'practice, where there is one database move per side so depth '
+                'costs a node per ply instead of a fan-out. Stops earlier if '
+                'ChessDB runs out; values below the depth limit are ignored.',
+          ),
+          _numField(
+            _bookTieBreakCtrl,
+            'Book tie-break window (cp)',
+            defaultText: '0',
+            onEdited: refresh,
+            tooltip:
+                'When ChessDB scores several moves within this many centipawns '
+                'of its best, the one masters have played most wins. 0 breaks '
+                'exact ties only — common in the opening, and otherwise '
+                'settled by the database\'s own ordering.',
+          ),
+        ],
+      ),
+      _labeledCheckbox(
+        'Let Stockfish finish lines ChessDB cannot',
+        _bookEngineFallback,
+        (v) {
+          _bookEngineFallback = v;
+          refresh();
+        },
+        tooltip:
+            'Off, a line ends exactly where ChessDB\'s knowledge ends. On, the '
+            'engine searches unknown positions at the engine depth and the '
+            'line carries on — far slower, since a database hit costs a '
+            'request and an engine search costs seconds. The run summary '
+            'reports how many moves came from each.',
+      ),
+    ];
+  }
+
+  /// The two sidelines the export writes to explain a decision rather than
+  /// to be memorised: why a losing reply loses, and why a natural-looking
+  /// move is not the one the book gives.
+  List<Widget> _variationsSection(VoidCallback refresh) => [
+    ..._refutationField(refresh),
+    ..._alternativeField(refresh),
+  ];
+
+  List<Widget> _refutationField(VoidCallback refresh) {
+    return [
       _labeledCheckbox(
         'Show how a losing reply is punished',
         _refutationLines,
@@ -688,19 +747,16 @@ mixin _GenerationConfigAdvanced
           refresh();
         },
         tooltip:
-            'When a reply leaves you winning the build stops there, because '
-            'there is nothing left to prepare. This asks the engine how the '
-            'position is won and writes the answer as a variation on that '
-            'move.',
+            'When a reply leaves you winning the build stops there. This asks '
+            'the engine how the position is won and writes the answer as a '
+            'variation on that move.',
       ),
     ];
   }
 
-  /// Explaining an omission — why a natural-looking move is not the one
-  /// the book gives.
-  List<Widget> _exportAlternativeFields(VoidCallback refresh) {
+  List<Widget> _alternativeField(VoidCallback refresh) {
     return [
-      const SizedBox(height: 12),
+      const SizedBox(height: 8),
       _labeledCheckbox(
         'Show why a natural move is not in the book',
         _alternativeLines,
@@ -709,19 +765,15 @@ mixin _GenerationConfigAdvanced
           refresh();
         },
         tooltip:
-            'At each position in a line, the move a human is most likely to '
-            'play is checked against the book. When it is missing because it '
-            'loses material or the game, the engine\'s answer to it is '
-            'written as a variation — the natural move you pass over, and the '
-            'try your opponent should avoid. Moves that are simply playable '
-            'are left out, so a variation here always means something. Adds '
-            'an engine pass after the build.',
+            'Checks the move a human is most likely to play at each position; '
+            'when it is missing because it loses material or the game, writes '
+            'the engine\'s refutation as a variation. Moves that are simply '
+            'playable are left out. Adds an engine pass after the build.',
       ),
     ];
   }
 
   List<Widget> _pgnFilterSection(VoidCallback refresh) {
-    final isDb = _buildMode == BuildMode.dbExplorer;
     return [
       Wrap(
         spacing: 8,
@@ -732,8 +784,6 @@ mixin _GenerationConfigAdvanced
             'Min games per move',
             defaultText: '5',
             onEdited: refresh,
-            enabled: isDb,
-            disabledReason: 'Only used when Build from = My PGN files',
             tooltip:
                 'Opponent moves need at least this many games in your PGN '
                 'files to be explored.',
@@ -743,8 +793,6 @@ mixin _GenerationConfigAdvanced
             'Min move probability (0–1)',
             defaultText: '0.05',
             onEdited: refresh,
-            enabled: isDb,
-            disabledReason: 'Only used when Build from = My PGN files',
             tooltip: 'Minimum move frequency to include an opponent reply.',
           ),
           _numField(
@@ -752,8 +800,6 @@ mixin _GenerationConfigAdvanced
             'Min player Elo (0 = off)',
             defaultText: '0',
             onEdited: refresh,
-            enabled: isDb,
-            disabledReason: 'Only used when Build from = My PGN files',
             tooltip: 'Skip games where both players are below this rating.',
           ),
         ],

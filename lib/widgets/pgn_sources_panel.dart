@@ -18,14 +18,17 @@ import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/storage/storage_factory.dart';
 import '../theme/app_colors.dart';
 import 'pgn_inline_slice_editor.dart';
+import 'pgn_sources_controller.dart';
 
 /// Compact panel for managing multiple PGN sources with per-source slicing.
+///
+/// The list itself belongs to [PgnSourcesController], which the host owns, so
+/// unmounting the panel (leaving DB Explorer mode, collapsing a section) does
+/// not drop the files the user attached. Only which row is expanded is view
+/// state, and that is this widget's.
 class PgnSourcesPanel extends StatefulWidget {
-  /// Pre-loaded sources (e.g. from a previous session).
-  final List<PgnSource>? initialSources;
-
-  /// Called whenever the sources list changes.
-  final ValueChanged<List<PgnSource>>? onSourcesChanged;
+  /// The sources this panel edits.
+  final PgnSourcesController controller;
 
   /// Board preview controller (for slice preview hover).
   final BoardPreviewController? boardPreview;
@@ -35,44 +38,19 @@ class PgnSourcesPanel extends StatefulWidget {
 
   const PgnSourcesPanel({
     super.key,
-    this.initialSources,
-    this.onSourcesChanged,
+    required this.controller,
     this.boardPreview,
     this.currentFen,
   });
 
   @override
-  State<PgnSourcesPanel> createState() => PgnSourcesPanelState();
+  State<PgnSourcesPanel> createState() => _PgnSourcesPanelState();
 }
 
-class PgnSourcesPanelState extends State<PgnSourcesPanel> {
-  final List<PgnSource> _sources = [];
+class _PgnSourcesPanelState extends State<PgnSourcesPanel> {
   String? _expandedSourceId;
 
-  /// Access current sources externally.
-  List<PgnSource> get sources => List.unmodifiable(_sources);
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.initialSources != null) {
-      _sources.addAll(widget.initialSources!);
-    }
-  }
-
-  /// Programmatically seed sources (e.g. from file paths).
-  void seedSources(List<PgnSource> sources) {
-    setState(() {
-      _sources
-        ..clear()
-        ..addAll(sources);
-    });
-    _notify();
-  }
-
-  void _notify() {
-    widget.onSourcesChanged?.call(List.unmodifiable(_sources));
-  }
+  PgnSourcesController get _controller => widget.controller;
 
   Future<void> _addFromFile() async {
     try {
@@ -86,22 +64,22 @@ class PgnSourcesPanelState extends State<PgnSourcesPanel> {
         final path = file.path;
         if (path == null) continue;
         // Dedupe by path
-        if (_sources.any((s) => s.filePath == path)) continue;
+        if (_controller.hasFile(path)) continue;
 
         final content = await StorageFactory.instance.readFile(path);
         if (!mounted) return;
         final gameCount = content != null ? pgn.countPgnGames(content) : 0;
 
-        final source = PgnSource(
-          id: PgnSource.generateId(),
-          name: p.basenameWithoutExtension(path),
-          filePath: path,
-          rawPgnContent: content,
-          totalGames: gameCount,
+        _controller.add(
+          PgnSource(
+            id: PgnSource.generateId(),
+            name: p.basenameWithoutExtension(path),
+            filePath: path,
+            rawPgnContent: content,
+            totalGames: gameCount,
+          ),
         );
-        setState(() => _sources.add(source));
       }
-      _notify();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -117,22 +95,16 @@ class PgnSourcesPanelState extends State<PgnSourcesPanel> {
         context: context,
         builder: (ctx) => _CompactPasteDialog(),
       ).then((source) {
-        if (!mounted) return;
-        if (source != null) {
-          setState(() => _sources.add(source));
-          _notify();
-        }
+        if (!mounted || source == null) return;
+        _controller.add(source);
       }),
     );
   }
 
   void _removeSource(int index) {
-    final id = _sources[index].id;
-    setState(() {
-      _sources.removeAt(index);
-      if (_expandedSourceId == id) _expandedSourceId = null;
-    });
-    _notify();
+    final id = _controller.sources[index].id;
+    if (_expandedSourceId == id) setState(() => _expandedSourceId = null);
+    _controller.removeAt(index);
   }
 
   void _toggleSliceEditor(String id) {
@@ -143,8 +115,16 @@ class PgnSourcesPanelState extends State<PgnSourcesPanel> {
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: _controller,
+      builder: (context, _) => _body(context),
+    );
+  }
+
+  Widget _body(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final sources = _controller.sources;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -170,30 +150,24 @@ class PgnSourcesPanelState extends State<PgnSourcesPanel> {
         const SizedBox(height: 8),
 
         // Source list
-        if (_sources.isEmpty)
+        if (sources.isEmpty)
           _EmptyState(onPickFile: _addFromFile, onPaste: _showPasteDialog)
         else
-          ..._sources.asMap().entries.map((entry) {
-            final idx = entry.key;
-            final source = entry.value;
-            final isExpanded = _expandedSourceId == source.id;
-            return _SourceRow(
-              source: source,
-              index: idx,
-              isExpanded: isExpanded,
+          for (var i = 0; i < sources.length; i++)
+            _SourceRow(
+              source: sources[i],
+              index: i,
+              isExpanded: _expandedSourceId == sources[i].id,
               boardPreview: widget.boardPreview,
               currentFen: widget.currentFen,
-              onRemove: () => _removeSource(idx),
-              onToggleSlice: () => _toggleSliceEditor(source.id),
-              onSliceResult: (indices, config) {
-                setState(() {
-                  source.sliceConfig = config;
-                  source.matchedIndices = indices;
-                });
-                _notify();
-              },
-            );
-          }),
+              onRemove: () => _removeSource(i),
+              onToggleSlice: () => _toggleSliceEditor(sources[i].id),
+              onSliceResult: (indices, config) => _controller.applySlice(
+                sources[i],
+                config: config,
+                matchedIndices: indices,
+              ),
+            ),
       ],
     );
   }

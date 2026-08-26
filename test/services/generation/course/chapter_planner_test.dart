@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/services/generation/course/chapter_planner.dart';
+import 'package:chess_auto_prep/services/generation/course/opening_namer.dart';
 import 'package:chess_auto_prep/services/generation/line_extractor.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -50,6 +51,8 @@ List<ExtractedLine> _fan(
 }
 
 void main() {
+  group('ChapterPlanner cut by ECO code', _ecoTests);
+
   group('ChapterPlanner', () {
     const planner = ChapterPlanner(maxLines: 10, minLines: 3);
 
@@ -138,5 +141,98 @@ void main() {
     test('empty input yields no chapters', () {
       expect(planner.plan(const []), isEmpty);
     });
+  });
+}
+
+// ── ECO-cut chapters ───────────────────────────────────────────────────────
+
+/// Classify by the line's first move, standing in for the real ECO book.
+OpeningLabel? Function(List<String>) _ecoByFirstMove(
+  Map<String, OpeningLabel> byMove,
+) =>
+    (moves) => moves.isEmpty ? null : byMove[moves.first];
+
+void _ecoTests() {
+  const najdorf = OpeningLabel(
+    eco: 'B90',
+    name: 'Sicilian Defense: Najdorf Variation',
+  );
+  const ruy = OpeningLabel(eco: 'C60', name: 'Ruy Lopez');
+
+  ChapterPlanner planner(Map<String, OpeningLabel> byMove) =>
+      ChapterPlanner(maxLines: 40, minLines: 3, ecoOf: _ecoByFirstMove(byMove));
+
+  test('lines are cut by code, not by where the tree branches', () {
+    final lines = [..._fan('e4', 5), ..._fan('d4', 5)];
+    final groups = planner({'e4': najdorf, 'd4': ruy}).plan(lines);
+
+    expect(groups.length, 2);
+    expect(groups.map((g) => g.ecoLabel?.eco).toSet(), {'B90', 'C60'});
+    expect(groups.every((g) => g.lines.length == 5), isTrue);
+  });
+
+  test('one code reached by different move orders is still one chapter', () {
+    // Two prefixes, one code: branch-point cutting would make two chapters.
+    final lines = [..._fan('e4', 4), ..._fan('Nf3', 4)];
+    final groups = planner({'e4': najdorf, 'Nf3': najdorf}).plan(lines);
+
+    expect(groups.length, 1);
+    expect(groups.single.lines.length, 8);
+    expect(groups.single.ecoLabel?.eco, 'B90');
+    // The chapter is named from the code, not from a prefix the lines do
+    // not actually share.
+    expect(groups.single.prefixSan, isEmpty);
+  });
+
+  test('a code too small to be a chapter joins the leftovers', () {
+    final lines = [..._fan('e4', 6), ..._fan('d4', 2)];
+    final groups = planner({'e4': najdorf, 'd4': ruy}).plan(lines);
+
+    expect(groups.length, 2);
+    expect(groups.first.ecoLabel?.eco, 'B90');
+    expect(groups.last.isMisc, isTrue);
+    expect(groups.last.lines.length, 2);
+    expect(groups.last.ecoLabel, isNull);
+  });
+
+  test('unclassified lines land in the leftovers rather than vanishing', () {
+    final lines = [..._fan('e4', 6), ..._fan('c4', 3)];
+    final groups = planner({'e4': najdorf}).plan(lines);
+
+    expect(groups.map((g) => g.lines.length).reduce((a, b) => a + b), 9);
+    expect(groups.last.isMisc, isTrue);
+  });
+
+  test('an oversized code is still split at its branch points', () {
+    final planner = ChapterPlanner(
+      maxLines: 5,
+      minLines: 2,
+      ecoOf: _ecoByFirstMove({'e4': najdorf}),
+    );
+    final groups = planner.plan([..._fan('e4 c5', 5), ..._fan('e4 e5', 5)]);
+
+    expect(groups.length, greaterThan(1));
+    // Every sub-chapter still knows which code it belongs to.
+    expect(groups.every((g) => g.ecoLabel?.eco == 'B90'), isTrue);
+  });
+
+  test('nothing classified falls back to branch-point cutting', () {
+    final lines = [..._fan('e4', 5), ..._fan('d4', 5)];
+    final groups = ChapterPlanner(
+      maxLines: 5,
+      minLines: 3,
+      ecoOf: (_) => null,
+    ).plan(lines);
+
+    expect(groups.length, greaterThan(1));
+    expect(groups.every((g) => g.ecoLabel == null), isTrue);
+    // Not one giant misc bucket holding the whole book.
+    expect(groups.where((g) => g.isMisc).length, lessThan(groups.length));
+  });
+
+  test('without a classifier the planner is unchanged', () {
+    final lines = [..._fan('e4', 5), ..._fan('d4', 5)];
+    final byBranch = ChapterPlanner(maxLines: 5, minLines: 3).plan(lines);
+    expect(byBranch.every((g) => g.ecoLabel == null), isTrue);
   });
 }
