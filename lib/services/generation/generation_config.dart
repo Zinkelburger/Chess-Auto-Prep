@@ -370,7 +370,7 @@ class TreeBuildConfig {
   /// replies come from titled-player practice (blended with Maia), model
   /// games are real master games along the line, and a repertoire move that
   /// beats what masters actually played is annotated "improves on … in
-  /// <game>".  Has no effect until the database is downloaded.
+  /// `<game>`".  Has no effect until the database is downloaded.
   final bool useMasterGames;
 
   /// When [useMasterGames] is on but the database is empty, download it

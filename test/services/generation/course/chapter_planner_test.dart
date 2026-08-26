@@ -232,7 +232,7 @@ void _ecoTests() {
 
   test('without a classifier the planner is unchanged', () {
     final lines = [..._fan('e4', 5), ..._fan('d4', 5)];
-    final byBranch = ChapterPlanner(maxLines: 5, minLines: 3).plan(lines);
+    final byBranch = const ChapterPlanner(maxLines: 5, minLines: 3).plan(lines);
     expect(byBranch.every((g) => g.ecoLabel == null), isTrue);
   });
 }

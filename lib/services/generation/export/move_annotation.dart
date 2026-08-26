@@ -274,7 +274,7 @@ class MoveAnnotation {
   }
 
   /// This annotation with [note] added (a sentence such as "…improves on …
-  /// in <game>"), everything else unchanged.  A note already present is kept
+  /// in `<game>`"), everything else unchanged.  A note already present is kept
   /// and the new one follows it: the extractor's transposition note and the
   /// composer's improvement note can land on the same move.
   MoveAnnotation withNote(String note) => MoveAnnotation(

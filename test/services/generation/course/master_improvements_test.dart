@@ -1,4 +1,4 @@
-/// "X improves on Y in <game>": the pass must claim an improvement only when
+/// "X improves on Y in `<game>`": the pass must claim an improvement only when
 /// masters mostly played something else *and* the engine, judging both moves
 /// at the same depth, backs ours by the configured margin — and it must
 /// cite a real game with the continuation that game played.

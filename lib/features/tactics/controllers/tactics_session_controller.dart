@@ -111,10 +111,9 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
   TacticsSessionController({
     TacticsDatabase? database,
     TacticsEngine? engine,
-    TacticsPanelHooks? panel,
+    this._panel,
   }) : database = database ?? TacticsDatabase(),
-       engine = engine ?? TacticsEngine(),
-       _panel = panel;
+       engine = engine ?? TacticsEngine();
 
   final TacticsDatabase database;
   final TacticsEngine engine;

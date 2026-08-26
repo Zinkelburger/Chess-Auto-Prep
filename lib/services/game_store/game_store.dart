@@ -356,11 +356,11 @@ class GameStore {
       _db.execute('ROLLBACK');
       rethrow;
     } finally {
-      find.dispose();
-      insert.dispose();
-      update.dispose();
-      clearPositions.dispose();
-      insertPosition.dispose();
+      find.close();
+      insert.close();
+      update.close();
+      clearPositions.close();
+      insertPosition.close();
     }
     return GameStoreImportResult(
       inserted: inserted,
@@ -386,7 +386,7 @@ class GameStore {
       _db.execute('ROLLBACK');
       rethrow;
     } finally {
-      stmt.dispose();
+      stmt.close();
     }
     return n;
   }

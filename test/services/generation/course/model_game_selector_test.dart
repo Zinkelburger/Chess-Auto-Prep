@@ -82,7 +82,7 @@ BuildTree _benkoRepertoire() {
     isWhiteToMove: true,
     evalCp: 56,
     parent: nxd5,
-  )..isRepertoireMove = true;
+  ).isRepertoireMove = true;
   return BuildTree(root: root, totalNodes: 5);
 }
 

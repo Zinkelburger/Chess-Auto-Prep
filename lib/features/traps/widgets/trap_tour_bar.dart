@@ -101,9 +101,9 @@ class TrapTourBarState extends State<TrapTourBar> {
     final trap = _currentTrap;
 
     return Container(
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: AppColors.surfaceInset,
-        border: const Border(top: BorderSide(color: AppColors.outline)),
+        border: Border(top: BorderSide(color: AppColors.outline)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

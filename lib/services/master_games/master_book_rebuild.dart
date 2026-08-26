@@ -162,8 +162,8 @@ Future<ClassicalCitationRebuild> rebuildClassicalCitations(
       await Future<void>.delayed(Duration.zero);
     }
   } finally {
-    select.dispose();
-    update.dispose();
+    select.close();
+    update.close();
   }
 
   return ClassicalCitationRebuild(

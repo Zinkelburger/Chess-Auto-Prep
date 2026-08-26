@@ -3,6 +3,8 @@
 /// downloads or dismisses; while a download runs it shows progress instead.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -63,7 +65,7 @@ class MasterGamesPromptBanner extends StatelessWidget {
             ] else ...[
               TextButton(
                 onPressed: () {
-                  service.sync();
+                  unawaited(service.sync());
                   onShowJobs?.call();
                 },
                 child: const Text('Download'),

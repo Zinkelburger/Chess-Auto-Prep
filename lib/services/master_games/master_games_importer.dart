@@ -256,8 +256,8 @@ MasterGamesImportResult _import(
     db.execute('ROLLBACK');
     rethrow;
   } finally {
-    insertGame.dispose();
-    upsertBook.dispose();
+    insertGame.close();
+    upsertBook.close();
   }
   // Fold the WAL back into the file now rather than leaving a
   // database-sized journal for the next import to trip over.  Best effort:

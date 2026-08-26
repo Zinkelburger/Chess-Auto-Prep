@@ -11,7 +11,7 @@
 ///                (position, move) for plies ≤ [kBookMaxPly] with game
 ///                counts, results, Elo and two sample game ids (strongest,
 ///                most recent).  This is a local Lichess-masters explorer and
-///                the source of "X improves on Y in <game>" citations.
+///                the source of "X improves on Y in `<game>`" citations.
 ///   twic_issues  which weekly issues are in, so sync is incremental.
 ///   meta         key/value blobs: the movetext dictionary.
 ///

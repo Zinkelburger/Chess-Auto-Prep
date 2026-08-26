@@ -99,7 +99,7 @@ class EngineResourcesSection extends StatelessWidget {
               _ConfigStatChip(
                 label: '$clamped thread${clamped == 1 ? '' : 's'} active',
               ),
-              _ConfigStatChip(label: '$kPoolHashPerWorkerMb MB hash'),
+              const _ConfigStatChip(label: '$kPoolHashPerWorkerMb MB hash'),
             ],
           ),
           if (!enabled) ...[

@@ -59,14 +59,11 @@ typedef EnrichmentProbe<T> =
 /// taken at construction would go stale (CLAUDE.md's supplier-callback rule).
 class EnrichmentRunner {
   EnrichmentRunner({
-    required TreeBuildConfig? Function() config,
-    required bool Function() isCancelled,
-    required void Function(String message) onStatus,
-    required Future<void> Function() ensureEngine,
-  }) : _config = config,
-       _isCancelled = isCancelled,
-       _onStatus = onStatus,
-       _ensureEngine = ensureEngine;
+    required this._config,
+    required this._isCancelled,
+    required this._onStatus,
+    required this._ensureEngine,
+  });
 
   final TreeBuildConfig? Function() _config;
   final bool Function() _isCancelled;
