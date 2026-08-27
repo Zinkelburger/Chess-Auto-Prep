@@ -3,10 +3,11 @@
  * chess.js, promotion, and the arrows/highlights lila uses to show a
  * solution.
  *
- * There is no promotion picker. The board queens by default and asks
- * [BoardOptions.promotionFor] first, so a puzzle whose solution underpromotes
- * gets the piece the line actually wants — otherwise the position would
- * diverge from the line after the very move that solved it.
+ * A pawn reaching the last rank opens lila's promotion picker (its
+ * `#promotion-choice`: a translucent sheet over the board with the four
+ * pieces in a column on the promotion file, running from the last rank back
+ * towards the middle). Clicking a piece plays the move; clicking anywhere
+ * else puts the pawn back.
  */
 import { Chess, type Square } from 'chess.js';
 import { Chessground } from 'chessground';
@@ -18,9 +19,15 @@ export type PromotionPiece = 'q' | 'r' | 'b' | 'n';
 
 export interface BoardOptions {
   onMove: (uci: string) => void;
-  /** Promotion piece for this from→to, when something knows better than a queen. */
-  promotionFor?: (orig: Key, dest: Key) => PromotionPiece | undefined;
 }
+
+/** lila's order: queen first, then knight, rook, bishop. */
+const PROMOTABLE: { piece: PromotionPiece; role: string }[] = [
+  { piece: 'q', role: 'queen' },
+  { piece: 'n', role: 'knight' },
+  { piece: 'r', role: 'rook' },
+  { piece: 'b', role: 'bishop' },
+];
 
 export class TrainerBoard {
   private cg: Api;
@@ -35,8 +42,10 @@ export class TrainerBoard {
    * resets the board mid-animation, wiping the solution arrows.
    */
   private applying = false;
+  /** The `#promotion-choice` sheet while a promotion is being chosen. */
+  private promotionEl: HTMLElement | null = null;
 
-  constructor(el: HTMLElement, private readonly opts: BoardOptions) {
+  constructor(private readonly el: HTMLElement, private readonly opts: BoardOptions) {
     this.cg = Chessground(el, {
       coordinates: true,
       movable: { free: false, color: undefined, dests: new Map(), showDests: true },
@@ -71,6 +80,7 @@ export class TrainerBoard {
 
   /** Show [fen]; optional [lastMove] highlight. */
   setPosition(fen: string, lastMove?: [Key, Key]): void {
+    this.dismissPromotion();
     this.chess.load(fen);
     this.cg.set({
       fen,
@@ -90,6 +100,7 @@ export class TrainerBoard {
 
   setInteractive(on: boolean): void {
     this.interactive = on;
+    if (!on) this.cancelPromotion();
     this.cg.set({ movable: this.movableConfig() });
   }
 
@@ -103,9 +114,17 @@ export class TrainerBoard {
   private onUserMove(orig: Key, dest: Key): void {
     if (this.applying) return;
     const piece = this.chess.get(orig as Square);
-    const promotion = piece?.type === 'p' && (dest[1] === '8' || dest[1] === '1')
-      ? this.opts.promotionFor?.(orig, dest) ?? 'q'
-      : undefined;
+    if (piece?.type === 'p' && (dest[1] === '8' || dest[1] === '1')) {
+      // Chessground has already slid the pawn onto the last rank; leave it
+      // there under the picker, as lila does, and finish in [finishPromotion].
+      this.cg.set({ movable: { color: undefined, dests: new Map() } });
+      this.showPromotion(orig, dest, piece.color === 'w' ? 'white' : 'black');
+      return;
+    }
+    this.commitUserMove(orig, dest);
+  }
+
+  private commitUserMove(orig: Key, dest: Key, promotion?: PromotionPiece): void {
     let uci = orig + dest;
     try {
       this.chess.move({ from: orig, to: dest, promotion });
@@ -122,6 +141,61 @@ export class TrainerBoard {
       movable: { color: undefined, dests: new Map() },
     });
     this.opts.onMove(uci);
+  }
+
+  /**
+   * lila's `PromotionCtrl.renderPromotion`: the column sits on the promotion
+   * file, and runs from the top of the board when the promoting side is the
+   * one at the bottom (its last rank is the top row), else from the bottom.
+   */
+  private showPromotion(orig: Key, dest: Key, color: 'white' | 'black'): void {
+    this.dismissPromotion();
+    const sheet = document.createElement('div');
+    sheet.id = 'promotion-choice';
+    const fromTop = color === this.orientation;
+    sheet.classList.add(fromTop ? 'top' : 'bottom');
+    const file = dest.charCodeAt(0) - 'a'.charCodeAt(0);
+    const left = (this.orientation === 'white' ? file : 7 - file) * 12.5;
+    PROMOTABLE.forEach(({ piece, role }, i) => {
+      const square = document.createElement('square');
+      square.style.top = `${(fromTop ? i : 7 - i) * 12.5}%`;
+      square.style.left = `${left}%`;
+      const el = document.createElement('piece');
+      el.classList.add(role, color);
+      square.appendChild(el);
+      square.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.finishPromotion(orig, dest, piece);
+      });
+      sheet.appendChild(square);
+    });
+    sheet.addEventListener('click', () => this.cancelPromotion());
+    sheet.oncontextmenu = () => false;
+    this.el.appendChild(sheet);
+    this.promotionEl = sheet;
+  }
+
+  private dismissPromotion(): boolean {
+    if (!this.promotionEl) return false;
+    this.promotionEl.remove();
+    this.promotionEl = null;
+    return true;
+  }
+
+  /** Put the pawn back and hand the move back to the user. */
+  private cancelPromotion(): void {
+    if (!this.dismissPromotion()) return;
+    this.cg.set({
+      fen: this.chess.fen(),
+      turnColor: this.turn(),
+      check: this.chess.inCheck(),
+      movable: this.movableConfig(),
+    });
+  }
+
+  private finishPromotion(orig: Key, dest: Key, piece: PromotionPiece): void {
+    this.dismissPromotion();
+    this.commitUserMove(orig, dest, piece);
   }
 
   /** Play [uci] with animation from the current position. Returns false if illegal. */

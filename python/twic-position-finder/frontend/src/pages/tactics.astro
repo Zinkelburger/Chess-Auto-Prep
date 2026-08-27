@@ -233,7 +233,7 @@ import '../styles/alerts.css';
   .train-layout { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 1fr); gap: 24px; align-items: start; }
   @media (max-width: 800px) { .train-layout { grid-template-columns: 1fr; } }
   .board-col { width: 100%; }
-  .trainer-board { width: 100%; aspect-ratio: 1; border-radius: 4px; overflow: hidden; box-shadow: var(--shadow); }
+  .trainer-board { position: relative; width: 100%; aspect-ratio: 1; border-radius: 4px; overflow: hidden; box-shadow: var(--shadow); }
   .side-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   .side-card { margin-bottom: 0; padding: 18px 20px; }
 
@@ -307,6 +307,24 @@ import '../styles/alerts.css';
   .trainer-board coords { text-shadow: none; }
   .trainer-board coords .coord-light { color: #946f51; }
   .trainer-board coords .coord-dark { color: #f0d9b5; }
+
+  /* lila's promotion picker (ui/lib/css/chess/_promotion.scss). */
+  .trainer-board #promotion-choice {
+    position: absolute; inset: 0; z-index: 205;
+    background: rgba(0, 0, 0, 0.5);
+  }
+  .trainer-board #promotion-choice square {
+    position: absolute; width: 12.5%; height: 12.5%;
+    cursor: pointer; border-radius: 50%;
+    background-color: #b0b0b0; box-shadow: inset 0 0 25px 3px #808080;
+    transition: all 0.15s;
+  }
+  .trainer-board #promotion-choice square:hover { box-shadow: inset 0 0 48px 8px var(--accent); border-radius: 0; }
+  .trainer-board #promotion-choice piece {
+    position: absolute; width: 100%; height: 100%; pointer-events: none;
+    transform: scale(0.8); transition: transform 0.15s;
+  }
+  .trainer-board #promotion-choice square:hover piece { transform: none; }
 </style>
 
 <script>

@@ -5,7 +5,7 @@
  */
 import type { Key } from 'chessground/types';
 import { HoverBoard } from '../lib/board-preview';
-import { TrainerBoard, type PromotionPiece } from './board';
+import { TrainerBoard } from './board';
 import { EnginePool } from './engine/engine-pool';
 import { EngineAbortError } from './engine/uci-worker';
 import { lineToSan, mineGame, trainablePlyCount, userColorOf, type Puzzle } from './miner';
@@ -446,7 +446,6 @@ export class TacticsApp {
     if (!this.board) {
       this.board = new TrainerBoard($('board'), {
         onMove: (uci) => this.onMove(uci),
-        promotionFor: (orig, dest) => this.expectedPromotion(orig + dest),
       });
     }
     this.show('train');
@@ -675,29 +674,14 @@ export class TacticsApp {
     });
   }
 
-  /**
-   * The piece the solution promotes to on this from→to, so the board plays
-   * the line's move instead of always queening. Without it an underpromotion
-   * puzzle accepts the queen and then continues from a position the rest of
-   * the line does not describe.
-   */
-  private expectedPromotion(fromTo: string): PromotionPiece | undefined {
-    const p = this.current;
-    if (!p) return undefined;
-    const correct = this.trainLine(p)[this.solvedPlies] ?? '';
-    if (correct.length !== 5 || correct.slice(0, 4).toLowerCase() !== fromTo.toLowerCase()) return undefined;
-    return correct[4] as PromotionPiece;
-  }
-
   private onMove(uci: string): void {
     const p = this.current;
     if (!p || !this.board || this.solved || this.revealed) return;
     const line = this.trainLine(p);
     const correct = (line[this.solvedPlies] ?? '').toLowerCase();
     const played = uci.toLowerCase();
-    // Exact: expectedPromotion() has already given the board the line's own
-    // promotion piece, so a right move matches outright rather than being
-    // forgiven for queening.
+    // Exact, promotion piece included: the board asked which piece, so an
+    // underpromotion puzzle is only solved by the underpromotion.
     const isMatch = correct !== '' && played === correct;
 
     if (!isMatch) {

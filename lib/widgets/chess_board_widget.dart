@@ -8,7 +8,7 @@ import '../models/board_annotation.dart';
 import '../models/completed_move.dart';
 import '../theme/app_colors.dart';
 import '../utils/chess_utils.dart'
-    show parseSquare, toAlgebraic, castlingKingDestination;
+    show parseSquare, toAlgebraic, castlingKingDestination, roleChar;
 import 'common/piece_image.dart';
 
 export '../models/completed_move.dart' show CompletedMove;
@@ -65,6 +65,11 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
   Offset? _dragStartPosition;
   Piece? _draggedPiece;
 
+  /// A pawn move onto the last rank awaiting its piece. The pawn is drawn on
+  /// [_Promoting.to] and a lila-style column of choices covers the board
+  /// until the user picks one or clicks elsewhere to cancel.
+  _Promoting? _promoting;
+
   // Drives only the floating dragged-piece layer. Following the cursor now
   // repaints one Positioned widget via ValueListenableBuilder instead of
   // setState-rebuilding the whole board (64-square painter + up to 32 piece
@@ -108,15 +113,15 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
             onPointerCancel: (_) => _shapeStartSquare = null,
             child: GestureDetector(
               onPanStart: (details) {
-                if (!widget.enableUserMoves) return;
+                if (!widget.enableUserMoves || _promoting != null) return;
                 _onPanStart(details, squareSize);
               },
               onPanUpdate: (details) {
-                if (!widget.enableUserMoves) return;
+                if (!widget.enableUserMoves || _promoting != null) return;
                 _onPanUpdate(details);
               },
               onPanEnd: (details) {
-                if (!widget.enableUserMoves) return;
+                if (!widget.enableUserMoves || _promoting != null) return;
                 _onPanEnd(details, squareSize);
               },
               onTapUp: (details) {
@@ -169,6 +174,8 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
                       return _buildDraggedPiece(squareSize, dragPos);
                     },
                   ),
+                  if (_promoting != null)
+                    _buildPromotionChoice(_promoting!, squareSize),
                 ],
               ),
             ),
@@ -195,7 +202,15 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
         final squareName = '$file$rank';
         final sq = parseSquare(squareName);
         if (sq == null) continue;
-        final piece = widget.position.board.pieceAt(sq);
+        var piece = widget.position.board.pieceAt(sq);
+
+        // While the picker is open the pawn sits on its destination square,
+        // as lila shows it, not back where it came from.
+        final promoting = _promoting;
+        if (promoting != null) {
+          if (squareName == promoting.from) continue;
+          if (squareName == promoting.to) piece = promoting.pawn;
+        }
 
         if (piece != null) {
           if (_isDragging && squareName == _dragStartSquare) {
@@ -323,6 +338,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
       _clearDragBookkeeping();
       selectedSquare = null;
       _internalHighlights.clear();
+      _promoting = null;
     });
   }
 
@@ -428,10 +444,8 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
 
   void _tryMakeMove(String from, String to) {
     try {
-      final fenBefore = widget.position.fen;
-
       final fromSq = parseSquare(from);
-      var toSq = parseSquare(to);
+      Square? toSq = parseSquare(to);
       if (fromSq == null || toSq == null) {
         _clearSelection();
         return;
@@ -456,15 +470,41 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
           ((piece!.color == Side.white && toSq ~/ 8 == 7) ||
               (piece.color == Side.black && toSq ~/ 8 == 0));
 
-      final move = NormalMove(
-        from: fromSq,
-        to: toSq,
-        promotion: isPromotion ? Role.queen : null,
-      );
+      if (isPromotion) {
+        // Ask which piece, as lila does, rather than assuming a queen.
+        setState(() {
+          selectedSquare = null;
+          _internalHighlights.clear();
+          _promoting = _Promoting(
+            from: from,
+            to: toAlgebraic(toSq!),
+            pawn: piece,
+          );
+        });
+        return;
+      }
+
+      _completeMove(fromSq, toSq, null);
+    } catch (e) {
+      debugPrint('[ChessBoardWidget] Move failed: $e');
+      _clearSelection();
+    }
+  }
+
+  /// Play [from]→[to] (with [promotion] for a pawn reaching the last rank)
+  /// and report it through [ChessBoardWidget.onMove].
+  void _completeMove(Square fromSq, Square toSq, Role? promotion) {
+    try {
+      final from = toAlgebraic(fromSq);
+      final to = toAlgebraic(toSq);
+      final fenBefore = widget.position.fen;
+      final move = NormalMove(from: fromSq, to: toSq, promotion: promotion);
 
       final (newPosition, san) = widget.position.makeSan(move);
       final fenAfter = newPosition.fen;
-      final uci = isPromotion ? '$from${to}q' : '$from$to';
+      final uci = promotion != null
+          ? '$from$to${roleChar(promotion).toLowerCase()}'
+          : '$from$to';
 
       _clearSelection();
 
@@ -488,7 +528,124 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
     setState(() {
       selectedSquare = null;
       _internalHighlights.clear();
+      _promoting = null;
     });
+  }
+
+  void _finishPromotion(_Promoting promoting, Role role) {
+    final fromSq = parseSquare(promoting.from);
+    final toSq = parseSquare(promoting.to);
+    if (fromSq == null || toSq == null) {
+      _clearSelection();
+      return;
+    }
+    _completeMove(fromSq, toSq, role);
+  }
+
+  /// lila's `#promotion-choice`: a translucent sheet over the board, with the
+  /// four pieces in a column on the promotion file running from the last rank
+  /// back towards the middle. Clicking the sheet cancels.
+  Widget _buildPromotionChoice(_Promoting promoting, double squareSize) {
+    final (col, _) = _squareToCoords(promoting.to);
+    final bottomSide = widget.flipped ? Side.black : Side.white;
+    final fromTop = promoting.pawn.color == bottomSide;
+
+    return Positioned.fill(
+      child: GestureDetector(
+        key: const Key('promotion-choice'),
+        behavior: HitTestBehavior.opaque,
+        onTap: _clearSelection,
+        child: ColoredBox(
+          color: Colors.black.withValues(alpha: 0.5),
+          child: Stack(
+            children: [
+              for (final (i, role) in _promotableRoles.indexed)
+                Positioned(
+                  left: col * squareSize,
+                  top: (fromTop ? i : 7 - i) * squareSize,
+                  width: squareSize,
+                  height: squareSize,
+                  child: _PromotionSquare(
+                    piece: Piece(color: promoting.pawn.color, role: role),
+                    size: squareSize,
+                    onTap: () => _finishPromotion(promoting, role),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+const List<Role> _promotableRoles = [
+  Role.queen,
+  Role.knight,
+  Role.rook,
+  Role.bishop,
+];
+
+class _Promoting {
+  final String from;
+  final String to;
+  final Piece pawn;
+
+  const _Promoting({required this.from, required this.to, required this.pawn});
+}
+
+/// One choice in the promotion column: a grey disc that squares off and
+/// tints on hover, like lila's `#promotion-choice square`.
+class _PromotionSquare extends StatefulWidget {
+  final Piece piece;
+  final double size;
+  final VoidCallback onTap;
+
+  const _PromotionSquare({
+    required this.piece,
+    required this.size,
+    required this.onTap,
+  });
+
+  @override
+  State<_PromotionSquare> createState() => _PromotionSquareState();
+}
+
+class _PromotionSquareState extends State<_PromotionSquare> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        key: ValueKey('promote-${roleChar(widget.piece.role)}'),
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          decoration: BoxDecoration(
+            color: const Color(0xFFB0B0B0),
+            borderRadius: BorderRadius.circular(_hover ? 0 : widget.size),
+            boxShadow: [
+              BoxShadow(
+                color: _hover ? AppColors.accent : const Color(0xFF808080),
+                blurRadius: _hover ? widget.size * 0.6 : widget.size * 0.3,
+                spreadRadius: _hover ? widget.size * 0.1 : widget.size * 0.04,
+                blurStyle: BlurStyle.inner,
+              ),
+            ],
+          ),
+          child: AnimatedScale(
+            duration: const Duration(milliseconds: 150),
+            scale: _hover ? 1 : 0.8,
+            child: PieceImage(piece: widget.piece, size: widget.size),
+          ),
+        ),
+      ),
+    );
   }
 }
 
