@@ -1,8 +1,12 @@
 /**
  * Chessground wrapper for the trainer board: legal-move generation from
- * chess.js, promotion (auto-queen; a non-queen promotion is accepted if the
- * engine line wants one), and the arrows/highlights lila uses to show a
+ * chess.js, promotion, and the arrows/highlights lila uses to show a
  * solution.
+ *
+ * There is no promotion picker. The board queens by default and asks
+ * [BoardOptions.promotionFor] first, so a puzzle whose solution underpromotes
+ * gets the piece the line actually wants — otherwise the position would
+ * diverge from the line after the very move that solved it.
  */
 import { Chess, type Square } from 'chess.js';
 import { Chessground } from 'chessground';
@@ -10,8 +14,12 @@ import type { Api } from 'chessground/api';
 import type { Key } from 'chessground/types';
 import type { DrawShape } from 'chessground/draw';
 
+export type PromotionPiece = 'q' | 'r' | 'b' | 'n';
+
 export interface BoardOptions {
   onMove: (uci: string) => void;
+  /** Promotion piece for this from→to, when something knows better than a queen. */
+  promotionFor?: (orig: Key, dest: Key) => PromotionPiece | undefined;
 }
 
 export class TrainerBoard {
@@ -19,6 +27,14 @@ export class TrainerBoard {
   private chess = new Chess();
   private interactive = false;
   private orientation: 'white' | 'black' = 'white';
+  /**
+   * Set while we drive the board ourselves. `cg.move()` fires chessground's
+   * own `events.move`, which is wired to [onUserMove] — without this the
+   * auto-played engine reply re-enters as though the user had made it, the
+   * nested `chess.move` throws on an already-advanced position, and the catch
+   * resets the board mid-animation, wiping the solution arrows.
+   */
+  private applying = false;
 
   constructor(el: HTMLElement, private readonly opts: BoardOptions) {
     this.cg = Chessground(el, {
@@ -85,8 +101,11 @@ export class TrainerBoard {
   }
 
   private onUserMove(orig: Key, dest: Key): void {
+    if (this.applying) return;
     const piece = this.chess.get(orig as Square);
-    const promotion = piece?.type === 'p' && (dest[1] === '8' || dest[1] === '1') ? 'q' : undefined;
+    const promotion = piece?.type === 'p' && (dest[1] === '8' || dest[1] === '1')
+      ? this.opts.promotionFor?.(orig, dest) ?? 'q'
+      : undefined;
     let uci = orig + dest;
     try {
       this.chess.move({ from: orig, to: dest, promotion });
@@ -107,6 +126,7 @@ export class TrainerBoard {
 
   /** Play [uci] with animation from the current position. Returns false if illegal. */
   playUci(uci: string): boolean {
+    this.applying = true;
     try {
       const mv = this.chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
       this.cg.move(mv.from as Key, mv.to as Key);
@@ -120,6 +140,8 @@ export class TrainerBoard {
       return true;
     } catch {
       return false;
+    } finally {
+      this.applying = false;
     }
   }
 

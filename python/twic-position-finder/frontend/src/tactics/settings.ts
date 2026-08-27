@@ -1,5 +1,6 @@
 /** Trainer settings, persisted in localStorage under one key. */
 import { defaultPoolSize } from './engine/engine-pool';
+import type { MinSeverity } from './miner';
 import type { TimeClass } from './sources';
 
 export interface Settings {
@@ -9,7 +10,7 @@ export interface Settings {
   depth: number;
   workers: number;
   timeClasses: TimeClass[];
-  minSeverity: 'mistake' | 'inaccuracy';
+  minSeverity: MinSeverity;
   autoNext: boolean;
 }
 

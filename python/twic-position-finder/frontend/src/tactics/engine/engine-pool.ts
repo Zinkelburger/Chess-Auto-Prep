@@ -94,16 +94,30 @@ export class EnginePool {
     if (signal?.aborted) return Promise.reject(new EngineAbortError());
     void this.start().catch(() => { /* surfaced through the task */ });
     return new Promise<EvalResult>((resolve, reject) => {
-      const task: Task = { fen, depth, signal, resolve, reject };
-      this.queue.push(task);
-      signal?.addEventListener('abort', () => {
+      // The listener only matters while the task is still queued; once a
+      // worker has it, the worker's own signal handling takes over. Detach on
+      // settle, or one signal accumulates a closure per site for a whole run.
+      const onAbort = () => {
         const i = this.queue.indexOf(task);
         if (i >= 0) {
           this.queue.splice(i, 1);
-          reject(new EngineAbortError());
+          settle(reject, new EngineAbortError());
           this.emit();
         }
-      }, { once: true });
+      };
+      const settle = <A>(fn: (a: A) => void, arg: A) => {
+        signal?.removeEventListener('abort', onAbort);
+        fn(arg);
+      };
+      const task: Task = {
+        fen,
+        depth,
+        signal,
+        resolve: (r) => settle(resolve, r),
+        reject: (e) => settle(reject, e),
+      };
+      this.queue.push(task);
+      signal?.addEventListener('abort', onAbort);
       this.emit();
       this.pump();
     });
@@ -115,8 +129,17 @@ export class EnginePool {
   }
 
   private pump(): void {
+    // A worker that died between searches never reaches run()'s error path,
+    // so drop it here or it lingers in the pool inflating `ready`.
+    if (this.workers.some((w) => w.isDead)) {
+      this.workers = this.workers.filter((w) => !w.isDead);
+      if (this.workers.length === 0 && !this.disposed && this.queue.length > 0) {
+        this.failQueue(new Error('Every engine worker stopped responding.'));
+      }
+      this.emit();
+    }
     for (const w of this.workers) {
-      if (w.isBusy || w.isDead) continue;
+      if (w.isBusy) continue;
       const task = this.queue.shift();
       if (!task) break;
       this.run(w, task);
@@ -135,13 +158,17 @@ export class EnginePool {
         if (w.isDead) {
           // Drop the dead worker; retry the task elsewhere unless cancelled.
           this.workers = this.workers.filter((x) => x !== w);
-          if (this.workers.length === 0 && !this.disposed) {
+          // dispose() rejects in-flight searches with a plain Error, not an
+          // EngineAbortError, so a disposed pool would otherwise re-queue the
+          // task onto a pool with no workers left to run it and the caller
+          // would await a promise that never settles.
+          if (this.disposed || this.workers.length === 0) {
             this.failQueue(err);
             task.reject(err);
-          } else if (!(err instanceof EngineAbortError)) {
-            this.queue.unshift(task);
-          } else {
+          } else if (err instanceof EngineAbortError) {
             task.reject(err);
+          } else {
+            this.queue.unshift(task);
           }
         } else {
           task.reject(err);

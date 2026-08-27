@@ -12,7 +12,7 @@
  * Everything degrades to in-memory when IndexedDB is unavailable.
  */
 import type { EvalResult } from './engine/uci-worker';
-import type { Puzzle } from './miner';
+import type { MinSeverity, Puzzle } from './miner';
 
 const DB_NAME = 'cap-tactics';
 const DB_VERSION = 1;
@@ -24,6 +24,32 @@ export interface GameRecord {
   analysedAt: number;
   /** Number of user moves that were evaluated. */
   sites: number;
+  /**
+   * The threshold this game was mined at. A record is only reusable for a
+   * run whose threshold is the same or stricter — mining at 'mistake' never
+   * recorded the inaccuracies a later 'inaccuracy' run wants, so that run
+   * has to analyse the game again. Absent on records written before this
+   * field existed; those are re-mined rather than guessed at.
+   */
+  minSeverity?: MinSeverity;
+}
+
+/** Loosest first: a record mined at [0] satisfies any run below it. */
+const SEVERITY_ORDER: MinSeverity[] = ['inaccuracy', 'mistake'];
+
+/**
+ * Can [record] answer a run that wants [want]? Only when it was mined at
+ * least as loosely — otherwise the puzzles it is missing were never found.
+ */
+export function recordSatisfies(record: GameRecord, want: MinSeverity): boolean {
+  if (!record.minSeverity) return false;
+  return SEVERITY_ORDER.indexOf(record.minSeverity) <= SEVERITY_ORDER.indexOf(want);
+}
+
+/** The subset of [record]'s puzzles a run at [want] should actually show. */
+export function puzzlesAtSeverity(record: GameRecord, want: MinSeverity): Puzzle[] {
+  if (want === 'inaccuracy') return record.puzzles;
+  return record.puzzles.filter((p) => p.severity !== 'inaccuracy');
 }
 
 function openDb(): Promise<IDBDatabase | null> {

@@ -88,7 +88,10 @@ export async function fetchLichessGames(
   for (const pgn of splitPgn(text)) {
     const parsed = parsePgn(pgn);
     const url = parsed.headers.Site ?? '';
-    const id = /lichess\.org\/([A-Za-z0-9]{8})/.exec(url)?.[1] ?? url ?? String(games.length);
+    // `||`, not `??`: an absent Site header leaves `url` as '', which `??`
+    // happily accepts — and every game would then share one cache key and
+    // read back the first game's puzzles.
+    const id = /lichess\.org\/([A-Za-z0-9]{8})/.exec(url)?.[1] || url || `idx${games.length}`;
     if (parsed.moves.length === 0) continue;
     games.push({ source: 'lichess', id, parsed, meta: metaFromHeaders('lichess', id, url, parsed, timeClassOf(parsed.headers)) });
   }
@@ -133,10 +136,16 @@ export async function fetchChesscomGames(
     let month: ChesscomGame[];
     try {
       const res = await fetch(monthUrl, { signal });
+      // A throttled archive is not an empty one. Skipping it silently would
+      // hand back a short list that looks like "you only played this much",
+      // so say so instead — the Lichess path already does.
+      if (res.status === 429) {
+        throw new SourceError('Chess.com is rate-limiting requests. Wait a minute and try again.');
+      }
       if (!res.ok) continue;
       month = ((await res.json()) as { games?: ChesscomGame[] }).games ?? [];
     } catch (err) {
-      if ((err as Error).name === 'AbortError') throw err;
+      if (err instanceof SourceError || (err as Error).name === 'AbortError') throw err;
       continue;
     }
     // Newest game first within the month.

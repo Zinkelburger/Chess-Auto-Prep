@@ -56,12 +56,20 @@ export class UciWorker {
     this.worker.onerror = (e) => {
       this.fail(new Error(`Stockfish worker failed: ${e.message || 'unknown error'}`));
     };
-    this.send('uci');
-    await this.waitFor((l) => l === 'uciok', BOOT_TIMEOUT_MS);
-    this.send(`setoption name Hash value ${hashMb}`);
-    this.send('setoption name MultiPV value 1');
-    this.send('setoption name Threads value 1');
-    await this.sync();
+    try {
+      this.send('uci');
+      await this.waitFor((l) => l === 'uciok', BOOT_TIMEOUT_MS);
+      this.send(`setoption name Hash value ${hashMb}`);
+      this.send('setoption name MultiPV value 1');
+      this.send('setoption name Threads value 1');
+      await this.sync();
+    } catch (err) {
+      // The pool only counts the failure; nobody else holds this worker, so
+      // without this the wasm stays resident for the life of the page — once
+      // per configured worker on a slow or blocked engine load.
+      this.terminate();
+      throw err;
+    }
   }
 
   get isBusy(): boolean {
@@ -157,8 +165,24 @@ export class UciWorker {
       } catch (err) {
         // Timed out: stop and drain the bestmove so the next search is clean.
         this.send('stop');
-        line = await this.waitFor((l) => l.startsWith('bestmove'), 5_000).catch(() => 'bestmove (none)');
-        if (this.info.depth === 0) throw err;
+        const drained = await this.waitFor((l) => l.startsWith('bestmove'), 5_000).catch(() => null);
+        if (drained === null) {
+          // The engine owes us a `bestmove` it has not sent. Reusing this
+          // worker would let that line arrive during the *next* search and
+          // satisfy its waiter — returning one position's move for another,
+          // silently. Retire it instead; the pool spreads the work over the
+          // workers that are still answering.
+          this.fail(new Error('Engine stopped responding'));
+          // Kill the process too: a wedged search left running would keep a
+          // core busy for the rest of the session.
+          try { this.worker?.terminate(); } catch { /* already gone */ }
+          this.worker = null;
+          if (this.info.depth === 0) throw err;
+          line = 'bestmove (none)';
+        } else {
+          line = drained;
+          if (this.info.depth === 0) throw err;
+        }
       }
       if (signal?.aborted) throw new EngineAbortError();
       const best = /^bestmove (\S+)/.exec(line)?.[1] ?? null;

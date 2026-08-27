@@ -5,13 +5,13 @@
  */
 import type { Key } from 'chessground/types';
 import { HoverBoard } from '../lib/board-preview';
-import { TrainerBoard } from './board';
+import { TrainerBoard, type PromotionPiece } from './board';
 import { EnginePool } from './engine/engine-pool';
 import { EngineAbortError } from './engine/uci-worker';
 import { lineToSan, mineGame, trainablePlyCount, userColorOf, type Puzzle } from './miner';
 import { fetchChesscomGames, fetchLichessGames, SourceError, type SourceGame } from './sources';
 import { ALL_TIME_CLASSES, LIMITS, loadSettings, saveSettings, type Settings } from './settings';
-import { TacticsStore } from './store';
+import { puzzlesAtSeverity, recordSatisfies, TacticsStore } from './store';
 import { SEVERITY_GLYPH } from './win-chances';
 import { Chess } from 'chess.js';
 
@@ -61,6 +61,8 @@ export class TacticsApp {
   /** Plies of the trainable line already on the board (user + opponent). */
   private solvedPlies = 0;
   private replyTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The 700ms "put the board back after a wrong move" timer. */
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
   /** Set by bindTrain, which owns the checkbox element. */
   private toggleAutoNext: () => void = () => {};
   private attemptedWrong = false;
@@ -290,6 +292,11 @@ export class TacticsApp {
 
     // Two games in flight keeps the pool saturated across game boundaries.
     let next = 0;
+    // Set when the run aborts *itself* after repeated engine errors, to tell
+    // that case apart from the user pressing Cancel: the user's path has
+    // already torn the run down, but ours still has to stop the clock and
+    // say what happened, or the screen keeps counting up forever.
+    let gaveUp = false;
     const runner = async () => {
       while (next < games.length && !ctl.signal.aborted) {
         const i = next++;
@@ -301,9 +308,12 @@ export class TacticsApp {
             const key = TacticsStore.gameKey(g.source, g.id, username, s.depth);
             const cached = await this.store.getGame(key);
             $('an-current').textContent = `${g.meta.white} – ${g.meta.black}`;
-            if (cached) {
+            // A record mined at a stricter threshold never saw the puzzles a
+            // looser run wants, so it cannot stand in for one; a looser record
+            // can, once the puzzles below the new threshold are filtered out.
+            if (cached && recordSatisfies(cached, s.minSeverity)) {
               shortcuts += cached.sites;
-              this.addPuzzles(cached.puzzles);
+              this.addPuzzles(puzzlesAtSeverity(cached, s.minSeverity));
             } else {
               const res = await mineGame(g.parsed, g.meta, color, {
                 pool, store: this.store, depth: s.depth, signal: ctl.signal, minSeverity: s.minSeverity,
@@ -313,7 +323,13 @@ export class TacticsApp {
                 },
               });
               shortcuts += res.shortcuts;
-              this.store.putGame({ key, puzzles: res.puzzles, analysedAt: Date.now(), sites: res.sites });
+              this.store.putGame({
+                key,
+                puzzles: res.puzzles,
+                analysedAt: Date.now(),
+                sites: res.sites,
+                minSeverity: s.minSeverity,
+              });
               this.addPuzzles(res.puzzles);
             }
           }
@@ -323,7 +339,10 @@ export class TacticsApp {
           const note = $('an-note');
           note.textContent = notes.join(' ');
           note.hidden = false;
-          if (notes.length > 3) ctl.abort();
+          if (notes.length > 3) {
+            gaveUp = true;
+            ctl.abort();
+          }
         } finally {
           fractions.delete(i);
           gamesDone++;
@@ -332,6 +351,16 @@ export class TacticsApp {
       }
     };
     await Promise.all([runner(), runner()]);
+    // The runners can spend a moment unwinding after an abort. If the user
+    // pressed Cancel (or started another run) in that window, this run is no
+    // longer the current one and must not touch shared state — finishing here
+    // would clear the *new* run's abort controller and elapsed timer, or drag
+    // the user off the setup screen into the trainer.
+    if (this.abort !== ctl) return;
+    if (gaveUp) {
+      this.finishAnalysis('The engine kept failing, so the run stopped early.');
+      return;
+    }
     if (ctl.signal.aborted) return;
     this.finishAnalysis(null);
   }
@@ -415,7 +444,10 @@ export class TacticsApp {
 
   private enterTraining(): void {
     if (!this.board) {
-      this.board = new TrainerBoard($('board'), { onMove: (uci) => this.onMove(uci) });
+      this.board = new TrainerBoard($('board'), {
+        onMove: (uci) => this.onMove(uci),
+        promotionFor: (orig, dest) => this.expectedPromotion(orig + dest),
+      });
     }
     this.show('train');
     this.renderAnalysingBanner();
@@ -426,7 +458,9 @@ export class TacticsApp {
     const banner = $('tr-analysing');
     banner.hidden = !this.analysing;
     if (this.analysing) {
-      banner.querySelector('span')!.textContent = `Still analysing in the background — ${this.puzzles.length} puzzle${this.puzzles.length === 1 ? '' : 's'} so far.`;
+      // Not querySelector('span'): the first span is the spinner, and the
+      // message would render inside a 14px circle, aria-hidden.
+      $('tr-analysing-text').textContent = `Still analysing in the background — ${this.puzzles.length} puzzle${this.puzzles.length === 1 ? '' : 's'} so far.`;
     }
   }
 
@@ -448,6 +482,8 @@ export class TacticsApp {
   private clearReply(): void {
     if (this.replyTimer) clearTimeout(this.replyTimer);
     this.replyTimer = null;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
   }
 
   /**
@@ -639,21 +675,43 @@ export class TacticsApp {
     });
   }
 
+  /**
+   * The piece the solution promotes to on this from→to, so the board plays
+   * the line's move instead of always queening. Without it an underpromotion
+   * puzzle accepts the queen and then continues from a position the rest of
+   * the line does not describe.
+   */
+  private expectedPromotion(fromTo: string): PromotionPiece | undefined {
+    const p = this.current;
+    if (!p) return undefined;
+    const correct = this.trainLine(p)[this.solvedPlies] ?? '';
+    if (correct.length !== 5 || correct.slice(0, 4).toLowerCase() !== fromTo.toLowerCase()) return undefined;
+    return correct[4] as PromotionPiece;
+  }
+
   private onMove(uci: string): void {
     const p = this.current;
-    if (!p || !this.board || this.solved) return;
+    if (!p || !this.board || this.solved || this.revealed) return;
     const line = this.trainLine(p);
     const correct = (line[this.solvedPlies] ?? '').toLowerCase();
     const played = uci.toLowerCase();
-    const isMatch = correct !== '' && (played === correct
-      || (played.slice(0, 4) === correct.slice(0, 4) && correct.length === 5 && played.length === 5 && played[4] === 'q'));
+    // Exact: expectedPromotion() has already given the board the line's own
+    // promotion piece, so a right move matches outright rather than being
+    // forgiven for queening.
+    const isMatch = correct !== '' && played === correct;
 
     if (!isMatch) {
       this.attemptedWrong = true;
       this.setTurnBox('bad', p);
       this.board.setInteractive(false);
-      setTimeout(() => {
-        if (this.current !== p || this.solved) return;
+      // Tracked and guarded on `revealed` too: pressing Space inside this
+      // window finishes the puzzle without setting `solved`, and an untracked
+      // timer would then hand the board back and reset the "Solution" box on
+      // a puzzle that is already over.
+      if (this.retryTimer) clearTimeout(this.retryTimer);
+      this.retryTimer = setTimeout(() => {
+        this.retryTimer = null;
+        if (this.current !== p || this.solved || this.revealed) return;
         this.resetToProgress(p);
         this.board!.setInteractive(true);
         this.setTurnBox('turn', p);
@@ -674,7 +732,7 @@ export class TacticsApp {
     this.board.setInteractive(false);
     this.replyTimer = setTimeout(() => {
       this.replyTimer = null;
-      if (this.current !== p || this.solved || !this.board) return;
+      if (this.current !== p || this.solved || this.revealed || !this.board) return;
       if (!this.board.playUci(line[this.solvedPlies])) {
         // The line came from a legal PV, so this should not happen — but a
         // stuck board would be worse than a puzzle that ends one move early.

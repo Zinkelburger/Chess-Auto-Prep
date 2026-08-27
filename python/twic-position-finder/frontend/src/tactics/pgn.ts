@@ -128,7 +128,10 @@ export function timeClassOf(headers: Record<string, string>): string {
   const tc = headers.TimeControl ?? '';
   if (!tc || tc === '-') return tc === '-' ? 'correspondence' : 'unknown';
   if (/^\d+\/\d+/.test(tc)) return 'correspondence';
-  const [base, inc] = tc.split('+').map((x) => Number.parseInt(x, 10) || 0);
+  // A TimeControl with no increment ("300") has no second field; without the
+  // fallbacks `inc` is undefined and `total` is NaN, which compares false
+  // against every bound and lands a 5+0 blitz game in 'classical'.
+  const [base = 0, inc = 0] = tc.split('+').map((x) => Number.parseInt(x, 10) || 0);
   const total = base + 40 * inc;
   if (total < 180) return 'bullet';
   if (total < 600) return 'blitz';

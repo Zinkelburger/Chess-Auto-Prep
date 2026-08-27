@@ -24,8 +24,14 @@ import { effectiveCp, severityOf, winPercent, winningChances, type Severity } fr
 
 export type Source = 'lichess' | 'chesscom';
 
+/** How bad a move has to be to become a puzzle. */
+export type MinSeverity = 'mistake' | 'inaccuracy';
+
 /** Max user moves the trainer will ask for in one puzzle (Flutter: 5). */
 const MAX_TRAINABLE_USER_MOVES = 5;
+
+/** White's nominal edge in the start position, for grading an unannotated 1st move. */
+const START_CP = 15;
 
 /** Captures, checks and mates are the only replies safe to assume forced. */
 const isTacticalSan = (san: string) => san.includes('x') || san.includes('+') || san.includes('#');
@@ -112,7 +118,7 @@ export interface MineOptions {
   depth: number;
   signal?: AbortSignal;
   /** Which severities become puzzles. */
-  minSeverity: 'mistake' | 'inaccuracy';
+  minSeverity: MinSeverity;
   onSite?: (done: number, total: number) => void;
 }
 
@@ -227,7 +233,11 @@ export async function mineGame(
     const cached = await store.getEval(fen, depth);
     if (cached) return cached;
     const r = await pool.evaluate(fen, depth, signal);
-    store.putEval(fen, depth, r);
+    // A search that timed out still returns whatever depth it reached. Using
+    // it for this one position is fine; filing it under the depth we *asked*
+    // for is not, because the store is keyed by that and every later run
+    // would read the shallow answer back as if it were the deep one.
+    if (r.depth >= depth) store.putEval(fen, depth, r);
     return r;
   }
 
@@ -255,17 +265,23 @@ export async function mineGame(
         shortcuts++;
         return null;
       }
-      // A candidate: the engine still has to supply the best line.
+      // A candidate: the engine is asked for the best line, not for a second
+      // opinion on the score. Both sides of the comparison stay the server's
+      // numbers — swapping one for a local search at a different depth would
+      // grade the move against a yardstick the screening never used, and
+      // could re-label (or discard) a move that has already qualified.
       engineBefore = await search(site.fenBefore);
-      cpBefore = userCp(engineBefore, true);
+      cpBefore = b;
       cpAfter = a;
     } else if (site.ply === 0 && site.evalAfter) {
       // Opening move with an annotation after it: treat the start as equal.
       const a = toUserPerspective(site.evalAfter, userIsWhite);
-      if (!severityPasses(severityOf(lostChances(15, a)), opts.minSeverity)) {
+      if (!severityPasses(severityOf(lostChances(START_CP, a)), opts.minSeverity)) {
         shortcuts++;
         return null;
       }
+      cpBefore = START_CP;
+      cpAfter = a;
     }
 
     engineBefore ??= await search(site.fenBefore);
