@@ -187,6 +187,13 @@ const ICON = {
     --low-bg-blink: #6d2f26;
     --danger: #e08585;
     --danger-bg: #3a2020;
+    /* Capture buttons. Solid glyphs on a dark half need explicit
+       colours, not opacity — see the .cap block below. */
+    --cap-line: #6b7787;    /* 3.43:1 on the idle half */
+    --cap-ink: #adb6c2;     /* glyph, resting — APCA Lc 58 */
+    --cap-dim: #98a2b0;     /* +Ns, resting — Lc 47 */
+    --cap-on-bg: #2b3a4d;   /* enabled face */
+    --cap-on-dim: #9dc0e8;  /* +Ns, enabled — Lc 59 */
     --mono: 'Source Code Pro', ui-monospace, SFMono-Regular, monospace;
     --sans: 'Source Sans 3', system-ui, -apple-system, sans-serif;
     --radius: 12px;
@@ -302,22 +309,34 @@ const ICON = {
     min-height: 64px;
     min-height: max(64px, 16cqh);
     background: var(--bg-input);
-    border: 1px solid var(--border);
+    /* The half behind these moves (grey → green → red), and near black a
+       small luminance step reads as nothing — no fill separates the button
+       from its half. The boundary has to be the border: #6b7787 is 3.43:1 on
+       the idle half, clearing WCAG 1.4.11's 3:1 for a control boundary. */
+    border: 1.5px solid var(--cap-line);
     border-radius: var(--radius);
-    color: var(--text);
+    color: var(--cap-ink);
     font: inherit;
     cursor: pointer;
     touch-action: none;
-    transition: opacity 0.15s, background 0.1s, transform 0.06s;
+    transition: background 0.1s, transform 0.06s;
   }
   /* pointer-events:none, not just :disabled — a disabled button swallows the
      tap instead of letting it reach the half underneath, which would leave
      three dead zones in the middle of the slap area. */
-  .cap:disabled { opacity: 0.3; cursor: default; pointer-events: none; }
-  .cap:not(:disabled) { border-color: var(--accent); }
+  /* No opacity here: these are disabled whenever the other side's clock runs,
+     so this is the state you look at most, and fading the whole button put the
+     glyph at APCA Lc 17 (15 is invisible) and the label and border at Lc 0.
+     The resting colours above already read — enabled adds accent, it doesn't
+     rescue legibility. */
+  .cap:disabled { cursor: default; pointer-events: none; }
+  /* Accent means "you can hit this right now", nothing else. */
+  .cap:not(:disabled) { background: var(--cap-on-bg); border-color: var(--accent); color: #fff; }
   .cap:not(:disabled):active { transform: scale(0.95); background: var(--accent); color: var(--accent-ink); }
-  .cap-piece { font-size: 1.5rem; font-size: clamp(1.2rem, 4cqh, 1.8rem); line-height: 1.1; }
-  .cap-add { font-family: var(--mono); font-size: 0.95rem; font-weight: 700; color: var(--accent); }
+  /* The piece is the decision; the seconds just have to happen. Size accordingly. */
+  .cap-piece { font-size: 2rem; font-size: clamp(1.9rem, 6cqh, 2.6rem); line-height: 1; }
+  .cap-add { font-family: var(--mono); font-size: 0.8rem; font-weight: 700; color: var(--cap-dim); }
+  .cap:not(:disabled) .cap-add { color: var(--cap-on-dim); }
   .cap:not(:disabled):active .cap-add { color: var(--accent-ink); }
 
   .chip-inc .num.bump { animation: bump 0.55s ease-out; }

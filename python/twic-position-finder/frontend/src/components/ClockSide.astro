@@ -15,15 +15,15 @@ const { side, name } = Astro.props;
   <div class="side-inner">
     <div class="captures">
       <button class="cap" data-cap="minor" data-side={side} type="button" disabled aria-label="Hit the clock — captured a knight or bishop">
-        <span class="cap-piece">♘♗</span>
+        <span class="cap-piece">♞♝</span>
         <span class="cap-add">+<span data-inc="minor">2</span>s</span>
       </button>
       <button class="cap" data-cap="rook" data-side={side} type="button" disabled aria-label="Hit the clock — captured a rook">
-        <span class="cap-piece">♖</span>
+        <span class="cap-piece">♜</span>
         <span class="cap-add">+<span data-inc="rook">4</span>s</span>
       </button>
       <button class="cap" data-cap="queen" data-side={side} type="button" disabled aria-label="Hit the clock — captured a queen">
-        <span class="cap-piece">♕</span>
+        <span class="cap-piece">♛</span>
         <span class="cap-add">+<span data-inc="queen">6</span>s</span>
       </button>
     </div>
