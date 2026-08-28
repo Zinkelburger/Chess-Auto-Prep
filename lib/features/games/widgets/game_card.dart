@@ -231,11 +231,12 @@ class GameCard extends StatelessWidget {
 /// counts stay visible but dim — the columns have to line up between rows for
 /// the numbers to be scannable at all.
 ///
-/// Severity is carried by *value*, not hue: dim, soft, ink from left to
-/// right. The blue/amber/red version painted a traffic light onto every card
-/// in the list, which made the list itself look like a verdict on how you
-/// play. Which number is which is fixed by position, and spelled out in the
-/// tooltip.
+/// Severity is carried by hue — blue inaccuracy, amber mistake, red blunder —
+/// because those three colours mean exactly that on every chess site the user
+/// has ever used, so the column is readable without decoding position. This is
+/// the one place in the list where colour is allowed to carry meaning; the
+/// scores and the book verdicts beside it stay in one ink. Which number is
+/// which is also fixed by position, and spelled out in the tooltip.
 class MistakeCounts extends StatelessWidget {
   const MistakeCounts({super.key, required this.game, this.onOpen});
 
@@ -264,9 +265,9 @@ class MistakeCounts extends StatelessWidget {
     final counts = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _count(summary.inaccuracies, AppColors.onSurfaceDim),
-        _count(summary.mistakes, AppColors.onSurfaceSoft),
-        _count(summary.blunders, AppColors.ink),
+        _count(summary.inaccuracies, AppColors.mistakeInaccuracy),
+        _count(summary.mistakes, AppColors.mistakeMistake),
+        _count(summary.blunders, AppColors.mistakeBlunder),
       ],
     );
     return Tooltip(

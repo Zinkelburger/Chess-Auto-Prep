@@ -128,9 +128,7 @@ class _ChapterListBodyState extends State<ChapterListBody> {
             child: EmptyStatePlaceholder(
               icon: Icons.menu_book,
               title: 'No chapters yet',
-              subtitle:
-                  'Add a chapter (e.g. "King\'s Gambit") to start organizing '
-                  'this repertoire.',
+              subtitle: 'Add a chapter to start organizing this repertoire.',
             ),
           ),
         ],
@@ -272,7 +270,6 @@ class _ChapterListBodyState extends State<ChapterListBody> {
                 autofocus: true,
                 decoration: InputDecoration(
                   labelText: 'Chapter Name',
-                  hintText: "King's Gambit",
                   errorText: nameError,
                 ),
                 onChanged: (_) {

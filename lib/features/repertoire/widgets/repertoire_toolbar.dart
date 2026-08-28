@@ -42,8 +42,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     this.onBuildByPlaying,
     this.onBuildFromGames,
     this.onOpenAudit,
-    this.onImportPgnFile,
-    this.onImportPgnPaste,
+    this.onImportPgn,
     this.isWhiteRepertoire,
     this.onOpenRepertoireOptions,
   });
@@ -63,8 +62,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onBuildByPlaying;
   final VoidCallback? onBuildFromGames;
   final VoidCallback? onOpenAudit;
-  final VoidCallback? onImportPgnFile;
-  final VoidCallback? onImportPgnPaste;
+  final VoidCallback? onImportPgn;
   final bool? isWhiteRepertoire;
 
   /// Opens the settings dialog for the open repertoire (side played, board
@@ -102,8 +100,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
           onGenerate: onOpenGeneration,
           onBuildByPlaying: onBuildByPlaying,
           onBuildFromGames: onBuildFromGames,
-          onImportPgnFile: onImportPgnFile,
-          onImportPgnPaste: onImportPgnPaste,
+          onImportPgn: onImportPgn,
         ),
         if (showTrainButton && onTrainRepertoire != null)
           RepertoireTrainButton(
@@ -470,9 +467,16 @@ class RepertoireGenerationStatusChip extends StatelessWidget {
 /// item — every entry opens its own configuration step or picker first, so
 /// nothing heavy can fire by accident.
 ///
-/// Rows are labels only. They used to carry an explaining sentence each,
-/// which turned a six-item menu into a wall of prose and made the choice
-/// harder rather than easier; the labels say which is which on their own.
+/// Rows are labels only — no explaining sentence, and no leading icon. The
+/// icons were decoration: a sparkle, a gamepad and a download arrow that no
+/// reader can tell apart faster than they can read five short labels, and
+/// that each suggested the wrong thing (the gamepad read as "play a game",
+/// not "author lines by playing them"). The label is the discriminator, so
+/// it is the only thing here.
+///
+/// The divider splits the two families the choice actually turns on: above
+/// it the moves come from the board in front of you, below it from games
+/// that already exist.
 class RepertoireAddLinesMenu extends StatelessWidget {
   const RepertoireAddLinesMenu({
     super.key,
@@ -480,56 +484,43 @@ class RepertoireAddLinesMenu extends StatelessWidget {
     this.onGenerate,
     this.onBuildByPlaying,
     this.onBuildFromGames,
-    this.onImportPgnFile,
-    this.onImportPgnPaste,
+    this.onImportPgn,
   });
 
   final VoidCallback? onPlanBuild;
   final VoidCallback? onGenerate;
   final VoidCallback? onBuildByPlaying;
   final VoidCallback? onBuildFromGames;
-  final VoidCallback? onImportPgnFile;
-  final VoidCallback? onImportPgnPaste;
+  final VoidCallback? onImportPgn;
+
+  /// Whether any of the board-side entries is on offer, which is also the
+  /// only case where a divider above the games-side ones separates anything.
+  bool get _hasBoardEntries =>
+      onPlanBuild != null || onGenerate != null || onBuildByPlaying != null;
 
   List<AppMenuEntry> get _entries => [
     if (onPlanBuild != null)
-      AppMenuEntry(
-        label: 'Plan a build…',
-        icon: Icons.route_outlined,
-        onRun: onPlanBuild!,
-      ),
+      AppMenuEntry(label: 'Plan a build…', onRun: onPlanBuild!),
     if (onGenerate != null)
-      AppMenuEntry(
-        label: 'Generate from here…',
-        icon: Icons.auto_awesome,
-        onRun: onGenerate!,
-      ),
+      AppMenuEntry(label: 'Generate from here…', onRun: onGenerate!),
     // Named for what the user does, not for the mode's internal name: the
     // one thing that separates it from Generate is who chooses our moves.
     if (onBuildByPlaying != null)
-      AppMenuEntry(
-        label: 'Play the moves myself…',
-        icon: Icons.sports_esports,
-        onRun: onBuildByPlaying!,
-      ),
+      AppMenuEntry(label: 'Play the moves myself…', onRun: onBuildByPlaying!),
     if (onBuildFromGames != null)
       AppMenuEntry(
         label: 'From my games…',
-        icon: Icons.download_for_offline_outlined,
         onRun: onBuildFromGames!,
+        dividerAbove: _hasBoardEntries,
       ),
-    if (onImportPgnFile != null)
+    // One entry, not the old "Load from disk…" / "Paste PGN…" pair: the
+    // dialog it opens offers both, so the menu no longer asks the user to
+    // pick a transport before it will show them the import.
+    if (onImportPgn != null)
       AppMenuEntry(
-        label: 'Load from disk…',
-        icon: Icons.file_open,
-        onRun: onImportPgnFile!,
-        dividerAbove: true,
-      ),
-    if (onImportPgnPaste != null)
-      AppMenuEntry(
-        label: 'Paste PGN…',
-        icon: Icons.paste,
-        onRun: onImportPgnPaste!,
+        label: 'Import PGN…',
+        onRun: onImportPgn!,
+        dividerAbove: onBuildFromGames == null && _hasBoardEntries,
       ),
   ];
 
@@ -548,7 +539,6 @@ class RepertoireAddLinesMenu extends StatelessWidget {
             for (final e in entries) ...[
               if (e.dividerAbove) const Divider(height: 1),
               MenuItemButton(
-                leadingIcon: Icon(e.icon, size: 18),
                 onPressed: e.onRun,
                 child: Text(e.label, style: const TextStyle(fontSize: 13)),
               ),

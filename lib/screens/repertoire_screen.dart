@@ -26,7 +26,6 @@ import '../widgets/chess_board_widget.dart';
 import '../widgets/master_games_prompt_banner.dart';
 import '../features/coverage/widgets/coverage_calculator_widget.dart';
 import '../widgets/pgn_with_analysis_pane.dart';
-import 'package:file_picker/file_picker.dart';
 import '../services/storage/storage_factory.dart';
 import '../widgets/app_settings_button.dart';
 import '../widgets/pgn_import_dialog.dart';
@@ -38,7 +37,9 @@ import '../widgets/layout/repertoire_status_bar.dart';
 import '../widgets/repertoire_list_body.dart';
 import '../widgets/repertoire_lines_browser.dart';
 import '../constants/ui_breakpoints.dart';
+import '../features/repertoire/models/repertoire_reload_summary.dart';
 import '../features/repertoire/widgets/repertoire_options_dialog.dart';
+import '../features/repertoire/widgets/repertoire_reload_dialog.dart';
 import '../features/repertoire/widgets/repertoire_toolbar.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../features/repertoire/widgets/repertoire_shortcuts.dart';
@@ -663,7 +664,9 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     final current = _controller.currentRepertoire;
     if (current != null && p.equals(current.filePath, newPath)) {
       // Same file, new contents (a line moved in or out): reload in place.
-      unawaited(_reloadRepertoire());
+      // Silent, not the reload dialog — we already know what changed, and a
+      // summary window over a move the user just made would be noise.
+      unawaited(_controller.loadRepertoire());
       return;
     }
     unawaited(_openChapterPath(newPath));
@@ -764,7 +767,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     unawaited(_loadChapters());
     final current = _controller.currentRepertoire;
     if (current != null && p.equals(current.filePath, chapterPath)) {
-      unawaited(_reloadRepertoire());
+      unawaited(_controller.loadRepertoire());
     }
   }
 
@@ -958,7 +961,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
                 Text(loadError, textAlign: TextAlign.center),
                 const SizedBox(height: 24),
                 FilledButton.icon(
-                  onPressed: _reloadRepertoire,
+                  onPressed: () => unawaited(_controller.loadRepertoire()),
                   icon: const Icon(Icons.refresh),
                   label: const Text('Retry'),
                 ),
@@ -1021,8 +1024,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         onBuildByPlaying: () => _buildLauncher.startBuildByPlaying(context),
         onBuildFromGames: () => _buildLauncher.buildFromGames(context),
         onOpenAudit: _openAuditDialog,
-        onImportPgnFile: _importPgnFromFile,
-        onImportPgnPaste: _importPgnFromPaste,
+        onImportPgn: _importPgn,
         trapNavigation: _buildTrapNavigation(),
         isWhiteRepertoire: _controller.isRepertoireWhite,
         onOpenRepertoireOptions: () => showRepertoireOptionsDialog(

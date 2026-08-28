@@ -416,4 +416,46 @@ void main() {
       );
     });
   });
+
+  /// `[EventDate]` starts with `[Event`, so a game-splitter that cuts on the
+  /// bare prefix finds two games in every Chessable export and every
+  /// index-addressed edit lands on the wrong one.
+  group('game indices in a file with [EventDate] headers', () {
+    late Directory tempDir;
+    late String path;
+
+    String game(String event, String moves) =>
+        '[Event "$event"]\n'
+        '[White "Chapter"]\n'
+        '[Result "*"]\n'
+        '[EventDate "2024.??.??"]\n\n'
+        '$moves *\n';
+
+    setUp(() async {
+      tempDir = await Directory.systemTemp.createTemp('repertoire_svc_test');
+      path = '${tempDir.path}/Main.pgn';
+      await File(path).writeAsString(
+        '${game('First', '1. d4 d5')}\n'
+        '${game('Second', '1. e4 e5')}\n'
+        '${game('Third', '1. c4 e6')}\n',
+      );
+    });
+
+    tearDown(() async => tempDir.delete(recursive: true));
+
+    test('readGameTextAt returns whole games, not header fragments', () async {
+      final service = RepertoireService();
+      final second = await service.readGameTextAt(path, 1);
+      expect(second, contains('[Event "Second"]'));
+      expect(second, contains('1. e4 e5'));
+      expect(await service.readGameTextAt(path, 3), isNull);
+    });
+
+    test('deleteGameAt removes the game the index names', () async {
+      final service = RepertoireService();
+      expect(await service.deleteGameAt(path, 1), isTrue);
+      final left = service.parseRepertoirePgn(await File(path).readAsString());
+      expect(left.map((l) => l.moves.first), ['d4', 'c4']);
+    });
+  });
 }

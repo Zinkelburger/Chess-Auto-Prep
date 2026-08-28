@@ -810,7 +810,6 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
           style: const TextStyle(fontSize: 12.5, fontFamily: 'monospace'),
           decoration: const InputDecoration(
             labelText: 'Moves',
-            hintText: '1.d4 d5 2.c4',
             isDense: true,
             border: OutlineInputBorder(),
           ),

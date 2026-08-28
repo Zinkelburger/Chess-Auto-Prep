@@ -505,6 +505,13 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
         'New chapter next to this…',
         Icons.note_add_outlined,
       ),
+      // Only an imported course has course chapters sitting inside one file.
+      if (_courseChaptersIn(chapter).length >= 2)
+        const _MenuEntry(
+          'split',
+          'Split into chapters…',
+          Icons.call_split_outlined,
+        ),
       const _MenuEntry.divider(),
       const _MenuEntry(
         'delete',
@@ -534,6 +541,8 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
         }
       case 'new_sibling':
         await _promptCreateChapter(p.dirname(chapter.path));
+      case 'split':
+        await _promptSplitChapter(chapter);
       case 'delete':
         if (await _confirm(
           'Delete chapter "${chapter.name}"?',
@@ -644,12 +653,31 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
 
   // ── Dialogs ────────────────────────────────────────────────────────────
 
+  /// Chapter titles a course export carries inside [chapter]'s single file —
+  /// the sections the outline already shows under it. Empty for a hand-made
+  /// chapter, which is what keeps "Split into chapters…" out of its menu.
+  List<String> _courseChaptersIn(OutlineChapter chapter) =>
+      chapter.sections.whereType<String>().toList();
+
+  Future<void> _promptSplitChapter(OutlineChapter chapter) async {
+    final titles = _courseChaptersIn(chapter);
+    final staying = chapter.linesIn(null).length;
+    final moving = chapter.lineCount - staying;
+    if (!await _confirm(
+      'Split "${chapter.name}" into ${titles.length} chapters?',
+      '$moving line(s) move into new chapter files named after the course\'s '
+          'own chapters, and their training progress moves with them.\n\n'
+          '${staying == 0 ? '"${chapter.name}" is left empty and removed.' : '$staying untitled line(s) stay in "${chapter.name}".'}',
+      confirmLabel: 'Split',
+      danger: false,
+    )) {
+      return;
+    }
+    _report(await _c.splitChapter(chapter.path));
+  }
+
   Future<void> _promptCreateChapter(String folderPath) async {
-    final name = await _promptName(
-      'New chapter',
-      '',
-      hint: 'e.g. Advance Variation',
-    );
+    final name = await _promptName('New chapter', '');
     if (name == null) return;
     _report(await _c.createChapter(folderPath: folderPath, name: name));
     if (!mounted) return;
@@ -663,19 +691,26 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
   }
 
   Future<void> _promptCreateFolder(String parentPath) async {
-    final name = await _promptName('New folder', '', hint: 'e.g. Sidelines');
+    final name = await _promptName('New folder', '');
     if (name == null) return;
     _report(await _c.createFolder(parentPath: parentPath, name: name));
   }
 
-  Future<String?> _promptName(String title, String initial, {String? hint}) {
+  Future<String?> _promptName(String title, String initial) {
     return showDialog<String>(
       context: context,
-      builder: (_) => _NameDialog(title: title, initial: initial, hint: hint),
+      builder: (_) => _NameDialog(title: title, initial: initial),
     );
   }
 
-  Future<bool> _confirm(String title, String body) async {
+  /// [confirmLabel] names what the button does; it is red only for the
+  /// deletions, so a reorganisation does not read as a destruction.
+  Future<bool> _confirm(
+    String title,
+    String body, {
+    String confirmLabel = 'Delete',
+    bool danger = true,
+  }) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -688,8 +723,10 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
-            child: const Text('Delete'),
+            style: danger
+                ? FilledButton.styleFrom(backgroundColor: AppColors.danger)
+                : null,
+            child: Text(confirmLabel),
           ),
         ],
       ),
@@ -1373,8 +1410,7 @@ class _Empty extends StatelessWidget {
 class _NameDialog extends StatefulWidget {
   final String title;
   final String initial;
-  final String? hint;
-  const _NameDialog({required this.title, required this.initial, this.hint});
+  const _NameDialog({required this.title, required this.initial});
 
   @override
   State<_NameDialog> createState() => _NameDialogState();
@@ -1414,11 +1450,7 @@ class _NameDialogState extends State<_NameDialog> {
           onChanged: (_) {
             if (_error != null) setState(() => _error = null);
           },
-          decoration: InputDecoration(
-            labelText: 'Name',
-            hintText: widget.hint,
-            errorText: _error,
-          ),
+          decoration: InputDecoration(labelText: 'Name', errorText: _error),
         ),
       ),
       actions: [

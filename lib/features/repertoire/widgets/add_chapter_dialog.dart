@@ -72,7 +72,6 @@ class _AddChapterDialogState extends State<_AddChapterDialog> {
             autofocus: true,
             decoration: InputDecoration(
               labelText: 'Chapter Name',
-              hintText: "King's Gambit",
               errorText: _error,
             ),
             onChanged: (_) {

@@ -52,7 +52,7 @@ import '../services/home_review_runner.dart';
 /// * **Auto-start is on the strip, not behind the gear.** Whether the analysis
 ///   starts itself when the app opens is the one setting users toggle often
 ///   enough to want in reach; the checkbox sits with the refresh and gear
-///   buttons and its tooltip says what it spends. The gear keeps what is left:
+///   buttons and its hover tooltip says what it spends. The gear keeps what is left:
 ///   which games, and how hard the engine works.
 /// * **Static.** Every control is always present; only labels, the enabled
 ///   states and the progress bar change.
@@ -157,15 +157,20 @@ class ReviewStrip extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Expanded(child: _buildStatus(running)),
-              AppCheckbox(
-                label: 'Auto-start',
-                tooltip:
+              // Plain hover tooltip, not an ⓘ: a glyph beside a checkbox on
+              // the strip is one more thing to look at, and the explanation is
+              // one hover away either way.
+              Tooltip(
+                message:
                     'Start the engine analysis by itself as soon as there are '
                     'games to analyse. On by default; it puts your CPU cores '
                     'on Stockfish for several minutes. Uncheck to start every '
                     'run by hand.',
-                value: autoRun,
-                onChanged: onAutoRunChanged,
+                child: AppCheckbox(
+                  label: 'Auto-start',
+                  value: autoRun,
+                  onChanged: onAutoRunChanged,
+                ),
               ),
               IconButton(
                 icon: const Icon(Icons.refresh, size: 18),
@@ -338,7 +343,11 @@ class ReviewStrip extends StatelessWidget {
     if (unreviewedCount > 0) {
       return '$unreviewedCount unanalysed ${_games(unreviewedCount)}';
     }
-    return gamesInWindow > 0 ? 'No new games to analyse' : 'No games yet';
+    if (gamesInWindow == 0) return 'No games yet';
+    // "No new games to analyse" answered a question nobody asked (what came
+    // back from the last check) instead of the one they did: is my window
+    // analysed? It is, and this says how much of it.
+    return 'Finished analysing $gamesInWindow ${_games(gamesInWindow)}';
   }
 
   /// The supporting line under the headline.
@@ -368,9 +377,10 @@ class ReviewStrip extends StatelessWidget {
     }
     // No "Out of 20 in your last 20 games" line: the headline already counts
     // the work, and restating the window read as a fact without a use.
-    return unreviewedCount > 0
-        ? ''
-        : 'Your $windowLabel is downloaded and analysed';
+    if (unreviewedCount > 0) return '';
+    // "last 20 games" takes a plural verb, "last 1 game" does not.
+    final verb = windowLabel.endsWith('s') ? 'are' : 'is';
+    return 'Your $windowLabel $verb downloaded and analysed';
   }
 
   static String _games(int n) => n == 1 ? 'game' : 'games';

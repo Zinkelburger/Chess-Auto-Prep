@@ -390,11 +390,17 @@ abstract final class AppColors {
   static const treeNodeAccentRepertoire = Color(0xFF8A9E9A);
 
   // ── Tactics mistake severity (?? / ? / ?! / custom) ─────────────────────
+  //
+  // Deliberately the same three hues as the move classification above, which
+  // are in turn the ones every chess site uses: blue inaccuracy, amber
+  // mistake, red blunder. Severity is the one place hue carries meaning the
+  // reader already knows, so a "2" in the blunder column and a `??` node in
+  // the tree agree on what red means.
 
-  static const mistakeBlunder = danger;
-  static const mistakeMistake = Color(0xFFFFA726);
-  static const mistakeInaccuracy = warning;
-  static const mistakeCustom = info;
+  static const mistakeBlunder = nagBlunder;
+  static const mistakeMistake = moveClassMistake;
+  static const mistakeInaccuracy = moveClassInaccuracy;
+  static const mistakeCustom = onSurfaceSoft;
 
   // ── Repertoire coverage status (Lines tab) ──────────────────────────────
 

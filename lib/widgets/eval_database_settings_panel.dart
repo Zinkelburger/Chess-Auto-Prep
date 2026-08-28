@@ -283,7 +283,7 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
                   controller: _pathCtrl,
                   decoration: InputDecoration(
                     labelText: 'ChessDB data directory',
-                    hintText: '/path/to/chessdb/chess-20251115/data',
+                    hintText: 'No folder selected',
                     border: const OutlineInputBorder(),
                     isDense: true,
                     suffixIcon: _buildPathStatusIcon(),

@@ -34,8 +34,7 @@ class PgnWithAnalysisPane extends StatefulWidget {
   final String repertoireColor;
   final bool isEditingExistingLine;
   final void Function(String updatedPgn)? onLineEdited;
-  final VoidCallback onImportPgnFile;
-  final VoidCallback onImportPgnPaste;
+  final VoidCallback onImportPgn;
   final VoidCallback? onViewInLines;
   final VoidCallback onReload;
   final BuildTree? generatedTree;
@@ -64,8 +63,7 @@ class PgnWithAnalysisPane extends StatefulWidget {
     required this.repertoireColor,
     required this.isEditingExistingLine,
     this.onLineEdited,
-    required this.onImportPgnFile,
-    required this.onImportPgnPaste,
+    required this.onImportPgn,
     this.onViewInLines,
     required this.onReload,
     this.generatedTree,
@@ -184,13 +182,12 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
       height: 36,
       child: Row(
         children: [
-          _AddPgnPill(
-            onFile: widget.onImportPgnFile,
-            onPaste: widget.onImportPgnPaste,
-          ),
+          _ImportPgnPill(onPressed: widget.onImportPgn),
           IconButton(
             icon: const Icon(Icons.refresh, size: 20),
-            tooltip: 'Reload repertoire',
+            // Says what it is for. "Reload repertoire" described the
+            // mechanism and left the reason to guess at.
+            tooltip: 'Check disk for changes',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
             onPressed: widget.onReload,
@@ -298,70 +295,44 @@ class _SplitHandleState extends State<_SplitHandle> {
   }
 }
 
-class _AddPgnPill extends StatelessWidget {
-  final VoidCallback onFile;
-  final VoidCallback onPaste;
+/// Opens the one import dialog. It used to be a popup menu asking "file or
+/// paste?" — a question the dialog itself answers better, since it shows both
+/// at once and lets a mis-picked file be replaced without reopening anything.
+class _ImportPgnPill extends StatelessWidget {
+  final VoidCallback onPressed;
 
-  const _AddPgnPill({required this.onFile, required this.onPaste});
+  const _ImportPgnPill({required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    return PopupMenuButton<String>(
-      padding: EdgeInsets.zero,
-      tooltip: 'Add PGN',
-      onSelected: (v) {
-        if (v == 'file') onFile();
-        if (v == 'paste') onPaste();
-      },
-      offset: const Offset(0, 30),
-      itemBuilder: (_) => [
-        PopupMenuItem(
-          value: 'file',
-          height: 36,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.file_open, size: 16, color: cs.onSurface),
-              const SizedBox(width: 8),
-              const Text('Pick .pgn file', style: TextStyle(fontSize: 12)),
-            ],
-          ),
-        ),
-        PopupMenuItem(
-          value: 'paste',
-          height: 36,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.paste, size: 16, color: cs.onSurface),
-              const SizedBox(width: 8),
-              const Text('Paste PGN', style: TextStyle(fontSize: 12)),
-            ],
-          ),
-        ),
-      ],
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: cs.primaryContainer,
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: Material(
+        color: cs.primaryContainer,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: onPressed,
           borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.add, size: 14, color: cs.onPrimaryContainer),
-            const SizedBox(width: 4),
-            Text(
-              'Add PGN',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: cs.onPrimaryContainer,
-              ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.upload_file, size: 14, color: cs.onPrimaryContainer),
+                const SizedBox(width: 5),
+                Text(
+                  'Import PGN',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: cs.onPrimaryContainer,
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

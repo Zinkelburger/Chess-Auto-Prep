@@ -17,15 +17,21 @@ mixin _TacticsImportPanelStartCard on _TacticsImportPanelStateBase {
         builder: (ctx, setDialogState) {
           final matching = draft.countMatching(widget.positions);
           return AlertDialog(
-            title: const Text('Session Settings'),
+            // Titled after the button that opens it, like the analysis
+            // gear: "Session Settings" named a concept the card never uses.
+            title: const Text('Tactics filters'),
+            // Scrollable: the form is a dozen rows tall and this dialog has
+            // to survive a short window without a render overflow.
             content: SizedBox(
               width: 360,
-              child: _SessionSettingsForm(
-                settings: draft,
-                showCustomType: _presentMistakeTypes.contains(
-                  TacticsSessionSettings.customMistakeType,
+              child: SingleChildScrollView(
+                child: _SessionSettingsForm(
+                  settings: draft,
+                  showCustomType: _presentMistakeTypes.contains(
+                    TacticsSessionSettings.customMistakeType,
+                  ),
+                  onChanged: (s) => setDialogState(() => draft = s),
                 ),
-                onChanged: (s) => setDialogState(() => draft = s),
               ),
             ),
             actions: [
@@ -111,12 +117,20 @@ mixin _TacticsImportPanelStartCard on _TacticsImportPanelStateBase {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
-                TextButton.icon(
-                  onPressed: _showSessionSettingsDialog,
-                  icon: const Icon(Icons.tune, size: 16),
-                  label: const Text('Filters…'),
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
+                // The tooltip names what is behind the button, expiry first:
+                // "how long do my puzzles last" is the question people go
+                // looking for and the one a bare "Filters…" hides.
+                Tooltip(
+                  message:
+                      'How long puzzles stay in the queue, which mistake '
+                      'types to practise, and what order they come in',
+                  child: TextButton.icon(
+                    onPressed: _showSessionSettingsDialog,
+                    icon: const Icon(Icons.tune, size: 16),
+                    label: const Text('Filters…'),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                    ),
                   ),
                 ),
               ],

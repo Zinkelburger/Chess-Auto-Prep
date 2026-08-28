@@ -210,7 +210,6 @@ mixin _GenerationConfigAdvanced
         onChanged: (_) => refresh(),
         decoration: const InputDecoration(
           labelText: 'Preferred setup moves (SAN, any order)',
-          hintText: 'e.g. Be3 Qd2 f3 O-O-O h4 Nh3',
           helperText:
               'Played whenever they stay sound; the repertoire deviates '
               'automatically when the opponent makes them too costly. '

@@ -19,6 +19,7 @@ import '../../../services/repertoire_service.dart';
 import '../../../services/storage/storage_factory.dart';
 import '../../../services/storage/storage_service.dart';
 import '../models/repertoire_outline.dart';
+import 'chapter_splitter.dart';
 import 'chapter_store.dart';
 
 /// Why a structural edit was refused, in words the user can act on.
@@ -34,13 +35,18 @@ class RepertoireOutlineService {
     StorageService? storage,
     RepertoireService? repertoire,
     ChapterStore? chapters,
+    ChapterSplitter? splitter,
   }) : _storage = storage ?? StorageFactory.instance,
        _repertoire = repertoire ?? RepertoireService(),
-       _chapters = chapters ?? ChapterStore(storage: storage);
+       _chapters = chapters ?? ChapterStore(storage: storage),
+       _splitter =
+           splitter ??
+           ChapterSplitter(storage: storage, repertoire: repertoire);
 
   final StorageService _storage;
   final RepertoireService _repertoire;
   final ChapterStore _chapters;
+  final ChapterSplitter _splitter;
 
   /// Parsed lines per chapter path, keyed by the file's modification time so
   /// an unchanged chapter is never re-parsed on rebuild.
@@ -234,6 +240,30 @@ class RepertoireOutlineService {
   Future<void> deleteChapter(String chapterPath) async {
     await _storage.deleteFile(chapterPath);
     _lineCache.remove(chapterPath);
+  }
+
+  /// Promotes the `[White]` course chapters inside [chapterPath] to real
+  /// chapter files beside it — what an imported Chessable-style course needs
+  /// before the builder's structure means anything.
+  ///
+  /// [isWhite] only supplies the new files' `// Color:` line when the source
+  /// declares none. See [ChapterSplitter] for what it does with ids and
+  /// training progress.
+  Future<ChapterSplitResult> splitChapter(
+    String chapterPath, {
+    required bool isWhite,
+  }) async {
+    final ChapterSplitResult result;
+    try {
+      result = await _splitter.split(chapterPath, isWhite: isWhite);
+    } on ChapterSplitException catch (e) {
+      throw OutlineEditException(e.message);
+    }
+    _lineCache.remove(chapterPath);
+    for (final path in result.createdPaths) {
+      _lineCache.remove(path);
+    }
+    return result;
   }
 
   // ── Folders ────────────────────────────────────────────────────────────

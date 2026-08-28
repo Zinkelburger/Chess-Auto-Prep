@@ -245,6 +245,26 @@ class RepertoireOutlineController extends ChangeNotifier
     _expanded.add(targetFolderPath);
   });
 
+  /// Promotes a chapter file's `[White]` course chapters to real chapter
+  /// files. When the source held nothing else it is removed, so an active
+  /// chapter follows the first new one rather than pointing at a gone file.
+  Future<OutlineEditOutcome> splitChapter(String chapterPath) =>
+      _edit(() async {
+        final result = await _service.splitChapter(
+          chapterPath,
+          isWhite: _isWhite,
+        );
+        _openChapters.remove(chapterPath);
+        _expanded.add(p.dirname(chapterPath));
+        if (_isActive(chapterPath)) {
+          final successor = result.sourceRemoved
+              ? (result.createdPaths.isEmpty ? null : result.createdPaths.first)
+              : chapterPath;
+          _activeChapterPath = successor;
+          onActiveChapterMoved?.call(successor);
+        }
+      });
+
   Future<OutlineEditOutcome> deleteChapter(String chapterPath) =>
       _edit(() async {
         await _service.deleteChapter(chapterPath);

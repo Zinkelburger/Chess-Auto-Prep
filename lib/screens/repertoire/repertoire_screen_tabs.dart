@@ -327,8 +327,7 @@ mixin _RepertoireTabContent
       onLineEdited: (updatedPgn) {
         unawaited(_controller.updateSelectedLineContent(updatedPgn));
       },
-      onImportPgnFile: _importPgnFromFile,
-      onImportPgnPaste: _importPgnFromPaste,
+      onImportPgn: _importPgn,
       onViewInLines: _showLinesSurface,
       onReload: _reloadRepertoire,
       generatedTree: _generationController.generatedTree,

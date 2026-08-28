@@ -69,6 +69,15 @@ class TacticsBrowseRow extends StatelessWidget {
   final bool selectMode;
   final bool checked;
 
+  /// Blue / amber / red, the meaning every chess site gives those three.
+  /// Custom puzzles carry no engine severity, so they stay in plain ink.
+  static Color _severityColor(String mistakeType) => switch (mistakeType) {
+    '??' => AppColors.mistakeBlunder,
+    '?' => AppColors.mistakeMistake,
+    '?!' => AppColors.mistakeInaccuracy,
+    _ => AppColors.mistakeCustom,
+  };
+
   @override
   Widget build(BuildContext context) {
     final pos = position;
@@ -146,13 +155,15 @@ class TacticsBrowseRow extends StatelessWidget {
                 width: 72,
                 // The severity in words, matching the trainer's "You played
                 // h5 (blunder)". `??`/`?`/`?!` was one glyph the reader had
-                // to decode, and the column it saved was never needed.
+                // to decode, and the column it saved was never needed. In the
+                // usual blue/amber/red, so the column can also be read as a
+                // colour while scrolling.
                 child: Text(
                   pos.mistakeType == 'custom' ? 'custom' : pos.mistakeLabel,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: AppColors.onSurfaceSoft,
+                    color: _severityColor(pos.mistakeType),
                   ),
                 ),
               ),

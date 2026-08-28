@@ -2,10 +2,33 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/features/repertoire/controllers/repertoire_outline_controller.dart';
 import 'package:chess_auto_prep/features/repertoire/models/repertoire_outline.dart';
+import 'package:chess_auto_prep/features/repertoire/services/chapter_splitter.dart';
 import 'package:chess_auto_prep/features/repertoire/services/repertoire_outline_service.dart';
+import 'package:chess_auto_prep/services/repertoire_review_service.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
+import 'package:chess_auto_prep/services/storage/storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+
+/// Keeps the review CSVs a split re-points out of the user's real
+/// `~/Documents`; everything else runs against the temp directory.
+class _CsvStorage implements StorageService {
+  String? reviews;
+  String? moveProgress;
+
+  @override
+  Future<String?> readRepertoireReviewsCsv() async => reviews;
+  @override
+  Future<void> saveRepertoireReviewsCsv(String csv) async => reviews = csv;
+  @override
+  Future<String?> readRepertoireMoveProgressCsv() async => moveProgress;
+  @override
+  Future<void> saveRepertoireMoveProgressCsv(String csv) async =>
+      moveProgress = csv;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 /// The outline is the file structure: folders nest, chapters are `.pgn`
 /// files, lines are games. These run against a real temp directory through
@@ -36,7 +59,13 @@ void main() {
     File(p.join(root, 'Sidelines', 'Exchange.pgn')).writeAsStringSync(
       '// Color: Black\n\n${_game('Exchange', '1. e4 e6 2. d4 d5 3. exd5 exd5')}\n',
     );
-    service = RepertoireOutlineService(storage: IOStorageService());
+    service = RepertoireOutlineService(
+      storage: IOStorageService(),
+      splitter: ChapterSplitter(
+        storage: IOStorageService(),
+        review: RepertoireReviewService(storage: _CsvStorage()),
+      ),
+    );
   });
 
   tearDown(() => tmp.deleteSync(recursive: true));
@@ -193,6 +222,50 @@ void main() {
       final out = await c.createChapter(folderPath: root, name: 'Advance');
       expect(out.ok, isFalse);
       expect(out.error, contains('already exists'));
+    });
+
+    test(
+      'splitting the active chapter follows it to the first new one',
+      () async {
+        // A course export: chapters in [White], variations in [Black].
+        final course = p.join(root, 'Course.pgn');
+        File(course).writeAsStringSync(
+          '// Color: Black\n\n'
+          '${_game('Course', '1. d4 d5 2. c4 e6', chapter: 'Tartakower')}\n'
+          '${_game('Course', '1. d4 d5 2. c4 c6', chapter: 'Tartakower')}\n'
+          '${_game('Course', '1. d4 Nf6 2. c4 e6', chapter: 'Catalan')}\n'
+          '${_game('Course', '1. d4 Nf6 2. c4 g6', chapter: 'Catalan')}\n',
+        );
+
+        String? followed = 'unset';
+        final c = RepertoireOutlineController(
+          service: service,
+          onActiveChapterMoved: (path) => followed = path,
+        );
+        await c.open(rootPath: root, activeChapterPath: course, isWhite: false);
+
+        final out = await c.splitChapter(course);
+        expect(out.ok, isTrue);
+        expect(File(course).existsSync(), isFalse);
+        expect(followed, p.join(root, 'Tartakower.pgn'));
+        expect(c.activeChapterPath, followed);
+        expect(
+          c.outline!.chapters.map((ch) => ch.name),
+          containsAll(['Catalan', 'Tartakower']),
+        );
+        expect(
+          c.outline!.findChapter(p.join(root, 'Catalan.pgn'))!.lineCount,
+          2,
+        );
+      },
+    );
+
+    test('splitting a chapter with no course chapters is refused', () async {
+      final c = RepertoireOutlineController(service: service);
+      await c.open(rootPath: root, activeChapterPath: null, isWhite: false);
+      final out = await c.splitChapter(p.join(root, 'Advance.pgn'));
+      expect(out.ok, isFalse);
+      expect(out.error, contains('no course chapters'));
     });
 
     test('deleting the active chapter clears it', () async {

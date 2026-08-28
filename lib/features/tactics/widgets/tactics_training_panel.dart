@@ -535,7 +535,13 @@ class _GameLine extends StatelessWidget {
     final spans = <TextSpan>[
       const TextSpan(text: 'You played '),
       TextSpan(text: position.userMove, style: move),
-      if (severity.isNotEmpty) TextSpan(text: ' ($severity)'),
+      // The one coloured word on the line: blue / amber / red mean
+      // inaccuracy / mistake / blunder everywhere else in chess too.
+      if (severity.isNotEmpty)
+        TextSpan(
+          text: ' ($severity)',
+          style: TextStyle(color: _severityColor(position.mistakeType)),
+        ),
     ];
     if (revealed && refutation.isNotEmpty) {
       spans.addAll([
@@ -556,4 +562,11 @@ class _GameLine extends StatelessWidget {
       overflow: TextOverflow.ellipsis,
     );
   }
+
+  static Color _severityColor(String mistakeType) => switch (mistakeType) {
+    '??' => AppColors.mistakeBlunder,
+    '?' => AppColors.mistakeMistake,
+    '?!' => AppColors.mistakeInaccuracy,
+    _ => AppColors.ink,
+  };
 }

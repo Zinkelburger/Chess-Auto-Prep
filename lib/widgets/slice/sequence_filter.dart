@@ -45,8 +45,6 @@ class SequenceFilter extends StatelessWidget {
         TextField(
           controller: controller.sequenceText,
           decoration: InputDecoration(
-            hintText: 'e.g.  d5 e5 [gap] f6',
-            hintStyle: AppTextStyles.hint.copyWith(fontSize: 12),
             isDense: true,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 10,

@@ -99,10 +99,7 @@ class LineItemRow extends StatelessWidget {
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'e.g., KID - Fianchetto Variation',
-            labelText: 'Line Title',
-          ),
+          decoration: const InputDecoration(labelText: 'Line Title'),
           onSubmitted: (value) {
             final title = value.trim();
             if (title.isNotEmpty) {

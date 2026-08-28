@@ -429,6 +429,15 @@ class RepertoireService {
     return sans.join(' ');
   }
 
+  /// Splits a PGN document into its `//` preamble and its games, exactly as
+  /// [pgn.splitPgnIntoGames] indexes them.
+  ///
+  /// The trailing space in `'[Event '` is load-bearing and the reason this
+  /// agrees with the parser at all: a bare `[Event` prefix also matches
+  /// `[EventDate "…"]`, which every Chessable export carries, and cutting
+  /// there split each game in two. Every index-addressed edit
+  /// ([readGameTextAt], [deleteGameAt], [updateGameTitleAt], [moveGame]) then
+  /// landed on the wrong half of the wrong game.
   ({String preamble, List<String> games}) _splitPgnDocumentPreservingPreamble(
     String content,
   ) {
@@ -451,7 +460,7 @@ class RepertoireService {
       final trimmed = line.trim();
 
       if (!seenGame) {
-        if (trimmed.startsWith('[Event')) {
+        if (trimmed.startsWith('[Event ')) {
           seenGame = true;
           currentGame.add(line);
         } else if (trimmed.isNotEmpty) {
@@ -460,7 +469,7 @@ class RepertoireService {
         continue;
       }
 
-      if (trimmed.startsWith('[Event') && currentGame.isNotEmpty) {
+      if (trimmed.startsWith('[Event ') && currentGame.isNotEmpty) {
         flushCurrentGame();
         currentGame.add(line);
         continue;
@@ -638,13 +647,38 @@ class RepertoireService {
   /// id truncates and collides for lines sharing a long prefix, so an id
   /// lookup can return the wrong game. [RepertoireLine.gameIndex] is exact.
   Future<String?> readGameTextAt(String filePath, int gameIndex) async {
-    final file = io.File(filePath);
-    if (!await file.exists()) return null;
-    final document = _splitPgnDocumentPreservingPreamble(
-      await readTextFile(file),
-    );
+    final document = await readPgnDocument(filePath);
+    if (document == null) return null;
     if (gameIndex < 0 || gameIndex >= document.games.length) return null;
     return document.games[gameIndex];
+  }
+
+  /// The whole document at [filePath]: its `//` preamble and every game as
+  /// raw text, indexed the way [RepertoireLine.gameIndex] is. Null when the
+  /// file does not exist.
+  ///
+  /// Exists so a caller that needs *every* game (splitting a chapter, say)
+  /// reads and cuts the file once instead of once per game.
+  Future<({String preamble, List<String> games})?> readPgnDocument(
+    String filePath,
+  ) async {
+    final file = io.File(filePath);
+    if (!await file.exists()) return null;
+    return _splitPgnDocumentPreservingPreamble(await readTextFile(file));
+  }
+
+  /// Writes [games] under [preamble] as a complete PGN document, replacing
+  /// whatever is at [filePath]. Same layout as every other write here, so a
+  /// file this produces is indistinguishable from one the editors touched.
+  Future<void> writePgnDocument(
+    String filePath, {
+    required String preamble,
+    required List<String> games,
+  }) async {
+    await writeTextFileAtomically(
+      io.File(filePath),
+      _reassembleDocument(preamble.trimRight(), games),
+    );
   }
 
   /// Edits the [gameIndex]-th game in place. Returns false when out of range.

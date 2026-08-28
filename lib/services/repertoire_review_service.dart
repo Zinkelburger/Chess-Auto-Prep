@@ -6,6 +6,7 @@ import '../models/repertoire_review_history_entry.dart';
 import '../models/repertoire_move_progress.dart';
 import '../models/training_settings.dart';
 import 'storage/storage_factory.dart';
+import 'storage/storage_service.dart';
 
 class RepertoireReviewService {
   static const _header =
@@ -15,7 +16,7 @@ class RepertoireReviewService {
   static const _moveProgressHeader =
       'repertoire_id,line_id,move_index,correct_streak,learned';
 
-  final _storage = StorageFactory.instance;
+  final StorageService _storage;
 
   Future<List<RepertoireReviewEntry>> loadAll() async {
     final csv = await _storage.readRepertoireReviewsCsv();
@@ -262,7 +263,12 @@ class RepertoireReviewService {
   /// tests can pin it.
   final Random _fuzz;
 
-  RepertoireReviewService({Random? fuzz}) : _fuzz = fuzz ?? Random();
+  /// [storage] is injectable only so tests can hold the review CSVs in
+  /// memory instead of writing to the user's real `~/Documents`; every
+  /// caller outside a test passes nothing.
+  RepertoireReviewService({Random? fuzz, StorageService? storage})
+    : _fuzz = fuzz ?? Random(),
+      _storage = storage ?? StorageFactory.instance;
 
   RepertoireReviewEntry applyRating(
     RepertoireReviewEntry entry,

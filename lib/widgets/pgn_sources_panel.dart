@@ -600,15 +600,8 @@ class _CompactPasteDialogState extends State<_CompactPasteDialog> {
               maxLines: 6,
               minLines: 3,
               style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-              decoration: InputDecoration(
-                hintText:
-                    '[Event "Opening"]\n[Result "*"]\n\n1. e4 e5 2. Nf3 *',
-                hintStyle: TextStyle(
-                  color: cs.onSurfaceVariant.withValues(alpha: 0.4),
-                  fontFamily: 'monospace',
-                  fontSize: 12,
-                ),
-                border: const OutlineInputBorder(),
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
                 contentPadding: const EdgeInsets.all(10),
               ),
               onChanged: (_) => _recount(),

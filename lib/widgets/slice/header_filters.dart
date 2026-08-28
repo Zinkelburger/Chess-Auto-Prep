@@ -59,19 +59,21 @@ class HeaderFilters extends StatelessWidget {
       f.mode = availableModes.first;
     }
 
+    // Hints say what the box wants, not what somebody else typed into it:
+    // a sample name is one more thing to read past on the way to your own.
     String hintText;
     if (f.field == kPlayerHeaderField) {
-      hintText = 'either colour — e.g. Carlsen; DrNykterstein';
+      hintText = 'either colour — separate spellings with ;';
     } else if (f.field == 'ECO') {
-      hintText = 'e.g. B12 or B1';
+      hintText = 'ECO code or prefix';
     } else if (f.field == 'Date') {
-      hintText = 'e.g. 2000';
+      hintText = 'Year';
     } else if (f.field == 'StudyRating') {
-      hintText = 'e.g. 3';
+      hintText = 'Rating';
     } else if (f.field == 'WhiteElo' || f.field == 'BlackElo') {
-      hintText = 'e.g. 2400';
+      hintText = 'Rating';
     } else {
-      hintText = 'Value...';
+      hintText = 'Value';
     }
 
     final showEcoWarn =

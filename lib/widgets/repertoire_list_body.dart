@@ -202,28 +202,32 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
           const SizedBox(width: 8),
           OutlinedButton.icon(
             onPressed: _importFromPgn,
-            icon: const Icon(Icons.file_upload_outlined, size: 18),
-            label: const Text('Load from disk…'),
+            icon: const Icon(Icons.upload_file, size: 18),
+            label: const Text('Import PGN…'),
           ),
         ],
       ),
     );
   }
 
-  /// Import-first path: pick the file, then name it. The create dialog opens
-  /// with the PGN already attached and the file's own name filled in.
+  /// Import-first path: bring in the PGN, then name it. The create dialog
+  /// opens with the PGN already attached and — for a file — its own name
+  /// filled in.
   Future<void> _importFromPgn() async {
-    final picked = await pickPgnImport();
-    if (picked == null || !mounted) return;
-    if (picked.error != null) {
-      showAppSnackBar(context, picked.error!, isError: true);
-      return;
-    }
+    final result = await showPgnImportDialog(context, confirmLabel: 'Continue');
+    if (result == null || !mounted) return;
+
+    final color = await inferImportColor(result.pgnContent);
+    if (!mounted) return;
+
+    final fileName = result.fileName;
     await _showCreateDialog(
-      initialImport: picked.result,
-      initialName: picked.suggestedName,
-      initialFileName: picked.fileName,
-      initialColor: picked.suggestedColor,
+      initialImport: result,
+      initialName: fileName == null
+          ? null
+          : p.basenameWithoutExtension(fileName),
+      initialFileName: fileName,
+      initialColor: color,
     );
   }
 
@@ -433,7 +437,6 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
                 controller: nameController,
                 decoration: InputDecoration(
                   labelText: 'Repertoire Name',
-                  hintText: 'Enter repertoire name',
                   errorText: nameError,
                 ),
                 autofocus: true,
@@ -724,7 +727,7 @@ class _InlinePgnAttach extends StatefulWidget {
   final PgnImportResult? importResult;
 
   /// Name of a file already attached by the import-first path, so the chip
-  /// shows what was picked instead of an empty "Add PGN".
+  /// shows what was picked instead of an empty "Import PGN".
   final String? initialFileName;
 
   /// The attached PGN, plus the side its moves suggest ('White'/'Black', or
@@ -752,14 +755,20 @@ class _InlinePgnAttachState extends State<_InlinePgnAttach> {
     _fileName = widget.initialFileName;
   }
 
-  Future<void> _pickFile() async {
-    final picked = await pickPgnImport();
-    if (picked == null || !mounted) return;
+  /// Opens the same import window as everywhere else, so a repertoire can be
+  /// started from pasted moves and not only from a file on disk.
+  Future<void> _openImport() async {
+    final result = await showPgnImportDialog(context, confirmLabel: 'Attach');
+    if (result == null || !mounted) return;
+
+    final color = await inferImportColor(result.pgnContent);
+    if (!mounted) return;
+
     setState(() {
-      _fileName = picked.fileName;
-      _error = picked.error;
+      _fileName = result.fileName ?? 'Pasted PGN';
+      _error = null;
     });
-    widget.onChanged(picked.result, picked.suggestedColor);
+    widget.onChanged(result, color);
   }
 
   void _clear() {
@@ -781,7 +790,7 @@ class _InlinePgnAttachState extends State<_InlinePgnAttach> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             GestureDetector(
-              onTap: _pickFile,
+              onTap: _openImport,
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -794,10 +803,14 @@ class _InlinePgnAttachState extends State<_InlinePgnAttach> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.add, size: 15, color: cs.onPrimaryContainer),
+                    Icon(
+                      Icons.upload_file,
+                      size: 15,
+                      color: cs.onPrimaryContainer,
+                    ),
                     const SizedBox(width: 5),
                     Text(
-                      'Add PGN',
+                      'Import PGN',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,

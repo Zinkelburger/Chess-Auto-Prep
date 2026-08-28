@@ -81,7 +81,6 @@ class _AccountsDialogState extends State<AccountsDialog> {
             _SiteField(
               fieldKey: const Key('lichess-username-field'),
               site: 'Lichess',
-              hint: 'e.g. DrNykterstein',
               controller: _lichess,
               lastFetch: app.lichessLastFetch,
               onSubmitted: _save,
@@ -90,7 +89,6 @@ class _AccountsDialogState extends State<AccountsDialog> {
             _SiteField(
               fieldKey: const Key('chesscom-username-field'),
               site: 'Chess.com',
-              hint: 'e.g. MagnusCarlsen',
               controller: _chesscom,
               lastFetch: app.chesscomLastFetch,
               onSubmitted: _save,
@@ -127,7 +125,6 @@ class _SiteField extends StatefulWidget {
   const _SiteField({
     required this.fieldKey,
     required this.site,
-    required this.hint,
     required this.controller,
     required this.lastFetch,
     required this.onSubmitted,
@@ -137,7 +134,6 @@ class _SiteField extends StatefulWidget {
   /// drive a download.
   final Key fieldKey;
   final String site;
-  final String hint;
   final TextEditingController controller;
   final DateTime? lastFetch;
   final VoidCallback onSubmitted;
@@ -162,10 +158,8 @@ class _SiteFieldState extends State<_SiteField> {
           key: widget.fieldKey,
           controller: widget.controller,
           autofocus: widget.site == 'Lichess',
-          decoration: InputDecoration(
-            hintText: widget.hint,
-            hintStyle: const TextStyle(color: AppColors.onSurfaceDisabled),
-            border: const OutlineInputBorder(),
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
             isDense: true,
           ),
           // Only the caption below depends on the text; repaint it as typing

@@ -51,7 +51,7 @@ class PositionFilter extends StatelessWidget {
               child: TextField(
                 controller: text,
                 decoration: InputDecoration(
-                  hintText: 'FEN or moves, e.g. 1. e4 c6',
+                  hintText: 'FEN or moves',
                   hintStyle: AppTextStyles.hint.copyWith(fontSize: 12),
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(

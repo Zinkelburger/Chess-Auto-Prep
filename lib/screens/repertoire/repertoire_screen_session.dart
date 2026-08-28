@@ -286,8 +286,26 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     _reclaimFocus();
   }
 
+  /// Re-reads the repertoire PGN and reports what changed.
+  ///
+  /// The bare reload is still available to callers that already know why they
+  /// are reloading (the load-error retry button); this is the user-facing one,
+  /// which exists to answer "has anything touched this file behind my back?"
   Future<void> _reloadRepertoire() async {
-    await _controller.loadRepertoire();
+    await showRepertoireReloadDialog(
+      context,
+      reload: () async {
+        final before = List<RepertoireLine>.of(_controller.repertoireLines);
+        await _controller.loadRepertoire();
+        final error = _controller.loadError;
+        if (error != null) return RepertoireReloadSummary.failed(error);
+        return RepertoireReloadSummary.between(
+          before,
+          _controller.repertoireLines,
+        );
+      },
+    );
+    _reclaimFocus();
   }
 
   /// Handle moves from the chessboard - board has already made the move and gives us rich info
@@ -376,39 +394,13 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     );
   }
 
-  Future<void> _importPgnFromFile() async {
-    try {
-      final file = await FilePicker.pickFile(
-        type: FileType.custom,
-        allowedExtensions: ['pgn', 'txt'],
-      );
-      if (file == null || !mounted) return;
-
-      final path = file.path;
-      if (path == null) return;
-
-      final content = await StorageFactory.instance.readFile(path);
-      if (content == null || !mounted) return;
-
-      final added = await _controller.importPgnContent(content);
-      if (!mounted) return;
-
-      showAppSnackBar(
-        context,
-        'Added $added line${added == 1 ? '' : 's'} to repertoire.',
-      );
-    } catch (e) {
-      if (mounted) {
-        showAppSnackBar(context, 'Could not read file: $e', isError: true);
-      }
-    }
-  }
-
-  Future<void> _importPgnFromPaste() async {
+  /// One entry point for every "add PGN" affordance: file and paste are the
+  /// same act with two sources, so they belong in one window rather than as
+  /// two menu items that make the user commit before they see either.
+  Future<void> _importPgn() async {
     final result = await showPgnImportDialog(
       context,
-      title: 'Paste PGN',
-      confirmLabel: 'Add to Repertoire',
+      confirmLabel: 'Add to repertoire',
     );
     if (result == null || !mounted) return;
 
@@ -419,6 +411,7 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
       context,
       'Added $added line${added == 1 ? '' : 's'} to repertoire.',
     );
+    _reclaimFocus();
   }
 
   /// Loads the sibling chapters of the active repertoire folder so the toolbar

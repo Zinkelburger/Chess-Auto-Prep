@@ -353,7 +353,6 @@ mixin _GenerationConfigCard
             autofocus: true,
             decoration: const InputDecoration(
               labelText: 'Preset name',
-              hintText: 'e.g. Anti-London deep prep',
               border: OutlineInputBorder(),
               isDense: true,
             ),

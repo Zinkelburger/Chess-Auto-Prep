@@ -62,14 +62,6 @@ class SkeletonPlanCard extends StatelessWidget {
           decoration: const InputDecoration(
             isDense: true,
             border: OutlineInputBorder(),
-            hintText:
-                '1.d4 Nf6 2.c4 c5 3.Nf3 cxd4 4.Nxd4 e5\n'
-                '1.d4 Nf6 2.c4 c5 3.d5 b5 4.cxb5 a6 5.bxa6 e6',
-            hintStyle: TextStyle(
-              fontFamily: 'monospace',
-              fontSize: 13,
-              color: AppColors.onSurfaceMuted,
-            ),
           ),
         ),
         const SizedBox(height: 6),

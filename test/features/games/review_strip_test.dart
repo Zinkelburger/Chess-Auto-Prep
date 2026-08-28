@@ -208,6 +208,13 @@ void main() {
 
     expect(transportColor(tester), AppColors.surfaceInset);
     expect(find.text('Check for new games'), findsOneWidget);
+    // The state is "your window is analysed", not "the last check came back
+    // empty" — a caught-up screen should read as finished work.
+    expect(find.text('Finished analysing 20 games'), findsOneWidget);
+    expect(
+      find.text('Your last 20 games are downloaded and analysed'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('the button offers to resume when only some games are analysed', (

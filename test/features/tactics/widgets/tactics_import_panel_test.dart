@@ -137,4 +137,86 @@ void main() {
     expect(button.onPressed, isNull);
     expect(find.text('Play tactics'), findsOneWidget);
   });
+
+  testWidgets('expiry is a number you type, with Never as its own box', (
+    tester,
+  ) async {
+    final session = await pumpPanel(
+      tester,
+      positions: [_position(id: '1')],
+      isImporting: false,
+    );
+
+    await tester.tap(find.text('Filters…'));
+    await tester.pumpAndSettle();
+
+    const field = Key('tactics-expiry-days-field');
+    expect(find.text('Tactics expire after'), findsOneWidget);
+    expect(
+      tester.widget<TextField>(find.byKey(field)).controller!.text,
+      '${session.sessionSettings.maxAgeDays}',
+      reason: 'the box opens showing the window in force',
+    );
+
+    await tester.enterText(find.byKey(field), '30');
+    await tester.pump();
+    await tester.tap(find.textContaining('Apply ('));
+    await tester.pumpAndSettle();
+
+    expect(session.sessionSettings.maxAgeDays, 30);
+  });
+
+  testWidgets('Never expire empties the window and greys the box', (
+    tester,
+  ) async {
+    final session = await pumpPanel(
+      tester,
+      positions: [_position(id: '1')],
+      isImporting: false,
+    );
+
+    await tester.tap(find.text('Filters…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Never expire'));
+    await tester.pump();
+
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('tactics-expiry-days-field')))
+          .enabled,
+      isFalse,
+      reason: 'a number that governs nothing should not be typeable',
+    );
+
+    await tester.tap(find.textContaining('Apply ('));
+    await tester.pumpAndSettle();
+    expect(session.sessionSettings.maxAgeDays, isNull);
+  });
+
+  testWidgets('a half-typed expiry box does not clear the setting', (
+    tester,
+  ) async {
+    final session = await pumpPanel(
+      tester,
+      positions: [_position(id: '1')],
+      isImporting: false,
+    );
+
+    await tester.tap(find.text('Filters…'));
+    await tester.pumpAndSettle();
+
+    const field = Key('tactics-expiry-days-field');
+    await tester.enterText(find.byKey(field), '30');
+    await tester.pump();
+    await tester.enterText(find.byKey(field), '');
+    await tester.pump();
+    await tester.tap(find.textContaining('Apply ('));
+    await tester.pumpAndSettle();
+
+    expect(
+      session.sessionSettings.maxAgeDays,
+      30,
+      reason: 'an empty box is mid-edit, not "expire after zero days"',
+    );
+  });
 }

@@ -82,10 +82,7 @@ class _GenerateRepertoireDialogState extends State<_GenerateRepertoireDialog> {
             const SizedBox(height: 16),
             TextField(
               controller: _nameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Repertoire name',
-                hintText: 'e.g. Caruana Kan',
-              ),
+              decoration: const InputDecoration(labelText: 'Repertoire name'),
               autofocus: true,
               onSubmitted: (_) => _submit(),
             ),

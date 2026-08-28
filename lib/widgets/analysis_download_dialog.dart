@@ -214,9 +214,6 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
                 autofocus: true,
                 decoration: InputDecoration(
                   labelText: 'Username',
-                  hintText: _platform == 'chesscom'
-                      ? 'e.g. MagnusCarlsen'
-                      : 'e.g. DrNykterstein',
                   helperText:
                       'Their public '
                       '${_platform == 'chesscom' ? 'Chess.com' : 'Lichess'}'
