@@ -33,11 +33,24 @@ class ExplorerSourceConfig {
   /// Comma-separated Lichess rating-band filters, e.g. '2000,2200,2500'.
   final String ratings;
 
-  const ExplorerSourceConfig({
+  /// [speeds] and [ratings] are stored sorted, so which order a caller
+  /// happens to hold its filters in cannot split one position into two cache
+  /// entries.  Producers disagreed: the panel's [ExplorerQuery] sorts a
+  /// `Set`, while build-by-playing passes the string it stored in prefs, and
+  /// the stock 'blitz,rapid,classical' is not sorted — so on the *default*
+  /// filters the two never shared a single cached response.
+  ExplorerSourceConfig({
     this.useMasters = false,
-    this.speeds = 'blitz,rapid,classical',
-    this.ratings = '2000,2200,2500',
-  });
+    String speeds = 'blitz,rapid,classical',
+    String ratings = '2000,2200,2500',
+  }) : speeds = _canonical(speeds),
+       ratings = _canonical(ratings);
+
+  static String _canonical(String csv) {
+    final parts = csv.split(',');
+    if (parts.length < 2) return csv;
+    return (parts..sort()).join(',');
+  }
 
   String get cacheKeyPrefix =>
       useMasters ? 'masters' : 'lichess|$speeds|$ratings';
@@ -74,6 +87,10 @@ class ExplorerCacheService {
 
   /// Whether the underlying client is inside a 429-backoff window.
   bool get isRateLimited => _client.isBackingOff;
+
+  /// Whether Lichess rejected the last Explorer call for want of an account
+  /// — the failure a login fixes, as opposed to a dead network.
+  bool get authRequired => _client.explorerAuthRequired;
 
   String _key(String fen, ExplorerSourceConfig source) =>
       '${source.cacheKeyPrefix}|${normalizeFen(fen)}';
@@ -119,9 +136,26 @@ class ExplorerCacheService {
     return future;
   }
 
-  /// Peek without fetching (for synchronous UI checks).
-  ExplorerResponse? peek(String fen, ExplorerSourceConfig source) =>
-      _cache[_key(fen, source)];
+  /// Peek without fetching (for synchronous UI checks).  Refreshes the
+  /// entry's recency, since a peek that hits is a use.
+  ExplorerResponse? peek(String fen, ExplorerSourceConfig source) {
+    final key = _key(fen, source);
+    final cached = _cache.remove(key);
+    if (cached != null) _cache[key] = cached;
+    return cached;
+  }
+
+  /// Store a response fetched elsewhere (the live panel fetches through its
+  /// own debounced path but shares this store, so a position browsed in the
+  /// panel is a hit for the candidate service and vice versa).
+  void put(String fen, ExplorerSourceConfig source, ExplorerResponse response) {
+    final key = _key(fen, source);
+    _cache.remove(key);
+    _cache[key] = response;
+    while (_cache.length > _maxEntries) {
+      _cache.remove(_cache.keys.first);
+    }
+  }
 
   void clear() => _cache.clear();
 }

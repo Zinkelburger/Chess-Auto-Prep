@@ -92,6 +92,11 @@ class TrainerBrowser extends StatefulWidget {
   /// Open the read-only board + comments view of a line.
   final void Function(RepertoireLine line)? onPreviewLine;
 
+  /// Open the book view of the lines on screen — the open chapter, or the
+  /// whole file when it has no chapters — so it can be read end to end
+  /// instead of one line at a time.
+  final void Function(List<RepertoireLine> lines)? onReadLines;
+
   /// Bulk "I already know these" pass over the visible lines.
   final Future<void> Function(Set<String> checkedLineIds, Set<String> scope)?
   onApplyLearnedSelection;
@@ -135,6 +140,7 @@ class TrainerBrowser extends StatefulWidget {
     this.reviewBatchSize = 0,
     required this.onTrainLine,
     this.onPreviewLine,
+    this.onReadLines,
     this.onApplyLearnedSelection,
     this.onOpenChapterSetup,
     this.playingWhite,
@@ -291,6 +297,15 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
               : () => _openChapter(null),
           onLearn: _selecting ? null : widget.onLearn,
           onReview: _selecting ? null : widget.onReview,
+          // Reading is per chapter: from the chapter list there is no one
+          // page to open, and a whole course is not a sitting.
+          onRead:
+              _selecting ||
+                  showingChapterList ||
+                  visible.isEmpty ||
+                  widget.onReadLines == null
+              ? null
+              : () => widget.onReadLines!(visible),
           learnBatchSize: widget.learnBatchSize,
           reviewBatchSize: widget.reviewBatchSize,
           onOpenChapterSetup: _selecting ? null : widget.onOpenChapterSetup,

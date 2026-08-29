@@ -19,30 +19,64 @@ import '../../services/pgn_parsing_service.dart' as pgn;
 
 List<PgnGameEntry> parseMultiGamePgn(String content) {
   final entries = <PgnGameEntry>[];
-  final chunks = content.split(pgn.pgnChunkSplitRe);
-  for (final chunk in chunks) {
-    final trimmed = chunk.trim();
-    if (trimmed.isEmpty) continue;
-    // A comment-only chunk (e.g. a `;`-comment banner before the first
-    // `[Event` header, as in chessgames.com collection downloads) is not a
-    // game; without this it would surface as a blank extra game.
-    if (trimmed
-        .split('\n')
-        .every((l) => l.trim().isEmpty || pgn.isPgnCommentLine(l.trim()))) {
-      continue;
-    }
-    final headers = pgn.extractHeaders(trimmed);
-    final rating = int.tryParse(headers['StudyRating'] ?? '') ?? 0;
-    entries.add(
-      PgnGameEntry(
-        headers: headers,
-        pgnText: trimmed,
-        studyRating: rating.clamp(0, 5),
-        studySummary: headers['StudySummary'] ?? '',
-      ),
-    );
+  var chunkStart = 0;
+  // Chunk boundaries are `[Event ` at a line start — the same cut the
+  // look-behind regex made, found with `indexOf` instead of a regex split
+  // that materialised every chunk up front.
+  while (true) {
+    final next = _nextChunkBoundary(content, chunkStart);
+    final chunk = content.substring(chunkStart, next ?? content.length);
+    _addChunk(entries, chunk);
+    if (next == null) break;
+    chunkStart = next;
   }
   return entries;
+}
+
+/// Offset of the next `[Event ` that begins a line strictly after [from]
+/// (so the chunk starting at [from] is never empty), or null.
+int? _nextChunkBoundary(String content, int from) {
+  var search = from + 1;
+  while (true) {
+    final idx = content.indexOf('[Event ', search);
+    if (idx < 0) return null;
+    if (idx > 0 && content.codeUnitAt(idx - 1) == 0x0A) return idx;
+    search = idx + 1;
+  }
+}
+
+void _addChunk(List<PgnGameEntry> entries, String chunk) {
+  final trimmed = chunk.trim();
+  if (trimmed.isEmpty) return;
+  // A comment-only chunk (e.g. a `;`-comment banner before the first
+  // `[Event` header, as in chessgames.com collection downloads) is not a
+  // game; without this it would surface as a blank extra game.
+  if (_isCommentOnly(trimmed)) return;
+  final headers = pgn.extractHeaders(trimmed);
+  final rating = int.tryParse(headers['StudyRating'] ?? '') ?? 0;
+  entries.add(
+    PgnGameEntry(
+      headers: headers,
+      pgnText: trimmed,
+      studyRating: rating.clamp(0, 5),
+      studySummary: headers['StudySummary'] ?? '',
+    ),
+  );
+}
+
+/// Whether every line of [text] is blank or a top-level comment line.  Stops
+/// at the first line that is neither, so a real game is settled by its
+/// first header rather than a scan of all its lines.
+bool _isCommentOnly(String text) {
+  var lineStart = 0;
+  while (lineStart <= text.length) {
+    var lineEnd = text.indexOf('\n', lineStart);
+    if (lineEnd < 0) lineEnd = text.length;
+    final line = text.substring(lineStart, lineEnd).trim();
+    if (line.isNotEmpty && !pgn.isPgnCommentLine(line)) return false;
+    lineStart = lineEnd + 1;
+  }
+  return true;
 }
 
 Future<List<int>> applySliceConfig(

@@ -21,6 +21,7 @@ import '../models/opening_tree.dart';
 import '../models/pgn_filter_models.dart' show splitPlayerNames;
 import '../core/pgn/pgn_dummy_mainline.dart';
 import '../utils/chess_utils.dart' show isNullMoveSan, playSanOrNullMove;
+import '../utils/fen_utils.dart' show normalizeFen;
 
 /// Common player name patterns used in repertoire files.
 const List<String> repertoirePlayerPatterns = [
@@ -39,9 +40,12 @@ const List<String> repertoirePlayerPatterns = [
 /// wrong-colour tree. App-generated placeholders ("Me", "Training",
 /// "My Repertoire", …) are all whole words.
 bool isRepertoirePlayer(String playerName) {
-  final words = playerName.toLowerCase().split(RegExp(r'[^a-z]+'));
+  final words = playerName.toLowerCase().split(_nonLetters);
   return words.any(repertoirePlayerPatterns.contains);
 }
+
+/// Hoisted: this runs twice per game while a tree is being built.
+final RegExp _nonLetters = RegExp(r'[^a-z]+');
 
 /// Whether [headerLower] names the user.
 ///
@@ -226,22 +230,39 @@ void walkMainlineIntoTree({
   promoteNullMoveDummyMainline(game.moves);
 
   final position = startPosition ?? Chess.initial;
+
+  // Where this game's first move hangs.  A `[FEN]` chapter starts mid-game, so
+  // it belongs under the node that *is* its start position; only a game
+  // starting where the tree does belongs at the root.
+  final placed = _anchorNode(tree, position);
+
+  // No node stands at that position, so the chapter is grafted at the root to
+  // keep it visible — but [OpeningTree.advance] matches children by SAN
+  // alone, and a graft is by definition not a real continuation of the root.
+  // Reusing a root child that merely shares the SAN would fold the whole
+  // chapter, stats included, into an unrelated line; [_graftStrict] refuses
+  // that and only creates a node of its own.
+  final anchor = placed ?? tree.root;
+  final strictFirstPly = placed == null;
+
   tree.root.updateStats(userResult);
+  if (!identical(anchor, tree.root)) anchor.updateStats(userResult);
 
   if (includeVariations) {
     _walkVariationsIntoTree(
       tree: tree,
       pgnNode: game.moves,
       pos: position,
-      treeNode: tree.root,
+      treeNode: anchor,
       depth: 0,
       maxDepth: maxDepth,
       userResult: userResult,
+      strictFirstPly: strictFirstPly,
     );
     return;
   }
 
-  var currentNode = tree.root;
+  var currentNode = anchor;
   var currentPos = position;
   var depth = 0;
   for (final nodeData in game.moves.mainline()) {
@@ -265,9 +286,11 @@ void walkMainlineIntoTree({
 
       currentPos = currentPos.play(move);
 
-      final childNode = currentNode.getOrCreateChild(moveSan, currentPos.fen);
+      final childNode = (strictFirstPly && depth == 0)
+          ? _graftStrict(tree, currentNode, moveSan, currentPos)
+          : tree.advance(currentNode, moveSan, currentPos);
+      if (childNode == null) break; // would have merged into another line
       childNode.updateStats(userResult);
-      tree.indexNode(childNode);
 
       currentNode = childNode;
       depth++;
@@ -279,6 +302,40 @@ void walkMainlineIntoTree({
   onWalkComplete?.call(currentPos);
 }
 
+/// [OpeningTree.advance] that refuses to reuse a child which merely shares
+/// the SAN: null when one exists at a different position.
+///
+/// Only a graft needs this.  Down a real walk a SAN can only ever lead to one
+/// position, so the check never fires; a grafted chapter's first move has no
+/// such guarantee, and reuse there silently merges two unrelated lines.
+OpeningTreeNode? _graftStrict(
+  OpeningTree tree,
+  OpeningTreeNode node,
+  String san,
+  Position positionAfter,
+) {
+  final existing = node.children[san];
+  if (existing != null) {
+    return normalizeFen(existing.fen) == normalizeFen(positionAfter.fen)
+        ? existing
+        : null;
+  }
+  return tree.advance(node, san, positionAfter);
+}
+
+/// The tree node a walk from [position] must start at: the root for a game
+/// that starts where the tree does, otherwise the node already standing at
+/// that position.  Null when the tree has never reached it.
+///
+/// Any of several transposing nodes is a legitimate home; the first indexed
+/// one keeps the choice deterministic.
+OpeningTreeNode? _anchorNode(OpeningTree tree, Position position) {
+  final key = normalizeFen(position.fen);
+  if (key == normalizeFen(tree.root.fen)) return tree.root;
+  final nodes = tree.fenToNodes[key];
+  return (nodes == null || nodes.isEmpty) ? null : nodes.first;
+}
+
 void _walkVariationsIntoTree({
   required OpeningTree tree,
   required PgnNode<PgnNodeData> pgnNode,
@@ -287,6 +344,7 @@ void _walkVariationsIntoTree({
   required int depth,
   required int maxDepth,
   required double? userResult,
+  bool strictFirstPly = false,
 }) {
   if (pgnNode.children.isEmpty || depth >= maxDepth) return;
 
@@ -306,6 +364,7 @@ void _walkVariationsIntoTree({
           depth: depth,
           maxDepth: maxDepth,
           userResult: userResult,
+          strictFirstPly: strictFirstPly,
         );
         continue;
       }
@@ -314,9 +373,11 @@ void _walkVariationsIntoTree({
       if (move == null) continue;
       final next = pos.play(move);
       if (i > 0) _incrementPathStats(treeNode, userResult);
-      final childNode = treeNode.getOrCreateChild(san, next.fen);
+      final childNode = strictFirstPly
+          ? _graftStrict(tree, treeNode, san, next)
+          : tree.advance(treeNode, san, next);
+      if (childNode == null) continue; // would have merged into another line
       childNode.updateStats(userResult);
-      tree.indexNode(childNode);
       _walkVariationsIntoTree(
         tree: tree,
         pgnNode: child,

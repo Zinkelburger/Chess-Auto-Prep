@@ -711,9 +711,21 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   /// Lines still ahead in this run — what the Train tab counts down.
-  int get remainingInRun => repetitionMode == RepetitionMode.linear
+  ///
+  /// Counted once per notification: the screen reads it several times per
+  /// build, and every read walked the queue with a status lookup per line.
+  int get remainingInRun =>
+      _remainingInRun ??= repetitionMode == RepetitionMode.linear
       ? dueQueue.length
       : dueQueue.where((line) => _inRun(line, sessionIntent)).length;
+
+  int? _remainingInRun;
+
+  @override
+  void notifyListeners() {
+    _remainingInRun = null;
+    super.notifyListeners();
+  }
 
   String _sessionCompleteMessage(TrainingIntent intent) {
     if (repetitionMode == RepetitionMode.linear) return 'Set complete!';

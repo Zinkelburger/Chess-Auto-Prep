@@ -31,20 +31,32 @@ String escapeHeaderValue(String value) =>
 /// Extract the display title for a PGN game string.
 ///
 /// Prefers a `[Title ...]` header; falls back to `[Event ...]`.
+///
+/// Scans line by line and stops at the first non-header line after the tag
+/// block: the movetext is the bulk of a game and never holds a tag pair, and
+/// this runs once per row in the lines browser and outline.  Lines before
+/// the first tag (a `// Color:` preamble, blank lines) are skipped, not
+/// treated as the end of the block.
 String extractEventTitle(String pgn) {
-  final lines = pgn.split('\n');
-
-  for (final line in lines) {
-    if (line.trim().startsWith('[Title ')) {
-      return extractHeaderValue(line) ?? '';
+  String? event;
+  var inTags = false;
+  var start = 0;
+  while (start < pgn.length) {
+    var end = pgn.indexOf('\n', start);
+    if (end < 0) end = pgn.length;
+    final line = pgn.substring(start, end).trim();
+    start = end + 1;
+    if (!line.startsWith('[')) {
+      if (inTags && line.isNotEmpty) break;
+      continue;
+    }
+    inTags = true;
+    if (line.startsWith('[Title ')) return extractHeaderValue(line) ?? '';
+    if (event == null && line.startsWith('[Event ')) {
+      event = extractHeaderValue(line) ?? '';
     }
   }
-  for (final line in lines) {
-    if (line.trim().startsWith('[Event ')) {
-      return extractHeaderValue(line) ?? '';
-    }
-  }
-  return '';
+  return event ?? '';
 }
 
 /// Whether [line] starts with [currentMoves] (prefix match).

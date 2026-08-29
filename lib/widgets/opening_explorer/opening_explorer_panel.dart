@@ -16,8 +16,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/coverage/services/coverage_service.dart'
     show LichessDatabase;
 import '../../models/explorer_response.dart';
+import '../../services/lichess_auth_service.dart';
 import '../../services/live_explorer_service.dart';
+import '../../theme/app_colors.dart';
 import '../lichess_db_selector.dart';
+import '../lichess_login_prompt.dart';
 import 'explorer_move_row.dart';
 
 class OpeningExplorerPanel extends StatefulWidget {
@@ -25,8 +28,10 @@ class OpeningExplorerPanel extends StatefulWidget {
     super.key,
     required this.service,
     required this.fen,
+    this.movePath = const [],
     required this.onPlayMove,
     this.onAddMove,
+    this.onHoverMove,
     this.repertoireMovesAtPosition = const {},
   });
 
@@ -35,11 +40,20 @@ class OpeningExplorerPanel extends StatefulWidget {
   /// FEN of the position to explore.
   final String fen;
 
-  /// Play a move (by SAN) on the board.
+  /// SAN path to [fen].  Lets the service scope its empty-run cutoff to this
+  /// line instead of silencing every position deeper than the last dead one.
+  final List<String> movePath;
+
+  /// Play a move (by SAN) on the board — a row click.
   final ValueChanged<String> onPlayMove;
 
-  /// Add a move to the repertoire. When null, the "+" affordance is hidden.
+  /// Add a move to the repertoire (right-click menu). When null, the menu is
+  /// not offered.
   final ValueChanged<ExplorerMove>? onAddMove;
+
+  /// The move under the pointer, or null once it leaves the rows — so the
+  /// host can echo it as an arrow on the board.
+  final ValueChanged<ExplorerMove?>? onHoverMove;
 
   /// SANs already present in the repertoire at this position (for styling).
   final Set<String> repertoireMovesAtPosition;
@@ -62,13 +76,50 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
   @override
   void initState() {
     super.initState();
+    // Logging in from anywhere in the app (this panel's own prompt, the DB
+    // info popover, settings) should refill the panel, not leave it sitting
+    // on a stale "login needed".
+    LichessAuthService.instance.addListener(_onAuthChanged);
     unawaited(_loadPrefs());
+  }
+
+  @override
+  void dispose() {
+    LichessAuthService.instance.removeListener(_onAuthChanged);
+    _clearHover();
+    super.dispose();
+  }
+
+  void _onAuthChanged() {
+    if (mounted) _requestCurrent();
   }
 
   @override
   void didUpdateWidget(covariant OpeningExplorerPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.fen != widget.fen) _requestCurrent();
+    if (oldWidget.fen != widget.fen) {
+      // The hovered row belongs to the old position; its arrow would point
+      // at the wrong squares on the new one.
+      _clearHover();
+      _requestCurrent();
+    }
+  }
+
+  ExplorerMove? _hoveredMove;
+
+  void _onRowHover(ExplorerMove move, bool hovered) {
+    if (hovered) {
+      _hoveredMove = move;
+      widget.onHoverMove?.call(move);
+    } else if (_hoveredMove?.uci == move.uci) {
+      _clearHover();
+    }
+  }
+
+  void _clearHover() {
+    if (_hoveredMove == null) return;
+    _hoveredMove = null;
+    widget.onHoverMove?.call(null);
   }
 
   ExplorerQuery get _query =>
@@ -76,7 +127,7 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
 
   void _requestCurrent() {
     if (!_prefsLoaded) return;
-    widget.service.request(widget.fen, _query);
+    widget.service.request(widget.fen, _query, movePath: widget.movePath);
   }
 
   Future<void> _loadPrefs() async {
@@ -161,13 +212,41 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
     );
   }
 
+  /// One line naming the active filters, e.g. "Lichess · Blitz, Rapid,
+  /// Classical · 2000+" — what the query actually is, not how many boxes
+  /// are ticked.
+  String get _filterSummary {
+    if (_database == LichessDatabase.masters) return 'Masters';
+    const order = [
+      'ultraBullet',
+      'bullet',
+      'blitz',
+      'rapid',
+      'classical',
+      'correspondence',
+    ];
+    final speeds = order
+        .where(_speeds.contains)
+        .map((s) => s[0].toUpperCase() + s.substring(1))
+        .join(', ');
+    final speedText = _speeds.length == order.length ? 'All speeds' : speeds;
+    final ratings = _ratings.map(int.tryParse).nonNulls.toList()..sort();
+    final ratingText = ratings.isEmpty
+        ? ''
+        : ratings.last >= 2500
+        ? '${ratings.first}+'
+        : ratings.length == 1
+        ? '${ratings.first}'
+        : '${ratings.first}–${ratings.last}';
+    return [
+      'Lichess',
+      speedText,
+      ratingText,
+    ].where((s) => s.isNotEmpty).join(' · ');
+  }
+
   Widget _buildFilterHeader(BuildContext context) {
-    final dbLabel = _database == LichessDatabase.masters
-        ? 'Masters'
-        : 'Lichess';
-    final summary = _database == LichessDatabase.masters
-        ? dbLabel
-        : '$dbLabel · ${_speeds.length} speeds · ${_ratings.length} ratings';
+    final summary = _filterSummary;
     return InkWell(
       onTap: () => setState(() => _filtersExpanded = !_filtersExpanded),
       child: Padding(
@@ -198,6 +277,12 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
     switch (state.status) {
       case ExplorerStatus.idle:
       case ExplorerStatus.loading:
+        // Hold the previous position's table rather than blanking to a
+        // spinner — the new rows swap in where the old ones were, so the
+        // panel never jumps. Only the very first lookup has nothing to keep,
+        // and only that one shows a spinner.
+        final previous = state.data;
+        if (previous != null) return _buildData(context, previous, stale: true);
         return const Center(
           child: SizedBox(
             width: 20,
@@ -210,6 +295,14 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
           Icons.hourglass_empty,
           'Lichess is rate-limiting requests.\nPausing a moment before retrying…',
         );
+      case ExplorerStatus.authRequired:
+        return LichessLoginPrompt(
+          compact: true,
+          message:
+              'Lichess requires an account to query the opening explorer. '
+              'Log in once and this panel fills itself in.',
+          onLoggedIn: _requestCurrent,
+        );
       case ExplorerStatus.error:
         return _buildMessage(
           Icons.cloud_off,
@@ -220,24 +313,56 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
     }
   }
 
-  Widget _buildData(BuildContext context, ExplorerResponse data) {
-    if (data.moves.isEmpty) {
-      return _buildMessage(
-        Icons.search_off,
-        'No games found for this position.',
-      );
-    }
+  /// [stale] marks [data] as the previous position's — shown while the next
+  /// one loads, dimmed and inert, because its moves are not legal here.
+  Widget _buildData(
+    BuildContext context,
+    ExplorerResponse data, {
+    bool stale = false,
+  }) {
+    final body = data.moves.isEmpty
+        ? _buildMessage(Icons.search_off, 'No games found for this position.')
+        : _buildTable(context, data);
+    if (!stale) return body;
+    return Stack(
+      children: [
+        Positioned.fill(child: body),
+        // Absorbs clicks as well as dimming: a row here belongs to the
+        // position we just left.
+        Positioned.fill(
+          child: AbsorbPointer(
+            child: ColoredBox(
+              color: Theme.of(
+                context,
+              ).colorScheme.surface.withValues(alpha: 0.55),
+            ),
+          ),
+        ),
+        const Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: LinearProgressIndicator(minHeight: 2),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTable(BuildContext context, ExplorerResponse data) {
     return Column(
       children: [
         _buildOpeningHeader(data),
+        const ExplorerTableHeader(),
         Expanded(
           child: Scrollbar(
             child: ListView.builder(
               padding: EdgeInsets.zero,
+              itemExtent: ExplorerColumns.rowHeight,
               itemCount: data.moves.length,
               itemBuilder: (context, i) {
                 final move = data.moves[i];
                 return ExplorerMoveRow(
+                  key: ValueKey(move.uci),
                   move: move,
                   inRepertoire: widget.repertoireMovesAtPosition.contains(
                     move.san,
@@ -246,11 +371,15 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
                   onAdd: widget.onAddMove == null
                       ? null
                       : () => widget.onAddMove!(move),
+                  onHover: widget.onHoverMove == null
+                      ? null
+                      : (hovered) => _onRowHover(move, hovered),
                 );
               },
             ),
           ),
         ),
+        ExplorerTotalsRow(response: data),
       ],
     );
   }
@@ -258,7 +387,6 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
   Widget _buildOpeningHeader(ExplorerResponse data) {
     final name = data.openingName;
     final eco = data.openingEco;
-    final games = _formatGames(data.totalGames);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -284,14 +412,14 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
           ],
           Expanded(
             child: Text(
-              name ?? 'Opening explorer',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+              name ?? 'No opening name',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: name == null ? AppColors.onSurfaceMuted : null,
+              ),
               overflow: TextOverflow.ellipsis,
             ),
-          ),
-          Text(
-            '$games games',
-            style: TextStyle(fontSize: 10, color: Colors.grey[400]),
           ),
         ],
       ),
@@ -316,11 +444,5 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
         ),
       ),
     );
-  }
-
-  static String _formatGames(int n) {
-    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
-    return '$n';
   }
 }

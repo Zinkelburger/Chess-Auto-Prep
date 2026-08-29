@@ -12,6 +12,9 @@ class _BrowserHeader extends StatelessWidget {
   final VoidCallback? onBack;
   final VoidCallback? onLearn;
   final VoidCallback? onReview;
+
+  /// Read the lines on screen as one page; null hides the button.
+  final VoidCallback? onRead;
   final int learnBatchSize;
   final int reviewBatchSize;
   final VoidCallback? onOpenChapterSetup;
@@ -27,6 +30,7 @@ class _BrowserHeader extends StatelessWidget {
     this.onBack,
     this.onLearn,
     this.onReview,
+    this.onRead,
     this.learnBatchSize = 0,
     this.reviewBatchSize = 0,
     this.onOpenChapterSetup,
@@ -138,6 +142,10 @@ class _BrowserHeader extends StatelessWidget {
                   emptyHint: 'Nothing due',
                 ),
               ),
+              if (onRead != null) ...[
+                SizedBox(width: dense ? 8 : 12),
+                _ReadAction(dense: dense, onPressed: onRead!),
+              ],
             ],
           ),
         ],
@@ -146,7 +154,65 @@ class _BrowserHeader extends StatelessWidget {
   }
 }
 
-/// "You play Black" — which side of the loaded file is being trained.
+/// The third thing to do with a chapter besides Learn and Review: read it.
+/// Neutral on purpose — the two coloured tiles are the training actions, and
+/// this is the one that touches no training state.
+class _ReadAction extends StatelessWidget {
+  final bool dense;
+  final VoidCallback onPressed;
+
+  const _ReadAction({required this.dense, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: AppColors.outline),
+      ),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(12),
+        child: Tooltip(
+          message: 'Board and notes for every line, on one page',
+          waitDuration: const Duration(milliseconds: 400),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: dense ? 12 : 16,
+              vertical: dense ? 10 : 14,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.menu_book_outlined,
+                  size: dense ? 20 : 24,
+                  color: AppColors.onSurfaceSoft,
+                ),
+                SizedBox(width: dense ? 8 : 10),
+                Text(
+                  'Read',
+                  style:
+                      (dense
+                              ? theme.textTheme.titleSmall
+                              : theme.textTheme.titleMedium)
+                          ?.copyWith(
+                            color: AppColors.onSurfaceSoft,
+                            fontWeight: FontWeight.w700,
+                          ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Black Repertoire" — which side of the loaded file is being trained.
 ///
 /// A header control, not a settings-screen row, because for an imported course
 /// this is a *guess*: the file says nothing, so the trainer reads it off the
@@ -178,7 +244,7 @@ class _PlayingSideButton extends StatelessWidget {
           playingWhite ? Icons.circle_outlined : Icons.circle,
           size: 13,
         ),
-        label: Text(dense ? side : 'You play $side'),
+        label: Text(dense ? side : '$side Repertoire'),
         style: TextButton.styleFrom(
           foregroundColor: AppColors.onSurfaceSoft,
           visualDensity: VisualDensity.compact,

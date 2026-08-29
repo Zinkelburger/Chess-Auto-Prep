@@ -268,7 +268,9 @@ class PgnViewerController extends ChangeNotifier
   void dispose() {
     _autoPlay.dispose();
     _solitaireSession.dispose();
-    persistDebounce?.cancel();
+    // A comment typed in the last 300 ms and a stale FEN-index stamp both
+    // still owe the file a write; the collection is going away, so now.
+    unawaited(flushPendingMetadata());
     super.dispose();
   }
 
@@ -328,6 +330,10 @@ class PgnViewerController extends ChangeNotifier
     required List<PgnGameEntry> entries,
     required Perspective newPerspective,
   }) {
+    // Settle the outgoing collection's debts (a pending metadata write, a
+    // stale FEN-index stamp) before its path and games are replaced; the
+    // flush captures both synchronously.
+    unawaited(flushPendingMetadata());
     filePath = path;
     // Whoever adopted a collection knows the mtime if there is one; a
     // from-memory collection has none. Cleared here so it can never outlive

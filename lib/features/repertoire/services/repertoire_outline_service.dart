@@ -15,6 +15,7 @@ library;
 import 'package:path/path.dart' as p;
 
 import '../../../models/repertoire_line.dart';
+import '../../../models/repertoire_metadata.dart';
 import '../../../services/repertoire_service.dart';
 import '../../../services/storage/storage_factory.dart';
 import '../../../services/storage/storage_service.dart';
@@ -70,55 +71,74 @@ class RepertoireOutlineService {
     );
   }
 
+  /// Sub-folders and chapters are independent, so each level reads them
+  /// concurrently rather than awaiting one stat and one parse at a time; a
+  /// refresh after every save was a chain of tens of serial syscalls.
   Future<OutlineFolder> _buildFolder(
     String folderPath, {
     required bool loadLines,
     required String? trainingColor,
   }) async {
-    final subdirs = await _storage.listSubdirectories(folderPath);
-    final chapters = await _storage.listChapters(folderPath);
+    final (subdirs, chapters) = await (
+      _storage.listSubdirectories(folderPath),
+      _storage.listChapters(folderPath),
+    ).wait;
     chapters.sort(
       (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
     );
 
-    final children = <OutlineNode>[];
-    for (final dir in subdirs) {
-      children.add(
-        await _buildFolder(
-          dir,
-          loadLines: loadLines,
-          trainingColor: trainingColor,
-        ),
-      );
-    }
-    for (final chapter in chapters) {
-      List<OutlineLine>? lines;
-      if (loadLines) {
-        lines = await _linesOf(chapter.filePath, trainingColor: trainingColor);
-      }
-      children.add(
-        OutlineChapter(
-          path: chapter.filePath,
-          name: chapter.name,
-          lines: lines,
-          knownLineCount: chapter.gameCount,
-        ),
-      );
-    }
+    final (folders, chapterNodes) = await (
+      Future.wait([
+        for (final dir in subdirs)
+          _buildFolder(dir, loadLines: loadLines, trainingColor: trainingColor),
+      ]),
+      Future.wait([
+        for (final chapter in chapters)
+          _chapterNode(
+            chapter,
+            loadLines: loadLines,
+            trainingColor: trainingColor,
+          ),
+      ]),
+    ).wait;
+
     return OutlineFolder(
       path: folderPath,
       name: p.basename(folderPath),
-      children: children,
+      children: [...folders, ...chapterNodes],
     );
   }
 
-  Future<List<OutlineLine>> _linesOf(
-    String chapterPath, {
+  Future<OutlineChapter> _chapterNode(
+    RepertoireMetadata chapter, {
+    required bool loadLines,
     required String? trainingColor,
   }) async {
-    final stat = await _storage.fileStat(chapterPath);
+    final lines = loadLines
+        ? await _linesOf(
+            chapter.filePath,
+            modified: chapter.lastModified,
+            trainingColor: trainingColor,
+          )
+        : null;
+    return OutlineChapter(
+      path: chapter.filePath,
+      name: chapter.name,
+      lines: lines,
+      knownLineCount: chapter.gameCount,
+    );
+  }
+
+  /// Parsed lines of [chapterPath], reusing the cache while the file's
+  /// modification time — [modified], already read by the chapter listing —
+  /// is unchanged.
+  Future<List<OutlineLine>> _linesOf(
+    String chapterPath, {
+    required DateTime modified,
+    required String? trainingColor,
+  }) async {
     final cached = _lineCache[chapterPath];
-    if (stat != null && cached != null && cached.modified == stat.modified) {
+    if (cached != null && cached.modified == modified) {
       return cached.lines;
     }
     List<RepertoireLine> parsed;
@@ -142,9 +162,7 @@ class RepertoireOutlineService {
           isModelGame: l.isModelGame,
         ),
     ];
-    if (stat != null) {
-      _lineCache[chapterPath] = (modified: stat.modified, lines: lines);
-    }
+    _lineCache[chapterPath] = (modified: modified, lines: lines);
     return lines;
   }
 

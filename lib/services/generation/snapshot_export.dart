@@ -28,8 +28,11 @@ import 'tree_my_ease.dart';
 import 'tree_serialization.dart';
 
 class SnapshotExportRequest {
-  /// Serialized [BuildTree] (v4 JSON) captured from the live build.
-  final String treeJson;
+  /// The live build's tree as a v4 JSON document ([serializeTreeJson]),
+  /// captured synchronously so it is a consistent point-in-time copy.  Plain
+  /// data, so it crosses into the export isolate without an encode on the
+  /// UI isolate.
+  final Map<String, dynamic> treeJson;
   final Map<String, dynamic> configJson;
 
   /// SAN prefix from the repertoire root to the tree root.
@@ -81,7 +84,7 @@ class SnapshotExportResult {
 /// return the selected tree for verification.  Top-level and pure so it can
 /// run via `Isolate.run`.
 SnapshotExportResult runSnapshotExport(SnapshotExportRequest request) {
-  final tree = deserializeTree(request.treeJson);
+  final tree = deserializeTreeJson(request.treeJson);
   // The snapshot stores the config as the user set it; selection must see
   // the same root-anchored eval window the build used.
   final config = TreeBuildConfig.fromJson(

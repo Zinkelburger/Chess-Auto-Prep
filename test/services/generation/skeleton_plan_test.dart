@@ -57,6 +57,30 @@ void main() {
       expect(m.diff, lessThanOrEqualTo(5));
     });
 
+    test('a caller-supplied position gives the same answer as the FEN', () {
+      final pos = _after('1.d4 Nf6 2.Nf3');
+      final byFen = plan.transferFor(pos.fen);
+      final byPos = plan.transferFor(pos.fen, position: pos);
+      expect(byPos?.uci, byFen?.uci);
+      expect(byPos?.diff, byFen?.diff);
+      expect(byPos?.pathLabel, byFen?.pathLabel);
+    });
+
+    test('a skeleton move that is illegal here is never transferred', () {
+      // After 1.d4 d5 2.c4 the c-pawn is gone from c7... no: Black's c7 pawn
+      // is still there, but after 1.d4 c5 2.d5 the ...c5 push is impossible.
+      final pos = _after('1.d4 c5 2.d5');
+      final m = plan.transferFor(pos.fen, position: pos);
+      expect(m?.uci, isNot('c7c5'));
+    });
+
+    test('expandedPlacement is the 64-cell board of the node', () {
+      final node = plan.nodes.first; // before ...Nf6, after 1.d4
+      expect(node.expandedPlacement, hasLength(64));
+      expect(node.expandedPlacement.substring(0, 8), 'rnbqkbnr');
+      expect(node.expandedPlacement[35], 'P'); // d4
+    });
+
     test('after 2.Bf4, still transfers ...c5', () {
       final m = plan.transferFor(_after('1.d4 Nf6 2.Bf4').fen);
       expect(m?.uci, 'c7c5');

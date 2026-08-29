@@ -284,7 +284,7 @@ void main() {
   });
 
   test('OutlineLine helpers', () {
-    const line = OutlineLine(
+    final line = OutlineLine(
       path: 'x',
       id: 'i',
       gameIndex: 0,

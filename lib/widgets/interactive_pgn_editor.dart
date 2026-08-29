@@ -6,6 +6,7 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
@@ -120,9 +121,22 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   Timer? _autoSaveTimer;
   static const _autoSaveDelay = Duration(seconds: 2);
 
+  /// The rendered movetext, kept across cursor moves.
+  ///
+  /// Keyed on the tree's identity and [MoveTree.version], not on the cursor:
+  /// the rows are the same widgets whichever move is selected, and the
+  /// selection is painted by each chip listening to [_selection].  Stepping
+  /// through a line therefore rebuilds two chips, not a paragraph per node —
+  /// the lichess-mobile move list does the same with cached segments.
   List<Widget>? _cachedMoveWidgets;
   MoveTree? _cachedTree;
-  TreePath? _cachedPath;
+  int _cachedVersion = -1;
+
+  /// The cursor, for the chips.  Updated in [didUpdateWidget] so the two
+  /// chips whose state changed repaint without the paragraph rebuilding.
+  late final ValueNotifier<TreePath> _selection = ValueNotifier(
+    widget.currentPath,
+  );
 
   @override
   void initState() {
@@ -139,11 +153,15 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     if (!identical(widget.tree, oldWidget.tree)) {
       _editingCommentPath = null;
     }
+    if (widget.currentPath != _selection.value) {
+      _selection.value = widget.currentPath;
+    }
   }
 
   @override
   void dispose() {
     _titleController.dispose();
+    _selection.dispose();
     _autoSaveTimer?.cancel();
     super.dispose();
   }
@@ -162,9 +180,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     widget.onCommentChanged?.call(path, trimmed.isEmpty ? null : trimmed);
     widget.onDirty?.call();
     _scheduleAutoSave();
-    // The tree was mutated in place, so the identity-based widget cache
-    // would keep rendering the old comment.
-    _cachedMoveWidgets = null;
     setState(() => _editingCommentPath = null);
   }
 
@@ -177,7 +192,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     if (node.comment == normalized) return;
     widget.onCommentChanged?.call(path, normalized);
     widget.onDirty?.call();
-    _cachedMoveWidgets = null;
     _scheduleAutoSave();
     if (mounted) setState(() {});
   }
@@ -192,9 +206,11 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       if (node == null) return;
       final next = toggleQualityNag(node.nags, nagId);
       node.nags = next.isEmpty ? null : next;
+      // Edited behind the tree's back, so tell it — the movetext cache
+      // keys on the version.
+      widget.tree.markMutated();
     }
     widget.onDirty?.call();
-    _cachedMoveWidgets = null;
     _scheduleAutoSave();
     setState(() {});
   }
@@ -214,7 +230,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       },
     );
     widget.onDirty?.call();
-    _cachedMoveWidgets = null;
     _scheduleAutoSave();
     setState(() {});
   }
@@ -610,7 +625,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     if (canCache &&
         _cachedMoveWidgets != null &&
         identical(widget.tree, _cachedTree) &&
-        widget.currentPath == _cachedPath) {
+        widget.tree.version == _cachedVersion) {
       return _cachedMoveWidgets!;
     }
 
@@ -761,7 +776,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     if (canCache) {
       _cachedMoveWidgets = rows;
       _cachedTree = widget.tree;
-      _cachedPath = widget.currentPath;
+      _cachedVersion = widget.tree.version;
     }
 
     return rows;
@@ -810,12 +825,35 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     return true;
   }
 
+  /// One move chip, repainted by [_selection] alone: the paragraph it sits
+  /// in is cached across cursor moves, so selection has to arrive through a
+  /// listener rather than through a rebuild — and only the two chips whose
+  /// selected state actually flipped rebuild, not every chip on the page.
   Widget _buildSingleMoveWidget(MoveNode node, TreePath nodePath, int depth) {
-    final isSelected = widget.currentPath == nodePath;
     final isOnCtxPath = _isOnContextPath(nodePath);
-
     final nagSuffix = qualityNagSuffix(node.nags);
+    return _SelectionAwareChip(
+      selection: _selection,
+      path: nodePath,
+      builder: (isSelected) => _moveChip(
+        node,
+        nodePath,
+        depth,
+        nagSuffix: nagSuffix,
+        isSelected: isSelected,
+        isOnCtxPath: isOnCtxPath,
+      ),
+    );
+  }
 
+  Widget _moveChip(
+    MoveNode node,
+    TreePath nodePath,
+    int depth, {
+    required String nagSuffix,
+    required bool isSelected,
+    required bool isOnCtxPath,
+  }) {
     Color? bgColor;
     Color borderColor = Colors.transparent;
 
@@ -853,6 +891,62 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       onSecondaryTapDown: (d) => _showContextMenu(nodePath, d.globalPosition),
     );
   }
+}
+
+/// Rebuilds its chip only when "is [path] the selected move?" changes.
+///
+/// A plain [ValueListenableBuilder] on the cursor would rebuild every chip
+/// in the movetext on every cursor move; this one compares the answer that
+/// matters to this chip and stays put when it did not change, so stepping
+/// through a line repaints exactly two chips.
+class _SelectionAwareChip extends StatefulWidget {
+  const _SelectionAwareChip({
+    required this.selection,
+    required this.path,
+    required this.builder,
+  });
+
+  final ValueListenable<TreePath> selection;
+  final TreePath path;
+  final Widget Function(bool isSelected) builder;
+
+  @override
+  State<_SelectionAwareChip> createState() => _SelectionAwareChipState();
+}
+
+class _SelectionAwareChipState extends State<_SelectionAwareChip> {
+  late bool _selected = widget.selection.value == widget.path;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.selection.addListener(_onSelectionChanged);
+  }
+
+  @override
+  void didUpdateWidget(_SelectionAwareChip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.selection, widget.selection)) {
+      oldWidget.selection.removeListener(_onSelectionChanged);
+      widget.selection.addListener(_onSelectionChanged);
+    }
+    _selected = widget.selection.value == widget.path;
+  }
+
+  @override
+  void dispose() {
+    widget.selection.removeListener(_onSelectionChanged);
+    super.dispose();
+  }
+
+  void _onSelectionChanged() {
+    final selected = widget.selection.value == widget.path;
+    if (selected == _selected) return;
+    setState(() => _selected = selected);
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(_selected);
 }
 
 class _PopupMenuRow extends StatelessWidget {

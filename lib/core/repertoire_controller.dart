@@ -88,6 +88,19 @@ class RepertoireController
 
   TreePath _cursor = TreePath.empty;
 
+  /// The nodes from the root to the cursor, refreshed with every cursor
+  /// assignment.  Everything derived from the cursor — the SAN history, the
+  /// FENs, the position — reads off this list, so a navigation costs one
+  /// O(depth) pointer walk and every later read is free.
+  List<MoveNode> _cursorNodes = const [];
+
+  /// SAN history at the cursor.  Unmodifiable and identity-stable between
+  /// cursor moves, so a widget can compare it by identity in
+  /// `didUpdateWidget` and rebuild its derived state only when the cursor
+  /// actually moved — the way lichess-mobile hands its UI immutable
+  /// snapshots rather than fresh lists on every read.
+  List<String> _moveHistory = const [];
+
   /// Cursor into [_tree].  Empty = starting position.
   ///
   /// Assigning this always re-syncs [_openingTree], so no caller can move the
@@ -96,6 +109,8 @@ class RepertoireController
   TreePath get _path => _cursor;
   set _path(TreePath value) {
     _cursor = value;
+    _cursorNodes = _tree.nodeListAt(value);
+    _moveHistory = List.unmodifiable([for (final n in _cursorNodes) n.san]);
     _syncOpeningTree();
   }
 
@@ -104,8 +119,9 @@ class RepertoireController
 
   // ── Derived state (backward-compatible getters) ──────────────────
 
-  /// SAN sequence from root to cursor (replaces old _moveHistory getter).
-  List<String> get moveHistory => _tree.sanSequenceAt(_path);
+  /// SAN sequence from root to cursor.  See [_moveHistory] for why this is
+  /// one stable list rather than a fresh copy per read.
+  List<String> get moveHistory => _moveHistory;
 
   /// Alias — always identical to [moveHistory] now.
   List<String> get currentMoveSequence => moveHistory;
@@ -114,10 +130,14 @@ class RepertoireController
   int get currentMoveIndex => _path.length - 1;
 
   /// Board FEN at cursor.  O(1) — stored on each [MoveNode].
-  String get fen => _tree.fenAt(_path);
+  String get fen =>
+      _cursorNodes.isEmpty ? _tree.startingFen : _cursorNodes.last.fen;
 
-  /// Derived position (lazy; most callers only need [fen]).
-  Position get position => tryParseFen(fen) ?? Chess.initial;
+  /// Position at the cursor.  Read off the node, which parses its FEN at
+  /// most once; never re-parsed per read.
+  Position get position => _cursorNodes.isEmpty
+      ? _tree.startingPosition
+      : _cursorNodes.last.position;
 
   /// From/to squares of the last [lastN] half-moves at the cursor — the
   /// recent-move trail for [ChessBoardWidget]. Empty at the starting
@@ -127,18 +147,14 @@ class RepertoireController
     final len = _path.length;
     if (len == 0) return const {};
     final baseIdx = len > lastN ? len - lastN : 0;
-    try {
-      final base = Chess.fromSetup(
-        Setup.parseFen(_tree.fenAt(_path.take(baseIdx))),
-      );
-      return recentMoveTrailSquares(
-        base,
-        _tree.sanSequenceAt(_path).sublist(baseIdx),
-        lastN: lastN,
-      );
-    } catch (_) {
-      return const {};
-    }
+    final base = baseIdx == 0
+        ? _tree.startingPosition
+        : _cursorNodes[baseIdx - 1].position;
+    return recentMoveTrailSquares(
+      base,
+      _moveHistory.sublist(baseIdx),
+      lastN: lastN,
+    );
   }
 
   /// Starting FEN if different from standard position.
@@ -151,21 +167,31 @@ class RepertoireController
   List<String> get rootMoveSans => _parsePgnMoveText(_rootMoves);
 
   /// FEN of the saved root position — the tree's starting position when no
-  /// root is saved.
+  /// root is saved.  Replayed once per (root moves, starting FEN) pair; it is
+  /// read on every rebuild through [isAtRootPosition].
   String get rootFen {
-    Position pos;
-    try {
-      pos = Chess.fromSetup(Setup.parseFen(_tree.startingFen));
-    } catch (_) {
-      pos = Chess.initial;
+    final cached = _rootFen;
+    if (cached != null &&
+        cached.rootMoves == _rootMoves &&
+        cached.startingFen == _tree.startingFen) {
+      return cached.fen;
     }
+    var pos = _tree.startingPosition;
     for (final san in rootMoveSans) {
       final next = playSanOrNullMove(pos, san);
       if (next == null) break;
       pos = next;
     }
-    return pos.fen;
+    final fen = pos.fen;
+    _rootFen = (
+      rootMoves: _rootMoves,
+      startingFen: _tree.startingFen,
+      fen: fen,
+    );
+    return fen;
   }
+
+  ({String rootMoves, String startingFen, String fen})? _rootFen;
 
   /// Whether the cursor currently sits on the saved root position
   /// (move counters ignored, so transpositions count).
@@ -180,6 +206,25 @@ class RepertoireController
     if (_path == target) return;
     if (!_tree.isValidPath(target)) return;
     _path = target;
+    // A pure cursor move: listeners that only care about structure can
+    // compare [structureVersion] and skip their rebuild.
+    notifyListeners();
+  }
+
+  // ── Change classification ────────────────────────────────────────
+
+  /// Bumped by every notification that is *not* a pure cursor move: a load,
+  /// a tree replacement, an edit, a lines change, a loading-state flip.
+  ///
+  /// The screen rebuilds wholesale only when this changes; a cursor move
+  /// reaches the zones that show the position through their own listeners.
+  /// That is what keeps arrow-key navigation from rebuilding the toolbar,
+  /// the bottom pane and everything else that does not show the board.
+  int get structureVersion => _structureVersion;
+  int _structureVersion = 0;
+
+  void _notifyStructureChanged() {
+    _structureVersion++;
     notifyListeners();
   }
 
@@ -191,17 +236,21 @@ class RepertoireController
   /// Otherwise adds a new node and jumps.  Replaces the old
   /// the old `userPlayedMove*` wrappers and most uses of
   /// `userSelectedTreeMove`.
-  void playMove(String sanMove) {
-    final newPath = _tree.addMove(_path, sanMove);
-    if (newPath != null) jump(newPath);
-  }
+  void playMove(String sanMove) => playMoveAtTreePath(_path, sanMove);
 
   /// Play a move from an explicit tree position (for opening-tree clicks
   /// where the base is the tree widget's current node, not the controller
   /// cursor).  Equivalent to old `userSelectedTreeMove`.
   void playMoveAtTreePath(TreePath basePath, String sanMove) {
+    final versionBefore = _tree.version;
     final newPath = _tree.addMove(basePath, sanMove);
-    if (newPath != null) jump(newPath);
+    if (newPath == null) return;
+    if (_tree.version == versionBefore) {
+      jump(newPath); // An existing move: a pure cursor move.
+      return;
+    }
+    _path = newPath;
+    _notifyStructureChanged();
   }
 
   /// Called when user selects a move in the opening tree.
@@ -253,7 +302,7 @@ class RepertoireController
     _annotatedLineLabel = null;
     _tree = MoveTree.fromMoves(moves, startingFen: _tree.startingFen);
     _path = _tree.mainlineEndFrom(TreePath.empty);
-    notifyListeners();
+    _notifyStructureChanged();
   }
 
   /// Clear the current line.
@@ -261,7 +310,7 @@ class RepertoireController
     _annotatedLineLabel = null;
     _tree = MoveTree(startingFen: _tree.startingFen);
     _path = TreePath.empty;
-    notifyListeners();
+    _notifyStructureChanged();
   }
 
   /// Set the board position from a FEN string.
@@ -275,7 +324,7 @@ class RepertoireController
       _path = TreePath.empty;
       _selectedPgnLine = null;
       _annotatedLineLabel = null;
-      notifyListeners();
+      _notifyStructureChanged();
       return true;
     } catch (e) {
       debugPrint('Invalid FEN: $e');
@@ -299,7 +348,7 @@ class RepertoireController
       _path = _tree.mainlineEndFrom(TreePath.empty);
       _selectedPgnLine = null;
       _annotatedLineLabel = null;
-      notifyListeners();
+      _notifyStructureChanged();
       return true;
     } catch (e) {
       debugPrint('Invalid move-history position: $e');
@@ -318,7 +367,7 @@ class RepertoireController
         ? MoveTree.fromPgn(line.fullPgn, startingFen: line.startPosition.fen)
         : MoveTree.fromMoves(line.moves, startingFen: _tree.startingFen);
     _path = _tree.mainlineEndFrom(TreePath.empty);
-    notifyListeners();
+    _notifyStructureChanged();
   }
 
   /// Load a raw move sequence onto the board.
@@ -327,7 +376,7 @@ class RepertoireController
     _annotatedLineLabel = null;
     _tree = MoveTree.fromMoves(moves, startingFen: _tree.startingFen);
     _path = _tree.mainlineEndFrom(TreePath.empty);
-    notifyListeners();
+    _notifyStructureChanged();
   }
 
   /// Human-readable label for the loaded annotated line (e.g. "Trap #45").
@@ -345,7 +394,7 @@ class RepertoireController
     _path = cursor != null && tree.isValidPath(cursor)
         ? cursor
         : tree.mainlineEndFrom(TreePath.empty);
-    notifyListeners();
+    _notifyStructureChanged();
   }
 
   /// Syncs the game state from the PGN editor (still needed during transition).
@@ -356,7 +405,7 @@ class RepertoireController
         ? TreePath.empty
         : tp.take((moveIndex + 1).clamp(0, tp.length));
     _path = target;
-    notifyListeners();
+    _notifyStructureChanged();
   }
 
   // ── Tree mutation (for PGN editor actions) ───────────────────────
@@ -381,7 +430,7 @@ class RepertoireController
     final newCursor = target.parent;
     _tree.deleteAt(target);
     _path = _tree.isValidPath(newCursor) ? newCursor : TreePath.empty;
-    notifyListeners();
+    _notifyStructureChanged();
   }
 
   /// Promote variation at [target] to mainline.
@@ -395,7 +444,7 @@ class RepertoireController
     final cursorSans = _tree.sanSequenceAt(_path);
     _tree.promoteVariation(target);
     _path = _pathForMoveSequence(cursorSans);
-    notifyListeners();
+    _notifyStructureChanged();
   }
 
   /// Union of every repertoire line's mainline moves as a single [MoveTree] —
@@ -458,19 +507,19 @@ class RepertoireController
       }
     }
     _path = _pathForMoveSequence(moveHistory);
-    notifyListeners();
+    _notifyStructureChanged();
   }
 
   /// Update comment on the node at [target].
   void setCommentAtPath(TreePath target, String? comment) {
     _tree.setComment(target, comment);
-    notifyListeners();
+    _notifyStructureChanged();
   }
 
   /// Toggle a move-quality NAG glyph on the node at [target].
   void toggleNagAtPath(TreePath target, int nagId) {
     _tree.toggleNag(target, nagId);
-    notifyListeners();
+    _notifyStructureChanged();
   }
 
   // ── Private helpers ──────────────────────────────────────────────
@@ -485,11 +534,15 @@ class RepertoireController
     return trimmedFen;
   }
 
-  /// Sync the opening tree to match current move sequence.
+  /// Sync the opening tree to match the cursor.
+  ///
+  /// Every node on the path already holds its FEN, so the tree cursor is
+  /// placed by FEN lookup rather than by replaying the line through
+  /// dartchess on every jump.
   void _syncOpeningTree() {
-    if (_openingTree != null) {
-      _openingTree!.syncToMoveHistory(currentMoveSequence);
-    }
+    final tree = _openingTree;
+    if (tree == null) return;
+    tree.syncToFens(_moveHistory, [for (final n in _cursorNodes) n.fen]);
   }
 
   /// Ensure a SAN sequence exists in the tree (adding nodes as needed).
@@ -563,7 +616,7 @@ class RepertoireController
 
   void clearSelectedPgnLine() {
     _selectedPgnLine = null;
-    notifyListeners();
+    _notifyStructureChanged();
   }
 
   /// Deletes a line from the repertoire file and reloads.
@@ -632,7 +685,7 @@ class RepertoireController
       _selectedPgnLine = updated[idx];
     }
 
-    notifyListeners();
+    _notifyStructureChanged();
     return true;
   }
 
@@ -648,7 +701,7 @@ class RepertoireController
     _appendLineInto(next, moves, title, pgnContent, updateTree: updateTree);
     _commitAppendedLines(next);
 
-    if (notify) notifyListeners();
+    if (notify) _notifyStructureChanged();
   }
 
   /// Append many lines with a single listener notification — generation can
@@ -665,7 +718,7 @@ class RepertoireController
     }
     if (!any) return;
     _commitAppendedLines(next);
-    notifyListeners();
+    _notifyStructureChanged();
   }
 
   /// Build one new line into [target] and mirror it into the opening tree.
@@ -725,7 +778,7 @@ class RepertoireController
       final next = List.of(_repertoireLines);
       next[lineIndex] = _authoring.extendLine(next[lineIndex], newMove);
       _repertoireLines = next;
-      notifyListeners();
+      _notifyStructureChanged();
       return;
     }
 
@@ -842,7 +895,7 @@ class RepertoireController
       } else {
         _navigateToRootPosition();
       }
-      notifyListeners();
+      _notifyStructureChanged();
     } finally {
       // Claiming the generation above suppressed the in-flight load's own
       // release, so this call owes any `awaitLoaded()` waiters theirs.
@@ -906,7 +959,7 @@ class RepertoireController
     if (existing == null) return;
     final updated = upsertMetadataComment(existing, '// Root:', moveText);
     await storage.writeFile(filePath, updated);
-    notifyListeners();
+    _notifyStructureChanged();
   }
 
   /// Imports PGN content into the current repertoire file.
@@ -950,6 +1003,6 @@ class RepertoireController
       }
       _loadCompleters.clear();
     }
-    notifyListeners();
+    _notifyStructureChanged();
   }
 }

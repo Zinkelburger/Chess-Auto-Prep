@@ -9,6 +9,8 @@
 /// and then apply all of it or none of it.
 library;
 
+import 'dart:isolate';
+
 import 'package:flutter/foundation.dart';
 
 import '../constants/engine_defaults.dart';
@@ -18,17 +20,53 @@ import '../services/opening_tree_builder.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';
-import 'repertoire_authoring.dart';
 
 // ---------------------------------------------------------------------------
-// Isolate-safe top-level helper for parsing repertoire lines (used by compute)
+// Isolate-safe top-level helper: one split, one parse per game, two products
 // ---------------------------------------------------------------------------
 
-List<RepertoireLine> _parseRepertoireInIsolate(
-  ({String pgn, String color}) args,
+/// Everything a chapter load derives from its games, computed in one pass.
+///
+/// A load used to run two isolates over the same text — one splitting and
+/// parsing every game for the opening tree (after re-serialising each game
+/// through `buildGame`), the other splitting and parsing every game again
+/// for the lines.  Both products come from the same parse now.
+typedef _LoadedGames = ({
+  Map<String, dynamic> tree,
+  List<RepertoireLine> lines,
+});
+
+_LoadedGames _loadGamesInIsolate(
+  ({String pgn, bool isWhite, int maxDepth}) args,
 ) {
   final service = RepertoireService();
-  return service.parseRepertoirePgn(args.pgn, trainingColor: args.color);
+  final text = pgn.stripBom(args.pgn);
+  final parsed = service.parseGames(pgn.splitPgnIntoGames(text));
+
+  final lines = service.linesFromParsedGames(
+    parsed,
+    declaredColor: args.isWhite ? 'white' : 'black',
+  );
+
+  final tree = OpeningTree();
+  for (final game in parsed) {
+    // A game with no moves is not a line and was never counted before.
+    if (game.game.moves.children.isEmpty) continue;
+    try {
+      OpeningTreeBuilder.addGame(
+        tree,
+        game.game,
+        usernameLower: '',
+        userIsWhite: args.isWhite,
+        maxDepth: args.maxDepth,
+        strictPlayerMatching: false,
+      );
+    } catch (e) {
+      debugPrint('Skipping game ${game.index} in the opening tree: $e');
+    }
+  }
+
+  return (tree: tree.toTransferJson(), lines: lines);
 }
 
 /// The `// Color:` / `// Root:` block a repertoire file carries above its
@@ -90,14 +128,10 @@ class LoadedRepertoire {
   );
 }
 
-/// Turns a repertoire PGN into a [LoadedRepertoire]. Stateless apart from its
-/// [RepertoireAuthoring] collaborator, so one instance can serve overlapping
-/// loads.
+/// Turns a repertoire PGN into a [LoadedRepertoire].  Stateless, so one
+/// instance can serve overlapping loads.
 class RepertoireLoader {
-  RepertoireLoader({RepertoireAuthoring? authoring})
-    : _authoring = authoring ?? RepertoireAuthoring();
-
-  final RepertoireAuthoring _authoring;
+  RepertoireLoader();
 
   /// Reads [filePath]. `exists` distinguishes "no such file" (the caller
   /// clears its opening tree) from "read as empty" (an empty tree is built).
@@ -117,89 +151,58 @@ class RepertoireLoader {
     String? pgnText, {
     required bool fallbackIsWhite,
   }) async {
-    final built = await _buildOpeningTree(pgnText);
-    final lines = await _parseLines(
-      pgnText,
-      isWhite: built.headers?.isWhite ?? fallbackIsWhite,
+    if (pgnText == null || pgnText.isEmpty) {
+      return LoadedRepertoire(
+        pgn: pgnText,
+        openingTree: OpeningTree(),
+        lines: const [],
+        headers: null,
+      );
+    }
+
+    final RepertoireHeaders headers;
+    try {
+      headers = parseRepertoireHeaders(pgnText);
+    } catch (e) {
+      debugPrint('Failed to read repertoire headers: $e');
+      return LoadedRepertoire(
+        pgn: pgnText,
+        openingTree: OpeningTree(),
+        lines: const [],
+        headers: null,
+      );
+    }
+
+    final _LoadedGames loaded;
+    try {
+      loaded = await Isolate.run(
+        () => _loadGamesInIsolate((
+          pgn: pgnText,
+          isWhite: headers.isWhite,
+          maxDepth: kOpeningTreeMaxDepth,
+        )),
+      );
+    } catch (e) {
+      debugPrint('Failed to load repertoire games: $e');
+      return LoadedRepertoire(
+        pgn: pgnText,
+        openingTree: OpeningTree(),
+        lines: const [],
+        headers: headers,
+      );
+    }
+
+    final tree = OpeningTree.fromTransferJson(loaded.tree);
+    debugPrint(
+      'Built opening tree with ${tree.totalGames} total games; '
+      'parsed ${loaded.lines.length} repertoire lines',
     );
     return LoadedRepertoire(
       pgn: pgnText,
-      openingTree: built.tree,
-      lines: lines,
-      headers: built.headers,
+      openingTree: tree,
+      lines: loaded.lines,
+      headers: headers,
     );
-  }
-
-  /// Parses repertoire lines for the PGN browser.
-  Future<List<RepertoireLine>> _parseLines(
-    String? pgnText, {
-    required bool isWhite,
-  }) async {
-    if (pgnText == null || pgnText.isEmpty) return const [];
-    try {
-      final lines = await compute(_parseRepertoireInIsolate, (
-        pgn: pgnText,
-        color: isWhite ? 'white' : 'black',
-      ));
-      debugPrint('Parsed ${lines.length} repertoire lines for PGN browser');
-      return lines;
-    } catch (e) {
-      debugPrint('Failed to parse repertoire lines: $e');
-      return const [];
-    }
-  }
-
-  /// Builds an opening tree from [pgnText], alongside the headers read off it.
-  Future<({OpeningTree tree, RepertoireHeaders? headers})> _buildOpeningTree(
-    String? pgnText,
-  ) async {
-    if (pgnText == null || pgnText.isEmpty) {
-      return (tree: OpeningTree(), headers: null);
-    }
-
-    try {
-      final headers = parseRepertoireHeaders(pgnText);
-
-      final processedGames = <String>[];
-      for (final chunk in pgn.splitPgnIntoGames(pgnText)) {
-        final tags = pgn.extractHeaders(chunk);
-        final moveLines = <String>[];
-        for (final line in chunk.split('\n')) {
-          final trimmed = line.trim();
-          if (trimmed.isEmpty || trimmed.startsWith('[')) continue;
-          moveLines.add(trimmed);
-        }
-        if (moveLines.isEmpty) continue;
-
-        final game = _authoring.buildGame(
-          event: tags['Event'],
-          date: tags['Date'],
-          white: tags['White'],
-          black: tags['Black'],
-          result: tags['Result'],
-          moveLines: moveLines,
-        );
-        if (game != null) processedGames.add(game);
-      }
-
-      if (processedGames.isEmpty) {
-        debugPrint('No games processed for tree building');
-        return (tree: OpeningTree(), headers: headers);
-      }
-
-      final tree = await OpeningTreeBuilder.buildTree(
-        pgnList: processedGames,
-        username: '',
-        userIsWhite: headers.isWhite,
-        maxDepth: kOpeningTreeMaxDepth,
-        strictPlayerMatching: false,
-      );
-      debugPrint('Built opening tree with ${tree.totalGames} total games');
-      return (tree: tree, headers: headers);
-    } catch (e) {
-      debugPrint('Failed to build opening tree: $e');
-      return (tree: OpeningTree(), headers: null);
-    }
   }
 }
 
@@ -208,12 +211,21 @@ class RepertoireLoader {
 RepertoireHeaders parseRepertoireHeaders(String pgnText) {
   String? color;
   String? rootMoves;
-  for (final line in pgnText.split('\n')) {
-    final trimmed = line.trim();
+  // The block lives above the first game — [upsertMetadataComment] puts it
+  // there — so the scan stops at the first `[Event ` line instead of
+  // splitting the whole file into lines to look at its top.
+  var lineStart = 0;
+  while (lineStart <= pgnText.length) {
+    var lineEnd = pgnText.indexOf('\n', lineStart);
+    if (lineEnd < 0) lineEnd = pgnText.length;
+    final trimmed = pgnText.substring(lineStart, lineEnd).trim();
+    lineStart = lineEnd + 1;
     if (trimmed.startsWith('// Color:')) {
       color = trimmed.substring(9).trim();
     } else if (trimmed.startsWith('// Root:')) {
       rootMoves = trimmed.substring(8).trim();
+    } else if (trimmed.startsWith('[Event ')) {
+      break;
     }
   }
   return RepertoireHeaders(

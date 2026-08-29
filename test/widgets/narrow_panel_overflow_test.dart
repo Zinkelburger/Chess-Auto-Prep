@@ -12,6 +12,7 @@ import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/models/opening_tree.dart';
 import 'package:chess_auto_prep/models/repertoire_line.dart';
 import 'package:chess_auto_prep/widgets/opening_tree_widget.dart';
+import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
 import 'package:chess_auto_prep/widgets/repertoire_lines_browser.dart';
 
 /// The minimum width the Lines side panel can be dragged to
@@ -162,5 +163,36 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('PgnAnnotationPanel glyph strip wraps at narrow widths', (
+    tester,
+  ) async {
+    // The Lines panel can go narrower than kNarrowPanelWidth in the editor
+    // layout; 190px is where the six glyphs plus both markers used to overflow.
+    for (final width in <double>[190, kNarrowPanelWidth, 600]) {
+      await tester.pumpWidget(
+        _host(
+          Column(
+            children: [
+              const Spacer(),
+              PgnAnnotationPanel(
+                targetKey: 'node-1',
+                moveLabel: '12...Nf6',
+                nags: const [1],
+                comment: 'A comment',
+                onToggleNag: (_) {},
+                onCommentChanged: (_) {},
+                onTogglePuzzleStart: () {},
+                onTogglePuzzleEnd: () {},
+              ),
+            ],
+          ),
+          width: width,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'width $width');
+    }
   });
 }

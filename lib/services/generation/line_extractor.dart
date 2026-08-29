@@ -248,6 +248,17 @@ class LineExtractor {
   List<({String key, BuildTreeNode node, List<String> movesSan, double reach})>
   _merges = [];
 
+  /// Every move-order prefix the last traversal actually emitted, built up as
+  /// each line is recorded rather than re-joined per repair round.
+  ///
+  /// Node identity cannot stand in for this.  The walk descends through
+  /// `resolveTransposition(node).children`, so one node is reached under
+  /// several move orders — and an owner whose own order never reached the
+  /// output would still look "played" because somebody else's order walked
+  /// its node, leaving a `Transposes to …` pointer aimed at a line that was
+  /// never written.
+  final Set<String> _playedMoveOrders = {};
+
   /// Extract complete repertoire lines from the tree.
   List<ExtractedLine> extract(
     BuildTree tree, {
@@ -259,7 +270,7 @@ class LineExtractor {
     _owners = {};
     _ownerDfs(
       node: tree.root,
-      movesSan: const [],
+      movesSan: <String>[],
       reach: 1.0,
       visited: <String>{},
     );
@@ -275,20 +286,17 @@ class LineExtractor {
     for (var attempt = 0; ; attempt++) {
       lines = <ExtractedLine>[];
       _merges = [];
+      _playedMoveOrders.clear();
       _extractDfs(
         node: tree.root,
-        movesSan: const [],
-        movesUci: const [],
-        moveAnnotations: const [],
-        coverageUnits: const [],
-        choices: const [],
+        path: _LinePath(),
         lines: lines,
         maxLines: maxLines,
         reach: 1.0,
         visited: <String>{},
       );
       if (attempt >= _maxOwnershipRepairs) break;
-      if (!_reassignUnreachableOwners(lines)) break;
+      if (!_reassignUnreachableOwners()) break;
     }
     return lines;
   }
@@ -297,15 +305,14 @@ class LineExtractor {
   ///
   /// Returns true when at least one owner changed, meaning the caller should
   /// walk again.
-  bool _reassignUnreachableOwners(List<ExtractedLine> lines) {
+  bool _reassignUnreachableOwners() {
     if (_merges.isEmpty) return false;
-    final played = _playedPrefixes(lines);
     var changed = false;
     for (final m in _merges) {
       final owner = _owners[m.key];
       // Already ours, or the owner's move order really is in the output.
       if (owner == null || identical(owner.node, m.node)) continue;
-      if (played.contains(owner.movesSan.join(' '))) continue;
+      if (_playedMoveOrders.contains(owner.movesSan.join(' '))) continue;
       _owners[m.key] = _Arrival(m.node, m.reach, m.movesSan);
       changed = true;
     }
@@ -330,6 +337,9 @@ class LineExtractor {
   /// position the arrival with the highest reach probability.  A position
   /// entered once is its own owner; one entered by several move orders gets
   /// the most probable of them.
+  ///
+  /// [movesSan] is the shared path list: pushed before and popped after each
+  /// descent, and copied only where an [_Arrival] keeps it.
   void _ownerDfs({
     required BuildTreeNode node,
     required List<String> movesSan,
@@ -342,7 +352,7 @@ class LineExtractor {
     final key = enterFenPath(resolved, visited);
     final current = _owners[key];
     if (current == null || reach > current.reach) {
-      _owners[key] = _Arrival(node, reach, movesSan);
+      _owners[key] = _Arrival(node, reach, List.unmodifiable(movesSan));
     }
 
     final isOurMove = node.isWhiteToMove == config.playAsWhite;
@@ -351,22 +361,26 @@ class LineExtractor {
           .where((c) => c.isRepertoireMove)
           .firstOrNull;
       if (selected != null) {
+        movesSan.add(selected.moveSan);
         _ownerDfs(
           node: selected,
-          movesSan: [...movesSan, selected.moveSan],
+          movesSan: movesSan,
           reach: reach,
           visited: visited,
         );
+        movesSan.removeLast();
       }
     } else {
       for (final child in resolved.children) {
         if (!_exportable(child)) continue;
+        movesSan.add(child.moveSan);
         _ownerDfs(
           node: child,
-          movesSan: [...movesSan, child.moveSan],
+          movesSan: movesSan,
           reach: reach * child.moveProbability,
           visited: visited,
         );
+        movesSan.removeLast();
       }
     }
     leaveFenPath(key, visited);
@@ -444,13 +458,14 @@ class LineExtractor {
     return 'Transposes to $text.';
   }
 
+  /// The extraction traversal.  [path] is the one growing line shared by
+  /// the whole walk: each descent pushes a ply and pops it on the way back,
+  /// and [_emitLine] copies it when a line is finished.  Copying at every
+  /// level instead — five lists per ply — was quadratic in depth per line,
+  /// repeated for every repair round.
   void _extractDfs({
     required BuildTreeNode node,
-    required List<String> movesSan,
-    required List<String> movesUci,
-    required List<MoveAnnotation> moveAnnotations,
-    required List<LineCoverageUnit> coverageUnits,
-    required List<LineChoice> choices,
+    required _LinePath path,
     required List<ExtractedLine> lines,
     required int maxLines,
     required double reach,
@@ -475,7 +490,7 @@ class LineExtractor {
     // beyond it, but a line must not end with the opponent to move and us
     // with nothing to play.
     final merge =
-        !cycle && movesSan.isNotEmpty && !_ownsContinuation(node, resolved);
+        !cycle && path.isNotEmpty && !_ownsContinuation(node, resolved);
     if (merge) {
       // Remember which arrival deferred at which position, so [extract]'s
       // repair pass can hand ownership back here if the owner turns out to be
@@ -483,7 +498,7 @@ class LineExtractor {
       _merges.add((
         key: canonicalizeFen(resolved.fen),
         node: node,
-        movesSan: movesSan,
+        movesSan: List.unmodifiable(path.movesSan),
         reach: reach,
       ));
     }
@@ -501,25 +516,18 @@ class LineExtractor {
           // a transposition is recognised as the same decision.
           final decisionKey =
               '${canonicalizeFen(resolved.fen)}|${selected.moveUci}';
-          final nextSan = [...movesSan, selected.moveSan];
-          final nextUci = [...movesUci, selected.moveUci];
-          final nextAnnotations = [
-            ...moveAnnotations,
-            _annotator.annotateOurMove(selected, gapCp),
-          ];
-          final nextChoices = [
-            ...choices,
-            _choiceAt(resolved, movesSan.length, isOurMove: true),
-          ];
-          final nextUnits = [
-            ...coverageUnits,
-            LineCoverageUnit(
+          path.push(
+            san: selected.moveSan,
+            uci: selected.moveUci,
+            annotation: _annotator.annotateOurMove(selected, gapCp),
+            choice: _choiceAt(resolved, path.length, isOurMove: true),
+            unit: LineCoverageUnit(
               key: decisionKey,
               value:
                   selected.cumulativeProbability *
                   (1.0 + gapCp.clamp(0, _sharpnessCapCp) / 100.0),
             ),
-          ];
+          );
           if (merge) {
             _emitLine(
               leaf: selected,
@@ -530,11 +538,7 @@ class LineExtractor {
               // be the canonical node the stub would be credited with the
               // owner's mass too.
               probability: reach,
-              movesSan: nextSan,
-              movesUci: nextUci,
-              moveAnnotations: nextAnnotations,
-              coverageUnits: nextUnits,
-              choices: nextChoices,
+              path: path,
               lines: lines,
               // The owner's path to the *same* position this line ends in —
               // its reply here is ours too.
@@ -543,11 +547,7 @@ class LineExtractor {
           } else {
             _extractDfs(
               node: selected,
-              movesSan: nextSan,
-              movesUci: nextUci,
-              moveAnnotations: nextAnnotations,
-              choices: nextChoices,
-              coverageUnits: nextUnits,
+              path: path,
               lines: lines,
               maxLines: maxLines,
               // Our own move does not change how likely the line is: we
@@ -556,17 +556,14 @@ class LineExtractor {
               visited: visited,
             );
           }
+          path.pop();
         }
       } else if (merge) {
         // We just moved into a position another line continues from.
         pushedAny = true;
         _emitLine(
           leaf: node,
-          movesSan: movesSan,
-          movesUci: movesUci,
-          moveAnnotations: moveAnnotations,
-          coverageUnits: coverageUnits,
-          choices: choices,
+          path: path,
           lines: lines,
           probability: reach,
           transposesInto: _owners[key]!.movesSan,
@@ -577,58 +574,45 @@ class LineExtractor {
           // but carry a guaranteed answer — export their lines too.
           if (!_exportable(child)) continue;
           pushedAny = true;
+          path.push(
+            san: child.moveSan,
+            uci: child.moveUci,
+            annotation: _annotator.annotateOpponentMove(resolved, child),
+            choice: _choiceAt(resolved, path.length, isOurMove: false),
+          );
           _extractDfs(
             node: child,
-            movesSan: [...movesSan, child.moveSan],
-            movesUci: [...movesUci, child.moveUci],
-            moveAnnotations: [
-              ...moveAnnotations,
-              _annotator.annotateOpponentMove(resolved, child),
-            ],
-            choices: [
-              ...choices,
-              _choiceAt(resolved, movesSan.length, isOurMove: false),
-            ],
-            coverageUnits: coverageUnits,
+            path: path,
             lines: lines,
             maxLines: maxLines,
             reach: reach * child.moveProbability,
             visited: visited,
           );
+          path.pop();
         }
       }
       leaveFenPath(key, visited);
     }
 
-    if (pushedAny || movesSan.isEmpty) return;
-
-    _emitLine(
-      leaf: node,
-      movesSan: movesSan,
-      movesUci: movesUci,
-      moveAnnotations: moveAnnotations,
-      coverageUnits: coverageUnits,
-      choices: choices,
-      lines: lines,
-    );
+    if (!pushedAny && path.isNotEmpty) {
+      _emitLine(leaf: node, path: path, lines: lines);
+    }
   }
 
   /// Record one finished line ending at [leaf].  A line cut at a
   /// transposition names the owning move order on its last move.
   void _emitLine({
     required BuildTreeNode leaf,
-    required List<String> movesSan,
-    required List<String> movesUci,
-    required List<MoveAnnotation> moveAnnotations,
-    required List<LineCoverageUnit> coverageUnits,
-    required List<LineChoice> choices,
+    required _LinePath path,
     required List<ExtractedLine> lines,
     List<String>? transposesInto,
     double? probability,
   }) {
     final (name: openingName, eco: openingEco) = _nearestOpening(leaf);
 
-    var annotations = _annotator.markTheoryBoundary(moveAnnotations);
+    // A copy: [path.annotations] keeps changing as the walk continues, and
+    // the annotator hands the list back unchanged when there is no boundary.
+    var annotations = _annotator.markTheoryBoundary(List.of(path.annotations));
     if (transposesInto != null && annotations.isNotEmpty) {
       annotations = [
         ...annotations.take(annotations.length - 1),
@@ -639,10 +623,16 @@ class LineExtractor {
       ];
     }
 
+    final prefix = StringBuffer();
+    for (var i = 0; i < path.movesSan.length; i++) {
+      if (i > 0) prefix.write(' ');
+      prefix.write(path.movesSan[i]);
+      _playedMoveOrders.add(prefix.toString());
+    }
     lines.add(
       ExtractedLine(
-        movesSan: movesSan,
-        movesUci: movesUci,
+        movesSan: List.unmodifiable(path.movesSan),
+        movesUci: List.unmodifiable(path.movesUci),
         probability: probability ?? leaf.cumulativeProbability,
         leafPruneReason: leaf.pruneReason,
         leafPruneEvalCp: leaf.pruneEvalCp,
@@ -651,8 +641,8 @@ class LineExtractor {
         leafEvalCp: leaf.engineEvalCp,
         leafFen: leaf.fen,
         moveAnnotations: annotations,
-        coverageUnits: coverageUnits,
-        choices: choices,
+        coverageUnits: List.unmodifiable(path.coverageUnits),
+        choices: List.unmodifiable(path.choices),
         transposesInto: transposesInto,
       ),
     );
@@ -694,6 +684,44 @@ class LineExtractor {
       }
     }
     return (name: null, eco: null);
+  }
+}
+
+/// The line under construction: parallel per-ply lists that grow and shrink
+/// with the traversal.  Coverage units are recorded only at our moves, so
+/// each push remembers whether it added one.
+class _LinePath {
+  final List<String> movesSan = [];
+  final List<String> movesUci = [];
+  final List<MoveAnnotation> annotations = [];
+  final List<LineCoverageUnit> coverageUnits = [];
+  final List<LineChoice> choices = [];
+  final List<bool> _pushedUnit = [];
+
+  int get length => movesSan.length;
+  bool get isNotEmpty => movesSan.isNotEmpty;
+
+  void push({
+    required String san,
+    required String uci,
+    required MoveAnnotation annotation,
+    required LineChoice choice,
+    LineCoverageUnit? unit,
+  }) {
+    movesSan.add(san);
+    movesUci.add(uci);
+    annotations.add(annotation);
+    choices.add(choice);
+    if (unit != null) coverageUnits.add(unit);
+    _pushedUnit.add(unit != null);
+  }
+
+  void pop() {
+    movesSan.removeLast();
+    movesUci.removeLast();
+    annotations.removeLast();
+    choices.removeLast();
+    if (_pushedUnit.removeLast()) coverageUnits.removeLast();
   }
 }
 

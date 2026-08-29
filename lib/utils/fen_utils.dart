@@ -16,9 +16,17 @@
 /// explicit `w` reads as White, so [plyFromFen] — which is defined from the
 /// other two — can never contradict either.  The adversarial-input contract in
 /// `test/services/fen_move_validation_test.dart` pins that behaviour.
+///
+/// None of the readers allocate a field list: they scan for the space that
+/// bounds the field they need.  These run per node in tree walks and per row
+/// in list builds, where `split(' ')` on a 70-character string was the single
+/// most common allocation.
 library;
 
 import '../services/eval/eval_canonicalize.dart';
+
+const int _space = 0x20;
+const int _w = 0x77;
 
 /// Strip a FEN down to its first four fields (board / active colour /
 /// castling / en-passant) so that positions are compared correctly
@@ -30,23 +38,55 @@ import '../services/eval/eval_canonicalize.dart';
 /// previously written cache entries.
 String normalizeFen(String fen) => canonicalizeFen4(fen);
 
+/// Start offset of the zero-based [index]th space-separated field, or -1 when
+/// [fen] has no such field.  Consecutive spaces delimit empty fields, exactly
+/// as `split(' ')` would report them, so every reader here agrees with the
+/// historical `split` semantics on malformed input.
+int _fieldStart(String fen, int index) {
+  var field = 0;
+  var start = 0;
+  while (field < index) {
+    final space = fen.indexOf(' ', start);
+    if (space < 0) return -1;
+    start = space + 1;
+    field++;
+  }
+  return start;
+}
+
+/// End offset (exclusive) of the field starting at [start].
+int _fieldEnd(String fen, int start) {
+  final space = fen.indexOf(' ', start);
+  return space < 0 ? fen.length : space;
+}
+
+/// Number of space-separated fields — `split(' ').length` without the list.
+int _fieldCount(String fen) {
+  var count = 1;
+  for (var i = 0; i < fen.length; i++) {
+    if (fen.codeUnitAt(i) == _space) count++;
+  }
+  return count;
+}
+
 /// Whether the side to move in [fen] is white.
 ///
 /// Returns `false` if the FEN is malformed or has fewer than two fields.
 /// That fallback is pinned by `test/services/fen_move_validation_test.dart`
 /// — only an explicit `w` is White.
 bool isWhiteToMove(String fen) {
-  final parts = fen.split(' ');
-  return parts.length >= 2 && parts[1] == 'w';
+  final start = _fieldStart(fen, 1);
+  if (start < 0) return false;
+  return _fieldEnd(fen, start) == start + 1 && fen.codeUnitAt(start) == _w;
 }
 
 /// Full-move number of [fen] — the number a PGN emitter must start counting
 /// from when its movetext begins at this position.  Defaults to 1 for short
 /// or malformed FENs, which is the standard start's value.
 int fullMoveNumber(String fen) {
-  final parts = fen.split(' ');
-  if (parts.length < 6) return 1;
-  return int.tryParse(parts[5]) ?? 1;
+  final start = _fieldStart(fen, 5);
+  if (start < 0) return 1;
+  return int.tryParse(fen.substring(start, _fieldEnd(fen, start))) ?? 1;
 }
 
 /// Zero-based ply index of the position [fen] describes, counting from move 1
@@ -64,7 +104,7 @@ int plyFromFen(String fen) =>
 /// default half-move clock 0 and full-move number 1.  Needed by libraries that
 /// require a complete FEN string (e.g. `chess.Chess.fromFEN`).
 String expandFen(String fen) {
-  final fields = fen.split(' ').length;
+  final fields = _fieldCount(fen);
   if (fields == 4) return '$fen 0 1';
   if (fields == 5) return '$fen 1';
   return fen;

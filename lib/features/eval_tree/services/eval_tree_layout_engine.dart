@@ -72,7 +72,9 @@ class EvalTreeLayoutFrame {
     required this.edges,
   }) : nodesById = UnmodifiableMapView(Map.unmodifiable(nodesById));
 
-  List<EvalTreeLayoutNode> get nodes => nodesById.values.toList()
+  /// Nodes in paint order (top to bottom, left to right).  Sorted once per
+  /// frame; the viewport reads this on every rebuild.
+  late final List<EvalTreeLayoutNode> nodes = nodesById.values.toList()
     ..sort((a, b) {
       final vertical = a.position.dy.compareTo(b.position.dy);
       if (vertical != 0) return vertical;
@@ -80,6 +82,25 @@ class EvalTreeLayoutFrame {
     });
 
   EvalTreeLayoutNode? tryNode(int nodeId) => nodesById[nodeId];
+}
+
+/// Measured node sizes for one snapshot and metric mode.
+///
+/// A node's size depends only on its labels, which the snapshot fixes, and
+/// on the metric shown; the layout engine used to lay out two `TextPainter`s
+/// per visible node on every select and zoom.  Hand the same cache to every
+/// `buildFrame` call for a snapshot and each node is measured once per mode.
+class EvalTreeNodeSizeCache {
+  EvalTreeNodeSizeCache(this.snapshot);
+
+  final EvalTreeSnapshot snapshot;
+  final Map<EvalTreeMetricDisplayMode, Map<int, Size>> _byMode = {};
+
+  Size sizeOf(
+    int nodeId,
+    EvalTreeMetricDisplayMode mode,
+    Size Function() measure,
+  ) => (_byMode[mode] ??= {}).putIfAbsent(nodeId, measure);
 }
 
 class EvalTreeLayoutEngine {
@@ -99,11 +120,17 @@ class EvalTreeLayoutEngine {
     fontFamily: nodeFontFamily,
   );
 
+  /// Lay out the visible part of [snapshot] for [controller]'s view state.
+  ///
+  /// [sizeCache] must belong to [snapshot]; pass one to reuse node
+  /// measurements across frames.
   static EvalTreeLayoutFrame buildFrame(
     EvalTreeSnapshot snapshot,
     EvalTreeController controller, {
     EvalTreeLayoutConfig config = const EvalTreeLayoutConfig(),
+    EvalTreeNodeSizeCache? sizeCache,
   }) {
+    assert(sizeCache == null || identical(sizeCache.snapshot, snapshot));
     final selectedNodeId = controller.selectedNodeId ?? snapshot.rootNodeId;
     final visibleNodeIds = _buildVisibleNodeIds(
       snapshot,
@@ -121,14 +148,14 @@ class EvalTreeLayoutEngine {
         ],
     };
 
+    final mode = controller.metricDisplayMode;
+    Size measure(int nodeId) =>
+        _estimateNodeSize(snapshot, snapshot.node(nodeId), mode, config);
     final nodeSizes = <int, Size>{
       for (final nodeId in visibleNodeIds)
-        nodeId: _estimateNodeSize(
-          snapshot,
-          snapshot.node(nodeId),
-          controller.metricDisplayMode,
-          config,
-        ),
+        nodeId: sizeCache == null
+            ? measure(nodeId)
+            : sizeCache.sizeOf(nodeId, mode, () => measure(nodeId)),
     };
     final subtreeWidths = <int, double>{};
     _measureSubtreeWidths(

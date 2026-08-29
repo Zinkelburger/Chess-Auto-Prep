@@ -62,14 +62,7 @@ String? sanToUci(String fen, String san) {
     final position = Chess.fromSetup(Setup.parseFen(fen));
     final move = position.parseSan(san);
     if (move == null) return null;
-    if (move is NormalMove) {
-      final uci = toStandardUci(position, move.from, move.to);
-      final promotion = move.promotion;
-      return promotion != null
-          ? '$uci${roleChar(promotion).toLowerCase()}'
-          : uci;
-    }
-    return move.uci;
+    return moveToStandardUci(position, move);
   } catch (_) {
     return null;
   }
@@ -128,6 +121,51 @@ Position? tryParseFen(String fen) {
   } catch (_) {
     return null;
   }
+}
+
+// =====================================================================
+// Position-first helpers.
+//
+// The FEN-taking helpers above re-parse and re-validate the whole position
+// on every call.  That is fine for one click and ruinous inside a loop: a
+// tree expander that derives ten children from one parent should parse the
+// parent once and go through these.  Lichess's mobile client does the same —
+// every node carries its `Position` and children come from one `makeSan`.
+// =====================================================================
+
+/// The move [uci] played from [position], with its SAN and the resulting
+/// position.  One legality check plus one move generation.
+///
+/// Returns null when [uci] does not parse or is illegal here.  Accepts both
+/// castling encodings (`e1g1` and dartchess's `e1h1`).
+({Move move, String san, Position after})? playUciFrom(
+  Position position,
+  String uci,
+) {
+  final move = Move.parse(uci);
+  if (move == null) return null;
+  try {
+    final (after, san) = position.makeSan(move);
+    return (move: move, san: san, after: after);
+  } catch (_) {
+    return null;
+  }
+}
+
+/// SAN for [uci] in [position], or null when illegal.  The position-first
+/// counterpart of [uciToSanOrNull].
+String? uciToSanFrom(Position position, String uci) =>
+    playUciFrom(position, uci)?.san;
+
+/// Standard UCI (`e1g1`, `e7e8q`) for a move produced by dartchess in
+/// [position] — castling normalised from the king→rook encoding via
+/// [toStandardUci], promotion suffixed in lowercase.  Drops are returned
+/// verbatim.
+String moveToStandardUci(Position position, Move move) {
+  if (move is! NormalMove) return move.uci;
+  final uci = toStandardUci(position, move.from, move.to);
+  final promotion = move.promotion;
+  return promotion == null ? uci : '$uci${roleChar(promotion).toLowerCase()}';
 }
 
 /// 0-based half-move (ply) index, counted from a game that starts at
@@ -412,9 +450,12 @@ Position? playSanOrNullMove(Position pos, String san) {
       epSquare: null,
     );
   }
-  final move = pos.parseSan(san);
-  if (move == null) return null;
+  // Total on purpose: parseSan throws on some malformed tokens (an empty
+  // string indexes past its end) and callers treat "not a legal move" and
+  // "not a move at all" the same way.
   try {
+    final move = pos.parseSan(san);
+    if (move == null) return null;
     return pos.play(move);
   } catch (_) {
     return null;

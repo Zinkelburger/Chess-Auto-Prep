@@ -20,7 +20,6 @@ class BuildConfigScreen extends StatefulWidget {
     super.key,
     required this.repertoireName,
     required this.title,
-    required this.icon,
     required this.child,
     this.startSignal,
     this.hasStarted,
@@ -30,7 +29,6 @@ class BuildConfigScreen extends StatefulWidget {
   /// `<repertoire> ▸ <step>` app-bar title.
   final String repertoireName;
   final String title;
-  final IconData icon;
   final Widget child;
 
   /// Fires whenever the job's state may have changed.
@@ -79,21 +77,13 @@ class _BuildConfigScreenState extends State<BuildConfigScreen> {
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 16,
-        title: Row(
-          children: [
-            Icon(widget.icon, size: 18),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                '${widget.repertoireName} ▸ ${widget.title}',
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
+        // Title only. The step is already named in words; the icon beside
+        // it was decoration, and a sparkle beside "Generate from here" read
+        // as a claim about the output rather than a label.
+        title: Text(
+          '${widget.repertoireName} ▸ ${widget.title}',
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
         ),
         actions: [
           IconButton(

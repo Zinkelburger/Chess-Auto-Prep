@@ -16,7 +16,7 @@ import '../../models/move_tree.dart';
 import '../../services/pgn_parsing_service.dart' show startPositionFromGame;
 import '../../utils/fen_utils.dart';
 import '../../utils/pgn_comment_utils.dart' show joinComments, toggleQualityNag;
-import '../../utils/chess_utils.dart' show playSanOrNullMove;
+import 'mainline_positions.dart';
 import 'pgn_dummy_mainline.dart';
 import 'pgn_variation_extractor.dart';
 
@@ -54,6 +54,12 @@ class ViewerGameModel {
 
   bool get hasAnalysis => variationsByPly.values.any((l) => l.isNotEmpty);
 
+  /// The board after each mainline ply, computed once and extended as the
+  /// mainline grows.  Every navigation reads from here instead of replaying
+  /// the game from the start.
+  MainlinePositions get mainline =>
+      MainlinePositions.of(moveHistory, startPosition);
+
   bool get hasEphemeralMoves {
     for (final roots in variationsByPly.values) {
       for (final root in roots) {
@@ -88,14 +94,8 @@ class ViewerGameModel {
       moveIndex = revealedPly!;
     }
     if (moveIndex < 0 || moveIndex > moveHistory.length) return false;
-    Position pos = startPosition;
-    for (int i = 0; i < moveIndex; i++) {
-      final next = playSanOrNullMove(pos, moveHistory[i].san);
-      if (next == null) break;
-      pos = next;
-    }
     mainLineIndex = moveIndex;
-    currentPosition = pos;
+    currentPosition = mainline.at(moveIndex);
     analysisPath = [];
     activeBranchPly = -1;
     return true;
@@ -103,18 +103,8 @@ class ViewerGameModel {
 
   /// Mainline index whose position matches [targetFen], or null when the
   /// game never reaches it. Index 0 is the start position.
-  int? mainlineIndexOfFen(String targetFen) {
-    final target = normalizeFen(targetFen);
-    Position pos = startPosition;
-    if (normalizeFen(pos.fen) == target) return 0;
-    for (int i = 0; i < moveHistory.length; i++) {
-      final next = playSanOrNullMove(pos, moveHistory[i].san);
-      if (next == null) break;
-      pos = next;
-      if (normalizeFen(pos.fen) == target) return i + 1;
-    }
-    return null;
-  }
+  int? mainlineIndexOfFen(String targetFen) =>
+      mainline.indexOfFen(normalizeFen(targetFen));
 
   /// Move the cursor onto [targetNode] inside the sidelines rooted at
   /// [branchPly]. Returns false when the node can't be located.
@@ -124,21 +114,13 @@ class ViewerGameModel {
     final path = findPathToNode(targetNode, roots);
     if (path == null) return false;
 
-    Position pos = startPosition;
-    for (int i = 0; i < branchPly; i++) {
-      final next = playSanOrNullMove(pos, moveHistory[i].san);
-      if (next == null) break;
-      pos = next;
-    }
-    for (final node in path) {
-      final next = playSanOrNullMove(pos, node.san);
-      if (next == null) break;
-      pos = next;
-    }
-
     mainLineIndex = branchPly;
     activeBranchPly = branchPly;
-    currentPosition = pos;
+    // Every sideline node carries the board after its move, so the target
+    // is one lookup rather than a replay of the branch prefix and the path.
+    currentPosition = path.isEmpty
+        ? mainline.at(branchPly)
+        : path.last.position;
     analysisPath = path;
     return true;
   }
@@ -233,6 +215,7 @@ class ViewerGameModel {
         final newNode = MoveNode(
           san: san,
           fen: fenAfter,
+          position: newPos,
           isEphemeral: !editing,
         );
         roots.add(newNode);
@@ -266,7 +249,9 @@ class ViewerGameModel {
     }
     final roots = variationsByPly.putIfAbsent(mainLineIndex, () => []);
     if (roots.any((r) => r.san == san)) return false;
-    roots.add(MoveNode(san: san, fen: newPos.fen, isEphemeral: true));
+    roots.add(
+      MoveNode(san: san, fen: newPos.fen, position: newPos, isEphemeral: true),
+    );
     return true;
   }
 
@@ -278,17 +263,8 @@ class ViewerGameModel {
     var changed = false;
     wrongByPly.forEach((ply, sans) {
       if (ply < 0 || ply >= moveHistory.length || sans.isEmpty) return;
-      Position pos = startPosition;
-      var reached = true;
-      for (int i = 0; i < ply; i++) {
-        final next = playSanOrNullMove(pos, moveHistory[i].san);
-        if (next == null) {
-          reached = false;
-          break;
-        }
-        pos = next;
-      }
-      if (!reached) return;
+      final pos = mainline.tryAt(ply);
+      if (pos == null) return;
 
       final roots = variationsByPly.putIfAbsent(ply, () => []);
       for (final san in sans) {
@@ -314,7 +290,14 @@ class ViewerGameModel {
         } catch (_) {
           continue;
         }
-        roots.add(MoveNode(san: san, fen: newPos.fen, isEphemeral: false));
+        roots.add(
+          MoveNode(
+            san: san,
+            fen: newPos.fen,
+            position: newPos,
+            isEphemeral: false,
+          ),
+        );
         changed = true;
       }
     });

@@ -49,57 +49,98 @@ bool isPgnCommentLine(String trimmedLine) =>
 /// Comment-only lines (`// ...`, spec `; ...` rest-of-line comments, `%`
 /// escapes) at the top level are stripped.
 ///
+/// Games are cut out of [content] as substrings between `[Event ` line
+/// starts: the text is scanned once for line boundaries and no per-line
+/// strings are made for the lines inside a game.  A file with N games costs
+/// N substrings, not one per line plus a trim per line.
+///
+/// Each chunk is the game's lines each terminated by `\n` (the last chunk
+/// always ends with one), which is what the line-joining implementation this
+/// replaces produced.
+///
 /// This is isolate-safe (no instance state captured).
 List<String> splitPgnIntoGames(String content) {
   final games = <String>[];
-  final lines = content.split('\n');
+  final length = content.length;
 
-  // A StringBuffer keeps accumulation linear; the old `currentGame += line`
-  // re-copied the whole game on every line, which made splitting large
-  // multi-game files superlinear (same issue countPgnGamesFast works around).
-  final currentGame = StringBuffer();
-  var inGame = false;
+  // Start offset of the game being accumulated, or -1 before the first one.
+  var gameStart = -1;
+  // Synthetic header block for header-less text, prepended to the chunk.
+  String? prefix;
 
-  void flushGame() {
-    final text = currentGame.toString();
-    if (text.trim().isNotEmpty) {
-      games.add(text);
-    }
-    currentGame.clear();
+  void flush(int end) {
+    final body = content.substring(gameStart, end);
+    final text = prefix == null ? body : '$prefix$body';
+    if (text.trim().isNotEmpty) games.add(text);
+    prefix = null;
   }
 
-  for (final line in lines) {
-    final trimmedLine = line.trim();
-
-    if (!inGame && isPgnCommentLine(trimmedLine)) {
-      continue;
-    }
+  var lineStart = 0;
+  while (lineStart <= length) {
+    var lineEnd = content.indexOf('\n', lineStart);
+    if (lineEnd < 0) lineEnd = length;
+    final firstNonBlank = _firstNonBlank(content, lineStart, lineEnd);
 
     // The trailing space is load-bearing: a bare `[Event` prefix also matches
     // `[EventDate "..."]`, which would split every game with that header in
     // two.
-    if (trimmedLine.startsWith('[Event ')) {
-      if (inGame) {
-        flushGame();
+    if (content.startsWith('[Event ', firstNonBlank)) {
+      if (gameStart >= 0) flush(lineStart);
+      gameStart = lineStart;
+    } else if (gameStart < 0 && firstNonBlank < lineEnd) {
+      final trimmedLine = content.substring(firstNonBlank, lineEnd).trim();
+      if (!isPgnCommentLine(trimmedLine)) {
+        prefix =
+            '[Event "Repertoire Line"]\n[White "Training"]\n[Black "Me"]\n\n';
+        gameStart = lineStart;
       }
-      currentGame.write('$line\n');
-      inGame = true;
-    } else if (inGame) {
-      currentGame.write('$line\n');
-    } else if (trimmedLine.isNotEmpty) {
-      currentGame.write(
-        '[Event "Repertoire Line"]\n[White "Training"]\n[Black "Me"]\n\n',
-      );
-      inGame = true;
-      currentGame.write('$line\n');
     }
+    lineStart = lineEnd + 1;
   }
 
-  if (inGame) {
-    flushGame();
+  if (gameStart >= 0) {
+    // Every line is `\n`-terminated in a chunk, the final one included.
+    final body = content.substring(gameStart);
+    final text = '${prefix ?? ''}$body\n';
+    if (text.trim().isNotEmpty) games.add(text);
   }
 
   return games;
+}
+
+/// Offset of the line that starts the last game in [content] — the last
+/// `[Event ` at a line start — or -1 when there is none.  The boundary
+/// [splitPgnIntoGames] cuts on, for callers that only want the final game.
+int lastGameStart(String content) {
+  const marker = '[Event ';
+  var from = content.length;
+  while (true) {
+    final idx = content.lastIndexOf(marker, from);
+    if (idx < 0) return -1;
+    if (_isLineStart(content, idx)) {
+      // Back up over the blanks to the true line start.
+      var lineStart = idx;
+      while (lineStart > 0 && content.codeUnitAt(lineStart - 1) != 0x0A) {
+        lineStart--;
+      }
+      return lineStart;
+    }
+    if (idx == 0) return -1;
+    from = idx - 1;
+  }
+}
+
+/// Offset of the first character in `[start, end)` that is not a space,
+/// tab, carriage return or byte-order mark — [end] when the line is blank.
+/// (`String.trim`, which this replaces, strips U+FEFF as whitespace too.)
+int _firstNonBlank(String content, int start, int end) {
+  var i = start;
+  while (i < end) {
+    final c = content.codeUnitAt(i);
+    if (c != 0x20 && c != 0x09 && c != 0x0D && c != 0xFEFF) break;
+    i++;
+  }
+  return i;
 }
 
 /// Extracts a map of PGN headers from a single-game PGN string.
@@ -115,13 +156,13 @@ Map<String, String> extractHeaders(String pgnText) {
 
 /// Returns the number of games in a PGN string.
 ///
-/// Uses [splitPgnIntoGames] so the count matches repertoire import and the
-/// Lines list. dartchess [PgnGame.parseMultiGamePgn] under-counts when games
-/// are separated only by `[Event` headers (no blank line), as in tree_builder
+/// Agrees with [splitPgnIntoGames] (so the count matches repertoire import
+/// and the Lines list) without building the chunks: both count `[Event `
+/// headers at line starts, and both report header-less move text as one
+/// game.  dartchess [PgnGame.parseMultiGamePgn] under-counts when games are
+/// separated only by `[Event` headers (no blank line), as in tree_builder
 /// repertoire exports.
-int countPgnGames(String pgnContent) {
-  return splitPgnIntoGames(stripBom(pgnContent)).length;
-}
+int countPgnGames(String pgnContent) => countPgnGamesFast(pgnContent);
 
 /// Fast game count for list/metadata display.
 ///
@@ -141,23 +182,208 @@ int countPgnGamesFast(String pgnContent) {
   while (true) {
     final idx = content.indexOf(marker, from);
     if (idx < 0) break;
-    // Only headers that begin a line (start of file or just after a newline)
-    // start a new game — mirrors `trimmedLine.startsWith('[Event ')`.
-    if (idx == 0 || content[idx - 1] == '\n') count++;
+    // Only headers that begin a line (start of file or just after a newline,
+    // with nothing but blanks between) start a new game — mirrors
+    // `trimmedLine.startsWith('[Event ')`.
+    if (_isLineStart(content, idx)) count++;
     from = idx + marker.length;
   }
   if (count > 0) return count;
 
   // No headers: header-less move text counts as one game if it has any
   // non-comment, non-blank content.
-  for (final line in content.split('\n')) {
-    final t = line.trim();
-    if (t.isEmpty || isPgnCommentLine(t)) {
-      continue;
-    }
-    return 1;
+  var lineStart = 0;
+  while (lineStart <= content.length) {
+    var lineEnd = content.indexOf('\n', lineStart);
+    if (lineEnd < 0) lineEnd = content.length;
+    final t = content.substring(lineStart, lineEnd).trim();
+    if (t.isNotEmpty && !isPgnCommentLine(t)) return 1;
+    lineStart = lineEnd + 1;
   }
   return 0;
+}
+
+/// Whether only blanks separate [offset] from the start of its line.
+bool _isLineStart(String content, int offset) {
+  var i = offset - 1;
+  while (i >= 0) {
+    final c = content.codeUnitAt(i);
+    if (c == 0x0A) return true;
+    if (c != 0x20 && c != 0x09 && c != 0x0D) return false;
+    i--;
+  }
+  return true;
+}
+
+// ── Mainline lexing ──────────────────────────────────────────────────────────
+
+/// dartchess's movetext token grammar, verbatim from its PGN parser: a SAN
+/// (with optional check/mate suffix), a null move, a comment or line-comment
+/// opener, a NAG, an annotation glyph, a variation bracket, or a result.
+/// Anything else on a line — move numbers, dots, stray text — is skipped.
+final RegExp _movetextTokenRe = RegExp(
+  r'(?:[NBKRQ]?[a-h]?[1-8]?[-x]?[a-h][1-8](?:=?[nbrqkNBRQK])?|[pnbrqkPNBRQK]?@[a-h][1-8]|O-O-O|0-0-0|O-O|0-0)[+#]?|--|Z0|0000|@@@@|{|;|\$\d{1,4}|[?!]{1,2}|\(|\)|\*|1-0|0-1|1\/2-1\/2',
+);
+
+/// One `[Tag "value"]` pair at the start of a header line, as dartchess
+/// recognises it (escaped quotes and backslashes allowed in the value).
+final RegExp _headerTagRe = RegExp(
+  r'^\s*\[([A-Za-z0-9][A-Za-z0-9_+#=:-]*)\s+"((?:[^"\\]|\\"|\\\\)*)"\]',
+);
+
+/// The mainline SAN moves of [gameText], exactly as
+/// `PgnGame.parsePgn(gameText).moves.mainline()` reports them, without
+/// building the move tree.
+///
+/// Line ids are derived from the mainline, so every file edit that looks a
+/// game up by id needs this list for every game in the file.  Parsing each
+/// game with dartchess allocates a node per move, per variation move and per
+/// comment; this walks the same token grammar and keeps only the top-level
+/// moves.  The equivalence is pinned by `test/services/mainline_lexer_test.dart`
+/// — change one, run the other.
+///
+/// Mirrors the parser's rules: `[Tag "value"]` lines at the top are headers;
+/// a `%` at a line start escapes that line; `;` comments to end of line;
+/// `{ }` comments do not nest and may span lines; `( )` variations nest;
+/// `Z0` / `0000` / `@@@@` are the null move `--`; `0-0` castling is
+/// normalised to `O-O`.  Results and `!?` glyphs are not moves, and — as in
+/// dartchess — tokens after a result are still read.
+List<String> mainlineSansOf(String gameText) {
+  final text = stripBom(gameText);
+  final sans = <String>[];
+  var depth = 0;
+
+  var lineStart = _movetextStart(text);
+  // Set when a brace comment ran past the end of its line: the scan resumes
+  // mid-line at the `}` instead of at the next line start.
+  var resumeInsideLine = false;
+
+  while (lineStart <= text.length) {
+    var lineEnd = text.indexOf('\n', lineStart);
+    if (lineEnd < 0) lineEnd = text.length;
+
+    if (!resumeInsideLine && text.startsWith('%', lineStart)) {
+      lineStart = lineEnd + 1;
+      continue;
+    }
+    resumeInsideLine = false;
+
+    final line = text.substring(lineStart, lineEnd);
+    var offset = 0;
+    var nextLineStart = lineEnd + 1;
+
+    tokens:
+    for (final match in _movetextTokenRe.allMatches(line, offset)) {
+      if (match.start < offset) continue;
+      final token = match[0]!;
+      switch (token) {
+        case ';':
+          break tokens;
+        case '(':
+          depth++;
+        case ')':
+          if (depth > 0) depth--;
+        case '{':
+          final close = text.indexOf('}', lineStart + match.end);
+          if (close < 0) return sans;
+          if (close < lineEnd) {
+            // Same line: skip the comment and keep lexing after it.
+            offset = close - lineStart + 1;
+            continue tokens;
+          }
+          // The comment closes on a later line: resume there, mid-line.
+          nextLineStart = close;
+          resumeInsideLine = true;
+          break tokens;
+        case '*' || '1-0' || '0-1' || '1/2-1/2':
+          break;
+        default:
+          if (token.codeUnitAt(0) == 0x24 /* $ */ ||
+              token.codeUnitAt(0) == 0x21 /* ! */ ||
+              token.codeUnitAt(0) == 0x3F /* ? */ ) {
+            break; // NAG or annotation glyph.
+          }
+          if (depth == 0) sans.add(_normalizeSanToken(token));
+      }
+    }
+    lineStart = nextLineStart;
+  }
+  return sans;
+}
+
+/// The `[Tag "value"]` pairs of the leading header block, decoded the way
+/// dartchess decodes them (`\\"` → `"`, `\\\\` → `\\`).  Stops at the first line
+/// that is not a header, so a tag-shaped string inside a comment is never
+/// read as a header — unlike [extractHeaders], which matches anywhere.
+Map<String, String> extractHeaderBlock(String gameText) {
+  final text = stripBom(gameText);
+  final headers = <String, String>{};
+  var lineStart = 0;
+  var inHeaders = false;
+  while (lineStart < text.length) {
+    var lineEnd = text.indexOf('\n', lineStart);
+    if (lineEnd < 0) lineEnd = text.length;
+    var line = text.substring(lineStart, lineEnd);
+    lineStart = lineEnd + 1;
+
+    if (!inHeaders) {
+      if (line.trim().isEmpty || line.startsWith('%')) continue;
+      inHeaders = true;
+    } else if (line.startsWith('%')) {
+      return headers;
+    }
+
+    for (var m = _headerTagRe.firstMatch(line); m != null;) {
+      headers[m.group(1)!] = m
+          .group(2)!
+          .replaceAll('\\"', '"')
+          .replaceAll('\\\\', '\\');
+      line = line.substring(m.end);
+      m = _headerTagRe.firstMatch(line);
+    }
+    if (line.trim().isNotEmpty) return headers;
+  }
+  return headers;
+}
+
+/// Offset of the first movetext line: past any leading blank / `%` lines and
+/// the run of header lines.  A line that carries text after its last header
+/// tag starts the movetext itself, as in dartchess.
+int _movetextStart(String text) {
+  var lineStart = 0;
+  var inHeaders = false;
+  while (lineStart < text.length) {
+    var lineEnd = text.indexOf('\n', lineStart);
+    if (lineEnd < 0) lineEnd = text.length;
+    var line = text.substring(lineStart, lineEnd);
+
+    if (!inHeaders) {
+      if (line.trim().isEmpty || line.startsWith('%')) {
+        lineStart = lineEnd + 1;
+        continue;
+      }
+      inHeaders = true;
+    } else if (line.startsWith('%')) {
+      // dartchess ends the game here; there is no movetext to read.
+      return text.length + 1;
+    }
+
+    var consumed = 0;
+    for (var m = _headerTagRe.firstMatch(line); m != null;) {
+      consumed += m.end;
+      line = line.substring(m.end);
+      m = _headerTagRe.firstMatch(line);
+    }
+    if (line.trim().isNotEmpty) return lineStart + consumed;
+    lineStart = lineEnd + 1;
+  }
+  return text.length + 1;
+}
+
+String _normalizeSanToken(String token) {
+  if (token == 'Z0' || token == '0000' || token == '@@@@') return '--';
+  if (token.codeUnitAt(0) == 0x30 /* 0 */ ) return token.replaceAll('0', 'O');
+  return token;
 }
 
 // ── Position replay ──────────────────────────────────────────────────────────
@@ -227,6 +453,52 @@ List<String> _child0Sans(PgnNode<PgnNodeData> node, {required int maxPlies}) {
   return remaining;
 }
 
+/// A game parsed once for every replay-based predicate a slice applies to
+/// it.  The slow slice path used to parse the same game up to three times —
+/// once per predicate — which is the whole cost of a slice on a collection
+/// without a `.fenidx`.
+class _ReplayGame {
+  _ReplayGame(this.game, this.start);
+
+  final PgnGame<PgnNodeData> game;
+  final Position start;
+
+  /// Null when the game or its `[FEN]` header does not parse; every
+  /// predicate then reports no match, as the per-call parses did.
+  static _ReplayGame? tryParse(Map<String, String> headers, String pgnText) {
+    try {
+      return _ReplayGame(
+        _parsePgnForReplay(pgnText),
+        _positionFromHeaders(headers),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool passesThroughFen(String targetFen) {
+    var found = false;
+    _forEachPgnNode(game.moves, start, (pos, _) {
+      if (normalizeFen(pos.fen) == targetFen) {
+        found = true;
+        return false;
+      }
+      return true;
+    });
+    return found;
+  }
+
+  bool matchesSequence(List<List<String>> groups, int maxGap) {
+    if (groups.isEmpty) return true;
+    final moves = game.moves
+        .mainline()
+        .map((n) => n.san)
+        .where((s) => !isNullMoveSan(s))
+        .toList();
+    return _matchGroupsAt(moves, groups, 0, 0, maxGap);
+  }
+}
+
 /// Whether [pgnText] contains a position matching [targetFen] (normalized).
 ///
 /// Walks the mainline and RAVs, so a course chapter that only reaches the
@@ -235,23 +507,9 @@ bool gamePassesThroughFen(
   Map<String, String> headers,
   String pgnText,
   String targetFen,
-) {
-  try {
-    final game = _parsePgnForReplay(pgnText);
-    var found = false;
-    _forEachPgnNode(game.moves, _positionFromHeaders(headers), (pos, _) {
-      if (normalizeFen(pos.fen) == targetFen) {
-        found = true;
-        return false;
-      }
-      return true;
-    });
-    return found;
-  } catch (_) {
-    // Best-effort; failure here is non-fatal and intentionally ignored.
-  }
-  return false;
-}
+) =>
+    _ReplayGame.tryParse(headers, pgnText)?.passesThroughFen(targetFen) ??
+    false;
 
 /// SAN after [targetFen] is reached, along the line that found it (the
 /// mainline of that variation, or the game mainline when the hit is there).
@@ -284,9 +542,12 @@ List<String> mainlineSansAfterFen(
 ///
 /// Returns `'white'` or `'black'`, or `null` if not found.
 String? extractRepertoireColor(String content) {
-  final lines = content.split('\n');
-  for (var i = 0; i < lines.length && i < 20; i++) {
-    final line = lines[i].trim();
+  var lineStart = 0;
+  for (var i = 0; i < 20 && lineStart <= content.length; i++) {
+    var lineEnd = content.indexOf('\n', lineStart);
+    if (lineEnd < 0) lineEnd = content.length;
+    final line = content.substring(lineStart, lineEnd).trim();
+    lineStart = lineEnd + 1;
     if (line.startsWith('// Color:')) {
       final color = line.substring(9).trim().toLowerCase();
       if (color == 'white' || color == 'black') return color;
@@ -399,17 +660,11 @@ bool gameMatchesSequence(
   int maxGap,
 ) {
   if (groups.isEmpty) return true;
-  try {
-    final game = _parsePgnForReplay(pgnText);
-    final moves = game.moves
-        .mainline()
-        .map((n) => n.san)
-        .where((s) => !isNullMoveSan(s))
-        .toList();
-    return _matchGroupsAt(moves, groups, 0, 0, maxGap);
-  } catch (_) {
-    return false;
-  }
+  return _ReplayGame.tryParse(
+        const {},
+        pgnText,
+      )?.matchesSequence(groups, maxGap) ??
+      false;
 }
 
 // ── Position input parsing (isolate-safe) ────────────────────────────────────
@@ -509,6 +764,12 @@ Future<List<int>> computeSliceMatches({
   required int seqGap,
   Map<String, List<int>>? fenIndex,
 }) {
+  // Records cross the isolate boundary; the enum travels by name.
+  final filterData = filters
+      .map((f) => (field: f.field, modeName: f.mode.name, value: f.value))
+      .toList();
+  final seqCopy = seqGroups.map((g) => List<String>.from(g)).toList();
+
   // Fast path: precomputed FEN index for position lookup
   if (targetFen != null && fenIndex != null) {
     final candidates = fenIndex[targetFen];
@@ -529,18 +790,15 @@ Future<List<int>> computeSliceMatches({
           ),
         )
         .toList();
-    final filterData = filters
-        .map((f) => (field: f.field, modeName: f.mode.name, value: f.value))
-        .toList();
-    final seqCopy = seqGroups.map((g) => List<String>.from(g)).toList();
 
     return Isolate.run(() {
+      final compiled = _CompiledFilter.compileAll(filterData);
       final result = <int>[];
       for (final c in candidateData) {
         if (!_passesNonPositionFilters(
           c.headers,
           c.pgnText,
-          filterData,
+          compiled,
           seqCopy,
           seqGap,
         )) {
@@ -553,49 +811,110 @@ Future<List<int>> computeSliceMatches({
   }
 
   // Slow path: full scan in isolate
-  final filterData = filters
-      .map((f) => (field: f.field, modeName: f.mode.name, value: f.value))
-      .toList();
   final gameData = games
       .map(
         (g) =>
             (headers: Map<String, String>.from(g.headers), pgnText: g.pgnText),
       )
       .toList();
-  final seqCopy = seqGroups.map((g) => List<String>.from(g)).toList();
 
   return Isolate.run(() {
+    final compiled = _CompiledFilter.compileAll(filterData);
+    final needsReplay = targetFen != null || seqCopy.isNotEmpty;
     final indices = <int>[];
     for (int i = 0; i < gameData.length; i++) {
       final game = gameData[i];
-      bool matches = true;
-
-      if (targetFen != null) {
-        matches = gamePassesThroughFen(game.headers, game.pgnText, targetFen);
+      if (needsReplay) {
+        // One parse serves both replay predicates.
+        final replay = _ReplayGame.tryParse(game.headers, game.pgnText);
+        if (replay == null) continue;
+        if (targetFen != null && !replay.passesThroughFen(targetFen)) continue;
+        if (!replay.matchesSequence(seqCopy, seqGap)) continue;
       }
-
-      if (matches &&
-          !_passesNonPositionFilters(
-            game.headers,
-            game.pgnText,
-            filterData,
-            seqCopy,
-            seqGap,
-          )) {
-        matches = false;
-      }
-
-      if (matches) indices.add(i);
+      if (!_CompiledFilter.allMatch(compiled, game.headers)) continue;
+      indices.add(i);
     }
     return indices;
   });
+}
+
+/// A header filter with its mode resolved and its query lower-cased once,
+/// rather than per game.  [MatchMode.regex] compiles its pattern once too.
+class _CompiledFilter {
+  _CompiledFilter._(this.field, this.mode, this.value)
+    : queryLower = value.toLowerCase(),
+      regex = mode == MatchMode.regex ? _tryRegExp(value) : null;
+
+  final String field;
+  final MatchMode mode;
+  final String value;
+  final String queryLower;
+  final RegExp? regex;
+
+  static RegExp? _tryRegExp(String pattern) {
+    try {
+      return RegExp(pattern, caseSensitive: false);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static List<_CompiledFilter> compileAll(
+    List<({String field, String modeName, String value})> filters,
+  ) => [
+    for (final f in filters)
+      if (f.value.isNotEmpty)
+        _CompiledFilter._(
+          f.field,
+          MatchMode.values.firstWhere(
+            (m) => m.name == f.modeName,
+            orElse: () => MatchMode.contains,
+          ),
+          f.value,
+        ),
+  ];
+
+  static bool allMatch(
+    List<_CompiledFilter> filters,
+    Map<String, String> headers,
+  ) {
+    for (final f in filters) {
+      if (!f.matches(headers)) return false;
+    }
+    return true;
+  }
+
+  bool matches(Map<String, String> headers) {
+    if (field == kPlayerHeaderField) {
+      return playerFieldMatches(
+        headers['White'] ?? '',
+        headers['Black'] ?? '',
+        value,
+        mode,
+      );
+    }
+    final headerVal = headers[field] ?? '';
+    switch (mode) {
+      case MatchMode.contains:
+        return headerVal.toLowerCase().contains(queryLower);
+      case MatchMode.notContains:
+        return !headerVal.toLowerCase().contains(queryLower);
+      case MatchMode.exact:
+        return headerVal.toLowerCase() == queryLower;
+      case MatchMode.regex:
+        return regex?.hasMatch(headerVal) ?? false;
+      case MatchMode.after:
+      case MatchMode.before:
+        return matchesField(headerVal, value, mode);
+    }
+  }
 }
 
 /// Shared predicate for header + sequence filters (not position).
 bool _passesNonPositionFilters(
   Map<String, String> headers,
   String pgnText,
-  List<({String field, String modeName, String value})> filterData,
+  List<_CompiledFilter> filters,
   List<List<String>> seqGroups,
   int seqGap,
 ) {
@@ -603,27 +922,7 @@ bool _passesNonPositionFilters(
       !gameMatchesSequence(pgnText, seqGroups, seqGap)) {
     return false;
   }
-  for (final f in filterData) {
-    if (f.value.isEmpty) continue;
-    final mode = MatchMode.values.firstWhere(
-      (m) => m.name == f.modeName,
-      orElse: () => MatchMode.contains,
-    );
-    if (f.field == kPlayerHeaderField) {
-      if (!playerFieldMatches(
-        headers['White'] ?? '',
-        headers['Black'] ?? '',
-        f.value,
-        mode,
-      )) {
-        return false;
-      }
-      continue;
-    }
-    final headerVal = headers[f.field] ?? '';
-    if (!matchesField(headerVal, f.value, mode)) return false;
-  }
-  return true;
+  return _CompiledFilter.allMatch(filters, headers);
 }
 
 // ── FEN index persistence ────────────────────────────────────────────────────

@@ -54,17 +54,16 @@ class MaiaDbExpander extends NodeExpander {
       final prob = entry.value;
       if (prob < config.maiaMinProb) continue;
 
-      final childFen = playUciMove(node.fen, uci);
-      if (childFen == null) continue;
+      final played = run.childMove(node, uci);
+      if (played == null) continue;
 
       // Child eval from DB only — skip candidates with no database coverage.
       final childEval = await run.evalResolver.lookupDbEvalWhite(
-        childFen,
+        played.fen,
         config,
       );
       if (childEval == null) continue;
 
-      final childIsWhite = isWhiteToMove(childFen);
       final childCpWhite = childEval.$1;
 
       if (bestCpWhite != null) {
@@ -72,20 +71,20 @@ class MaiaDbExpander extends NodeExpander {
         if (evalLoss > config.maxEvalLossCp) continue;
       }
 
-      final san = uciToSan(node.fen, uci);
       final child = run.makeChild(
         parent: node,
-        fen: childFen,
-        san: san,
+        fen: played.fen,
+        san: played.san,
         uci: uci,
+        position: played.after,
       );
       if (child == null) continue;
 
       child.moveProbability = 1.0;
       child.cumulativeProbability = node.cumulativeProbability;
       child.maiaFrequency = prob;
-      child.engineEvalCp = childIsWhite ? childCpWhite : -childCpWhite;
-      run.evalResolver.cacheEvalWhite(childFen, childCpWhite, childEval.$2);
+      child.engineEvalCp = child.isWhiteToMove ? childCpWhite : -childCpWhite;
+      run.evalResolver.cacheEvalWhite(played.fen, childCpWhite, childEval.$2);
 
       added++;
       run.emitNodeProgress(child);
@@ -101,10 +100,7 @@ class MaiaDbExpander extends NodeExpander {
       await _addFallbackOurMove(node, sortedMoves);
     }
 
-    await injectSetupCandidates(node, bestCpWhite: bestCpWhite);
-    await injectMasterCandidates(node, bestCpWhite: bestCpWhite);
-    await injectTransferCandidate(node, bestCpWhite: bestCpWhite);
-    await injectPinnedCandidate(node);
+    await injectCandidates(node, bestCpWhite: bestCpWhite);
 
     final incumbent = assignOurMovePriorities(node);
 
@@ -114,10 +110,7 @@ class MaiaDbExpander extends NodeExpander {
 
     // Fast: only the incumbent and gap-qualifying alternatives grow
     // subtrees; the rest stay evaluated leaves for selection.
-    for (final child in ourChildrenToExpand(node, incumbent)) {
-      if (run.isCancelled) break;
-      queue.add(child);
-    }
+    enqueueChildren(ourChildrenToExpand(node, incumbent), queue);
   }
 
   /// Last-resort our-move: the highest-policy legal move, with whatever eval
@@ -128,14 +121,15 @@ class MaiaDbExpander extends NodeExpander {
     List<MapEntry<String, double>> sortedMoves,
   ) async {
     for (final entry in sortedMoves) {
-      final childFen = playUciMove(node.fen, entry.key);
-      if (childFen == null) continue;
+      final played = run.childMove(node, entry.key);
+      if (played == null) continue;
 
       final child = run.makeChild(
         parent: node,
-        fen: childFen,
-        san: uciToSan(node.fen, entry.key),
+        fen: played.fen,
+        san: played.san,
         uci: entry.key,
+        position: played.after,
       );
       if (child == null) continue;
 
@@ -144,15 +138,13 @@ class MaiaDbExpander extends NodeExpander {
       child.maiaFrequency = entry.value;
 
       final childEval = await run.evalResolver.lookupDbEvalWhite(
-        childFen,
+        played.fen,
         config,
       );
       if (childEval != null) {
         final childCpWhite = childEval.$1;
-        child.engineEvalCp = isWhiteToMove(childFen)
-            ? childCpWhite
-            : -childCpWhite;
-        run.evalResolver.cacheEvalWhite(childFen, childCpWhite, childEval.$2);
+        child.engineEvalCp = child.isWhiteToMove ? childCpWhite : -childCpWhite;
+        run.evalResolver.cacheEvalWhite(played.fen, childCpWhite, childEval.$2);
       }
 
       run.emitNodeProgress(child);

@@ -25,6 +25,11 @@ class PgnFenIndex {
   Map<String, List<int>>? _value;
   int _generation = 0;
 
+  /// Set when the PGN file was rewritten after [value] was persisted: the
+  /// companion file's size/mtime stamp no longer matches, so it would be
+  /// rejected on the next load.  Cleared by [flushIfStale].
+  bool _stale = false;
+
   /// Read-only access to the precomputed FEN → game-indices map.
   /// Returns null while the index is being built.
   Map<String, List<int>>? get value => _value;
@@ -39,6 +44,25 @@ class PgnFenIndex {
   void reset() {
     _generation++;
     _value = null;
+    _stale = false;
+  }
+
+  /// Note that the PGN file changed under the persisted index (a comment or
+  /// rating write).  Persisting the index after every such write re-serialised
+  /// the whole map per keystroke burst; instead it is written once, by
+  /// [flushIfStale], when the collection is closed.
+  void markStale() => _stale = true;
+
+  /// Persist the index if a file write left it stale.  Safe to call when the
+  /// collection is being replaced: the index is captured synchronously, so a
+  /// [reset] that follows immediately does not empty it under the write.
+  Future<void> flushIfStale({
+    required String? filePath,
+    required int gameTotal,
+  }) {
+    if (!_stale || _value == null || filePath == null) return Future.value();
+    _stale = false;
+    return _persistIndex(_value!, filePath: filePath, gameTotal: gameTotal);
   }
 
   /// Try to load a persisted `<pgn>.fenidx` companion file, validating it
@@ -88,18 +112,25 @@ class PgnFenIndex {
   }
 
   /// Persist the current index to the `<pgn>.fenidx` companion file.
-  Future<void> persist({
-    required String? filePath,
+  Future<void> persist({required String? filePath, required int gameTotal}) {
+    final index = _value;
+    if (filePath == null || index == null) return Future.value();
+    _stale = false;
+    return _persistIndex(index, filePath: filePath, gameTotal: gameTotal);
+  }
+
+  Future<void> _persistIndex(
+    Map<String, List<int>> index, {
+    required String filePath,
     required int gameTotal,
   }) async {
-    if (filePath == null || _value == null) return;
     // Guard against persisting an index that is inconsistent with [gameTotal]:
     // the header records [gameTotal] as the game count, so any stored index
     // outside `[0, gameTotal)` would produce a file that passes load-time
     // validation yet points past `allGames`, crashing consumers with a
     // RangeError. If the in-memory index and [gameTotal] disagree, skip the
     // write rather than persist a corrupt companion file.
-    for (final indices in _value!.values) {
+    for (final indices in index.values) {
       for (final i in indices) {
         if (i < 0 || i >= gameTotal) {
           debugPrint(
@@ -115,7 +146,7 @@ class PgnFenIndex {
       final stat = await storage.fileStat(filePath);
       if (stat == null) return;
       final data = pgn.serializeFenIndex(
-        _value!,
+        index,
         gameCount: gameTotal,
         fileSize: stat.size,
         modifiedMs: stat.modified.millisecondsSinceEpoch,

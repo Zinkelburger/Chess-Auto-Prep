@@ -26,7 +26,7 @@ SnapshotExportRequest _request({
 }) {
   final tree = StandardTree().toTree();
   return SnapshotExportRequest(
-    treeJson: serializeTree(tree),
+    treeJson: serializeTreeJson(tree),
     configJson: _config.toJson(),
     prefix: prefix,
     repertoireStartFen: _startFen,

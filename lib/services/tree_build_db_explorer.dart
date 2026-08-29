@@ -213,23 +213,23 @@ extension TreeBuildServiceDbExplorer on TreeBuildService {
     final tree = run.tree;
 
     if (node.ply >= config.maxPly) {
-      node.explored = true;
+      run.markExplored(node);
       return;
     }
     // Fast: our-move sidelines whose frequency-share priority fell below
     // the floor are not worth expanding (priority ≤ cumulativeProbability).
     if (TreeBuildService._belowSearchFloor(node, config)) {
-      node.explored = true;
+      run.markExplored(node);
       return;
     }
     if (config.maxNodes > 0 && tree.totalNodes >= config.maxNodes) {
-      node.explored = true;
+      run.markExplored(node);
       return;
     }
 
     final pos = freqMap.get(node.fen);
     if (pos == null || pos.moves.isEmpty) {
-      node.explored = true;
+      run.markExplored(node);
       return;
     }
 
@@ -256,15 +256,15 @@ extension TreeBuildServiceDbExplorer on TreeBuildService {
       for (final m in pos.moves) {
         if (config.maxNodes > 0 && tree.totalNodes >= config.maxNodes) break;
 
-        final childFen = playUciMove(node.fen, m.uci);
-        if (childFen == null) continue;
+        final played = run.childMove(node, m.uci);
+        if (played == null) continue;
 
-        final san = m.san.isNotEmpty ? m.san : uciToSan(node.fen, m.uci);
         final child = run.makeChild(
           parent: node,
-          fen: childFen,
-          san: san,
+          fen: played.fen,
+          san: m.san.isNotEmpty ? m.san : played.san,
           uci: m.uci,
+          position: played.after,
         );
         if (child == null) continue;
 
@@ -280,7 +280,7 @@ extension TreeBuildServiceDbExplorer on TreeBuildService {
       // Opponent move: smoothed DB frequencies (Maia Dirichlet prior when
       // coverage is sparse), else raw frequencies with min-games/min-prob.
       if (reach == 0) {
-        node.explored = true;
+        run.markExplored(node);
         return;
       }
 
@@ -318,7 +318,7 @@ extension TreeBuildServiceDbExplorer on TreeBuildService {
       );
     }
 
-    node.explored = true;
+    run.markExplored(node);
 
     run.emitNodeProgress(node);
   }
@@ -343,25 +343,33 @@ extension TreeBuildServiceDbExplorer on TreeBuildService {
 
     _log('Enriching evals: ${noEval.length} nodes without eval');
 
-    // Phase 1: external eval sources (cache + cdbdirect + ChessDB)
+    // Phase 1: external eval sources (cache + cdbdirect + ChessDB).  The
+    // cloud provider rate-limits itself to [chessDbApiConcurrency] requests,
+    // so that many lanes keeps its quota busy without exceeding it.
     int enriched = 0;
-    for (final node in noEval) {
-      await waitIfPaused();
-      if (run.isCancelled) return;
+    await runLanes(
+      noEval,
+      lanes: config.chessDbApiConcurrency,
+      stop: () => run.isCancelled,
+      task: (node) async {
+        await waitIfPaused();
+        if (run.isCancelled) return;
 
-      final gotEval = await _evalResolver.ensureEval(
-        node,
-        config,
-        fenMap: run.fenMap,
-        pool: _pool,
-        dbOnly: true,
-      );
-      if (gotEval) enriched++;
+        final gotEval = await _evalResolver.ensureEval(
+          node,
+          config,
+          fenMap: run.fenMap,
+          pool: _pool,
+          dbOnly: true,
+        );
+        if (gotEval) enriched++;
 
-      if (enriched % _externalEvalProgressInterval == 0) {
-        run.emitNodeProgress(node);
-      }
-    }
+        if (enriched % _externalEvalProgressInterval == 0) {
+          run.emitNodeProgress(node);
+        }
+      },
+    );
+    if (run.isCancelled) return;
 
     _log('External eval enrichment: $enriched / ${noEval.length} resolved');
 
@@ -376,29 +384,36 @@ extension TreeBuildServiceDbExplorer on TreeBuildService {
         (byFen[node.fen] ??= []).add(node);
       }
 
+      // One position per lane: each [ensureEval] acquires its own worker.
       int i = 0;
-      for (final group in byFen.values) {
-        await waitIfPaused();
-        if (run.isCancelled) return;
+      await runLanes(
+        byFen.values.toList(),
+        lanes: run.expansionLanes,
+        stop: () => run.isCancelled,
+        task: (group) async {
+          await waitIfPaused();
+          if (run.isCancelled) return;
 
-        final node = group.first;
-        await _evalResolver.ensureEval(
-          node,
-          config,
-          fenMap: run.fenMap,
-          pool: _pool,
-        );
+          final node = group.first;
+          await _evalResolver.ensureEval(
+            node,
+            config,
+            fenMap: run.fenMap,
+            pool: _pool,
+          );
 
-        if (node.hasEngineEval) {
-          for (final other in group.skip(1)) {
-            other.engineEvalCp = node.engineEvalCp;
+          if (node.hasEngineEval) {
+            for (final other in group.skip(1)) {
+              other.engineEvalCp = node.engineEvalCp;
+            }
           }
-        }
 
-        if (i++ % _stockfishEvalProgressInterval == 0) {
-          run.emitNodeProgress(node);
-        }
-      }
+          if (i++ % _stockfishEvalProgressInterval == 0) {
+            run.emitNodeProgress(node);
+          }
+        },
+      );
+      if (run.isCancelled) return;
     }
 
     final failed = noEval.where((n) => !n.hasEngineEval).length;

@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/core/repertoire_controller.dart';
 import 'package:chess_auto_prep/core/repertoire_writer.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_suggestion_service.dart';
 import 'package:chess_auto_prep/models/repertoire_metadata.dart';
+import 'package:chess_auto_prep/services/repertoire_service.dart';
 
 void main() {
   group('RepertoireWriter undo', () {
@@ -178,5 +179,65 @@ void main() {
       await controller.loadRepertoire();
       expect(writer.canUndo, isFalse);
     });
+
+    // Per-ply undo snapshots come from the service, which only produces them
+    // when there is a document to snapshot.  Indexing them unconditionally
+    // threw part-way through the add, leaving the tree extended and the undo
+    // stack half-built.
+    test('a multi-move add still works with no document to snapshot', () async {
+      controller.loadMoveHistory(['e4', 'e5']);
+      final noSnapshots = RepertoireWriter(
+        controller,
+        service: _NoSnapshotService(),
+      );
+
+      final path = await noSnapshots.addMovesAtPosition(
+        pathFromRoot: ['e4', 'e5'],
+        sans: ['Nf3', 'Nc6', 'Bb5'],
+      );
+
+      expect(path, ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5']);
+      expect(controller.repertoireLines.first.moves, [
+        'e4',
+        'e5',
+        'Nf3',
+        'Nc6',
+        'Bb5',
+      ]);
+      // One undo entry per ply, as with a snapshotting service.
+      expect(await noSnapshots.undo(), isTrue);
+      expect(await noSnapshots.undo(), isTrue);
+      expect(await noSnapshots.undo(), isTrue);
+      expect(noSnapshots.canUndo, isFalse);
+      expect(controller.repertoireLines.first.moves, ['e4', 'e5']);
+    });
   });
+}
+
+/// A service that writes the file but hands back no per-ply snapshots — the
+/// shape [RepertoireService.appendMovesAtPath] returns for a repertoire with
+/// no file path behind it.
+class _NoSnapshotService extends RepertoireService {
+  @override
+  Future<({bool success, String updatedContent, List<String> snapshots})>
+  appendMovesAtPath(
+    String filePath,
+    List<String> pathFromRoot,
+    List<String> newSans, {
+    String? startingFen,
+    bool isWhiteRepertoire = true,
+  }) async {
+    final real = await super.appendMovesAtPath(
+      filePath,
+      pathFromRoot,
+      newSans,
+      startingFen: startingFen,
+      isWhiteRepertoire: isWhiteRepertoire,
+    );
+    return (
+      success: real.success,
+      updatedContent: real.updatedContent,
+      snapshots: const <String>[],
+    );
+  }
 }

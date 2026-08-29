@@ -80,6 +80,21 @@ class TrapExtractor {
     return results;
   }
 
+  /// Whether the build's own trap pass already scored [node] below the bar.
+  ///
+  /// Phase 2 runs this same analysis on every opponent node and stores the
+  /// result in [BuildTreeNode.trapScore] (-1 when it never ran).  Almost every
+  /// node fails [minTrapScore], so re-running the analysis here just to
+  /// reject it again was the bulk of the extractor's work on every publish.
+  /// The findability discount only ever lowers a score, so a stored score
+  /// under the bar is conclusive whenever this extractor discounts too;
+  /// without a discount the undiscounted score could still clear it, and the
+  /// analysis runs.
+  bool _rejectedByStoredScore(BuildTreeNode node) =>
+      findabilityPRef != null &&
+      node.trapScore >= 0.0 &&
+      node.trapScore <= minTrapScore;
+
   void _collectTraps(BuildTreeNode node, List<_TrapCandidate> candidates) {
     for (final child in node.children) {
       _collectTraps(child, candidates);
@@ -91,6 +106,7 @@ class TrapExtractor {
         ? !node.isWhiteToMove
         : node.isWhiteToMove;
     if (!isOpponentMove) return;
+    if (_rejectedByStoredScore(node)) return;
 
     final analysis = analyzeTrapScore(node, findabilityPRef: findabilityPRef);
     if (analysis == null || analysis.popularIsBest) return;

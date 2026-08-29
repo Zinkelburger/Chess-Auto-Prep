@@ -110,6 +110,26 @@ class MoveNode implements MoveTreeNodeView {
   /// Board FEN *after* this move was played.
   final String fen;
 
+  /// The position [fen] describes, parsed at most once.
+  ///
+  /// Nodes created by playing a move keep the [Position] they were derived
+  /// from; nodes that arrive with only a FEN (a deserialised tree, a
+  /// hand-built test fixture) parse it lazily on first use.  Either way a
+  /// second read is free, so navigation, legal-move lookups and move
+  /// derivation never re-parse a FEN the tree already holds.
+  /// The board after this move, parsed at most once.
+  ///
+  /// Substitutes the initial board when [fen] does not parse, so display code
+  /// always has *a* board to draw.  Anything that derives new state from it —
+  /// playing a further move, deriving a child FEN — must use
+  /// [positionOrNull] instead and refuse, or a corrupt FEN silently produces
+  /// moves belonging to a completely different position.
+  Position get position => positionOrNull ?? Chess.initial;
+
+  /// [position] without the substitution: null when [fen] does not parse.
+  Position? get positionOrNull => _position ??= tryParseFen(fen);
+  Position? _position;
+
   String? comment;
   List<int>? nags;
 
@@ -131,11 +151,15 @@ class MoveNode implements MoveTreeNodeView {
   MoveNode({
     required this.san,
     required this.fen,
+    Position? position,
     this.comment,
     this.nags,
     this.isEphemeral = false,
     List<MoveNode>? children,
-  }) : id = _nextId++,
+  }) : // A private named initializing formal is not legal Dart.
+       // ignore: prefer_initializing_formals
+       _position = position,
+       id = _nextId++,
        children = children ?? [];
 
   /// First child matching [san], or `null`.
@@ -181,13 +205,44 @@ class MoveNode implements MoveTreeNodeView {
 /// Owns the data; navigation state (the cursor) lives in the controller.
 class MoveTree {
   /// FEN of the position *before* any root move.
-  String startingFen;
+  String get startingFen => _startingFen;
+  set startingFen(String value) {
+    if (value == _startingFen) return;
+    _startingFen = value;
+    _startingPosition = null;
+    _bumpVersion();
+  }
+
+  String _startingFen;
+  Position? _startingPosition;
+
+  /// The position *before* any root move, parsed at most once per
+  /// [startingFen].
+  Position get startingPosition => startingPositionOrNull ?? Chess.initial;
+
+  /// [startingPosition] without the fallback: null when [startingFen] does
+  /// not parse.
+  Position? get startingPositionOrNull =>
+      _startingPosition ??= tryParseFen(_startingFen);
 
   /// Root-level siblings (typically one first move, but PGN allows multiple).
   final List<MoveNode> roots;
 
+  /// Incremented on every structural or annotation change made through this
+  /// class.  Views that cache work derived from the tree (the editor's
+  /// rendered movetext, a flattened outline) key that cache on the version
+  /// rather than rebuilding whenever the cursor moves.  Mutating [roots] or
+  /// a node's `children` directly bypasses it — call [markMutated] after.
+  int get version => _version;
+  int _version = 0;
+
+  void _bumpVersion() => _version++;
+
+  /// Record an out-of-band mutation (see [version]).
+  void markMutated() => _bumpVersion();
+
   MoveTree({String? startingFen, List<MoveNode>? roots})
-    : startingFen = startingFen ?? kStandardStartFen,
+    : _startingFen = startingFen ?? kStandardStartFen,
       roots = roots ?? [];
 
   /// Deep copy whose nodes carry freshly minted ids.
@@ -203,6 +258,7 @@ class MoveTree {
   static MoveNode _copyNodeWithFreshId(MoveNode node) => MoveNode(
     san: node.san,
     fen: node.fen,
+    position: node._position,
     comment: node.comment,
     nags: node.nags,
     isEphemeral: node.isEphemeral,
@@ -249,6 +305,21 @@ class MoveTree {
     if (path.isEmpty) return startingFen;
     final node = nodeAt(path);
     return node?.fen ?? startingFen;
+  }
+
+  /// Position at [path].  Empty or invalid path → [startingPosition].
+  /// O(depth) pointer walk; never parses a FEN the tree already parsed.
+  Position positionAt(TreePath path) {
+    if (path.isEmpty) return startingPosition;
+    return nodeAt(path)?.position ?? startingPosition;
+  }
+
+  /// [positionAt] that refuses instead of substituting the start: null when
+  /// [path] is unknown or the FEN there does not parse.  Callers that go on
+  /// to *derive* a position from the result want this one.
+  Position? positionOrNullAt(TreePath path) {
+    if (path.isEmpty) return startingPositionOrNull;
+    return nodeAt(path)?.positionOrNull;
   }
 
   /// SAN sequence from root to [path].
@@ -301,16 +372,11 @@ class MoveTree {
   /// Add a move after position [parentPath].
   ///
   /// If a child with the same SAN already exists, returns the path to it
-  /// (no duplicate).  Otherwise appends a new child and returns its path.
-  /// Returns `null` if the SAN is illegal at the parent position.
+  /// (no duplicate) — that check comes first, so a SAN already in the tree is
+  /// answered without a legality test.  Otherwise appends a new child and
+  /// returns its path.  Returns `null` when the parent path is unknown, its
+  /// FEN does not parse, or the SAN is illegal there.
   TreePath? addMove(TreePath parentPath, String san) {
-    final parentFen = fenAt(parentPath);
-    final pos = tryParseFen(parentFen);
-    if (pos == null) return null;
-    final next = playSanOrNullMove(pos, san);
-    if (next == null) return null;
-    final newPos = next;
-
     final siblings = parentPath.isEmpty ? roots : nodeAt(parentPath)?.children;
     if (siblings == null) return null;
 
@@ -321,7 +387,15 @@ class MoveTree {
       }
     }
 
-    siblings.add(MoveNode(san: san, fen: newPos.fen));
+    // Refuse rather than substitute: a node whose FEN does not parse must not
+    // grow a child built by playing [san] from the *initial* board.
+    final parent = positionOrNullAt(parentPath);
+    if (parent == null) return null;
+    final next = playSanOrNullMove(parent, san);
+    if (next == null) return null;
+
+    siblings.add(MoveNode(san: san, fen: next.fen, position: next));
+    _bumpVersion();
     return parentPath.child(siblings.length - 1);
   }
 
@@ -329,6 +403,7 @@ class MoveTree {
   void deleteAt(TreePath path) {
     if (path.isEmpty) {
       roots.clear();
+      _bumpVersion();
       return;
     }
     final parentSiblings = path.length == 1
@@ -337,6 +412,7 @@ class MoveTree {
     if (parentSiblings == null) return;
     if (path.last >= 0 && path.last < parentSiblings.length) {
       parentSiblings.removeAt(path.last);
+      _bumpVersion();
     }
   }
 
@@ -349,13 +425,15 @@ class MoveTree {
     }
     final node = siblings.removeAt(path.last);
     siblings.insert(0, node);
+    _bumpVersion();
   }
 
   /// Set comment on the node at [path].
   void setComment(TreePath path, String? comment) {
     final node = nodeAt(path);
-    if (node != null) {
+    if (node != null && node.comment != comment) {
       node.comment = comment;
+      _bumpVersion();
     }
   }
 
@@ -369,6 +447,7 @@ class MoveTree {
     if (node == null) return;
     final next = toggleQualityNag(node.nags, nagId);
     node.nags = next.isEmpty ? null : next;
+    _bumpVersion();
   }
 
   // ── PGN round-trip ─────────────────────────────────────────────────
@@ -405,7 +484,7 @@ class MoveTree {
       final next = playSanOrNullMove(pos, san);
       if (next == null) break;
       pos = next;
-      final node = MoveNode(san: san, fen: pos.fen);
+      final node = MoveNode(san: san, fen: pos.fen, position: pos);
       siblings.add(node);
       siblings = node.children;
     }
@@ -463,6 +542,7 @@ class MoveTree {
         MoveNode(
           san: san,
           fen: afterPos.fen,
+          position: afterPos,
           comment: (comment != null && comment.trim().isNotEmpty)
               ? comment.trim()
               : null,

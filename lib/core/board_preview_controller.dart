@@ -10,6 +10,7 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 
+import '../models/board_annotation.dart';
 import '../utils/safe_change_notifier.dart';
 
 /// Where the active preview is rendered.
@@ -35,6 +36,21 @@ class BoardPreviewController extends ChangeNotifier with SafeChangeNotifier {
   Offset? get anchorGlobal => _anchorGlobal;
   Object? get ownerTag => _ownerTag;
   bool get isPreview => _previewFen != null;
+
+  BoardAnnotation? _hoverArrow;
+
+  /// Arrow echoing the move under the pointer in a move list (opening
+  /// explorer, repertoire tree), drawn over the committed board the way
+  /// Lichess previews an explorer row. Null when nothing is hovered.
+  BoardAnnotation? get hoverArrow => _hoverArrow;
+
+  /// Show [arrow] on the board, or clear it with null. Immediate — a hover
+  /// echo that lagged behind the pointer would feel broken, not calm.
+  void setHoverArrow(BoardAnnotation? arrow) {
+    if (arrow == _hoverArrow) return;
+    _hoverArrow = arrow;
+    notifyListeners();
+  }
 
   /// Request a board preview. Debounced at 80ms.
   ///

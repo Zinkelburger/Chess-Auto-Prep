@@ -354,36 +354,42 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
   /// — mainline, variation, or inline comment-line preview. Hosts pass this
   /// to [ChessBoardWidget.recentMoveSquares] for the subtle last-move
   /// highlight.
+  ///
+  /// Read on every build, so it replays one move from a memoised board
+  /// ([ViewerGameModel.mainline], [MoveNode.position]) rather than the whole
+  /// game from its start.
   Set<String> _recentMoveSquares() {
-    List<String> mainlineSans(int upTo) => [
-      for (int i = 0; i < upTo && i < _moveHistory.length; i++)
-        _moveHistory[i].san,
-    ];
-
     try {
       if (_inlineActive) {
         final anchorFen = _inlineAnchorFen;
-        if (anchorFen != null) {
-          return recentMoveTrailSquares(
-            Chess.fromSetup(Setup.parseFen(anchorFen)),
-            _inlineSans.sublist(0, _inlineCursor),
-          );
-        }
-        return recentMoveTrailSquares(_startPosition, [
-          ...mainlineSans(_inlineBaseIndex),
-          ..._inlineSans.sublist(0, _inlineCursor),
-        ]);
+        final base = anchorFen != null
+            ? Chess.fromSetup(Setup.parseFen(anchorFen))
+            : _m.mainline.tryAt(_inlineBaseIndex);
+        if (base == null) return const {};
+        return recentMoveTrailSquares(
+          base,
+          _inlineSans.sublist(0, _inlineCursor),
+        );
       }
       if (_analysisPath.isNotEmpty) {
-        return recentMoveTrailSquares(_startPosition, [
-          ...mainlineSans(_activeBranchPly),
-          for (final node in _analysisPath) node.san,
-        ]);
+        final last = _analysisPath.last;
+        final before = _analysisPath.length > 1
+            ? _analysisPath[_analysisPath.length - 2].position
+            : _m.mainline.tryAt(_activeBranchPly);
+        if (before == null) return const {};
+        return recentMoveTrailSquares(before, [last.san]);
       }
-      return recentMoveTrailSquares(
-        _startPosition,
-        mainlineSans(_mainLineIndex),
-      );
+      // The move that produced the current mainline position is the last
+      // real move at or before the cursor; a null-move token marks nothing,
+      // so the highlight stays on the move before it, as a full replay did.
+      var ply = _mainLineIndex - 1;
+      while (ply >= 0 && isNullMoveSan(_moveHistory[ply].san)) {
+        ply--;
+      }
+      if (ply < 0) return const {};
+      final before = _m.mainline.tryAt(ply);
+      if (before == null) return const {};
+      return recentMoveTrailSquares(before, [_moveHistory[ply].san]);
     } catch (_) {
       return const {};
     }

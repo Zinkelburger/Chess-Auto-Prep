@@ -554,14 +554,18 @@ String _result(String? r) => switch (r) {
   _ => '*',
 };
 
+// Hoisted: `_playedAt` runs once per imported game.
+final RegExp _pgnDateRe = RegExp(r'^(\d{4})\.(\d{2})\.(\d{2})');
+final RegExp _pgnTimeRe = RegExp(r'^(\d{2}):(\d{2})(?::(\d{2}))?');
+
 /// `UTCDate`/`Date` + `UTCTime`/`Time` as a UTC instant, or null.
 DateTime? _playedAt(Map<String, String> h) {
   final d = h['UTCDate'] ?? h['Date'];
   if (d == null) return null;
-  final m = RegExp(r'^(\d{4})\.(\d{2})\.(\d{2})').firstMatch(d);
+  final m = _pgnDateRe.firstMatch(d);
   if (m == null) return null;
   final t = h['UTCTime'] ?? h['Time'] ?? '';
-  final tm = RegExp(r'^(\d{2}):(\d{2})(?::(\d{2}))?').firstMatch(t);
+  final tm = _pgnTimeRe.firstMatch(t);
   try {
     return DateTime.utc(
       int.parse(m.group(1)!),

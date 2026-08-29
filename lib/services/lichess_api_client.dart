@@ -70,8 +70,19 @@ class LichessApiClient {
   bool _profilingEnabled = false;
   void Function(String message)? _profilingLogger;
 
+  bool _explorerAuthRequired = false;
+
   /// Whether the client is currently in a 429-backoff window.
   bool get isBackingOff => DateTime.now().isBefore(_earliestNextRequest);
+
+  /// Whether Lichess rejected the last Explorer call for want of an account.
+  ///
+  /// Lichess put the opening explorer behind a login in 2026 (anti-abuse):
+  /// anonymous requests to `explorer.lichess.ovh` return 401, and the API
+  /// spec now declares `security: OAuth2` on every Explorer endpoint. This
+  /// lets callers prompt for login instead of reporting a dead network.
+  /// Set by [fetchExplorer] on 401/403, cleared by its next success.
+  bool get explorerAuthRequired => _explorerAuthRequired;
 
   /// Enable/disable detailed per-request timing diagnostics.
   ///
@@ -331,6 +342,10 @@ class LichessApiClient {
     final getMs = getSw.elapsedMilliseconds;
 
     if (response == null) {
+      // Retries exhausted (network, or a 429 that never cleared) — whatever
+      // this is, it is not an auth problem, so don't leave a stale 401 flag
+      // pointing the user at a login that will not help.
+      _explorerAuthRequired = false;
       _profile(
         'Explorer null response fen=$fenShort '
         'total=${totalSw.elapsedMilliseconds}ms get=${getMs}ms',
@@ -338,6 +353,10 @@ class LichessApiClient {
       return null;
     }
     if (response.statusCode != 200) {
+      // 401/403 is "no Lichess account", not "no network" — the two need
+      // very different things from the user, so record which one it was.
+      _explorerAuthRequired =
+          response.statusCode == 401 || response.statusCode == 403;
       if (kDebugMode) {
         debugPrint(
           '[LichessAPI] Explorer HTTP ${response.statusCode} for $fenShort…',
@@ -349,6 +368,8 @@ class LichessApiClient {
       );
       return null;
     }
+
+    _explorerAuthRequired = false;
 
     final decodeSw = Stopwatch()..start();
     final data = json.decode(response.body) as Map<String, dynamic>;

@@ -3,6 +3,7 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
@@ -14,7 +15,9 @@ import 'package:chess_auto_prep/models/trap_line_info.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
 import 'package:chess_auto_prep/features/browse/services/candidate_service.dart';
 import '../../../utils/app_shortcuts.dart';
+import '../../../services/lichess_auth_service.dart';
 import '../../../widgets/layout/empty_state_placeholder.dart';
+import '../../../widgets/lichess_login_prompt.dart';
 import 'candidate_row.dart';
 import 'expanded_trap_list.dart';
 
@@ -72,15 +75,32 @@ class _BrowsePanelState extends State<BrowsePanel> {
   @override
   void initState() {
     super.initState();
+    // Database candidates need a Lichess account (the explorer 401s without
+    // one), so a login anywhere in the app is a reason to re-ask.
+    LichessAuthService.instance.addListener(_onAuthChanged);
     unawaited(_loadCandidates());
+  }
+
+  @override
+  void dispose() {
+    LichessAuthService.instance.removeListener(_onAuthChanged);
+    super.dispose();
+  }
+
+  void _onAuthChanged() {
+    if (mounted) unawaited(_loadCandidates());
   }
 
   @override
   void didUpdateWidget(covariant BrowsePanel old) {
     super.didUpdateWidget(old);
+    // Content compare, not identity: a host that rebuilds for an unrelated
+    // reason may hand over a fresh list of the same moves, and refetching
+    // candidates for the same position on every rebuild is what made the
+    // panel flicker.
     if (widget.fen != old.fen ||
-        widget.pathFromRoot != old.pathFromRoot ||
-        widget.currentMoves != old.currentMoves) {
+        !listEquals(widget.pathFromRoot, old.pathFromRoot) ||
+        !listEquals(widget.currentMoves, old.currentMoves)) {
       unawaited(_loadCandidates());
     }
   }
@@ -233,12 +253,24 @@ class _BrowsePanelState extends State<BrowsePanel> {
   }
 
   Widget _buildEmpty(ThemeData theme) {
+    // With no account there are no database moves to merge in, so an empty
+    // list here is usually the login, not the position.
+    if (!LichessAuthService.instance.isLoggedIn) {
+      return Expanded(
+        child: LichessLoginPrompt(
+          message:
+              'Lichess requires an account to query the opening database. '
+              'Log in to see database moves alongside your tree.',
+          onLoggedIn: () => unawaited(_loadCandidates()),
+        ),
+      );
+    }
     return const Expanded(
       child: EmptyStatePlaceholder(
         icon: Icons.search_off,
         iconSize: 48,
         title: 'No candidates at this position',
-        subtitle: 'Generate a tree or connect to Lichess',
+        subtitle: 'Generate a tree, or try a different position',
       ),
     );
   }

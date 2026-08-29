@@ -17,20 +17,31 @@ class RepertoireDatabasePane extends StatefulWidget {
   const RepertoireDatabasePane({
     super.key,
     required this.fen,
+    required this.currentMoveSequence,
     required this.repertoireMovesAtPosition,
     required this.onPlayMove,
-    required this.onAddMove,
+    this.onAddMove,
+    this.onHoverMove,
   });
 
   /// Position the explorer looks up.
   final String fen;
+
+  /// SAN path to [fen].
+  final List<String> currentMoveSequence;
 
   /// SANs already in the repertoire at [fen]; a callback so the walk only
   /// happens while this tab is actually built.
   final ValueGetter<Set<String>> repertoireMovesAtPosition;
 
   final ValueChanged<String> onPlayMove;
-  final ValueChanged<ExplorerMove> onAddMove;
+
+  /// Right-click "add to repertoire"; null where there is no repertoire to
+  /// add to (the planner).
+  final ValueChanged<ExplorerMove>? onAddMove;
+
+  /// Hovered explorer move (null on leave), for an arrow on the board.
+  final ValueChanged<ExplorerMove?>? onHoverMove;
 
   @override
   State<RepertoireDatabasePane> createState() => _RepertoireDatabasePaneState();
@@ -50,9 +61,11 @@ class _RepertoireDatabasePaneState extends State<RepertoireDatabasePane> {
     return OpeningExplorerPanel(
       service: _explorer,
       fen: widget.fen,
+      movePath: widget.currentMoveSequence,
       repertoireMovesAtPosition: widget.repertoireMovesAtPosition(),
       onPlayMove: widget.onPlayMove,
       onAddMove: widget.onAddMove,
+      onHoverMove: widget.onHoverMove,
     );
   }
 }

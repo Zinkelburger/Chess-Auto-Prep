@@ -651,6 +651,10 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   /// Replace one candidate of the current step (if still at [path]).
+  ///
+  /// Patches that land in the same event-loop turn — the database answers
+  /// for a whole question arrive together — coalesce into one notification;
+  /// a patch that arrives on its own still shows up on its own.
   void _patchCandidate(
     List<String> path,
     String san,
@@ -663,8 +667,15 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
         for (final c in current.candidates) c.san == san ? update(c) : c,
       ],
     );
-    notifyListeners();
+    if (_patchNotifyScheduled) return;
+    _patchNotifyScheduled = true;
+    scheduleMicrotask(() {
+      _patchNotifyScheduled = false;
+      if (!isDisposed) notifyListeners();
+    });
   }
+
+  bool _patchNotifyScheduled = false;
 
   List<PlanCandidate> _overlayKnowledge(
     List<PlanCandidate> candidates,

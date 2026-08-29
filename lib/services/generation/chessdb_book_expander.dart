@@ -52,7 +52,11 @@ class ChessDbBookExpander extends NodeExpander {
     // the app, this one included — but the selector can only honour a pin
     // whose child exists, so it is added here even though the database
     // preferred something else.
-    await injectPinnedCandidate(node);
+    await injectCandidates(
+      node,
+      bestCpWhite: null,
+      sources: const {InjectionSource.pin},
+    );
 
     final incumbent = assignOurMovePriorities(node);
 
@@ -63,10 +67,7 @@ class ChessDbBookExpander extends NodeExpander {
 
     if (coverageOnly) return;
 
-    for (final c in ourChildrenToExpand(node, incumbent)) {
-      if (run.isCancelled) break;
-      queue.add(c);
-    }
+    enqueueChildren(ourChildrenToExpand(node, incumbent), queue);
   }
 
   /// Opponent replies: every move masters play here, or — once the position
@@ -111,10 +112,7 @@ class ChessDbBookExpander extends NodeExpander {
     }
 
     if (node.children.isEmpty) return;
-    for (final child in List.of(node.children)) {
-      if (run.isCancelled) break;
-      queue.add(child);
-    }
+    enqueueChildren(List.of(node.children), queue);
   }
 
   // ── Choosing the move ───────────────────────────────────────────────────
@@ -171,7 +169,7 @@ class ChessDbBookExpander extends NodeExpander {
   Future<_BookChoice?> _engineMove(BuildTreeNode node) async {
     if (run.pool.workerCount == 0) return null;
 
-    final whiteToMove = isWhiteToMove(node.fen);
+    final whiteToMove = node.isWhiteToMove;
     final DiscoveryResult discovery;
     try {
       final sw = Stopwatch()..start();
@@ -255,7 +253,7 @@ class ChessDbBookExpander extends NodeExpander {
   void _recordNodeEval(BuildTreeNode node, int stmCp) {
     if (node.hasEngineEval) return;
     node.engineEvalCp = stmCp;
-    final whiteCp = isWhiteToMove(node.fen) ? stmCp : -stmCp;
+    final whiteCp = node.isWhiteToMove ? stmCp : -stmCp;
     run.evalResolver.cacheEvalWhite(node.fen, whiteCp, config.evalDepth);
   }
 
@@ -266,14 +264,15 @@ class ChessDbBookExpander extends NodeExpander {
     required double probability,
   }) {
     final move = choice.move;
-    final childFen = playUciMove(node.fen, move.uci);
-    if (childFen == null) return null;
+    final played = run.childMove(node, move.uci);
+    if (played == null) return null;
 
     final child = run.makeChild(
       parent: node,
-      fen: childFen,
-      san: move.san.isNotEmpty ? move.san : uciToSan(node.fen, move.uci),
+      fen: played.fen,
+      san: move.san.isNotEmpty ? move.san : played.san,
       uci: move.uci,
+      position: played.after,
     );
     if (child == null) return null;
 
@@ -283,11 +282,11 @@ class ChessDbBookExpander extends NodeExpander {
     // [DbMove.stmCp] scores the move from the *parent's* point of view, and
     // the child is the opponent's turn — hence the flip. Mind the sign zoo
     // in README.md before touching this.
-    final whiteCp = isWhiteToMove(node.fen) ? move.stmCp : -move.stmCp;
-    child.engineEvalCp = isWhiteToMove(childFen) ? whiteCp : -whiteCp;
-    run.evalResolver.cacheEvalWhite(childFen, whiteCp, config.evalDepth);
+    final whiteCp = node.isWhiteToMove ? move.stmCp : -move.stmCp;
+    child.engineEvalCp = child.isWhiteToMove ? whiteCp : -whiteCp;
+    run.evalResolver.cacheEvalWhite(played.fen, whiteCp, config.evalDepth);
 
-    final masterFactor = run.masterPriorityFactor(childFen);
+    final masterFactor = run.masterPriorityFactor(played.fen);
     child.searchPriority =
         effectiveSearchPriority(node) * probability * masterFactor;
     child.searchPriorityDiscount = masterFactor;

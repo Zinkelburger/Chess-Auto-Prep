@@ -11,7 +11,6 @@ library;
 
 import 'dart:async';
 import 'dart:io';
-import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
@@ -1116,9 +1115,9 @@ class GenerationSessionController extends ChangeNotifier
   ) async {
     String? treeJson;
     try {
-      // The build is finished here (no concurrent mutator), so the indented
-      // JSON encode of the whole tree can safely run off the UI isolate.
-      final json = await Isolate.run(() => serializeTree(tree));
+      // The build is finished here (no concurrent mutator); the indented
+      // encode of the whole tree runs off the UI isolate.
+      final json = await serializeTreeInIsolate(tree);
       treeJson = json;
       final base = p.withoutExtension(filePath);
       await StorageFactory.instance.writeFile('${base}_tree.json', json);
@@ -1300,7 +1299,10 @@ class GenerationSessionController extends ChangeNotifier
     try {
       // Build has stopped (failure path) — serialize off the UI isolate.
       if (failedTree != null) {
-        failedTreeJson = await Isolate.run(() => serializeTree(failedTree));
+        failedTreeJson = await serializeTreeInIsolate(
+          failedTree,
+          indent: false,
+        );
       }
     } catch (e) {
       // Partial tree may be unserializable; dump the log regardless.
@@ -1334,7 +1336,10 @@ class GenerationSessionController extends ChangeNotifier
           tree.root.fen == _startFen) {
         tree.startMoves = _startMoveSequence.join(' ');
       }
-      final treeJson = serializeTree(tree);
+      // Captured synchronously (a consistent snapshot of the live tree),
+      // encoded compactly off the UI isolate: this runs from pause and
+      // cancel, exactly when a multi-second freeze would be felt.
+      final treeJson = await serializeTreeInIsolate(tree, indent: false);
       await StorageFactory.instance.writeFile(path, treeJson);
     } catch (e) {
       debugPrint('[GenerationController] Failed to save partial tree: $e');

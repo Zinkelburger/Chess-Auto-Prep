@@ -205,8 +205,8 @@ void main() {
         ),
       );
 
-      expect(find.text('You play Black'), findsOneWidget);
-      await tester.tap(find.text('You play Black'));
+      expect(find.text('Black Repertoire'), findsOneWidget);
+      await tester.tap(find.text('Black Repertoire'));
       expect(opened, 1);
     });
 

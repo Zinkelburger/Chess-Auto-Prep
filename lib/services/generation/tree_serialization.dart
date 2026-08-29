@@ -5,6 +5,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 
@@ -15,20 +16,67 @@ import 'fen_map.dart';
 // ── Serialization ────────────────────────────────────────────────────────
 
 /// Encode a [BuildTree] as a JSON string matching the C v4 format.
-String serializeTree(BuildTree tree) {
-  final root = <String, dynamic>{
-    'format': 'opening_tree',
-    'version': 4,
-    'total_nodes': tree.totalNodes,
-    'max_depth': tree.maxPlyReached,
-    'build_complete': tree.buildComplete,
-    'config': tree.configSnapshot,
-    if (tree.startMoves.isNotEmpty) 'start_moves': tree.startMoves,
-    'tree': _nodeToJson(tree.root),
-  };
-  return const JsonEncoder.withIndent('  ').convert(root);
+///
+/// [indent] pretty-prints; the human-facing `_tree.json` artifact keeps it,
+/// while partial saves and failure dumps pass false — on a 30k-node tree the
+/// indented encode is several times the cost of the compact one.
+String serializeTree(BuildTree tree, {bool indent = true}) =>
+    encodeTreeJson(serializeTreeJson(tree), indent: indent);
+
+/// The v4 JSON document for [tree] as plain maps and lists.
+///
+/// Built iteratively (an explicit stack, no recursion) and cheaply enough to
+/// run on the UI isolate: this is the consistent point-in-time snapshot a
+/// pause or cancel takes of a live tree, after which the expensive part —
+/// turning it into text — can leave the isolate via [serializeTreeInIsolate].
+Map<String, dynamic> serializeTreeJson(BuildTree tree) => <String, dynamic>{
+  'format': 'opening_tree',
+  'version': 4,
+  'total_nodes': tree.totalNodes,
+  'max_depth': tree.maxPlyReached,
+  'build_complete': tree.buildComplete,
+  'config': tree.configSnapshot,
+  if (tree.startMoves.isNotEmpty) 'start_moves': tree.startMoves,
+  'tree': _subtreeToJson(tree.root),
+};
+
+/// JSON text for a document from [serializeTreeJson].
+String encodeTreeJson(Map<String, dynamic> json, {bool indent = true}) => indent
+    ? const JsonEncoder.withIndent('  ').convert(json)
+    : jsonEncode(json);
+
+/// [serializeTree] with the text encoding done on a worker isolate.
+///
+/// The document is captured synchronously — atomic with respect to the
+/// async build loop — and only the plain-data document crosses the isolate
+/// boundary.  Sending the [BuildTree] itself would copy every node with its
+/// parent back-pointer, which costs about as much as the encode it was meant
+/// to move off the UI isolate.
+Future<String> serializeTreeInIsolate(BuildTree tree, {bool indent = true}) {
+  final json = serializeTreeJson(tree);
+  return Isolate.run(() => encodeTreeJson(json, indent: indent));
 }
 
+/// [root] and its whole subtree as nested maps, depth-first with an
+/// explicit stack.
+Map<String, dynamic> _subtreeToJson(BuildTreeNode root) {
+  final rootJson = _nodeToJson(root);
+  final pending = <(BuildTreeNode, Map<String, dynamic>)>[(root, rootJson)];
+  while (pending.isNotEmpty) {
+    final (node, json) = pending.removeLast();
+    if (node.children.isEmpty) continue;
+    final children = <Map<String, dynamic>>[];
+    json['children'] = children;
+    for (final child in node.children) {
+      final childJson = _nodeToJson(child);
+      children.add(childJson);
+      pending.add((child, childJson));
+    }
+  }
+  return rootJson;
+}
+
+/// One node's own fields (no children).
 Map<String, dynamic> _nodeToJson(BuildTreeNode node) {
   final obj = <String, dynamic>{'id': node.nodeId, 'depth': node.ply};
 
@@ -103,10 +151,6 @@ Map<String, dynamic> _nodeToJson(BuildTreeNode node) {
     obj['repertoire_score'] = node.repertoireScore;
   }
 
-  if (node.children.isNotEmpty) {
-    obj['children'] = node.children.map(_nodeToJson).toList();
-  }
-
   return obj;
 }
 
@@ -120,6 +164,16 @@ BuildTree deserializeTree(String jsonStr, {FenMap? fenMap}) {
   final sw = Stopwatch()..start();
   final data = jsonDecode(jsonStr) as Map<String, dynamic>;
   final jsonParseMs = sw.elapsedMilliseconds;
+  return deserializeTreeJson(data, fenMap: fenMap, jsonParseMs: jsonParseMs);
+}
+
+/// Decode an already-parsed v4 document (see [serializeTreeJson]).
+BuildTree deserializeTreeJson(
+  Map<String, dynamic> data, {
+  FenMap? fenMap,
+  int jsonParseMs = 0,
+}) {
+  final sw = Stopwatch()..start();
   final version = (data['version'] as num?)?.toInt() ?? 3;
 
   final configData = data['config'] as Map<String, dynamic>? ?? const {};

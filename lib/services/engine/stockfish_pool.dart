@@ -44,6 +44,19 @@ class StockfishPool {
 
   int get workerCount => _workers.length;
 
+  /// How many workers may run at once: the count the current consumer asked
+  /// [ensureWorkers] for, never more than exist.
+  ///
+  /// This is not always [workerCount].  The pool only ever *grows* — workers
+  /// left over from interactive analysis are reconfigured rather than killed —
+  /// so a build that provisioned four lanes under a four-thread budget can
+  /// find eight workers sitting there.  Running all eight would spend double
+  /// the budget in threads and in hash, which is exactly what the lane split
+  /// exists to avoid.
+  int get concurrencyLimit => _targetCount > 0 && _targetCount < _workers.length
+      ? _targetCount
+      : _workers.length;
+
   /// UCI Threads applied when spawning or reconfiguring workers.
   int _threadsPerWorker = 1;
   int get threadsPerWorker => _threadsPerWorker;
@@ -98,11 +111,42 @@ class StockfishPool {
     await Future.wait([for (final w in _workers) w.setThreads(threads)]);
   }
 
-  /// Prepare the pool for tree building: ensure at least one worker and
-  /// apply [threads] UCI Threads for faster MultiPV.
-  Future<void> prepareForTreeBuild(int threads) async {
-    await ensureWorkers(1, threads);
-    await reconfigureAllWorkers(threads);
+  /// Prepare the pool for tree building with [threadBudget] engine threads
+  /// in total.
+  ///
+  /// The budget is spread across *lanes* — independent workers that each
+  /// expand a different frontier node — rather than handed to one worker as
+  /// UCI Threads.  A fixed-depth search scales sub-linearly with threads
+  /// (lazy SMP), while N single-thread workers on N different positions
+  /// scale nearly linearly, so for the same CPU the build gets several times
+  /// the throughput.  How many lanes: [EngineSettings.workers], capped by the
+  /// budget so a 4-thread budget never spawns 8 workers; any threads left
+  /// over after that split go to each worker (a 12-thread budget on a
+  /// 4-worker setting gives 4 workers × 3 threads).
+  ///
+  /// Idempotent and safe to call over an existing pool: extra workers left
+  /// by interactive analysis are reconfigured, not killed.
+  Future<void> prepareForTreeBuild(int threadBudget) async {
+    final lanes = laneCountFor(threadBudget);
+    final perWorker = threadsPerLane(threadBudget, lanes);
+    await ensureWorkers(lanes, perWorker);
+    await reconfigureAllWorkers(perWorker);
+  }
+
+  /// Lanes a build should run for [threadBudget] threads: the configured
+  /// worker count, clamped to the budget and to at least one.
+  static int laneCountFor(int threadBudget, {int? workers}) {
+    final budget = threadBudget < 1 ? 1 : threadBudget;
+    final want = workers ?? EngineSettings.instance.workers;
+    return want.clamp(1, budget);
+  }
+
+  /// UCI Threads per worker so [lanes] workers together use about
+  /// [threadBudget] threads; never below one.
+  static int threadsPerLane(int threadBudget, int lanes) {
+    if (lanes < 1) return threadBudget < 1 ? 1 : threadBudget;
+    final per = threadBudget ~/ lanes;
+    return per < 1 ? 1 : per;
   }
 
   Future<EvalWorker?> _spawnOne(int index) async {
@@ -187,11 +231,29 @@ class StockfishPool {
     }
   }
 
-  /// Evaluate multiple FENs.  Each acquires its own worker, so up to
-  /// [workerCount] evaluations run in parallel.
+  /// Evaluate multiple FENs, up to [workerCount] at a time, results in
+  /// input order.
+  ///
+  /// Runs on [forEachParallel]: one worker acquisition per lane, held for
+  /// the whole batch.  The previous `Future.wait(fens.map(evaluateFen))`
+  /// parked every FEN as a waiter on [acquire] at once, and [acquire]'s
+  /// 60 s timeout is counted from that moment — so on a one-worker pool any
+  /// batch longer than ~15 depth-20 evals threw `TimeoutException` for its
+  /// tail, which the verifier then reported as a failed pass.
+  ///
+  /// Throws [StateError] if a worker died mid-batch and left a slot empty.
   Future<List<EvalResult>> evaluateMany(List<String> fens, int depth) async {
     if (fens.isEmpty) return const [];
-    return Future.wait(fens.map((f) => evaluateFen(f, depth)));
+    final results = List<EvalResult?>.filled(fens.length, null);
+    await forEachParallel(
+      [for (var i = 0; i < fens.length; i++) i],
+      (worker, i) async =>
+          results[i] = await worker.evaluateFen(fens[i], depth),
+    );
+    return [
+      for (final r in results)
+        r ?? (throw StateError('Evaluation batch was interrupted')),
+    ];
   }
 
   /// Process [items] in parallel across all workers using dynamic
@@ -199,7 +261,7 @@ class StockfishPool {
   /// its previous one, so a single slow item never leaves other workers idle
   /// (unlike static round-robin partitioning of the work up front).
   ///
-  /// Runs up to [workerCount] tasks concurrently.  [task] is handed an
+  /// Runs up to [concurrencyLimit] tasks concurrently.  [task] is handed an
   /// acquired worker — held for the whole call and released automatically —
   /// plus one item.  Pass [stopWhen] to abort remaining items *and* UCI-stop
   /// the in-flight search on that worker instead of waiting for depth.
@@ -209,7 +271,7 @@ class StockfishPool {
     bool Function()? stopWhen,
   }) async {
     if (items.isEmpty) return;
-    final concurrency = workerCount.clamp(1, items.length);
+    final concurrency = concurrencyLimit.clamp(1, items.length);
     var nextIndex = 0;
 
     Future<void> loop() async {
@@ -262,11 +324,15 @@ class StockfishPool {
   }
 
   /// Run MultiPV discovery.  Acquires a worker for the duration.
+  ///
+  /// [searchMoves] restricts the search to those root moves; see
+  /// [EvalWorker.runDiscovery].
   Future<DiscoveryResult> discoverMoves({
     required String fen,
     required int depth,
     required int multiPv,
     required bool isWhiteToMove,
+    List<String>? searchMoves,
     void Function(DiscoveryResult)? onProgress,
   }) async {
     final w = await acquire();
@@ -276,6 +342,7 @@ class StockfishPool {
         depth,
         multiPv,
         isWhiteToMove,
+        searchMoves: searchMoves,
         onProgress: onProgress,
       );
     } finally {
@@ -341,6 +408,12 @@ class StockfishPool {
       _free.add(replacement);
     }
   }
+
+  /// Set the provisioned worker count without spawning anything, so a test
+  /// can reach the state a build leaves behind: more workers alive than the
+  /// current consumer asked for.
+  @visibleForTesting
+  void setTargetCountForTest(int count) => _targetCount = count;
 
   /// Inject a worker that was not spawned by [ensureWorkers] (unit tests).
   @visibleForTesting

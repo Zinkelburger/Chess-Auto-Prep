@@ -79,15 +79,23 @@ double _computeMyEase(BuildTreeNode ourMoveChild, BuildTreeNode parent) {
 bool _isOnlyReasonableMove(BuildTreeNode child, BuildTreeNode parent) {
   if (parent.children.length < 2) return true;
 
-  final evaluated = parent.children.where((c) => c.hasEngineEval).toList();
-  if (evaluated.length < 2) return true;
+  // The two highest sibling evals, in one pass — this runs once per child,
+  // so sorting the siblings here was quadratic per node.
+  int? best;
+  int? second;
+  for (final sibling in parent.children) {
+    final cp = sibling.engineEvalCp;
+    if (cp == null) continue;
+    if (best == null || cp > best) {
+      second = best;
+      best = cp;
+    } else if (second == null || cp > second) {
+      second = cp;
+    }
+  }
+  if (best == null || second == null) return true;
 
-  evaluated.sort(
-    (a, b) => (b.engineEvalCp ?? 0).compareTo(a.engineEvalCp ?? 0),
-  );
-
-  final gap = (evaluated[0].engineEvalCp! - evaluated[1].engineEvalCp!).abs();
-  return gap > kOnlyReasonableMoveGapCp;
+  return (best - second).abs() > kOnlyReasonableMoveGapCp;
 }
 
 /// True when this child has the best engine eval among siblings.

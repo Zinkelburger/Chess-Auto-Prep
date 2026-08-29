@@ -112,7 +112,7 @@ class SnapshotExporter {
       // Synchronous, so atomic w.r.t. the async build loop — the copy is a
       // consistent point-in-time snapshot even while BFS continues.
       final exportRequest = SnapshotExportRequest(
-        treeJson: serializeTree(tree),
+        treeJson: serializeTreeJson(tree),
         configJson: Map<String, dynamic>.from(config.toJson()),
         prefix: List<String>.from(_startMoveSequence()),
         repertoireStartFen: request.repertoireStartFen,

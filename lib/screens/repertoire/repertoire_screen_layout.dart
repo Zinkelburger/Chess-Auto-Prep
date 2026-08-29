@@ -104,7 +104,8 @@ mixin _RepertoireLayout
   /// What fills the outline column — the same surface the compact layout's
   /// Lines tab shows: a running session or draft, the metrics browser, or
   /// the chapter/line tree.
-  Widget _buildOutlineColumnContent() => _buildSecondTabContent();
+  Widget _buildOutlineColumnContent() =>
+      _cursorScoped((_) => _buildSecondTabContent());
 
   /// The right column: Engine | Database | Tree, collapsible to a strip.
   Widget _buildAnalysisSidePanel(double width) {
@@ -127,9 +128,9 @@ mixin _RepertoireLayout
       showTooltip: 'Show analysis panel',
       onCollapsedChanged: _layout.setLinesPanelCollapsed,
       children: [
-        _buildEngineTabContent(),
-        _buildDatabaseTabContent(),
-        _buildTreeTabContent(),
+        _cursorScoped((_) => _buildEngineTabContent()),
+        _cursorScoped((_) => _buildDatabaseTabContent()),
+        _cursorScoped((_) => _buildTreeTabContent()),
       ],
     );
   }
@@ -216,21 +217,30 @@ mixin _RepertoireLayout
     );
   }
 
+  /// Rebuild [build]'s subtree on every controller notification, cursor
+  /// moves included.  The screen itself only rebuilds on structural changes
+  /// (see `_onRepertoireChanged`), so every zone that shows the position
+  /// goes through here — the board, the PGN editor, the analysis tabs and
+  /// the outline — and nothing else does.
+  Widget _cursorScoped(WidgetBuilder build) => ListenableBuilder(
+    listenable: _controller,
+    builder: (context, _) => build(context),
+  );
+
   Widget _buildBoardZone() {
     return Column(
       children: [
         Expanded(
-          child: BoardZone(
-            boardPreview: _boardPreview,
-            fen: _isBuildSessionActive
-                ? _buildSession.boardFen
-                : (_ephemeralPreview?.fen ?? _controller.fen),
-            positionFromFen: _positionFromFen,
-            boardFlipped: _boardFlipped,
-            onMove: _handleMove,
-            annotations: buildAuditBoardAnnotations(
-              result: _auditController.result,
-              currentFen: _controller.fen,
+          child: _cursorScoped(
+            (_) => BoardZone(
+              boardPreview: _boardPreview,
+              fen: _isBuildSessionActive
+                  ? _buildSession.boardFen
+                  : (_ephemeralPreview?.fen ?? _controller.fen),
+              positionFromFen: _positionFromFen,
+              boardFlipped: _boardFlipped,
+              onMove: _handleMove,
+              annotations: _auditAnnotationsAt(_controller.fen),
             ),
           ),
         ),
@@ -256,9 +266,9 @@ mixin _RepertoireLayout
             controller: _toolsTabController,
             physics: const NeverScrollableScrollPhysics(),
             children: [
-              _buildPgnTabWithEngines(),
-              _buildSecondTabContent(),
-              _buildTreeTabContent(),
+              _cursorScoped((_) => _buildPgnTabWithEngines()),
+              _cursorScoped((_) => _buildSecondTabContent()),
+              _cursorScoped((_) => _buildTreeTabContent()),
             ],
           ),
         ),
@@ -276,7 +286,7 @@ mixin _RepertoireLayout
         Expanded(
           child: Padding(
             padding: const EdgeInsets.all(4.0),
-            child: _buildPgnTab(),
+            child: _cursorScoped((_) => _buildPgnTab()),
           ),
         ),
         _buildNavControls(),

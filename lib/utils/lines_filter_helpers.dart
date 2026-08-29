@@ -35,14 +35,17 @@ class LineDisplayData {
   /// without move numbers.
   final String searchText;
 
-  const LineDisplayData({required this.title, required this.searchText});
-}
+  /// Lowercase name, for sorting — a comparator that lower-cases both sides
+  /// on every comparison allocates O(n log n) strings per sort.
+  final String nameLower;
 
-/// Builds the display/search index for [lines]. O(total PGN size); call it
-/// when the repertoire changes, not per filter run.
-Map<String, LineDisplayData> buildLineDisplayIndex(List<RepertoireLine> lines) {
-  final index = <String, LineDisplayData>{};
-  for (final line in lines) {
+  const LineDisplayData({
+    required this.title,
+    required this.searchText,
+    required this.nameLower,
+  });
+
+  factory LineDisplayData.of(RepertoireLine line) {
     final eventTitle = pgn_utils.extractEventTitle(line.fullPgn);
     final title = !isPlaceholderLineTitle(eventTitle) ? eventTitle : line.name;
     final searchText = [
@@ -51,7 +54,35 @@ Map<String, LineDisplayData> buildLineDisplayIndex(List<RepertoireLine> lines) {
       line.moves.join(' '),
       pgn_utils.formatMovesForSearch(line.moves),
     ].join('\n').toLowerCase();
-    index[line.id] = LineDisplayData(title: title, searchText: searchText);
+    return LineDisplayData(
+      title: title,
+      searchText: searchText,
+      nameLower: line.name.toLowerCase(),
+    );
+  }
+}
+
+/// Builds the display/search index for [lines]. O(total PGN size); call it
+/// when the repertoire changes, not per filter run.
+///
+/// Pass the [previous] index and the lines it was built from to make the
+/// call incremental: a [RepertoireLine] is immutable and the controller
+/// replaces only the lines that changed, so entries whose line object is
+/// unchanged are carried over and only new or edited lines are derived.  An
+/// autosave or a one-line append then costs one line, not the whole file.
+Map<String, LineDisplayData> buildLineDisplayIndex(
+  List<RepertoireLine> lines, {
+  Map<String, LineDisplayData>? previous,
+  List<RepertoireLine>? previousLines,
+}) {
+  final reusable = <String, RepertoireLine>{
+    if (previous != null && previousLines != null)
+      for (final line in previousLines) line.id: line,
+  };
+  final index = <String, LineDisplayData>{};
+  for (final line in lines) {
+    final data = identical(reusable[line.id], line) ? previous![line.id] : null;
+    index[line.id] = data ?? LineDisplayData.of(line);
   }
   return index;
 }
@@ -155,8 +186,11 @@ List<RepertoireLine> filterAndSortLines({
     LineSortBy.coverage => coverageSortRank(lineCoverage[line.id]),
   };
 
+  String nameKey(RepertoireLine line) =>
+      displayIndex?[line.id]?.nameLower ?? line.name.toLowerCase();
+
   int byName(RepertoireLine a, RepertoireLine b) =>
-      a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      nameKey(a).compareTo(nameKey(b));
 
   filtered.sort((a, b) {
     if (sortBy == LineSortBy.name) {

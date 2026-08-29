@@ -34,8 +34,7 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 
-import '../../utils/chess_utils.dart'
-    show sanToUci, tryParseFen, uciToSanOrNull;
+import '../../utils/chess_utils.dart' show sanToUci, tryParseFen;
 import '../../utils/fen_utils.dart' show normalizeFen;
 
 /// A board structure the user wants to steer toward (`avoid == false`) or
@@ -153,8 +152,19 @@ class SkeletonNode {
   /// Piece placement (first FEN field) of [fen], cached for [pieceDiff].
   final String placement;
 
+  /// [placement] expanded to 64 cells, computed once.  Every transfer lookup
+  /// compares the query position against every skeleton node, so expanding
+  /// the skeleton side per comparison cost a 64-char string per node per
+  /// our-move node in the build.
+  late final String expandedPlacement = _expandPlacement(placement);
+
   SkeletonNode({required this.fen, required this.uci, required this.pathLabel})
-    : placement = fen.split(' ').first;
+    : placement = _placementOf(fen);
+
+  static String _placementOf(String fen) {
+    final space = fen.indexOf(' ');
+    return space < 0 ? fen : fen.substring(0, space);
+  }
 
   Map<String, dynamic> toJson() => {'fen': fen, 'uci': uci, 'path': pathLabel};
 
@@ -224,17 +234,23 @@ class SkeletonPlan {
   ///
   /// Ties broken by smallest distance. The returned move is a *candidate* the
   /// caller still eval-gates — transfer never overrides the eval-loss window.
-  TransferMatch? transferFor(String beforeFen) {
-    final placement = normalizeFen(beforeFen).split(' ').first;
-    final pos = tryParseFen(beforeFen);
+  ///
+  /// Pass [position] when the caller already holds the parsed position;
+  /// otherwise [beforeFen] is parsed here.  Legality is a single
+  /// [Position.isLegal] check per skeleton node within range, not a SAN
+  /// derivation.
+  TransferMatch? transferFor(String beforeFen, {Position? position}) {
+    final pos = position ?? tryParseFen(beforeFen);
     if (pos == null) return null;
+    final placement = _expandPlacement(SkeletonNode._placementOf(beforeFen));
 
     TransferMatch? best;
     for (final n in nodes) {
-      final diff = _placementDiff(placement, n.placement);
+      final diff = _expandedDiff(placement, n.expandedPlacement);
       if (diff > transferMaxDiff) continue;
       // The move must be legal in *this* position.
-      if (uciToSanOrNull(beforeFen, n.uci) == null) continue;
+      final move = Move.parse(n.uci);
+      if (move == null || !pos.isLegal(move)) continue;
       if (best == null || diff < best.diff) {
         best = TransferMatch(uci: n.uci, diff: diff, pathLabel: n.pathLabel);
       }
@@ -357,30 +373,32 @@ class SkeletonPlan {
   }
 }
 
-/// Number of board squares whose contents differ between two FEN placement
-/// fields (first FEN field). Both are expanded to 64 cells first.
-int _placementDiff(String a, String b) {
-  final ea = _expandPlacement(a);
-  final eb = _expandPlacement(b);
+/// Number of board squares whose contents differ between two placements
+/// already expanded by [_expandPlacement].
+int _expandedDiff(String a, String b) {
   var diff = 0;
   for (var i = 0; i < 64; i++) {
-    if (ea[i] != eb[i]) diff++;
+    if (a.codeUnitAt(i) != b.codeUnitAt(i)) diff++;
   }
   return diff;
 }
+
+const int _slash = 0x2F;
+const int _zero = 0x30;
+const int _nine = 0x39;
 
 /// Expand a FEN placement field into 64 chars (rank 8 → rank 1, file a → h),
 /// '.' for empty. Returns a fixed 64-length string; malformed input is padded
 /// or truncated so callers never index out of range.
 String _expandPlacement(String placement) {
   final sb = StringBuffer();
-  for (final ch in placement.split('')) {
-    if (ch == '/') continue;
-    final digit = int.tryParse(ch);
-    if (digit != null) {
-      sb.write('.' * digit);
+  for (var i = 0; i < placement.length; i++) {
+    final c = placement.codeUnitAt(i);
+    if (c == _slash) continue;
+    if (c >= _zero && c <= _nine) {
+      sb.write('.' * (c - _zero));
     } else {
-      sb.write(ch);
+      sb.writeCharCode(c);
     }
   }
   var s = sb.toString();

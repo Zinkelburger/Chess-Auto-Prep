@@ -183,17 +183,29 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // The glyph strip wraps instead of overflowing: the panel lives in
+          // side panels the user can drag down to ~190px, where six glyphs
+          // plus the marker buttons no longer fit on one line.
           Row(
             children: [
-              for (final nag in kMoveNags)
-                GlyphButton(
-                  symbol: nag.symbol,
-                  name: nag.name,
-                  color: nag.color,
-                  isActive: widget.nags.contains(nag.id),
-                  onTap: enabled ? () => widget.onToggleNag(nag.id) : null,
+              Expanded(
+                child: Wrap(
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    for (final nag in kMoveNags)
+                      GlyphButton(
+                        symbol: nag.symbol,
+                        name: nag.name,
+                        color: nag.color,
+                        isActive: widget.nags.contains(nag.id),
+                        onTap: enabled
+                            ? () => widget.onToggleNag(nag.id)
+                            : null,
+                      ),
+                  ],
                 ),
-              const Spacer(),
+              ),
               if (widget.onTogglePuzzleStart != null)
                 _markerButton(
                   icon: Icons.flag,

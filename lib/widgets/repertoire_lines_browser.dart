@@ -125,7 +125,15 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
       _computeLineMetrics();
     }
     if (oldWidget.lines != widget.lines) {
-      _displayIndex = buildLineDisplayIndex(widget.lines);
+      _displayIndex = buildLineDisplayIndex(
+        widget.lines,
+        previous: _displayIndex,
+        previousLines: oldWidget.lines,
+      );
+      // Metrics for the lines that are new to the list or were replaced by an
+      // edit; lines carried over untouched keep theirs.  A change to one of
+      // the shared metric inputs is handled above and re-derives everything.
+      if (!metricsChanged) _computeLineMetrics(previousLines: oldWidget.lines);
     }
     // Content compare, not identity: the parent hands us a fresh
     // currentMoveSequence list on every rebuild, so an identity `!=` was
@@ -167,13 +175,17 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     _lineCoverage = computeLineCoverageMap(widget.lines, result);
   }
 
-  void _computeLineMetrics() {
-    _lineMetrics = computeLineMetricsMap(
+  /// Derives quality metrics for [widget.lines]; with [previousLines] only
+  /// the lines that are new or were replaced by an edit are re-derived.
+  void _computeLineMetrics({List<RepertoireLine>? previousLines}) {
+    _lineMetrics = buildLineMetricsIndex(
       lines: widget.lines,
       treeRoot: widget.tree?.root,
       isWhiteRepertoire: widget.isWhiteRepertoire,
       traps: widget.traps,
       coherenceResult: widget.coherenceResult,
+      previous: previousLines == null ? null : _lineMetrics,
+      previousLines: previousLines,
     );
   }
 

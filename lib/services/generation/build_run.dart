@@ -9,15 +9,20 @@
 /// service) fail loudly at the entry point instead of corrupting state.
 library;
 
+import 'dart:collection';
 import 'dart:math' as math;
 
+import 'package:dartchess/dartchess.dart';
+
 import '../../models/build_tree_node.dart';
-import '../master_games/master_games_db.dart' show BookLookup, BookMove;
+import '../../utils/chess_utils.dart' show playUciFrom, tryParseFen;
 import '../../utils/fen_utils.dart';
 import '../engine/stockfish_pool.dart';
+import '../master_games/master_games_db.dart' show BookLookup, BookMove;
+import '../master_games/position_key.dart';
+import 'fen_map.dart';
 import 'generation_config.dart';
 import 'run_debug_dump.dart';
-import 'fen_map.dart';
 import 'tree_build_progress.dart';
 import 'tree_eval_resolver.dart';
 
@@ -47,6 +52,9 @@ class BuildCancellation {
 
   void requestStop() => _stopRequested = true;
 }
+
+/// A move played from a parent node, with everything a child needs.
+typedef ChildMove = ({String fen, String san, Position after});
 
 /// State owned by one call to `build()` / `buildFromPgnFreqMap()`.
 class BuildRun {
@@ -98,11 +106,93 @@ class BuildRun {
     required this.waitIfPaused,
     required this.nextNodeId,
     this.masterBook,
-  });
+  }) {
+    seedDepthHistogram();
+  }
 
   bool get isCancelled => cancel.isCancelled;
 
+  // ── Concurrency ─────────────────────────────────────────────────────────
+
+  /// How many frontier nodes the build loop expands at once.
+  ///
+  /// One per engine worker when the engine is the bottleneck — each lane
+  /// keeps a worker busy while the others wait on Maia, the database or the
+  /// eval cache — capped by the configured thread budget so a pool left over
+  /// from interactive analysis cannot oversubscribe the machine.  Modes that
+  /// never touch the engine run a single lane: Maia inference is serialised
+  /// on one ORT session anyway, and one lane keeps their expansion order
+  /// deterministic.
+  int get expansionLanes {
+    if (!config.usesStockfish) return 1;
+    final budget = math.max(1, config.resolvedEngineThreads);
+    return pool.workerCount.clamp(1, budget);
+  }
+
+  // ── Positions ───────────────────────────────────────────────────────────
+
+  /// Parsed positions by node id, most recently used last.  A node is
+  /// expanded once, but its position is read several times on the way — for
+  /// every child derived from it, for candidate injection, and again if the
+  /// coverage sweep revisits it — so the parse is kept for a while.  Bounded
+  /// because a best-first frontier can hold tens of thousands of nodes.
+  final LinkedHashMap<int, Position> _positions = LinkedHashMap();
+  static const int _positionCacheSize = 4096;
+
+  /// The position [node] stands in, parsed at most once per node while it
+  /// stays in the cache.  Children created by [makeChild] with their
+  /// [Position] never parse at all.
+  Position positionOf(BuildTreeNode node) =>
+      positionOrNullOf(node) ?? Chess.initial;
+
+  /// [positionOf] without the substitution: null when [node]'s FEN does not
+  /// parse.  Anything that *derives* a position from a node — every
+  /// expander's child creation, through [childMove] — must refuse instead,
+  /// or the move is played from the initial board and the child ends up
+  /// describing a position the tree never reached.  The failure is also not
+  /// memoised, so a substitute board cannot poison later reads.
+  Position? positionOrNullOf(BuildTreeNode node) {
+    final cached = _positions.remove(node.nodeId);
+    if (cached != null) {
+      _positions[node.nodeId] = cached; // Refresh recency.
+      return cached;
+    }
+    final parsed = tryParseFen(node.fen);
+    if (parsed == null) return null;
+    _rememberPosition(node.nodeId, parsed);
+    return parsed;
+  }
+
+  void _rememberPosition(int nodeId, Position position) {
+    _positions[nodeId] = position;
+    if (_positions.length > _positionCacheSize) {
+      _positions.remove(_positions.keys.first);
+    }
+  }
+
+  /// [uci] played from [parent]: the child's FEN, SAN and position, or null
+  /// when [parent]'s FEN does not parse or the move is illegal there.  One legality check and one move
+  /// generation, against a position that is parsed once per parent — every
+  /// expander used to re-parse the parent's FEN twice per child.
+  ChildMove? childMove(BuildTreeNode parent, String uci) {
+    final from = positionOrNullOf(parent);
+    if (from == null) return null;
+    final played = playUciFrom(from, uci);
+    if (played == null) return null;
+    return (fen: played.after.fen, san: played.san, after: played.after);
+  }
+
   // ── Master practice ─────────────────────────────────────────────────────
+
+  /// Book rows by canonical position, filled on first lookup.
+  ///
+  /// The book is asked about the same position many times over — for the
+  /// reply fan-out, our-move injection, the depth cap, and once *per child*
+  /// for the priority factor — so without this an our-move node with eight
+  /// children issued ten identical `SELECT`s, and the query counters below
+  /// measured that repetition rather than how often the book knew anything.
+  final Map<int, List<BookMove>> _bookByPosition = {};
+  final Map<int, int> _bookGamesByPosition = {};
 
   /// Book moves from [fen]; empty when there is no book, the position is
   /// unknown, or the lookup fails (logged once per position, never thrown —
@@ -110,27 +200,39 @@ class BuildRun {
   List<BookMove> bookAt(String fen) {
     final lookup = masterBook;
     if (lookup == null) return const [];
+    final key = positionKey(fen);
+    final cached = _bookByPosition[key];
+    if (cached != null) return cached;
+
+    List<BookMove> moves;
     try {
-      final moves = lookup(fen);
+      moves = lookup(fen);
       // Counted here because this is the single funnel every book read goes
       // through — reply candidates, our-move injection and the depth cap
-      // all land on it.
+      // all land on it — and counted once per position, not per read.
       stats.masterBookQueries++;
       if (moves.isNotEmpty) stats.masterBookHits++;
-      return moves;
     } catch (e) {
       log('Master book lookup failed @ $fen: $e');
-      return const [];
+      moves = const [];
     }
+    _bookByPosition[key] = moves;
+    var games = 0;
+    for (final m in moves) {
+      games += m.games;
+    }
+    _bookGamesByPosition[key] = games;
+    return moves;
   }
 
   /// Master games from [fen] (sum over moves); 0 off-book.
   int masterGamesAt(String fen) {
-    var n = 0;
-    for (final m in bookAt(fen)) {
-      n += m.games;
-    }
-    return n;
+    if (masterBook == null) return 0;
+    final key = positionKey(fen);
+    final cached = _bookGamesByPosition[key];
+    if (cached != null) return cached;
+    bookAt(fen);
+    return _bookGamesByPosition[key] ?? 0;
   }
 
   /// True when [fen] is master practice: a book is in use and the position
@@ -180,6 +282,8 @@ class BuildRun {
     return base + bonus;
   }
 
+  // ── Budget ──────────────────────────────────────────────────────────────
+
   /// True once [TreeBuildConfig.timeBudgetMinutes] of active build time has
   /// elapsed (0 = no budget).  The stopwatch is paused with the pause gate,
   /// so a paused build does not burn its budget.
@@ -225,13 +329,19 @@ class BuildRun {
 
   void log(String msg) => runLog.add('[TreeBuild] $msg');
 
+  // ── Tree mutation ───────────────────────────────────────────────────────
+
   /// Create, register, and index a child of [parent], or return null when a
   /// sibling already covers [fen] (castling-representation dedup).
+  ///
+  /// Pass [position] when the caller derived the child by playing a move —
+  /// [childMove] does — so the child's own expansion never parses its FEN.
   BuildTreeNode? makeChild({
     required BuildTreeNode parent,
     required String fen,
     required String san,
     required String uci,
+    Position? position,
   }) {
     if (parent.children.any((c) => c.fen == fen)) return null;
 
@@ -240,7 +350,9 @@ class BuildRun {
       moveSan: san,
       moveUci: uci,
       ply: parent.ply + 1,
-      isWhiteToMove: isWhiteToMove(fen),
+      isWhiteToMove: position != null
+          ? position.turn == Side.white
+          : isWhiteToMove(fen),
       nodeId: nextNodeId++,
       parent: parent,
     );
@@ -251,7 +363,72 @@ class BuildRun {
     if (child.ply > tree.maxPlyReached) {
       tree.maxPlyReached = child.ply;
     }
+    if (position != null) _rememberPosition(child.nodeId, position);
+    _countNode(child.ply, 1);
     return child;
+  }
+
+  /// Mark [node] fully processed.  Every `explored = true` in the build goes
+  /// through here so the per-ply histogram stays exact without a tree walk.
+  void markExplored(BuildTreeNode node) {
+    if (node.explored) return;
+    node.explored = true;
+    _countExplored(node.ply, 1);
+  }
+
+  /// Detach the childless [node] from the tree (coverage sweep removal).
+  void removeLeaf(BuildTreeNode node) {
+    final parent = node.parent;
+    if (parent == null) return;
+    if (!parent.children.remove(node)) return;
+    tree.nodeIndex.remove(node.nodeId);
+    tree.totalNodes--;
+    _positions.remove(node.nodeId);
+    _countNode(node.ply, -1);
+    if (node.explored) _countExplored(node.ply, -1);
+  }
+
+  // ── Depth histogram ─────────────────────────────────────────────────────
+
+  /// Per-ply node counts, index = ply, maintained incrementally by
+  /// [makeChild] / [markExplored] / [removeLeaf].
+  ///
+  /// Progress used to rebuild these with a full tree walk on every emitted
+  /// event — at the 250 ms emit cap on a 30k-node tree that is well over a
+  /// hundred thousand node visits per second on the UI isolate, for two
+  /// lists of integers.
+  List<int> get depthTotals => List.unmodifiable(_depthTotals);
+  List<int> get depthExplored => List.unmodifiable(_depthExplored);
+  final List<int> _depthTotals = [];
+  final List<int> _depthExplored = [];
+
+  /// Recount from the tree.  Called once per run at construction; a resumed
+  /// build's saved nodes are counted here and never again.
+  void seedDepthHistogram() {
+    _depthTotals.clear();
+    _depthExplored.clear();
+    final (totals, explored) = TreeBuildProgressTracker.depthHistogram(
+      tree.root,
+    );
+    _depthTotals.addAll(totals);
+    _depthExplored.addAll(explored);
+  }
+
+  void _countNode(int ply, int delta) {
+    _growHistogram(ply);
+    _depthTotals[ply] += delta;
+  }
+
+  void _countExplored(int ply, int delta) {
+    _growHistogram(ply);
+    _depthExplored[ply] += delta;
+  }
+
+  void _growHistogram(int ply) {
+    while (_depthTotals.length <= ply) {
+      _depthTotals.add(0);
+      _depthExplored.add(0);
+    }
   }
 
   /// Throttled progress emission anchored at [node].
@@ -263,6 +440,8 @@ class BuildRun {
       onProgress,
       config.maxPly,
       buildSw: stopwatch,
+      depthTotals: _depthTotals,
+      depthExplored: _depthExplored,
     );
   }
 }

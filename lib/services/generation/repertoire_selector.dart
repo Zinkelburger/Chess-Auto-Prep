@@ -44,6 +44,8 @@ class RepertoireSelector {
   /// Mark `isRepertoireMove` flags on the tree.
   /// Returns the count of selected our-move repertoire entries.
   int select(BuildTree tree) {
+    _structureHere.clear();
+    _structureAhead.clear();
     return _selectRecursive(tree.root, <String>{});
   }
 
@@ -217,11 +219,30 @@ class RepertoireSelector {
   static const int _vetoPlies = 4;
   static const double _vetoThreshold = -0.5;
 
+  /// Structure scores by node id, and lookahead values by (node id, plies).
+  ///
+  /// The lookahead is asked for every candidate child of every our-move
+  /// node and walks four plies of the already-built subtree, parsing a FEN
+  /// at each leaf; sibling candidates share most of that subtree, and the
+  /// verifier re-runs selection several times over.  Both maps are cleared
+  /// per [select] call, since evals — and so the tree — may change between.
+  final Map<int, double> _structureHere = {};
+  final Map<(int, int), double> _structureAhead = {};
+
   double _structureLookahead(BuildTreeNode node, int pliesLeft) {
-    double here() {
+    final key = (node.nodeId, pliesLeft);
+    final memo = _structureAhead[key];
+    if (memo != null) return memo;
+    final value = _structureLookaheadUncached(node, pliesLeft);
+    _structureAhead[key] = value;
+    return value;
+  }
+
+  double _structureLookaheadUncached(BuildTreeNode node, int pliesLeft) {
+    double here() => _structureHere.putIfAbsent(node.nodeId, () {
       final pos = tryParseFen(node.fen);
       return pos == null ? 0.0 : _plan.structureScore(pos, _ourSide);
-    }
+    });
 
     if (pliesLeft <= 0 || node.children.isEmpty) return here();
 

@@ -17,13 +17,39 @@ import '../services/repertoire_audit_service.dart';
 import '../../../models/opening_tree.dart';
 import '../../../services/engine/engine_lifecycle.dart';
 import '../../../services/engine/stockfish_pool.dart';
+import '../../../services/jobs/notify_throttle.dart';
 import '../../../services/jobs/repertoire_job.dart';
 import '../../../utils/safe_change_notifier.dart';
 
 class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
+  @override
+  void dispose() {
+    _progressNotify.dispose();
+    super.dispose();
+  }
+
   final RepertoireAuditService _service = RepertoireAuditService();
 
-  AuditResult? _result;
+  AuditResult? _resultValue;
+
+  /// Every write to the result goes through here so [resultVersion] cannot
+  /// fall behind it.
+  AuditResult? get _result => _resultValue;
+  set _result(AuditResult? value) {
+    _resultValue = value;
+    _resultVersion++;
+  }
+
+  /// Bumped whenever the result is replaced *or edited in place*.
+  ///
+  /// Views that cache work derived from the findings cannot key that cache on
+  /// the result's identity: dismissing a finding mutates `dismissed` on the
+  /// existing [AuditFinding] and hands the very same [AuditResult] back, so
+  /// the object never changes even though what it means to a board or a
+  /// summary just did.
+  int get resultVersion => _resultVersion;
+  int _resultVersion = 0;
+
   List<AuditFinding> _liveFindings = [];
   int _nodesChecked = 0;
   int _totalNodes = 0;
@@ -221,9 +247,13 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
+  /// Live findings and progress arrive per position; the screen only needs
+  /// to hear about them a few times a second.
+  late final NotifyThrottle _progressNotify = NotifyThrottle(notifyListeners);
+
   void onLiveFinding(AuditFinding finding) {
     _liveFindings = [..._liveFindings, finding];
-    notifyListeners();
+    _progressNotify();
   }
 
   void onProgress(int checked, int total) {
@@ -237,7 +267,7 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
         totalNodes: total,
       ),
     );
-    notifyListeners();
+    _progressNotify();
   }
 
   // ── Resume interrupted audit ────────────────────────────────────────

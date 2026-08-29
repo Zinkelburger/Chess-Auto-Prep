@@ -17,6 +17,7 @@ import '../../features/browse/services/candidate_service.dart';
 import '../../features/browse/widgets/candidate_row.dart';
 import '../../services/build_by_playing/build_by_playing_controller.dart';
 import '../../theme/app_colors.dart';
+import '../lichess_login_prompt.dart';
 
 class BuildSessionPane extends StatefulWidget {
   const BuildSessionPane({
@@ -309,16 +310,17 @@ class _BuildSessionPaneState extends State<BuildSessionPane> {
 
   Widget _buildPaused(BuildContext context) {
     final theme = Theme.of(context);
+    final needsLogin = _session.pausedForLichessLogin;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.pause_circle_outline,
+            Icon(
+              needsLogin ? Icons.lock_outline : Icons.pause_circle_outline,
               size: 32,
-              color: AppColors.warning,
+              color: needsLogin ? AppColors.onSurfaceMuted : AppColors.warning,
             ),
             const SizedBox(height: 12),
             Text(
@@ -327,6 +329,12 @@ class _BuildSessionPaneState extends State<BuildSessionPane> {
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
+            // A login is the only thing that will make Resume work here, so
+            // lead with it and let Resume pick the session back up after.
+            if (needsLogin) ...[
+              LichessLoginButton(onLoggedIn: _session.resume),
+              const SizedBox(height: 10),
+            ],
             FilledButton.icon(
               onPressed: _session.resume,
               icon: const Icon(Icons.play_arrow, size: 18),

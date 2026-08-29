@@ -212,10 +212,12 @@ class PgnGameRecord {
   }
 
   int? get year {
-    final match = RegExp(r'(\d{4})').firstMatch(date);
+    final match = _fourDigitYear.firstMatch(date);
     if (match == null) return null;
     return int.tryParse(match.group(1)!);
   }
+
+  static final RegExp _fourDigitYear = RegExp(r'(\d{4})');
 
   bool get isDecisive =>
       outcome == GameOutcome.whiteWin || outcome == GameOutcome.blackWin;

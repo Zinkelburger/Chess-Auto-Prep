@@ -20,7 +20,13 @@ class StockfishExpander extends NodeExpander {
     final mpvCount = wideOpening
         ? config.rootMultipv
         : config.effectiveMultipv(nodePriority);
-    final whiteToMove = isWhiteToMove(node.fen);
+    final whiteToMove = node.isWhiteToMove;
+
+    // Maia's view of this position is wanted for every child's
+    // `maiaFrequency`.  Inference runs on its own isolate, so it is started
+    // here and collected after the engine work: the two overlap instead of
+    // queueing behind one another.
+    final maiaPolicy = _maiaPolicyFor(node.fen);
 
     final sw = Stopwatch()..start();
     final discovery = await run.pool.discoverMoves(
@@ -86,34 +92,17 @@ class StockfishExpander extends NodeExpander {
       _addBestMove(node, discovery.lines.first, whiteToMove: whiteToMove);
     }
 
-    await injectSetupCandidates(node, bestCpWhite: bestCp);
-    await injectMasterCandidates(node, bestCpWhite: bestCp);
-    await injectTransferCandidate(node, bestCpWhite: bestCp);
-    await injectPinnedCandidate(node);
+    await injectCandidates(node, bestCpWhite: bestCp);
 
     // Populate maia_frequency on our-move children.  C gates this on
     // `populate_maia_frequency` (novelty > 0 || find_traps); Dart always
     // populates when Maia is available since the data is useful for both
     // novelty scoring and trap-line display.
-    if (MaiaFactory.isAvailable &&
-        MaiaFactory.instance != null &&
-        node.children.isNotEmpty) {
-      try {
-        final maiaResult = await MaiaFactory.instance!.evaluate(
-          node.fen,
-          config.maiaElo,
-        );
-        run.stats.maiaEvals++;
-        if (maiaResult.policy.isNotEmpty) {
-          for (final child in node.children) {
-            final freq = maiaResult.policy[child.moveUci];
-            if (freq != null) {
-              child.maiaFrequency = freq;
-            }
-          }
-        }
-      } catch (_) {
-        // Maia frequency is best-effort
+    final policy = await maiaPolicy;
+    if (policy.isNotEmpty) {
+      for (final child in node.children) {
+        final freq = policy[child.moveUci];
+        if (freq != null) child.maiaFrequency = freq;
       }
     }
 
@@ -125,9 +114,21 @@ class StockfishExpander extends NodeExpander {
 
     // Fast: only the incumbent and gap-qualifying alternatives grow
     // subtrees; the rest stay evaluated leaves for selection.
-    for (final child in ourChildrenToExpand(node, incumbent)) {
-      if (run.isCancelled) break;
-      queue.add(child);
+    enqueueChildren(ourChildrenToExpand(node, incumbent), queue);
+  }
+
+  /// Maia's policy at [fen], or empty when Maia is unavailable or fails.
+  /// Best-effort: a missing policy costs the naturalness annotation, never
+  /// the expansion.
+  Future<Map<String, double>> _maiaPolicyFor(String fen) async {
+    final maia = MaiaFactory.instance;
+    if (!MaiaFactory.isAvailable || maia == null) return const {};
+    try {
+      final result = await maia.evaluate(fen, config.maiaElo);
+      run.stats.maiaEvals++;
+      return result.policy;
+    } catch (_) {
+      return const {};
     }
   }
 
@@ -139,18 +140,17 @@ class StockfishExpander extends NodeExpander {
     required bool whiteToMove,
   }) {
     if (line.moveUci.isEmpty) return;
-    final childFen = playUciMove(node.fen, line.moveUci);
-    if (childFen == null) return;
+    final played = run.childMove(node, line.moveUci);
+    if (played == null) return;
 
-    final san = uciToSan(node.fen, line.moveUci);
-    final childIsWhite = isWhiteToMove(childFen);
     final childEvalStm = whiteToMove ? -line.effectiveCp : line.effectiveCp;
 
     final child = run.makeChild(
       parent: node,
-      fen: childFen,
-      san: san,
+      fen: played.fen,
+      san: played.san,
       uci: line.moveUci,
+      position: played.after,
     );
     if (child == null) return;
 
@@ -158,8 +158,8 @@ class StockfishExpander extends NodeExpander {
     child.cumulativeProbability = node.cumulativeProbability;
     child.engineEvalCp = childEvalStm;
     run.evalResolver.cacheEvalWhite(
-      childFen,
-      childIsWhite ? childEvalStm : -childEvalStm,
+      played.fen,
+      child.isWhiteToMove ? childEvalStm : -childEvalStm,
       config.evalDepth,
     );
 

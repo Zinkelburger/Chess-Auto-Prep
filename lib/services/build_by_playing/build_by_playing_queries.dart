@@ -67,14 +67,4 @@ mixin _RepertoireQueries on ChangeNotifier {
     }
     return (committed, fullPath.sublist(i));
   }
-
-  String _fenForSans(List<String> sans) {
-    var pos = tryParseFen(_repertoire.tree.startingFen) ?? Chess.initial;
-    for (final san in sans) {
-      final move = pos.parseSan(san);
-      if (move == null) break;
-      pos = pos.play(move);
-    }
-    return pos.fen;
-  }
 }

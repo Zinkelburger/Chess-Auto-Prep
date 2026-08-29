@@ -41,4 +41,31 @@ class BoardAnnotation {
 
   bool get isArrow => dest != null && dest != orig;
   bool get isCircle => !isArrow;
+
+  /// Arrow for a standard UCI move (`e2e4`, `e7e8q`), or null when [uci] is
+  /// not four valid square characters. Used to echo a hovered move onto the
+  /// board.
+  static BoardAnnotation? arrowFromUci(
+    String uci, {
+    AnnotationBrush brush = AnnotationBrush.blue,
+  }) {
+    if (!_uciSquares.hasMatch(uci)) return null;
+    final orig = uci.substring(0, 2);
+    final dest = uci.substring(2, 4);
+    if (orig == dest) return null;
+    return BoardAnnotation(orig: orig, dest: dest, brush: brush);
+  }
+
+  static final _uciSquares = RegExp(r'^[a-h][1-8][a-h][1-8]');
+
+  @override
+  bool operator ==(Object other) =>
+      other is BoardAnnotation &&
+      other.orig == orig &&
+      other.dest == dest &&
+      other.brush == brush &&
+      other.label == label;
+
+  @override
+  int get hashCode => Object.hash(orig, dest, brush, label);
 }

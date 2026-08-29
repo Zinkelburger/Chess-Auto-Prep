@@ -46,10 +46,23 @@ class ChapterScope {
   /// to reproduce forty moves of somebody else's game is not training, so
   /// they are filtered out here rather than in the file: browsing and study
   /// still show them.
-  List<RepertoireLine> get lines => [
-    for (final line in _lines())
-      if (!line.isModelGame) line,
-  ];
+  ///
+  /// Filtered once per source list: the owner replaces its list wholesale on
+  /// load, so the list's identity is the cache key, and every read during a
+  /// build (counts, names, the queue) shares one filtered copy.
+  List<RepertoireLine> get lines {
+    final source = _lines();
+    final cached = _trainable;
+    if (cached != null && identical(cached.source, source)) return cached.lines;
+    final filtered = List<RepertoireLine>.unmodifiable([
+      for (final line in source)
+        if (!line.isModelGame) line,
+    ]);
+    _trainable = (source: source, lines: filtered);
+    return filtered;
+  }
+
+  ({List<RepertoireLine> source, List<RepertoireLine> lines})? _trainable;
 
   /// A study's chapters are its puzzles — nothing to re-group.
   bool get sourceIsStudy => _sourceIsStudy();
@@ -103,19 +116,51 @@ class ChapterScope {
   }
 
   /// Distinct chapters in file order. Empty when the source has none.
-  List<String> get names {
-    final seen = <String>{};
-    final ordered = <String>[];
-    for (final line in lines) {
-      final chapter = chapterOf(line);
-      if (chapter != null && seen.add(chapter)) ordered.add(chapter);
-    }
-    return ordered;
-  }
+  ///
+  /// Derived once per (lines, grouping setting, delimiter, declined); the
+  /// trainer header reads it on every rebuild.
+  List<String> get names => _grouping().names;
 
   /// Lines the chapter scheme leaves out (an intro game with no title, say).
-  bool get hasUngroupedLines =>
-      names.isNotEmpty && lines.any((line) => chapterOf(line) == null);
+  bool get hasUngroupedLines {
+    final grouping = _grouping();
+    return grouping.names.isNotEmpty && grouping.hasUngrouped;
+  }
+
+  _Grouping _grouping() {
+    final source = lines;
+    final mode = settings.chapterGrouping;
+    final delimiter = settings.chapterDelimiter;
+    final cached = _groupingCache;
+    if (cached != null &&
+        identical(cached.lines, source) &&
+        cached.mode == mode &&
+        cached.delimiter == delimiter &&
+        cached.declined == declined) {
+      return cached;
+    }
+    final seen = <String>{};
+    final ordered = <String>[];
+    var ungrouped = false;
+    for (final line in source) {
+      final chapter = chapterOf(line);
+      if (chapter == null) {
+        ungrouped = true;
+      } else if (seen.add(chapter)) {
+        ordered.add(chapter);
+      }
+    }
+    return _groupingCache = _Grouping(
+      lines: source,
+      mode: mode,
+      delimiter: delimiter,
+      declined: declined,
+      names: List.unmodifiable(ordered),
+      hasUngrouped: ungrouped,
+    );
+  }
+
+  _Grouping? _groupingCache;
 
   /// [lines] scoped to [activeChapter].
   List<RepertoireLine> get scopedLines => activeChapter == null
@@ -239,4 +284,23 @@ class ChapterScope {
     pendingPrompt = proposal;
     return true;
   }
+}
+
+/// Chapter names derived from one lines list under one grouping setting.
+class _Grouping {
+  const _Grouping({
+    required this.lines,
+    required this.mode,
+    required this.delimiter,
+    required this.declined,
+    required this.names,
+    required this.hasUngrouped,
+  });
+
+  final List<RepertoireLine> lines;
+  final ChapterGroupingMode mode;
+  final String delimiter;
+  final bool declined;
+  final List<String> names;
+  final bool hasUngrouped;
 }

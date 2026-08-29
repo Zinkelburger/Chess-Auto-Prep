@@ -351,6 +351,96 @@ void main() {
       expect(e4.children, isEmpty);
     });
 
+    test('a custom-start game hangs under the node at that position', () {
+      const afterE4 =
+          'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+      final tree = OpeningTree();
+      // A real line first, so the tree knows the position the chapter starts
+      // from.
+      walkMainlineIntoTree(
+        tree: tree,
+        game: parse('1. e4 *'),
+        userResult: 0.5,
+        maxDepth: 30,
+      );
+
+      walkMainlineIntoTree(
+        tree: tree,
+        game: parse('[FEN "$afterE4"]\n\n1... c5 2. Nf3 *'),
+        userResult: 1.0,
+        maxDepth: 30,
+        startPosition: Chess.fromSetup(Setup.parseFen(afterE4)),
+      );
+
+      // Under 1.e4, where it belongs — not as a second root move.
+      final e4 = tree.root.children['e4']!;
+      expect(e4.children['c5'], isNotNull);
+      expect(e4.children['c5']!.children['Nf3'], isNotNull);
+      expect(tree.root.children.containsKey('c5'), isFalse);
+    });
+
+    test('a custom-start game never merges into a line sharing its SAN', () {
+      // The tree has 1.e4 e5; the chapter starts from a position the tree has
+      // never seen and its first move is also "e5".  Folding it into the real
+      // 1.e4 e5 node would silently add its games to an unrelated line.
+      const afterD4 =
+          'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1';
+      final tree = OpeningTree();
+      walkMainlineIntoTree(
+        tree: tree,
+        game: parse('1. e4 e5 *'),
+        userResult: 0.5,
+        maxDepth: 30,
+      );
+      final realE5 = tree.root.children['e4']!.children['e5']!;
+      final gamesBefore = realE5.gamesPlayed;
+
+      walkMainlineIntoTree(
+        tree: tree,
+        game: parse('[FEN "$afterD4"]\n\n1... e5 *'),
+        userResult: 1.0,
+        maxDepth: 30,
+        startPosition: Chess.fromSetup(Setup.parseFen(afterD4)),
+      );
+
+      expect(realE5.gamesPlayed, gamesBefore, reason: 'not folded in');
+      // The root has no "e5" child of its own to collide with, so the graft
+      // is allowed to stand there.
+      expect(tree.root.children['e5'], isNotNull);
+    });
+
+    test('a graft is dropped rather than merged when the SAN collides', () {
+      // A black pawn on e5 can play the SAN "e4" — the same SAN as the root's
+      // real 1.e4, from a position the tree has never seen.  Reusing that
+      // child would add this chapter's games to the King's Pawn.
+      const blackPawn = '4k3/8/8/4p3/8/8/8/4K3 b - - 0 1';
+      final tree = OpeningTree();
+      walkMainlineIntoTree(
+        tree: tree,
+        game: parse('1. e4 *'),
+        userResult: 0.5,
+        maxDepth: 30,
+      );
+      final realE4 = tree.root.children['e4']!;
+      final gamesBefore = realE4.gamesPlayed;
+      final childrenBefore = realE4.children.length;
+
+      walkMainlineIntoTree(
+        tree: tree,
+        game: parse('[FEN "$blackPawn"]\n\n1... e4 2. Kd2 *'),
+        userResult: 1.0,
+        maxDepth: 30,
+        startPosition: Chess.fromSetup(Setup.parseFen(blackPawn)),
+      );
+
+      expect(
+        realE4.gamesPlayed,
+        gamesBefore,
+        reason: 'the collision is refused, not merged',
+      );
+      expect(realE4.children.length, childrenBefore, reason: 'no subtree');
+    });
+
     test('honours a custom start position', () {
       const startFen =
           'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1';

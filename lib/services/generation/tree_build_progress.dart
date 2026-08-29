@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:math' as math;
 
 import '../../models/build_tree_node.dart';
@@ -15,10 +16,9 @@ import '../../models/build_tree_node.dart';
 /// floor — mapping its logarithm onto [0, 1] gives an honest whole-run
 /// progress fraction, and the recent descent rate gives a whole-run ETA.
 class TreeBuildProgressTracker {
-  /// Minimum wall-clock gap between emitted progress events.  Each emit
-  /// walks the tree once (O(n)) to build the per-ply histogram, so this is
-  /// time-based rather than node-count-based to keep the walk cost bounded
-  /// on fast-growing trees.
+  /// Minimum wall-clock gap between emitted progress events.  Time-based
+  /// rather than node-count-based so a fast-growing tree cannot flood the
+  /// UI with events.
   static const int _emitIntervalMs = 250;
 
   /// Sliding window over which the priority-descent rate (whole-run ETA)
@@ -39,7 +39,7 @@ class TreeBuildProgressTracker {
   int _frontierSize = 0;
 
   /// (elapsedMs, priorityProgress) samples inside the ETA window.
-  final List<(int, double)> _progressSamples = [];
+  final Queue<(int, double)> _progressSamples = Queue();
 
   void reset({
     required int buildStartTotalNodes,
@@ -67,6 +67,12 @@ class TreeBuildProgressTracker {
     if (frontierSize >= 0) _frontierSize = frontierSize;
   }
 
+  /// Emit a progress event, at most once per [_emitIntervalMs] unless
+  /// [force]d.
+  ///
+  /// [depthTotals] / [depthExplored] are the per-ply counts the run keeps
+  /// incrementally (see `BuildRun.depthTotals`); they are copied into the
+  /// event so a listener holding the last event never sees them change.
   void emitProgress(
     BuildTree tree,
     int ply,
@@ -74,13 +80,16 @@ class TreeBuildProgressTracker {
     void Function(BuildProgress) onProgress,
     int maxPlyConfig, {
     required Stopwatch buildSw,
+    required List<int> depthTotals,
+    required List<int> depthExplored,
     bool force = false,
   }) {
     final elapsedMs = buildSw.elapsedMilliseconds;
     if (!force && elapsedMs - _lastEmitMs < _emitIntervalMs) return;
     _lastEmitMs = elapsedMs;
 
-    final (totals, explored) = depthHistogram(tree.root);
+    final totals = List<int>.of(depthTotals);
+    final explored = List<int>.of(depthExplored);
 
     double? nodesPerMinute;
     final elapsedMin = elapsedMs / 60000.0;
@@ -155,7 +164,7 @@ class TreeBuildProgressTracker {
     _progressSamples.add((elapsedMs, progress));
     while (_progressSamples.length > 2 &&
         _progressSamples.first.$1 < elapsedMs - _etaWindowMs) {
-      _progressSamples.removeAt(0);
+      _progressSamples.removeFirst();
     }
     final first = _progressSamples.first;
     final deltaMs = elapsedMs - first.$1;

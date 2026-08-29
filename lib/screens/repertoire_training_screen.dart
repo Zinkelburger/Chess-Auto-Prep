@@ -26,6 +26,7 @@ import '../widgets/app_overflow_menu.dart';
 import '../widgets/app_settings_button.dart';
 import '../widgets/pgn_viewer_widget.dart';
 import '../widgets/trainer_keyboard_scope.dart';
+import '../widgets/training/chapter_reader_screen.dart';
 import '../widgets/training/chapter_setup_dialog.dart';
 import '../widgets/training/line_preview_dialog.dart';
 import '../widgets/training/move_input_widget.dart';
@@ -469,6 +470,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       reviewBatchSize: _sessionCap(_training.settings.reviewsPerSession),
       onTrainLine: (line) => _training.startLine(line),
       onPreviewLine: _previewLine,
+      onReadLines: _readLines,
       onApplyLearnedSelection: _applyLearnedSelection,
       // Only offered when the file actually has a layout to propose, and
       // never in the cramped side panel.
@@ -826,6 +828,43 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
             Navigator.of(dialogContext).pop();
             _training.startLine(line);
           },
+        ),
+      ),
+    );
+  }
+
+  /// Book view of a whole chapter (or the whole file when it has none): one
+  /// board, every line's notes on one page. Never touches training state;
+  /// train/edit hand off after the page closes, the same way the line
+  /// preview does.
+  Future<void> _readLines(List<RepertoireLine> lines) async {
+    final chapter = _training.activeChapter;
+    final chapterTitle = chapter == null
+        ? 'All lines'
+        : chapter == TrainingSessionController.ungroupedChapter
+        ? 'Other lines'
+        : chapter;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ChapterReaderScreen(
+          repertoireName: _training.repertoire?.name ?? 'Repertoire',
+          chapterTitle: chapterTitle,
+          lines: lines,
+          reviewMap: _training.reviewMap,
+          editLabel: _training.sourceIsStudy
+              ? 'Edit in Study'
+              : 'Edit in Builder',
+          onEditLine: (line) {
+            if (_training.sourceIsStudy) {
+              _openInStudy();
+            } else if (_training.repertoire != null) {
+              context.read<AppState>().switchToBuilder(
+                repertoirePath: _training.repertoire!.filePath,
+                lineId: line.id,
+              );
+            }
+          },
+          onTrainLine: _training.startLine,
         ),
       ),
     );

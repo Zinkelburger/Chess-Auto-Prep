@@ -19,7 +19,7 @@ library;
 
 import 'dart:async';
 
-import '../../utils/chess_utils.dart' show playUciMove, uciToSan;
+import '../../utils/chess_utils.dart' show playUciFrom, tryParseFen;
 import '../../utils/fen_utils.dart' show isWhiteToMove;
 import '../engine/stockfish_pool.dart';
 import 'generation_config.dart';
@@ -119,15 +119,15 @@ Future<Map<String, EngineTail>> computeEngineTails({
 /// what the position allows once it is truncated.
 List<String> _sanTail(String fen, List<String> pvUci, int plies) {
   final out = <String>[];
-  var current = fen;
+  final start = tryParseFen(fen);
+  if (start == null) return out;
+  var position = start;
   for (final uci in pvUci) {
     if (out.length >= plies) break;
-    final san = uciToSan(current, uci);
-    if (san.isEmpty) break;
-    final next = playUciMove(current, uci);
-    if (next == null) break;
-    out.add(san);
-    current = next;
+    final played = playUciFrom(position, uci);
+    if (played == null) break;
+    out.add(played.san);
+    position = played.after;
   }
   return out;
 }

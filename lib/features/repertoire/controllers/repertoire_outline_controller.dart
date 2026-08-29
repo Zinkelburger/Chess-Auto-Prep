@@ -16,6 +16,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../utils/safe_change_notifier.dart';
+import '../models/outline_rows.dart';
 import '../models/repertoire_outline.dart';
 import '../services/repertoire_outline_service.dart';
 
@@ -58,6 +59,46 @@ class RepertoireOutlineController extends ChangeNotifier
   String? _error;
   String? get error => _error;
 
+  /// Bumped whenever the fold state ([_expanded], [_openChapters]) or the
+  /// active chapter changes — the parts of the row list that are not the
+  /// outline itself.  [rows] keys its cache on it.
+  int _viewVersion = 0;
+
+  OutlineRowCache? _rowCache;
+
+  /// The visible rows of the panel for [filter], flattened once per
+  /// (outline, fold state, filter) and reused across rebuilds.
+  ///
+  /// The panel used to walk the whole outline and build a widget per line on
+  /// every rebuild — every cursor move, every search keystroke — which on a
+  /// large course was thousands of allocations per arrow key.  Now the walk
+  /// happens here, only when one of its inputs changed, and the panel renders
+  /// the rows lazily.
+  List<OutlineRow> rows(OutlineFilter filter) {
+    final outline = _outline;
+    if (outline == null) return const [];
+    final cached = _rowCache;
+    if (cached != null &&
+        identical(cached.outline, outline) &&
+        cached.viewVersion == _viewVersion &&
+        cached.filter == filter) {
+      return cached.rows;
+    }
+    final rows = OutlineRowBuilder(
+      filter: filter,
+      isExpanded: isExpanded,
+      isChapterOpen: isChapterOpen,
+      activeChapterPath: _activeChapterPath,
+    ).build(outline);
+    _rowCache = OutlineRowCache(
+      outline: outline,
+      viewVersion: _viewVersion,
+      filter: filter,
+      rows: rows,
+    );
+    return rows;
+  }
+
   /// Folder paths currently expanded in the panel. The root is always open.
   final Set<String> _expanded = {};
   bool isExpanded(String folderPath) =>
@@ -98,6 +139,7 @@ class RepertoireOutlineController extends ChangeNotifier
     _activeChapterPath = null;
     _expanded.clear();
     _openChapters.clear();
+    _viewVersion++;
     notifyListeners();
   }
 
@@ -118,6 +160,7 @@ class RepertoireOutlineController extends ChangeNotifier
       if (epoch != _epoch) return;
       _outline = built;
       _revealActive();
+      _viewVersion++;
     } catch (e) {
       if (epoch != _epoch) return;
       _error = 'Could not read the repertoire folder.\n$e';
@@ -134,6 +177,7 @@ class RepertoireOutlineController extends ChangeNotifier
   void setActiveChapter(String? chapterPath, {bool notify = true}) {
     _activeChapterPath = chapterPath;
     _revealActive();
+    _viewVersion++;
     if (notify) notifyListeners();
   }
 
@@ -154,11 +198,13 @@ class RepertoireOutlineController extends ChangeNotifier
   void toggleFolder(String folderPath) {
     if (_rootPath != null && p.equals(folderPath, _rootPath!)) return;
     if (!_expanded.remove(folderPath)) _expanded.add(folderPath);
+    _viewVersion++;
     notifyListeners();
   }
 
   void toggleChapter(String chapterPath) {
     if (!_openChapters.remove(chapterPath)) _openChapters.add(chapterPath);
+    _viewVersion++;
     notifyListeners();
   }
 
@@ -166,6 +212,7 @@ class RepertoireOutlineController extends ChangeNotifier
     if (open
         ? _openChapters.add(chapterPath)
         : _openChapters.remove(chapterPath)) {
+      _viewVersion++;
       notifyListeners();
     }
   }

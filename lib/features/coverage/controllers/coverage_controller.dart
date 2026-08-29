@@ -7,12 +7,23 @@ library;
 import 'package:flutter/foundation.dart';
 
 import '../../../models/opening_tree.dart';
+import '../../../services/jobs/notify_throttle.dart';
 import '../../../services/jobs/repertoire_job.dart';
 import 'package:chess_auto_prep/features/coverage/models/coverage_config.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../../../utils/safe_change_notifier.dart';
 
 class CoverageController extends ChangeNotifier with SafeChangeNotifier {
+  /// Progress arrives per tree node; the screen hears about it a few times
+  /// a second.  Terminal states flush so a finished run lands at once.
+  late final NotifyThrottle _progressNotify = NotifyThrottle(notifyListeners);
+
+  @override
+  void dispose() {
+    _progressNotify.dispose();
+    super.dispose();
+  }
+
   CoverageResult? _result;
   bool _isRunning = false;
   double? _progress;
@@ -103,7 +114,7 @@ class CoverageController extends ChangeNotifier with SafeChangeNotifier {
         onProgress: (message, prog) {
           _progressMessage = message;
           _progress = prog;
-          notifyListeners();
+          _progressNotify();
           onProgress?.call(message, prog);
         },
       );
@@ -112,13 +123,13 @@ class CoverageController extends ChangeNotifier with SafeChangeNotifier {
       _isRunning = false;
       _progress = null;
       _progressMessage = null;
-      notifyListeners();
+      _progressNotify.flush();
       return coverageResult;
     } catch (e) {
       _isRunning = false;
       _progress = null;
       _progressMessage = null;
-      notifyListeners();
+      _progressNotify.flush();
       rethrow;
     }
   }

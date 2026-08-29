@@ -22,6 +22,23 @@ import 'storage/storage_factory.dart';
 import '../utils/chess_utils.dart';
 import '../utils/movetext_builder.dart';
 
+/// A game cut from a chapter file and parsed once: the parse tree, the raw
+/// text it came from, and its position in the file.
+///
+/// Both products of a chapter load — the training lines and the opening tree
+/// — are built from these, so a game is split and parsed exactly once.
+typedef ParsedRepertoireGame = ({
+  PgnGame<PgnNodeData> game,
+  String text,
+  int index,
+});
+
+// Hoisted: these ran once per game (or per edit) as fresh `RegExp`s.
+final RegExp _cumProbInTextRe = RegExp(r'CumProb\s+([\d.]+)%');
+final RegExp _eventTagRe = RegExp(r'\[Event\s+"[^"]*"\]');
+final RegExp _headerLineRe = RegExp(r'^\[(\w+)\s+"[^"]*"\]$');
+final RegExp _headerPairRe = RegExp(r'^\[(\w+)\s+"([^"]*)"\]');
+
 class RepertoireService {
   /// Parses a repertoire PGN file and extracts all trainable lines.
   ///
@@ -81,20 +98,24 @@ class RepertoireService {
     bool inferColorWhenUnknown = false,
   }) {
     pgnContent = pgn.stripBom(pgnContent);
-    final lines = <RepertoireLine>[];
     final declaredColor =
         trainingColor ?? pgn.extractRepertoireColor(pgnContent);
-    final resolvedColor = declaredColor ?? 'white';
+    return linesFromParsedGames(
+      parseGames(pgn.splitPgnIntoGames(pgnContent)),
+      declaredColor: declaredColor,
+      colorFromStartingSide: colorFromStartingSide,
+      inferColorWhenUnknown: inferColorWhenUnknown,
+    );
+  }
 
-    final games = pgn.splitPgnIntoGames(pgnContent);
-
-    // Chapter titles are a whole-file property (do the [White] headers group
-    // the games?), so games are parsed before any line is built.
-    final parsedGames =
-        <({PgnGame<PgnNodeData> game, String text, int index})>[];
+  /// Parse each game text once.  Games that fail to parse are dropped (and
+  /// logged in debug builds); [ParsedRepertoireGame.index] keeps every
+  /// survivor's position in the original list.
+  List<ParsedRepertoireGame> parseGames(List<String> games) {
+    final parsed = <ParsedRepertoireGame>[];
     for (int gameIndex = 0; gameIndex < games.length; gameIndex++) {
       try {
-        parsedGames.add((
+        parsed.add((
           game: PgnGame.parsePgn(games[gameIndex]),
           text: games[gameIndex],
           index: gameIndex,
@@ -103,10 +124,25 @@ class RepertoireService {
         if (kDebugMode) {
           debugPrint('Error parsing game $gameIndex: $e');
         }
-        continue;
       }
     }
+    return parsed;
+  }
 
+  /// The trainable lines of [parsedGames]; see [parseRepertoirePgn] for the
+  /// colour rules.  [declaredColor] is the file's `// Color:` (or the
+  /// caller's override), null when the file declares none.
+  List<RepertoireLine> linesFromParsedGames(
+    List<ParsedRepertoireGame> parsedGames, {
+    required String? declaredColor,
+    bool colorFromStartingSide = false,
+    bool inferColorWhenUnknown = false,
+  }) {
+    final lines = <RepertoireLine>[];
+    final resolvedColor = declaredColor ?? 'white';
+
+    // Chapter titles are a whole-file property (do the [White] headers group
+    // the games?), so games are parsed before any line is built.
     final chapterTitles = detectHeaderChapters([
       for (final p in parsedGames) p.game.headers,
     ]);
@@ -118,38 +154,30 @@ class RepertoireService {
       final chapter = chapterTitles?[i];
 
       try {
-        final mainlineMoves = game.moves
-            .mainline()
-            .map((node) => node.san)
-            .toList();
-
-        if (mainlineMoves.isEmpty) continue;
+        // One walk of the mainline serves the moves, the comments and the
+        // puzzle marker; it used to be walked three times.
+        final moveNodes = game.moves.mainline().toList(growable: false);
+        if (moveNodes.isEmpty) continue;
+        final mainlineMoves = [for (final node in moveNodes) node.san];
 
         final startPosition = extractStartPosition(game);
 
         final comments = <String, String>{};
-        final moveNodes = game.moves.mainline().toList();
+        int? markerIndex;
         for (int i = 0; i < moveNodes.length; i++) {
-          final node = moveNodes[i];
-          if (node.comments != null && node.comments!.isNotEmpty) {
-            final comment = node.comments!.join(' ').trim();
-            if (comment.isNotEmpty) {
-              comments[i.toString()] = comment;
-            }
-          }
+          final nodeComments = moveNodes[i].comments;
+          if (nodeComments == null || nodeComments.isEmpty) continue;
+          final comment = nodeComments.join(' ').trim();
+          if (comment.isEmpty) continue;
+          comments[i.toString()] = comment;
+          // A `[%tstart]` puzzle marker names the first move the solver
+          // must find, so in per-chapter colour mode the solver is whoever
+          // plays that move — not whoever moves first in the chapter. That
+          // lets a full game saved from the standard start train as a
+          // Black puzzle.
+          if (markerIndex == null && hasPuzzleStart(comment)) markerIndex = i;
         }
 
-        // A `[%tstart]` puzzle marker names the first move the solver must
-        // find, so in per-chapter colour mode the solver is whoever plays
-        // that move — not whoever moves first in the chapter. That lets a
-        // full game saved from the standard start train as a Black puzzle.
-        int? markerIndex;
-        for (int m = 0; m < moveNodes.length; m++) {
-          if (hasPuzzleStart(comments[m.toString()])) {
-            markerIndex = m;
-            break;
-          }
-        }
         final startIsWhite = startPosition.turn == Side.white;
         final markerMoverIsWhite = markerIndex == null
             ? startIsWhite
@@ -157,9 +185,6 @@ class RepertoireService {
         final color = colorFromStartingSide
             ? (markerMoverIsWhite ? 'white' : 'black')
             : resolvedColor;
-
-        final variations = <String>[];
-        _extractVariations(game.moves, variations);
 
         // Chapter-titled games (Chessable exports) name the variation in the
         // [Black] header; everything else keeps the Opening/Event naming.
@@ -169,7 +194,7 @@ class RepertoireService {
                 variationTitle.isNotEmpty &&
                 variationTitle != '?'
             ? variationTitle
-            : _generateLineName(game, gameIndex);
+            : _generateLineName(game, mainlineMoves, gameIndex);
         final lineId = _extractLineId(game, mainlineMoves, gameIndex);
         final importance = _extractImportance(game, gameText);
 
@@ -182,8 +207,9 @@ class RepertoireService {
             startPosition: startPosition,
             fullPgn: gameText,
             comments: comments,
-            variations: variations,
-            headers: Map<String, String>.from(game.headers),
+            // The parse tree is discarded after this, so its header map is
+            // ours to keep; copying it once per game bought nothing.
+            headers: game.headers,
             importance: importance,
             chapter: chapter,
             // In a chapter-titled export every repertoire line carries
@@ -261,26 +287,58 @@ class RepertoireService {
   /// parse or have no moves — using exactly the rule of [parseRepertoirePgn],
   /// including collision resolution. This is what file edits must use to
   /// find a line by id.
+  ///
+  /// Reads the header block and lexes the mainline ([pgn.mainlineSansOf])
+  /// instead of building each game's move tree with dartchess: an id needs
+  /// the header id or the mainline SAN list, nothing more, and this runs over
+  /// every game in the file on every rename, autosave and review rating.
   List<String?> lineIdsForGames(List<String> games) {
     final ids = List<String?>.filled(games.length, null);
     final seen = <String>{};
     for (var i = 0; i < games.length; i++) {
-      final List<String> moves;
-      final PgnGame game;
-      try {
-        game = PgnGame.parsePgn(games[i]);
-        moves = game.moves.mainline().map((n) => n.san).toList();
-      } catch (_) {
-        continue;
-      }
+      final moves = pgn.mainlineSansOf(games[i]);
       if (moves.isEmpty) continue;
-      final id = _extractLineId(game, moves, i);
+      final id = repertoireLineIds.fromHeaders(
+        pgn.extractHeaderBlock(games[i]),
+        moves,
+        i,
+      );
       ids[i] = seen.add(id)
           ? id
           : repertoireLineIds.resolveCollision(moves, i, seen);
     }
     return ids;
   }
+
+  /// [lineIdsForGames] for the document at [filePath], memoised on the
+  /// file's size and mtime.  An edit session issues a burst of lookups
+  /// against a file that only changes when this service writes it, so a
+  /// hit is the common case and a miss costs one lexing pass.
+  Future<List<String?>> _lineIdsForFile(
+    String filePath,
+    io.FileStat stat,
+    List<String> games,
+  ) async {
+    final cached = _lineIdCache[filePath];
+    if (cached != null &&
+        cached.size == stat.size &&
+        cached.modified == stat.modified &&
+        cached.gameCount == games.length) {
+      return cached.ids;
+    }
+    final ids = lineIdsForGames(games);
+    _lineIdCache[filePath] = _CachedLineIds(
+      size: stat.size,
+      modified: stat.modified,
+      gameCount: games.length,
+      ids: ids,
+    );
+    return ids;
+  }
+
+  /// One entry per edited file; bounded by the handful of chapters a
+  /// session touches, and never larger than the on-disk repertoire.
+  static final Map<String, _CachedLineIds> _lineIdCache = {};
 
   /// Detects chapter titles carried in game headers, the way Chessable
   /// course exports encode them: every game titles its chapter in [White]
@@ -355,12 +413,17 @@ class RepertoireService {
       if (parsed != null) return parsed;
     }
 
-    final cumProbMatch = RegExp(r'CumProb\s+([\d.]+)%').firstMatch(gameText);
-    if (cumProbMatch != null) {
-      final pct = double.tryParse(cumProbMatch.group(1)!);
-      if (pct != null) return pct / 100.0;
+    // Two regex passes over the whole game text, per game, per load — only
+    // worth running when the marker is actually there, which a plain
+    // substring scan settles far faster than a regex.
+    if (gameText.contains('CumProb')) {
+      final cumProbMatch = _cumProbInTextRe.firstMatch(gameText);
+      if (cumProbMatch != null) {
+        final pct = double.tryParse(cumProbMatch.group(1)!);
+        if (pct != null) return pct / 100.0;
+      }
     }
-
+    if (!gameText.contains('[%')) return null;
     return parseImportanceComment(gameText);
   }
 
@@ -378,7 +441,7 @@ class RepertoireService {
   }
 
   /// Generates a meaningful name for the repertoire line
-  String _generateLineName(PgnGame game, int index) {
+  String _generateLineName(PgnGame game, List<String> mainline, int index) {
     final event = game.headers['Event'] ?? '';
     final opening = game.headers['Opening'] ?? '';
 
@@ -389,44 +452,11 @@ class RepertoireService {
         event != 'Repertoire Line' &&
         event != 'Edited Line') {
       return event;
+    } else if (mainline.isNotEmpty) {
+      return 'Line: ${mainline.take(3).join(' ')}';
     } else {
-      final moves = game.moves
-          .mainline()
-          .take(3)
-          .map((node) => node.san)
-          .toList();
-      if (moves.isNotEmpty) {
-        return 'Line: ${moves.join(' ')}';
-      } else {
-        return 'Repertoire Line ${index + 1}';
-      }
+      return 'Repertoire Line ${index + 1}';
     }
-  }
-
-  /// Recursively extracts variation strings for reference
-  void _extractVariations(PgnNode<PgnNodeData> moves, List<String> variations) {
-    for (int i = 1; i < moves.children.length; i++) {
-      final variation = _variationToSanString(moves.children[i]);
-      if (variation.isNotEmpty) {
-        variations.add(variation);
-      }
-    }
-
-    if (moves.children.isNotEmpty) {
-      _extractVariations(moves.children.first, variations);
-    }
-  }
-
-  String _variationToSanString(PgnChildNode<PgnNodeData> startNode) {
-    final sans = <String>[startNode.data.san];
-    var current = startNode;
-
-    while (current.children.isNotEmpty) {
-      current = current.children.first;
-      sans.add(current.data.san);
-    }
-
-    return sans.join(' ');
   }
 
   /// Splits a PGN document into its `//` preamble and its games, exactly as
@@ -442,45 +472,46 @@ class RepertoireService {
     String content,
   ) {
     content = pgn.stripBom(content);
-    final lines = content.split('\n');
     final preambleLines = <String>[];
     final games = <String>[];
-    var currentGame = <String>[];
-    var seenGame = false;
+    var gameStart = -1;
 
-    void flushCurrentGame() {
-      final gameText = currentGame.join('\n').trimRight();
-      if (gameText.isNotEmpty) {
-        games.add(gameText);
-      }
-      currentGame = <String>[];
-    }
+    // One pass over line starts; a game is a substring between two `[Event `
+    // lines, right-trimmed as the line-joining version produced it.
+    var lineStart = 0;
+    while (lineStart <= content.length) {
+      var lineEnd = content.indexOf('\n', lineStart);
+      if (lineEnd < 0) lineEnd = content.length;
 
-    for (final line in lines) {
-      final trimmed = line.trim();
-
-      if (!seenGame) {
-        if (trimmed.startsWith('[Event ')) {
-          seenGame = true;
-          currentGame.add(line);
-        } else if (trimmed.isNotEmpty) {
-          preambleLines.add(line);
+      if (_startsWithEventTag(content, lineStart, lineEnd)) {
+        if (gameStart >= 0) {
+          final text = content.substring(gameStart, lineStart).trimRight();
+          if (text.isNotEmpty) games.add(text);
         }
-        continue;
+        gameStart = lineStart;
+      } else if (gameStart < 0) {
+        final line = content.substring(lineStart, lineEnd);
+        if (line.trim().isNotEmpty) preambleLines.add(line);
       }
-
-      if (trimmed.startsWith('[Event ') && currentGame.isNotEmpty) {
-        flushCurrentGame();
-        currentGame.add(line);
-        continue;
-      }
-
-      currentGame.add(line);
+      lineStart = lineEnd + 1;
     }
-
-    flushCurrentGame();
+    if (gameStart >= 0) {
+      final text = content.substring(gameStart).trimRight();
+      if (text.isNotEmpty) games.add(text);
+    }
 
     return (preamble: preambleLines.join('\n').trimRight(), games: games);
+  }
+
+  /// Whether the line `[start, end)` is `[Event ` after optional blanks.
+  static bool _startsWithEventTag(String content, int start, int end) {
+    var i = start;
+    while (i < end) {
+      final c = content.codeUnitAt(i);
+      if (c != 0x20 && c != 0x09 && c != 0x0D) break;
+      i++;
+    }
+    return content.startsWith('[Event ', i);
   }
 
   /// Extract a stable line identifier, preferring a PGN header if present.
@@ -493,25 +524,14 @@ class RepertoireService {
   /// first, and it parses through the same pipeline as the trainer so the
   /// two agree regardless of how the source serialized its headers. Returns
   /// null when [pgn] does not parse.
-  String? lineIdForGamePgn(String pgn, int index) {
-    try {
-      final game = PgnGame.parsePgn(pgn);
-      final moves = game.moves.mainline().map((n) => n.san).toList();
-      return _extractLineId(game, moves, index);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// Find the index of the game matching [lineId] within [games], resolving
-  /// ids exactly as [parseRepertoirePgn] does so a collision-renamed line is
-  /// found under the id the app actually shows for it.
-  int? _findGameIndexByLineId(List<String> games, String lineId) {
-    final ids = lineIdsForGames(games);
-    for (var i = 0; i < ids.length; i++) {
-      if (ids[i] == lineId) return i;
-    }
-    return null;
+  String? lineIdForGamePgn(String pgnText, int index) {
+    final moves = pgn.mainlineSansOf(pgnText);
+    if (moves.isEmpty) return null;
+    return repertoireLineIds.fromHeaders(
+      pgn.extractHeaderBlock(pgnText),
+      moves,
+      index,
+    );
   }
 
   /// Reassemble a PGN document from preamble + game list.
@@ -520,27 +540,39 @@ class RepertoireService {
     return '${sections.join('\n\n').trimRight()}\n';
   }
 
-  /// Updates the [Event] header (title) for a specific line in a PGN file.
+  /// Loads the PGN document at [filePath], locates the game for [lineId],
+  /// lets [mutate] modify the mutable games list (given the match index),
+  /// then writes the result back atomically. Returns false if the file or
+  /// line is missing.
   ///
-  /// Finds the game matching [lineId] by re-parsing the file, then rewrites
-  /// the [Event] header with [newTitle].
-  /// Loads the PGN document at [filePath], locates the game for [lineId], lets
-  /// [mutate] modify the mutable games list (given the match index), then writes
-  /// the result back atomically. Returns false if the file or line is missing.
+  /// [gameIndex] is the caller's [RepertoireLine.gameIndex] when it has one:
+  /// the game there is used directly when it still resolves to [lineId],
+  /// which it does unless the file changed under us.  Ids are otherwise
+  /// looked up through the per-file cache ([_lineIdsForFile]), so neither
+  /// path parses a move tree.
   Future<bool> _editLineInFile(
     String filePath,
     String lineId,
-    void Function(List<String> games, int matchIndex) mutate,
-  ) async {
+    void Function(List<String> games, int matchIndex) mutate, {
+    int? gameIndex,
+  }) async {
     final file = io.File(filePath);
     if (!await file.exists()) return false;
 
+    final stat = await file.stat();
     final content = await readTextFile(file);
     final document = _splitPgnDocumentPreservingPreamble(content);
     final games = List<String>.from(document.games);
 
-    final matchIndex = _findGameIndexByLineId(games, lineId);
-    if (matchIndex == null) return false;
+    final ids = await _lineIdsForFile(filePath, stat, games);
+    final matchIndex =
+        gameIndex != null &&
+            gameIndex >= 0 &&
+            gameIndex < ids.length &&
+            ids[gameIndex] == lineId
+        ? gameIndex
+        : ids.indexOf(lineId);
+    if (matchIndex < 0) return false;
 
     mutate(games, matchIndex);
 
@@ -554,16 +586,21 @@ class RepertoireService {
   Future<bool> updateLineTitle(
     String filePath,
     String lineId,
-    String newTitle,
-  ) {
-    return _editLineInFile(filePath, lineId, (games, matchIndex) {
-      final gameText = games[matchIndex];
-      final eventRegex = RegExp(r'\[Event\s+"[^"]*"\]');
-      games[matchIndex] = eventRegex.hasMatch(gameText)
-          ? gameText.replaceFirst(eventRegex, '[Event "$newTitle"]')
-          : '[Event "$newTitle"]\n$gameText';
+    String newTitle, {
+    int? gameIndex,
+  }) {
+    return _editLineInFile(filePath, lineId, gameIndex: gameIndex, (
+      games,
+      matchIndex,
+    ) {
+      games[matchIndex] = _withEventTitle(games[matchIndex], newTitle);
     });
   }
+
+  static String _withEventTitle(String gameText, String newTitle) =>
+      _eventTagRe.hasMatch(gameText)
+      ? gameText.replaceFirst(_eventTagRe, '[Event "$newTitle"]')
+      : '[Event "$newTitle"]\n$gameText';
 
   /// Replaces the full PGN content of an existing line identified by [lineId].
   ///
@@ -573,9 +610,13 @@ class RepertoireService {
   Future<bool> updateLineContent(
     String filePath,
     String lineId,
-    String newGamePgn,
-  ) {
-    return _editLineInFile(filePath, lineId, (games, matchIndex) {
+    String newGamePgn, {
+    int? gameIndex,
+  }) {
+    return _editLineInFile(filePath, lineId, gameIndex: gameIndex, (
+      games,
+      matchIndex,
+    ) {
       games[matchIndex] = _mergeMissingHeaders(
         games[matchIndex],
         newGamePgn.trimRight(),
@@ -588,7 +629,7 @@ class RepertoireService {
   /// metadata, CumProb, …). Dropping LineID would orphan the line: every
   /// later lookup by id — rename, autosave, delete — silently fails.
   String _mergeMissingHeaders(String oldGame, String newGame) {
-    final keyPattern = RegExp(r'^\[(\w+)\s+"[^"]*"\]$');
+    final keyPattern = _headerLineRe;
 
     List<String> headerLines(String game) {
       final result = <String>[];
@@ -634,8 +675,11 @@ class RepertoireService {
   }
 
   /// Removes a game identified by [lineId] from the PGN file on disk.
-  Future<bool> deleteLine(String filePath, String lineId) {
-    return _editLineInFile(filePath, lineId, (games, matchIndex) {
+  Future<bool> deleteLine(String filePath, String lineId, {int? gameIndex}) {
+    return _editLineInFile(filePath, lineId, gameIndex: gameIndex, (
+      games,
+      matchIndex,
+    ) {
       games.removeAt(matchIndex);
     });
   }
@@ -710,11 +754,7 @@ class RepertoireService {
     int gameIndex,
     String newTitle,
   ) => _editGameAt(filePath, gameIndex, (games) {
-    final gameText = games[gameIndex];
-    final eventRegex = RegExp(r'\[Event\s+"[^"]*"\]');
-    games[gameIndex] = eventRegex.hasMatch(gameText)
-        ? gameText.replaceFirst(eventRegex, '[Event "$newTitle"]')
-        : '[Event "$newTitle"]\n$gameText';
+    games[gameIndex] = _withEventTitle(games[gameIndex], newTitle);
   });
 
   /// Appends [gameTexts] to the chapter at [filePath], creating the file when
@@ -790,15 +830,15 @@ class RepertoireService {
     final file = io.File(filePath);
     if (!await file.exists()) return false;
 
+    final stat = await file.stat();
     final content = await readTextFile(file);
     final document = _splitPgnDocumentPreservingPreamble(content);
     final games = List<String>.from(document.games);
 
-    // Resolve every id in one pass. `_findGameIndexByLineId` re-derives the
-    // whole file's ids on each call, so looking each entry up separately
-    // re-parsed all N games N times — the bulk write was quadratic in exactly
-    // the case it exists to make cheap.
-    final idsByIndex = lineIdsForGames(games);
+    // Resolve every id in one pass; looking each entry up separately would
+    // make the bulk write quadratic in exactly the case it exists to make
+    // cheap.
+    final idsByIndex = await _lineIdsForFile(filePath, stat, games);
     final indexById = <String, int>{};
     for (var i = 0; i < idsByIndex.length; i++) {
       final id = idsByIndex[i];
@@ -841,7 +881,7 @@ class RepertoireService {
     required int passCount,
     required int failCount,
   }) {
-    final headerPattern = RegExp(r'^\[(\w+)\s+"([^"]*)"\]', multiLine: true);
+    final headerPattern = _headerPairRe;
     final headers = <String, String>{};
     String moveText = '';
 
@@ -915,54 +955,85 @@ class RepertoireService {
     String? startingFen,
     bool isWhiteRepertoire = true,
   }) async {
+    final result = await appendMovesAtPath(
+      filePath,
+      pathFromRoot,
+      [san],
+      startingFen: startingFen,
+      isWhiteRepertoire: isWhiteRepertoire,
+    );
+    return (success: result.success, updatedContent: result.updatedContent);
+  }
+
+  /// Appends [newSans] after [pathFromRoot]: onto the game whose mainline is
+  /// exactly [pathFromRoot] when there is one, else as a new game holding
+  /// the whole line.  One read, one lexing pass, one atomic write for
+  /// however many plies — a build-by-playing commit used to do all three
+  /// once per ply.
+  ///
+  /// Equivalent to calling [appendMoveAtPath] once per ply: after the first
+  /// append the game's mainline is the extended prefix, so every later ply
+  /// lands on the same game.  [snapshots] holds the document as it would
+  /// have stood after each ply (the last one is [updatedContent]), so a
+  /// caller keeping per-ply undo history has the same states the per-ply
+  /// writes produced — assembled in memory, never written.
+  Future<({bool success, String updatedContent, List<String> snapshots})>
+  appendMovesAtPath(
+    String filePath,
+    List<String> pathFromRoot,
+    List<String> newSans, {
+    String? startingFen,
+    bool isWhiteRepertoire = true,
+  }) async {
     final file = io.File(filePath);
     if (!await file.exists()) {
-      return (success: false, updatedContent: '');
+      return (success: false, updatedContent: '', snapshots: const <String>[]);
     }
 
     final content = await readTextFile(file);
+    if (newSans.isEmpty) {
+      return (
+        success: true,
+        updatedContent: content,
+        snapshots: const <String>[],
+      );
+    }
     final document = _splitPgnDocumentPreservingPreamble(content);
     final games = List<String>.from(document.games);
 
-    int? exactMatchIndex;
-    for (int i = 0; i < games.length; i++) {
-      try {
-        final game = PgnGame.parsePgn(games[i]);
-        final moves = game.moves.mainline().map((n) => n.san).toList();
-        if (_listEquals(moves, pathFromRoot)) {
-          exactMatchIndex = i;
-          break;
-        }
-      } catch (_) {
-        continue;
+    // The mainline is all that decides a match, and lexing it is a fraction
+    // of building each game's move tree.
+    final exactMatchIndex = games.indexWhere(
+      (game) => _listEquals(pgn.mainlineSansOf(game), pathFromRoot),
+    );
+
+    final snapshots = <String>[];
+    var prefix = pathFromRoot;
+    for (final san in newSans) {
+      if (exactMatchIndex >= 0) {
+        games[exactMatchIndex] = appendSanToGamePgn(
+          games[exactMatchIndex],
+          prefix,
+          san,
+        );
+      } else if (prefix.length == pathFromRoot.length) {
+        games.add(
+          buildMinimalGamePgn(
+            [...pathFromRoot, san],
+            startingFen: startingFen,
+            isWhiteRepertoire: isWhiteRepertoire,
+          ),
+        );
+      } else {
+        games[games.length - 1] = appendSanToGamePgn(games.last, prefix, san);
       }
+      prefix = [...prefix, san];
+      snapshots.add(_reassembleDocument(document.preamble, games));
     }
 
-    if (exactMatchIndex != null) {
-      games[exactMatchIndex] = appendSanToGamePgn(
-        games[exactMatchIndex],
-        pathFromRoot,
-        san,
-      );
-    } else {
-      final fullPath = [...pathFromRoot, san];
-      games.add(
-        buildMinimalGamePgn(
-          fullPath,
-          startingFen: startingFen,
-          isWhiteRepertoire: isWhiteRepertoire,
-        ),
-      );
-    }
-
-    final sections = <String>[];
-    if (document.preamble.isNotEmpty) {
-      sections.add(document.preamble);
-    }
-    sections.addAll(games);
-    final updated = '${sections.join('\n\n').trimRight()}\n';
+    final updated = snapshots.last;
     await writeTextFileAtomically(file, updated);
-    return (success: true, updatedContent: updated);
+    return (success: true, updatedContent: updated, snapshots: snapshots);
   }
 
   static bool _listEquals(List<String> a, List<String> b) {
@@ -989,7 +1060,7 @@ class RepertoireService {
     final lines = gameText.split('\n');
     final moveLines = <String>[];
     final headerLines = <String>[];
-    final headerPattern = RegExp(r'^\[(\w+)\s+"([^"]*)"\]');
+    final headerPattern = _headerPairRe;
 
     for (final line in lines) {
       final trimmed = line.trim();
@@ -1032,4 +1103,19 @@ class RepertoireService {
 
   static String _movesToPgnMoveText(List<String> moves) =>
       buildNumberedMovetext(moves);
+}
+
+/// The ids of one file's games, valid while the file's stat is unchanged.
+class _CachedLineIds {
+  const _CachedLineIds({
+    required this.size,
+    required this.modified,
+    required this.gameCount,
+    required this.ids,
+  });
+
+  final int size;
+  final DateTime modified;
+  final int gameCount;
+  final List<String?> ids;
 }

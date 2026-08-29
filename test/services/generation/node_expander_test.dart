@@ -828,6 +828,49 @@ void main() {
       expect(_child(root, 'd4').lastPlayedYear, 2025);
     });
 
+    test('recency is stamped even when the book offers no new candidate '
+        'because MultiPV already covers it', () async {
+      resetNodeIds();
+      final root = makeNode(
+        fen: kStandardStartFen,
+        san: '',
+        ply: 0,
+        isWhiteToMove: true,
+      )..searchPriority = 1.0;
+      // Both of the book's most-played moves come back in MultiPV, so the
+      // candidate list is empty — the common case once the engine's top
+      // moves and master practice agree.  The children still need their
+      // `[%lastPlayed]`, or MoveAnnotator drops it from every exported move.
+      final pool = FakeStockfishPool()
+        ..discoveryByFen[kStandardStartFen] = DiscoveryResult(
+          lines: [
+            discoveryLine(pvNumber: 1, cpWhite: 40, pv: ['e2e4']),
+            discoveryLine(pvNumber: 2, cpWhite: 30, pv: ['d2d4']),
+          ],
+        );
+      MaiaFactory.testOverride = FakeMaiaEvaluator({kStandardStartFen: {}});
+
+      final run = runWith(
+        config: _base.copyWith(masterMinGames: 3),
+        node: root,
+        pool: pool,
+        masterBook: (fen) => fen == kStandardStartFen
+            ? [book('e2e4', 900, year: 2026), book('d2d4', 800, year: 2025)]
+            : const [],
+      );
+      await NodeExpander.forRun(
+        run,
+      ).expandOurMove(root, FrontierQueue(bestFirst: true));
+
+      expect(
+        root.children.map((c) => c.moveSan),
+        unorderedEquals(['e4', 'd4']),
+      );
+      expect(run.stats.masterCandidatesInjected, 0, reason: 'nothing to add');
+      expect(_child(root, 'e4').lastPlayedYear, 2026);
+      expect(_child(root, 'd4').lastPlayedYear, 2025);
+    });
+
     test('an injected master move outside the eval window is dropped, and '
         'a thin position injects nothing', () async {
       resetNodeIds();
@@ -940,6 +983,180 @@ void main() {
       expect(e4.searchPriority, closeTo(1.0, 1e-9));
       expect(d4.searchPriority, closeTo(config.ourAltDiscount, 1e-9));
       expect(queue.length, 2, reason: 'ply 0 is inside the wide-opening band');
+    });
+  });
+
+  group('candidate injection', () {
+    BookMove book(String uci, int games) => BookMove(
+      uci: uci,
+      games: games,
+      whiteWins: 0,
+      draws: games,
+      blackWins: 0,
+      averageElo: 2600,
+      maxElo: 2700,
+      lastYear: 2024,
+      topGameId: 1,
+      recentGameId: 2,
+    );
+
+    BuildRun runWith({
+      required TreeBuildConfig config,
+      required BuildTreeNode node,
+      required FakeStockfishPool pool,
+      BookLookup? masterBook,
+    }) => BuildRun(
+      config: config,
+      tree: _treeWith(node),
+      fenMap: FenMap(),
+      pool: pool,
+      evalResolver: TreeEvalResolver()..stats = BuildStats(),
+      stats: BuildStats(),
+      runLog: RunDebugLog(),
+      progress: TreeBuildProgressTracker(),
+      onProgress: (_) {},
+      cancel: BuildCancellation(),
+      finishNow: () => false,
+      waitIfPaused: () async {},
+      nextNodeId: 1000,
+      masterBook: masterBook,
+    );
+
+    test('every source is scored in one restricted search, deduplicated '
+        'against MultiPV and each other', () async {
+      resetNodeIds();
+      final root = makeNode(
+        fen: kStandardStartFen,
+        san: '',
+        ply: 0,
+        isWhiteToMove: true,
+      )..searchPriority = 1.0;
+      final afterD4 = playUciMove(kStandardStartFen, 'd2d4')!;
+      final afterC4 = playUciMove(kStandardStartFen, 'c2c4')!;
+      final afterH4 = playUciMove(kStandardStartFen, 'h2h4')!;
+      final pool = FakeStockfishPool()
+        ..discoveryByFen[kStandardStartFen] = DiscoveryResult(
+          lines: [
+            discoveryLine(pvNumber: 1, cpWhite: 40, pv: ['e2e4']),
+          ],
+        )
+        ..stmCpByFen[afterD4] = -30
+        ..stmCpByFen[afterC4] = -25
+        ..stmCpByFen[afterH4] = 20; // -20 for White: 60cp behind, rejected
+      MaiaFactory.testOverride = FakeMaiaEvaluator({kStandardStartFen: {}});
+
+      // Setup offers h4 and d4; the book's top two are e4 (in MultiPV
+      // already) and d4 (again) — c4 is third and outside the book's slots.
+      // One search, two distinct moves.
+      final run = runWith(
+        config: _base.copyWith(setupMoves: 'h4 d4', masterMinGames: 3),
+        node: root,
+        pool: pool,
+        masterBook: (fen) => fen == kStandardStartFen
+            ? [book('e2e4', 900), book('d2d4', 800), book('c2c4', 200)]
+            : const [],
+      );
+      await NodeExpander.forRun(
+        run,
+      ).expandOurMove(root, FrontierQueue(bestFirst: true));
+
+      expect(pool.injectionSearches, hasLength(1));
+      expect(pool.injectionSearches.single, unorderedEquals(['h2h4', 'd2d4']));
+      expect(
+        root.children.map((c) => c.moveSan),
+        unorderedEquals(['e4', 'd4']),
+      );
+      expect(_child(root, 'd4').engineEvalCp, -30);
+    });
+
+    test('a pin is scored with the rest but never eval-gated', () async {
+      resetNodeIds();
+      final root = makeNode(
+        fen: kStandardStartFen,
+        san: '',
+        ply: 0,
+        isWhiteToMove: true,
+      )..searchPriority = 1.0;
+      final afterH4 = playUciMove(kStandardStartFen, 'h2h4')!;
+      final pool = FakeStockfishPool()
+        ..discoveryByFen[kStandardStartFen] = DiscoveryResult(
+          lines: [
+            discoveryLine(pvNumber: 1, cpWhite: 40, pv: ['e2e4']),
+          ],
+        )
+        ..stmCpByFen[afterH4] = 200; // -200 for White: far outside the window
+      MaiaFactory.testOverride = FakeMaiaEvaluator({kStandardStartFen: {}});
+
+      final plan = SkeletonPlan.fromLines(['1.h4'], playAsWhite: true);
+      final run = runWith(
+        // Also a setup move, which alone would be gated: the pin wins.
+        config: _base.copyWith(setupMoves: 'h4', skeletonPlan: plan),
+        node: root,
+        pool: pool,
+      );
+      await NodeExpander.forRun(
+        run,
+      ).expandOurMove(root, FrontierQueue(bestFirst: true));
+
+      expect(pool.injectionSearches.single, ['h2h4']);
+      expect(
+        root.children.map((c) => c.moveSan),
+        unorderedEquals(['e4', 'h4']),
+      );
+    });
+
+    test('nothing to inject means no extra search at all', () async {
+      resetNodeIds();
+      final root = makeNode(
+        fen: kStandardStartFen,
+        san: '',
+        ply: 0,
+        isWhiteToMove: true,
+      )..searchPriority = 1.0;
+      final pool = FakeStockfishPool()
+        ..discoveryByFen[kStandardStartFen] = DiscoveryResult(
+          lines: [
+            discoveryLine(pvNumber: 1, cpWhite: 40, pv: ['e2e4']),
+          ],
+        );
+      MaiaFactory.testOverride = FakeMaiaEvaluator({kStandardStartFen: {}});
+      await NodeExpander.forRun(
+        runWith(config: _base, node: root, pool: pool),
+      ).expandOurMove(root, FrontierQueue(bestFirst: true));
+      expect(pool.injectionSearches, isEmpty);
+      expect(pool.evalCalls, isEmpty);
+    });
+  });
+
+  group('Maia prefetch', () {
+    test('children put on the frontier have their Maia policy requested '
+        'before they are popped', () async {
+      resetNodeIds();
+      final root = makeNode(
+        fen: kStandardStartFen,
+        san: '',
+        ply: 0,
+        isWhiteToMove: true,
+      )..searchPriority = 1.0;
+      final pool = FakeStockfishPool()
+        ..discoveryByFen[kStandardStartFen] = DiscoveryResult(
+          lines: [
+            discoveryLine(pvNumber: 1, cpWhite: 40, pv: ['e2e4']),
+            discoveryLine(pvNumber: 2, cpWhite: 35, pv: ['d2d4']),
+          ],
+        );
+      final maia = FakeMaiaEvaluator({kStandardStartFen: {}});
+      MaiaFactory.testOverride = maia;
+
+      final queue = FrontierQueue(bestFirst: true);
+      await NodeExpander.forRun(
+        _makeRun(config: _base, tree: _treeWith(root), pool: pool),
+      ).expandOurMove(root, queue);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(queue.length, 2);
+      expect(maia.calls, contains(playUciMove(kStandardStartFen, 'e2e4')));
+      expect(maia.calls, contains(playUciMove(kStandardStartFen, 'd2d4')));
     });
   });
 }

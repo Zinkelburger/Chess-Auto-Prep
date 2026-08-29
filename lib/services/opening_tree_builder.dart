@@ -3,6 +3,8 @@ import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart';
 import '../models/opening_tree.dart';
+import '../utils/chess_utils.dart' show tryParseFen;
+import '../utils/fen_utils.dart' show expandFen;
 import 'package:chess_auto_prep/utils/log.dart';
 
 import 'pgn_tree_core.dart';
@@ -136,14 +138,13 @@ class OpeningTreeBuilder {
       final trimmed = pgnText.trim();
       if (trimmed.isNotEmpty) {
         try {
-          final game = PgnGame.parsePgn(trimmed);
-          _processGame(
+          addGame(
             tree,
-            game,
-            usernameLower,
-            userIsWhite,
-            maxDepth,
-            strictPlayerMatching,
+            PgnGame.parsePgn(trimmed),
+            usernameLower: usernameLower,
+            userIsWhite: userIsWhite,
+            maxDepth: maxDepth,
+            strictPlayerMatching: strictPlayerMatching,
           );
         } catch (_) {
           skipped++;
@@ -166,14 +167,18 @@ class OpeningTreeBuilder {
     return tree.toTransferJson();
   }
 
-  static void _processGame(
+  /// Fold one parsed [game] into [tree] under the builder's attribution
+  /// rules.  Public so a caller that has already parsed its games (the
+  /// repertoire loader parses each game once for lines *and* tree) can grow
+  /// a tree without re-serialising and re-parsing them.
+  static void addGame(
     OpeningTree tree,
-    PgnGame<PgnNodeData> game,
-    String usernameLower,
-    bool? userIsWhiteFilter,
-    int maxDepth,
-    bool strictPlayerMatching,
-  ) {
+    PgnGame<PgnNodeData> game, {
+    required String usernameLower,
+    required bool? userIsWhite,
+    required int maxDepth,
+    required bool strictPlayerMatching,
+  }) {
     // 1. Safe Header Access
     final white = game.headers['White'] ?? '';
     final black = game.headers['Black'] ?? '';
@@ -184,7 +189,7 @@ class OpeningTreeBuilder {
       whiteHeader: white,
       blackHeader: black,
       usernameLower: usernameLower,
-      userIsWhiteFilter: userIsWhiteFilter,
+      userIsWhiteFilter: userIsWhite,
       strictPlayerMatching: strictPlayerMatching,
       unattributablePolicy: UnattributableGamePolicy.skip,
     );
@@ -200,12 +205,26 @@ class OpeningTreeBuilder {
     // tree so the viewer Tree tab shows every book continuation, not just
     // each chapter's mainline. Scored player games stay mainline-only —
     // their variations are analysis notes, not extra games.
+    //
+    // A `[FEN]` chapter starts its walk from that position: replaying its
+    // first move from the standard start fails, and the whole chapter used
+    // to vanish from the tree at ply 1.
     walkMainlineIntoTree(
       tree: tree,
       game: game,
       userResult: userResult,
       maxDepth: maxDepth,
+      startPosition: _startPositionOf(game),
       includeVariations: userResult == null,
     );
+  }
+
+  /// The position a game starts from: its `[FEN]` header when it carries one
+  /// (the same lenient rule the repertoire lines use — no `[SetUp]` needed),
+  /// else the standard start.
+  static Position? _startPositionOf(PgnGame<PgnNodeData> game) {
+    final fen = game.headers['FEN']?.trim();
+    if (fen == null || fen.isEmpty) return null;
+    return tryParseFen(expandFen(fen));
   }
 }

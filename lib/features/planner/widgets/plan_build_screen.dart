@@ -1,4 +1,4 @@
-/// "Plan a build": the full-width planning mode.
+/// "Plan the lines": the full-width planning mode.
 ///
 /// Three columns — the plan so far, the board (with engine and database
 /// under it so the user can look around), and the current question — over
@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../constants/chess_constants.dart';
+import '../../../models/board_annotation.dart';
 import '../../../services/analysis_games_service.dart';
 import '../../../services/generation/generation_config.dart';
 import '../../../theme/app_colors.dart';
@@ -116,6 +117,10 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
 
   List<String>? _previewMoves;
 
+  /// Arrow for the explorer row under the pointer. Its own notifier so a
+  /// hover repaints the board, not the whole screen.
+  final ValueNotifier<BoardAnnotation?> _hoverArrow = ValueNotifier(null);
+
   // Review-phase state.
   final GlobalKey<GenerationConfigFormState> _configKey = GlobalKey();
   TreeBuildConfig? _reviewConfig;
@@ -133,6 +138,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
     _plan.dispose();
     _movesText.dispose();
     _keys.dispose();
+    _hoverArrow.dispose();
     super.dispose();
   }
 
@@ -432,7 +438,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
         title: Row(
           children: [
             Text(
-              '${widget.repertoireName} ▸ Plan a build',
+              '${widget.repertoireName} ▸ Plan the lines',
               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
             ),
             const SizedBox(width: 24),
@@ -636,16 +642,20 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
             child: Center(
               child: AspectRatio(
                 aspectRatio: 1,
-                child: ChessBoardWidget(
-                  position: pos,
-                  flipped: !widget.isWhite,
-                  // Start: the board sets the root. Walk: a move played at
-                  // the question position becomes a candidate and is
-                  // selected — Maia's list is a suggestion, not a fence.
-                  enableUserMoves: interactive || _boardAcceptsMoves,
-                  onMove: interactive
-                      ? _onStartBoardMove
-                      : (_boardAcceptsMoves ? _onWalkBoardMove : null),
+                child: ValueListenableBuilder<BoardAnnotation?>(
+                  valueListenable: _hoverArrow,
+                  builder: (context, arrow, _) => ChessBoardWidget(
+                    position: pos,
+                    flipped: !widget.isWhite,
+                    annotations: arrow == null ? const [] : [arrow],
+                    // Start: the board sets the root. Walk: a move played
+                    // at the question position becomes a candidate and is
+                    // selected — Maia's list is a suggestion, not a fence.
+                    enableUserMoves: interactive || _boardAcceptsMoves,
+                    onMove: interactive
+                        ? _onStartBoardMove
+                        : (_boardAcceptsMoves ? _onWalkBoardMove : null),
+                  ),
                 ),
               ),
             ),
@@ -721,6 +731,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                       ),
                       RepertoireDatabasePane(
                         fen: fen,
+                        currentMoveSequence: _boardMoves,
                         repertoireMovesAtPosition: () => const {},
                         onPlayMove: (san) {
                           if (_plan.phase == PlanPhase.start) {
@@ -734,7 +745,9 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                             });
                           }
                         },
-                        onAddMove: (_) {},
+                        onHoverMove: (move) => _hoverArrow.value = move == null
+                            ? null
+                            : BoardAnnotation.arrowFromUci(move.uci),
                       ),
                     ],
                   ),

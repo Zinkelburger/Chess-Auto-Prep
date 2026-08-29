@@ -143,7 +143,7 @@ void main() {
     final sw = Stopwatch()..start();
     final result = runSnapshotExport(
       SnapshotExportRequest(
-        treeJson: treeJson,
+        treeJson: data,
         configJson: config,
         prefix: prefix,
         repertoireStartFen: kStandardStartFen,

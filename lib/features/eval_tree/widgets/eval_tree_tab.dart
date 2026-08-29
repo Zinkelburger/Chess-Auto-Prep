@@ -76,6 +76,39 @@ class _EvalTreeTabState extends State<EvalTreeTab>
   BuildTree? _tree;
   EvalTreeSnapshot? _snapshot;
   EvalTreeLineMetricsCache? _metricsCache;
+
+  /// Node measurements for [_snapshot]; replaced with it.
+  EvalTreeNodeSizeCache? _sizeCache;
+
+  /// The last frame and the view state it was built for.  A controller
+  /// notification that changes none of the frame's inputs (a focus request,
+  /// say) reuses it instead of laying the tree out again.
+  _FrameMemo? _frameMemo;
+
+  EvalTreeLayoutFrame _frameFor(EvalTreeSnapshot snapshot) {
+    final key = _FrameKey(
+      snapshot: snapshot,
+      selectedNodeId: _controller.selectedNodeId,
+      visiblePly: _controller.visiblePly,
+      showAncestorSpine: _controller.showAncestorSpine,
+      maxDisplayNodes: _controller.maxDisplayNodes,
+      metricDisplayMode: _controller.metricDisplayMode,
+    );
+    final memo = _frameMemo;
+    if (memo != null && memo.key == key) return memo.frame;
+    var sizes = _sizeCache;
+    if (sizes == null || !identical(sizes.snapshot, snapshot)) {
+      sizes = _sizeCache = EvalTreeNodeSizeCache(snapshot);
+    }
+    final frame = EvalTreeLayoutEngine.buildFrame(
+      snapshot,
+      _controller,
+      sizeCache: sizes,
+    );
+    _frameMemo = _FrameMemo(key, frame);
+    return frame;
+  }
+
   bool _isLoading = false;
   String? _error;
   bool _dismissed = false;
@@ -163,10 +196,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
           return _buildEmptyState(context);
         }
 
-        final layoutFrame = EvalTreeLayoutEngine.buildFrame(
-          snapshot,
-          _controller,
-        );
+        final layoutFrame = _frameFor(snapshot);
         return Column(
           children: [
             _buildSummaryBar(context, snapshot),
@@ -440,4 +470,49 @@ class _EvalTreeTabState extends State<EvalTreeTab>
     final base = p.withoutExtension(filePath);
     return '${base}_tree.json';
   }
+}
+
+/// Everything `EvalTreeLayoutEngine.buildFrame` reads from the controller.
+class _FrameKey {
+  const _FrameKey({
+    required this.snapshot,
+    required this.selectedNodeId,
+    required this.visiblePly,
+    required this.showAncestorSpine,
+    required this.maxDisplayNodes,
+    required this.metricDisplayMode,
+  });
+
+  final EvalTreeSnapshot snapshot;
+  final int? selectedNodeId;
+  final int visiblePly;
+  final bool showAncestorSpine;
+  final int maxDisplayNodes;
+  final EvalTreeMetricDisplayMode metricDisplayMode;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _FrameKey &&
+      identical(other.snapshot, snapshot) &&
+      other.selectedNodeId == selectedNodeId &&
+      other.visiblePly == visiblePly &&
+      other.showAncestorSpine == showAncestorSpine &&
+      other.maxDisplayNodes == maxDisplayNodes &&
+      other.metricDisplayMode == metricDisplayMode;
+
+  @override
+  int get hashCode => Object.hash(
+    identityHashCode(snapshot),
+    selectedNodeId,
+    visiblePly,
+    showAncestorSpine,
+    maxDisplayNodes,
+    metricDisplayMode,
+  );
+}
+
+class _FrameMemo {
+  const _FrameMemo(this.key, this.frame);
+  final _FrameKey key;
+  final EvalTreeLayoutFrame frame;
 }

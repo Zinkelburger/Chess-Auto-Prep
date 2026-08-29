@@ -142,6 +142,8 @@ mixin _RepertoireTabContent
       repertoireMovesAtPosition: _repertoireMovesAtCurrentPosition,
       onPlayMove: _controller.playMove,
       onAddMove: _onExplorerAddMove,
+      onHoverTreeMove: _onTreeMoveHover,
+      onHoverExplorerMove: _onExplorerMoveHover,
     );
   }
 
@@ -179,9 +181,11 @@ mixin _RepertoireTabContent
   Widget _buildDatabaseTabContent() {
     return RepertoireDatabasePane(
       fen: _controller.fen,
+      currentMoveSequence: _controller.currentMoveSequence,
       repertoireMovesAtPosition: _repertoireMovesAtCurrentPosition,
       onPlayMove: _controller.playMove,
       onAddMove: _onExplorerAddMove,
+      onHoverMove: _onExplorerMoveHover,
     );
   }
 
@@ -299,11 +303,15 @@ mixin _RepertoireTabContent
   }
 
   Widget _buildBottomPane() {
+    // Job progress ticks (generation, audit) only change the jobs tab and
+    // its badge; the findings panel is rebuilt by the audit controller's own
+    // notifications, not by every progress tick of an unrelated job.
     return ListenableBuilder(
       listenable: _jobManager,
-      builder: (context, _) => BottomPane(
+      child: _buildFindingsContent(),
+      builder: (context, findings) => BottomPane(
         controller: _bottomPane,
-        findingsContent: _buildFindingsContent(),
+        findingsContent: findings!,
         jobsContent: _buildJobsContent(),
         findingsBadge: _auditController.activeFindingCount,
         jobsBadge: _jobManager.activeJobs.length,
@@ -432,6 +440,24 @@ mixin _RepertoireTabContent
     final path = _controller.path;
     final children = path.isEmpty ? tree.roots : tree.nodeAt(path)?.children;
     return {for (final c in (children ?? const [])) c.san};
+  }
+
+  /// Echo the hovered explorer row on the board, the way Lichess arrows a
+  /// hovered explorer move. The API's UCI is standard (`e1g1` castling).
+  void _onExplorerMoveHover(ExplorerMove? move) {
+    _boardPreview.setHoverArrow(
+      move == null ? null : BoardAnnotation.arrowFromUci(move.uci),
+    );
+  }
+
+  /// Same for the repertoire tree, whose rows only know their SAN: resolve
+  /// it against the board position (a tree row that is not legal there —
+  /// the tree can sit one transposition off — simply draws nothing).
+  void _onTreeMoveHover(String? san) {
+    final uci = san == null ? null : sanToUci(_controller.fen, san);
+    _boardPreview.setHoverArrow(
+      uci == null ? null : BoardAnnotation.arrowFromUci(uci),
+    );
   }
 
   Future<void> _onExplorerAddMove(ExplorerMove move) async {

@@ -33,7 +33,16 @@ class RepertoireTreePane extends StatefulWidget {
     required this.repertoireMovesAtPosition,
     required this.onPlayMove,
     required this.onAddMove,
+    this.onHoverTreeMove,
+    this.onHoverExplorerMove,
   });
+
+  /// SAN under the pointer in the repertoire tree (null on leave), for an
+  /// arrow on the board.
+  final ValueChanged<String?>? onHoverTreeMove;
+
+  /// Explorer move under the pointer (null on leave), likewise.
+  final ValueChanged<ExplorerMove?>? onHoverExplorerMove;
 
   /// The repertoire's tree, or null before one is loaded.
   final OpeningTree? tree;
@@ -121,6 +130,7 @@ class _RepertoireTreePaneState extends State<RepertoireTreePane> {
             onMoveSelected: widget.onMoveSelected,
             onGoBack: widget.onGoBack,
             onGoForward: widget.onGoForward,
+            onHoverMove: widget.onHoverTreeMove,
           );
 
     return Column(
@@ -226,9 +236,11 @@ class _RepertoireTreePaneState extends State<RepertoireTreePane> {
     return OpeningExplorerPanel(
       service: _explorer!,
       fen: widget.fen,
+      movePath: widget.currentMoveSequence,
       repertoireMovesAtPosition: widget.repertoireMovesAtPosition(),
       onPlayMove: widget.onPlayMove,
       onAddMove: widget.onAddMove,
+      onHoverMove: widget.onHoverExplorerMove,
     );
   }
 }

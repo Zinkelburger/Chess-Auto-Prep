@@ -53,9 +53,20 @@ class RepertoireAuthoring {
   }
 
   /// The last game in a multi-game PGN (or the whole string if only one).
+  ///
+  /// Cut from the last `[Event ` line start, the same boundary
+  /// [pgn.splitPgnIntoGames] uses, so a browse add does not re-split the
+  /// whole updated file to take one game off its end.  Text with no `[Event `
+  /// header (a bare move list) still goes through the splitter, which
+  /// synthesises headers for it.
   String extractLastGamePgn(String fullPgn) {
-    final games = pgn.splitPgnIntoGames(fullPgn);
-    return games.isEmpty ? fullPgn : games.last;
+    final start = pgn.lastGameStart(fullPgn);
+    if (start < 0) {
+      final games = pgn.splitPgnIntoGames(fullPgn);
+      return games.isEmpty ? fullPgn : games.last;
+    }
+    // The splitter terminates its last chunk with one extra newline.
+    return '${fullPgn.substring(start)}\n';
   }
 
   /// Index of the line whose moves exactly equal [prefix], or null.
@@ -115,7 +126,6 @@ class RepertoireAuthoring {
       startPosition: line.startPosition,
       fullPgn: _service.appendSanToGamePgn(line.fullPgn, line.moves, newMove),
       comments: line.comments,
-      variations: line.variations,
       headers: line.headers,
       importance: line.importance,
     );

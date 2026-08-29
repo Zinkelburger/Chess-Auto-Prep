@@ -9,7 +9,10 @@
 /// reads as structure without becoming separate files.
 ///
 /// Nodes are immutable snapshots. Mutations go through the outline service,
-/// which edits the disk and rebuilds.
+/// which edits the disk and rebuilds.  Because a snapshot never changes,
+/// anything derived from it — line counts, section grouping, the lowercase
+/// text a search matches against, a line's preview — is computed once and
+/// kept on the node; the panel reads these on every rebuild.
 library;
 
 import '../../../utils/movetext_builder.dart';
@@ -37,11 +40,14 @@ class OutlineFolder extends OutlineNode {
   /// Sub-folders first, then chapters, each sorted by name.
   final List<OutlineNode> children;
 
-  const OutlineFolder({
+  OutlineFolder({
     required this.path,
     required this.name,
     required this.children,
   });
+
+  /// Lowercase name, for search.
+  late final String nameLower = name.toLowerCase();
 
   List<OutlineFolder> get folders =>
       children.whereType<OutlineFolder>().toList();
@@ -66,7 +72,15 @@ class OutlineFolder extends OutlineNode {
     }
   }
 
-  int get lineCount => allChapters.fold<int>(0, (n, c) => n + c.lineCount);
+  late final int lineCount = allChapters.fold<int>(
+    0,
+    (n, c) => n + c.lineCount,
+  );
+
+  /// Chapters below this folder, materialised once (see [allChapters]).
+  late final List<OutlineChapter> chapterList = allChapters.toList(
+    growable: false,
+  );
 
   /// The chapter at [chapterPath] anywhere below this folder, or null.
   OutlineChapter? findChapter(String chapterPath) {
@@ -105,7 +119,7 @@ class OutlineChapter extends OutlineNode {
   /// Line count when [lines] is not loaded — from the chapter listing.
   final int knownLineCount;
 
-  const OutlineChapter({
+  OutlineChapter({
     required this.path,
     required this.name,
     this.lines,
@@ -115,20 +129,30 @@ class OutlineChapter extends OutlineNode {
   bool get isLoaded => lines != null;
   int get lineCount => lines?.length ?? knownLineCount;
 
-  /// Section titles in first-seen order (from `[White]` chapter headers),
-  /// with `null` for untitled lines. Empty when the file has no sections.
-  List<String?> get sections {
-    final seen = <String?>[];
+  /// Lowercase name, for search.
+  late final String nameLower = name.toLowerCase();
+
+  /// Lines grouped by section, in first-seen section order.  Empty when the
+  /// file has no `[White]` chapter headers at all, so [sections] is empty
+  /// for a hand-made chapter and the panel lists its lines flat.
+  late final Map<String?, List<OutlineLine>> linesBySection = _groupBySection();
+
+  Map<String?, List<OutlineLine>> _groupBySection() {
+    final grouped = <String?, List<OutlineLine>>{};
     var titled = false;
     for (final l in lines ?? const <OutlineLine>[]) {
       if (l.section != null) titled = true;
-      if (!seen.contains(l.section)) seen.add(l.section);
+      (grouped[l.section] ??= []).add(l);
     }
-    return titled ? seen : const [];
+    return titled ? grouped : const {};
   }
 
+  /// Section titles in first-seen order (from `[White]` chapter headers),
+  /// with `null` for untitled lines. Empty when the file has no sections.
+  List<String?> get sections => linesBySection.keys.toList(growable: false);
+
   List<OutlineLine> linesIn(String? section) =>
-      (lines ?? const []).where((l) => l.section == section).toList();
+      linesBySection[section] ?? const [];
 
   OutlineChapter copyWith({List<OutlineLine>? lines, int? knownLineCount}) =>
       OutlineChapter(
@@ -162,7 +186,7 @@ class OutlineLine extends OutlineNode {
   /// A database game kept as illustration, not a line to know.
   final bool isModelGame;
 
-  const OutlineLine({
+  OutlineLine({
     required this.path,
     required this.id,
     required this.gameIndex,
@@ -171,6 +195,16 @@ class OutlineLine extends OutlineNode {
     this.section,
     this.isModelGame = false,
   });
+
+  /// Lowercase name and moves, what a search term is matched against.
+  late final String searchText =
+      '${name.toLowerCase()}\n${moves.join(' ').toLowerCase()}';
+
+  /// [preview] with the default length — what every row shows.
+  late final String previewLabel = preview();
+
+  /// Whether [searchText] contains [needle] (already lowercase).
+  bool matches(String needle) => searchText.contains(needle);
 
   /// Whether this line passes through the position reached by [prefix]
   /// (SAN sequence from the start). The empty prefix matches everything.

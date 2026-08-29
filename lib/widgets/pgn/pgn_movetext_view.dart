@@ -12,14 +12,14 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 
+import '../../core/pgn/mainline_positions.dart';
 import '../../models/move_tree.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/pgn_text_styles.dart';
 import 'comment_editor.dart';
 import 'comment_prose_spans.dart';
 import 'movetext_primitives.dart' show MoveChip;
-import '../../utils/chess_utils.dart'
-    show coordsAtPly, isNullMoveSan, playSanOrNullMove;
+import '../../utils/chess_utils.dart' show coordsAtPly, isNullMoveSan;
 import '../../utils/pgn_comment_utils.dart'
     show
         filterDisplayComment,

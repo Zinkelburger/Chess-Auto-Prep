@@ -4,6 +4,7 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
@@ -71,7 +72,12 @@ class OpeningTreeWidget extends StatefulWidget {
     this.onViewGamePgn,
     this.wdlPerspective = WdlPerspective.playerIsWhite,
     this.protagonistIsWhite,
+    this.onHoverMove,
   });
+
+  /// The SAN under the pointer in the move list, or null once it leaves —
+  /// so the host can echo the move as an arrow on the board.
+  final ValueChanged<String?>? onHoverMove;
 
   @override
   State<OpeningTreeWidget> createState() => _OpeningTreeWidgetState();
@@ -80,6 +86,42 @@ class OpeningTreeWidget extends StatefulWidget {
 class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
   final TextEditingController _searchController = TextEditingController();
   List<RepertoireLine> _filteredLines = [];
+
+  /// What the pane shows for one cursor position, derived once per
+  /// (tree, FEN, lines, coverage result) rather than on every rebuild.
+  ///
+  /// The tree is mutable but has no version counter; the controller swaps
+  /// the lines list whenever it grows the tree, so the list's identity
+  /// stands in for one.  `continuations` still costs a legal-move sweep and
+  /// a sort, and the pane rebuilds on every engine tick and hover.
+  _PositionView? _view;
+
+  _PositionView _viewFor(OpeningTree tree) {
+    final current = _view;
+    final coverageResult = widget.coverageResult;
+    if (current != null &&
+        identical(current.tree, tree) &&
+        identical(current.lines, widget.repertoireLines) &&
+        identical(current.coverage?.result, coverageResult) &&
+        current.fen == tree.currentFen) {
+      return current;
+    }
+    // The coverage index outlives the position; rebuild it only when the
+    // result itself changed.
+    final coverage = coverageResult == null
+        ? null
+        : identical(current?.coverage?.result, coverageResult)
+        ? current!.coverage
+        : CoverageIndex(coverageResult);
+    return _view = _PositionView(
+      tree: tree,
+      lines: widget.repertoireLines,
+      fen: tree.currentFen,
+      group: tree.currentGroup,
+      continuations: tree.continuations,
+      coverage: coverage,
+    );
+  }
 
   @override
   void initState() {
@@ -94,8 +136,15 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
   @override
   void didUpdateWidget(OpeningTreeWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.repertoireLines != widget.repertoireLines ||
-        oldWidget.currentMoveSequence != widget.currentMoveSequence) {
+    // Content compare for the move sequence: a host that rebuilds for an
+    // unrelated reason (an engine tick, a hover) must not re-filter and
+    // re-sort every line.  The lines list is compared by identity on
+    // purpose — the controller swaps it on every change.
+    if (!identical(oldWidget.repertoireLines, widget.repertoireLines) ||
+        !listEquals(
+          oldWidget.currentMoveSequence,
+          widget.currentMoveSequence,
+        )) {
       _filterLines();
     }
   }
@@ -160,8 +209,9 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
     final movePath = tree.currentMovePathString;
     // Transposition-aware: stats and continuations are merged across every
     // path that reaches this FEN, including one-ply transpositions into book.
-    final position = tree.currentGroup;
-    final continuations = tree.continuations;
+    final view = _viewFor(tree);
+    final position = view.group;
+    final continuations = view.continuations;
 
     // Reach annotation: how likely the analyzed player is to end up here.
     final protagonistIsWhite = widget.protagonistIsWhite;
@@ -329,15 +379,16 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                       parentGamesPlayed: position.gamesPlayed,
                       perspective: widget.wdlPerspective,
                       reachEstimate: childReach,
-                      coverageStatus: resolveCoverageStatus(
-                        group: child,
-                        tree: widget.tree,
-                        coverageResult: widget.coverageResult,
-                      ),
+                      coverageStatus: view.coverage?.statusOf(child),
                       onTap: () {
                         widget.onMoveSelected?.call(child.move);
                         widget.onPositionSelected?.call(child.fen);
                       },
+                      onHover: widget.onHoverMove == null
+                          ? null
+                          : (hovered) => widget.onHoverMove!(
+                              hovered ? child.move : null,
+                            ),
                     );
                   },
                 ),
@@ -766,4 +817,25 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
       ),
     );
   }
+}
+
+/// One cursor position's view of the tree: the merged group, its
+/// continuations, and the coverage index that classifies them.  See
+/// `_OpeningTreeWidgetState._viewFor` for when it is rebuilt.
+class _PositionView {
+  const _PositionView({
+    required this.tree,
+    required this.lines,
+    required this.fen,
+    required this.group,
+    required this.continuations,
+    required this.coverage,
+  });
+
+  final OpeningTree tree;
+  final List<RepertoireLine> lines;
+  final String fen;
+  final PositionGroup group;
+  final List<PositionGroup> continuations;
+  final CoverageIndex? coverage;
 }

@@ -474,9 +474,13 @@ class RepertoireGenerationStatusChip extends StatelessWidget {
 /// not "author lines by playing them"). The label is the discriminator, so
 /// it is the only thing here.
 ///
-/// The divider splits the two families the choice actually turns on: above
-/// it the moves come from the board in front of you, below it from games
-/// that already exist.
+/// The rows are ordered in two families — three verbs for making moves at
+/// the board, then two sources the moves come out of — and the labels carry
+/// that on their own. There is no rule between them: a five-row menu does
+/// not need furniture to be read. ("Plan a build" and "Import PGN" were the
+/// two labels that broke the pattern — "a build" is the pipeline's word for
+/// itself, and "Import" named the transport rather than where the lines
+/// come from.)
 class RepertoireAddLinesMenu extends StatelessWidget {
   const RepertoireAddLinesMenu({
     super.key,
@@ -493,14 +497,9 @@ class RepertoireAddLinesMenu extends StatelessWidget {
   final VoidCallback? onBuildFromGames;
   final VoidCallback? onImportPgn;
 
-  /// Whether any of the board-side entries is on offer, which is also the
-  /// only case where a divider above the games-side ones separates anything.
-  bool get _hasBoardEntries =>
-      onPlanBuild != null || onGenerate != null || onBuildByPlaying != null;
-
   List<AppMenuEntry> get _entries => [
     if (onPlanBuild != null)
-      AppMenuEntry(label: 'Plan a build…', onRun: onPlanBuild!),
+      AppMenuEntry(label: 'Plan the lines…', onRun: onPlanBuild!),
     if (onGenerate != null)
       AppMenuEntry(label: 'Generate from here…', onRun: onGenerate!),
     // Named for what the user does, not for the mode's internal name: the
@@ -508,20 +507,12 @@ class RepertoireAddLinesMenu extends StatelessWidget {
     if (onBuildByPlaying != null)
       AppMenuEntry(label: 'Play the moves myself…', onRun: onBuildByPlaying!),
     if (onBuildFromGames != null)
-      AppMenuEntry(
-        label: 'From my games…',
-        onRun: onBuildFromGames!,
-        dividerAbove: _hasBoardEntries,
-      ),
+      AppMenuEntry(label: 'From my games…', onRun: onBuildFromGames!),
     // One entry, not the old "Load from disk…" / "Paste PGN…" pair: the
     // dialog it opens offers both, so the menu no longer asks the user to
     // pick a transport before it will show them the import.
     if (onImportPgn != null)
-      AppMenuEntry(
-        label: 'Import PGN…',
-        onRun: onImportPgn!,
-        dividerAbove: onBuildFromGames == null && _hasBoardEntries,
-      ),
+      AppMenuEntry(label: 'From a PGN…', onRun: onImportPgn!),
   ];
 
   @override
@@ -536,13 +527,11 @@ class RepertoireAddLinesMenu extends StatelessWidget {
       child: Center(
         child: MenuAnchor(
           menuChildren: [
-            for (final e in entries) ...[
-              if (e.dividerAbove) const Divider(height: 1),
+            for (final e in entries)
               MenuItemButton(
                 onPressed: e.onRun,
                 child: Text(e.label, style: const TextStyle(fontSize: 13)),
               ),
-            ],
           ],
           builder: (context, controller, _) {
             void toggle() =>

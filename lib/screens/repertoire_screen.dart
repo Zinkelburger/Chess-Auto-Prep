@@ -78,7 +78,9 @@ import '../widgets/build_by_playing/build_session_pane.dart';
 import '../widgets/games_repertoire/draft_review_pane.dart';
 import '../widgets/layout/jobs_tab_content.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
+import '../models/board_annotation.dart';
 import '../models/explorer_response.dart';
+import '../utils/chess_utils.dart' show sanToUci;
 import 'repertoire_chapters_screen.dart';
 import 'repertoire_selection_screen.dart';
 import '../features/repertoire/controllers/build_launcher.dart';
@@ -270,7 +272,6 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
         builder: (_) => BuildConfigScreen(
           repertoireName: _configRouteTitle,
           title: 'Generate from here',
-          icon: Icons.auto_awesome,
           startSignal: _generationController,
           hasStarted: () => _generationController.isGenerating,
           child: RepertoireGenerationTab(
@@ -306,7 +307,6 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
         builder: (_) => BuildConfigScreen(
           repertoireName: _configRouteTitle,
           title: 'Audit for gaps',
-          icon: Icons.policy_outlined,
           startSignal: _auditController,
           hasStarted: () => _auditController.isAuditing,
           child: AuditConfigPanel(
@@ -544,8 +544,26 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     if (mounted) setState(() {});
   }
 
+  /// [RepertoireController.structureVersion] the screen last rebuilt for.
+  /// A notification that leaves it unchanged is a cursor move, which only
+  /// the position zones need to hear about.
+  int _structureSeen = -1;
+
   void _onRepertoireChanged() {
     if (!mounted) return;
+
+    // A pure cursor move reaches the board, PGN, outline and analysis zones
+    // through their own [ListenableBuilder]s (see [_cursorScoped]); the rest
+    // of the screen — toolbar, banners, bottom pane, status bar — shows
+    // nothing that depends on the cursor and stays as built.  Only the
+    // ephemeral-preview reset below needs the screen itself when the user
+    // navigates away from a previewed finding.
+    final structureChanged = _controller.structureVersion != _structureSeen;
+    if (!structureChanged &&
+        (_ephemeralPreview == null || _navigatingToFinding)) {
+      return;
+    }
+    _structureSeen = _controller.structureVersion;
 
     String? newRepertoireId;
     setState(() {

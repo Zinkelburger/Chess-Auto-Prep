@@ -67,12 +67,11 @@ class MaiaService {
     }
 
     final result = await _evaluateOnnx(fen, elo);
-    await MaiaCache.instance.put(
-      fen,
-      elo,
-      result.policy,
-      result.winProbability,
-    );
+    // Not awaited: the write is batched behind a 500 ms timer, and this call
+    // sits on the node-expansion critical path.  The in-memory mirror is
+    // filled synchronously, so the next `get` for this position hits it
+    // regardless of when the batch commits.
+    MaiaCache.instance.putSoon(fen, elo, result.policy, result.winProbability);
     return result;
   }
 

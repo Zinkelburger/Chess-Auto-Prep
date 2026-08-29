@@ -21,10 +21,18 @@ mixin _MetadataOps on ChangeNotifier {
 
   Timer? persistDebounce;
 
+  /// Games whose rating or summary changed since the last write.  Their
+  /// `[StudyRating]` / `[StudySummary]` headers are rewritten at persist
+  /// time; every other game's text is written as it stands.  Rewriting all
+  /// of them — in a `compute` that copied the whole collection into another
+  /// isolate — was the cost of every comment edit.
+  final Set<PgnGameEntry> _dirtyGames = Set.identity();
+
   void setRating(int stars) {
     if (filteredGames.isEmpty) return;
     final game = filteredGames[currentGameIndex];
     game.studyRating = stars;
+    _dirtyGames.add(game);
     notifyListeners();
     unawaited(persistMetadata());
     onReclaimFocus?.call();
@@ -37,36 +45,70 @@ mixin _MetadataOps on ChangeNotifier {
     });
   }
 
+  /// Write the collection back to its file: dirty games get their metadata
+  /// headers regenerated, the rest are written from memory as they are.
+  ///
+  /// Everything the write depends on is captured before the first `await`,
+  /// so [flushPendingMetadata] can call this for a collection that is about
+  /// to be replaced.  The FEN index is only marked stale here — its stamp
+  /// no longer matches the file — and is persisted once when the collection
+  /// is closed rather than after every edit.
   Future<void> doPersistMetadata() async {
-    if (filePath == null) return;
-    final gameData = allGames
-        .map(
-          (g) =>
-              (pgn: g.pgnText, rating: g.studyRating, summary: g.studySummary),
-        )
-        .toList();
+    persistDebounce?.cancel();
+    persistDebounce = null;
+    final path = filePath;
+    if (path == null || !isActive()) return;
+    final games = allGames;
+    final dirty = List.of(_dirtyGames);
+    _dirtyGames.clear();
 
-    final result = await compute(buildMetadataOutput, gameData);
-
-    if (!isActive()) return;
-    for (int i = 0; i < result.length && i < allGames.length; i++) {
-      allGames[i].pgnText = result[i];
+    if (dirty.isNotEmpty) {
+      final rewritten = buildMetadataOutput([
+        for (final g in dirty)
+          (pgn: g.pgnText, rating: g.studyRating, summary: g.studySummary),
+      ]);
+      for (var i = 0; i < dirty.length; i++) {
+        dirty[i].pgnText = rewritten[i];
+      }
     }
+
     try {
       await StorageFactory.instance.writeFile(
-        filePath!,
-        '${result.join('\n\n')}\n',
+        path,
+        '${games.map((g) => g.pgnText).join('\n\n')}\n',
       );
+      // Everything past this point writes back to *controller* state, which
+      // is only ours while the collection we wrote is still the loaded one —
+      // and it may not be, because `_adoptCollection` fires this flush and
+      // then immediately replaces the collection.  Stamping regardless would
+      // hang the outgoing file's mtime on the incoming collection (defeating
+      // every staleness check) and mark the incoming FEN index stale for a
+      // write that never touched it.
+      if (filePath != path || !identical(allGames, games)) return;
       // This write is ours, and the in-memory copy above already matches it.
       // Re-stamping keeps a caller comparing mtimes from reading our own save
       // as somebody else's edit and reloading the whole file for nothing.
       loadedFileModified = (await StorageFactory.instance.fileStat(
-        filePath!,
+        path,
       ))?.modified;
-      await _fenIndex.persist(filePath: filePath, gameTotal: allGames.length);
+      _fenIndex.markStale();
     } catch (e) {
       debugPrint('Failed to persist metadata: $e');
     }
+  }
+
+  /// Run a debounced persist now (for the collection currently loaded), and
+  /// persist the FEN index if any write left its stamp behind.  Called when
+  /// the collection is replaced or the controller is disposed.
+  Future<void> flushPendingMetadata() async {
+    // Captured before the first await.  This is called *by* the code that is
+    // about to swap the collection out, so reading [filePath] afterwards
+    // would name the file that is arriving and write the outgoing
+    // collection's index into its `.fenidx`.
+    final path = filePath;
+    final total = allGames.length;
+    if (persistDebounce != null) await doPersistMetadata();
+    await _fenIndex.flushIfStale(filePath: path, gameTotal: total);
   }
 
   void persistMoveComments(String updatedPgnMovetext) {
@@ -80,10 +122,12 @@ mixin _MetadataOps on ChangeNotifier {
   void persistMoveCommentsFor(PgnGameEntry game, String updatedPgnMovetext) {
     if (filePath == null) return;
 
-    final headerEnd = RegExp(r'\]\s*\n').allMatches(game.pgnText).last;
+    final headerEnd = _headerBlockEndRe.allMatches(game.pgnText).last;
     final headerPart = game.pgnText.substring(0, headerEnd.end);
     game.pgnText = '$headerPart\n$updatedPgnMovetext\n';
 
     unawaited(persistMetadata());
   }
 }
+
+final RegExp _headerBlockEndRe = RegExp(r'\]\s*\n');

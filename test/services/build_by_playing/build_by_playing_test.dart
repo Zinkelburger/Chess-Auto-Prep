@@ -9,6 +9,10 @@ import 'package:chess_auto_prep/services/build_by_playing/build_by_playing_confi
 import 'package:chess_auto_prep/services/build_by_playing/build_by_playing_controller.dart';
 import 'package:chess_auto_prep/services/explorer_cache_service.dart';
 import 'package:chess_auto_prep/services/lichess_api_client.dart';
+import 'package:chess_auto_prep/services/live_explorer_service.dart'
+    show ExplorerQuery;
+import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart'
+    show LichessDatabase;
 
 /// Serves canned Explorer responses keyed by the board field of the FEN;
 /// unknown positions get an empty response (0 games → line cutoff).
@@ -113,19 +117,42 @@ void main() {
 
   group('ExplorerSourceConfig', () {
     test('cache key separates masters from lichess filters', () {
-      const masters = ExplorerSourceConfig(useMasters: true);
-      const lichess = ExplorerSourceConfig(speeds: 'blitz', ratings: '2000');
+      final masters = ExplorerSourceConfig(useMasters: true);
+      final lichess = ExplorerSourceConfig(speeds: 'blitz', ratings: '2000');
       expect(masters.cacheKeyPrefix, 'masters');
       expect(lichess.cacheKeyPrefix, 'lichess|blitz|2000');
       expect(masters.cacheKeyPrefix == lichess.cacheKeyPrefix, isFalse);
     });
 
     test('equality follows field values', () {
-      const a = ExplorerSourceConfig(speeds: 'blitz', ratings: '2000');
-      const b = ExplorerSourceConfig(speeds: 'blitz', ratings: '2000');
-      const c = ExplorerSourceConfig(speeds: 'rapid', ratings: '2000');
+      final a = ExplorerSourceConfig(speeds: 'blitz', ratings: '2000');
+      final b = ExplorerSourceConfig(speeds: 'blitz', ratings: '2000');
+      final c = ExplorerSourceConfig(speeds: 'rapid', ratings: '2000');
       expect(a, b);
       expect(a == c, isFalse);
+    });
+
+    test('filter order does not split one position into two entries', () {
+      final stored = ExplorerSourceConfig(
+        speeds: 'blitz,rapid,classical',
+        ratings: '2500,2000,2200',
+      );
+      final sorted = ExplorerSourceConfig(
+        speeds: 'blitz,classical,rapid',
+        ratings: '2000,2200,2500',
+      );
+      expect(stored.cacheKeyPrefix, sorted.cacheKeyPrefix);
+      expect(stored, sorted);
+    });
+
+    test('the panel and build-by-playing agree on the default filters', () {
+      // The panel sorts a Set; build-by-playing passes the string it stored.
+      // The stock 'blitz,rapid,classical' is not in sorted order, so before
+      // the type canonicalised its own fields these two never shared a hit.
+      const panel = ExplorerQuery(database: LichessDatabase.lichess);
+      final stored = ExplorerSourceConfig();
+      expect(panel.source, stored);
+      expect(panel.source.cacheKeyPrefix, stored.cacheKeyPrefix);
     });
   });
 

@@ -72,49 +72,18 @@ _legalSanCache = {};
       startWhiteToMove: view.startingWhiteTurn,
     );
 
-/// Replay the mainline into a list of positions: `[k]` is the board after
-/// `k` half-moves. Returns null when there is no start position, or when
-/// inline lines are disabled (nothing consumes the positions then).
-//
-// Per-game cache for the mainline replay: navigating just re-renders the same
-// game, so replaying every SAN on each rebuild is wasted work. Keyed on the
-// [moveHistory] list identity via an Expando so each live movetext view keeps
-// its own entry — a single shared slot thrashed (full-game dartchess replay
-// per build) whenever two viewers were mounted at once. The stored start and
-// length are re-validated so comment/NAG edits (same positions) reuse the
-// cache while an appended move (changed length) rebuilds it.
-class _PrefixCacheEntry {
-  const _PrefixCacheEntry(this.start, this.length, this.positions);
-  final Position start;
-  final int length;
-  final List<Position> positions;
-}
-
-final Expando<_PrefixCacheEntry> _prefixCache = Expando<_PrefixCacheEntry>();
-
+/// The mainline as a list of positions: `[k]` is the board after `k`
+/// half-moves. Returns null when there is no start position, or when inline
+/// lines are disabled (nothing consumes the positions then).
+///
+/// Served by [MainlinePositions], the memo the viewer model navigates from,
+/// keyed on the same `moveHistory` list — so the movetext view and the model
+/// never replay the same game separately, and an appended move extends the
+/// shared entry instead of rebuilding it.
 List<Position>? _buildPrefixPositions(PgnMovetextView view) {
   final start = view.startPosition;
   if (start == null || view.onPlayInlineLine == null) return null;
-  final cached = _prefixCache[view.moveHistory];
-  if (cached != null &&
-      identical(cached.start, start) &&
-      cached.length == view.moveHistory.length) {
-    return cached.positions;
-  }
-  final positions = <Position>[start];
-  Position pos = start;
-  for (final data in view.moveHistory) {
-    final next = playSanOrNullMove(pos, data.san);
-    if (next == null) break;
-    pos = next;
-    positions.add(pos);
-  }
-  _prefixCache[view.moveHistory] = _PrefixCacheEntry(
-    start,
-    view.moveHistory.length,
-    positions,
-  );
-  return positions;
+  return MainlinePositions.of(view.moveHistory, start).positions;
 }
 
 Position? _posAt(List<Position>? prefix, int ply) =>

@@ -52,13 +52,29 @@ class ExplorerResponse {
   final String? openingName;
   final String? openingEco;
 
+  /// Result split over every game at this position, as reported by the
+  /// API's top-level `white`/`draws`/`black` fields. Null when the caller
+  /// built the response without them; see [whiteTotal] for the fallback.
+  final int? white;
+  final int? draws;
+  final int? black;
+
   const ExplorerResponse({
     required this.fen,
     required this.moves,
     required this.totalGames,
     this.openingName,
     this.openingEco,
+    this.white,
+    this.draws,
+    this.black,
   });
+
+  /// Result totals for the position — the explorer's Σ row. Falls back to
+  /// summing [moves] when the API-level counts were not supplied.
+  int get whiteTotal => white ?? moves.fold(0, (n, m) => n + m.white);
+  int get drawTotal => draws ?? moves.fold(0, (n, m) => n + m.draws);
+  int get blackTotal => black ?? moves.fold(0, (n, m) => n + m.black);
 
   /// Parse a raw JSON map returned by the Lichess Explorer endpoint.
   factory ExplorerResponse.fromJson(
@@ -101,6 +117,9 @@ class ExplorerResponse {
       totalGames: totalGames,
       openingName: opening?['name'] as String?,
       openingEco: opening?['eco'] as String?,
+      white: data['white'] as int?,
+      draws: data['draws'] as int?,
+      black: data['black'] as int?,
     );
   }
 

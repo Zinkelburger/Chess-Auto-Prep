@@ -21,6 +21,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../theme/app_colors.dart';
 import '../controllers/repertoire_outline_controller.dart';
+import '../models/outline_rows.dart';
 import '../models/repertoire_outline.dart';
 import '../services/repertoire_outline_service.dart';
 
@@ -125,32 +126,11 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
     });
   }
 
-  bool get _filtering =>
-      _search.isNotEmpty || (_atPosition && widget.currentMoves.isNotEmpty);
-
-  bool _lineVisible(OutlineLine line) {
-    if (_atPosition && !line.passesThrough(widget.currentMoves)) return false;
-    if (_search.isEmpty) return true;
-    return line.name.toLowerCase().contains(_search) ||
-        line.moves.join(' ').toLowerCase().contains(_search);
-  }
-
-  int _visibleCount(OutlineChapter chapter) {
-    final lines = chapter.lines;
-    if (lines == null) return chapter.lineCount;
-    if (!_filtering) return lines.length;
-    return lines.where(_lineVisible).length;
-  }
-
-  bool _chapterVisible(OutlineChapter chapter) =>
-      !_filtering ||
-      _visibleCount(chapter) > 0 ||
-      chapter.name.toLowerCase().contains(_search);
-
-  bool _folderVisible(OutlineFolder folder) =>
-      !_filtering ||
-      folder.allChapters.any(_chapterVisible) ||
-      folder.name.toLowerCase().contains(_search);
+  OutlineFilter get _filter => OutlineFilter(
+    search: _search,
+    atPosition: _atPosition,
+    currentMoves: widget.currentMoves,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -164,7 +144,7 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
             _Header(
               title: widget.title ?? outline?.name ?? 'Repertoire',
               lineCount: outline?.lineCount ?? 0,
-              chapterCount: outline == null ? 0 : outline.allChapters.length,
+              chapterCount: outline == null ? 0 : outline.chapterList.length,
               loading: _c.isLoading,
               onNewChapter: outline == null
                   ? null
@@ -214,18 +194,16 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
         title: 'No chapters yet',
         detail:
             'A repertoire is chapters, and chapters hold lines. Make a '
-            'chapter, then fill it: Add lines ▸ Generate with engine, or '
-            'import a PGN.',
+            'chapter, then fill it from the Add lines menu.',
         action: Wrap(
           spacing: 8,
           runSpacing: 8,
           alignment: WrapAlignment.center,
           children: [
             if (widget.onPlanBuild != null)
-              FilledButton.icon(
+              FilledButton(
                 onPressed: widget.onPlanBuild,
-                icon: const Icon(Icons.route_outlined, size: 18),
-                label: const Text('Plan a build'),
+                child: const Text('Plan the lines'),
               ),
             FilledButton.tonalIcon(
               onPressed: () => _promptCreateChapter(outline.path),
@@ -237,8 +215,8 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
       );
     }
 
-    final rows = <Widget>[];
-    _appendFolder(rows, outline, depth: 0, isRoot: true);
+    final filter = _filter;
+    final rows = _c.rows(filter);
     if (rows.isEmpty) {
       return _Empty(
         icon: Icons.search_off,
@@ -252,138 +230,86 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
         ),
       );
     }
-    return ListView(
+    // Rows are flattened by the controller once per change and rendered
+    // lazily here: a fixed extent lets the list size itself without
+    // building a single row, and stable keys keep row state (drag, hover)
+    // attached across rebuilds.
+    return ListView.builder(
       primary: false,
       padding: const EdgeInsets.only(bottom: 24),
-      children: rows,
+      itemExtent: OutlineRow.height,
+      itemCount: rows.length,
+      itemBuilder: (context, index) => _buildRow(rows[index]),
     );
   }
 
   // ── Tree rows ──────────────────────────────────────────────────────────
 
-  void _appendFolder(
-    List<Widget> rows,
-    OutlineFolder folder, {
-    required int depth,
-    required bool isRoot,
-  }) {
-    if (!isRoot) {
-      if (!_folderVisible(folder)) return;
-      rows.add(
-        _DropTarget(
+  Widget _buildRow(OutlineRow row) {
+    switch (row) {
+      case FolderRow(:final folder, :final depth, :final expanded):
+        return _DropTarget(
+          key: ValueKey(row.key),
           accepts: (d) => _canDropOnFolder(d, folder),
           onDrop: (d) => _dropOnFolder(d, folder),
           child: _FolderRow(
             folder: folder,
             depth: depth,
-            expanded: _c.isExpanded(folder.path),
+            expanded: expanded,
             onToggle: () => _c.toggleFolder(folder.path),
             onContextMenu: (pos) => _folderMenu(pos, folder),
           ),
-        ),
-      );
-      if (!_c.isExpanded(folder.path)) return;
-    }
-    final childDepth = isRoot ? depth : depth + 1;
-    for (final child in folder.children) {
-      switch (child) {
-        case OutlineFolder f:
-          _appendFolder(rows, f, depth: childDepth, isRoot: false);
-        case OutlineChapter c:
-          _appendChapter(rows, c, depth: childDepth);
-        case OutlineLine _:
-          break;
-      }
-    }
-  }
-
-  void _appendChapter(
-    List<Widget> rows,
-    OutlineChapter chapter, {
-    required int depth,
-  }) {
-    if (!_chapterVisible(chapter)) return;
-    final active =
-        _c.activeChapterPath != null &&
-        p.equals(_c.activeChapterPath!, chapter.path);
-    // A filter unfolds every chapter that has a hit; otherwise the user's
-    // fold state rules.
-    final open = _filtering || _c.isChapterOpen(chapter.path);
-    rows.add(
-      _DropTarget(
-        accepts: (d) => _canDropOnChapter(d, chapter),
-        onDrop: (d) => _dropOnChapter(d, chapter),
-        child: _ChapterRow(
-          chapter: chapter,
+        );
+      case ChapterRow(
+        :final chapter,
+        :final depth,
+        :final active,
+        :final open,
+        :final visibleLines,
+      ):
+        return _DropTarget(
+          key: ValueKey(row.key),
+          accepts: (d) => _canDropOnChapter(d, chapter),
+          onDrop: (d) => _dropOnChapter(d, chapter),
+          child: _ChapterRow(
+            chapter: chapter,
+            depth: depth,
+            active: active,
+            open: open,
+            badge: widget.chapterBadge?.call(chapter.path),
+            visibleLines: visibleLines,
+            onTap: () {
+              if (!active) widget.onOpenChapter(chapter.path);
+              _c.setChapterOpen(chapter.path, true);
+            },
+            onToggle: () => _c.toggleChapter(chapter.path),
+            onContextMenu: (pos) => _chapterMenu(pos, chapter),
+          ),
+        );
+      case SectionRow(:final title, :final depth, :final count):
+        return _SectionRow(
+          key: ValueKey(row.key),
+          title: title ?? 'Other lines',
           depth: depth,
-          active: active,
-          open: open,
-          badge: widget.chapterBadge?.call(chapter.path),
-          visibleLines: _visibleCount(chapter),
-          onTap: () {
-            if (!active) widget.onOpenChapter(chapter.path);
-            _c.setChapterOpen(chapter.path, true);
-          },
-          onToggle: () => _c.toggleChapter(chapter.path),
-          onContextMenu: (pos) => _chapterMenu(pos, chapter),
-        ),
-      ),
-    );
-    if (!open) return;
-    final lines = chapter.lines;
-    if (lines == null) return;
-    if (lines.isEmpty) {
-      rows.add(
-        _Hint(
-          depth: depth + 1,
-          text: 'Empty — add lines to fill this chapter.',
-        ),
-      );
-      return;
+          count: count,
+        );
+      case LineRow(:final chapter, :final line, :final depth):
+        final sel = widget.selectedLine;
+        final selected =
+            sel != null &&
+            sel.gameIndex == line.gameIndex &&
+            p.equals(sel.chapterPath, chapter.path);
+        return _LineRow(
+          key: ValueKey(row.key),
+          line: line,
+          depth: depth,
+          selected: selected,
+          onTap: () => widget.onOpenLine(chapter.path, line),
+          onContextMenu: (pos) => _lineMenu(pos, chapter, line),
+        );
+      case HintRow(:final depth, :final text):
+        return _Hint(key: ValueKey(row.key), depth: depth, text: text);
     }
-    final sections = chapter.sections;
-    if (sections.isEmpty) {
-      for (final line in lines) {
-        if (_lineVisible(line)) _appendLine(rows, chapter, line, depth + 1);
-      }
-      return;
-    }
-    for (final section in sections) {
-      final inSection = chapter.linesIn(section).where(_lineVisible).toList();
-      if (inSection.isEmpty) continue;
-      rows.add(
-        _SectionRow(
-          title: section ?? 'Other lines',
-          depth: depth + 1,
-          count: inSection.length,
-        ),
-      );
-      for (final line in inSection) {
-        _appendLine(rows, chapter, line, depth + 2);
-      }
-    }
-  }
-
-  void _appendLine(
-    List<Widget> rows,
-    OutlineChapter chapter,
-    OutlineLine line,
-    int depth,
-  ) {
-    final sel = widget.selectedLine;
-    final selected =
-        sel != null &&
-        sel.gameIndex == line.gameIndex &&
-        p.equals(sel.chapterPath, chapter.path);
-    rows.add(
-      _LineRow(
-        line: line,
-        depth: depth,
-        selected: selected,
-        onTap: () => widget.onOpenLine(chapter.path, line),
-        onContextMenu: (pos) => _lineMenu(pos, chapter, line),
-      ),
-    );
   }
 
   // ── Drag & drop rules ──────────────────────────────────────────────────
@@ -999,6 +925,7 @@ class _DropTarget extends StatelessWidget {
   final ValueChanged<OutlineDragData> onDrop;
   final Widget child;
   const _DropTarget({
+    super.key,
     required this.accepts,
     required this.onDrop,
     required this.child,
@@ -1031,7 +958,10 @@ class _RowShell extends StatelessWidget {
   final VoidCallback? onTap;
   final ValueChanged<Offset> onContextMenu;
   final Widget child;
-  final Widget? feedbackLabel;
+
+  /// Text shown under the pointer while dragging; defaults to the node's
+  /// name.  Built only when a drag actually starts.
+  final String Function()? feedbackLabel;
 
   const _RowShell({
     required this.node,
@@ -1050,7 +980,7 @@ class _RowShell extends StatelessWidget {
       child: Container(
         color: highlighted ? AppColors.accent.withValues(alpha: 0.12) : null,
         padding: EdgeInsets.only(left: 8.0 + depth * 14, right: 6),
-        height: 30,
+        height: OutlineRow.height,
         child: child,
       ),
     );
@@ -1066,11 +996,14 @@ class _RowShell extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             constraints: const BoxConstraints(maxWidth: 240),
-            child: DefaultTextStyle(
-              style: const TextStyle(fontSize: 12, color: AppColors.ink),
-              child:
-                  feedbackLabel ??
-                  Text(node.name, overflow: TextOverflow.ellipsis),
+            // The label is only ever laid out in the drag overlay, so the
+            // Builder defers its (string-building) work until then.
+            child: Builder(
+              builder: (_) => Text(
+                feedbackLabel?.call() ?? node.name,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12, color: AppColors.ink),
+              ),
             ),
           ),
         ),
@@ -1222,6 +1155,7 @@ class _SectionRow extends StatelessWidget {
   final int depth;
   final int count;
   const _SectionRow({
+    super.key,
     required this.title,
     required this.depth,
     required this.count,
@@ -1229,12 +1163,14 @@ class _SectionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return Container(
+      height: OutlineRow.height,
+      alignment: Alignment.bottomLeft,
       padding: EdgeInsets.only(
         left: 12.0 + depth * 14,
         right: 8,
         top: 4,
-        bottom: 2,
+        bottom: 4,
       ),
       child: Row(
         children: [
@@ -1265,6 +1201,7 @@ class _LineRow extends StatelessWidget {
   final ValueChanged<Offset> onContextMenu;
 
   const _LineRow({
+    super.key,
     required this.line,
     required this.depth,
     required this.selected,
@@ -1280,10 +1217,7 @@ class _LineRow extends StatelessWidget {
       highlighted: selected,
       onTap: onTap,
       onContextMenu: onContextMenu,
-      feedbackLabel: Text(
-        '${line.name} · ${line.preview(maxPlies: 4)}',
-        overflow: TextOverflow.ellipsis,
-      ),
+      feedbackLabel: () => '${line.name} · ${line.preview(maxPlies: 4)}',
       child: Row(
         children: [
           Icon(
@@ -1309,7 +1243,7 @@ class _LineRow extends StatelessWidget {
                 const SizedBox(width: 8),
                 Flexible(
                   child: Text(
-                    line.preview(),
+                    line.previewLabel,
                     style: const TextStyle(
                       fontSize: 11,
                       fontFamily: 'monospace',
@@ -1344,15 +1278,12 @@ class _Count extends StatelessWidget {
 class _Hint extends StatelessWidget {
   final int depth;
   final String text;
-  const _Hint({required this.depth, required this.text});
+  const _Hint({super.key, required this.depth, required this.text});
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.only(
-      left: 12.0 + depth * 14,
-      top: 4,
-      bottom: 6,
-      right: 8,
-    ),
+  Widget build(BuildContext context) => Container(
+    height: OutlineRow.height,
+    alignment: Alignment.centerLeft,
+    padding: EdgeInsets.only(left: 12.0 + depth * 14, right: 8),
     child: Text(
       text,
       style: const TextStyle(

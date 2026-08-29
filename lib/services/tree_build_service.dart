@@ -2,9 +2,16 @@
 /// evaluations on every node, matching the C tree_builder algorithm.
 ///
 /// Phase 1 (this service): frontier-driven build with constant MultiPV at
-/// our-move nodes, single-source opponent moves (Maia OR Lichess with an
-/// optional Maia Dirichlet prior), eval-window pruning, and transposition
-/// detection — matches C tree_builder.
+/// our-move nodes, single-source opponent moves (the master-games book with
+/// a Maia Dirichlet prior, or Maia alone), eval-window pruning, and
+/// transposition detection — matches C tree_builder.
+///
+/// The frontier is expanded by several *lanes* at once, one per engine
+/// worker (see [BuildRun.expansionLanes]): each lane pops a node, runs the
+/// whole per-node pipeline, and pops the next.  Tree mutation only ever
+/// happens synchronously between awaits, so lanes never see a half-built
+/// node; the one thing they must not do is expand the same node twice, which
+/// the in-flight set below guarantees.
 ///
 /// Search algorithm (config.searchAlgorithm):
 ///   - Fast Expectimax (default): best-first frontier — pop the node with
@@ -35,7 +42,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import '../models/build_tree_node.dart';
-import '../utils/chess_utils.dart' show playUciMove, uciToSan;
 import '../utils/fen_utils.dart';
 import 'engine/stockfish_pool.dart';
 import 'engine/engine_lifecycle.dart';
@@ -45,6 +51,7 @@ import 'generation/build_run.dart';
 import 'generation/fen_map.dart';
 import 'generation/frontier_queue.dart';
 import 'generation/generation_config.dart';
+import 'generation/lanes.dart';
 import 'generation/node_expander.dart';
 import 'generation/opponent_prior.dart';
 import 'generation/pgn_freq_map.dart';
@@ -429,22 +436,46 @@ class TreeBuildService {
       queue.add(tree.root);
     }
 
-    while (!run.isCancelled && !run.shouldFinish() && queue.isNotEmpty) {
-      await waitIfPaused();
-      if (run.isCancelled) return;
-      final node = queue.removeFirst();
-      run.progress.onDequeue(
-        node.ply,
-        priority: effectiveSearchPriority(node),
-        frontierSize: queue.length,
-      );
-      await _processBuildNode(
-        run: run,
-        node: node,
-        queue: queue,
-        expander: expander,
-      );
+    // Nodes some lane is expanding right now.  A transposition resolved by
+    // another lane can re-queue a node whose reach just crossed the floor
+    // ([addArrivalCumP]); if that node is mid-expansion the re-queue is
+    // dropped — its children are enqueued by the expansion in progress.
+    final inFlight = <int>{};
+    final gate = LaneGate();
+
+    Future<void> lane() async {
+      while (!run.isCancelled && !run.shouldFinish()) {
+        await waitIfPaused();
+        if (run.isCancelled) return;
+        if (queue.isEmpty) {
+          if (inFlight.isEmpty) return;
+          // Another lane may still enqueue children; wait for it to finish
+          // a node rather than declaring the frontier exhausted.
+          await gate.changed;
+          continue;
+        }
+        final node = queue.removeFirst();
+        if (!inFlight.add(node.nodeId)) continue;
+        run.progress.onDequeue(
+          node.ply,
+          priority: effectiveSearchPriority(node),
+          frontierSize: queue.length,
+        );
+        try {
+          await _processBuildNode(
+            run: run,
+            node: node,
+            queue: queue,
+            expander: expander,
+          );
+        } finally {
+          inFlight.remove(node.nodeId);
+          gate.signal();
+        }
+      }
     }
+
+    await Future.wait([for (var i = 0; i < run.expansionLanes; i++) lane()]);
   }
 
   /// Below-floor check shared by the main loop and the DB-explorer loop:
@@ -484,7 +515,7 @@ class TreeBuildService {
           fenMap: run.fenMap,
         );
       }
-      node.explored = true;
+      run.markExplored(node);
       return true;
     }
     run.fenMap.putCanonical(node.fen, node);
@@ -531,7 +562,7 @@ class TreeBuildService {
             pool: _pool,
           );
         }
-        node.explored = true;
+        run.markExplored(node);
         return;
       }
       coverageOnly = true;
@@ -572,11 +603,11 @@ class TreeBuildService {
         dbOnly: !config.usesStockfish,
       );
       if (!gotEval && !config.usesStockfish) {
-        node.explored = true;
+        run.markExplored(node);
         return;
       }
       if (evalWindowPrune(node, config)) {
-        node.explored = true;
+        run.markExplored(node);
         return;
       }
     }
@@ -608,7 +639,7 @@ class TreeBuildService {
     // guessing.
     if (!run.isCancelled &&
         (node.children.isNotEmpty || node.pruneReason != PruneReason.none)) {
-      node.explored = true;
+      run.markExplored(node);
     }
   }
 
@@ -649,109 +680,121 @@ class TreeBuildService {
       (groups[canonicalizeFen(n.fen)] ??= []).add(n);
     }
 
-    int answered = 0;
-    int removed = 0;
-    int outOfTime = 0;
-    final removedLines = <PrunedLine>[];
+    final tally = _SweepTally();
     final throwawayQueue = FrontierQueue(bestFirst: false);
 
-    for (final group in groups.values) {
-      await waitIfPaused();
-      if (run.isCancelled) break;
-      // Past the budget's sweep grace we stop *answering* holes but keep
-      // walking, so the leaves we never got to are still removed rather than
-      // left dangling on an unanswered opponent move.
-      final graced = !run.sweepBudgetExhausted;
+    // Holes are independent positions, so they are answered [expansionLanes]
+    // at a time: one recorded run swept 152 minutes for 4,590 holes, one
+    // MultiPV search after another on a single worker.
+    await runLanes(
+      groups.values.toList(),
+      lanes: run.expansionLanes,
+      stop: () => run.isCancelled,
+      task: (group) => _sweepGroup(run, expander, group, throwawayQueue, tally),
+    );
 
-      final canonical = run.fenMap.getCanonical(group.first.fen);
-      if (canonical != null && !group.contains(canonical)) {
-        // The position lives elsewhere in the tree: answered there, or
-        // explicitly pruned there — these leaves resolve via transposition.
-        if (canonical.children.isNotEmpty ||
-            canonical.pruneReason != PruneReason.none) {
-          continue;
-        }
-      }
-
-      // Representative: the registered canonical when it dangles here,
-      // else the most-reachable member (registered for future resolution).
-      final rep = (canonical != null && group.contains(canonical))
-          ? canonical
-          : (group..sort(
-                  (a, b) => b.cumulativeProbability.compareTo(
-                    a.cumulativeProbability,
-                  ),
-                ))
-                .first;
-      run.fenMap.putCanonical(rep.fen, rep);
-
-      // The hole is worth answering if any path into this position carries
-      // an opponent move at/above the coverage floor.
-      var maxProb = 0.0;
-      for (final n in group) {
-        if (n.moveProbability > maxProb) maxProb = n.moveProbability;
-      }
-      for (final t in run.fenMap.getTranspositions(rep.fen)) {
-        if (t.moveProbability > maxProb) maxProb = t.moveProbability;
-      }
-
-      final worthAnswering = maxProb >= config.coverMinProb;
-      if (worthAnswering && !graced) outOfTime++;
-      if (worthAnswering && graced) {
-        final canExpand =
-            config.buildMode == BuildMode.maiaDbExplore ||
-            _pool.workerCount > 0;
-        if (config.buildMode == BuildMode.maiaDbExplore) {
-          await _evalResolver.ensureEval(
-            rep,
-            config,
-            fenMap: run.fenMap,
-            pool: _pool,
-            dbOnly: true,
-          );
-        }
-        if (canExpand) {
-          await expander.expandOurMove(rep, throwawayQueue, coverageOnly: true);
-        }
-        rep.explored = true;
-        if (rep.children.isNotEmpty) {
-          answered++;
-          continue; // duplicates resolve via transposition
-        }
-        // Now explicitly flagged (eval window) — keep, it's not silent.
-        if (rep.pruneReason != PruneReason.none) continue;
-      }
-
-      // Below the floor, or the expansion produced no answer: remove the
-      // whole equivalence group so no line ends on an unanswered move.
-      for (final n in group) {
-        removedLines.add(PrunedLine.fromNode(n));
-        _removeLeaf(tree, n);
-        removed++;
-      }
-    }
-
-    lastRemovedUncovered = removedLines;
-    if (answered > 0 || removed > 0) {
+    lastRemovedUncovered = tally.removedLines;
+    if (tally.answered > 0 || tally.removed > 0) {
       _log(
-        'Coverage sweep: $answered holes answered, '
-        '$removed uncovered leaves removed'
-        '${outOfTime > 0 ? ', $outOfTime left unanswered (out of time)' : ''}',
+        'Coverage sweep: ${tally.answered} holes answered, '
+        '${tally.removed} uncovered leaves removed'
+        '${tally.outOfTime > 0 ? ', ${tally.outOfTime} left unanswered (out of time)' : ''}',
       );
     }
-    return answered + removed;
+    return tally.answered + tally.removed;
   }
 
-  void _removeLeaf(BuildTree tree, BuildTreeNode node) {
-    final parent = node.parent;
-    if (parent == null) return;
-    if (parent.children.remove(node)) {
-      tree.nodeIndex.remove(node.nodeId);
-      tree.totalNodes--;
+  /// Answer or remove one equivalence group of dangling our-turn leaves.
+  Future<void> _sweepGroup(
+    BuildRun run,
+    NodeExpander expander,
+    List<BuildTreeNode> group,
+    FrontierQueue throwawayQueue,
+    _SweepTally tally,
+  ) async {
+    final config = run.config;
+    await waitIfPaused();
+    if (run.isCancelled) return;
+    // Past the budget's sweep grace we stop *answering* holes but keep
+    // walking, so the leaves we never got to are still removed rather than
+    // left dangling on an unanswered opponent move.
+    final graced = !run.sweepBudgetExhausted;
+
+    final canonical = run.fenMap.getCanonical(group.first.fen);
+    if (canonical != null && !group.contains(canonical)) {
+      // The position lives elsewhere in the tree: answered there, or
+      // explicitly pruned there — these leaves resolve via transposition.
+      if (canonical.children.isNotEmpty ||
+          canonical.pruneReason != PruneReason.none) {
+        return;
+      }
+    }
+
+    // Representative: the registered canonical when it dangles here,
+    // else the most-reachable member (registered for future resolution).
+    final rep = (canonical != null && group.contains(canonical))
+        ? canonical
+        : (group..sort(
+                (a, b) =>
+                    b.cumulativeProbability.compareTo(a.cumulativeProbability),
+              ))
+              .first;
+    run.fenMap.putCanonical(rep.fen, rep);
+
+    // The hole is worth answering if any path into this position carries
+    // an opponent move at/above the coverage floor.
+    var maxProb = 0.0;
+    for (final n in group) {
+      if (n.moveProbability > maxProb) maxProb = n.moveProbability;
+    }
+    for (final t in run.fenMap.getTranspositions(rep.fen)) {
+      if (t.moveProbability > maxProb) maxProb = t.moveProbability;
+    }
+
+    final worthAnswering = maxProb >= config.coverMinProb;
+    if (worthAnswering && !graced) tally.outOfTime++;
+    if (worthAnswering && graced) {
+      final canExpand =
+          config.buildMode == BuildMode.maiaDbExplore || _pool.workerCount > 0;
+      if (config.buildMode == BuildMode.maiaDbExplore) {
+        await _evalResolver.ensureEval(
+          rep,
+          config,
+          fenMap: run.fenMap,
+          pool: _pool,
+          dbOnly: true,
+        );
+      }
+      if (canExpand) {
+        await expander.expandOurMove(rep, throwawayQueue, coverageOnly: true);
+      }
+      run.markExplored(rep);
+      if (rep.children.isNotEmpty) {
+        tally.answered++;
+        return; // duplicates resolve via transposition
+      }
+      // Now explicitly flagged (eval window) — keep, it's not silent.
+      if (rep.pruneReason != PruneReason.none) return;
+    }
+
+    // Below the floor, or the expansion produced no answer: remove the
+    // whole equivalence group so no line ends on an unanswered move.
+    for (final n in group) {
+      tally.removedLines.add(PrunedLine.fromNode(n));
+      run.removeLeaf(n);
+      tally.removed++;
     }
   }
 
   bool _fenKeysEqual(String fenA, String fenB) {
     return canonicalizeFen(fenA) == canonicalizeFen(fenB);
   }
+}
+
+/// Counters the coverage sweep's lanes share.
+class _SweepTally {
+  int answered = 0;
+  int removed = 0;
+  int outOfTime = 0;
+  final List<PrunedLine> removedLines = [];
 }

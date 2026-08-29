@@ -10,13 +10,13 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' as io;
 import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
-import '../../utils/file_text_reader.dart';
 import '../../utils/chess_utils.dart' show isNullMoveSan, playSanOrNullMove;
 import '../eval/eval_canonicalize.dart';
 import 'pgn_freq_cache.dart';
@@ -198,18 +198,13 @@ PgnFreqMap _scanFile({
   required void Function() onProgress,
 }) {
   final fileMap = PgnFreqMap(gameCapacity: config.retainGames);
-  final decoded = decodeTextBytesDetailed(io.File(path).readAsBytesSync());
-  if (decoded.usedLatin1Fallback) {
-    debugPrint('[PgnFreqParser] Warning: read $path as Latin-1 (not UTF-8)');
-  }
+  var gameIndex = 0;
 
-  final games = splitPgnGames(decoded.text);
-  for (var gi = 0; gi < games.length; gi++) {
-    final game = games[gi];
-
+  final usedLatin1 = _forEachGame(path, (game) {
+    gameIndex++;
     if (_belowEloFloor(game.headers, config.minElo)) {
       tally.skippedElo++;
-      continue;
+      return;
     }
 
     switch (_scanGame(
@@ -217,7 +212,7 @@ PgnFreqMap _scanFile({
       game: game,
       config: config,
       targetKey: targetKey,
-      gameIndex: gi + 1,
+      gameIndex: gameIndex,
       warnings: warnings,
     )) {
       case _GameScan.ok:
@@ -229,9 +224,132 @@ PgnFreqMap _scanFile({
         tally.parseErrors++;
     }
 
-    if (gi % 100 == 0) onProgress();
+    if (gameIndex % 100 == 0) onProgress();
+  });
+
+  if (usedLatin1) {
+    debugPrint('[PgnFreqParser] Warning: read $path as Latin-1 (not UTF-8)');
   }
   return fileMap;
+}
+
+/// Bytes read per `readIntoSync`.  Large enough that the syscall count is
+/// irrelevant, small enough that three of them (raw, decoded, carry) are
+/// nothing next to the map being built.
+const int _readChunkBytes = 4 << 20;
+
+/// Feed every game in the file at [path] to [onGame], one at a time.
+///
+/// A multi-gigabyte database is never resident: bytes are read in fixed
+/// chunks, decoded incrementally, split into lines, and each game is handed
+/// over the moment its movetext ends.  The previous whole-file
+/// `readAsBytesSync` → decode → `split('\n')` held three copies of the file
+/// at once (bytes, a two-byte-per-char string, and a list of every line).
+///
+/// Encoding follows `decodeTextBytesDetailed`: UTF-8, with a whole-file
+/// Latin-1 fallback when the bytes are not valid UTF-8.  A validation pass
+/// decides that up front — games are scanned as they stream and cannot be
+/// un-scanned if a malformed byte turns up late in the file.  Returns whether
+/// the fallback was used.
+bool _forEachGame(String path, void Function(PgnGame game) onGame) {
+  final file = io.File(path).openSync();
+  try {
+    final utf8Valid = _isValidUtf8(file);
+    file.setPositionSync(0);
+
+    final splitter = PgnGameSplitter(onGame);
+    final lines = _LineSink(splitter.addLine);
+    final ByteConversionSink decoder = utf8Valid
+        ? utf8.decoder.startChunkedConversion(lines)
+        : latin1.decoder.startChunkedConversion(lines);
+    final buffer = Uint8List(_readChunkBytes);
+    while (true) {
+      final read = file.readIntoSync(buffer);
+      if (read == 0) break;
+      decoder.addSlice(buffer, 0, read, false);
+    }
+    decoder.close();
+    splitter.close();
+    return !utf8Valid;
+  } finally {
+    file.closeSync();
+  }
+}
+
+/// Whether [file] (read from its current position to the end) is well-formed
+/// UTF-8, by the same rules `utf8.decode` enforces: no overlong forms, no
+/// surrogates, nothing above U+10FFFF.  Streams the bytes; allocates nothing
+/// per byte.
+bool _isValidUtf8(io.RandomAccessFile file) {
+  final buffer = Uint8List(_readChunkBytes);
+  var pending = 0; // Continuation bytes still expected.
+  var low = 0x80; // Allowed range of the next continuation byte.
+  var high = 0xBF;
+  while (true) {
+    final read = file.readIntoSync(buffer);
+    if (read == 0) break;
+    for (var i = 0; i < read; i++) {
+      final b = buffer[i];
+      if (pending > 0) {
+        if (b < low || b > high) return false;
+        low = 0x80;
+        high = 0xBF;
+        pending--;
+      } else if (b < 0x80) {
+        continue;
+      } else if (b >= 0xC2 && b <= 0xDF) {
+        pending = 1;
+      } else if (b == 0xE0) {
+        pending = 2;
+        low = 0xA0;
+      } else if (b == 0xED) {
+        pending = 2;
+        high = 0x9F;
+      } else if (b >= 0xE1 && b <= 0xEF) {
+        pending = 2;
+      } else if (b == 0xF0) {
+        pending = 3;
+        low = 0x90;
+      } else if (b == 0xF4) {
+        pending = 3;
+        high = 0x8F;
+      } else if (b >= 0xF1 && b <= 0xF3) {
+        pending = 3;
+      } else {
+        return false;
+      }
+    }
+  }
+  return pending == 0;
+}
+
+/// Turns decoded text chunks into lines.  Only the trailing partial line is
+/// carried between chunks, so memory stays bounded by the longest line.
+class _LineSink implements Sink<String> {
+  _LineSink(this._onLine);
+
+  final void Function(String line) _onLine;
+  String _carry = '';
+
+  @override
+  void add(String chunk) {
+    var start = 0;
+    while (true) {
+      final newline = chunk.indexOf('\n', start);
+      if (newline < 0) break;
+      final line = chunk.substring(start, newline);
+      _onLine(_carry.isEmpty ? line : _carry + line);
+      _carry = '';
+      start = newline + 1;
+    }
+    if (start < chunk.length) _carry += chunk.substring(start);
+  }
+
+  @override
+  void close() {
+    if (_carry.isNotEmpty) _onLine(_carry);
+    _carry = '';
+  }
 }
 
 /// True when both players are rated and *both* fall below [minElo].  A single
@@ -333,8 +451,8 @@ _GameScan _scanGame({
         return _GameScan.error;
       }
       position = next;
-      fenKey = canonicalizeFen4(position.fen);
       if (!tracking) {
+        fenKey = canonicalizeFen4(position.fen);
         if (fenKey == targetKey) {
           tracking = true;
           map.recordReach(fenKey);
@@ -342,9 +460,14 @@ _GameScan _scanGame({
         }
         continue;
       }
-      if (counting) map.recordReach(fenKey);
+      // Past the counted window the key is never read again (counting only
+      // ever turns off), so the FEN is not serialised.
+      if (counting) {
+        fenKey = canonicalizeFen4(position.fen);
+        map.recordReach(fenKey);
+        if (plyTracked < kGameRefMaxPly) visitedKeys.add(fenKey);
+      }
       plyTracked++;
-      if (counting && plyTracked <= kGameRefMaxPly) visitedKeys.add(fenKey);
       continue;
     }
 
@@ -388,10 +511,12 @@ _GameScan _scanGame({
     if (retaining) trackedMoves.add(san);
 
     position = position.play(move);
-    fenKey = canonicalizeFen4(position.fen);
-    if (counting) map.recordReach(fenKey);
+    if (counting) {
+      fenKey = canonicalizeFen4(position.fen);
+      map.recordReach(fenKey);
+      if (plyTracked < kGameRefMaxPly) visitedKeys.add(fenKey);
+    }
     plyTracked++;
-    if (counting && plyTracked <= kGameRefMaxPly) visitedKeys.add(fenKey);
   }
 
   if (!tracking) return _GameScan.prefixSkip;
@@ -448,79 +573,103 @@ class PgnGame {
 
 final _headerPattern = RegExp(r'^\[(\w+)\s+"(.*)"\]$');
 
-/// Split a PGN file into games on the header/movetext boundary.
+/// Incremental PGN game splitter: feed it lines, receive games.
 ///
-/// Tolerates missing blank lines between games, which hand-edited and scraped
-/// files routinely omit.
-List<PgnGame> splitPgnGames(String pgn) {
-  final games = <PgnGame>[];
-  var headers = <String, String>{};
-  final movetext = StringBuffer();
-  var inMovetext = false;
+/// Splits on the header/movetext boundary and tolerates missing blank lines
+/// between games, which hand-edited and scraped files routinely omit.  The
+/// state machine is the same one [splitPgnGames] runs over a whole string;
+/// exposing it line by line is what lets the scanner stream a file.
+class PgnGameSplitter {
+  PgnGameSplitter(this._onGame);
 
-  void flush() {
-    if (movetext.isEmpty) return;
-    games.add(PgnGame(headers: headers, movetext: movetext.toString()));
-    headers = <String, String>{};
-    movetext.clear();
-    inMovetext = false;
-  }
+  final void Function(PgnGame game) _onGame;
 
-  for (final line in pgn.split('\n')) {
+  Map<String, String> _headers = <String, String>{};
+  final StringBuffer _movetext = StringBuffer();
+  bool _inMovetext = false;
+
+  void addLine(String line) {
     final trimmed = line.trim();
 
     if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-      if (inMovetext) flush();
+      if (_inMovetext) _flush();
       final match = _headerPattern.firstMatch(trimmed);
-      if (match != null) headers[match.group(1)!] = match.group(2)!;
+      if (match != null) _headers[match.group(1)!] = match.group(2)!;
     } else if (trimmed.isEmpty) {
-      if (headers.isNotEmpty && !inMovetext) {
-        inMovetext = true;
-      } else if (inMovetext) {
-        flush();
+      if (_headers.isNotEmpty && !_inMovetext) {
+        _inMovetext = true;
+      } else if (_inMovetext) {
+        _flush();
       }
     } else {
-      inMovetext = true;
-      if (movetext.isNotEmpty) movetext.write(' ');
-      movetext.write(trimmed);
+      _inMovetext = true;
+      if (_movetext.isNotEmpty) _movetext.write(' ');
+      _movetext.write(trimmed);
     }
   }
 
-  flush();
+  /// Emit the game in progress, if any.  Call once after the last line.
+  void close() => _flush();
+
+  void _flush() {
+    if (_movetext.isEmpty) return;
+    _onGame(PgnGame(headers: _headers, movetext: _movetext.toString()));
+    _headers = <String, String>{};
+    _movetext.clear();
+    _inMovetext = false;
+  }
+}
+
+/// Split a PGN string into games.  See [PgnGameSplitter].
+List<PgnGame> splitPgnGames(String pgn) {
+  final games = <PgnGame>[];
+  final splitter = PgnGameSplitter(games.add);
+  var start = 0;
+  while (start <= pgn.length) {
+    var end = pgn.indexOf('\n', start);
+    if (end < 0) end = pgn.length;
+    splitter.addLine(pgn.substring(start, end));
+    start = end + 1;
+  }
+  splitter.close();
   return games;
 }
 
 /// Tokenize movetext, skipping comments, variations, and NAGs.
+///
+/// Works on code units: `movetext[i]` allocates a one-character string, and
+/// this runs over every byte of movetext in a multi-million-game database.
 List<String> tokenizeMovetext(String movetext) {
   final tokens = <String>[];
   final len = movetext.length;
   var i = 0;
 
   while (i < len) {
-    final ch = movetext[i];
+    final ch = movetext.codeUnitAt(i);
 
-    if (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n') {
+    if (_isWhitespace(ch)) {
       i++;
       continue;
     }
-    if (ch == '{') {
-      while (i < len && movetext[i] != '}') {
+    if (ch == _leftBrace) {
+      while (i < len && movetext.codeUnitAt(i) != _rightBrace) {
         i++;
       }
       if (i < len) i++;
       continue;
     }
-    if (ch == '(') {
+    if (ch == _leftParen) {
       var depth = 1;
       i++;
       while (i < len && depth > 0) {
-        if (movetext[i] == '(') depth++;
-        if (movetext[i] == ')') depth--;
+        final c = movetext.codeUnitAt(i);
+        if (c == _leftParen) depth++;
+        if (c == _rightParen) depth--;
         i++;
       }
       continue;
     }
-    if (ch == r'$') {
+    if (ch == _dollar) {
       i++;
       while (i < len && _isDigit(movetext.codeUnitAt(i))) {
         i++;
@@ -529,7 +678,7 @@ List<String> tokenizeMovetext(String movetext) {
     }
 
     final start = i;
-    while (i < len && !_isTokenBoundary(movetext[i])) {
+    while (i < len && !_isTokenBoundary(movetext.codeUnitAt(i))) {
       i++;
     }
     tokens.add(movetext.substring(start, i));
@@ -537,13 +686,21 @@ List<String> tokenizeMovetext(String movetext) {
   return tokens;
 }
 
-bool _isTokenBoundary(String ch) =>
-    ch == ' ' ||
-    ch == '\t' ||
-    ch == '\r' ||
-    ch == '\n' ||
-    ch == '{' ||
-    ch == '(';
+const int _space = 0x20;
+const int _tab = 0x09;
+const int _cr = 0x0D;
+const int _lf = 0x0A;
+const int _leftBrace = 0x7B;
+const int _rightBrace = 0x7D;
+const int _leftParen = 0x28;
+const int _rightParen = 0x29;
+const int _dollar = 0x24;
+const int _dot = 0x2E;
+
+bool _isWhitespace(int c) => c == _space || c == _tab || c == _cr || c == _lf;
+
+bool _isTokenBoundary(int c) =>
+    _isWhitespace(c) || c == _leftBrace || c == _leftParen;
 
 bool _isDigit(int codeUnit) => codeUnit >= 48 && codeUnit <= 57;
 
@@ -561,8 +718,8 @@ String? tokenToSan(String token) {
   }
   if (i == 0) return token;
   if (i >= token.length) return null;
-  if (token[i] != '.') return token;
-  while (i < token.length && token[i] == '.') {
+  if (token.codeUnitAt(i) != _dot) return token;
+  while (i < token.length && token.codeUnitAt(i) == _dot) {
     i++;
   }
   return i >= token.length ? null : token.substring(i);
@@ -628,9 +785,11 @@ int _eloTag(Map<String, String> headers, String tag) {
   return int.tryParse(value) ?? 0;
 }
 
+final RegExp _fourDigitYear = RegExp(r'(\d{4})');
+
 int? _year(String? date) {
   if (date == null) return null;
-  final match = RegExp(r'(\d{4})').firstMatch(date);
+  final match = _fourDigitYear.firstMatch(date);
   return match == null ? null : int.tryParse(match.group(1)!);
 }
 

@@ -30,6 +30,7 @@ import '../../models/opening_tree.dart';
 import '../../utils/fen_utils.dart';
 import '../../utils/san_token_utils.dart';
 import '../explorer_cache_service.dart';
+import '../lichess_auth_service.dart';
 import '../generation/fen_map.dart';
 import 'build_by_playing_config.dart';
 import 'build_by_playing_types.dart';
@@ -110,6 +111,19 @@ class BuildByPlayingController extends ChangeNotifier
 
   String? _pauseMessage;
   bool _pausedFromDecision = false;
+  bool _pausedForLichessLogin = false;
+
+  /// Whether the session is parked because Lichess wants an account, rather
+  /// than because of a rate limit, a dead network, or navigation. The paused
+  /// surface offers a login button when this is true.
+  bool get pausedForLichessLogin =>
+      _phase == BuildByPlayingPhase.paused && _pausedForLichessLogin;
+
+  /// Lichess put the opening explorer behind a login in 2026: no account
+  /// means every query 401s, so treat "not logged in" and "was rejected as
+  /// anonymous" as the same fixable failure.
+  bool get _needsLichessLogin =>
+      !LichessAuthService.instance.isLoggedIn || _explorer.authRequired;
 
   _CommitInfo? _lastCommitInfo;
   bool get canUndoCommit =>
@@ -312,12 +326,17 @@ class BuildByPlayingController extends ChangeNotifier
       if (epoch != _epoch) return;
 
       if (resp == null) {
+        final needsLogin = _needsLichessLogin;
         _pause(
-          _explorer.isRateLimited
+          needsLogin
+              ? 'Lichess needs an account before it will answer opening '
+                    'database queries — log in, then resume'
+              : _explorer.isRateLimited
               ? 'Lichess rate limit hit — wait a moment, then resume'
               : 'Opening database unavailable — check your connection, '
                     'then resume',
           fromDecision: false,
+          forLichessLogin: needsLogin,
         );
         return;
       }
@@ -474,9 +493,9 @@ class BuildByPlayingController extends ChangeNotifier
   }
 
   /// Commit [san] as the repertoire answer at the decision point: the
-  /// uncommitted line prefix is written first (ply by ply, chaining paths so
-  /// one session line stays one PGN game), then the move itself. The session
-  /// then continues with the opponent's next reply.
+  /// uncommitted line prefix and the move itself go to disk in one write
+  /// (one PGN game, extended in place), then the session continues with the
+  /// opponent's next reply.  Undo history is still one entry per ply.
   Future<void> commitMove(String san) async {
     if (_phase != BuildByPlayingPhase.awaitingUserMove &&
         _phase != BuildByPlayingPhase.exploring) {
@@ -494,18 +513,9 @@ class BuildByPlayingController extends ChangeNotifier
 
     final epoch = _epoch;
     try {
-      var path = List<String>.from(_lastCommittedPath);
-      for (final ply in List<String>.from(_uncommittedSuffix)) {
-        path = await _repertoire.writer.addMoveAtPosition(
-          fen: _fenForSans(path),
-          san: ply,
-          pathFromRoot: path,
-        );
-      }
-      path = await _repertoire.writer.addMoveAtPosition(
-        fen: decisionFen,
-        san: san,
-        pathFromRoot: path,
+      final path = await _repertoire.writer.addMovesAtPosition(
+        pathFromRoot: _lastCommittedPath,
+        sans: [..._uncommittedSuffix, san],
       );
       if (epoch != _epoch) return;
       _lastCommittedPath = path;
@@ -626,9 +636,14 @@ class BuildByPlayingController extends ChangeNotifier
     }
   }
 
-  void _pause(String message, {bool fromDecision = false}) {
+  void _pause(
+    String message, {
+    bool fromDecision = false,
+    bool forLichessLogin = false,
+  }) {
     _pauseMessage = message;
     _pausedFromDecision = fromDecision;
+    _pausedForLichessLogin = forLichessLogin;
     _setPhase(BuildByPlayingPhase.paused);
   }
 

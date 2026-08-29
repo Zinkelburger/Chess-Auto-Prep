@@ -39,6 +39,12 @@ class RepertoireBoardPane extends StatelessWidget {
             boardPreview.target == BoardPreviewTarget.mainBoard;
         final displayFen = isPreview ? boardPreview.previewFen! : fen;
         final position = positionFromFen(displayFen);
+        // The hovered-move arrow rides on top of the audit annotations; a
+        // preview shows a different position, so neither applies there.
+        final hoverArrow = boardPreview.hoverArrow;
+        final shownAnnotations = isPreview
+            ? const <BoardAnnotation>[]
+            : [...annotations, ?hoverArrow];
 
         return Container(
           padding: const EdgeInsets.all(12),
@@ -49,11 +55,13 @@ class RepertoireBoardPane extends StatelessWidget {
                 children: [
                   Opacity(
                     opacity: isPreview ? 0.85 : 1.0,
+                    // No per-FEN key: the board widget resets its own drag
+                    // state when the position changes, and remounting it on
+                    // every move rebuilt every piece image and painter.
                     child: ChessBoardWidget(
-                      key: ValueKey(displayFen),
                       position: position,
                       flipped: boardFlipped,
-                      annotations: isPreview ? const [] : annotations,
+                      annotations: shownAnnotations,
                       onPieceSelected: (square) {},
                       onMove: isPreview
                           ? null

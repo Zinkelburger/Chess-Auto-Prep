@@ -154,11 +154,16 @@ class EvalWorker {
 
   /// Run MultiPV analysis on a position. Returns when bestmove arrives.
   /// Calls [onProgress] on each info update for progressive UI.
+  ///
+  /// [searchMoves] restricts the search to those root moves (UCI): each gets
+  /// its own PV line, so a handful of candidates the caller wants scored can
+  /// share one search and one hash instead of costing a `go` apiece.
   Future<DiscoveryResult> runDiscovery(
     String fen,
     int depth,
     int multiPv,
     bool isWhiteToMove, {
+    List<String>? searchMoves,
     void Function(DiscoveryResult)? onProgress,
   }) async {
     stop();
@@ -177,7 +182,11 @@ class EvalWorker {
     _discoveryCompleter = Completer<DiscoveryResult>();
 
     engine.sendCommand('position fen $fen');
-    engine.sendCommand('go depth $depth');
+    engine.sendCommand(
+      searchMoves == null || searchMoves.isEmpty
+          ? 'go depth $depth'
+          : 'go depth $depth searchmoves ${searchMoves.join(' ')}',
+    );
 
     final result = await _discoveryCompleter!.future;
 

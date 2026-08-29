@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 
 import '../services/lichess_auth_service.dart';
 import '../theme/app_colors.dart';
+import 'lichess_login_prompt.dart';
 
 class LichessDbInfoIcon extends StatelessWidget {
   const LichessDbInfoIcon({super.key, this.size = 14});
@@ -74,26 +75,6 @@ class _InfoPopupOverlay extends StatefulWidget {
 }
 
 class _InfoPopupOverlayState extends State<_InfoPopupOverlay> {
-  bool _oauthInProgress = false;
-
-  Future<void> _startLogin() async {
-    final lichess = LichessAuthService.instance;
-    setState(() => _oauthInProgress = true);
-
-    try {
-      final url = await lichess.startOAuthFlow();
-      await LichessAuthService.openUrl(url);
-      final success = await lichess.waitForCallback();
-      if (mounted && success) {
-        widget.onDismiss();
-      } else if (mounted) {
-        setState(() => _oauthInProgress = false);
-      }
-    } catch (_) {
-      if (mounted) setState(() => _oauthInProgress = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     // Dark-only app: popover chrome comes straight from the shared palette.
@@ -159,30 +140,9 @@ class _InfoPopupOverlayState extends State<_InfoPopupOverlay> {
                       ),
                     )
                   else
-                    SizedBox(
-                      width: double.infinity,
-                      height: 32,
-                      child: ElevatedButton.icon(
-                        onPressed: _oauthInProgress ? null : _startLogin,
-                        icon: _oauthInProgress
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.login, size: 16),
-                        label: Text(
-                          _oauthInProgress
-                              ? 'Waiting for browser...'
-                              : 'Log into Lichess',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                        ),
-                      ),
+                    LichessLoginButton(
+                      expand: true,
+                      onLoggedIn: widget.onDismiss,
                     ),
                 ],
               ),

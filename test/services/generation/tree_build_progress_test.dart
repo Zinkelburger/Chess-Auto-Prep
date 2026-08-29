@@ -43,6 +43,9 @@ void main() {
       Stopwatch sw,
     ) {
       BuildProgress? out;
+      final (totals, explored) = TreeBuildProgressTracker.depthHistogram(
+        tree.root,
+      );
       tracker.emitProgress(
         tree,
         0,
@@ -50,6 +53,8 @@ void main() {
         (p) => out = p,
         20,
         buildSw: sw,
+        depthTotals: totals,
+        depthExplored: explored,
         force: true,
       );
       return out!;
@@ -129,6 +134,9 @@ void main() {
 
       tracker.onDequeue(2);
       BuildProgress? out;
+      final (totals, explored) = TreeBuildProgressTracker.depthHistogram(
+        tree.root,
+      );
       tracker.emitProgress(
         tree,
         2,
@@ -136,6 +144,8 @@ void main() {
         (p) => out = p,
         20,
         buildSw: sw,
+        depthTotals: totals,
+        depthExplored: explored,
         force: true,
       );
 

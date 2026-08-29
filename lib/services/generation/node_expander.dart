@@ -6,8 +6,8 @@
 /// node grows children, and that lives here behind [NodeExpander]:
 ///
 ///   - [StockfishExpander] (`BuildMode.stockfishExpectimax`): our moves
-///     from Stockfish MultiPV, opponent moves from Lichess stats with a
-///     Maia fallback (or Maia only).
+///     from Stockfish MultiPV, opponent moves from the master-games book
+///     blended with Maia, or Maia alone.
 ///   - [MaiaDbExpander] (`BuildMode.maiaDbExplore`): our moves from Maia's
 ///     policy filtered to positions with database evals; same opponent
 ///     sources.
@@ -19,10 +19,19 @@
 /// expansion plumbing.  The opponent-children loop in particular exists
 /// exactly once ([addOpponentChildren]) — its coverage-floor semantics were
 /// historically copy-pasted per source and had already drifted.
+///
+/// Every child is derived from its parent's parsed [Position] through
+/// [BuildRun.childMove]: one legality check and one move generation per
+/// child, against a position parsed once per node.  Nothing here parses a
+/// FEN string to play a move.
 library;
 
+import 'dart:async';
+
+import 'package:dartchess/dartchess.dart' show Move;
+
 import '../../models/build_tree_node.dart';
-import '../../utils/chess_utils.dart' show playUciMove, sanToUci, uciToSan;
+import '../../utils/chess_utils.dart' show moveToStandardUci;
 import '../../utils/fen_utils.dart';
 import '../maia/maia_factory.dart';
 import '../../models/analysis/discovery_result.dart';
@@ -33,6 +42,7 @@ import 'frontier_queue.dart';
 import 'generation_config.dart';
 import 'opponent_prior.dart';
 import 'setup_bias.dart';
+import 'skeleton_plan.dart';
 
 part 'chessdb_book_expander.dart';
 part 'maia_db_expander.dart';
@@ -92,7 +102,7 @@ bool evalWindowPrune(BuildTreeNode node, TreeBuildConfig config) {
 /// Add opponent children to [node] from probability-ranked [candidates].
 ///
 /// This is the single implementation of the opponent fan-out policy, shared
-/// by every candidate source (Lichess stats, Maia policy, PGN frequency
+/// by every candidate source (master book, Maia policy, PGN frequency
 /// map).  Per candidate, in order:
 ///
 ///   1. Coverage floor: a reply at/above [TreeBuildConfig.coverMinProb]
@@ -117,7 +127,7 @@ bool evalWindowPrune(BuildTreeNode node, TreeBuildConfig config) {
 /// Children get raw (unrenormalized) probabilities — Σpᵢ ≤ 1 — because the
 /// expectimax tail term accounts for uncovered mass; renormalizing would
 /// silently bias V.  [attachStats] copies per-move W/B/D onto children
-/// (Lichess only — frequency-map counts carry no outcome split worth
+/// (book sources only — frequency-map counts carry no outcome split worth
 /// storing).  [onChild] runs for each added child (e.g. direct enqueue).
 void addOpponentChildren({
   required BuildRun run,
@@ -149,9 +159,14 @@ void addOpponentChildren({
       : const <String>{};
 
   for (final move in candidates) {
-    if (excluded.isNotEmpty) {
-      final san = move.san.isNotEmpty ? move.san : uciToSan(node.fen, move.uci);
-      if (excluded.contains(normalizeSetupSan(san))) continue;
+    // Played once per candidate; illegal moves (a stale book row, a Maia
+    // token that does not fit the position) are skipped before any gate.
+    final played = run.childMove(node, move.uci);
+    if (played == null) continue;
+    final san = move.san.isNotEmpty ? move.san : played.san;
+
+    if (excluded.isNotEmpty && excluded.contains(normalizeSetupSan(san))) {
+      continue;
     }
     final prob = move.probability;
     final newCumul = node.cumulativeProbability * prob;
@@ -172,15 +187,12 @@ void addOpponentChildren({
       if (newCumul < config.minProbability) continue;
     }
 
-    final childFen = playUciMove(node.fen, move.uci);
-    if (childFen == null) continue;
-
-    final san = move.san.isNotEmpty ? move.san : uciToSan(node.fen, move.uci);
     final child = run.makeChild(
       parent: node,
-      fen: childFen,
+      fen: played.fen,
       san: san,
       uci: move.uci,
+      position: played.after,
     );
     if (child == null) continue;
 
@@ -189,7 +201,7 @@ void addOpponentChildren({
     // Master practice earns search order, not just candidacy: a reply
     // masters have actually played is expanded before an equally likely one
     // nobody has. Stored on the edge so a priority rebuild keeps it.
-    final masterFactor = run.masterPriorityFactor(childFen);
+    final masterFactor = run.masterPriorityFactor(played.fen);
     child.searchPriority = basePri * prob * masterFactor;
     child.searchPriorityDiscount = masterFactor;
     if (attachStats && move.games > 0) {
@@ -231,6 +243,34 @@ Future<Map<String, double>> maiaPolicyForSmoothing(
     run.log('Maia prior lookup failed @ $fen: $e');
     return const {};
   }
+}
+
+/// Where an our-move candidate came from when it was not one of the
+/// engine's own MultiPV lines.  See [NodeExpander.injectCandidates].
+enum InjectionSource {
+  /// Preferred-setup moves ([TreeBuildConfig.setupMoves]).
+  setup,
+
+  /// Master practice at a book position.
+  master,
+
+  /// The skeleton's move at a near-identical position.
+  transfer,
+
+  /// A move the user pinned in the skeleton.
+  pin,
+}
+
+/// One candidate to score and, if it survives the eval-loss window, add.
+class _Injection {
+  _Injection(this.uci, this.move, {required this.gated});
+
+  final String uci;
+  final ChildMove move;
+
+  /// Whether the eval-loss window applies.  A pin bypasses it: the user's
+  /// choice stands even if it costs eval, and the UI warns them separately.
+  bool gated;
 }
 
 /// Strategy for growing a node's children in one [BuildMode].
@@ -287,10 +327,30 @@ abstract class NodeExpander {
     }
     if (node.children.isEmpty) return;
 
-    for (final child in List.of(node.children)) {
+    enqueueChildren(List.of(node.children), queue);
+  }
+
+  /// Put [children] on the frontier and warm Maia for them.
+  ///
+  /// Every child's own expansion will ask Maia about its position — for the
+  /// opponent's reply distribution or for our moves' naturalness — and Maia
+  /// inference is serialised on one ORT session.  Asking now, while the
+  /// engine is busy with the next frontier node, is the overlap that keeps
+  /// both busy; by the time the child is popped its policy is a cache hit.
+  void enqueueChildren(Iterable<BuildTreeNode> children, FrontierQueue queue) {
+    for (final child in children) {
       if (run.isCancelled) break;
       queue.add(child);
+      prefetchMaia(child.fen);
     }
+  }
+
+  /// Start a Maia inference for [fen] without waiting for it.  Errors are
+  /// dropped: the real read handles them when it happens.
+  void prefetchMaia(String fen) {
+    final maia = MaiaFactory.instance;
+    if (!MaiaFactory.isAvailable || maia == null) return;
+    unawaited(maia.evaluate(fen, config.maiaElo).then((_) {}, onError: (_) {}));
   }
 
   // ── Shared opponent sources ─────────────────────────────────────────────
@@ -463,15 +523,15 @@ abstract class NodeExpander {
 
     if (node.children.any((c) => c.moveUci == pvUci)) return;
 
-    final childFen = playUciMove(node.fen, pvUci);
-    if (childFen == null) return;
+    final played = run.childMove(node, pvUci);
+    if (played == null) return;
 
-    final san = uciToSan(node.fen, pvUci);
     final child = run.makeChild(
       parent: node,
-      fen: childFen,
-      san: san,
+      fen: played.fen,
+      san: played.san,
       uci: pvUci,
+      position: played.after,
     );
     if (child == null) return;
 
@@ -500,61 +560,247 @@ abstract class NodeExpander {
     run.emitNodeProgress(child);
   }
 
-  // ── Shared our-move plumbing ────────────────────────────────────────────
-
-  /// Preferred-setup candidate injection: quiet system moves (h4, Nh3, ...)
-  /// are often missing from Maia/MultiPV top-N, so the selection tie-break
-  /// would have nothing to choose.  Evaluate any legal setup move not
-  /// already a candidate and add it, subject to the same eval-loss window
-  /// as regular candidates.  [bestCpWhite] is the best candidate eval in
-  /// white-POV centipawns (null = no reference, window not applied).
-  Future<void> injectSetupCandidates(
-    BuildTreeNode node, {
-    required int? bestCpWhite,
-  }) async {
-    final setup = parseSetupMoves(config.setupMoves);
-    if (setup.isEmpty) return;
-    for (final san in setup) {
-      final uci = sanToUci(node.fen, san);
-      if (uci == null) continue; // not legal here (or already played)
-      await _injectCandidateUci(node, uci, bestCpWhite: bestCpWhite);
-    }
-  }
+  // ── Shared our-move plumbing: candidate injection ───────────────────────
 
   /// How many of the book's most-played moves are offered as our-move
   /// candidates at a master-practice position.
   static const int kMasterCandidateCount = 2;
 
-  /// Master-practice candidate injection: the moves masters actually play
-  /// here are often in MultiPV already, but not always — a theoretical main
-  /// line the engine rates a hair below a sharper try would otherwise never
-  /// be a candidate, and selection cannot choose what it never sees.  Inject
-  /// the book's top [kMasterCandidateCount] moves (each with at least
-  /// [TreeBuildConfig.masterMinGames] games), eval-gated like a setup move;
-  /// the selector still decides on eval.  Children that are in the book get
-  /// the year the move was last played, for the recency annotation.
-  /// No-op off-book or without a database.
-  Future<void> injectMasterCandidates(
+  /// Setup moves, parsed once per run rather than per node.
+  late final Set<String> _setupSans = parseSetupMoves(config.setupMoves);
+
+  /// Pins by canonical FEN, built once per run ([SkeletonPlan.pinsByFen]
+  /// rebuilds the map on every read).
+  late final Map<String, String> _pins = config.skeletonPlan.pinsByFen;
+
+  /// Skeleton transfer lookups by FEN.  [SkeletonPlan.transferFor] compares
+  /// the position against every skeleton node and is asked twice per
+  /// our-move node (injection, then the alternative gate), so the answer is
+  /// kept.
+  final Map<String, TransferMatch?> _transfers = {};
+
+  TransferMatch? _transferFor(BuildTreeNode node) {
+    if (config.skeletonPlan.nodes.isEmpty) return null;
+    return _transfers.putIfAbsent(
+      node.fen,
+      () => config.skeletonPlan.transferFor(
+        node.fen,
+        position: run.positionOf(node),
+      ),
+    );
+  }
+
+  /// Add our-move candidates that the engine's own MultiPV did not offer,
+  /// each subject to the same eval-loss window as a regular candidate (a
+  /// pin excepted).  [bestCpWhite] is the best candidate eval in white-POV
+  /// centipawns (null = no reference, window not applied).
+  ///
+  /// The sources, in the order their moves are collected:
+  ///
+  ///   - **Setup** — quiet system moves (h4, Nh3, …) are often missing from
+  ///     Maia/MultiPV top-N, so the selection tie-break would have nothing
+  ///     to choose.
+  ///   - **Master** — the moves masters actually play here are often in
+  ///     MultiPV already, but not always: a theoretical main line the engine
+  ///     rates a hair below a sharper try would otherwise never be a
+  ///     candidate, and selection cannot choose what it never sees.  The
+  ///     book's top [kMasterCandidateCount] moves with at least
+  ///     [TreeBuildConfig.masterMinGames] games are offered; children that
+  ///     are in the book get the year the move was last played, for the
+  ///     recency annotation.
+  ///   - **Transfer** — the move the user's skeleton played at the nearest
+  ///     position (the experiment found Stockfish's top-8 omits ...c5 at
+  ///     both 2.Nf3 and 2.Bf4), so the selector's transfer bias has
+  ///     something to choose.
+  ///   - **Pin** — a move the user played by hand must exist as a candidate
+  ///     even when MultiPV omits it, so selection's pin override has a child
+  ///     to mark.  Ungated: the user's choice stands even if it costs eval.
+  ///
+  /// Every candidate from every source is scored in **one** engine search
+  /// (`go … searchmoves`, one PV per move) rather than one `go` apiece: the
+  /// searches share the hash, and a six-move setup string no longer costs
+  /// six extra searches per our-move node.  Without an engine the database
+  /// chain is consulted for all candidates concurrently.
+  Future<void> injectCandidates(
     BuildTreeNode node, {
     required int? bestCpWhite,
+    Set<InjectionSource> sources = const {
+      InjectionSource.setup,
+      InjectionSource.master,
+      InjectionSource.transfer,
+      InjectionSource.pin,
+    },
   }) async {
-    if (run.masterBook == null) return;
-    final book = run.bookAt(node.fen); // most played first
-    if (book.isEmpty) return;
-    var total = 0;
-    for (final m in book) {
-      total += m.games;
-    }
-    if (total < config.masterMinGames) return;
+    final injections = _collectInjections(node, sources);
 
-    var injected = 0;
-    for (final m in book) {
-      if (injected >= kMasterCandidateCount) break;
-      if (m.games < config.masterMinGames) break; // sorted by games desc
-      await _injectCandidateUci(node, m.uci, bestCpWhite: bestCpWhite);
-      injected++;
-      run.stats.masterCandidatesInjected++;
+    // Year stamping is about the children that exist, not the ones this call
+    // adds: an empty candidate list means the book's top moves are already
+    // children (the common case once MultiPV covers them), and those still
+    // need their `[%lastPlayed]`.  Stamping therefore runs on every path out.
+    if (injections.isNotEmpty) {
+      final scoredByUci = await _scoreInjections(node, injections);
+
+      for (final injection in injections) {
+        final scored = scoredByUci[injection.uci];
+        if (scored == null) continue; // unevaluable here
+        final childCpWhite = scored.$1;
+        if (injection.gated && bestCpWhite != null) {
+          final evalLoss = node.isWhiteToMove
+              ? bestCpWhite - childCpWhite
+              : childCpWhite - bestCpWhite;
+          if (evalLoss > config.maxEvalLossCp) continue;
+        }
+        _addInjected(node, injection, childCpWhite, depth: scored.$2);
+      }
     }
+
+    if (sources.contains(InjectionSource.master)) _stampBookYears(node);
+  }
+
+  /// The distinct legal candidates [sources] offer at [node] that are not
+  /// already children.  A move offered by several sources is kept once; a
+  /// pin makes it ungated whichever source listed it first.
+  List<_Injection> _collectInjections(
+    BuildTreeNode node,
+    Set<InjectionSource> sources,
+  ) {
+    final byUci = <String, _Injection>{};
+
+    /// Whether [uci] is (now) an injection: false when illegal here or
+    /// already a child.  A move several sources offer is kept once.
+    bool offer(String uci, {required bool gated}) {
+      final existing = byUci[uci];
+      if (existing != null) {
+        existing.gated = existing.gated && gated;
+        return true;
+      }
+      final played = run.childMove(node, uci);
+      if (played == null) return false; // not legal here
+      if (node.children.any((c) => c.fen == played.fen || c.moveUci == uci)) {
+        return false; // already a candidate
+      }
+      byUci[uci] = _Injection(uci, played, gated: gated);
+      return true;
+    }
+
+    if (sources.contains(InjectionSource.setup) && _setupSans.isNotEmpty) {
+      final position = run.positionOf(node);
+      for (final san in _setupSans) {
+        final Move? move;
+        try {
+          move = position.parseSan(san);
+        } catch (_) {
+          continue;
+        }
+        if (move == null) continue; // not legal here (or already played)
+        offer(moveToStandardUci(position, move), gated: true);
+      }
+    }
+
+    if (sources.contains(InjectionSource.master) && run.masterBook != null) {
+      final book = run.bookAt(node.fen); // most played first
+      if (run.masterGamesAt(node.fen) >= config.masterMinGames) {
+        // The top [kMasterCandidateCount] book moves are the candidates,
+        // whether or not the engine offered them too: the rule is "what
+        // masters play", not "what the engine missed".
+        var considered = 0;
+        for (final m in book) {
+          if (considered >= kMasterCandidateCount) break;
+          if (m.games < config.masterMinGames) break; // sorted by games desc
+          considered++;
+          if (offer(m.uci, gated: true)) run.stats.masterCandidatesInjected++;
+        }
+      }
+    }
+
+    if (sources.contains(InjectionSource.transfer)) {
+      // Only at our-move nodes we did not pin (a pinned node's move is
+      // already a candidate through the normal sources, or will be forced by
+      // selection).
+      final match = _transferFor(node);
+      if (match != null) offer(match.uci, gated: true);
+    }
+
+    if (sources.contains(InjectionSource.pin) && _pins.isNotEmpty) {
+      final uci = _pins[normalizeFen(node.fen)];
+      if (uci != null) offer(uci, gated: false);
+    }
+
+    return byUci.values.toList();
+  }
+
+  /// White-POV eval of each injection's child position, by UCI.  Moves the
+  /// engine (or the database) could not score are absent.
+  /// White-POV score per candidate, *with the depth it was searched to*.
+  ///
+  /// The depth travels with the score because the two sources do not agree
+  /// on it: a MultiPV search really did reach [TreeBuildConfig.evalDepth],
+  /// while the database chain answers at whatever depth it happens to hold.
+  /// Writing the latter into the cache as full-depth would let a shallow
+  /// ChessDB number outrank a real search and never be refined.
+  Future<Map<String, (int cpWhite, int depth)>> _scoreInjections(
+    BuildTreeNode node,
+    List<_Injection> injections,
+  ) async {
+    final out = <String, (int, int)>{};
+    if (config.usesStockfish && run.pool.workerCount > 0) {
+      final discovery = await run.pool.discoverMoves(
+        fen: node.fen,
+        depth: config.evalDepth,
+        multiPv: injections.length,
+        isWhiteToMove: node.isWhiteToMove,
+        searchMoves: [for (final i in injections) i.uci],
+      );
+      run.stats.sfMultipvCalls++;
+      // Discovery scores are White-POV already.
+      for (final line in discovery.lines) {
+        if (line.moveUci.isNotEmpty) {
+          out[line.moveUci] = (line.effectiveCp, config.evalDepth);
+        }
+      }
+      return out;
+    }
+
+    final evals = await Future.wait([
+      for (final i in injections)
+        run.evalResolver.lookupDbEvalWhite(i.move.fen, config),
+    ]);
+    for (var k = 0; k < injections.length; k++) {
+      final eval = evals[k];
+      if (eval != null) out[injections[k].uci] = (eval.$1, eval.$2);
+    }
+    return out;
+  }
+
+  void _addInjected(
+    BuildTreeNode node,
+    _Injection injection,
+    int cpWhite, {
+    required int depth,
+  }) {
+    final child = run.makeChild(
+      parent: node,
+      fen: injection.move.fen,
+      san: injection.move.san,
+      uci: injection.uci,
+      position: injection.move.after,
+    );
+    if (child == null) return;
+
+    child.moveProbability = 1.0;
+    child.cumulativeProbability = node.cumulativeProbability;
+    child.engineEvalCp = child.isWhiteToMove ? cpWhite : -cpWhite;
+    run.evalResolver.cacheEvalWhite(child.fen, cpWhite, depth);
+
+    run.emitNodeProgress(child);
+  }
+
+  /// Give every child that is in the book the year its move was last
+  /// played, when nothing set it yet.
+  void _stampBookYears(BuildTreeNode node) {
+    if (run.masterBook == null) return;
+    final book = run.bookAt(node.fen);
+    if (book.isEmpty) return;
     final yearByUci = {for (final m in book) m.uci: m.lastYear};
     for (final child in node.children) {
       final y = yearByUci[child.moveUci];
@@ -564,93 +810,7 @@ abstract class NodeExpander {
     }
   }
 
-  /// Skeleton-transfer candidate injection (candidate union): the move the
-  /// user's skeleton played at the nearest position is often absent from
-  /// engine MultiPV — the experiment found Stockfish's top-8 omits ...c5 at
-  /// both 2.Nf3 and 2.Bf4 — so without this the selector's transfer bias would
-  /// have nothing to choose. Inject it as an eval-gated candidate exactly like
-  /// a setup move; the selector decides whether it wins.
-  Future<void> injectTransferCandidate(
-    BuildTreeNode node, {
-    required int? bestCpWhite,
-  }) async {
-    final plan = config.skeletonPlan;
-    if (plan.nodes.isEmpty) return;
-    // Only at our-move nodes we did not pin (a pinned node's move is already a
-    // candidate through the normal sources, or will be forced by selection).
-    final match = plan.transferFor(node.fen);
-    if (match == null) return;
-    await _injectCandidateUci(node, match.uci, bestCpWhite: bestCpWhite);
-  }
-
-  /// Pinned-move candidate injection: a move the user played by hand must
-  /// exist as a candidate even when engine MultiPV omits it, so selection's
-  /// pin override has a child to mark. Unlike setup/transfer, a pin bypasses
-  /// the eval-loss window (bestCpWhite: null) — the user's choice stands even
-  /// if it costs eval; the UI warns them separately.
-  Future<void> injectPinnedCandidate(BuildTreeNode node) async {
-    final pins = config.skeletonPlan.pinsByFen;
-    if (pins.isEmpty) return;
-    final uci = pins[normalizeFen(node.fen)];
-    if (uci == null) return;
-    await _injectCandidateUci(node, uci, bestCpWhite: null);
-  }
-
-  /// Evaluate [uci] in [node]'s position and add it as an our-move candidate
-  /// child, subject to the same eval-loss window as regular candidates.
-  /// No-op when the move is illegal, already a candidate, or unevaluable.
-  Future<void> _injectCandidateUci(
-    BuildTreeNode node,
-    String uci, {
-    required int? bestCpWhite,
-  }) async {
-    final whiteToMove = isWhiteToMove(node.fen);
-    final childFen = playUciMove(node.fen, uci);
-    if (childFen == null) return;
-    if (node.children.any((c) => c.fen == childFen || c.moveUci == uci)) {
-      return; // already a candidate
-    }
-
-    // Child eval: Stockfish when available, else the DB eval chain
-    // (matches how each build mode evaluates regular candidates).
-    final int childCpWhite;
-    final int evalDepthUsed;
-    if (config.usesStockfish && run.pool.workerCount > 0) {
-      final result = await run.pool.evaluateFen(childFen, config.evalDepth);
-      run.stats.sfMultipvCalls++;
-      final childIsWhite = isWhiteToMove(childFen);
-      childCpWhite = childIsWhite ? result.effectiveCp : -result.effectiveCp;
-      evalDepthUsed = config.evalDepth;
-    } else {
-      final dbEval = await run.evalResolver.lookupDbEvalWhite(childFen, config);
-      if (dbEval == null) return;
-      childCpWhite = dbEval.$1;
-      evalDepthUsed = dbEval.$2;
-    }
-
-    if (bestCpWhite != null) {
-      final evalLoss = whiteToMove
-          ? bestCpWhite - childCpWhite
-          : childCpWhite - bestCpWhite;
-      if (evalLoss > config.maxEvalLossCp) return;
-    }
-
-    final child = run.makeChild(
-      parent: node,
-      fen: childFen,
-      san: uciToSan(node.fen, uci),
-      uci: uci,
-    );
-    if (child == null) return;
-
-    child.moveProbability = 1.0;
-    child.cumulativeProbability = node.cumulativeProbability;
-    final childIsWhite = isWhiteToMove(childFen);
-    child.engineEvalCp = childIsWhite ? childCpWhite : -childCpWhite;
-    run.evalResolver.cacheEvalWhite(childFen, childCpWhite, evalDepthUsed);
-
-    run.emitNodeProgress(child);
-  }
+  // ── Shared our-move plumbing: priorities and gating ─────────────────────
 
   /// Best-first priorities at an our-move node: the incumbent (best eval for
   /// us at expansion time) inherits the parent's priority; alternatives are
@@ -715,12 +875,9 @@ abstract class NodeExpander {
       return children;
     }
 
-    final setupSans = parseSetupMoves(config.setupMoves).toSet();
     // A skeleton-transfer move is kept alive like a setup move: its subtree
     // must exist in case selection prefers it.
-    final transferUci = config.skeletonPlan.nodes.isEmpty
-        ? null
-        : config.skeletonPlan.transferFor(node.fen)?.uci;
+    final transferUci = _transferFor(node)?.uci;
     final incumbentCp = incumbent.evalForUs(config.playAsWhite);
     final alts =
         [
@@ -735,7 +892,7 @@ abstract class NodeExpander {
     final expand = <BuildTreeNode>[incumbent];
     var altsTaken = 0;
     for (final alt in alts) {
-      if (setupSans.contains(alt.moveSan) ||
+      if (_setupSans.contains(alt.moveSan) ||
           (transferUci != null && alt.moveUci == transferUci)) {
         expand.add(alt);
         continue;

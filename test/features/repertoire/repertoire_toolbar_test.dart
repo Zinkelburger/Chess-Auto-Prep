@@ -115,12 +115,12 @@ void main() {
       );
       await openMenu(tester);
 
-      expect(find.text('Plan a build…'), findsOneWidget);
+      expect(find.text('Plan the lines…'), findsOneWidget);
       expect(find.text('Generate from here…'), findsOneWidget);
       expect(find.text('Play the moves myself…'), findsOneWidget);
       expect(find.text('From my games…'), findsOneWidget);
       // File and paste are one entry: the dialog it opens offers both.
-      expect(find.text('Import PGN…'), findsOneWidget);
+      expect(find.text('From a PGN…'), findsOneWidget);
       expect(find.text('Paste PGN…'), findsNothing);
 
       // No explaining sentence under any of them — the labels stand alone.
@@ -135,9 +135,9 @@ void main() {
       await _pump(tester, onPlanBuild: () {}, onGenerate: () {});
       await openMenu(tester);
 
-      expect(find.text('Plan a build…'), findsOneWidget);
+      expect(find.text('Plan the lines…'), findsOneWidget);
       expect(find.text('From my games…'), findsNothing);
-      expect(find.text('Import PGN…'), findsNothing);
+      expect(find.text('From a PGN…'), findsNothing);
     });
 
     testWidgets('picking an entry runs that entry', (tester) async {

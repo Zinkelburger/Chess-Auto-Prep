@@ -320,7 +320,11 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     _controller.playMove(move.san);
   }
 
+  /// The position for [fen] — the controller's cached cursor position when
+  /// that is what the board shows (the common case), a fresh parse only for
+  /// a preview or session FEN.
   Position _positionFromFen(String fen) {
+    if (fen == _controller.fen) return _controller.position;
     try {
       return Chess.fromSetup(Setup.parseFen(fen));
     } catch (e) {
@@ -328,6 +332,31 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
       return _controller.position;
     }
   }
+
+  /// Audit arrows for [fen], computed once per (audit result, FEN).  The
+  /// board zone rebuilds on every cursor notification and the derivation
+  /// scans every finding and parses the FEN, so it is not per-build work.
+  ///
+  /// Keyed on the controller's [AuditSessionController.resultVersion], not on
+  /// the result's identity: dismissing a finding mutates it in place and
+  /// re-emits the same object, and the arrows must follow.
+  List<BoardAnnotation> _auditAnnotationsAt(String fen) {
+    final result = _auditController.result;
+    final version = _auditController.resultVersion;
+    final cached = _auditAnnotations;
+    if (cached != null && cached.version == version && cached.fen == fen) {
+      return cached.annotations;
+    }
+    final annotations = buildAuditBoardAnnotations(
+      result: result,
+      currentFen: fen,
+    );
+    _auditAnnotations = (version: version, fen: fen, annotations: annotations);
+    return annotations;
+  }
+
+  ({int version, String fen, List<BoardAnnotation> annotations})?
+  _auditAnnotations;
 
   Future<void> _showCoverageCalculator() async {
     if (_coverageController.isRunning) {

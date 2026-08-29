@@ -87,14 +87,76 @@ Map<String, LineQualityInfo> computeLineMetricsMap({
   return map;
 }
 
+/// [computeLineMetricsMap] made incremental, on the same rule
+/// `buildLineDisplayIndex` uses.
+///
+/// Pass the [previous] map and the [previousLines] it was built from: a
+/// [RepertoireLine] is immutable and the controller replaces only the lines
+/// that changed, so a line whose object is *identical* to the one it had
+/// before keeps its metrics and every other line is re-derived.  An autosave
+/// or a one-line append then costs one line, not the whole file.
+///
+/// Identity, not id: editing a line's moves rebuilds it as a new object under
+/// the same id, so reusing on the id alone would leave that line's quality,
+/// bottleneck ply and trap counts describing the moves it used to have.
+///
+/// The result covers exactly [lines], so entries for deleted lines are
+/// dropped instead of accumulating for the life of the session.  Omit
+/// [previous]/[previousLines] to derive everything.
+Map<String, LineQualityInfo> buildLineMetricsIndex({
+  required List<RepertoireLine> lines,
+  required BuildTreeNode? treeRoot,
+  required bool isWhiteRepertoire,
+  required List<TrapLineInfo> traps,
+  CoherenceResult? coherenceResult,
+  Map<String, LineQualityInfo>? previous,
+  List<RepertoireLine>? previousLines,
+}) {
+  Map<String, LineQualityInfo> derive(List<RepertoireLine> subset) =>
+      subset.isEmpty
+      ? const <String, LineQualityInfo>{}
+      : computeLineMetricsMap(
+          lines: subset,
+          treeRoot: treeRoot,
+          isWhiteRepertoire: isWhiteRepertoire,
+          traps: traps,
+          coherenceResult: coherenceResult,
+        );
+
+  if (previous == null || previousLines == null) return derive(lines);
+
+  final before = <String, RepertoireLine>{
+    for (final line in previousLines) line.id: line,
+  };
+  final computed = derive([
+    for (final line in lines)
+      if (!previous.containsKey(line.id) || !identical(before[line.id], line))
+        line,
+  ]);
+
+  final index = <String, LineQualityInfo>{};
+  for (final line in lines) {
+    final info = computed[line.id] ?? previous[line.id];
+    if (info != null) index[line.id] = info;
+  }
+  return index;
+}
+
 List<BuildTreeNode> walkTreeForLine(BuildTreeNode root, List<String> moves) {
   final path = <BuildTreeNode>[root];
   var current = root;
   for (final move in moves) {
-    final child = current.children.where((c) => c.moveSan == move).toList();
-    if (child.isEmpty) break;
-    current = child.first;
+    final child = _childBySan(current, move);
+    if (child == null) break;
+    current = child;
     path.add(current);
   }
   return path;
+}
+
+BuildTreeNode? _childBySan(BuildTreeNode node, String san) {
+  for (final child in node.children) {
+    if (child.moveSan == san) return child;
+  }
+  return null;
 }
