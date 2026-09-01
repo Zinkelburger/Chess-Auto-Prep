@@ -19,6 +19,7 @@ finish-args:
   - --share=network
   # The app reads user-chosen paths (PGN imports, ChessDB data dirs) that it
   # persists and reopens across sessions, which document portals don't cover.
+  # Also what lets a double-clicked .pgn under $HOME arrive as a plain path.
   - --filesystem=home
 modules:
   - name: chess-auto-prep
@@ -31,6 +32,8 @@ modules:
         /app/share/applications/com.example.chess_auto_prep.desktop
       - install -Dm644 com.example.chess_auto_prep.png
         /app/share/icons/hicolor/128x128/apps/com.example.chess_auto_prep.png
+      - install -Dm644 com.example.chess_auto_prep.metainfo.xml
+        /app/share/metainfo/com.example.chess_auto_prep.metainfo.xml
     sources:
       - type: dir
         path: ../../build/linux/x64/release/bundle
@@ -39,3 +42,5 @@ modules:
         path: ../../linux/com.example.chess_auto_prep.desktop
       - type: file
         path: ../../linux/com.example.chess_auto_prep.png
+      - type: file
+        path: com.example.chess_auto_prep.metainfo.xml

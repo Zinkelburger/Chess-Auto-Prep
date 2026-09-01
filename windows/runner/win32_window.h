@@ -7,6 +7,11 @@
 #include <memory>
 #include <string>
 
+// Class name of the app's top-level window. Distinct from the Flutter
+// template default so a second instance can find *this* app's window rather
+// than any Flutter app's (see single_instance.h).
+constexpr const wchar_t kWindowClassName[] = L"CHESS_AUTO_PREP_WINDOW";
+
 // A class abstraction for a high DPI-aware Win32 Window. Intended to be
 // inherited from by classes that wish to specialize with custom
 // rendering and input handling

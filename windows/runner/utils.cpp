@@ -41,6 +41,53 @@ std::vector<std::string> GetCommandLineArguments() {
   return command_line_arguments;
 }
 
+std::wstring Utf16FromUtf8(const std::string& utf8_string) {
+  if (utf8_string.empty()) {
+    return std::wstring();
+  }
+  int input_length = static_cast<int>(utf8_string.size());
+  int target_length = ::MultiByteToWideChar(
+      CP_UTF8, MB_ERR_INVALID_CHARS, utf8_string.data(), input_length,
+      nullptr, 0);
+  if (target_length <= 0) {
+    return std::wstring();
+  }
+  std::wstring utf16_string(static_cast<size_t>(target_length), L'\0');
+  int converted_length = ::MultiByteToWideChar(
+      CP_UTF8, MB_ERR_INVALID_CHARS, utf8_string.data(), input_length,
+      &utf16_string[0], target_length);
+  if (converted_length == 0) {
+    return std::wstring();
+  }
+  return utf16_string;
+}
+
+std::vector<std::string> FileArguments(
+    const std::vector<std::string>& arguments) {
+  std::vector<std::string> paths;
+  for (const std::string& argument : arguments) {
+    if (argument.empty() || argument[0] == '-') continue;
+    std::wstring relative = Utf16FromUtf8(argument);
+    if (relative.empty()) continue;
+
+    DWORD needed = ::GetFullPathNameW(relative.c_str(), 0, nullptr, nullptr);
+    if (needed == 0) continue;
+    std::wstring full(needed, L'\0');
+    DWORD written =
+        ::GetFullPathNameW(relative.c_str(), needed, &full[0], nullptr);
+    if (written == 0 || written >= needed) continue;
+    full.resize(written);
+
+    DWORD attributes = ::GetFileAttributesW(full.c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES ||
+        (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
+      continue;
+    }
+    paths.push_back(Utf8FromUtf16(full.c_str()));
+  }
+  return paths;
+}
+
 std::string Utf8FromUtf16(const wchar_t* utf16_string) {
   if (utf16_string == nullptr) {
     return std::string();

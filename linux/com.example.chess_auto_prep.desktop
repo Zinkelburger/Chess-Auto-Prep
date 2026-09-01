@@ -1,8 +1,10 @@
 [Desktop Entry]
 Name=Chess Auto Prep
 Comment=Chess repertoire and tactics trainer
-Exec=chess_auto_prep
+Exec=chess_auto_prep %f
 Icon=com.example.chess_auto_prep
 StartupWMClass=com.example.chess_auto_prep
 Type=Application
-Categories=Game;Education;
+Categories=Game;BoardGame;
+Keywords=chess;pgn;repertoire;tactics;
+MimeType=application/vnd.chess-pgn;

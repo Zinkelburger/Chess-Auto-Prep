@@ -5,13 +5,43 @@
 #include <gdk/gdkx.h>
 #endif
 
+#include <string>
+#include <vector>
+
 #include "desktop_integration.h"
+#include "file_open_channel.h"
 #include "flutter/generated_plugin_registrant.h"
 
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
+  FileOpenChannel* file_open_channel;
 };
+
+// The files among |arguments|: anything that is not a flag and names an
+// existing regular file. Relative paths are made absolute here, while the
+// working directory is still the one the file was named in.
+static std::vector<std::string> file_arguments(gchar** arguments) {
+  std::vector<std::string> paths;
+  for (gchar** arg = arguments; arg != nullptr && *arg != nullptr; ++arg) {
+    if ((*arg)[0] == '-' || (*arg)[0] == '\0') continue;
+    if (!g_file_test(*arg, G_FILE_TEST_IS_REGULAR)) continue;
+    g_autoptr(GFile) file = g_file_new_for_commandline_arg(*arg);
+    g_autofree gchar* path = g_file_get_path(file);
+    if (path != nullptr) paths.push_back(path);
+  }
+  return paths;
+}
+
+// Raises the existing window, if there is one. A second launch — from the
+// menu, or "Open with" — reaches the running instance through GApplication
+// and should bring it forward rather than open a second copy.
+static gboolean present_existing_window(GtkApplication* application) {
+  GList* windows = gtk_application_get_windows(application);
+  if (windows == nullptr) return FALSE;
+  gtk_window_present(GTK_WINDOW(windows->data));
+  return TRUE;
+}
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
@@ -26,6 +56,8 @@ static void first_frame_cb(MyApplication* self, FlView *view)
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
+  if (present_existing_window(GTK_APPLICATION(application))) return;
+
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
@@ -117,8 +149,26 @@ static void my_application_activate(GApplication* application) {
   gtk_widget_realize(GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
+  self->file_open_channel->Attach(
+      fl_engine_get_binary_messenger(fl_view_get_engine(view)));
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
+}
+
+// Implements GApplication::open — files a *second* launch forwarded to this,
+// the running instance ("Open with" on a .pgn while the app is up).
+static void my_application_open(GApplication* application, GFile** files,
+                                gint n_files, const gchar* hint) {
+  MyApplication* self = MY_APPLICATION(application);
+  std::vector<std::string> paths;
+  for (gint i = 0; i < n_files; ++i) {
+    g_autofree gchar* path = g_file_get_path(files[i]);
+    if (path != nullptr) paths.push_back(path);
+  }
+  self->file_open_channel->Open(paths);
+  if (!present_existing_window(GTK_APPLICATION(application))) {
+    g_application_activate(application);
+  }
 }
 
 // Implements GApplication::local_command_line.
@@ -126,6 +176,7 @@ static gboolean my_application_local_command_line(GApplication* application, gch
   MyApplication* self = MY_APPLICATION(application);
   // Strip out the first argument as it is the binary name.
   self->dart_entrypoint_arguments = g_strdupv(*arguments + 1);
+  std::vector<std::string> paths = file_arguments(*arguments + 1);
 
   g_autoptr(GError) error = nullptr;
   if (!g_application_register(application, nullptr, &error)) {
@@ -134,6 +185,27 @@ static gboolean my_application_local_command_line(GApplication* application, gch
      return TRUE;
   }
 
+  // Another instance owns the app-id on the session bus: hand it our files
+  // (or just raise it) and exit. Without a session bus, GApplication
+  // registers every launch as primary, so this is never the sandbox-less
+  // headless case.
+  if (g_application_get_is_remote(application)) {
+    if (paths.empty()) {
+      g_application_activate(application);
+    } else {
+      std::vector<GFile*> files;
+      for (const std::string& path : paths) {
+        files.push_back(g_file_new_for_path(path.c_str()));
+      }
+      g_application_open(application, files.data(),
+                         static_cast<gint>(files.size()), "");
+      for (GFile* file : files) g_object_unref(file);
+    }
+    *exit_status = 0;
+    return TRUE;
+  }
+
+  self->file_open_channel->Open(paths);
   g_application_activate(application);
   *exit_status = 0;
 
@@ -162,18 +234,23 @@ static void my_application_shutdown(GApplication* application) {
 static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
+  delete self->file_open_channel;
+  self->file_open_channel = nullptr;
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 
 static void my_application_class_init(MyApplicationClass* klass) {
   G_APPLICATION_CLASS(klass)->activate = my_application_activate;
+  G_APPLICATION_CLASS(klass)->open = my_application_open;
   G_APPLICATION_CLASS(klass)->local_command_line = my_application_local_command_line;
   G_APPLICATION_CLASS(klass)->startup = my_application_startup;
   G_APPLICATION_CLASS(klass)->shutdown = my_application_shutdown;
   G_OBJECT_CLASS(klass)->dispose = my_application_dispose;
 }
 
-static void my_application_init(MyApplication* self) {}
+static void my_application_init(MyApplication* self) {
+  self->file_open_channel = new FileOpenChannel();
+}
 
 MyApplication* my_application_new() {
   // Set the program name to the application ID, which helps various systems
@@ -182,8 +259,17 @@ MyApplication* my_application_new() {
   // the application to be recognized beyond its binary name.
   g_set_prgname(APPLICATION_ID);
 
+  // One instance per session: a later launch forwards its files to the
+  // running one over the session bus (see local_command_line) instead of
+  // opening a second window. Set CHESS_AUTO_PREP_NEW_INSTANCE=1 to get the
+  // old behaviour — handy when a stale `flutter run` is still alive.
+  GApplicationFlags flags = G_APPLICATION_HANDLES_OPEN;
+  if (g_strcmp0(g_getenv("CHESS_AUTO_PREP_NEW_INSTANCE"), "1") == 0) {
+    flags = static_cast<GApplicationFlags>(flags | G_APPLICATION_NON_UNIQUE);
+  }
+
   return MY_APPLICATION(g_object_new(my_application_get_type(),
                                      "application-id", APPLICATION_ID,
-                                     "flags", G_APPLICATION_NON_UNIQUE,
+                                     "flags", flags,
                                      nullptr));
 }

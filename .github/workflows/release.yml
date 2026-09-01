@@ -83,6 +83,13 @@ jobs:
           cd build/linux/x64/release/bundle
           zip -r ../../../../../chess-auto-prep-${{ github.ref_name }}-linux.zip .
 
+      - name: Build .deb
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          packaging/deb/build_deb.sh "$VERSION" build/linux/x64/release/bundle .
+          mv "chess-auto-prep-$VERSION-linux-amd64.deb" \
+             "chess-auto-prep-${{ github.ref_name }}-linux-amd64.deb"
+
       - name: Install flatpak-builder
         run: sudo apt-get install -y flatpak flatpak-builder
 
@@ -104,6 +111,7 @@ jobs:
           path: |
             chess-auto-prep-${{ github.ref_name }}-linux.zip
             chess-auto-prep-${{ github.ref_name }}-linux.flatpak
+            chess-auto-prep-${{ github.ref_name }}-linux-amd64.deb
 
   build-windows:
     runs-on: windows-latest
@@ -134,15 +142,32 @@ jobs:
       - name: Build Windows release
         run: flutter build windows --release
 
-      - name: Zip bundle
+      - name: Zip bundle (portable)
         shell: pwsh
         run: |
           Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath chess-auto-prep-${{ github.ref_name }}-windows.zip
 
+      # Inno Setup ships on the hosted Windows image; the choco line is a
+      # fallback for when an image update drops it.
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          }
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          & $iscc "/DAppVersion=$version" packaging\windows\installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Move-Item "dist\chess-auto-prep-$version-windows-setup.exe" "chess-auto-prep-${{ github.ref_name }}-windows-setup.exe"
+
       - uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: chess-auto-prep-${{ github.ref_name }}-windows.zip
+          path: |
+            chess-auto-prep-${{ github.ref_name }}-windows.zip
+            chess-auto-prep-${{ github.ref_name }}-windows-setup.exe
 
   build-macos:
     runs-on: macos-latest
@@ -236,4 +261,8 @@ jobs:
           files: artifacts/*
           generate_release_notes: true
           body: |
+            **Windows:** `windows-setup.exe` — installs for your user (no admin), adds a Start Menu entry, and opens `.pgn` files. SmartScreen will warn because the installer is not code-signed: click **More info → Run anyway**. The `windows.zip` is the same app, portable — unzip and run.
+
+            **Linux:** `linux-amd64.deb` for Debian/Ubuntu/Mint (double-click, or `sudo apt install ./chess-auto-prep-*.deb`); `linux.flatpak` for everything else (double-click, or `flatpak install chess-auto-prep-*.flatpak`). Both register the app for `.pgn` files. The `linux.zip` is portable — unzip and run; the app offers to add itself to your menu.
+
             **Which macOS zip?** Apple Silicon (M1/M2/M3/M4) → `macos-arm64`. Intel → `macos-x86_64`. Each build includes the matching Stockfish; they are not a universal binary.

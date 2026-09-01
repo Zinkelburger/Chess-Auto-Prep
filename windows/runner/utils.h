@@ -16,4 +16,14 @@ std::string Utf8FromUtf16(const wchar_t* utf16_string);
 // encoded in UTF-8. Returns an empty std::vector<std::string> on failure.
 std::vector<std::string> GetCommandLineArguments();
 
+// Takes a UTF-8 std::string and returns it as UTF-16. Returns an empty
+// std::wstring on failure.
+std::wstring Utf16FromUtf8(const std::string& utf8_string);
+
+// The files among |arguments|: anything that is not a flag and names an
+// existing file, as an absolute UTF-8 path. Relative paths are resolved
+// here, while the working directory is still the one they were named in.
+std::vector<std::string> FileArguments(
+    const std::vector<std::string>& arguments);
+
 #endif  // RUNNER_UTILS_H_

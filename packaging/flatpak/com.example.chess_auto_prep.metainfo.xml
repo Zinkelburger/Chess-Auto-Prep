@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata: what GNOME Software / KDE Discover show for the
+     Flatpak and the .deb, and how they learn the app opens PGN files. -->
+<component type="desktop-application">
+  <id>com.example.chess_auto_prep</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-or-later</project_license>
+  <name>Chess Auto Prep</name>
+  <summary>Chess repertoire and tactics trainer</summary>
+  <description>
+    <p>
+      Build and train opening repertoires, find tactics in your own games,
+      analyse positions with Stockfish, and open PGN files.
+    </p>
+  </description>
+  <launchable type="desktop-id">com.example.chess_auto_prep.desktop</launchable>
+  <provides>
+    <mediatype>application/vnd.chess-pgn</mediatype>
+  </provides>
+  <categories>
+    <category>Game</category>
+    <category>BoardGame</category>
+  </categories>
+  <keywords>
+    <keyword>chess</keyword>
+    <keyword>pgn</keyword>
+    <keyword>repertoire</keyword>
+    <keyword>tactics</keyword>
+  </keywords>
+  <url type="homepage">https://github.com/Zinkelburger/Chess-Auto-Prep</url>
+  <url type="bugtracker">https://github.com/Zinkelburger/Chess-Auto-Prep/issues</url>
+  <developer id="io.github.zinkelburger">
+    <name>Andrew Bernal</name>
+  </developer>
+  <content_rating type="oars-1.1" />
+</component>

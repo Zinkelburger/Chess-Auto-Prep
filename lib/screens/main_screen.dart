@@ -23,6 +23,7 @@ import '../features/engine_tournament/services/tournament_open_watcher.dart';
 import '../features/engine_tournament/widgets/engine_tournament_screen.dart';
 import '../features/games/widgets/tactics_games_pane.dart';
 import '../services/engine/engine_lifecycle.dart';
+import '../services/file_open_requests.dart';
 import '../services/storage/app_paths.dart';
 import '../widgets/app_breadcrumb_trail.dart';
 import 'analysis_screen.dart';
@@ -62,6 +63,11 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   /// is to arrive from somewhere else — or from a cold start.
   TournamentOpenWatcher? _tournamentOpenWatcher;
 
+  /// Files the desktop asked us to open — a double-clicked .pgn. Here for the
+  /// same reason as the tournament watcher: they come from outside the app,
+  /// so the always-mounted host screen is what listens.
+  FileOpenRequests? _fileOpenRequests;
+
   /// True while the window is paused, hidden, or detaching. Mode switches
   /// must not resume Stockfish until the app is in the foreground again.
   bool _appBackgrounded = false;
@@ -77,7 +83,22 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       _lastMode = appState.currentMode;
       appState.addListener(_onAppStateChanged);
       unawaited(_startTournamentOpenWatcher(appState));
+      _startFileOpenRequests(appState);
     });
+  }
+
+  void _startFileOpenRequests(AppState appState) {
+    final requests = FileOpenRequests(
+      onOpen: (paths) {
+        if (!mounted) return;
+        // The viewer shows one collection at a time, so a multi-file
+        // "Open with" lands on the first; the rest are a click away in the
+        // file picker.
+        appState.handOff(OpenPgnViewer(pgnPath: paths.first));
+      },
+    );
+    _fileOpenRequests = requests;
+    unawaited(requests.start());
   }
 
   /// Never throws and never blocks the first frame: a widget test with no
@@ -128,6 +149,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     _appState?.removeListener(_onAppStateChanged);
     unawaited(_tournamentOpenWatcher?.stop());
     _tournamentOpenWatcher = null;
+    _fileOpenRequests?.stop();
+    _fileOpenRequests = null;
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

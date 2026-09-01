@@ -18,6 +18,28 @@ Current implementation map: **[docs/COMPONENT_MAP.md](docs/COMPONENT_MAP.md)**
 Engine-vs-engine matches (in the app, headless, or from an agent): [docs/ENGINE_TOURNAMENT.md](docs/ENGINE_TOURNAMENT.md)  
 Planned / incomplete work: [docs/FUTURE_FEATURES.md](docs/FUTURE_FEATURES.md)
 
+## Installing a release
+
+Grab the file for your system from the
+[latest release](https://github.com/Zinkelburger/Chess-Auto-Prep/releases/latest):
+
+| System | File | Notes |
+|---|---|---|
+| Windows | `…-windows-setup.exe` | Installs for your user (no admin prompt), Start Menu entry, opens `.pgn` files. Unsigned, so SmartScreen warns once: **More info → Run anyway**. |
+| Windows (portable) | `…-windows.zip` | Unzip anywhere and run. The app offers to register itself for `.pgn` files on first run. |
+| Debian / Ubuntu / Mint | `…-linux-amd64.deb` | Double-click, or `sudo apt install ./chess-auto-prep-*.deb`. |
+| Other Linux | `…-linux.flatpak` | Double-click, or `flatpak install chess-auto-prep-*.flatpak`. |
+| Linux (portable) | `…-linux.zip` | Unzip and run. The app offers to add itself to your menu and take over `.pgn` files. |
+| macOS | `…-macos-arm64.zip` / `…-macos-x86_64.zip` | Apple Silicon / Intel. Unsigned: right-click → Open the first time. |
+
+Every install registers the app for `.pgn` files, so double-clicking a game
+file opens it in the PGN viewer — in the window that is already open, if
+there is one. Windows and most Linux desktops still ask you to confirm the
+first time if another app already owns `.pgn`.
+
+Packaging lives in `packaging/` (`windows/installer.iss`, `deb/build_deb.sh`,
+`flatpak/`) and is driven by `.github/workflows/release.yml` on `v*` tags.
+
 ## Getting Started
 
 ### Prerequisites
