@@ -9,7 +9,7 @@ const { prefix } = Astro.props;
 ---
 <div class="form-row">
   <label for={`${prefix}-label`}>Name <span class="optional">optional</span></label>
-  <input type="text" id={`${prefix}-label`} placeholder="Najdorf as Black, Carlsen's games, …" maxlength="80" autocomplete="off" />
+  <input type="text" id={`${prefix}-label`} maxlength="80" autocomplete="off" />
 </div>
 
 <div class="filters-section">

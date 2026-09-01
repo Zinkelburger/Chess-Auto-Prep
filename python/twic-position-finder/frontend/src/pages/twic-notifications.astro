@@ -39,7 +39,7 @@ const TURNSTILE = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
       <form id="subscribe-form" novalidate>
         <div class="form-row">
           <label for="sub-email">Email</label>
-          <input type="email" id="sub-email" name="email" required autocomplete="email" placeholder="you@example.com" />
+          <input type="email" id="sub-email" name="email" required autocomplete="email" />
         </div>
         <AlertFields prefix="sub" />
         {TURNSTILE && (
@@ -58,7 +58,7 @@ const TURNSTILE = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
       <form id="login-form" class="inline-form" novalidate>
         <div class="form-row grow">
           <label for="login-email">Email</label>
-          <input type="email" id="login-email" required autocomplete="email" placeholder="you@example.com" />
+          <input type="email" id="login-email" required autocomplete="email" />
         </div>
         <button type="submit" class="btn btn-outline">Email me a login link</button>
       </form>

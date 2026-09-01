@@ -13,7 +13,6 @@ export type FilterKey = 'fen' | 'player' | 'eco' | 'min_elo' | 'max_elo' | 'even
 export interface FilterDef {
   key: FilterKey;
   label: string;
-  placeholder?: string;
   inputMode?: 'numeric' | 'text';
   pattern?: string;
   mono?: boolean;
@@ -28,18 +27,16 @@ export const FILTER_DEFS: FilterDef[] = [
   {
     key: 'fen',
     label: 'Position (FEN)',
-    placeholder: 'rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2',
     mono: true,
     hasBoardPreview: true,
     repeatable: true,
     tooltip: 'Alert when a game reaches exactly this position. Paste a FEN from Lichess or Chess Auto Prep.',
   },
-  { key: 'player', label: 'Player', placeholder: 'Carlsen, M', autocomplete: 'player' },
-  { key: 'eco', label: 'Opening (ECO)', placeholder: 'B90', hasEcoPicker: true },
+  { key: 'player', label: 'Player', autocomplete: 'player' },
+  { key: 'eco', label: 'Opening (ECO)', hasEcoPicker: true },
   {
     key: 'min_elo',
     label: 'Minimum Elo',
-    placeholder: '2500',
     inputMode: 'numeric',
     pattern: '[0-9]*',
     tooltip: 'At least one player must be rated at or above this.',
@@ -47,12 +44,11 @@ export const FILTER_DEFS: FilterDef[] = [
   {
     key: 'max_elo',
     label: 'Maximum Elo',
-    placeholder: '2200',
     inputMode: 'numeric',
     pattern: '[0-9]*',
     tooltip: 'Both players must be rated at or below this.',
   },
-  { key: 'event', label: 'Event', placeholder: 'Tata Steel', autocomplete: 'event' },
+  { key: 'event', label: 'Event', autocomplete: 'event' },
 ];
 
 const AUTOCOMPLETE: Record<'player' | 'event', { url: string; label: string }> = {
@@ -224,7 +220,6 @@ export class FilterBuilder {
     if (def.mono) input.className = 'mono';
     if (def.inputMode) input.inputMode = def.inputMode;
     if (def.pattern) input.pattern = def.pattern;
-    if (def.placeholder) input.placeholder = def.placeholder;
     input.autocomplete = 'off';
     input.spellcheck = false;
     input.dataset.filterType = def.key;

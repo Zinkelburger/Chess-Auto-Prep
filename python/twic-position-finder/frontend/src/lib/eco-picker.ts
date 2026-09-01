@@ -47,7 +47,7 @@ export function openEcoModal(targetInput: HTMLInputElement): void {
       <button class="modal-close" type="button" aria-label="Close">&times;</button>
     </div>
     <div class="eco-modal-search">
-      <input type="search" placeholder="Code or name — B90, Sicilian, Najdorf…" autocomplete="off" aria-label="Search openings" />
+      <input type="search" autocomplete="off" aria-label="Search openings" />
     </div>
     <div class="eco-modal-list scroll-thin" role="listbox"></div>
     <div class="modal-footer">
