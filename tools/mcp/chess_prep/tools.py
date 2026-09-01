@@ -12,6 +12,9 @@ agent can ask what a Colle (or any) repertoire plays against a given line,
 including transpositions. Engine-tournament tools (`tournament_run` and
 friends) shell out to `tools/run_engine_tournament.dart`, so the app and an
 agent play by exactly the same rules and quote the same numbers.
+Expectimax tools (`expectimax_run` and friends) shell out to `tree_builder/`
+for the same reason, and answer the one question an engine alone cannot:
+which of several objectively equal moves scores best against a human.
 """
 
 from __future__ import annotations
@@ -391,6 +394,10 @@ class Registry:
         from .engine_tournament import register_engine_tournament_tools
 
         register_engine_tournament_tools(self)
+
+        from .expectimax import register_expectimax_tools
+
+        register_expectimax_tools(self)
 
     # ── Handlers ───────────────────────────────────────────────────────────
 

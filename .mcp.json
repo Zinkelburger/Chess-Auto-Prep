@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "chess-prep": {
+      "command": "python3",
+      "args": ["tools/mcp/chess_prep/__main__.py"]
+    }
+  }
+}
