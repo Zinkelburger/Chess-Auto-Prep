@@ -65,7 +65,7 @@ class RepertoireNavControls extends StatelessWidget {
           IconButton(
             onPressed: onGenerateFromHere,
             icon: const Icon(Icons.add, size: 16),
-            tooltip: 'Generate line from here',
+            tooltip: 'Generate from here…',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           ),

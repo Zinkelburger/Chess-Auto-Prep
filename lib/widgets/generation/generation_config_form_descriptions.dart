@@ -27,9 +27,8 @@ mixin _GenerationConfigDescriptions on _GenerationConfigFormStateBase {
         return 'Maia moves and database win rates only — fast, no engine '
             'needed. Requires an evaluation database, enabled below.';
       case BuildMode.dbExplorer:
-        return 'Builds from the PGN files you add below, not from your '
-            'existing repertoire. Move frequencies come from those games; '
-            'engine evals are added afterwards.';
+        return 'Builds from the PGN files listed below. Move frequencies '
+            'come from those games; engine evals are added afterwards.';
       case BuildMode.trapFinder:
         return 'Not yet available.';
       case BuildMode.chessDbBook:

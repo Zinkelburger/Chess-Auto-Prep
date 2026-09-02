@@ -68,14 +68,10 @@ const Map<String, Object> _inRangeAlternatives = {
 /// field is only listed once its loss is a design decision the form makes on
 /// purpose, not an omission.
 const Map<String, String> _knownLossy = {
-  // ── Quantised onto a checkbox ────────────────────────────────────────
-  // "Wide opening search" is a bool; the config field is a ply count that
-  // the form can only express as 3 (on) or 0 (off). Pinned exactly by
-  // 'the checkbox-backed knobs quantise' below.
-  'opening_width_plies': 'bool-backed: the checkbox writes 3 or 0',
-  'novelty_weight': 'bool-backed: "prefer novelties" writes 60 or 0',
   // Novelties and the natural-move bias pull in opposite directions, so the
   // form zeroes this whenever novelties are on — which the probe turns on.
+  // (opening_width_plies and novelty_weight are checkbox-backed but keep a
+  // seed's own positive value; pinned by 'the checkbox-backed knobs' below.)
   'memorability_tolerance_cp': 'forced to 0 while novelties are on',
 
   // ── Owned by global settings, not by the config ──────────────────────
@@ -298,11 +294,12 @@ void main() {
   });
 
   group('the deliberate transforms', () {
-    testWidgets('the checkbox-backed knobs quantise onto their two values', (
+    testWidgets('the checkbox-backed knobs keep a seed\'s own value', (
       tester,
     ) async {
-      // Any positive width means "wide opening on", which the form can only
-      // write back as its own 3. Same shape for the novelty weight.
+      // Any positive width means "wide opening on"; the checkbox says
+      // whether to widen, not by how much, so a planner or preset value
+      // survives the trip. Same shape for the novelty weight.
       const wide = TreeBuildConfig(
         startFen: _startFen,
         playAsWhite: true,
@@ -310,8 +307,8 @@ void main() {
         noveltyWeight: 25,
       );
       final wideResult = await _throughForm(tester, wide);
-      expect(wideResult.openingWidthPlies, 3);
-      expect(wideResult.noveltyWeight, 60);
+      expect(wideResult.openingWidthPlies, 10);
+      expect(wideResult.noveltyWeight, 25);
 
       const narrow = TreeBuildConfig(
         startFen: _startFen,
@@ -322,6 +319,44 @@ void main() {
       final narrowResult = await _throughForm(tester, narrow);
       expect(narrowResult.openingWidthPlies, 0);
       expect(narrowResult.noveltyWeight, 0);
+    });
+
+    testWidgets('an unseeded form writes the checkbox defaults', (
+      tester,
+    ) async {
+      final formKey = GlobalKey<GenerationConfigFormState>();
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<EvalDatabaseSettings>.value(
+              value: EvalDatabaseSettings.instance,
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: GenerationConfigForm(
+                  isGenerating: false,
+                  playAsWhite: false,
+                  key: formKey,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final config = formKey.currentState!.toConfig(
+        startFen: _startFen,
+        playAsWhite: false,
+      );
+      // Wide opening on, novelties off — the form's own defaults.
+      expect(config.openingWidthPlies, 3);
+      expect(config.noveltyWeight, 0);
+      // Same eval window as for White: the numbers are root offsets.
+      expect(config.minEvalCp, -100);
+      expect(config.maxEvalCp, 200);
     });
 
     testWidgets('novelties zero the memorability tolerance, and only then', (
@@ -504,9 +539,10 @@ void main() {
       // The form's declared defaults, which differ from the constructor's in
       // exactly the places TreeBuildConfig.formDefaults documents.
       expect(config.maxEvalLossCp, 30);
-      // Side-dependent, and deliberately not TreeBuildConfig.formDefaults'
-      // flat -100: playing White the form starts at "no worse than equal".
-      expect(config.minEvalCp, 0);
+      // The same as TreeBuildConfig.formDefaults for both colours: the
+      // window is an offset from the root eval, and a White floor of 0 used
+      // to prune every position a centipawn below the start.
+      expect(config.minEvalCp, -100);
       expect(config.maxEvalCp, 200);
       expect(config.maxPly, 20);
       // ...and the fields with no control fall back to the constructor's.

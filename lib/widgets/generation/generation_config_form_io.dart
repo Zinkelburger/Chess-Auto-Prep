@@ -96,6 +96,13 @@ mixin _GenerationConfigIo
     _maxPlyCtrl.text = maxPly.toString();
   }
 
+  /// The Max line length field as typed; the unfinished-build card reads it
+  /// to say what depth a resume will continue to.
+  String get maxPlyText => _maxPlyCtrl.text;
+
+  /// Fires as the Max line length field changes.
+  Listenable get maxPlyListenable => _maxPlyCtrl;
+
   /// A build is starting: the ChessDB usage line counts this run, from zero.
   void resetChessDbApiUsageForBuild(int quota) {
     _evalSources.resetApiUsageForBuild(quota);
@@ -106,6 +113,8 @@ mixin _GenerationConfigIo
     if (_buildMode == BuildMode.trapFinder) {
       return '${_buildModeLabel(_buildMode)} is not yet available in the app.';
     }
+    final numError = _firstNumFieldError();
+    if (numError != null) return numError;
     if (_buildMode == BuildMode.dbExplorer && _pgnSources.filePaths.isEmpty) {
       return _pgnSources.isEmpty
           ? 'Add at least one PGN file first. Use the picker above to '
@@ -275,7 +284,11 @@ mixin _GenerationConfigIo
       ),
       // "Wide opening search" on → widen the first few plies (both colors'
       // first two of our moves); off → 0 (legacy: only the root ply is wide).
-      openingWidthPlies: _wideOpening ? 3 : 0,
+      // A seed that carried its own width keeps it: the checkbox says
+      // whether to widen, not by how much.
+      openingWidthPlies: _wideOpening
+          ? (seed.openingWidthPlies > 0 ? seed.openingWidthPlies : 3)
+          : 0,
       maiaPriorGames: double.tryParse(_maiaPriorGamesCtrl.text.trim()) ?? 30.0,
       coverMinProb: (double.tryParse(_coverMinProbCtrl.text.trim()) ?? 0.05)
           .clamp(0.0, 1.0),
@@ -306,7 +319,10 @@ mixin _GenerationConfigIo
       selectionMode: _buildMode == BuildMode.chessDbBook
           ? SelectionMode.engineOnly
           : _selectionMode,
-      noveltyWeight: _preferNovelties ? 60 : 0,
+      // Same as the opening width: on keeps a seed's own weight.
+      noveltyWeight: _preferNovelties
+          ? (seed.noveltyWeight > 0 ? seed.noveltyWeight : 60)
+          : 0,
       leafConfidence: double.tryParse(_leafConfidenceCtrl.text.trim()) ?? 1.0,
     );
 

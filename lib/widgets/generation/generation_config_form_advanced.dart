@@ -171,9 +171,10 @@ mixin _GenerationConfigAdvanced
 
   /// Which algorithm picks our move at each of our turns.
   List<Widget> _moveChoiceModeField(VoidCallback refresh) {
+    final isBook = _buildMode == BuildMode.chessDbBook;
     return [
       DropdownButtonFormField<SelectionMode>(
-        initialValue: _selectionMode,
+        initialValue: _effectiveSelectionMode,
         decoration: const InputDecoration(
           labelText: 'How the repertoire move is picked',
           border: OutlineInputBorder(),
@@ -186,7 +187,7 @@ mixin _GenerationConfigAdvanced
               child: Text(_selectionModeLabel(mode)),
             ),
         ],
-        onChanged: widget.isGenerating
+        onChanged: widget.isGenerating || isBook
             ? null
             : (v) {
                 if (v != null) {
@@ -195,7 +196,12 @@ mixin _GenerationConfigAdvanced
                 }
               },
       ),
-      _caption(_selectionModeDescription()),
+      _caption(
+        isBook
+            ? 'The ChessDB book has one move per position, so the build '
+                  'always takes the engine-best pick here.'
+            : _selectionModeDescription(),
+      ),
     ];
   }
 

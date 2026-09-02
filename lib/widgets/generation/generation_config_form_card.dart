@@ -184,8 +184,11 @@ mixin _GenerationConfigCard
             'Engine depth',
             defaultText: '$kDefaultGenerationEvalDepth',
             onEdited: () => setState(() {}),
-            enabled: _buildMode != BuildMode.maiaDbExplore,
-            disabledReason: 'Evals come from databases in this build source',
+            enabled: _usesEngineDepth,
+            disabledReason: _buildMode == BuildMode.chessDbBook
+                ? 'ChessDB supplies the moves; turn on the Stockfish '
+                      'fallback (Advanced → ChessDB book) to use the engine'
+                : 'Evals come from databases in this build source',
             tooltip:
                 'Stockfish search depth at every evaluated position — '
                 'during the build, or in the eval pass run after a '
@@ -203,9 +206,12 @@ mixin _GenerationConfigCard
             'Your candidate moves per position',
             defaultText: '4',
             onEdited: () => setState(() {}),
-            enabled: _buildMode != BuildMode.dbExplorer,
-            disabledReason:
-                'Your PGN files decide the candidate moves in this mode',
+            enabled:
+                _buildMode != BuildMode.dbExplorer &&
+                _buildMode != BuildMode.chessDbBook,
+            disabledReason: _buildMode == BuildMode.chessDbBook
+                ? 'ChessDB plays one move per position in this build source'
+                : 'Your PGN files decide the candidate moves in this mode',
             tooltip:
                 'How many of your candidate moves are considered at each '
                 'position — engine MultiPV lines, or top Maia moves in '
@@ -534,9 +540,9 @@ mixin _GenerationConfigCard
       'vs ~$elo',
       source,
       '$ply half-moves deep',
-      if (_buildMode == BuildMode.stockfishExpectimax) 'engine depth $depth',
+      if (_usesEngineDepth) 'engine depth $depth',
       _selectionModeLabel(
-        _selectionMode,
+        _effectiveSelectionMode,
       ).replaceAll(' (recommended)', '').toLowerCase(),
       if (_preferNovelties) 'novelties',
       if (_trapsOnly) 'traps only',
@@ -547,14 +553,19 @@ mixin _GenerationConfigCard
   }
 
   Widget _summary() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceInset,
-        borderRadius: BorderRadius.circular(8),
+    return Tooltip(
+      message:
+          'What this build will do. The move-choice rule and verification '
+          'are set under Advanced…',
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceInset,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(_summaryText(), style: const TextStyle(fontSize: 12)),
       ),
-      child: Text(_summaryText(), style: const TextStyle(fontSize: 12)),
     );
   }
 }

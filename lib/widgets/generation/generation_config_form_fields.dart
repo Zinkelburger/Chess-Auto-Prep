@@ -30,6 +30,7 @@ mixin _GenerationConfigFields on _GenerationConfigFormStateBase {
     final String? helper = !enabled && disabledReason != null
         ? disabledReason
         : (defaultText != null ? 'default $defaultText' : null);
+    final problem = isEnabled ? _numFieldProblem(controller) : null;
     final field = SizedBox(
       width: 210,
       child: TextField(
@@ -41,6 +42,7 @@ mixin _GenerationConfigFields on _GenerationConfigFormStateBase {
           labelText: modified ? '$label •' : label,
           helperText: helper,
           helperMaxLines: 2,
+          errorText: problem,
           border: const OutlineInputBorder(),
           isDense: true,
         ),
