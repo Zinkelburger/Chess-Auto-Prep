@@ -282,6 +282,9 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
             currentMoveSequence: _controller.currentMoveSequence,
             repertoireStartFen: _controller.startingFen ?? kStandardStartFen,
             generationController: _generationController,
+            existingLineMoves: [
+              for (final line in _controller.repertoireLines) line.moves,
+            ],
             onLinesSaved: (lines) {
               _controller.appendNewLines([
                 for (final l in lines)
@@ -578,7 +581,10 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
           _boardFlipped = !_controller.isRepertoireWhite;
           // A build-by-playing session must not survive a repertoire swap.
           _buildSession.endSession();
+          // Drop the old repertoire's trees now, then bring in whatever this
+          // one saved — the last full build and every probe since.
           _generationController.clearTree();
+          unawaited(_generationController.loadSavedTreeFor(currentId));
           _coverageController.clear();
           // A tour from the previous repertoire's traps makes no sense here.
           _trapSession.endTourForRepertoireSwitch();
@@ -1028,6 +1034,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         ),
         isGenerating: _generationController.isGenerating,
         isGenerationPaused: _generationController.isPaused,
+        isExpectimaxProbe: _generationController.isExpectimaxProbe,
         showTrainButton: true,
         showSelectRepertoireAction: true,
         generationLocked: _generationController.isGenerating,
@@ -1103,8 +1110,12 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
                     // Lock the whole tab (board, PGN editor, engine panes)
                     // while a build actively runs; the bottom pane and status
                     // bar stay reachable below for job progress.
+                    // A probe borrows the engine but leaves the board and
+                    // the panes alone — browsing the database while it
+                    // runs is the point.
                     if (_generationController.isGenerating &&
-                        !_generationController.isPaused)
+                        !_generationController.isPaused &&
+                        !_generationController.isExpectimaxProbe)
                       GenerationLockOverlay(
                         statusText: _generationController.progress.status,
                         canPause: _generationController.canPause,

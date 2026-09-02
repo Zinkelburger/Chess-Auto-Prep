@@ -47,6 +47,36 @@ are pure functions over the tree — keep them that way; it is what makes
 them unit-testable without fakes. (Phase 3.5 loads the bundled ECO book, an
 asset read, and degrades to move-based names when it is unavailable.)
 
+## On-demand expectimax (`expectimax_probe.dart`)
+
+The expectimax pane reads a per-repertoire *database*: the tree the last
+full Generate wrote (`<repertoire>_tree.json`) plus every probe the user has
+asked for since (`<repertoire>_expectimax.json`, a list of trees).
+`GenerationSessionController.loadSavedTreeFor` loads both when a repertoire
+opens, so the values survive a restart; `GeneratedRepertoire.probes` carries
+the probe trees and its FenMap spans all of them, which is how the pane
+finds a position whichever tree holds it.
+
+A probe is `GenerationRequest.expectimaxOnly`: the ordinary Phase 1 build
+rooted at a board position (or after one chosen move) with a small depth,
+then `_finishExpectimaxProbe` instead of Phases 2.5–3.5. It grafts the tree
+into whichever database tree already holds its root (`graftProbe`: existing
+nodes are completed, never replaced; new ones are rebased in) or keeps it as
+a tree of its own, re-runs the Phase 2 scoring over the tree it landed in
+(`rescoreTree` — ease, expectimax, trap scores, CPL; **not** selection, the
+★ marks stay what the last Generate chose), republishes the bundle and
+writes it back. No lines are exported and no partial-tree file is left for
+the Generate tab.
+
+Nothing is computed while the user browses. A probe starts only from a
+button in the pane, runs as a job with its own tile, and does not lock the
+repertoire tab — browsing the database while it runs is the point. Its
+config is the last build's (or the form defaults) with export, verification,
+the master-games download and the skeleton switched off, and the ChessDB
+API allowed only by `EvalDatabaseSettings.chessDbApiForExpectimax`
+(Settings → Offline evaluation database; off by default because one probe
+from a busy position can spend most of the daily quota).
+
 ## Course composition (`course/`)
 
 A repertoire tree flattened into root-to-leaf paths is what a machine wants

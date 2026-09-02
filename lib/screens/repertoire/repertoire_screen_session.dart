@@ -130,13 +130,18 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     final ctrl = _generationController;
 
     if (ctrl.isGenerating && ctrl.currentJob == null) {
+      final probe = ctrl.isExpectimaxProbe;
       ctrl.currentJob = _jobManager.createJob(
         type: JobType.generation,
-        label: _controller.currentRepertoire?.name ?? 'Generation',
+        label: probe
+            ? 'Expectimax · ${ctrl.expectimaxProbeLabel}'
+            : _controller.currentRepertoire?.name ?? 'Generation',
         subtreeFen: _controller.fen,
       );
       ctrl.currentJob!.updateStatus(JobStatus.running);
-      _openBottomPane(BottomPaneTab.jobs);
+      // A probe reports inside the expectimax pane that started it; the
+      // Jobs pane is still there for anyone who wants the tile.
+      if (!probe) _openBottomPane(BottomPaneTab.jobs);
     }
 
     context.read<AppState>().setRepertoireGenerating(ctrl.isGenerating);

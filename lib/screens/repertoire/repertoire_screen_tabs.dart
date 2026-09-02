@@ -170,6 +170,7 @@ mixin _RepertoireTabContent
             fenMap: _generationController.generatedTreeFenMap,
             boardPreview: _boardPreview,
             coherenceResult: _generationController.coherenceService.result,
+            generation: _generationController,
             fenOverride: _isBuildSessionActive ? _buildSession.boardFen : null,
           ),
         ],
@@ -219,6 +220,7 @@ mixin _RepertoireTabContent
                   boardPreview: _boardPreview,
                   coherenceResult:
                       _generationController.coherenceService.result,
+                  generation: _generationController,
                   // Follow the scratchpad while a session explores.
                   fenOverride: _isBuildSessionActive
                       ? _buildSession.boardFen
@@ -341,6 +343,7 @@ mixin _RepertoireTabContent
       generatedTree: _generationController.generatedTree,
       treeConfig: _generationController.generatedTreeConfig,
       fenMap: _generationController.generatedTreeFenMap,
+      generation: _generationController,
       boardPreview: _boardPreview,
       coherenceResult: _generationController.coherenceService.result,
       isAnalysisActive: true,

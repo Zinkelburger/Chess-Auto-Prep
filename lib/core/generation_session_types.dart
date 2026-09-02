@@ -51,6 +51,17 @@ class GenerationRequest {
   /// Called once with every exported line after the PGN file is written.
   final void Function(List<GeneratedLineExport> lines) onLinesSaved;
 
+  /// Move sequences (from the repertoire's start, as [lineKey] strings) the
+  /// repertoire file already holds.  A generated line that matches one is
+  /// not written again: the export appends to the file, so without this a
+  /// second build into the same chapter doubled every line.
+  final Set<String> existingLineKeys;
+
+  /// An on-demand expectimax probe: build the tree and fold it into the
+  /// repertoire's expectimax database, then stop — no verification, no
+  /// lines, no PGN. See `GenerationSessionController.computeExpectimax`.
+  final bool expectimaxOnly;
+
   const GenerationRequest({
     required this.config,
     required this.repertoireFilePath,
@@ -59,7 +70,13 @@ class GenerationRequest {
     required this.repertoireStartFen,
     required this.onLinesSaved,
     this.existingTree,
+    this.existingLineKeys = const {},
+    this.expectimaxOnly = false,
   });
+
+  /// The identity of a line for duplicate detection: its SAN moves from the
+  /// repertoire start, space-joined.
+  static String lineKey(List<String> moves) => moves.join(' ');
 }
 
 /// What Phase 2 produces: the scored tree's derived structures plus the
@@ -109,4 +126,29 @@ class ExtractedLines {
   });
 
   bool get wasPruned => lines.length < rawCount;
+}
+
+/// Where an on-demand expectimax probe is rooted: the repertoire it belongs
+/// to and the moves from that repertoire's start to the position, plus the
+/// one move to play first when the user asked for a specific move.
+class ExpectimaxProbeTarget {
+  const ExpectimaxProbeTarget({
+    required this.repertoireFilePath,
+    required this.repertoireStartFen,
+    required this.movesFromStart,
+    required this.plies,
+    required this.playAsWhite,
+    this.moveSan,
+  });
+
+  final String repertoireFilePath;
+  final String repertoireStartFen;
+  final List<String> movesFromStart;
+
+  /// "Compute this move": the probe is rooted after this SAN move.
+  final String? moveSan;
+
+  /// Half-moves to explore below the root.
+  final int plies;
+  final bool playAsWhite;
 }

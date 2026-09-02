@@ -9,6 +9,7 @@ library;
 import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
+import '../../core/generation_session_controller.dart';
 import '../../core/repertoire_controller.dart';
 import '../../models/build_tree_node.dart';
 import '../../services/coherence_service.dart';
@@ -29,6 +30,9 @@ class InlineExpectimaxBar extends StatefulWidget {
   /// build-by-playing scratchpad position).
   final String? fenOverride;
 
+  /// Enables on-demand probes from the pane; see [ExpectimaxPanelHost].
+  final GenerationSessionController? generation;
+
   const InlineExpectimaxBar({
     super.key,
     required this.controller,
@@ -38,6 +42,7 @@ class InlineExpectimaxBar extends StatefulWidget {
     required this.boardPreview,
     this.coherenceResult,
     this.fenOverride,
+    this.generation,
   });
 
   static bool get isEnabled => _InlineExpectimaxBarState._enabled;
@@ -96,6 +101,7 @@ class _InlineExpectimaxBarState extends State<InlineExpectimaxBar> {
               coherenceResult: widget.coherenceResult,
               compact: true,
               fenOverride: widget.fenOverride,
+              generation: widget.generation,
             ),
           ),
         ],

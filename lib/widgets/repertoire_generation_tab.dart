@@ -20,6 +20,7 @@ import '../services/generation/tree_serialization.dart';
 import '../services/storage/storage_factory.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
+import '../utils/movetext_builder.dart';
 import 'generation/generation_config_form.dart';
 import 'starting_position_card.dart';
 
@@ -36,6 +37,10 @@ class RepertoireGenerationTab extends StatefulWidget {
   final void Function(List<GeneratedLineExport> lines) onLinesSaved;
   final GenerationSessionController generationController;
 
+  /// Move sequences of the lines the repertoire already holds, so the
+  /// export can skip the ones a previous build already wrote.
+  final Iterable<List<String>> existingLineMoves;
+
   const RepertoireGenerationTab({
     super.key,
     required this.fen,
@@ -45,6 +50,7 @@ class RepertoireGenerationTab extends StatefulWidget {
     required this.repertoireStartFen,
     required this.onLinesSaved,
     required this.generationController,
+    this.existingLineMoves = const [],
   });
 
   @override
@@ -152,15 +158,13 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         final json = await storage.readFile(path);
         if (json == null) return;
         final tree = await Isolate.run(() => deserializeTree(json));
-        if (!tree.buildComplete && mounted) {
-          setState(() {
-            final md = tree.configSnapshot['max_depth'];
-            if (md is num) {
-              _configFormKey.currentState?.setMaxPly(md.toInt());
-            }
-            _savedPartialTree = tree;
-          });
-        }
+        // The card reports the saved target depth; the Max line length field
+        // is left alone. Rewriting it here used to change the depth of the
+        // next *fresh* build without a word.
+        //
+        // A tree that finished exploring but was cancelled before its lines
+        // were built is offered too — Finish Now is exactly what it needs.
+        if (mounted) setState(() => _savedPartialTree = tree);
       } catch (e) {
         debugPrint('[RepertoireGenTab] Failed to load partial tree: $e');
       }
@@ -274,6 +278,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       repertoireStartFen: widget.repertoireStartFen,
       existingTree: existingTree,
       onLinesSaved: widget.onLinesSaved,
+      existingLineKeys: {
+        for (final moves in widget.existingLineMoves)
+          GenerationRequest.lineKey(moves),
+      },
     );
     unawaited(
       ctrl.startBuild(request).whenComplete(() {
@@ -372,9 +380,45 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     );
   }
 
+  /// The saved build's move prefix as movetext (`1.e4 c5 2.Nf3`), or null
+  /// when it recorded none.
+  static String? _savedTreeMovetext(BuildTree tree) {
+    final moves = tree.startMoves
+        .split(RegExp(r'\s+'))
+        .where((m) => m.isNotEmpty)
+        .toList();
+    if (moves.isEmpty) return null;
+    return buildNumberedMovetext(moves);
+  }
+
+  /// The Max line length the form currently shows, which is what Resume
+  /// continues toward.
+  int? _formMaxPly() {
+    final text = _configFormKey.currentState?.maxPlyText;
+    return text == null ? null : int.tryParse(text.trim());
+  }
+
   Widget _buildPartialTreeCard(BuildTree tree) {
+    // Rebuild as the field is edited so the resume wording stays true.
+    final maxPlyListenable = _configFormKey.currentState?.maxPlyListenable;
+    if (maxPlyListenable == null) return _partialTreeCardBody(tree);
+    return ListenableBuilder(
+      listenable: maxPlyListenable,
+      builder: (_, _) => _partialTreeCardBody(tree),
+    );
+  }
+
+  Widget _partialTreeCardBody(BuildTree tree) {
     final canResume = _canResumeSavedTree(tree);
+    // Fully explored: there is nothing to resume, only lines to build.
+    final exploredFully = tree.buildComplete;
     final targetDepth = tree.configSnapshot['max_depth'];
+    final movetext = _savedTreeMovetext(tree);
+    final formMaxPly = _formMaxPly();
+    // Resumable from elsewhere on the board: the tree recorded its own
+    // moves, so it continues from *its* root, not from the position shown
+    // in the banner above.
+    final resumesElsewhere = canResume && tree.root.fen != widget.fen;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -385,13 +429,19 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.pause_circle, size: 18, color: AppColors.warning),
-              SizedBox(width: 8),
+              const Icon(
+                Icons.pause_circle,
+                size: 18,
+                color: AppColors.warning,
+              ),
+              const SizedBox(width: 8),
               Text(
-                'Unfinished build available',
-                style: TextStyle(
+                exploredFully
+                    ? 'Explored build not yet exported'
+                    : 'Unfinished build available',
+                style: const TextStyle(
                   fontWeight: FontWeight.w600,
                   color: AppColors.warning,
                 ),
@@ -401,19 +451,38 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           const SizedBox(height: 4),
           Text(
             '${tree.totalNodes} nodes, depth ${tree.maxPlyReached}'
-            '${targetDepth is num ? '\nTarget depth: ${targetDepth.toInt()}' : ''}'
-            '${tree.startMoves.isNotEmpty ? '\nFrom: ${tree.startMoves}' : ''}',
+            '${targetDepth is num ? '\nWas heading for depth ${targetDepth.toInt()}' : ''}'
+            '${movetext != null ? '\nFrom: $movetext' : ''}',
             style: const TextStyle(
               fontSize: 12,
               color: AppColors.onSurfaceSoft,
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
-            'Resume continues toward the target depth; Finish Now builds '
-            'lines from what is already explored.',
-            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+          Text(
+            exploredFully
+                ? 'The search finished but the run was cancelled before any '
+                      'lines were built. Finish Now builds them from the '
+                      'explored tree.'
+                : formMaxPly != null
+                ? 'Resume continues to the Max line length above '
+                      '($formMaxPly half-moves); Finish Now builds lines from '
+                      'what is already explored.'
+                : 'Resume continues to the Max line length above; Finish Now '
+                      'builds lines from what is already explored.',
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.onSurfaceMuted,
+            ),
           ),
+          if (resumesElsewhere) ...[
+            const SizedBox(height: 4),
+            const Text(
+              'This build starts from the position listed above, not from '
+              'the board — resuming it keeps the moves it recorded.',
+              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+            ),
+          ],
           if (!canResume) ...[
             const SizedBox(height: 4),
             const Text(
@@ -428,18 +497,21 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              Tooltip(
-                message:
-                    'Continues the search toward the Max line length set '
-                    'above, then builds lines.',
-                child: OutlinedButton.icon(
-                  onPressed: canResume
-                      ? () => _startTreeBuild(existingTree: tree)
-                      : null,
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('Resume Exploring'),
+              if (!exploredFully)
+                Tooltip(
+                  message: formMaxPly != null
+                      ? 'Continues the search to $formMaxPly half-moves (the '
+                            'Max line length above), then builds lines.'
+                      : 'Continues the search toward the Max line length set '
+                            'above, then builds lines.',
+                  child: OutlinedButton.icon(
+                    onPressed: canResume
+                        ? () => _startTreeBuild(existingTree: tree)
+                        : null,
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('Resume Exploring'),
+                  ),
                 ),
-              ),
               Tooltip(
                 message:
                     'Stops at depth ${tree.maxPlyReached} already reached '

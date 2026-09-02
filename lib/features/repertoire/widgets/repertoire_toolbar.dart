@@ -30,6 +30,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     required this.title,
     this.isGenerating = false,
     this.isGenerationPaused = false,
+    this.isExpectimaxProbe = false,
     this.showTrainButton = false,
     this.showSelectRepertoireAction = false,
     this.generationLocked = false,
@@ -50,6 +51,10 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   final Widget title;
   final bool isGenerating;
   final bool isGenerationPaused;
+
+  /// The running build is an on-demand expectimax probe, not a repertoire
+  /// build — the chip says so.
+  final bool isExpectimaxProbe;
   final bool showTrainButton;
   final bool showSelectRepertoireAction;
   final bool generationLocked;
@@ -93,6 +98,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
         if (isGenerating)
           RepertoireGenerationStatusChip(
             isPaused: isGenerationPaused,
+            label: isExpectimaxProbe ? 'Computing expectimax…' : null,
             onTap: onOpenGeneration,
           ),
         RepertoireAddLinesMenu(
@@ -410,10 +416,14 @@ class RepertoireGenerationStatusChip extends StatelessWidget {
     super.key,
     required this.isPaused,
     this.onTap,
+    this.label,
   });
 
   final bool isPaused;
   final VoidCallback? onTap;
+
+  /// Replaces "Building..." while running (e.g. an expectimax probe).
+  final String? label;
 
   @override
   Widget build(BuildContext context) {
@@ -445,7 +455,7 @@ class RepertoireGenerationStatusChip extends StatelessWidget {
                     ),
                   const SizedBox(width: 6),
                   Text(
-                    isPaused ? 'Paused' : 'Building...',
+                    isPaused ? 'Paused' : (label ?? 'Building...'),
                     style: const TextStyle(
                       fontSize: 11,
                       color: AppColors.onSurfaceSoft,

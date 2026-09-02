@@ -1,11 +1,14 @@
-/// The expectimax values a build stored for the current position, laid out
-/// as a table: every move the tree holds here, what it is worth in practice,
+/// The expectimax values stored for the current position, laid out as a
+/// table: every move the database holds here, what it is worth in practice,
 /// what the engine says, and the line that follows.
 ///
-/// Everything shown is read straight from the built tree — nothing is
+/// Everything shown is read straight from the stored trees — nothing is
 /// computed while the user browses, so the pane is instant and never races
-/// the engine.  A position the build did not reach says so plainly instead
-/// of spinning.
+/// the engine.  A position the database does not hold says so plainly and,
+/// when [ExpectimaxLinesPane.hooks] is given, offers to compute it: a probe
+/// is a build the user starts on purpose, runs as a job, and lands back in
+/// the database when it finishes — the way a database site queues analysis
+/// for a position and shows the result once it is in.
 ///
 /// Visual parity with [UnifiedEnginePane]: rank, eval, clickable/hoverable
 /// SAN continuation.
@@ -13,8 +16,11 @@ library;
 
 import 'package:flutter/material.dart';
 
+import 'dart:async';
+
 import '../../models/build_tree_node.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
+import '../../models/eval_database_settings.dart';
 import '../../services/coherence_service.dart';
 import '../../services/expectimax_line_service.dart';
 import '../../services/generation/eca_calculator.dart';
@@ -22,10 +28,15 @@ import '../../services/generation/fen_map.dart';
 import '../../services/generation/generation_config.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/chess_utils.dart' show fenAfterMoves, formatPackedEval;
+import '../../utils/app_messages.dart';
 import '../../utils/ease_utils.dart' show expectedCpFromWinProb;
 import '../clickable_move_line.dart';
+import 'expectimax_probe_hooks.dart';
 import 'floating_board_preview.dart';
 import '../../utils/fen_utils.dart';
+
+/// Depths the pane offers for a probe, in half-moves.
+const List<int> kExpectimaxProbePlyChoices = [6, 8, 10, 12, 16, 20, 24];
 
 class ExpectimaxLinesPane extends StatefulWidget {
   final String fen;
@@ -41,6 +52,9 @@ class ExpectimaxLinesPane extends StatefulWidget {
   /// Embedded beside the engine pane — no bottom line-length control.
   final bool compact;
 
+  /// Lets the user ask for values the database lacks. Null: read-only.
+  final ExpectimaxProbeHooks? hooks;
+
   const ExpectimaxLinesPane({
     super.key,
     required this.fen,
@@ -53,6 +67,7 @@ class ExpectimaxLinesPane extends StatefulWidget {
     this.onLineMoveClicked,
     this.coherenceResult,
     this.compact = false,
+    this.hooks,
   });
 
   @override
@@ -68,9 +83,15 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
   int _maxPlies = 12;
   final GlobalKey _previewStackKey = GlobalKey();
 
+  /// Half-moves the next probe explores; remembered across sessions.
+  int _probePlies = EvalDatabaseSettings.instance.expectimaxProbePlies;
+
   @override
   void initState() {
     super.initState();
+    if (!kExpectimaxProbePlyChoices.contains(_probePlies)) {
+      _probePlies = EvalDatabaseSettings.defaultExpectimaxProbePlies;
+    }
     _recompute();
   }
 
@@ -126,25 +147,192 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
     return node.isWhiteToMove == config.playAsWhite;
   }
 
+  // ── Probes ───────────────────────────────────────────────────────────
+
+  Future<void> _startProbe({String? moveSan}) async {
+    final hooks = widget.hooks;
+    if (hooks == null) return;
+    final error = await hooks.compute(moveSan: moveSan, plies: _probePlies);
+    if (error != null && mounted) {
+      showAppSnackBar(context, error, isError: true);
+    }
+  }
+
+  void _setProbePlies(int? plies) {
+    if (plies == null) return;
+    setState(() => _probePlies = plies);
+    unawaited(EvalDatabaseSettings.instance.setExpectimaxProbePlies(plies));
+  }
+
+  /// Compute button plus depth picker, or the run state while one is in
+  /// flight. Empty when the pane is read-only.
+  Widget? _probeActions({String? moveSan, String? label}) {
+    final hooks = widget.hooks;
+    if (hooks == null) return null;
+    if (hooks.isBusy) return _probeRunning(hooks);
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Tooltip(
+          message:
+              'Runs a small build from this position — engine, Maia and any '
+              'evaluation database you have enabled — and stores the result. '
+              'Runs as a job; keep browsing meanwhile.',
+          child: FilledButton.tonalIcon(
+            onPressed: () => unawaited(_startProbe(moveSan: moveSan)),
+            icon: const Icon(Icons.functions, size: 16),
+            label: Text(
+              label ?? 'Compute from here',
+              style: const TextStyle(fontSize: 12),
+            ),
+            style: FilledButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+            ),
+          ),
+        ),
+        _probeDepthPicker(),
+      ],
+    );
+  }
+
+  Widget _probeDepthPicker() {
+    return Tooltip(
+      message: 'How many half-moves a probe explores below its position.',
+      child: DropdownButton<int>(
+        value: _probePlies,
+        isDense: true,
+        underline: const SizedBox.shrink(),
+        style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
+        items: [
+          for (final plies in kExpectimaxProbePlyChoices)
+            DropdownMenuItem(value: plies, child: Text('$plies half-moves')),
+        ],
+        onChanged: _setProbePlies,
+      ),
+    );
+  }
+
+  Widget _probeRunning(ExpectimaxProbeHooks hooks) {
+    if (!hooks.isProbeRunning) {
+      return const Text(
+        'A build is running — probes can start once it finishes.',
+        style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+      );
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(
+          width: 12,
+          height: 12,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            hooks.status.isEmpty ? 'Computing…' : hooks.status,
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.onSurfaceMuted,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        TextButton(
+          onPressed: hooks.cancel,
+          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+          child: const Text('Cancel', style: TextStyle(fontSize: 11)),
+        ),
+      ],
+    );
+  }
+
+  /// Header-corner control: a "deeper" button when idle, the run state
+  /// while a probe is in flight.
+  Widget? _headerProbeControl() {
+    final hooks = widget.hooks;
+    if (hooks == null) return null;
+    if (hooks.isBusy) {
+      if (!hooks.isProbeRunning) return null;
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 6),
+          const Text(
+            'Computing…',
+            style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+          ),
+          IconButton(
+            tooltip: 'Cancel the probe',
+            icon: const Icon(Icons.close, size: 14),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+            onPressed: hooks.cancel,
+          ),
+        ],
+      );
+    }
+    return IconButton(
+      tooltip:
+          'Compute $_probePlies half-moves deeper from here and add the '
+          'result to the database',
+      icon: const Icon(Icons.add_circle_outline, size: 16),
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+      onPressed: () => unawaited(_startProbe()),
+    );
+  }
+
+  /// Per-row control: compute the position after this row's first move.
+  Widget? _rowProbeControl(ExpectimaxLine line) {
+    final hooks = widget.hooks;
+    if (hooks == null || hooks.isBusy || line.movesSan.isEmpty) return null;
+    final san = line.movesSan.first;
+    return IconButton(
+      tooltip: 'Compute $_probePlies half-moves after $san',
+      icon: const Icon(Icons.play_circle_outline, size: 15),
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+      onPressed: () => unawaited(_startProbe(moveSan: san)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.tree == null || widget.config == null) {
       return _buildEmptyState(
         icon: Icons.analytics_outlined,
-        title: 'No built tree loaded',
-        body:
-            'Expectimax values are computed when a repertoire is generated. '
-            'Generate or open one to see them here.',
+        title: 'No expectimax database yet',
+        body: widget.hooks != null
+            ? 'Generate a repertoire, or compute expectimax from this '
+                  'position to start one.'
+            : 'Expectimax values are computed when a repertoire is generated. '
+                  'Generate or open one to see them here.',
+        actions: _probeActions(),
       );
     }
     final node = _node;
     if (node == null) {
       return _buildEmptyState(
         icon: Icons.search_off,
-        title: 'Not in the built tree',
-        body:
-            'The build never reached this position, so it has no expectimax '
-            'value. Step back into the repertoire to see the values again.',
+        title: 'Not computed for this position',
+        body: widget.hooks != null
+            ? 'No build has reached this position. Compute from here to add '
+                  'it to the database.'
+            : 'The build never reached this position, so it has no expectimax '
+                  'value. Step back into the repertoire to see the values again.',
+        actions: _probeActions(),
       );
     }
 
@@ -184,34 +372,38 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
     required IconData icon,
     required String title,
     required String body,
+    Widget? actions,
   }) {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 28, color: AppColors.onSurfaceDim),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              style: const TextStyle(
-                color: AppColors.onSurfaceSoft,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 28, color: AppColors.onSurfaceDim),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: AppColors.onSurfaceSoft,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              body,
-              style: const TextStyle(
-                color: AppColors.onSurfaceMuted,
-                fontSize: 11,
-                height: 1.3,
+              const SizedBox(height: 4),
+              Text(
+                body,
+                style: const TextStyle(
+                  color: AppColors.onSurfaceMuted,
+                  fontSize: 11,
+                  height: 1.3,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
-            ),
-          ],
+              if (actions != null) ...[const SizedBox(height: 10), actions],
+            ],
+          ),
         ),
       ),
     );
@@ -220,11 +412,20 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
   /// In the tree, but the build stopped here: the header still carries the
   /// position's own value, so say only that there is nothing below it.
   Widget _buildLeafState() {
-    return const Padding(
-      padding: EdgeInsets.all(12),
-      child: Text(
-        'End of the built tree — no continuations were explored from here.',
-        style: TextStyle(color: AppColors.onSurfaceMuted, fontSize: 11),
+    final actions = _probeActions();
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'End of the stored tree — no continuations were explored from '
+            'here.',
+            style: TextStyle(color: AppColors.onSurfaceMuted, fontSize: 11),
+          ),
+          if (actions != null) ...[const SizedBox(height: 8), actions],
+        ],
       ),
     );
   }
@@ -241,6 +442,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
         ? _formatEval(node.evalForUs(playAsWhite))
         : null;
 
+    final probeControl = _headerProbeControl();
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(
@@ -248,14 +450,15 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
           const Flexible(
             child: Tooltip(
               message:
-                  'What each move is worth in practice, from the built tree.\n'
+                  'What each move is worth in practice, from the stored '
+                  'trees.\n'
                   'Expectimax folds Stockfish evals with how often humans\n'
                   '(Maia at the build rating) actually go wrong, so a move\n'
                   'that sets problems scores above its raw eval.\n\n'
-                  'Values are stored at build time — nothing is computed\n'
-                  'while you browse.',
+                  'Values are stored when a build or a probe runs — nothing\n'
+                  'is computed while you browse.',
               child: Text(
-                'Expectimax · from built tree',
+                'Expectimax database',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -294,6 +497,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
                 ],
               ),
             ),
+          if (probeControl != null) ...[const Spacer(), probeControl],
         ],
       ),
     );
@@ -451,6 +655,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
               onHoverExit: () => widget.boardPreview.clearPreview(),
             ),
           ),
+          ?_rowProbeControl(line),
         ],
       ),
     );
@@ -469,6 +674,13 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
       padding: const EdgeInsets.all(8),
       child: Row(
         children: [
+          if (widget.hooks != null) ...[
+            const Text(
+              'Probe depth ',
+              style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+            ),
+            _probeDepthPicker(),
+          ],
           const Spacer(),
           Tooltip(
             message: 'How far each line continues past the current position',

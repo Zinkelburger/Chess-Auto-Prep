@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/repertoire_controller.dart';
+import '../core/generation_session_controller.dart';
 import '../models/build_tree_node.dart';
 import '../models/move_tree.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
@@ -40,6 +41,9 @@ class PgnWithAnalysisPane extends StatefulWidget {
   final BuildTree? generatedTree;
   final TreeBuildConfig? treeConfig;
   final FenMap? fenMap;
+
+  /// Enables on-demand expectimax probes in the analysis dock.
+  final GenerationSessionController? generation;
   final BoardPreviewController boardPreview;
   final CoherenceResult? coherenceResult;
   final bool isAnalysisActive;
@@ -69,6 +73,7 @@ class PgnWithAnalysisPane extends StatefulWidget {
     this.generatedTree,
     this.treeConfig,
     this.fenMap,
+    this.generation,
     required this.boardPreview,
     this.coherenceResult,
     required this.isAnalysisActive,
@@ -153,6 +158,7 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
                       tree: widget.generatedTree,
                       treeConfig: widget.treeConfig,
                       fenMap: widget.fenMap,
+                      generation: widget.generation,
                       boardPreview: widget.boardPreview,
                       coherenceResult: widget.coherenceResult,
                       isActive: widget.isAnalysisActive,

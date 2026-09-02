@@ -152,7 +152,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Expectimax · from built tree'), findsOneWidget);
+    expect(find.text('Expectimax database'), findsOneWidget);
     expect(find.textContaining('OUR CANDIDATES'), findsOneWidget);
     // Both candidates are rows — the pass-over d4 included.
     expect(find.text('1'), findsOneWidget);
@@ -189,7 +189,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Not in the built tree'), findsOneWidget);
+    expect(find.text('Not computed for this position'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
@@ -201,7 +201,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.textContaining('End of the built tree'), findsOneWidget);
+    expect(find.textContaining('End of the stored tree'), findsOneWidget);
     expect(find.textContaining('engine +0.25'), findsOneWidget);
   });
 
@@ -211,7 +211,7 @@ void main() {
     await tester.pumpWidget(_pane(fen: _startFen));
     await tester.pump();
 
-    expect(find.text('No built tree loaded'), findsOneWidget);
+    expect(find.text('No expectimax database yet'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 }

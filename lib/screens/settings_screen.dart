@@ -30,6 +30,7 @@ import '../models/eval_database_settings.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/system_info.dart';
 import '../widgets/eval_database_settings_panel.dart';
+import '../widgets/labeled_toggle.dart';
 import '../widgets/master_games_settings_panel.dart';
 import '../widgets/games_database_settings_panel.dart';
 import '../services/master_games/master_games_service.dart';
@@ -208,7 +209,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // ── Database section ───────────────────────────────────────────────────────
 
   Widget _buildDatabaseSection() {
-    return const SettingsGroup(
+    return SettingsGroup(
       title: 'Offline evaluation database',
       icon: Icons.storage,
       subtitle:
@@ -216,9 +217,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'position?" instantly, so the engine only runs for positions nobody '
           'has looked at yet.',
       children: [
-        Padding(
+        const Padding(
           padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: EvalDatabaseSettingsPanel(),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: ListenableBuilder(
+            listenable: EvalDatabaseSettings.instance,
+            builder: (context, _) {
+              final settings = EvalDatabaseSettings.instance;
+              return AppSwitch(
+                label: 'Use the ChessDB API for on-demand expectimax',
+                value: settings.chessDbApiForExpectimax,
+                onChanged: (v) =>
+                    unawaited(settings.setChessDbApiForExpectimax(v)),
+                tooltip:
+                    'A probe started from the expectimax pane may query '
+                    'chessdb.cn for evaluations. Off by default: one probe '
+                    'from a busy position can use most of the daily quota, '
+                    'and a local dump or the engine answers just as well. '
+                    'Repertoire builds have their own switch on the Generate '
+                    'form.',
+              );
+            },
+          ),
         ),
       ],
     );

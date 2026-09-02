@@ -7,6 +7,7 @@ library;
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
+import '../core/generation_session_controller.dart';
 import '../core/repertoire_controller.dart';
 import '../models/build_tree_node.dart';
 import '../models/engine_settings.dart';
@@ -36,6 +37,9 @@ class RepertoireAnalysisDock extends StatefulWidget {
   final CoherenceResult? coherenceResult;
   final bool isActive;
 
+  /// Enables on-demand probes from the expectimax pane.
+  final GenerationSessionController? generation;
+
   const RepertoireAnalysisDock({
     super.key,
     required this.controller,
@@ -45,6 +49,7 @@ class RepertoireAnalysisDock extends StatefulWidget {
     required this.boardPreview,
     this.coherenceResult,
     required this.isActive,
+    this.generation,
   });
 
   @override
@@ -282,6 +287,7 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
       boardPreview: widget.boardPreview,
       coherenceResult: widget.coherenceResult,
       compact: true,
+      generation: widget.generation,
       onMoveSelected: (san) => widget.controller.playMove(san),
       onLineMoveClicked: (sanMoves, index) {
         widget.controller.applyLineFromCurrent(sanMoves, index);

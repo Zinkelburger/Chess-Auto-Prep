@@ -11,6 +11,7 @@ library;
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
@@ -32,7 +33,9 @@ import '../services/generation/pgn_freq_map.dart' show PgnGameRecord;
 import '../services/master_games/master_games_db.dart';
 import '../services/master_games/master_games_service.dart';
 import '../services/master_games/master_model_games.dart';
+import '../models/eval_database_settings.dart';
 import '../services/generation/eca_calculator.dart';
+import '../services/generation/expectimax_probe.dart';
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import '../services/generation/line_extractor.dart';
@@ -43,6 +46,7 @@ import '../services/opening_book_service.dart';
 import '../services/generation/repertoire_selector.dart';
 import '../services/generation/repertoire_verifier.dart';
 import '../services/generation/run_debug_dump.dart';
+import '../services/generation/skeleton_plan.dart';
 import '../services/generation/trap_extractor.dart';
 import '../services/generation/tree_build_progress.dart';
 import '../services/generation/tree_ease.dart';
@@ -52,8 +56,10 @@ import '../services/jobs/generation_job_display.dart';
 import '../services/jobs/repertoire_job.dart';
 import '../services/storage/storage_factory.dart';
 import '../services/tree_build_service.dart';
+import '../utils/chess_utils.dart' show fenAfterMoves;
 import '../utils/fen_utils.dart';
 import '../utils/findability.dart';
+import '../utils/movetext_builder.dart';
 import 'generated_repertoire.dart';
 import '../utils/safe_change_notifier.dart';
 import 'generation_progress.dart';
@@ -62,7 +68,12 @@ import 'snapshot_exporter.dart';
 
 export 'generation_progress.dart';
 export 'generation_session_types.dart'
-    show GeneratedLineExport, GenerationRequest, TreeAnalysis, ExtractedLines;
+    show
+        GeneratedLineExport,
+        GenerationRequest,
+        TreeAnalysis,
+        ExtractedLines,
+        ExpectimaxProbeTarget;
 export 'snapshot_exporter.dart';
 
 class GenerationSessionController extends ChangeNotifier
@@ -136,6 +147,24 @@ class GenerationSessionController extends ChangeNotifier
   /// from it (FenMap, eval-tree snapshot, trap index).
   GeneratedRepertoire? _current;
 
+  /// On-demand probe trees for the repertoire at [_databasePath]: positions
+  /// the main tree never reached, built one request at a time from the
+  /// expectimax pane. Published through [current] as part of its FenMap.
+  final List<BuildTree> _probes = [];
+
+  /// The main tree of [current] is itself a probe — there was no full build
+  /// when the first probe ran, so it stood in as the root of the bundle.
+  /// A later full build moves it into [_probes] rather than dropping it.
+  bool _mainTreeIsProbe = false;
+
+  /// Repertoire file whose expectimax database is loaded, if any.
+  String? _databasePath;
+
+  /// Guards [loadSavedTreeFor] against an older load landing after a newer
+  /// one — switching repertoires twice while the first file is still being
+  /// parsed must show the second repertoire's tree.
+  int _loadSeq = 0;
+
   /// Context for saving partial tree state — set at build start so that
   /// pause/cancel from any source can persist the in-progress tree to disk.
   String? _repertoireFilePath;
@@ -170,6 +199,10 @@ class GenerationSessionController extends ChangeNotifier
   /// Why the last run produced no model games, or empty when it produced some
   /// (or was not asked for any).
   String lastModelGameNote = '';
+
+  /// Lines the last export left out because the repertoire file already had
+  /// them (see [GenerationRequest.existingLineKeys]).
+  int _duplicatesSkipped = 0;
 
   /// Where the last run wrote its companion model-games file, if it did.
   String? lastModelGamesPath;
@@ -326,6 +359,12 @@ class GenerationSessionController extends ChangeNotifier
       if (built == null) return;
       final (:tree, :finishedEarly) = built;
 
+      // A probe stops here: fold the tree into the database and report.
+      if (request.expectimaxOnly) {
+        await _finishExpectimaxProbe(tree, request, prefix);
+        return;
+      }
+
       // Selection and verification judge nodes against the same eval window
       // the build applied — the root-anchored one when relativeEval is on.
       final anchored = config.anchoredToRoot(tree.root);
@@ -338,8 +377,9 @@ class GenerationSessionController extends ChangeNotifier
       );
       if (_cancelRequested) {
         lastRunSummary =
-            'Cancelled during verification '
-            '(${tree.totalNodes} nodes, nothing exported).';
+            'Cancelled during verification (${tree.totalNodes} nodes, '
+            'nothing exported). The explored tree is saved — Finish Now on '
+            'the Generate tab builds lines from it.';
         return;
       }
 
@@ -475,6 +515,7 @@ class GenerationSessionController extends ChangeNotifier
     lastRunSummary = '';
     lastCourseOutline = const [];
     lastModelGameNote = '';
+    _duplicatesSkipped = 0;
     _enrichment.reset();
     lastConfig = config;
     progress.reset();
@@ -491,7 +532,9 @@ class GenerationSessionController extends ChangeNotifier
     _activeRequest = request;
 
     coherenceService.invalidate();
-    _current = null;
+    // A full build replaces the database; a probe adds to it, and the pane
+    // keeps showing it while the probe runs.
+    if (!request.expectimaxOnly) _current = null;
     // Hosts listening for isGenerating create the Jobs-panel job here.
     notifyListeners();
     currentJob
@@ -633,7 +676,10 @@ class GenerationSessionController extends ChangeNotifier
     }
 
     if (_cancelRequested) {
-      lastRunSummary = _discardRequested
+      lastRunSummary = request.expectimaxOnly
+          ? 'Expectimax probe cancelled (${tree.totalNodes} nodes, nothing '
+                'added).'
+          : _discardRequested
           ? 'Build discarded (${tree.totalNodes} nodes).'
           : 'Build cancelled (${tree.totalNodes} nodes) — '
                 'resume it anytime from the Generate tab.';
@@ -837,7 +883,15 @@ class GenerationSessionController extends ChangeNotifier
     lastCourseOutline = course.outline;
 
     final saved = <GeneratedLineExport>[];
+    _duplicatesSkipped = 0;
     for (final entry in course.entries) {
+      // Already in the file: writing it again would only duplicate it.
+      if (request.existingLineKeys.contains(
+        GenerationRequest.lineKey(entry.movesSan),
+      )) {
+        _duplicatesSkipped++;
+        continue;
+      }
       _pgnWriter.queue(entry.pgn);
       if (_pgnWriter.lineCount >= _pgnFlushEveryLines) {
         await _pgnWriter.flush(filePath);
@@ -1191,11 +1245,17 @@ class GenerationSessionController extends ChangeNotifier
     final elapsedLabel = formatJobDuration(
       Duration(milliseconds: _pipelineSw.elapsedMilliseconds),
     );
+    final duplicateNote = _duplicatesSkipped > 0
+        ? ' $_duplicatesSkipped line${_duplicatesSkipped == 1 ? '' : 's'} '
+              'already in the repertoire ${_duplicatesSkipped == 1 ? 'was' : 'were'} '
+              'not written again.'
+        : '';
     lastRunSummary =
         'Complete in $elapsedLabel: ${tree.totalNodes} nodes, '
         '${analysis.selectedCount} repertoire moves, '
         '${extracted.lines.length} lines$pruneNote'
-        '${_courseNote()}.${extracted.trapsOnlyNote}$lastModelGameNote';
+        '${_courseNote()}.$duplicateNote${extracted.trapsOnlyNote}'
+        '$lastModelGameNote';
     if (config.isChessDbBook) {
       lastRunSummary = '$lastRunSummary ${_bookSourceNote()}';
     }
@@ -1363,7 +1423,9 @@ class GenerationSessionController extends ChangeNotifier
     _isPaused = true;
     _pipelineSw.stop();
     currentJob?.updateStatus(JobStatus.paused);
-    unawaited(savePartialTree());
+    // A probe is not resumable from the Generate tab, so it leaves no
+    // partial file for that tab to offer.
+    if (!isExpectimaxProbe) unawaited(savePartialTree());
     // Hand the engine back so analysis works everywhere while paused.
     unawaited(EngineLifecycle.instance.pauseGeneration());
     progress.flushNotify();
@@ -1398,7 +1460,7 @@ class GenerationSessionController extends ChangeNotifier
     _cancelRequested = true;
     // A discard throws the tree away, so there is no point saving it here —
     // the unwind deletes the partial file instead.
-    if (!_discardRequested) unawaited(savePartialTree());
+    if (!_discardRequested && !isExpectimaxProbe) unawaited(savePartialTree());
     if (_isPaused) {
       _isPaused = false;
       _pipelineSw.start();
@@ -1442,7 +1504,29 @@ class GenerationSessionController extends ChangeNotifier
 
   // ── Generated tree lifecycle ─────────────────────────────────────────
 
-  void onTreeBuilt(BuildTree tree) {
+  /// Publish [tree] as the main tree of the bundle.
+  ///
+  /// [probes] replaces the probe list when given; otherwise the probes
+  /// already loaded stay. A main tree that was itself a probe (see
+  /// [_mainTreeIsProbe]) is demoted to the probe list rather than lost.
+  void onTreeBuilt(
+    BuildTree tree, {
+    List<BuildTree>? probes,
+    bool mainIsProbe = false,
+  }) {
+    if (probes != null) {
+      _probes
+        ..clear()
+        ..addAll(probes);
+    }
+    final previous = _current?.tree;
+    if (_mainTreeIsProbe &&
+        previous != null &&
+        !identical(previous, tree) &&
+        !_probes.contains(previous)) {
+      _probes.insert(0, previous);
+    }
+    _mainTreeIsProbe = mainIsProbe;
     TreeBuildConfig? config;
     if (tree.configSnapshot.isNotEmpty) {
       try {
@@ -1463,14 +1547,264 @@ class GenerationSessionController extends ChangeNotifier
       tree,
       playAsWhite: playAsWhite,
       config: config,
+      probes: _probes,
     );
     notifyListeners();
   }
 
   void clearTree() {
     _current = null;
+    _probes.clear();
+    _mainTreeIsProbe = false;
+    _databasePath = null;
+    _loadSeq++;
     coherenceService.invalidate();
     notifyListeners();
+  }
+
+  // ── Expectimax database ──────────────────────────────────────────────
+
+  /// Whether the run in flight is an on-demand expectimax probe rather than
+  /// a full build.
+  bool get isExpectimaxProbe => _activeRequest?.expectimaxOnly ?? false;
+
+  /// `1.e4 c5 2.Nf3` for the probe in flight (or the start position), for
+  /// job tiles and status chips.
+  String get expectimaxProbeLabel {
+    final moves = _activeRequest?.lineMovePrefix ?? const [];
+    return moves.isEmpty ? 'start position' : buildNumberedMovetext(moves);
+  }
+
+  /// Load the expectimax database saved beside [repertoireFilePath]: the
+  /// tree the last full build wrote (`_tree.json`) and every probe since
+  /// (`_expectimax.json`). Replaces whatever is loaded; a repertoire with
+  /// neither file ends with no tree.
+  ///
+  /// Idle only — a running build owns the bundle until it finishes.
+  Future<void> loadSavedTreeFor(String repertoireFilePath) async {
+    if (_isGenerating) return;
+    final seq = ++_loadSeq;
+    final storage = StorageFactory.instance;
+    final base = p.withoutExtension(repertoireFilePath);
+    final treePath = '${base}_tree.json';
+    final probesPath = ExpectimaxProbeStore.pathFor(repertoireFilePath);
+
+    BuildTree? main;
+    var probes = <BuildTree>[];
+    try {
+      if (await storage.fileExists(treePath)) {
+        final json = await storage.readFile(treePath);
+        if (json != null && json.isNotEmpty) {
+          main = await Isolate.run(() => deserializeTree(json));
+        }
+      }
+      if (await storage.fileExists(probesPath)) {
+        final json = await storage.readFile(probesPath);
+        if (json != null && json.isNotEmpty) {
+          probes = await Isolate.run(() => ExpectimaxProbeStore.decode(json));
+        }
+      }
+    } catch (e) {
+      log.w(
+        'expectimax database load failed for $repertoireFilePath',
+        name: 'GenerationSession',
+        error: e,
+      );
+    }
+    // Superseded by a newer load or a build that started meanwhile.
+    if (seq != _loadSeq || _isGenerating || isDisposed) return;
+
+    _databasePath = repertoireFilePath;
+    if (main != null) {
+      main.sortAllChildren();
+      onTreeBuilt(main, probes: probes);
+    } else if (probes.isNotEmpty) {
+      // No full build yet: the first probe stands in as the main tree.
+      onTreeBuilt(probes.first, probes: probes.sublist(1), mainIsProbe: true);
+    } else {
+      _current = null;
+      _probes.clear();
+      _mainTreeIsProbe = false;
+      coherenceService.invalidate();
+      notifyListeners();
+    }
+  }
+
+  /// Start an on-demand expectimax probe: a small build rooted at
+  /// [target]'s position that is folded into the repertoire's expectimax
+  /// database when it finishes. Returns why it could not start, or null
+  /// when it did (progress then reports through [progress] and the job).
+  ///
+  /// The probe borrows the settings of the last build (or the form defaults
+  /// when there was none) with everything that is not about scoring the
+  /// position switched off: no line export, no verification, no master-game
+  /// download, no skeleton, and the ChessDB API only when
+  /// [EvalDatabaseSettings.chessDbApiForExpectimax] allows it.
+  Future<String?> computeExpectimax(ExpectimaxProbeTarget target) async {
+    if (_isGenerating) {
+      return isExpectimaxProbe
+          ? 'An expectimax probe is already running.'
+          : 'A build is running — wait for it to finish first.';
+    }
+    final moves = [
+      ...target.movesFromStart,
+      if (target.moveSan != null) target.moveSan!,
+    ];
+    final fen = fenAfterMoves(
+      target.repertoireStartFen,
+      moves,
+      moves.length - 1,
+    );
+    final playedPlies = plyFromFen(fen) - plyFromFen(target.repertoireStartFen);
+    if (playedPlies != moves.length) {
+      return 'Could not play ${moves.join(' ')} from the repertoire start.';
+    }
+    if (_databasePath != null &&
+        !p.equals(_databasePath!, target.repertoireFilePath)) {
+      // The bundle belongs to another file; never merge across repertoires.
+      clearTree();
+    }
+
+    final base =
+        lastConfig ??
+        _current?.config ??
+        TreeBuildConfig.formDefaults(
+          startFen: fen,
+          playAsWhite: target.playAsWhite,
+        );
+    final settings = EvalDatabaseSettings.instance;
+    final config = base.copyWith(
+      startFen: fen,
+      playAsWhite: target.playAsWhite,
+      maxPly: target.plies,
+      timeBudgetMinutes: 0,
+      buildMode: BuildMode.stockfishExpectimax,
+      pgnFilePaths: const [],
+      verifyFinal: false,
+      trapsOnly: false,
+      rootReplyExclude: const [],
+      setupMoves: '',
+      skeletonPlan: const SkeletonPlan(),
+      downloadMasterGamesIfMissing: false,
+      enableChessDbApi: settings.chessDbApiForExpectimax,
+    );
+    final request = GenerationRequest(
+      config: config,
+      repertoireFilePath: target.repertoireFilePath,
+      buildRootFen: fen,
+      lineMovePrefix: List.unmodifiable(moves),
+      repertoireStartFen: target.repertoireStartFen,
+      onLinesSaved: (_) {},
+      expectimaxOnly: true,
+    );
+    unawaited(startBuild(request));
+    return null;
+  }
+
+  /// Phase 2 for a probe: graft it where the database already holds its
+  /// root, or keep it as a tree of its own; re-score the tree it landed in;
+  /// republish the bundle and write it to disk.
+  Future<void> _finishExpectimaxProbe(
+    BuildTree probe,
+    GenerationRequest request,
+    List<String> prefix,
+  ) async {
+    progress.setStatus(
+      'Adding to the expectimax database...',
+      GenerationPhase.computingExpectimax,
+    );
+    final bundle = _current;
+    final playAsWhite = request.config.playAsWhite;
+    final existing = <BuildTree>[if (bundle != null) ...bundle.allTrees];
+
+    final at = bundle?.fenMap.getCanonical(probe.root.fen);
+    final host = at == null ? null : treeOwning(at, existing);
+    final int added;
+    final BuildTree landed;
+    if (at != null && host != null) {
+      added = graftProbe(
+        host: host,
+        at: at,
+        probe: probe,
+        playAsWhite: playAsWhite,
+      );
+      landed = host;
+    } else {
+      added = probe.totalNodes;
+      landed = probe;
+      probe.startMoves = prefix.join(' ');
+    }
+
+    // Re-score with a map over the whole database so transposition leaves
+    // resolve across trees.
+    final scoringConfig = identical(landed, probe)
+        ? request.config
+        : (bundle?.config ?? request.config);
+    final fenMap = FenMap();
+    for (final tree in [...existing, if (identical(landed, probe)) probe]) {
+      fenMap.populate(tree.root);
+    }
+    rescoreTree(landed, scoringConfig, fenMap);
+
+    _databasePath = request.repertoireFilePath;
+    if (bundle == null) {
+      onTreeBuilt(probe, probes: const [], mainIsProbe: true);
+    } else {
+      final probes = [..._probes, if (identical(landed, probe)) probe];
+      onTreeBuilt(bundle.tree, probes: probes, mainIsProbe: _mainTreeIsProbe);
+    }
+    await _persistExpectimaxDatabase(
+      request.repertoireFilePath,
+      mainTreeChanged: bundle != null && identical(landed, bundle.tree),
+    );
+
+    final elapsed = formatJobDuration(
+      Duration(milliseconds: _pipelineSw.elapsedMilliseconds),
+    );
+    final where = prefix.isEmpty
+        ? 'the start position'
+        : buildNumberedMovetext(prefix);
+    lastRunSummary =
+        'Expectimax computed from $where in $elapsed: $added new '
+        'position${added == 1 ? '' : 's'} (${probe.totalNodes} explored).';
+    progress.setStatus(lastRunSummary, GenerationPhase.computingExpectimax);
+  }
+
+  /// Write the probe trees (and a probe-origin main tree) to
+  /// `_expectimax.json`; rewrite `_tree.json` when a graft changed the
+  /// build's own tree, so the database survives a restart.
+  Future<void> _persistExpectimaxDatabase(
+    String repertoireFilePath, {
+    required bool mainTreeChanged,
+  }) async {
+    final bundle = _current;
+    if (bundle == null) return;
+    final storage = StorageFactory.instance;
+    try {
+      final probeTrees = [if (_mainTreeIsProbe) bundle.tree, ...bundle.probes];
+      final probesPath = ExpectimaxProbeStore.pathFor(repertoireFilePath);
+      if (probeTrees.isEmpty) {
+        if (await storage.fileExists(probesPath)) {
+          await storage.deleteFile(probesPath);
+        }
+      } else {
+        final json = await Isolate.run(
+          () => ExpectimaxProbeStore.encode(probeTrees),
+        );
+        await storage.writeFile(probesPath, json);
+      }
+      if (mainTreeChanged && !_mainTreeIsProbe) {
+        final json = await serializeTreeInIsolate(bundle.tree);
+        final base = p.withoutExtension(repertoireFilePath);
+        await storage.writeFile('${base}_tree.json', json);
+      }
+    } catch (e) {
+      log.w(
+        'expectimax database save failed for $repertoireFilePath',
+        name: 'GenerationSession',
+        error: e,
+      );
+    }
   }
 
   @override

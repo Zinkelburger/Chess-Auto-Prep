@@ -43,6 +43,12 @@ class GeneratedRepertoire {
   /// Config snapshot the tree was built with (may be null for legacy trees).
   final TreeBuildConfig? config;
 
+  /// On-demand expectimax probes rooted at positions [tree] never reached.
+  /// Part of the [fenMap] — the expectimax pane finds them there — but not
+  /// of the graph snapshot or the trap index, which describe the repertoire
+  /// the build chose.
+  final List<BuildTree> probes;
+
   const GeneratedRepertoire({
     required this.tree,
     required this.playAsWhite,
@@ -51,7 +57,11 @@ class GeneratedRepertoire {
     required this.metricsCache,
     required this.traps,
     this.config,
+    this.probes = const [],
   });
+
+  /// Every tree in the database, main tree first.
+  List<BuildTree> get allTrees => [tree, ...probes];
 
   /// Derive every artifact from [tree] exactly once.
   ///
@@ -62,8 +72,14 @@ class GeneratedRepertoire {
     BuildTree tree, {
     required bool playAsWhite,
     TreeBuildConfig? config,
+    List<BuildTree> probes = const [],
   }) {
+    // The main tree registers first, so a position both hold resolves to
+    // the build's own node.
     final fenMap = FenMap()..populate(tree.root);
+    for (final probe in probes) {
+      fenMap.populate(probe.root);
+    }
     fenMap.freeze();
     final snapshot = EvalTreeSnapshotAdapter.fromBuildTree(
       tree,
@@ -84,6 +100,7 @@ class GeneratedRepertoire {
       metricsCache: metricsCache,
       traps: traps,
       config: config,
+      probes: List.unmodifiable(probes),
     );
   }
 }
