@@ -41,6 +41,36 @@ void main() {
     );
   });
 
+  test('the line from before each move is kept beside its score', () {
+    final nodes = nodesOf('1. e4 e5 2. Nf3 Nc6 1-0');
+    final annotated = annotateMovetextWithEvals(
+      moveNodes: nodes,
+      plyEvals: const [
+        PlyEval(cp: 30, depth: 18),
+        PlyEval(cp: 12, depth: 18),
+        PlyEval(cp: 45, depth: 18),
+        PlyEval(cp: 20, depth: 18),
+      ],
+      // Ply 1 was served from the shared cache and has no line; the others
+      // are what the engine would have played from the position before.
+      plyPvs: const [
+        ['e4', 'e5', 'Nf3'],
+        null,
+        ['Nf3', 'Nc6', 'Bb5'],
+        ['Nc6', 'Bb5'],
+      ],
+      lastPlyIsCheckmate: false,
+      result: '1-0',
+    );
+
+    expect(
+      annotated,
+      '1. e4 {[%eval 0.30,18] [%pv e4,e5,Nf3]} e5 {[%eval 0.12,18]} '
+      '2. Nf3 {[%eval 0.45,18] [%pv Nf3,Nc6,Bb5]} '
+      'Nc6 {[%eval 0.20,18] [%pv Nc6,Bb5]} 1-0',
+    );
+  });
+
   test('scores are White-normalized, not written from the mover\'s view', () {
     final nodes = nodesOf('1. e4 e5 2. Qh5 Nf6 1-0');
     final annotated = annotateMovetextWithEvals(

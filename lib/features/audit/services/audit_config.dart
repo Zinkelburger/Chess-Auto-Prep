@@ -42,6 +42,19 @@ class AuditConfig {
   /// Whether to use Maia for missing opponent responses.
   final bool useMaia;
 
+  /// Whether to ask ChessDB for strong opponent replies the repertoire does
+  /// not answer.
+  ///
+  /// Maia and the game databases flag replies people *play*; this flags
+  /// replies that are *good*, whether anyone plays them or not — the rare
+  /// sideline the database scores level with the main move.
+  final bool useChessDb;
+
+  /// An uncovered opponent reply is flagged when Stockfish's MultiPV or
+  /// ChessDB scores it within this many centipawns of the opponent's best
+  /// move at that position.
+  final int strongReplyWindowCp;
+
   /// Lichess Explorer configuration.
   final String explorerSpeeds;
   final String explorerRatings;
@@ -82,6 +95,8 @@ class AuditConfig {
     this.useStockfish = true,
     this.useLichessDb = false,
     this.useMaia = true,
+    this.useChessDb = true,
+    this.strongReplyWindowCp = 50,
     this.explorerSpeeds = 'blitz,rapid,classical',
     this.explorerRatings = '1800,2000,2200,2500',
     this.multiPv = 3,
@@ -103,6 +118,8 @@ class AuditConfig {
     'useStockfish': useStockfish,
     'useLichessDb': useLichessDb,
     'useMaia': useMaia,
+    'useChessDb': useChessDb,
+    'strongReplyWindowCp': strongReplyWindowCp,
     'explorerSpeeds': explorerSpeeds,
     'explorerRatings': explorerRatings,
     'multiPv': multiPv,
@@ -124,6 +141,8 @@ class AuditConfig {
     useStockfish: m['useStockfish'] as bool? ?? true,
     useLichessDb: m['useLichessDb'] as bool? ?? true,
     useMaia: m['useMaia'] as bool? ?? true,
+    useChessDb: m['useChessDb'] as bool? ?? true,
+    strongReplyWindowCp: m['strongReplyWindowCp'] as int? ?? 50,
     explorerSpeeds: m['explorerSpeeds'] as String? ?? 'blitz,rapid,classical',
     explorerRatings: m['explorerRatings'] as String? ?? '1800,2000,2200,2500',
     multiPv: m['multiPv'] as int? ?? 3,
@@ -138,9 +157,11 @@ class AuditConfig {
       if (useStockfish) 'SF d$evalDepth',
       if (useLichessDb) 'Lichess',
       if (useMaia) 'Maia $maiaElo',
+      if (useChessDb) 'ChessDB',
       if (clashPgnPaths.isNotEmpty) 'Clashes (${clashPgnPaths.length})',
     ];
-    return '${sources.join(' + ')} · ${maxPly}ply · mistake≥${mistakeThresholdCp}cp';
+    return '${sources.join(' + ')} · ${maxPly}ply · '
+        'mistake≥${mistakeThresholdCp}cp · reply≤${strongReplyWindowCp}cp';
   }
 
   AuditConfig copyWith({
@@ -156,6 +177,8 @@ class AuditConfig {
     bool? useStockfish,
     bool? useLichessDb,
     bool? useMaia,
+    bool? useChessDb,
+    int? strongReplyWindowCp,
     String? explorerSpeeds,
     String? explorerRatings,
     int? multiPv,
@@ -179,6 +202,8 @@ class AuditConfig {
       useStockfish: useStockfish ?? this.useStockfish,
       useLichessDb: useLichessDb ?? this.useLichessDb,
       useMaia: useMaia ?? this.useMaia,
+      useChessDb: useChessDb ?? this.useChessDb,
+      strongReplyWindowCp: strongReplyWindowCp ?? this.strongReplyWindowCp,
       explorerSpeeds: explorerSpeeds ?? this.explorerSpeeds,
       explorerRatings: explorerRatings ?? this.explorerRatings,
       multiPv: multiPv ?? this.multiPv,

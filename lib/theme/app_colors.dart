@@ -34,18 +34,26 @@ abstract final class AppColors {
   /// PGN movetext tokens alias this — there is exactly one "white" in the app.
   static const ink = Color(0xFFF2F2F2);
 
-  /// One step softer than [ink] (15.3:1) — subtitles, move numbers.
-  static const inkSoft = Color(0xFFE8E8E8);
+  /// Secondary text and icons (8.2:1). The one grey below [ink]: captions,
+  /// meta lines, labels. Hierarchy above this comes from weight, not from a
+  /// lighter grey.
+  ///
+  /// Sept 2026: the ink ladder used to have six rungs (ink, inkSoft,
+  /// onSurfaceSoft, onSurfaceMuted, onSurfaceDim, onSurfaceDisabled). Nobody
+  /// can read six greys as six levels; they read as "white" and "grey" with
+  /// noise in between. The old names below are aliases so call sites did not
+  /// have to change — new code should use [ink], [onSurfaceMuted] and
+  /// [onSurfaceDisabled] only.
+  static const onSurfaceMuted = Color(0xFFABABAB);
 
-  /// Secondary text/icons that must stay comfortably readable (9.6:1).
-  static const onSurfaceSoft = Color(0xFFBDBDBD);
+  /// Alias of [ink] (retired second white).
+  static const inkSoft = ink;
 
-  /// Muted labels / chrome — the AA floor workhorse (7.0:1).
-  static const onSurfaceMuted = Color(0xFF9E9E9E);
+  /// Alias of [onSurfaceMuted] (retired lighter grey).
+  static const onSurfaceSoft = onSurfaceMuted;
 
-  /// Dimmest legible ink (5.4:1). The old #757575 failed AA (4.07:1) and is
-  /// now reserved for [onSurfaceDisabled].
-  static const onSurfaceDim = Color(0xFF8A8A8A);
+  /// Alias of [onSurfaceMuted] (retired darker grey).
+  static const onSurfaceDim = onSurfaceMuted;
 
   /// Disabled controls ONLY (4.07:1 — intentionally sub-AA; WCAG exempts
   /// disabled UI). Never use for readable copy.
@@ -363,7 +371,6 @@ abstract final class AppColors {
   // ── Game-analysis eval chart (game_analysis_chart.dart) ─────────────────
 
   static const chartEvalLine = Color(0xFFD08030);
-  static const chartMedianLine = Color(0xFF6FBF8F);
 
   /// Decorative gridline — same hex as [onSurfaceDisabled], distinct role
   /// (non-text chrome, so sub-AA is acceptable).

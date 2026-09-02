@@ -187,7 +187,7 @@ class _ChapterManagerDialogState extends State<_ChapterManagerDialog> {
                         ? const Text(
                             'Open now',
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: 12,
                               color: AppColors.onSurfaceMuted,
                             ),
                           )

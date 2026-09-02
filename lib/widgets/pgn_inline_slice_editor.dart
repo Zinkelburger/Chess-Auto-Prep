@@ -188,7 +188,7 @@ class _InlineSliceEditorState extends State<InlineSliceEditor> {
                         ? 'Computing...'
                         : '${_matchedIndices.length}/${widget.allGames.length}',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: _computing
                           ? cs.onSurfaceVariant
@@ -206,7 +206,7 @@ class _InlineSliceEditorState extends State<InlineSliceEditor> {
                           : null,
                       style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 12),
-                        textStyle: const TextStyle(fontSize: 11),
+                        textStyle: const TextStyle(fontSize: 12),
                       ),
                       child: const Text('Apply'),
                     ),
@@ -251,7 +251,7 @@ class _InlineSliceEditorState extends State<InlineSliceEditor> {
                     ),
                     label: Text(
                       _showPreview ? 'Hide lines' : 'Preview lines',
-                      style: const TextStyle(fontSize: 11),
+                      style: const TextStyle(fontSize: 12),
                     ),
                   ),
                 ],

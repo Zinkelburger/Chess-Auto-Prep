@@ -108,7 +108,7 @@ class EvalTreeLayoutEngine {
   static const double nodeVerticalPadding = 5;
   static const double nodeTitleFontSize = 13;
   static const double nodeSecondaryFontSize = 11;
-  static const String nodeFontFamily = 'monospace';
+  static const String nodeFontFamily = 'SourceCodePro';
   static const double _nodeTextWidthBuffer = 4;
   static const TextStyle _nodeTitleMeasureStyle = TextStyle(
     fontSize: nodeTitleFontSize,

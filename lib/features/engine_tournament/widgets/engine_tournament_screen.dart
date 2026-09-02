@@ -16,7 +16,7 @@ import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/app_messages.dart';
 import '../../../widgets/app_breadcrumb_trail.dart';
-import '../../../widgets/app_mode_menu_button.dart';
+import '../../../widgets/app_mode_switcher.dart';
 import '../../../widgets/app_overflow_menu.dart';
 import '../../../widgets/app_settings_button.dart';
 import '../../../widgets/layout/responsive_split_layout.dart';
@@ -114,7 +114,7 @@ class _EngineTournamentScreenState extends State<EngineTournamentScreen> {
         return Scaffold(
           appBar: AppBar(
             titleSpacing: 16,
-            title: const AppBarTitleWithTrail(title: Text('Engine Tournament')),
+            title: const AppBarTitleWithTrail(title: AppModeSwitcher()),
             actions: [
               FilledButton.icon(
                 onPressed: _controller.isRunning ? null : _newTournament,
@@ -143,7 +143,6 @@ class _EngineTournamentScreenState extends State<EngineTournamentScreen> {
                   ),
                 ],
               ),
-              const AppModeMenuButton(),
             ],
           ),
           body: _buildBody(selected),

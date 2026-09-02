@@ -161,6 +161,42 @@ void main() {
     });
   });
 
+  group('the Lichess store gate', () {
+    // These two fields have no control in the section — they are read
+    // straight off app settings — and for a while nothing read them at all,
+    // so every build the form started had the Lichess step switched off no
+    // matter what had been downloaded.
+    test('app settings reach the config', () async {
+      await EvalDatabaseSettings.instance.setEnableLichessEvals(true);
+      await EvalDatabaseSettings.instance.setLichessEvalsPath('/data/lichess');
+
+      final back = _readBack(controller);
+
+      expect(back.enableLichessEvals, isTrue);
+      expect(back.lichessEvalsPath, '/data/lichess');
+    });
+
+    test('the switch alone is not enough without a path', () async {
+      await EvalDatabaseSettings.instance.setEnableLichessEvals(true);
+      await EvalDatabaseSettings.instance.setLichessEvalsPath('');
+
+      final back = _readBack(controller);
+
+      expect(
+        back.enableLichessEvals,
+        isFalse,
+        reason: 'the provider would open a directory named \'\'',
+      );
+    });
+
+    test('a path alone does not switch it on', () async {
+      await EvalDatabaseSettings.instance.setEnableLichessEvals(false);
+      await EvalDatabaseSettings.instance.setLichessEvalsPath('/data/lichess');
+
+      expect(_readBack(controller).enableLichessEvals, isFalse);
+    });
+  });
+
   group('the local ChessDB picker', () {
     test('a valid file turns the source on and marks the path good', () {
       controller.setLocalChessDbFile('/tmp/slice.db', valid: true);

@@ -49,7 +49,7 @@ class _ExpandedTrapListState extends State<ExpandedTrapList> {
         padding: EdgeInsets.symmetric(horizontal: 24, vertical: 4),
         child: Text(
           'No trap details available',
-          style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+          style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
         ),
       );
     }
@@ -80,7 +80,7 @@ class _ExpandedTrapListState extends State<ExpandedTrapList> {
                       '${traps[i].popularMove}? played ${(traps[i].popularProb * 100).toStringAsFixed(0)}%, '
                       'loses ${(traps[i].evalDiffCp / 100).toStringAsFixed(1)} pawns'
                       '${traps[i].refutationMove != null ? ' → punish with ${traps[i].refutationMove}' : ''}',
-                      style: const TextStyle(fontSize: 11),
+                      style: const TextStyle(fontSize: 12),
                     ),
                   ),
                   InkWell(
@@ -95,7 +95,7 @@ class _ExpandedTrapListState extends State<ExpandedTrapList> {
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(color: AppColors.divider),
                       ),
-                      child: const Text('Go', style: TextStyle(fontSize: 10)),
+                      child: const Text('Go', style: TextStyle(fontSize: 12)),
                     ),
                   ),
                 ],
@@ -119,7 +119,7 @@ class _ExpandedTrapListState extends State<ExpandedTrapList> {
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    child: const Text('Prev', style: TextStyle(fontSize: 10)),
+                    child: const Text('Prev', style: TextStyle(fontSize: 12)),
                   ),
                   TextButton(
                     onPressed: _currentTrapIdx < traps.length - 1
@@ -133,7 +133,7 @@ class _ExpandedTrapListState extends State<ExpandedTrapList> {
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    child: const Text('Next', style: TextStyle(fontSize: 10)),
+                    child: const Text('Next', style: TextStyle(fontSize: 12)),
                   ),
                 ],
               ),

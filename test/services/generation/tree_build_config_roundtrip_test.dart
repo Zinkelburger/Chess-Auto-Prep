@@ -28,7 +28,7 @@ const String _startFen =
 const Map<String, String> _enumAlternatives = {
   'search_algorithm': 'pure',
   'build_mode': 'dbExplorer',
-  'selection_mode': 'trappy',
+  'selection_mode': 'engineOnly',
   'annotation_detail': 'none',
 };
 
@@ -242,6 +242,8 @@ void main() {
         'enable_chessdb_api',
         'enable_ext_eval_subtree_skip',
         'enable_local_chessdb',
+        'enable_lichess_evals',
+        'lichess_evals_path',
         'engine_tail_depth',
         'engine_tail_plies',
         'engine_threads',
@@ -273,10 +275,12 @@ void main() {
         'model_game_count',
         'model_game_min_elo',
         'novelty_weight',
+        'mistake_weight',
         'off_book_opp_max_children',
         'book_tail_max_ply',
         'book_engine_fallback',
         'book_tie_break_window_cp',
+        'reply_window_cp',
         'opening_width_plies',
         'opp_mass_target',
         'opp_max_children',

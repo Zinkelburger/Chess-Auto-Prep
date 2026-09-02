@@ -30,6 +30,7 @@ import '../models/eval_database_settings.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/system_info.dart';
 import '../widgets/eval_database_settings_panel.dart';
+import '../widgets/lichess_eval_settings_panel.dart';
 import '../widgets/labeled_toggle.dart';
 import '../widgets/master_games_settings_panel.dart';
 import '../widgets/games_database_settings_panel.dart';
@@ -210,16 +211,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildDatabaseSection() {
     return SettingsGroup(
-      title: 'Offline evaluation database',
+      title: 'Offline evaluation databases',
       icon: Icons.storage,
       subtitle:
-          'Optional. A local copy of ChessDB answers "how good is this '
-          'position?" instantly, so the engine only runs for positions nobody '
-          'has looked at yet.',
+          'Optional. A local copy of ChessDB or of the Lichess cloud '
+          'evaluations answers "how good is this position?" instantly, so the '
+          'engine only runs for positions nobody has looked at yet.',
       children: [
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: EvalDatabaseSettingsPanel(),
+        ),
+        const Divider(height: 24, indent: 16, endIndent: 16),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: LichessEvalSettingsPanel(),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

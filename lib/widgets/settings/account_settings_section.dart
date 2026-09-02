@@ -163,7 +163,7 @@ class _LichessLoginTileState extends State<_LichessLoginTile> {
               Text(
                 detail,
                 style: const TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   color: AppColors.onSurfaceMuted,
                 ),
               ),

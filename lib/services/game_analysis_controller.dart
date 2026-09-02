@@ -25,6 +25,7 @@ import '../utils/chess_utils.dart'
 import '../utils/ease_utils.dart' show winningChanceFromCp;
 import '../utils/eval_constants.dart';
 import '../utils/pgn_comment_utils.dart';
+import 'engine/engine_lifecycle.dart';
 import 'engine/stockfish_pool.dart';
 import 'eval_cache.dart';
 import 'maia/maia_factory.dart';
@@ -74,6 +75,31 @@ class MoveEval {
   });
 
   bool get isWhiteMove => ply % 2 == 1;
+
+  /// A move worth a card or an inline mark that has no engine line to offer
+  /// with it — the `[%pv]` was never stored (a review pass from before lines
+  /// were kept, or a score served from the eval cache, which keeps none).
+  bool get needsBestLine =>
+      classification != MoveClassification.normal &&
+      !deliversCheckmate &&
+      bestLine.isEmpty;
+
+  MoveEval withBestLine(List<String> line) => MoveEval(
+    ply: ply,
+    san: san,
+    fenBefore: fenBefore,
+    fenAfter: fenAfter,
+    scoreCp: scoreCp,
+    scoreMate: scoreMate,
+    winningChance: winningChance,
+    classification: classification,
+    maiaProb: maiaProb,
+    maiaTopMove: maiaTopMove,
+    maiaTopProb: maiaTopProb,
+    bestLine: line,
+    depth: depth,
+    deliversCheckmate: deliversCheckmate,
+  );
 
   int get effectiveCp {
     if (deliversCheckmate) {
@@ -270,6 +296,36 @@ parseCachedEvals(String pgnText) {
 // Controller
 // ---------------------------------------------------------------------------
 
+/// [pgnText]'s movetext with a `[%pv]` written onto each mainline move named
+/// in [linesByPly] (1-based ply → SAN line from the position before it),
+/// alongside whatever comment the move already carries. Null when the game
+/// does not parse or names no such ply.
+String? injectBestLines(String pgnText, Map<int, List<String>> linesByPly) {
+  if (linesByPly.isEmpty) return null;
+  final PgnGame parsed;
+  try {
+    parsed = PgnGame.parsePgn(pgnText);
+  } catch (_) {
+    return null;
+  }
+  final mainline = parsed.moves.mainline().toList();
+  var written = false;
+  for (final entry in linesByPly.entries) {
+    final index = entry.key - 1;
+    if (index < 0 || index >= mainline.length || entry.value.isEmpty) continue;
+    final node = mainline[index];
+    final comments = node.comments;
+    if (comments != null && comments.isNotEmpty) {
+      comments[0] = setPvInComment(comments[0], entry.value);
+    } else {
+      node.comments = ['[%pv ${entry.value.join(',')}]'];
+    }
+    written = true;
+  }
+  if (!written) return null;
+  return buildMovetext(mainline, result: parsed.headers['Result']);
+}
+
 class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
   List<MoveEval> _evals = [];
   List<MoveEval> get evals => _evals;
@@ -294,9 +350,14 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
 
   bool _isCancelled = false;
 
+  /// Bumped by every load, clear, cancel and analysis start, so work begun
+  /// for one game ([fillMissingBestLines]) cannot land on the next.
+  int _generation = 0;
+
   // ── Loading cached analysis from PGN ────────────────────────────────────
 
   Future<bool> tryLoadFromPgn(String pgnText) async {
+    _generation++;
     _evals = [];
 
     try {
@@ -315,7 +376,80 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
+  /// The classified moves of the loaded series that have no line behind
+  /// them. See [MoveEval.needsBestLine].
+  List<MoveEval> get movesMissingBestLine => [
+    for (final e in _evals)
+      if (e.needsBestLine) e,
+  ];
+
+  /// Search for the lines the stored series is missing, so a review-pass
+  /// graph always opens with something to click on its mistakes.
+  ///
+  /// The series a review pass stores scores every ply, but the line behind a
+  /// score was not always kept (passes from before lines were stored; scores
+  /// served from the shared eval cache, which holds no lines). The tab's
+  /// cards and the movetext's inline marks both go quiet on such a move.
+  /// This searches just those positions — a handful, at the depth the series
+  /// was scored at — puts the lines on the loaded evals, and hands the
+  /// re-annotated movetext to [onAnnotatedMovetext] so it is stored and never
+  /// searched again.
+  ///
+  /// Silent when there is nothing to fill, while a full analysis is running,
+  /// while repertoire generation holds the engine, or when no engine can be
+  /// started; a load of a different game in the meantime discards the result.
+  Future<void> fillMissingBestLines(
+    String pgnText, {
+    ValueChanged<String>? onAnnotatedMovetext,
+  }) async {
+    if (_isAnalyzing) return;
+    final missing = movesMissingBestLine;
+    if (missing.isEmpty) return;
+    if (EngineLifecycle.instance.state == EngineState.generating) return;
+    final generation = _generation;
+
+    // The depth the graph was drawn at, so the lines agree with the scores
+    // beside them; the engine setting when the series does not say.
+    var depth = EngineSettings.instance.depth;
+    for (final e in missing) {
+      final d = e.depth;
+      if (d != null && d < depth) depth = d;
+    }
+
+    final List<EvalResult> results;
+    try {
+      final pool = StockfishPool.instance;
+      await pool.ensureWorkers();
+      if (pool.workerCount == 0) return;
+      results = await pool.evaluateMany([
+        for (final e in missing) e.fenBefore,
+      ], depth);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[GameAnalysis] Line fill failed: $e');
+      return;
+    }
+    if (generation != _generation || _isAnalyzing) return;
+
+    final linesByPly = <int, List<String>>{};
+    for (var i = 0; i < missing.length; i++) {
+      final line = _uciPvToSan(missing[i].fenBefore, results[i].pv);
+      if (line.isNotEmpty) linesByPly[missing[i].ply] = line;
+    }
+    if (linesByPly.isEmpty) return;
+
+    _evals = [
+      for (final e in _evals)
+        linesByPly.containsKey(e.ply) ? e.withBestLine(linesByPly[e.ply]!) : e,
+    ];
+    notifyListeners();
+
+    if (onAnnotatedMovetext == null) return;
+    final annotated = injectBestLines(pgnText, linesByPly);
+    if (annotated != null) onAnnotatedMovetext(annotated);
+  }
+
   void clearEvals() {
+    _generation++;
     _evals = [];
     _totalMoves = 0;
     _analyzedMoves = 0;
@@ -335,6 +469,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
   }) async {
     if (_isAnalyzing) cancel();
 
+    _generation++;
     _evals = [];
     _analyzedMoves = 0;
     _isAnalyzing = true;
@@ -572,15 +707,11 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
             classification = MoveClassification.interesting;
           }
 
-          // For non-normal moves (including interesting), show the engine's
-          // preferred line from the position *before* the move. For normal
-          // moves, show the continuation from after the move.
-          final List<String> bestLine;
-          if (classification != MoveClassification.normal) {
-            bestLine = _uciPvToSan(prevBeforeFen, prevBeforePv);
-          } else {
-            bestLine = _uciPvToSan(p.fenAfter, result.pv);
-          }
+          // The engine's line from the position *before* the move — what to
+          // have played instead. One convention for every move, the same one
+          // the review pass writes and every `[%pv]` reader assumes; the
+          // continuation after a move is the next ply's before-line anyway.
+          final bestLine = _uciPvToSan(prevBeforeFen, prevBeforePv);
 
           final eval = MoveEval(
             ply: ply,
@@ -688,6 +819,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
       buildMovetext(mainline, result: result);
 
   void cancel() {
+    _generation++;
     _isCancelled = true;
     StockfishPool.instance.stopAll();
   }

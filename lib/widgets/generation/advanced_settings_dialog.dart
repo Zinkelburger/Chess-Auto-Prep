@@ -137,7 +137,7 @@ class _AdvancedSettingsDialogState extends State<AdvancedSettingsDialog> {
         Expanded(
           child: Text(
             'Everything on the main form stays in sync with these.',
-            style: AppTextStyles.caption.copyWith(fontSize: 11),
+            style: AppTextStyles.caption.copyWith(fontSize: 12),
             overflow: TextOverflow.ellipsis,
           ),
         ),
@@ -169,7 +169,7 @@ class _TableOfContents extends StatelessWidget {
             child: Text(
               'SECTIONS',
               style: AppTextStyles.caption.copyWith(
-                fontSize: 10,
+                fontSize: 12,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.8,
               ),

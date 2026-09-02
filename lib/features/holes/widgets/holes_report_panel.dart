@@ -280,7 +280,7 @@ class _HolesReportPanelState extends State<HolesReportPanel>
                 Text(
                   '$dismissedCount dismissed',
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     color: AppColors.onSurfaceMuted,
                   ),
                 ),
@@ -289,7 +289,7 @@ class _HolesReportPanelState extends State<HolesReportPanel>
                   onPressed: _restoreAll,
                   child: const Text(
                     'Restore all',
-                    style: TextStyle(fontSize: 11),
+                    style: TextStyle(fontSize: 12),
                   ),
                 ),
               ],
@@ -347,7 +347,7 @@ class _HolesReportPanelState extends State<HolesReportPanel>
             if (totalMatching > visibleCount) ...[
               const Text(
                 'Top',
-                style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
               ),
               const SizedBox(width: 3),
               SizedBox(width: 34, height: 20, child: _capField(context)),
@@ -355,7 +355,7 @@ class _HolesReportPanelState extends State<HolesReportPanel>
               Text(
                 'of $totalMatching',
                 style: const TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   color: AppColors.onSurfaceMuted,
                 ),
               ),
@@ -363,7 +363,7 @@ class _HolesReportPanelState extends State<HolesReportPanel>
               Text(
                 '$visibleCount findings',
                 style: const TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   color: AppColors.onSurfaceMuted,
                 ),
               ),
@@ -395,7 +395,7 @@ class _HolesReportPanelState extends State<HolesReportPanel>
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontSize: 11,
+                          fontSize: 12,
                           color: AppColors.onSurfaceMuted,
                         ),
                       ),
@@ -408,7 +408,7 @@ class _HolesReportPanelState extends State<HolesReportPanel>
                         icon: const Icon(Icons.refresh, size: 14),
                         label: const Text(
                           'Re-run',
-                          style: TextStyle(fontSize: 11),
+                          style: TextStyle(fontSize: 12),
                         ),
                         style: TextButton.styleFrom(
                           padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -431,7 +431,7 @@ class _HolesReportPanelState extends State<HolesReportPanel>
   Widget _capField(BuildContext context) {
     return TextField(
       controller: _capCtrl,
-      style: const TextStyle(fontSize: 11, color: AppColors.onSurfaceSoft),
+      style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
       textAlign: TextAlign.center,
       keyboardType: TextInputType.number,
       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -468,7 +468,7 @@ class _HolesReportPanelState extends State<HolesReportPanel>
     return SizedBox(
       height: 26,
       child: FilterChip(
-        label: Text('$label ($count)', style: const TextStyle(fontSize: 11)),
+        label: Text('$label ($count)', style: const TextStyle(fontSize: 12)),
         selected: selected,
         // Disabled at zero; stays live while selected so it can be
         // toggled back off.

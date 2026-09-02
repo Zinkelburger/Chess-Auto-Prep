@@ -190,7 +190,7 @@ class HeaderFilters extends StatelessWidget {
               padding: EdgeInsets.only(left: 248, top: 2),
               child: Text(
                 'Expected A00–E99',
-                style: TextStyle(fontSize: 10, color: AppColors.warning),
+                style: TextStyle(fontSize: 12, color: AppColors.warning),
               ),
             ),
           if (_showsNameMatches(f)) _buildNameMatchesLine(f.value),
@@ -220,7 +220,7 @@ class HeaderFilters extends StatelessWidget {
       child: Text(
         _nameMatchesLabel(summary),
         style: TextStyle(
-          fontSize: 11,
+          fontSize: 12,
           color: summary.matchedGames == 0
               ? AppColors.warning
               : AppColors.onSurfaceMuted,

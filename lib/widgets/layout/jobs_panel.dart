@@ -93,14 +93,14 @@ class JobsPanel extends StatelessWidget {
                 Text(
                   'Completed',
                   style: AppTextStyles.caption.copyWith(
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 const Spacer(),
                 TextButton(
                   onPressed: () => jobManager.clearCompleted(),
-                  child: const Text('Clear', style: TextStyle(fontSize: 11)),
+                  child: const Text('Clear', style: TextStyle(fontSize: 12)),
                 ),
               ],
             ),
@@ -250,7 +250,7 @@ class JobsPanel extends StatelessWidget {
                   : null,
               child: const Text(
                 'Export Lines',
-                style: TextStyle(fontSize: 11, color: AppColors.info),
+                style: TextStyle(fontSize: 12, color: AppColors.info),
               ),
             ),
           ),
@@ -264,7 +264,7 @@ class JobsPanel extends StatelessWidget {
               onPressed: extrasEnabled ? onFinishNowGeneration : null,
               child: const Text(
                 'Finish Now',
-                style: TextStyle(fontSize: 11, color: AppColors.warning),
+                style: TextStyle(fontSize: 12, color: AppColors.warning),
               ),
             ),
           ),
@@ -387,6 +387,7 @@ class JobsPanel extends StatelessWidget {
       JobType.tacticsImport => Icons.extension_outlined,
       JobType.gameAnalysis => Icons.reviews_outlined,
       JobType.masterGames => Icons.library_books_outlined,
+      JobType.evalDatabase => Icons.storage_outlined,
     };
     // A stopped *resumable* job was paused, not cancelled: its work is already
     // on disk and starting it again carries on from there. "Cancelled" would
@@ -441,7 +442,7 @@ class JobsPanel extends StatelessWidget {
       ),
       subtitle: Text(
         subtitleParts.join(' · '),
-        style: AppTextStyles.caption.copyWith(fontSize: 11),
+        style: AppTextStyles.caption.copyWith(fontSize: 12),
         overflow: TextOverflow.ellipsis,
       ),
       trailing: Icon(
@@ -518,7 +519,7 @@ class _ActiveJobCard extends StatelessWidget {
       onPressed: onPressed,
       child: Text(
         isPaused ? 'Resume' : 'Pause',
-        style: const TextStyle(fontSize: 11),
+        style: const TextStyle(fontSize: 12),
       ),
     );
     if (onPressed != null) return button;
@@ -581,8 +582,8 @@ class _ActiveJobCard extends StatelessWidget {
                           Text(
                             elapsed!,
                             style: const TextStyle(
-                              fontSize: 10,
-                              fontFamily: 'monospace',
+                              fontSize: 12,
+                              fontFamily: 'SourceCodePro',
                               color: AppColors.onSurfaceMuted,
                             ),
                           ),
@@ -593,7 +594,7 @@ class _ActiveJobCard extends StatelessWidget {
                       Text(
                         subtitle!,
                         style: const TextStyle(
-                          fontSize: 10,
+                          fontSize: 12,
                           color: AppColors.onSurfaceMuted,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -610,7 +611,7 @@ class _ActiveJobCard extends StatelessWidget {
                   child: Text(
                     isCancelling ? 'Cancelling…' : 'Cancel',
                     style: const TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       color: AppColors.danger,
                     ),
                   ),
@@ -619,12 +620,12 @@ class _ActiveJobCard extends StatelessWidget {
                 if (isPaused && onResume != null)
                   TextButton(
                     onPressed: onResume,
-                    child: const Text('Resume', style: TextStyle(fontSize: 11)),
+                    child: const Text('Resume', style: TextStyle(fontSize: 12)),
                   )
                 else if (!isPaused && onPause != null)
                   TextButton(
                     onPressed: onPause,
-                    child: const Text('Pause', style: TextStyle(fontSize: 11)),
+                    child: const Text('Pause', style: TextStyle(fontSize: 12)),
                   ),
                 ...?extraActions,
                 if (onCancel != null)
@@ -632,7 +633,7 @@ class _ActiveJobCard extends StatelessWidget {
                     onPressed: onCancel,
                     child: const Text(
                       'Cancel',
-                      style: TextStyle(fontSize: 11, color: AppColors.danger),
+                      style: TextStyle(fontSize: 12, color: AppColors.danger),
                     ),
                   ),
               ],
@@ -646,7 +647,7 @@ class _ActiveJobCard extends StatelessWidget {
               Text(
                 phaseLabel,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: FontWeight.w500,
                   color: accent.withAlpha(220),
                 ),
@@ -721,7 +722,7 @@ class _StatChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       label,
-      style: const TextStyle(fontSize: 9, color: AppColors.onSurfaceMuted),
+      style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
     );
   }
 }

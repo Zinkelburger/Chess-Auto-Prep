@@ -269,4 +269,52 @@ void main() {
     expect(entry.playedDisplay, '3... Nf6');
     expect(entry.expectedDisplay, '3... cxd4');
   });
+
+  group('repeated', () {
+    test(
+      'lists only points hit by more than one game, most-repeated first',
+      () {
+        final twice = _report(
+          pathSans: ['e4', 'c5', 'c3'],
+          playedSan: 'Nf6',
+          byMe: true,
+          expectedSans: ['d5'],
+        );
+        final thrice = _report(pathSans: ['e4', 'c5'], playedSan: 'Nf3');
+        final once = _report(
+          pathSans: ['e4', 'e5'],
+          playedSan: 'Bc4',
+          byMe: true,
+          expectedSans: ['Nf3'],
+        );
+        final data = aggregateOpeningReview([
+          _game(deviation: once),
+          _game(deviation: twice),
+          _game(deviation: twice),
+          _game(deviation: thrice),
+          _game(deviation: thrice),
+          _game(deviation: thrice),
+        ]);
+        final repeated = data.repeated();
+        expect(repeated.map((e) => e.games.length), [3, 2]);
+        expect(repeated.first.isBookEnd, isTrue);
+        expect(repeated.last.isBookEnd, isFalse);
+        expect(data.repeated(limit: 1), hasLength(1));
+      },
+    );
+
+    test('is empty when nothing repeats', () {
+      final data = aggregateOpeningReview([
+        _game(
+          deviation: _report(
+            pathSans: ['e4', 'e5'],
+            playedSan: 'Bc4',
+            byMe: true,
+            expectedSans: ['Nf3'],
+          ),
+        ),
+      ]);
+      expect(data.repeated(), isEmpty);
+    });
+  });
 }

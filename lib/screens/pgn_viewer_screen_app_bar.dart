@@ -24,6 +24,7 @@ mixin _AppBarBuildersMixin
   Future<void> _pastePgn();
   Future<void> _loadFile(String path);
   void _closeFile();
+  bool _toggleSolitaireMode();
   @override
   void _reclaimFocus();
 
@@ -49,7 +50,7 @@ mixin _AppBarBuildersMixin
       title: AppBarTitleWithTrail(
         title: Row(
           children: [
-            const Text('PGN Viewer'),
+            const AppModeSwitcher(),
             const SizedBox(width: 12),
             Flexible(child: _buildOpenPgnMenuButton(fileName)),
             if (_controller.allGames.isNotEmpty &&
@@ -100,17 +101,19 @@ mixin _AppBarBuildersMixin
           IconButton(
             onPressed: _controller.showOpeningTree
                 ? null
-                : _controller.toggleSolitaire,
+                : _toggleSolitaireMode,
             icon: Icon(
               Icons.psychology,
               size: 20,
-              color: _controller.isSolitaireMode
+              color: _controller.isSolitaireMode || _controller.isSolitaireSetup
                   ? Theme.of(context).colorScheme.primary
                   : null,
             ),
             tooltip: _controller.isSolitaireMode
-                ? 'Exit solitaire mode (Esc)'
-                : 'Solitaire mode (Ctrl+S)',
+                ? 'Leave solitaire (Esc)'
+                : _controller.isSolitaireSetup
+                ? 'Cancel solitaire setup (Esc)'
+                : 'Solitaire — guess the moves of this game (Ctrl+S)',
           ),
           // No group separators: the thin vertical rules read as part of the
           // button beside them ("what is that bar doing on my button?"), and
@@ -132,7 +135,6 @@ mixin _AppBarBuildersMixin
         // included, which is how the trophy cabinet and app settings stay
         // reachable there without icons of their own.
         AppOverflowMenu(entries: _overflowEntries()),
-        const AppModeMenuButton(),
       ],
     );
   }
@@ -183,13 +185,20 @@ mixin _AppBarBuildersMixin
               'data; the builder then explores and scores lines from there.',
         ),
       ],
-      if (_controller.totalTrophyCount > 0)
-        AppMenuEntry(
-          label: 'Trophy cabinet (${_controller.totalTrophyCount})',
-          icon: Icons.emoji_events,
-          dividerAbove: true,
-          onRun: _showTrophyCabinet,
-        ),
+      // Always listed, even empty: it is how a new user learns that solitaire
+      // guesses which beat the game move are collected at all.
+      AppMenuEntry(
+        label: _controller.totalTrophyCount > 0
+            ? 'Solitaire trophies (${_controller.totalTrophyCount})'
+            : 'Solitaire trophies',
+        icon: Icons.emoji_events,
+        dividerAbove: true,
+        onRun: _showTrophyCabinet,
+        hint: _controller.totalTrophyCount > 0
+            ? null
+            : 'Guesses that the engine rates above the move actually played, '
+                  'found when you analyse a game after solitaire.',
+      ),
       AppMenuEntry(
         label: 'App settings…',
         icon: Icons.settings,

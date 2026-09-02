@@ -91,15 +91,21 @@ void main() {
   });
 
   group('our-move alternative gating (expandAlternative)', () {
-    test('Pure and trappy always expand', () {
+    test('Pure always expands', () {
       final pure = makeConfig(searchAlgorithm: SearchAlgorithm.pure);
-      final trappy = makeConfig(selectionMode: SelectionMode.trappy);
-      for (final c in [pure, trappy]) {
-        expect(
-          c.expandAlternative(gapCp: 400, altsAlreadyExpanded: 10),
-          isTrue,
-        );
-      }
+      expect(
+        pure.expandAlternative(gapCp: 400, altsAlreadyExpanded: 10),
+        isTrue,
+      );
+    });
+
+    test('a mistake weight does not widen the gate on its own', () {
+      final weighted = makeConfig().copyWith(mistakeWeight: 100);
+      expect(
+        weighted.expandAlternative(gapCp: 400, altsAlreadyExpanded: 10),
+        isFalse,
+        reason: 'the user chooses Pure search or a 0 gap; nothing rewrites it',
+      );
     });
 
     test('Fast gates by eval gap', () {

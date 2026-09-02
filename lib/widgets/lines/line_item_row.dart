@@ -176,8 +176,8 @@ class LineItemRow extends StatelessWidget {
                 child: Text(
                   '${line.moves.length}',
                   style: const TextStyle(
-                    fontSize: 11,
-                    fontFamily: 'monospace',
+                    fontSize: 12,
+                    fontFamily: 'SourceCodePro',
                     color: AppColors.onSurfaceSoft,
                   ),
                 ),
@@ -286,7 +286,7 @@ class LineItemRow extends StatelessWidget {
         HoverableMoveChips(
           moves: line.moves,
           maxMoves: line.moves.length,
-          fontSize: 11,
+          fontSize: 12,
           boardPreview: boardPreview,
           ownerTag: this,
         ),
@@ -340,7 +340,7 @@ class _ScoreText extends StatelessWidget {
     if (v == null) {
       return const Text(
         '—',
-        style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+        style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
       );
     }
     final color = v >= goodAbove
@@ -348,7 +348,7 @@ class _ScoreText extends StatelessWidget {
         : (v < dangerBelow ? AppColors.danger : AppColors.warning);
     return Text(
       v.toStringAsFixed(2),
-      style: TextStyle(fontSize: 11, fontFamily: 'monospace', color: color),
+      style: TextStyle(fontSize: 12, fontFamily: 'SourceCodePro', color: color),
     );
   }
 }
@@ -364,15 +364,15 @@ class _TrapsCellText extends StatelessWidget {
     if (count == 0) {
       return const Text(
         '—',
-        style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+        style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
       );
     }
     final evalDiff = metrics?.bestTrapEvalDiff;
     final text = Text(
       '$count',
       style: const TextStyle(
-        fontSize: 11,
-        fontFamily: 'monospace',
+        fontSize: 12,
+        fontFamily: 'SourceCodePro',
         color: AppColors.warning,
       ),
     );
@@ -390,7 +390,7 @@ class _TrapBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       '${metrics.trapCount} trap${metrics.trapCount == 1 ? '' : 's'}',
-      style: const TextStyle(fontSize: 11, color: AppColors.onSurfaceSoft),
+      style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
     );
   }
 }
@@ -415,10 +415,10 @@ class _ImportanceBadge extends StatelessWidget {
       child: Text(
         '${(importance * 100).toStringAsFixed(1)}%',
         style: const TextStyle(
-          fontSize: 10,
+          fontSize: 12,
           fontWeight: FontWeight.bold,
           color: AppColors.engineLine,
-          fontFamily: 'monospace',
+          fontFamily: 'SourceCodePro',
         ),
       ),
     );
@@ -437,7 +437,7 @@ class _CoverageStatus extends StatelessWidget {
     if (leaf == null) {
       return const Text(
         '—',
-        style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+        style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
       );
     }
 
@@ -460,7 +460,7 @@ class _CoverageStatus extends StatelessWidget {
 
     final label = Text(
       text,
-      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color),
+      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color),
     );
     if (tooltip == null) return label;
     return Tooltip(message: tooltip, child: label);
@@ -508,7 +508,7 @@ class _UnaccountedAnnotation extends StatelessWidget {
               const Text(
                 'Unaccounted: ',
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: AppColors.coverageUnaccounted,
                 ),
@@ -531,8 +531,8 @@ class _UnaccountedAnnotation extends StatelessWidget {
                           child: Text(
                             label,
                             style: TextStyle(
-                              fontSize: 10,
-                              fontFamily: 'monospace',
+                              fontSize: 12,
+                              fontFamily: 'SourceCodePro',
                               color: AppColors.coverageUnaccounted,
                               decoration: TextDecoration.underline,
                               decorationColor: AppColors.coverageUnaccounted
@@ -546,8 +546,8 @@ class _UnaccountedAnnotation extends StatelessWidget {
                         // Muted relative to the clickable moves above so the
                         // tappable/plain hierarchy survives tokenization.
                         style: const TextStyle(
-                          fontSize: 10,
-                          fontFamily: 'monospace',
+                          fontSize: 12,
+                          fontFamily: 'SourceCodePro',
                           color: AppColors.dangerMuted,
                         ),
                       );
@@ -556,7 +556,7 @@ class _UnaccountedAnnotation extends StatelessWidget {
                       Text(
                         '+${moves.length - LineItemRow.maxUnaccountedMovesPreview} more',
                         style: const TextStyle(
-                          fontSize: 10,
+                          fontSize: 12,
                           color: AppColors.dangerMuted,
                           fontStyle: FontStyle.italic,
                         ),
@@ -622,7 +622,7 @@ class _HardMoveWarning extends StatelessWidget {
                 const SizedBox(width: 4),
                 Text(
                   label,
-                  style: const TextStyle(fontSize: 10, color: AppColors.danger),
+                  style: const TextStyle(fontSize: 12, color: AppColors.danger),
                 ),
               ],
             ),
@@ -650,7 +650,7 @@ class _HardMoveWarning extends StatelessWidget {
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(color: AppColors.outline),
                 ),
-                child: const Text('Go', style: TextStyle(fontSize: 10)),
+                child: const Text('Go', style: TextStyle(fontSize: 12)),
               ),
             ),
         ],

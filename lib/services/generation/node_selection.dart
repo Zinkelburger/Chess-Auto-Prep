@@ -31,10 +31,9 @@ int bestSiblingEvalCp(
 /// when none pass the filter.
 ///
 /// [eligible] gates candidates in the filtered pass. Whether it also gates
-/// the fallback pass differs between historical call sites (the expectimax
-/// selector requires `hasExpectimax` in both passes; the trappy selector
-/// requires `hasEngineEval` only in the filtered pass), so that is controlled
-/// by [eligibleGuardsFallback] rather than duplicated.
+/// the fallback pass is a call-site decision (the expectimax selector
+/// requires `hasExpectimax` in both passes), so that is controlled by
+/// [eligibleGuardsFallback] rather than duplicated.
 ///
 /// A candidate is picked only when its value is strictly greater than
 /// [minValue]; callers seed this with their historical accumulator init
@@ -86,4 +85,33 @@ BuildTreeNode? pickChildByValue(
   }
 
   return bestChild;
+}
+
+/// How many of [candidate]'s evaluated opponent replies score within
+/// [windowCp] of the best of them, from the opponent's side — or null when
+/// none of its children carry an engine eval, so nothing can be counted.
+///
+/// This is the tree's own view of "how many good moves does the opponent
+/// have here": the replies the opponent model put in the tree, compared
+/// with each other. A leaf candidate has no replies to count.
+int? goodReplyCount(
+  BuildTreeNode candidate,
+  int windowCp, {
+  required bool playAsWhite,
+}) {
+  var best = kWorstEvalCp;
+  var any = false;
+  for (final reply in candidate.children) {
+    if (!reply.hasEngineEval) continue;
+    any = true;
+    final cpOpp = reply.evalForUs(!playAsWhite);
+    if (cpOpp > best) best = cpOpp;
+  }
+  if (!any) return null;
+  var count = 0;
+  for (final reply in candidate.children) {
+    if (!reply.hasEngineEval) continue;
+    if (best - reply.evalForUs(!playAsWhite) <= windowCp) count++;
+  }
+  return count;
 }

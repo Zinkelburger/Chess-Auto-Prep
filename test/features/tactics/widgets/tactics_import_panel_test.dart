@@ -1,4 +1,4 @@
-/// The Tactics card: what is playable, and the button that plays it.
+/// The Play block: what is playable, and the button that plays it.
 library;
 
 import 'package:flutter/material.dart';
@@ -63,7 +63,6 @@ void main() {
               child: TacticsImportPanel(
                 isImporting: isImporting,
                 positions: positions,
-                onClearDatabase: () {},
                 onBrowseTactics: () {},
               ),
             ),

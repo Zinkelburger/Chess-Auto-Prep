@@ -112,7 +112,7 @@ class GenerationLockOverlay extends StatelessWidget {
                   'Master games finishes the job whenever you like.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 11.5,
+                    fontSize: 12,
                     color: AppColors.onSurfaceMuted,
                     height: 1.4,
                   ),
@@ -144,7 +144,7 @@ class GenerationLockOverlay extends StatelessWidget {
                   'your mind.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 11.5,
+                    fontSize: 12,
                     color: AppColors.onSurfaceMuted,
                     height: 1.4,
                   ),
@@ -196,7 +196,7 @@ class GenerationPausedBanner extends StatelessWidget {
               child: Text(
                 'Build paused — board and engine are free. '
                 'Resume it when you like, or discard it if you don\'t want it.',
-                style: TextStyle(fontSize: 12.5, color: AppColors.inkSoft),
+                style: TextStyle(fontSize: 13, color: AppColors.inkSoft),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -215,7 +215,7 @@ class GenerationPausedBanner extends StatelessWidget {
               ),
               label: const Text(
                 'Resume',
-                style: TextStyle(color: AppColors.ink, fontSize: 12.5),
+                style: TextStyle(color: AppColors.ink, fontSize: 13),
               ),
             ),
             const SizedBox(width: 6),
@@ -228,7 +228,7 @@ class GenerationPausedBanner extends StatelessWidget {
                 side: const BorderSide(color: AppColors.danger),
               ),
               icon: const Icon(Icons.delete_outline, size: 16),
-              label: const Text('Discard', style: TextStyle(fontSize: 12.5)),
+              label: const Text('Discard', style: TextStyle(fontSize: 13)),
             ),
           ],
         ),

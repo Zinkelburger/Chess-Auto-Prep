@@ -129,13 +129,14 @@ class ChessDbBookExpander extends NodeExpander {
     if (list.isNotEmpty) {
       run.stats.bookDbMoveHits++;
       _recordNodeEval(node, list.bestStmCp!);
-      return _BookChoice(_pickFromDb(node, list), list.source);
+      return _BookChoice(await _pickFromDb(node, list), list.source);
     }
     if (!config.bookEngineFallback) return null;
     return _engineMove(node);
   }
 
-  /// The database's best move, with master practice breaking ties.
+  /// The database's best move, with ties broken first by how few good
+  /// replies each leaves the opponent, then by master practice.
   ///
   /// Ties are common: ChessDB scores whole clusters of opening moves 0 or 25,
   /// and picking the first of them by list order would make the book depend
@@ -144,9 +145,19 @@ class ChessDbBookExpander extends NodeExpander {
   /// a practicality weighting, and with the default
   /// [TreeBuildConfig.bookTieBreakWindowCp] of 0 it only ever separates moves
   /// the database scores exactly equal.
-  DbMove _pickFromDb(BuildTreeNode node, DbMoveList list) {
-    final tied = list.withinCp(config.bookTieBreakWindowCp);
+  ///
+  /// [TreeBuildConfig.replyWindowCp] puts one more objective fact ahead
+  /// of master practice: the database's own count of good replies. Two moves
+  /// it scores level can leave the opponent one good answer or five, and the
+  /// one with fewer is a smaller book to learn for the same eval.
+  Future<DbMove> _pickFromDb(BuildTreeNode node, DbMoveList list) async {
+    var tied = list.withinCp(config.bookTieBreakWindowCp);
     if (tied.length < 2) return list.moves.first;
+
+    if (config.replyWindowCp > 0) {
+      tied = await _fewestGoodReplies(node, tied);
+      if (tied.length < 2) return tied.first;
+    }
 
     final games = <String, int>{
       for (final m in run.bookAt(node.fen)) m.uci: m.games,
@@ -163,6 +174,39 @@ class ChessDbBookExpander extends NodeExpander {
       }
     }
     return best;
+  }
+
+  /// The candidates in [tied] that leave the opponent the fewest replies
+  /// ChessDB scores within [TreeBuildConfig.replyWindowCp] of their best.
+  ///
+  /// A candidate whose resulting position the database does not know cannot
+  /// be compared, so it drops out — unless nothing is known, in which case
+  /// the tie stands as it was and master practice settles it.
+  Future<List<DbMove>> _fewestGoodReplies(
+    BuildTreeNode node,
+    List<DbMove> tied,
+  ) async {
+    final counts = <DbMove, int>{};
+    for (final candidate in tied) {
+      final played = run.childMove(node, candidate.uci);
+      if (played == null) continue;
+      final replies = await run.evalResolver.lookupBookMoves(
+        played.fen,
+        config,
+      );
+      if (replies.isEmpty) continue;
+      counts[candidate] = replies.withinCp(config.replyWindowCp).length;
+    }
+    if (counts.isEmpty) return tied;
+
+    var fewest = counts.values.first;
+    for (final n in counts.values) {
+      if (n < fewest) fewest = n;
+    }
+    return [
+      for (final candidate in tied)
+        if (counts[candidate] == fewest) candidate,
+    ];
   }
 
   /// Engine fallback for a position no ChessDB source has seen.

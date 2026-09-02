@@ -93,7 +93,7 @@ class CoherencePanel extends StatelessWidget {
             : Text(
                 '${(cluster.signature.support * 100).round()}%',
                 style: const TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: FontWeight.bold,
                   color: AppColors.onSurfaceSoft,
                 ),
@@ -107,7 +107,7 @@ class CoherencePanel extends StatelessWidget {
                 children: cluster.signature.items
                     .map(
                       (m) => Chip(
-                        label: Text(m, style: const TextStyle(fontSize: 10)),
+                        label: Text(m, style: const TextStyle(fontSize: 12)),
                         visualDensity: VisualDensity.compact,
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
@@ -143,7 +143,7 @@ class CoherencePanel extends StatelessWidget {
     return Text(
       score.toStringAsFixed(2),
       style: const TextStyle(
-        fontSize: 11,
+        fontSize: 12,
         fontWeight: FontWeight.bold,
         color: AppColors.onSurfaceSoft,
       ),
@@ -237,7 +237,7 @@ class _SummaryItem extends StatelessWidget {
             color: color,
           ),
         ),
-        Text(label, style: AppTextStyles.caption.copyWith(fontSize: 10)),
+        Text(label, style: AppTextStyles.caption.copyWith(fontSize: 12)),
       ],
     );
   }

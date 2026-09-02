@@ -52,7 +52,8 @@ claude mcp add chess-prep -- python3 /abs/path/to/tools/mcp/chess_prep/__main__.
 | `pgn_position` | Book moves at a FEN, plus one-ply transpositions into book |
 | `pgn_walk` | Ply-by-ply: in-book / transposition / novelty, with replies |
 | `pgn_eval` | Stockfish MultiPV at a position, compared to book moves |
-| `pgn_audit` | Flag book moves Stockfish thinks are mistakes |
+| `pgn_audit` | Flag book moves Stockfish thinks are mistakes, and opponent replies ChessDB rates strong that the file never answers |
+| `chessdb_query` | ChessDB's scored move list for a position, with how many good replies each good move leaves the opponent |
 | `master_status` | Coverage of the app's local master-games database (TWIC) |
 | `master_book` | What titled players play from a position, with a cited game per move |
 | `master_game` | One master game by id, as PGN |
@@ -99,10 +100,11 @@ pgn_open    {path: "/…/Colle.pgn"}
 pgn_walk    {path, moves: "1. d4 Nf6 2. c4 c5 3. d5 b5"}
 pgn_position {path, moves: "1. d4 Nf6"}          # what White actually plays
 pgn_eval     {path, moves: "1. d4 Nf6 2. Nf3 c5"} # engine vs book
-pgn_audit    {path, moves: "…", side: "white"}    # book mistakes along a line
+pgn_audit    {path, moves: "…", side: "white"}    # book mistakes + uncovered strong replies along a line
+chessdb_query {moves: "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. d4 exd4 5. e5 Ng4 6. O-O"}  # which reply leaves White fewest good moves?
 ```
 
-`pgn_eval` / `pgn_audit` need a Stockfish binary (`STOCKFISH` or on `PATH`).
+`pgn_eval` and the mistake half of `pgn_audit` need a Stockfish binary (`STOCKFISH` or on `PATH`); `chessdb_query` and the reply-gap half of `pgn_audit` need only the network.
 Chessable `Z0` dummy mainlines are promoted the same way as in the app.
 
 ### Master games (TWIC)

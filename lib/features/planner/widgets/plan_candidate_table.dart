@@ -85,7 +85,7 @@ class _HeaderRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const style = TextStyle(
-      fontSize: 10,
+      fontSize: 12,
       letterSpacing: 0.6,
       fontWeight: FontWeight.w700,
       color: AppColors.onSurfaceMuted,
@@ -177,9 +177,9 @@ class _CandidateRow extends StatelessWidget {
               child: Text(
                 isWhiteToMove ? c.san : '…${c.san}',
                 style: const TextStyle(
-                  fontSize: 13.5,
+                  fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  fontFamily: 'monospace',
+                  fontFamily: 'SourceCodePro',
                 ),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
@@ -297,7 +297,7 @@ class _CandidateRow extends StatelessWidget {
       text ?? '–',
       textAlign: TextAlign.right,
       style: TextStyle(
-        fontSize: 12.5,
+        fontSize: 13,
         fontWeight: strong ? FontWeight.w700 : FontWeight.w500,
         fontFeatures: const [FontFeature.tabularFigures()],
         color: text == null ? AppColors.onSurfaceDim : (color ?? AppColors.ink),

@@ -53,7 +53,7 @@ class MasterGamesPromptBanner extends StatelessWidget {
                           'years, ~3 GB) once and the generator uses '
                           'titled-player practice, real model games and '
                           '"improves on … in <game>" notes.',
-                style: const TextStyle(fontSize: 12.5),
+                style: const TextStyle(fontSize: 13),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 2,
               ),

@@ -64,7 +64,7 @@ Open (or create) the SQLite database for caching explorer responses and engine
 evaluations.
 
 **CLI configuration.** On every run, `save_config_to_db()` in `main.c`
-serializes the effective CLI (including preset-derived defaults) to JSON and
+serializes the effective CLI to JSON and
 stores it under `build_metadata` key `cli_args` via `rdb_save_cli_config()`.
 Pass **`--resume`** to reload that JSON from `<name>.db` before building:
 `load_config_from_db()` fills unset options from the saved snapshot, while
@@ -174,7 +174,7 @@ move it is:
    drives branching).
 5. **Create children** with evaluations set inline, cached to the DB.
 6. **Maia frequency enrichment** — if a Maia model is loaded and
-   `populate_maia_frequency` is set (e.g. under `--fresh` /
+   `populate_maia_frequency` is set (e.g. under
    `--novelty-weight`), run inference on the parent position and store
    each child's predicted human play probability as `maia_frequency`.
    This inference goes through the DB-cached Maia wrapper so resumed
@@ -369,13 +369,12 @@ trap = min(1, max(0, best_eval − popular_eval) / 200) × p_popular
 
 Lines are sorted by trap score descending (up to 200).  This is
 independent of the repertoire — it surfaces the trickiest positions
-anywhere in the tree.  The `--traps` preset also widens build
-tolerances (`min_eval` to −100/−300, `max_eval_loss` to 100cp) so
-the tree explores more speculative positions where traps are likelier.
+anywhere in the tree.  `--traps` changes nothing else: widen
+`--max-eval-loss` / `--min-eval` yourself if you want the tree to
+explore speculative positions where traps are likelier.
 
 **`--traps-in-repertoire`**: The older behavior — scans the tree and
-prints the top 20 trap positions to stdout (no PGN output).  Can be
-combined with any preset.
+prints the top 20 trap positions to stdout (no PGN output).
 
 ### Stage 4: Export
 
@@ -569,7 +568,7 @@ At each our-move node, `score_our_move_children()` filters by
 `max_eval_loss_cp`, then returns `argmax(V)` — just pick the child with
 the highest practical win probability.
 
-When `novelty_weight > 0` (e.g. via `--fresh` or `--novelty-weight`),
+When `novelty_weight > 0` (`--novelty-weight`),
 the selection applies a novelty bonus before picking:
 
 ```
@@ -686,22 +685,13 @@ all castling UCI to king-destination form at three levels:
 | `max_eval_loss_cp` | `--max-eval-loss` | 50 | Quality floor at our-move nodes |
 | `novelty_weight` | `--novelty-weight` | 0 | 0 = off, 100 = maximize novelty boost at our-move nodes |
 
-### Preset Modes
+### No preset modes
 
-The CLI supports five preset bundles (`--solid`, `--practical`, `--tricky`,
-`--traps`, `--fresh`). Each sets defaults for eval tolerance, novelty
-weight, and eval floor (`--min-eval`).
-**Modes set defaults only; explicit flags override.** For example:
-`--fresh --novelty-weight 80` keeps fresh’s other defaults but overrides
-the novelty weight to 80.
-
-| Mode | novelty | `--min-eval` (W / B) | `--max-eval-loss` | Intent |
-|------|---------|----------------------|-------------------|--------|
-| `--solid` | 0 | 0 / -100 | 30 | Tight quality floor, no compromise. |
-| `--practical` | 0 | -25 / -200 | 50 | Balanced eval tolerance. |
-| `--tricky` | 0 | -50 / -250 | 75 | Wider tolerance for speculative moves. |
-| `--traps` | 0 | -100 / -300 | 100 | Widest tolerance + whole-tree trap PGN (`<name>.traps.pgn`). |
-| `--fresh` | 60 | (default) | 40 | Sound but unusual moves. Favor rarely-played lines. |
+There used to be `--solid`, `--practical`, `--tricky`, `--traps`-as-preset
+and `--fresh`, each rewriting `--min-eval`, `--max-eval-loss` and
+`--novelty-weight` behind the user's back.  They are gone: every knob is
+its own flag and nothing sets another.  `--traps` survives as a plain
+output switch (whole-tree trap scan + `<name>.traps.pgn`).
 
 ### What Each Parameter Does Intuitively
 
@@ -730,8 +720,7 @@ the novelty weight to 80.
   At our-move nodes, boosts the adjusted V of moves that are rarely
   played (low Lichess game count or low Maia predicted frequency).
   The eval-loss filter still runs first, so novelty cannot promote
-  objectively bad moves.  Use `--fresh` for the preset or
-  `--novelty-weight <0-100>` for fine-grained control.  In maia-only
+  objectively bad moves.  `--novelty-weight <0-100>`.  In maia-only
   mode the novelty signal comes from Maia predictions (approximate);
   `--lichess` gives novelty based on real game data.
 

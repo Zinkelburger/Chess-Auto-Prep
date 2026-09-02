@@ -131,7 +131,7 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
                 '• Practical traps — at frequently reached leaves, Maia '
                 'expectimax finds lines that score far better for the '
                 'attacker than the raw engine eval suggests',
-                style: const TextStyle(fontSize: 12.5, height: 1.35),
+                style: const TextStyle(fontSize: 13, height: 1.35),
               ),
               const SizedBox(height: 6),
               const Text(

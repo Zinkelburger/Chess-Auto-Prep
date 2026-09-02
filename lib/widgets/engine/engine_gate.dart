@@ -67,10 +67,7 @@ class EngineBusyNotice extends StatelessWidget {
             Flexible(
               child: Text(
                 'Engine busy — building your repertoire.',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  color: AppColors.onSurfaceSoft,
-                ),
+                style: TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
                 overflow: TextOverflow.ellipsis,
               ),
             ),

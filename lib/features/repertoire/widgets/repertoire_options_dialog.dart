@@ -142,7 +142,7 @@ class _RepertoireOptionsDialogState extends State<_RepertoireOptionsDialog> {
     child: Text(
       text.toUpperCase(),
       style: const TextStyle(
-        fontSize: 11,
+        fontSize: 12,
         fontWeight: FontWeight.w700,
         letterSpacing: 0.8,
         color: AppColors.onSurfaceSoft,

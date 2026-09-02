@@ -79,7 +79,7 @@ class NavigationTrail extends StatelessWidget {
                               const SizedBox(width: 4),
                               Text(
                                 entry.label,
-                                style: const TextStyle(fontSize: 11),
+                                style: const TextStyle(fontSize: 12),
                               ),
                             ],
                           ),

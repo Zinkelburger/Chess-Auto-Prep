@@ -124,7 +124,7 @@ class PgnPerspectiveButton extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 120),
           child: Text(
             label,
-            style: const TextStyle(fontSize: 11),
+            style: const TextStyle(fontSize: 12),
             overflow: TextOverflow.ellipsis,
           ),
         ),

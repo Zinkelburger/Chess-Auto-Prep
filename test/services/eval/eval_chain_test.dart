@@ -108,6 +108,75 @@ void main() {
     expect(outcome.whiteCp, -33);
   });
 
+  test('the Lichess store answers after the ChessDB dump', () async {
+    final stats = BuildStats();
+    final cache = EvalCache.instance;
+    final local = InMemoryEvalProvider()
+      ..put(fen, const EvalHit(cp: 44, depth: 20));
+    final lichess = InMemoryEvalProvider()
+      ..put(fen, const EvalHit(cp: 12, depth: 40));
+
+    final config = baseConfig().copyWith(enableLichessEvals: true);
+
+    // With both on, the broader database wins.
+    final both = await resolveEvalChain(
+      fen: fen,
+      config: config,
+      cache: cache,
+      stats: stats,
+      localEvalProvider: local,
+      lichessEvals: lichess,
+      stockfishEval: fakeStockfish,
+    );
+    expect(both.source, EvalChainSource.localChessDb);
+
+    await cache.clear();
+
+    // With ChessDB off, the Lichess store answers instead of the engine.
+    final alone = await resolveEvalChain(
+      fen: fen,
+      config: config.copyWith(enableLocalChessDb: false),
+      cache: cache,
+      stats: stats,
+      lichessEvals: lichess,
+      stockfishEval: fakeStockfish,
+    );
+    expect(alone.source, EvalChainSource.lichessEvals);
+    expect(alone.whiteCp, 12);
+    expect(stats.lichessEvalHits, 1);
+  });
+
+  test('a Lichess miss does not skip the subtree', () async {
+    final stats = BuildStats();
+    final cache = EvalCache.instance;
+    // Nothing in it: 394 million positions is a small fraction of what a
+    // build asks about, so a miss here must not stand in for "ChessDB has
+    // never heard of this line".
+    final lichess = InMemoryEvalProvider();
+    final api = ChessDbApiProvider(
+      httpFetch: (_) async => http.Response('eval:33', 200),
+    );
+    await api.init();
+
+    final outcome = await resolveEvalChain(
+      fen: fen,
+      config: baseConfig().copyWith(
+        enableLocalChessDb: false,
+        enableLichessEvals: true,
+      ),
+      cache: cache,
+      stats: stats,
+      lichessEvals: lichess,
+      chessDbApi: api,
+      stockfishEval: fakeStockfish,
+    );
+
+    expect(outcome.source, EvalChainSource.chessDbApi);
+    expect(outcome.extEvalMode, isNot(ExtEvalMode.skipExternal));
+    expect(stats.extEvalSubtreeSkips, 0);
+    expect(stats.lichessEvalMisses, 1);
+  });
+
   test('falls back to Stockfish when all external sources miss', () async {
     final stats = BuildStats();
     final cache = EvalCache.instance;

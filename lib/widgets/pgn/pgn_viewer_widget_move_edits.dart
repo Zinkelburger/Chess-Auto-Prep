@@ -15,7 +15,7 @@ mixin _PgnViewerMoveEdits on _PgnViewerWidgetStateBase {
     final editing =
         widget.editMode &&
         widget.onCommentsChanged != null &&
-        widget.revealedPly == null;
+        _m.reveal == null;
 
     // While an inline comment-preview is active, _currentPosition is the
     // preview board (not the mainline tail), so the mainline fast paths are
@@ -51,6 +51,14 @@ mixin _PgnViewerMoveEdits on _PgnViewerWidgetStateBase {
   /// [_recordVariationMove] during play) is promoted rather than duplicated.
   void _addGuessVariations(Map<int, List<String>> wrongByPly) {
     if (!_m.addGuessVariations(wrongByPly)) return;
+    setState(() {});
+    _notifyCommentsChanged();
+  }
+
+  /// Same for wrong guesses made inside a sideline: saved alternatives under
+  /// the node they were played from ([wrongByParentId] keyed by node id).
+  void _addGuessNodeVariations(Map<int, List<String>> wrongByParentId) {
+    if (!_m.addGuessNodeVariations(wrongByParentId)) return;
     setState(() {});
     _notifyCommentsChanged();
   }

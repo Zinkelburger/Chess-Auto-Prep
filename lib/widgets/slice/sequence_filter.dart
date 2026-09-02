@@ -39,7 +39,7 @@ class SequenceFilter extends StatelessWidget {
         Text(
           'Find games containing specific moves in order. '
           'Use [gap] between groups that need not be consecutive.',
-          style: AppTextStyles.caption.copyWith(fontSize: 11),
+          style: AppTextStyles.caption.copyWith(fontSize: 12),
         ),
         const SizedBox(height: 8),
         TextField(
@@ -70,7 +70,7 @@ class SequenceFilter extends StatelessWidget {
               minHeight: 28,
             ),
           ),
-          style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+          style: const TextStyle(fontSize: 12, fontFamily: 'SourceCodePro'),
           onChanged: (_) => controller.validateSequence(),
           onSubmitted: (_) => controller.validateSequence(),
         ),
@@ -81,7 +81,7 @@ class SequenceFilter extends StatelessWidget {
               Expanded(
                 child: Text(
                   error,
-                  style: const TextStyle(fontSize: 11, color: AppColors.danger),
+                  style: const TextStyle(fontSize: 12, color: AppColors.danger),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -104,7 +104,10 @@ class SequenceFilter extends StatelessWidget {
                   ),
                   border: OutlineInputBorder(),
                 ),
-                style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontFamily: 'SourceCodePro',
+                ),
                 keyboardType: TextInputType.number,
                 onChanged: (_) => controller.sequenceGapChanged(),
               ),

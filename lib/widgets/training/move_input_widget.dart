@@ -353,7 +353,7 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
           LengthLimitingTextInputFormatter(7),
         ],
         style: TextStyle(
-          fontFamily: 'monospace',
+          fontFamily: 'SourceCodePro',
           fontSize: 15,
           fontWeight: FontWeight.w500,
           color: hasError

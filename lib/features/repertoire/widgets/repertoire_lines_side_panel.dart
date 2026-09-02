@@ -131,7 +131,7 @@ class RepertoireLinesSidePanel extends StatelessWidget {
               child: Text(
                 label,
                 style: AppTextStyles.caption.copyWith(
-                  fontSize: 11,
+                  fontSize: 12,
                   color: color,
                   fontWeight: highlighted ? FontWeight.w600 : null,
                 ),

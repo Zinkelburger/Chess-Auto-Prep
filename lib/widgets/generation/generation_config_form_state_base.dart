@@ -141,6 +141,8 @@ abstract class _GenerationConfigFormStateBase
 
   late final TextEditingController _bookTailMaxPlyCtrl = _ctrl('40');
   late final TextEditingController _bookTieBreakCtrl = _ctrl('0');
+  late final TextEditingController _replyWindowCtrl = _ctrl('0');
+  late final TextEditingController _mistakeWeightCtrl = _ctrl('0');
 
   SelectionMode _selectionMode = SelectionMode.expectimax;
   BuildMode _buildMode = BuildMode.stockfishExpectimax;
@@ -398,6 +400,18 @@ abstract class _GenerationConfigFormStateBase
       isInt: true,
       min: 0,
       max: 200,
+    ),
+    _replyWindowCtrl: const _NumSpec(
+      'Reply window',
+      isInt: true,
+      min: 0,
+      max: 200,
+    ),
+    _mistakeWeightCtrl: const _NumSpec(
+      'Opponent-mistake weight',
+      isInt: true,
+      min: 0,
+      max: 100,
     ),
   };
 

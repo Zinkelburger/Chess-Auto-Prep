@@ -66,7 +66,7 @@ class EngineResourcesSection extends StatelessWidget {
             'Your system has $cores logical core${cores == 1 ? '' : 's'}. '
             'Tree build uses 1 Stockfish worker with UCI Threads set below.',
             style: const TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               color: AppColors.onSurfaceMuted,
             ),
           ),
@@ -106,13 +106,13 @@ class EngineResourcesSection extends StatelessWidget {
             const SizedBox(height: 6),
             const Text(
               'No engine in this build source.',
-              style: TextStyle(fontSize: 10, color: AppColors.onSurfaceMuted),
+              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
             ),
           ] else if (isDbExplorer) ...[
             const SizedBox(height: 6),
             const Text(
               'Engine runs during eval enrichment after the PGN tree is built.',
-              style: TextStyle(fontSize: 10, color: AppColors.onSurfaceMuted),
+              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
             ),
           ],
         ],
@@ -130,7 +130,7 @@ class _ConfigStatChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       label,
-      style: const TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+      style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
     );
   }
 }

@@ -233,7 +233,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 10,
+            fontSize: 12,
             fontWeight: selected ? FontWeight.bold : FontWeight.normal,
             color: selected ? AppColors.warning : AppColors.onSurfaceSoft,
           ),
@@ -256,7 +256,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 10,
+            fontSize: 12,
             fontWeight: selected ? FontWeight.bold : FontWeight.normal,
             color: selected ? AppColors.onWarning : AppColors.onSurfaceSoft,
           ),
@@ -302,7 +302,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                 Text(
                   '#${index + 1}',
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: FontWeight.bold,
                     color: AppColors.onSurfaceMuted,
                   ),
@@ -380,7 +380,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                       const Text(
                         'Opponent replies:',
                         style: TextStyle(
-                          fontSize: 10,
+                          fontSize: 12,
                           fontWeight: FontWeight.w600,
                           color: AppColors.onSurfaceMuted,
                           letterSpacing: 0.5,
@@ -395,7 +395,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                           child: Text(
                             '+${replies.length - 4} more',
                             style: const TextStyle(
-                              fontSize: 10,
+                              fontSize: 12,
                               color: AppColors.onSurfaceMuted,
                               fontStyle: FontStyle.italic,
                             ),
@@ -469,7 +469,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
               reply.san,
               style: TextStyle(
                 fontSize: 12,
-                fontFamily: 'monospace',
+                fontFamily: 'SourceCodePro',
                 fontWeight: FontWeight.bold,
                 // NAG palette: brighter on dark than danger/evalPositive.
                 color: isGood
@@ -484,20 +484,20 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
             Text(
               'drops ${evalDrop}cp',
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 12,
                 color: isBad ? AppColors.danger : AppColors.replyInaccuracy,
               ),
             )
           else if (isGood)
             const Text(
               'best move',
-              style: TextStyle(fontSize: 10, color: AppColors.evalPositive),
+              style: TextStyle(fontSize: 12, color: AppColors.evalPositive),
             ),
           const Spacer(),
           Text(
             '${(reply.probability * 100).toStringAsFixed(0)}%',
             style: const TextStyle(
-              fontSize: 10,
+              fontSize: 12,
               fontWeight: FontWeight.w600,
               color: AppColors.onSurfaceSoft,
             ),
@@ -521,7 +521,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
     return Text(
       label,
       style: const TextStyle(
-        fontSize: 10,
+        fontSize: 12,
         fontWeight: FontWeight.bold,
         color: AppColors.onSurfaceSoft,
       ),
@@ -535,10 +535,10 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
     final badge = Text(
       text,
       style: const TextStyle(
-        fontSize: 10,
+        fontSize: 12,
         fontWeight: FontWeight.w600,
         color: AppColors.onSurfaceSoft,
-        fontFamily: 'monospace',
+        fontFamily: 'SourceCodePro',
       ),
     );
     return tooltip != null ? Tooltip(message: tooltip, child: badge) : badge;
@@ -586,9 +586,9 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
             Text(
               '${(i ~/ 2) + 1}.',
               style: const TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 color: AppColors.onSurfaceMuted,
-                fontFamily: 'monospace',
+                fontFamily: 'SourceCodePro',
               ),
             ),
           Container(
@@ -602,8 +602,8 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
             child: Text(
               plies[i].$1,
               style: TextStyle(
-                fontSize: 11,
-                fontFamily: 'monospace',
+                fontSize: 12,
+                fontFamily: 'SourceCodePro',
                 color: plies[i].$2,
                 fontWeight: plies[i].$3 ? FontWeight.bold : FontWeight.normal,
               ),

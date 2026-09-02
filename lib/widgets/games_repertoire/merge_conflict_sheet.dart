@@ -146,7 +146,7 @@ class _MergeConflictSheetState extends State<MergeConflictSheet> {
                   ? 'Your ${conflict.draftSan} will be added as an extra line.'
                   : 'Keeping your prep — this branch of the draft is skipped.',
               style: const TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 color: AppColors.onSurfaceDim,
               ),
             ),
@@ -181,7 +181,7 @@ class _MergeConflictSheetState extends State<MergeConflictSheet> {
             child: Text(
               '· $tag',
               style: const TextStyle(
-                fontSize: 10,
+                fontSize: 12,
                 color: AppColors.onSurfaceDim,
               ),
             ),

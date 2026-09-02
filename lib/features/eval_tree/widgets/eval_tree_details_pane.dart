@@ -68,7 +68,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
           Text(
             isOurTurn ? 'Our move' : 'Opponent',
             style: const TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               color: AppColors.onSurfaceSoft,
               fontWeight: FontWeight.w600,
             ),
@@ -254,7 +254,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
           Text(
             isOurTurn ? 'Candidate moves' : 'Opponent replies',
             style: const TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: FontWeight.w600,
               color: AppColors.onSurfaceSoft,
             ),
@@ -263,7 +263,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
           Text(
             '($count)',
             style: const TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               color: AppColors.onSurfaceMuted,
             ),
           ),
@@ -318,7 +318,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
-                      fontFamily: 'monospace',
+                      fontFamily: 'SourceCodePro',
                     ),
                   ),
                 ),
@@ -341,7 +341,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
                   Text(
                     'V ${(child.expectimaxValue! * 100).toStringAsFixed(1)}%',
                     style: const TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       color: AppColors.onSurfaceSoft,
                       fontWeight: FontWeight.w500,
                     ),
@@ -397,7 +397,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
       style: const TextStyle(
         fontSize: 12,
         fontWeight: FontWeight.bold,
-        fontFamily: 'monospace',
+        fontFamily: 'SourceCodePro',
       ),
     );
   }
@@ -408,7 +408,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
       style: const TextStyle(
         fontSize: 12,
         fontWeight: FontWeight.bold,
-        fontFamily: 'monospace',
+        fontFamily: 'SourceCodePro',
       ),
     );
   }
@@ -453,11 +453,11 @@ class EvalTreeDetailsPane extends StatelessWidget {
       children: [
         Text(
           '$label: ',
-          style: const TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+          style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
         ),
         Text(
           value,
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
         ),
       ],
     );
@@ -471,7 +471,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
     return Text(
       isHigh ? 'Winning$evalStr' : 'Lost$evalStr',
       style: const TextStyle(
-        fontSize: 11,
+        fontSize: 12,
         color: AppColors.onSurfaceSoft,
         fontWeight: FontWeight.w600,
       ),
@@ -484,9 +484,9 @@ class EvalTreeDetailsPane extends StatelessWidget {
       child: Text(
         '$label:$value',
         style: const TextStyle(
-          fontSize: 10,
+          fontSize: 12,
           color: AppColors.onSurfaceMuted,
-          fontFamily: 'monospace',
+          fontFamily: 'SourceCodePro',
         ),
       ),
     );

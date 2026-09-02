@@ -3,6 +3,8 @@
 library;
 
 import 'package:chess_auto_prep/features/games/models/recent_game.dart';
+import 'package:chess_auto_prep/features/games/services/game_deviation_service.dart';
+import 'package:chess_auto_prep/features/games/services/game_moments.dart';
 import 'package:chess_auto_prep/features/games/services/game_review_summary.dart';
 import 'package:chess_auto_prep/features/games/widgets/game_card.dart';
 import 'package:chess_auto_prep/features/games/widgets/repertoire_line_panel.dart';
@@ -221,6 +223,89 @@ void main() {
         detectMySide(headers: headers, myUsernames: const [null, '  ']),
         isNull,
       );
+    });
+  });
+
+  group('moments strip', () {
+    const leftBook = DeviationReport(
+      matchedPlies: 3,
+      chapterPath: '/r/alapin.pgn',
+      chapterName: 'Alapin',
+      pathSans: ['e4', 'c5', 'c3'],
+      playedSan: 'd5',
+      byMe: false,
+      expectedSans: ['Nf6'],
+    );
+
+    Future<void> pumpCard(
+      WidgetTester tester,
+      RecentGame game, {
+      required double width,
+      void Function(GameMoment)? onOpenMoment,
+    }) => tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: width,
+              child: GameCard(
+                game: game,
+                onOpen: () {},
+                onOpenAnalysis: () {},
+                onOpenLine: () {},
+                onOpenMoment: onOpenMoment ?? (_) {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    testWidgets('a wide card shows the moments and opens one on tap', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1400, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final game = _game(sans: const ['e4', 'c5', 'c3', 'd5'])
+        ..deviation = leftBook
+        ..deviationComputed = true;
+      GameMoment? opened;
+      await pumpCard(tester, game, width: 900, onOpenMoment: (m) => opened = m);
+
+      expect(find.byType(MomentsStrip), findsOneWidget);
+      expect(find.text('2... d5'), findsOneWidget);
+      expect(find.text('They left book'), findsOneWidget);
+      // The text column keeps what it had.
+      expect(find.text('Left book at move 2 (them)'), findsOneWidget);
+
+      await tester.tap(find.text('2... d5'));
+      expect(opened?.ply, 4);
+    });
+
+    testWidgets('a narrow card has no strip and the text keeps the width', (
+      tester,
+    ) async {
+      final game = _game(sans: const ['e4', 'c5', 'c3', 'd5'])
+        ..deviation = leftBook
+        ..deviationComputed = true;
+      await pumpCard(tester, game, width: 520);
+      expect(find.byType(MomentsStrip), findsNothing);
+      expect(find.text('Left book at move 2 (them)'), findsOneWidget);
+    });
+
+    testWidgets('no moments, no strip', (tester) async {
+      tester.view.physicalSize = const Size(1400, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await pumpCard(tester, _game(), width: 900);
+      expect(find.byType(MomentsStrip), findsNothing);
+    });
+
+    test('stripFits needs the board, the text column and one moment', () {
+      expect(GameCard.stripFits(500), isFalse);
+      expect(GameCard.stripFits(600), isTrue);
     });
   });
 }

@@ -28,7 +28,7 @@ mixin _GenerationConfigCard
         Text(
           title.toUpperCase(),
           style: const TextStyle(
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.8,
             color: AppColors.onSurfaceSoft,
@@ -532,7 +532,6 @@ mixin _GenerationConfigCard
       BuildMode.stockfishExpectimax => 'engine + human model',
       BuildMode.maiaDbExplore => 'database win rates',
       BuildMode.dbExplorer => 'your PGN files',
-      BuildMode.trapFinder => 'trap finder',
       BuildMode.chessDbBook => 'ChessDB mainlines',
     };
     final parts = [
@@ -545,6 +544,8 @@ mixin _GenerationConfigCard
         _effectiveSelectionMode,
       ).replaceAll(' (recommended)', '').toLowerCase(),
       if (_preferNovelties) 'novelties',
+      if ((int.tryParse(_mistakeWeightCtrl.text.trim()) ?? 0) > 0)
+        'mistake weight ${_mistakeWeightCtrl.text.trim()}',
       if (_trapsOnly) 'traps only',
       if (_verifyFinal && !_noVerifyMode) 'verified',
       if (budget > 0) 'stops after ${budget}m',

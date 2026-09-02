@@ -85,7 +85,7 @@ class _Stat extends StatelessWidget {
         ),
         Text(
           label,
-          style: const TextStyle(fontSize: 10, color: AppColors.onSurfaceMuted),
+          style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
         ),
       ],
     );

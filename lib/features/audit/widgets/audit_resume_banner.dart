@@ -42,7 +42,7 @@ class AuditResumeBanner extends StatelessWidget {
           Expanded(
             child: Text(
               'Audit interrupted at $checked positions ($findings findings)',
-              style: const TextStyle(fontSize: 11, color: AppColors.warning),
+              style: const TextStyle(fontSize: 12, color: AppColors.warning),
             ),
           ),
           TextButton(
@@ -51,7 +51,7 @@ class AuditResumeBanner extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8),
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              textStyle: const TextStyle(fontSize: 11),
+              textStyle: const TextStyle(fontSize: 12),
             ),
             child: const Text('Resume'),
           ),
@@ -62,7 +62,7 @@ class AuditResumeBanner extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8),
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              textStyle: const TextStyle(fontSize: 11),
+              textStyle: const TextStyle(fontSize: 12),
               foregroundColor: AppColors.onSurfaceMuted,
             ),
             child: const Text('Start Fresh'),

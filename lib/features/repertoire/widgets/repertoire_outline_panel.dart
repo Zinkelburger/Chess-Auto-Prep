@@ -565,7 +565,7 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
                       e.label,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 12.5,
+                        fontSize: 13,
                         color: e.danger ? AppColors.danger : null,
                       ),
                     ),
@@ -802,7 +802,7 @@ class _Header extends StatelessWidget {
                       : '$chapterCount chapter${chapterCount == 1 ? '' : 's'} · '
                             '$lineCount line${lineCount == 1 ? '' : 's'}',
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     color: AppColors.onSurfaceMuted,
                   ),
                 ),
@@ -906,7 +906,7 @@ class _FilterRow extends StatelessWidget {
             child: FilterChip(
               label: const Text(
                 'At this position',
-                style: TextStyle(fontSize: 11),
+                style: TextStyle(fontSize: 12),
               ),
               selected: atPosition,
               onSelected: atPositionEnabled ? onAtPositionChanged : null,
@@ -1053,10 +1053,7 @@ class _FolderRow extends StatelessWidget {
           Expanded(
             child: Text(
               folder.name,
-              style: const TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -1122,7 +1119,7 @@ class _ChapterRow extends StatelessWidget {
             child: Text(
               chapter.name,
               style: TextStyle(
-                fontSize: 12.5,
+                fontSize: 13,
                 fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                 color: active ? AppColors.ink : null,
               ),
@@ -1138,7 +1135,7 @@ class _ChapterRow extends StatelessWidget {
               ),
               child: Text(
                 badge!,
-                style: const TextStyle(fontSize: 10, color: AppColors.accent),
+                style: const TextStyle(fontSize: 12, color: AppColors.accent),
               ),
             ),
             const SizedBox(width: 6),
@@ -1178,7 +1175,7 @@ class _SectionRow extends StatelessWidget {
             child: Text(
               title.toUpperCase(),
               style: const TextStyle(
-                fontSize: 10,
+                fontSize: 12,
                 letterSpacing: 0.6,
                 fontWeight: FontWeight.w700,
                 color: AppColors.onSurfaceMuted,
@@ -1245,8 +1242,8 @@ class _LineRow extends StatelessWidget {
                   child: Text(
                     line.previewLabel,
                     style: const TextStyle(
-                      fontSize: 11,
-                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      fontFamily: 'SourceCodePro',
                       color: AppColors.onSurfaceMuted,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -1257,7 +1254,7 @@ class _LineRow extends StatelessWidget {
           ),
           Text(
             '${line.moves.length}',
-            style: const TextStyle(fontSize: 10, color: AppColors.onSurfaceDim),
+            style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceDim),
           ),
         ],
       ),
@@ -1271,7 +1268,7 @@ class _Count extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
     '$n',
-    style: const TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+    style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
   );
 }
 
@@ -1287,7 +1284,7 @@ class _Hint extends StatelessWidget {
     child: Text(
       text,
       style: const TextStyle(
-        fontSize: 11,
+        fontSize: 12,
         color: AppColors.onSurfaceDim,
         fontStyle: FontStyle.italic,
       ),

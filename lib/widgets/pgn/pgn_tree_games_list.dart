@@ -111,7 +111,7 @@ class _PgnTreeGamesListState extends State<PgnTreeGamesList> {
                 Text(
                   'At this position',
                   style: AppTextStyles.caption.copyWith(
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: AppColors.onSurfaceSoft,
                   ),
@@ -193,7 +193,7 @@ class _ExpandAllToggle extends StatelessWidget {
               ),
               Text(
                 'Expand all',
-                style: AppTextStyles.caption.copyWith(fontSize: 11),
+                style: AppTextStyles.caption.copyWith(fontSize: 12),
               ),
             ],
           ),
@@ -279,7 +279,7 @@ class _GameRow extends StatelessWidget {
       children: [
         Text(
           game.label,
-          style: const TextStyle(fontSize: 11),
+          style: const TextStyle(fontSize: 12),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
@@ -289,7 +289,7 @@ class _GameRow extends StatelessWidget {
             child: Text(
               pv,
               style: const TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 height: 1.2,
                 color: AppColors.pgnMove,
               ),
@@ -308,7 +308,7 @@ class _GameRow extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         const Icon(Icons.star, size: 12, color: AppColors.starAccent),
-        Text('${game.studyRating}', style: const TextStyle(fontSize: 10)),
+        Text('${game.studyRating}', style: const TextStyle(fontSize: 12)),
       ],
     );
   }

@@ -78,7 +78,7 @@ class _CoverageProgressBar extends StatelessWidget {
           if (message != null)
             Text(
               message!,
-              style: const TextStyle(fontSize: 11, color: AppColors.info),
+              style: const TextStyle(fontSize: 12, color: AppColors.info),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -141,7 +141,7 @@ class _CoverageSummaryBar extends StatelessWidget {
               const SizedBox(width: 4),
               const Text(
                 '|',
-                style: TextStyle(fontSize: 10, color: AppColors.onSurfaceMuted),
+                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
               ),
               const SizedBox(width: 4),
               _CoverageStat(
@@ -152,7 +152,7 @@ class _CoverageSummaryBar extends StatelessWidget {
               const SizedBox(width: 4),
               const Text(
                 '|',
-                style: TextStyle(fontSize: 10, color: AppColors.onSurfaceMuted),
+                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
               ),
               const SizedBox(width: 4),
               _CoverageStat(
@@ -177,7 +177,7 @@ class _CoverageSummaryBar extends StatelessWidget {
                     Text(
                       '$totalUnaccounted unaccounted',
                       style: const TextStyle(
-                        fontSize: 10,
+                        fontSize: 12,
                         color: AppColors.onSurfaceSoft,
                       ),
                     ),
@@ -238,7 +238,7 @@ class _GapButton extends StatelessWidget {
       child: OutlinedButton.icon(
         onPressed: onPressed,
         icon: Icon(icon, size: 14),
-        label: Text(label, style: const TextStyle(fontSize: 11)),
+        label: Text(label, style: const TextStyle(fontSize: 12)),
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 8),
           visualDensity: VisualDensity.compact,
@@ -273,7 +273,7 @@ class _CoverageStat extends StatelessWidget {
         const SizedBox(width: 4),
         Text(
           '$label: ${percent.toStringAsFixed(1)}%',
-          style: const TextStyle(fontSize: 10, color: AppColors.onSurfaceSoft),
+          style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
         ),
       ],
     );
@@ -303,7 +303,7 @@ class _StatsBar extends StatelessWidget {
           Text(
             '${filteredLines.length} line${filteredLines.length == 1 ? '' : 's'}',
             style: const TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               color: AppColors.onSurfaceSoft,
             ),
           ),
@@ -314,7 +314,7 @@ class _StatsBar extends StatelessWidget {
             ),
             Text(
               '$matchingCount at current position',
-              style: const TextStyle(fontSize: 11, color: AppColors.info),
+              style: const TextStyle(fontSize: 12, color: AppColors.info),
             ),
           ],
         ],

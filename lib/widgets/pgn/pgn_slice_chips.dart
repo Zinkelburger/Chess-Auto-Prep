@@ -58,12 +58,12 @@ class PgnSliceChips extends StatelessWidget {
               child: Text(
                 '${controller.filteredGames.length}/${controller.allGames.length}',
                 style: const TextStyle(
-                  fontSize: 10,
+                  fontSize: 12,
                   fontWeight: FontWeight.bold,
                   // info, not chipActiveFg: on the pale infoTint wash the
                   // near-white fg would erase the "filters active" signal.
                   color: AppColors.info,
-                  fontFamily: 'monospace',
+                  fontFamily: 'SourceCodePro',
                 ),
               ),
             ),
@@ -91,7 +91,7 @@ class PgnSliceChips extends StatelessWidget {
               child: Text(
                 label,
                 style: const TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: AppColors.chipActiveFg,
                 ),
@@ -140,7 +140,7 @@ class PgnSliceChips extends StatelessWidget {
               Text(
                 label,
                 style: const TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   color: AppColors.onSurfaceSoft,
                 ),
               ),
@@ -187,7 +187,7 @@ class PgnSliceChips extends StatelessWidget {
               Text(
                 controller.hasActiveFilters ? 'Edit' : 'Slice',
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   color: controller.hasActiveFilters
                       ? AppColors.chipActiveFg
                       : AppColors.onSurfaceSoft,

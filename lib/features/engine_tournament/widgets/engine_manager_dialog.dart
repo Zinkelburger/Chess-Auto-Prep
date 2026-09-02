@@ -215,7 +215,7 @@ Future<void> _showVerificationResult(
                   child: SelectableText(
                     report.transcript.take(12).join('\n'),
                     style: AppTextStyles.caption.copyWith(
-                      fontFamily: 'monospace',
+                      fontFamily: 'SourceCodePro',
                     ),
                   ),
                 ),

@@ -533,6 +533,15 @@ class MoveMetrics {
   /// The whole thing on one line, or empty when the comment held no metrics.
   String get summary => labels.join(' · ');
 
+  /// True when an engine score is the *only* thing here.
+  ///
+  /// This is what separates a game-analysis annotation, which a pass writes on
+  /// every ply and which the viewer therefore hides, from a generated
+  /// repertoire's per-move facts, which always carry more than a score
+  /// (likelihood, expectimax, ease, game counts) and stay on the page.
+  bool get isEvalOnly =>
+      labels.length == 1 && (evalCp != null || evalMate != null);
+
   static String _percent(double fraction) => '${(fraction * 100).round()}%';
 
   static String _signedPawns(int centipawns) {
@@ -568,6 +577,14 @@ final _classificationRe = RegExp(
 );
 final _wasBestRe = RegExp(r'[A-Za-z0-9+#-]+\s+was best\.?');
 final _whitespaceRe = RegExp(r'\s+');
+
+/// [comment] with every `[%tag …]` token removed and nothing else touched.
+///
+/// The cheap half of [filterDisplayComment], for callers that only need to
+/// know whether a comment is *all* tokens — a test that runs over every ply of
+/// a game on every movetext rebuild, where the full filter's fifteen passes
+/// would be felt.
+String stripPgnTokens(String comment) => comment.replaceAll(_anyPgnTokenRe, '');
 
 /// Strip engine annotation tokens (`[%eval]`, `[%clk]`, `[%maia]`, `[%pv]`),
 /// cutechess-style per-move engine readouts, Lichess classification text,

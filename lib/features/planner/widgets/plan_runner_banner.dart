@@ -44,7 +44,7 @@ class PlanRunnerBanner extends StatelessWidget {
             Expanded(
               child: Text(
                 label,
-                style: const TextStyle(fontSize: 12.5),
+                style: const TextStyle(fontSize: 13),
                 overflow: TextOverflow.ellipsis,
               ),
             ),

@@ -275,7 +275,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
           Text(
             '${snapshot.nodeCount} nodes • max ply $maxPly',
             style: const TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               color: AppColors.onSurfaceSoft,
             ),
           ),
@@ -290,7 +290,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
               ),
               label: const Text(
                 'Reload',
-                style: TextStyle(fontSize: 11, color: AppColors.onSurfaceSoft),
+                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
               ),
             ),
           ),
@@ -310,7 +310,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
               ),
               label: const Text(
                 'Close',
-                style: TextStyle(fontSize: 11, color: AppColors.onSurfaceSoft),
+                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
               ),
             ),
           ),
@@ -352,7 +352,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
         const SizedBox(width: 3),
         // Deliberate 9→10px bump: 9px was below any legible floor on desktop
         // (flagged in the theme audit as a readability fix, not a drift).
-        Text(label, style: AppTextStyles.caption.copyWith(fontSize: 10)),
+        Text(label, style: AppTextStyles.caption.copyWith(fontSize: 12)),
       ],
     );
   }

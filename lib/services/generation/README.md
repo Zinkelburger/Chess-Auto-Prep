@@ -238,8 +238,14 @@ and nothing in the app is allowed to second-guess it.
   MultiPV, no alternatives, nothing for Phase 2 to choose between. Exact
   score ties (very common: ChessDB scores whole clusters of opening moves 0
   or 25) go to the move with more master games, widened by
-  `bookTieBreakWindowCp` if the user asks. That tie-break is the only vote
-  anything but the database gets.
+  `bookTieBreakWindowCp` if the user asks. With `replyWindowCp` > 0 the
+  database gets a second vote before master practice does: each tied
+  candidate's resulting position is looked up and the one leaving the
+  opponent the *fewest* replies within that window of their best wins
+  (`_fewestGoodReplies`) — two level moves can leave one good answer or
+  five, and the narrower one is the smaller book. Master practice then
+  separates only the candidates that count the same. Those two tie-breaks
+  are the only vote anything but the database's score gets.
 - **Their move** is master practice, unsmoothed — `_addOpponentChildrenFrom
   MasterBook(smoothWithMaia: false)`. The Dirichlet prior would add moves
   that are merely plausible, and this book's opponent model is recorded
@@ -284,6 +290,17 @@ encyclopedia branches everywhere, and the reader is looking for a code. The
 group carries its own `OpeningLabel` because lines reaching one code by
 different move orders share a shorter prefix than the code's defining
 position.
+
+## Fewest good replies (`replyWindowCp`)
+
+Off by default. On, `RepertoireSelector._applyReplyPreference` re-ranks the
+candidates inside the `maxEvalLossCp` guard by how many opponent replies
+score within the window of their best (`goodReplyCount`, read from the
+tree's evaluated children), and the mode's own value only separates equal
+counts. Expectimax never sees this on its own: an opponent node is valued
+by where Maia's probability lands, so one obvious good reply and ten good
+replies score the same. The ChessDB book applies the same knob with the
+database's full move list instead of the tree (see above).
 
 ## The two numbers on every node
 
@@ -402,8 +419,9 @@ Pure = exhaustive FIFO BFS at full width. Fast = best-first (max-heap on
 - The first `openingWidthPlies` of our moves are exempt: wide MultiPV
   floor, full window, no alt gate (a narrow early fan-out can never be
   recovered later).
-- Trappy selection disables the alt gate entirely — worse-eval moves are
-  the point and need searched subtrees.
+- A build that leans on `mistakeWeight` wants its worse-eval candidates
+  searched too: Pure search, or `fastAltGapCp` = 0, does that.  Nothing
+  widens on its own.
 
 Search priorities shape **which nodes exist**, never how they are valued.
 

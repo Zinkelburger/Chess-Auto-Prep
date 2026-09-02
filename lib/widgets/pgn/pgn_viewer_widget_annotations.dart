@@ -118,6 +118,14 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
     _notifyCommentsChanged();
   }
 
+  /// Guess notes for sideline moves ([notes] keyed by node id).
+  void _addGuessNodeAnnotations(Map<int, String> notes) {
+    if (notes.isEmpty) return;
+    var changed = false;
+    setState(() => changed = _m.appendGuessNodeNotes(notes));
+    if (changed) _notifyCommentsChanged();
+  }
+
   void _toggleNag(int moveIndex, int nagId) {
     if (moveIndex < 0 || moveIndex >= _moveHistory.length) return;
     setState(() => _m.toggleMainlineNag(moveIndex, nagId));

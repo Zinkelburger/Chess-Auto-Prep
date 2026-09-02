@@ -4,39 +4,28 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_state.dart';
-import '../../tactics/services/tactics_import_coordinator.dart';
-import '../../tactics/controllers/tactics_session_controller.dart';
-import '../../tactics/services/tactics_database.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../widgets/accounts/accounts_dialog.dart';
-import '../../../widgets/common/list_search_field.dart';
-import '../../../widgets/engine/engine_gate.dart';
+import '../../../widgets/common/list_search_field.dart' show matchesSearch;
 import '../controllers/recent_games_controller.dart';
 import '../models/recent_game.dart';
 import '../services/home_review_runner.dart';
 import '../services/my_repertoire_settings.dart';
-import '../services/opening_review.dart';
+import '../services/recent_game_navigation.dart';
 import 'game_card.dart';
 import 'games_home_header.dart';
-import 'home_review_settings_dialog.dart';
-import 'opening_review_dialog.dart';
-import 'review_strip.dart';
 
-/// The recent-games half of the unified Tactics home: who you are, the review
-/// job, then your games as cards. Shown in the Tactics screen's left pane
-/// whenever no puzzle is active; the board takes the pane back during a
-/// session.
+/// The games half of the tactics home: a one-line header, then your games as
+/// cards. Shown in the Tactics screen's left pane whenever no puzzle is
+/// active; the board takes the pane back during a session.
 ///
-/// Nothing here starts the engine on its own — the review waits for its play
-/// button (see [HomeReviewRunner]).
+/// Only the list lives here. The engine analysis, the opening review and the
+/// play button are blocks of the home column on the right (see
+/// `TacticsImportPanel`); this pane is never anything but your games.
 ///
-/// Layout rule: the header and the review strip are always on screen — even
-/// with no account set. Only the *list* area shows loading and empty states;
-/// hiding the play button until games arrived meant the one control that
-/// fetches them was missing exactly when it was needed. This pane only *shows*
-/// whose games it lists; the names are typed in the accounts dialog, which its
-/// empty state and the right pane's card both open.
+/// Auto-start still lives here, because the list is what triggers it: the
+/// first load with games in it starts the run (see [_maybeAutoRun]).
 ///
 /// The [RecentGamesController] and [HomeReviewRunner] are provided by
 /// `_TacticsModeView` (they must outlive this widget: the pane is swapped out
@@ -60,7 +49,8 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
   static bool _autoRunAttempted = false;
 
   /// Type-to-filter over the loaded games. Narrows the list only — the window
-  /// and time-control filters (gear dialog) still decide what gets fetched.
+  /// and time-control filters (analysis settings) still decide what gets
+  /// fetched.
   String _search = '';
 
   @override
@@ -109,7 +99,8 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
   /// On by default (see [GamesListFilters.autoRun]), which is what makes
   /// setting a username enough: the save loads the list, the list's first
   /// notification lands here, and the download-and-analyse run begins without
-  /// anyone pressing anything. Unchecking Auto-start on the strip stops that.
+  /// anyone pressing anything. Unchecking Auto-start in the analysis settings
+  /// stops that.
   ///
   /// The one-shot guard is only spent on a run that really starts. A pane that
   /// loaded with no account, or while a run was already going, stays armed —
@@ -126,116 +117,12 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
     unawaited(runner.start());
   }
 
-  void _startReview() {
-    // The review is an engine pass — refuse while tree generation holds
-    // Stockfish, with the same message every other engine consumer shows.
-    if (!EngineGate.ensureAvailable(context)) return;
-    unawaited(_runner?.start());
-  }
-
-  /// Open one game in the PGN viewer, on the tab that answers the question the
-  /// user clicked on.
-  void _openGame(RecentGame game, {PgnViewerTab tab = PgnViewerTab.game}) {
-    context.read<AppState>().switchToPgnViewer(
-      path: game.cachePath,
-      gameId: game.record.dedupKey,
-      tab: tab,
-      // Only the Analysis tab is worth an engine pass on arrival; opening a
-      // game to read it, or to see the line it left, should not start one.
-      autoAnalyze: tab == PgnViewerTab.analysis,
-      historyLabel: 'Game: ${game.white} vs ${game.black}',
-    );
-  }
-
-  /// All the window's deviations in one dialog — reviewable as a queue,
-  /// like tactics, instead of clicking into each game.
-  Future<void> _showOpeningReview() async {
-    final controller = _controller;
-    if (controller == null) return;
-    await showDialog<void>(
-      context: context,
-      builder: (_) => OpeningReviewDialog(
-        data: aggregateOpeningReview(controller.games),
-        windowLabel: controller.window.label,
-        onEditLine: _openLineInBuilder,
-        onOpenGame: (game) => _openGame(game, tab: PgnViewerTab.line),
-      ),
-    );
-  }
-
-  /// The deliberate trip to the builder: editing the book, not reviewing it.
-  void _openLineInBuilder(OpeningReviewEntry entry) {
-    context.read<AppState>().switchToBuilder(
-      repertoirePath: entry.chapterPath,
-      moveSequence: entry.pathSans,
-      historyLabel: 'Repertoire: ${entry.chapterName}',
-    );
-  }
-
-  Future<void> _showSettingsDialog() async {
-    final controller = _controller;
-    if (controller == null) return;
-    final result = await showDialog<HomeReviewSettingsResult>(
-      context: context,
-      builder: (_) => HomeReviewSettingsDialog(
-        filters: controller.filters,
-        window: controller.window,
-      ),
-    );
-    if (result != null) {
-      await controller.setFilters(result.filters, window: result.window);
-      // A different set of games means "review complete" was about the old
-      // set — back to the resting state so the button reads honestly.
-      _runner?.reset();
-    }
-  }
-
-  /// Step two of the loop: play the puzzles the review found. The button is
-  /// here, next to Review games; setting a puzzle up is the control panel's
-  /// job, so it is asked through the shared session controller (the two panes
-  /// are siblings and can't call each other).
-  void _studyTactics() {
-    context.read<TacticsSessionController>().panel?.start?.call();
-  }
+  void _openGame(RecentGame game, {PgnViewerTab tab = PgnViewerTab.game}) =>
+      openRecentGame(context.read<AppState>(), game, tab: tab);
 
   @override
   Widget build(BuildContext context) {
-    final controller = context.read<RecentGamesController>();
-    final runner = context.read<HomeReviewRunner>();
-    final coordinator = context.read<TacticsImportCoordinator>();
-    final database = context.read<TacticsDatabase>();
-    final session = context.read<TacticsSessionController>();
-    return ListenableBuilder(
-      // The coordinator reports each reviewed game, so the strip's counters and
-      // the rows' mistake counts fill in while the review runs. The database and
-      // session join them for the Study-tactics button's ready count — puzzles
-      // stream in during a review, so the number has to keep up.
-      listenable: Listenable.merge([
-        controller,
-        runner,
-        coordinator,
-        database,
-        session,
-      ]),
-      builder: (context, _) => _buildBody(
-        context,
-        controller,
-        runner,
-        coordinator,
-        database,
-        session,
-      ),
-    );
-  }
-
-  Widget _buildBody(
-    BuildContext context,
-    RecentGamesController controller,
-    HomeReviewRunner runner,
-    TacticsImportCoordinator coordinator,
-    TacticsDatabase database,
-    TacticsSessionController session,
-  ) {
+    final controller = context.watch<RecentGamesController>();
     // Usernames come out of prefs asynchronously at startup; until that read
     // finishes, "no usernames" may just mean "still loading" — don't flash
     // the no-accounts card at a configured user.
@@ -245,37 +132,12 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
     if (!usernamesLoaded && !controller.hasAnyUsername) {
       return const Center(child: CircularProgressIndicator());
     }
-    final games = controller.games;
-    // Cheap enough to recompute per build (a walk over ≤ a window of games,
-    // no IO) and it has to be: the count on the Opening-review button ticks up
-    // as the analysis reports each game.
-    final openingReview = aggregateOpeningReview(games);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        GamesHomeHeader(controller: controller),
-        ReviewStrip(
-          runner: runner,
-          coordinator: coordinator,
-          isLoadingGames: controller.isLoading,
-          gamesInWindow: games.length,
-          unreviewedCount: games
-              .where((g) => g.meWhite != null && g.summary == null)
-              .length,
-          windowLabel: controller.window.label,
-          readyPuzzleCount: session.sessionSettings.countMatching(
-            database.positions,
-          ),
-          openingIssueCount:
-              openingReview.mistakes.length + openingReview.bookEnds.length,
-          autoRun: controller.filters.autoRun,
-          onAutoRunChanged: controller.setAutoRun,
-          onStart: _startReview,
-          onPause: runner.pause,
-          onStudyTactics: _studyTactics,
-          onRefresh: () => controller.refresh(force: true),
-          onSettings: _showSettingsDialog,
-          onOpeningReview: _showOpeningReview,
+        GamesHomeHeader(
+          controller: controller,
+          onSearchChanged: (v) => setState(() => _search = v),
         ),
         Expanded(child: _buildList(controller)),
       ],
@@ -303,9 +165,7 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
             const SizedBox(height: 16),
             Text(
               controller.statusMessage ?? 'Loading games…',
-              style: AppTextStyles.body.copyWith(
-                color: AppColors.onSurfaceSoft,
-              ),
+              style: AppTextStyles.muted,
             ),
           ],
         ),
@@ -327,41 +187,25 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
       for (final game in controller.games)
         if (matchesSearch(_search, _gameHaystack(game))) game,
     ];
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-          child: ListSearchField(
-            hintText: 'Search by opponent, opening or date',
-            onChanged: (v) => setState(() => _search = v),
-          ),
-        ),
-        Expanded(
-          child: games.isEmpty
-              ? Center(
-                  child: Text(
-                    'No games match "$_search"',
-                    style: AppTextStyles.body.copyWith(
-                      color: AppColors.onSurfaceMuted,
-                    ),
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  itemCount: games.length,
-                  itemBuilder: (context, index) {
-                    final game = games[index];
-                    return GameCard(
-                      game: game,
-                      onOpen: () => _openGame(game),
-                      onOpenAnalysis: () =>
-                          _openGame(game, tab: PgnViewerTab.analysis),
-                      onOpenLine: () => _openGame(game, tab: PgnViewerTab.line),
-                    );
-                  },
-                ),
-        ),
-      ],
+    if (games.isEmpty) {
+      return Center(
+        child: Text('No games match "$_search"', style: AppTextStyles.muted),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      itemCount: games.length,
+      itemBuilder: (context, index) {
+        final game = games[index];
+        return GameCard(
+          game: game,
+          onOpen: () => _openGame(game),
+          onOpenAnalysis: () => _openGame(game, tab: PgnViewerTab.analysis),
+          onOpenLine: () => _openGame(game, tab: PgnViewerTab.line),
+          onOpenMoment: (moment) =>
+              openGameMoment(context.read<AppState>(), game, moment),
+        );
+      },
     );
   }
 
@@ -401,21 +245,12 @@ class _EmptyStateCard extends StatelessWidget {
               children: [
                 Icon(icon, size: 40, color: AppColors.onSurfaceMuted),
                 const SizedBox(height: 12),
-                Text(
-                  title,
-                  style: AppTextStyles.body.copyWith(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                Text(title, style: AppTextStyles.emptyStateTitle),
                 const SizedBox(height: 8),
                 Text(
                   message,
                   textAlign: TextAlign.center,
-                  style: AppTextStyles.body.copyWith(
-                    fontSize: 13,
-                    color: AppColors.onSurfaceSoft,
-                  ),
+                  style: AppTextStyles.emptyStateBody,
                 ),
                 const SizedBox(height: 16),
                 FilledButton(onPressed: onPressed, child: Text(buttonLabel)),

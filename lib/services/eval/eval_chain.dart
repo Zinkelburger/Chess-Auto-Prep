@@ -14,6 +14,7 @@ enum EvalChainSource {
   projectCache,
   cdbDirect,
   localChessDb,
+  lichessEvals,
   chessDbApi,
   stockfish,
 }
@@ -48,6 +49,7 @@ Future<EvalChainOutcome> resolveEvalChain({
   required BuildStats stats,
   SqliteEvalProvider? localChessDb,
   ExternalEvalProvider? cdbDirect,
+  ExternalEvalProvider? lichessEvals,
   ExternalEvalProvider? localEvalProvider,
   ChessDbApiProvider? chessDbApi,
   ExtEvalMode extEvalMode = ExtEvalMode.none,
@@ -144,6 +146,25 @@ Future<EvalChainOutcome> resolveEvalChain({
       localHardMiss = true;
     } else {
       stats.localChessDbMisses++;
+    }
+  }
+
+  // Lichess publishes 394 million positions against ChessDB's 64 billion, so
+  // it answers last among the local sources and — unlike them — a miss here
+  // says nothing about the subtree, which is why it stays out of the
+  // hard-miss bookkeeping below.
+  if (mode != ExtEvalMode.skipExternal &&
+      config.enableLichessEvals &&
+      lichessEvals != null) {
+    final hit = await lichessEvals.lookup(fen, minDepth: minDepth);
+    if (hit.isHit) {
+      stats.lichessEvalHits++;
+      return recordHit(EvalChainSource.lichessEvals, hit.hit!);
+    }
+    if (hit.shallow) {
+      stats.lichessEvalShallow++;
+    } else {
+      stats.lichessEvalMisses++;
     }
   }
 

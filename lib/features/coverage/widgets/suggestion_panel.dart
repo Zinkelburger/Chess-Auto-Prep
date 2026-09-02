@@ -33,15 +33,53 @@ class SuggestionPanel extends StatefulWidget {
 
 class _SuggestionPanelState extends State<SuggestionPanel> {
   double _targetCoverage = 75.0;
-  SuggestionWeights _weights = SuggestionWeights.balanced;
   List<SuggestedLine> _suggestions = [];
   bool _isLoading = false;
-  String _activePreset = 'balanced';
+
+  static const _defaultWeights = SuggestionWeights();
+  late final _impactCtrl = _weightCtrl(_defaultWeights.impactExp);
+  late final _evalCtrl = _weightCtrl(_defaultWeights.evalExp);
+  late final _easeCtrl = _weightCtrl(_defaultWeights.easeExp);
+  late final _trapCtrl = _weightCtrl(_defaultWeights.trapExp);
+  late final _coherenceCtrl = _weightCtrl(_defaultWeights.coherenceExp);
+
+  static TextEditingController _weightCtrl(double v) =>
+      TextEditingController(text: _fmt(v));
+
+  static String _fmt(double v) =>
+      v == v.roundToDouble() ? v.toInt().toString() : v.toString();
 
   @override
   void initState() {
     super.initState();
     _targetCoverage = (widget.currentCoverage + 10).clamp(0, 100);
+  }
+
+  @override
+  void dispose() {
+    for (final c in [
+      _impactCtrl,
+      _evalCtrl,
+      _easeCtrl,
+      _trapCtrl,
+      _coherenceCtrl,
+    ]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  /// The weights as typed; a blank or unparseable field keeps its default.
+  SuggestionWeights get _weights {
+    double read(TextEditingController c, double fallback) =>
+        (double.tryParse(c.text.trim()) ?? fallback).clamp(0.0, 5.0);
+    return SuggestionWeights(
+      impactExp: read(_impactCtrl, _defaultWeights.impactExp),
+      evalExp: read(_evalCtrl, _defaultWeights.evalExp),
+      easeExp: read(_easeCtrl, _defaultWeights.easeExp),
+      trapExp: read(_trapCtrl, _defaultWeights.trapExp),
+      coherenceExp: read(_coherenceCtrl, _defaultWeights.coherenceExp),
+    );
   }
 
   void _generate() {
@@ -61,7 +99,7 @@ class _SuggestionPanelState extends State<SuggestionPanel> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildHeader(theme),
-        _buildPresets(theme),
+        _buildWeights(theme),
         const Divider(height: 1),
         if (_isLoading)
           const Expanded(child: Center(child: CircularProgressIndicator()))
@@ -152,34 +190,69 @@ class _SuggestionPanelState extends State<SuggestionPanel> {
     );
   }
 
-  Widget _buildPresets(ThemeData theme) {
+  /// One field per scoring factor.  Each is an exponent: 0 ignores the
+  /// factor, 1 weighs it fully, and they multiply, so the ratios matter more
+  /// than the absolute numbers.
+  Widget _buildWeights(ThemeData theme) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Wrap(
         spacing: 8,
+        runSpacing: 6,
         children: [
-          _presetChip('Max Coverage', 'max', SuggestionWeights.maxCoverage),
-          _presetChip('Balanced', 'balanced', SuggestionWeights.balanced),
-          _presetChip('Playable', 'playable', SuggestionWeights.playable),
-          _presetChip('Trappy', 'trappy', SuggestionWeights.trappy),
+          _weightField(
+            _impactCtrl,
+            'Coverage',
+            'How much of your games the line accounts for.',
+          ),
+          _weightField(
+            _evalCtrl,
+            'Eval',
+            'Engine eval at the end of the line, for you.',
+          ),
+          _weightField(
+            _easeCtrl,
+            'Ease',
+            'How natural the line\'s moves are to find over the board.',
+          ),
+          _weightField(
+            _trapCtrl,
+            'Traps',
+            'Positions in the line where opponents tend to go wrong.',
+          ),
+          _weightField(
+            _coherenceCtrl,
+            'Coherence',
+            'How well the line fits the structures the repertoire already '
+                'plays.',
+          ),
         ],
       ),
     );
   }
 
-  Widget _presetChip(String label, String id, SuggestionWeights w) {
-    return ChoiceChip(
-      label: Text(label, style: const TextStyle(fontSize: 11)),
-      selected: _activePreset == id,
-      onSelected: (selected) {
-        if (selected) {
-          setState(() {
-            _activePreset = id;
-            _weights = w;
-          });
-        }
-      },
-      visualDensity: VisualDensity.compact,
+  Widget _weightField(
+    TextEditingController controller,
+    String label,
+    String tooltip,
+  ) {
+    return Tooltip(
+      message:
+          '$tooltip 0 ignores it; weights multiply, so only their '
+          'ratios matter.',
+      child: SizedBox(
+        width: 88,
+        child: TextField(
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          style: const TextStyle(fontSize: 12),
+          decoration: InputDecoration(
+            labelText: label,
+            isDense: true,
+            border: const OutlineInputBorder(),
+          ),
+        ),
+      ),
     );
   }
 
@@ -248,7 +321,7 @@ class _SuggestionRow extends StatelessWidget {
                     child: Text(
                       '#${index + 1}',
                       style: const TextStyle(
-                        fontSize: 10,
+                        fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -274,7 +347,7 @@ class _SuggestionRow extends StatelessWidget {
                     ),
                     child: Text(
                       suggestion.source,
-                      style: const TextStyle(fontSize: 10),
+                      style: const TextStyle(fontSize: 12),
                     ),
                   ),
                 ],
@@ -331,7 +404,7 @@ class _SuggestionRow extends StatelessWidget {
                     ),
                     child: Text(
                       'Accept (+${suggestion.coverageGain.toStringAsFixed(1)}%)',
-                      style: const TextStyle(fontSize: 11),
+                      style: const TextStyle(fontSize: 12),
                     ),
                   ),
                 ],
@@ -356,7 +429,7 @@ class _MetricChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       '$label: $value',
-      style: const TextStyle(fontSize: 10, color: AppColors.onSurfaceSoft),
+      style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
     );
   }
 }

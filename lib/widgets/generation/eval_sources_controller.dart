@@ -149,11 +149,15 @@ class EvalSourcesController extends ChangeNotifier with SafeChangeNotifier {
   /// Writes what the controls describe onto [config] — the inverse of
   /// [applyConfig].
   ///
-  /// The cdb-direct trio is not ours to edit: it is owned by app settings
-  /// ([databases]) and gated on a runtime probe for the install
-  /// ([cdbDirectAvailable]), so a config cannot dictate it and neither can
-  /// this section. It is written here because it belongs to the same lookup
-  /// chain the section describes.
+  /// The cdb-direct trio and the Lichess pair are not ours to edit: they are
+  /// owned by app settings ([databases]), and cdb-direct is additionally
+  /// gated on a runtime probe for the native reader ([cdbDirectAvailable]),
+  /// so a config cannot dictate them and neither can this section. They are
+  /// written here because they belong to the same lookup chain the section
+  /// describes — and because nothing else writes them: while these two lines
+  /// were missing, `enableLichessEvals` was false in every build the form
+  /// started, so the store, its provider and its stats counters were
+  /// unreachable no matter what the user had downloaded or switched on.
   TreeBuildConfig applyTo(
     TreeBuildConfig config, {
     required EvalDatabaseSettings databases,
@@ -165,6 +169,9 @@ class EvalSourcesController extends ChangeNotifier with SafeChangeNotifier {
       cdbDirectPath: cdbDirectAvailable ? databases.cdbDirectPath : '',
       cdbDirectReadAhead: cdbDirectAvailable && databases.cdbDirectReadAhead,
       batchEvalLookups: cdbDirectAvailable && _batchEvalLookups,
+      enableLichessEvals:
+          databases.enableLichessEvals && databases.lichessEvalsPath.isNotEmpty,
+      lichessEvalsPath: databases.lichessEvalsPath,
       enableLocalChessDb: _enableLocalChessDb,
       localChessDbPath: localChessDbPath,
       enableChessDbApi: _enableChessDbApi,

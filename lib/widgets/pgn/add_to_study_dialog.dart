@@ -184,7 +184,7 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
                             subtitle: Text(
                               '${s.gameCount} chapter'
                               '${s.gameCount == 1 ? '' : 's'}',
-                              style: const TextStyle(fontSize: 11),
+                              style: const TextStyle(fontSize: 12),
                             ),
                             onTap: () => _pickExisting(s),
                           ),

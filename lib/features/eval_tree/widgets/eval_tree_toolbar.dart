@@ -68,7 +68,7 @@ class EvalTreeToolbar extends StatelessWidget {
             children: [
               const Text(
                 'Metric',
-                style: TextStyle(fontSize: 10, color: AppColors.onSurfaceMuted),
+                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
               ),
               const SizedBox(width: 6),
               SegmentedButton<EvalTreeMetricDisplayMode>(
@@ -94,7 +94,7 @@ class EvalTreeToolbar extends StatelessWidget {
                   padding: WidgetStatePropertyAll(
                     EdgeInsets.symmetric(horizontal: 8, vertical: 0),
                   ),
-                  textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 10)),
+                  textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 12)),
                 ),
               ),
               const SizedBox(width: 4),
@@ -142,7 +142,7 @@ class EvalTreeToolbar extends StatelessWidget {
             children: [
               const Text(
                 'Ahead',
-                style: TextStyle(fontSize: 10, color: AppColors.onSurfaceMuted),
+                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
               ),
               SizedBox(
                 width: 132,
@@ -169,9 +169,9 @@ class EvalTreeToolbar extends StatelessWidget {
               Text(
                 '${controller.visiblePly} ply',
                 style: const TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   color: AppColors.onSurfaceSoft,
-                  fontFamily: 'monospace',
+                  fontFamily: 'SourceCodePro',
                 ),
               ),
             ],
@@ -191,7 +191,7 @@ class EvalTreeToolbar extends StatelessWidget {
               Text(
                 '$visibleNodeCount / $totalNodeCount',
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 12,
                   color: hitDisplayCap
                       ? AppColors.warning
                       : AppColors.onSurfaceMuted,
@@ -200,7 +200,7 @@ class EvalTreeToolbar extends StatelessWidget {
               Text(
                 '  |  ${currentNode.subtreeSize} subtree',
                 style: const TextStyle(
-                  fontSize: 10,
+                  fontSize: 12,
                   color: AppColors.onSurfaceMuted,
                 ),
               ),

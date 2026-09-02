@@ -20,6 +20,7 @@ enum JobType {
   tacticsImport,
   gameAnalysis,
   masterGames,
+  evalDatabase,
 }
 
 // ── Progress snapshot ───────────────────────────────────────────────

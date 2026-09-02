@@ -46,9 +46,10 @@ import '../utils/app_shortcuts.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/shortcut_tooltip.dart';
 import '../widgets/app_breadcrumb_trail.dart';
-import '../widgets/app_mode_menu_button.dart';
+import '../widgets/app_mode_switcher.dart';
 import '../widgets/app_overflow_menu.dart';
 import '../widgets/app_settings_button.dart';
+import '../widgets/common/confirm_dialog.dart';
 import '../widgets/engine/engine_gate.dart';
 import '../widgets/layout/responsive_split_layout.dart';
 import '../widgets/chess_board_widget.dart';
@@ -312,6 +313,14 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         _tabController.animateTo(_analysisTabIndex);
     }
     if (handoff.autoAnalyze) _startAutoAnalysisForCurrentGame();
+    final ply = handoff.ply;
+    if (ply != null) {
+      // The PGN widget takes the newly selected game on its next build and
+      // parks the cursor at the start; move it after that build, not before.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _controller.goToPly(ply);
+      });
+    }
   }
 
   /// Whether the open collection still matches its file on disk.
@@ -792,6 +801,68 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     );
   }
 
+  /// Leave a running solitaire session — asking first when guesses made so
+  /// far would be thrown away — or close the setup strip.
+  @override
+  Future<void> _leaveSolitaire() async {
+    if (!_controller.isSolitaireMode) {
+      _controller.cancelSolitaireSetup();
+      _reclaimFocus();
+      return;
+    }
+    if (_controller.solitaire.hasProgress) {
+      final leave = await confirmAction(
+        context,
+        title: 'Leave solitaire?',
+        message: 'Your guesses in this game so far are lost.',
+        confirmLabel: 'Leave',
+        destructive: false,
+      );
+      if (!mounted) return;
+      if (!leave) {
+        _reclaimFocus();
+        return;
+      }
+    }
+    _controller.stopSolitaire();
+    _reclaimFocus();
+  }
+
+  /// Run [action] (switching game) — after asking, when a solitaire game is
+  /// half done.
+  @override
+  Future<void> _guardingSolitaireProgress(VoidCallback action) async {
+    if (_controller.isSolitaireMode && _controller.solitaire.hasProgress) {
+      final go = await confirmAction(
+        context,
+        title: 'Switch game?',
+        message: 'Your guesses in this game so far are lost.',
+        confirmLabel: 'Switch',
+        destructive: false,
+      );
+      if (!mounted) return;
+      if (!go) {
+        _reclaimFocus();
+        return;
+      }
+    }
+    action();
+  }
+
+  /// From the completion banner: leave solitaire and put the engine on the
+  /// game. Trophy detection needs both the guess log (kept after the session
+  /// stops) and the evals, so it hangs off the analysis either way — a fresh
+  /// run's completion, or right now when cached evals already cover the game.
+  @override
+  void _analyseSolitaireGame() {
+    _controller.stopSolitaire();
+    final cached =
+        _analysisController.evals.isNotEmpty &&
+        !_analysisController.isAnalyzing;
+    _startAutoAnalysisForCurrentGame();
+    if (cached) unawaited(_detectTrophies());
+  }
+
   @override
   Future<void> _copyCurrentGamePgn() async {
     if (_controller.filteredGames.isEmpty) return;
@@ -1033,6 +1104,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         },
         preempts: true,
       ),
+      ...KeyBinding.forShortcut(
+        AppShortcut.hintMove,
+        'Hint: highlight the piece that moves',
+        _controller.hintCurrentMove,
+      ),
       for (final shortcut in [
         AppShortcut.autoPlay,
         AppShortcut.nextTab,
@@ -1139,16 +1215,23 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       'Go to game number',
       GameNumberField.focusActive,
     ),
+    // The setup strip: Enter starts, Escape (below) closes it.
+    if (_controller.isSolitaireSetup)
+      KeyBinding(LogicalKeyboardKey.enter, 'Start solitaire', () {
+        _controller.beginSolitaire();
+        return true;
+      }),
     // Escape leaves whatever you are in, innermost first — the ordering is the
     // whole contract: solitaire and amend are modes you entered, full screen is
     // a view you entered, and scratch analysis moves are the only thing left to
-    // back out of once you are in none of them.
+    // back out of once you are in none of them. Leaving a half-played
+    // solitaire game asks first.
     ...KeyBinding.forShortcut(
       AppShortcut.leave,
       'Exit solitaire / amend / fullscreen, clear analysis moves',
       () {
-        if (_controller.isSolitaireMode) {
-          _controller.toggleSolitaire();
+        if (_controller.isSolitaireMode || _controller.isSolitaireSetup) {
+          unawaited(_leaveSolitaire());
         } else if (_editMode) {
           _toggleEditMode();
         } else if (_controller.isFullScreen) {
@@ -1210,8 +1293,18 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// a view of every game at once and there is no single game to guess through.
   /// Returns true either way: refusing is an answer, not a fall-through to
   /// some other binding.
+  @override
   bool _toggleSolitaireMode() {
-    if (!_controller.showOpeningTree) _controller.toggleSolitaire();
+    if (_controller.showOpeningTree) return true;
+    if (_controller.isSolitaireMode) {
+      unawaited(_leaveSolitaire());
+    } else {
+      _controller.toggleSolitaire();
+      // The setup strip and the game itself live in the Game tab; opening
+      // setup from Analysis or Line would otherwise light the icon and show
+      // nothing.
+      if (_controller.isSolitaireSetup) _tabController.animateTo(_kGameTab);
+    }
     return true;
   }
 

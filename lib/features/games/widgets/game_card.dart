@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../../../services/game_analysis_controller.dart'
+    show MoveClassification;
 import '../../../services/games_library/game_filter.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../widgets/common/static_board_thumbnail.dart';
 import '../models/recent_game.dart';
+import '../services/game_moments.dart';
 
 /// One recent game, as a card.
 ///
@@ -22,6 +25,13 @@ import '../models/recent_game.dart';
 /// are the only way in. A column of icon buttons on the right edge used to
 /// repeat them; it read as clutter on every row and said nothing the words
 /// beside it didn't already say.
+///
+/// Wide cards grow a strip of *moments* to the right of the text — the
+/// position where the game left the book and each of my mistakes, as small
+/// boards with the move drawn on them (see [GameMoment]). The text used to be
+/// all there was, and on any window past about 1100px more than half of
+/// every card was empty. The strip scrolls sideways on its own; the board and
+/// the text never move.
 class GameCard extends StatelessWidget {
   const GameCard({
     super.key,
@@ -29,6 +39,7 @@ class GameCard extends StatelessWidget {
     required this.onOpen,
     required this.onOpenAnalysis,
     required this.onOpenLine,
+    this.onOpenMoment,
   });
 
   /// Board edge; also sets the card's height.
@@ -42,6 +53,18 @@ class GameCard extends StatelessWidget {
   /// pixel ratio, so this size carries no sharpness ceiling of its own.
   static const double boardSize = 144;
 
+  /// Width the text column keeps once the strip appears. Everything in it
+  /// fits comfortably at this width; the strip takes what is left.
+  static const double bodyWidth = 300;
+
+  /// Board edge of one moment in the strip. Smaller than the final-position
+  /// board: this one is not for recognising the position but for seeing the
+  /// arrow on it, and the caption under it carries the move. Sized so the
+  /// board, two caption lines and the scrollbar fit in [boardSize].
+  static const double momentSize = 100;
+
+  static const double _gap = 10;
+
   final RecentGame game;
 
   /// Open the game in the PGN viewer (Game tab).
@@ -52,6 +75,14 @@ class GameCard extends StatelessWidget {
 
   /// Open the game beside the book line it left (Line tab).
   final VoidCallback onOpenLine;
+
+  /// Open the game at one of its moments. Null hides the strip.
+  final void Function(GameMoment moment)? onOpenMoment;
+
+  /// Whether a card [width] wide (inside its padding) has room for the strip:
+  /// the board, the text at its fixed width, and at least one moment.
+  static bool stripFits(double width) =>
+      width >= boardSize + _gap + bodyWidth + _gap + momentSize;
 
   @override
   Widget build(BuildContext context) {
@@ -69,16 +100,37 @@ class GameCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: AppColors.divider),
             ),
-            child: Row(
-              // Centred, not top-aligned: the board is taller than the text
-              // beside it, and pinning that text to the top left a band of
-              // dead space under it on every row.
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                _buildBoard(),
-                const SizedBox(width: 10),
-                Expanded(child: _buildBody(context)),
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final moments = onOpenMoment == null
+                    ? const <GameMoment>[]
+                    : game.moments;
+                final showStrip =
+                    moments.isNotEmpty && stripFits(constraints.maxWidth);
+                return Row(
+                  // Centred, not top-aligned: the board is taller than the
+                  // text beside it, and pinning that text to the top left a
+                  // band of dead space under it on every row.
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _buildBoard(),
+                    const SizedBox(width: _gap),
+                    if (!showStrip)
+                      Expanded(child: _buildBody(context))
+                    else ...[
+                      SizedBox(width: bodyWidth, child: _buildBody(context)),
+                      const SizedBox(width: _gap),
+                      Expanded(
+                        child: MomentsStrip(
+                          moments: moments,
+                          flipped: game.meWhite == false,
+                          onOpen: onOpenMoment!,
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -197,7 +249,7 @@ class GameCard extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: AppTextStyles.mono.copyWith(
-              fontSize: 12.5,
+              fontSize: 13,
               color: AppColors.onSurfaceSoft,
             ),
           ),
@@ -367,7 +419,7 @@ class _DeviationLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final muted = AppTextStyles.body.copyWith(
-      fontSize: 12.5,
+      fontSize: 13,
       color: AppColors.onSurfaceSoft,
     );
     if (!game.deviationComputed) {
@@ -434,23 +486,161 @@ class _DeviationLine extends StatelessWidget {
               child: Text(
                 text,
                 overflow: TextOverflow.ellipsis,
-                style: AppTextStyles.body.copyWith(
-                  fontSize: 12.5,
-                  color: color,
-                ),
+                style: AppTextStyles.body.copyWith(fontSize: 13, color: color),
               ),
             ),
             const SizedBox(width: 6),
             Text(
               'View line',
               style: AppTextStyles.body.copyWith(
-                fontSize: 12.5,
+                fontSize: 13,
                 color: AppColors.onSurfaceMuted,
                 decoration: TextDecoration.underline,
                 decorationColor: AppColors.onSurfaceDim,
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The moments of one game as a row of small boards, scrolling sideways.
+///
+/// Every moment is here, in game order, so scrolling right reads as playing
+/// through the game; there is no "+N" and no cap. The scrollbar belongs to
+/// the strip and stays visible whenever there is more to the right — on a
+/// desktop a hidden overflow is the same as a cap. A plain wheel over the
+/// strip still scrolls the games list (a horizontal list ignores vertical
+/// wheel deltas); a horizontal swipe or the bar moves the strip.
+class MomentsStrip extends StatefulWidget {
+  const MomentsStrip({
+    super.key,
+    required this.moments,
+    required this.flipped,
+    required this.onOpen,
+  });
+
+  final List<GameMoment> moments;
+
+  /// Black at the bottom — the same orientation as the final-position board.
+  final bool flipped;
+  final void Function(GameMoment moment) onOpen;
+
+  @override
+  State<MomentsStrip> createState() => _MomentsStripState();
+}
+
+class _MomentsStripState extends State<MomentsStrip> {
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: GameCard.boardSize,
+      child: Scrollbar(
+        controller: _scroll,
+        thumbVisibility: true,
+        thickness: 4,
+        child: ListView.separated(
+          controller: _scroll,
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.only(bottom: 8),
+          itemCount: widget.moments.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 8),
+          itemBuilder: (context, index) {
+            final moment = widget.moments[index];
+            return MomentTile(
+              moment: moment,
+              flipped: widget.flipped,
+              onTap: () => widget.onOpen(moment),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// One moment: the board with the move on it, the move, and what it was.
+///
+/// The played move takes the mistake's hue — blue, amber, red, the same three
+/// the counts use — or red when I left the book and a plain ink when they
+/// did. What the book or the engine wanted instead is green. Those are the
+/// only colours in the strip; the captions stay in the two inks.
+class MomentTile extends StatelessWidget {
+  const MomentTile({
+    super.key,
+    required this.moment,
+    required this.flipped,
+    required this.onTap,
+  });
+
+  final GameMoment moment;
+  final bool flipped;
+  final VoidCallback onTap;
+
+  static Color _playedColor(GameMoment moment) =>
+      switch (moment.classification) {
+        MoveClassification.blunder => AppColors.mistakeBlunder,
+        MoveClassification.mistake => AppColors.mistakeMistake,
+        MoveClassification.inaccuracy => AppColors.mistakeInaccuracy,
+        _ => moment.byMe ? AppColors.danger : AppColors.onSurfaceMuted,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final arrows = <BoardArrow>[
+      for (final uci in moment.wantedUcis)
+        BoardArrow(uci: uci, color: AppColors.success.withValues(alpha: 0.85)),
+      if (moment.playedUci.isNotEmpty)
+        BoardArrow(
+          uci: moment.playedUci,
+          color: _playedColor(moment).withValues(alpha: 0.9),
+        ),
+    ];
+    return Tooltip(
+      message: moment.tooltip,
+      waitDuration: const Duration(milliseconds: 600),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: SizedBox(
+          width: GameCard.momentSize,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              StaticBoardThumbnail(
+                fen: moment.fen,
+                size: GameCard.momentSize,
+                flipped: flipped,
+                arrows: arrows,
+              ),
+              const SizedBox(height: 3),
+              Text(
+                moment.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.monoDense.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                moment.detail,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.caption,
+              ),
+            ],
+          ),
         ),
       ),
     );

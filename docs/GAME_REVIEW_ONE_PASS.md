@@ -124,6 +124,57 @@ headers, and Chess.com's `ECOUrl` slug supplies the name where it doesn't.
   Game tab, the mistake counts → Analysis tab (with the engine), the book
   verdict → Line tab.
 
+### The moments strip
+
+On a card wide enough (board + 300px of text + one moment, see
+`GameCard.stripFits`) the empty right half holds a **strip of moments**: one
+small board per thing worth a second look, in game order — the position where
+the game left the book (played move drawn red when mine, book move green) and
+each of my classified mistakes (played move in the mistake's hue, engine move
+green when a `[%pv]` was stored). `buildGameMoments` in
+`features/games/services/game_moments.dart` derives them from the deviation
+report and the review summary; `RecentGame.moments` memoises the result until
+either input is reassigned. Clicking a moment hands the viewer a `ply` along
+with the tab (`OpenPgnViewer.ply` → `PgnViewerController.goToPly`, applied one
+frame after the game is selected so the widget has taken the new game).
+
+The strip scrolls sideways on its own with an always-visible scrollbar; the
+board and the text never move, and a plain wheel over it still scrolls the
+games list. No cap, no "+N".
+
+For the mistakes to exist the summary has to come from the eval series, not
+the count store: `GameReviewSummary.moments` is filled by `summaryFromEvals`,
+`RecentGamesController._mergeSummary` prefers the parsed summary whenever its
+counts agree with the store's, and `applyAnnotatedMovetext` reads a game's
+series the moment the engine pass reports it, so the strip fills in during a
+run rather than on the next load.
+
+### Lines behind the scores
+
+Every place a mistake is shown — the Analysis tab's cards, the inline
+`Blunder +0.3 → +2.1  Best: …` mark in the movetext, the moments strip's
+green arrow — offers the engine's line from the position before it, read
+from a `[%pv]` beside the `[%eval]`. Two passes write them, one convention
+(the line from *before* the move, what to have played instead):
+
+- The review pass keeps the PV of every position it searched
+  (`annotateMovetextWithEvals(plyPvs:)`), so a game reviewed from the home
+  opens with clickable lines on its mistakes. A score served from the shared
+  eval cache has no line behind it, and a game annotated before lines were
+  kept has none at all.
+- So the viewer fills what is missing on open:
+  `GameAnalysisController.fillMissingBestLines` searches just the classified
+  moves with no line, at the depth the series was scored at, puts the lines
+  on the loaded evals and writes them back through `persistMoveComments`,
+  once. It stays silent while a full analysis runs, while generation holds
+  the engine, or when no engine can be started.
+
+Writing annotations back used to reload the widget and park the reader at
+move one (and restart a solitaire game). `ViewerGameModel.adoptAnnotations`
+takes the new comments and glyphs onto the loaded mainline in place when the
+moves and the stored sidelines are the same game; anything else still
+reloads.
+
 ## The Line tab
 
 The PGN viewer's side panel is **Game · Line · Analysis**.

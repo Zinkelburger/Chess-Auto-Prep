@@ -230,7 +230,7 @@ class _AddPgnButton extends StatelessWidget {
             Text(
               'Add PGN',
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: cs.onPrimaryContainer,
               ),
@@ -303,7 +303,7 @@ class _SourceRow extends StatelessWidget {
                     child: Text(
                       source.color == PgnSourceColor.white ? '♔' : '♚',
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 12,
                         color: source.color == PgnSourceColor.white
                             ? AppColors.onSideWhite
                             : AppColors.ink,
@@ -331,7 +331,7 @@ class _SourceRow extends StatelessWidget {
                         Text(
                           p.basename(source.filePath!),
                           style: TextStyle(
-                            fontSize: 10,
+                            fontSize: 12,
                             color: cs.onSurfaceVariant,
                           ),
                           maxLines: 1,
@@ -376,7 +376,7 @@ class _SourceRow extends StatelessWidget {
                         Text(
                           source.sliceLabel,
                           style: TextStyle(
-                            fontSize: 10,
+                            fontSize: 12,
                             fontWeight: source.isSliced
                                 ? FontWeight.w600
                                 : FontWeight.normal,
@@ -399,7 +399,7 @@ class _SourceRow extends StatelessWidget {
                 // Game count
                 Text(
                   '${source.totalGames}',
-                  style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
+                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                 ),
                 const SizedBox(width: 4),
                 // Remove
@@ -483,7 +483,7 @@ class _EmptyState extends StatelessWidget {
               OutlinedButton.icon(
                 onPressed: onPickFile,
                 icon: const Icon(Icons.file_open, size: 14),
-                label: const Text('Pick file', style: TextStyle(fontSize: 11)),
+                label: const Text('Pick file', style: TextStyle(fontSize: 12)),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -495,7 +495,7 @@ class _EmptyState extends StatelessWidget {
               OutlinedButton.icon(
                 onPressed: onPaste,
                 icon: const Icon(Icons.paste, size: 14),
-                label: const Text('Paste PGN', style: TextStyle(fontSize: 11)),
+                label: const Text('Paste PGN', style: TextStyle(fontSize: 12)),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -599,7 +599,7 @@ class _CompactPasteDialogState extends State<_CompactPasteDialog> {
               controller: _controller,
               maxLines: 6,
               minLines: 3,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              style: const TextStyle(fontFamily: 'SourceCodePro', fontSize: 12),
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
                 contentPadding: const EdgeInsets.all(10),
@@ -614,7 +614,7 @@ class _CompactPasteDialogState extends State<_CompactPasteDialog> {
                   const SizedBox(width: 6),
                   Text(
                     _error!,
-                    style: TextStyle(fontSize: 11, color: cs.error),
+                    style: TextStyle(fontSize: 12, color: cs.error),
                   ),
                 ],
               )
@@ -626,7 +626,7 @@ class _CompactPasteDialogState extends State<_CompactPasteDialog> {
                   Text(
                     '$_gameCount line${_gameCount == 1 ? '' : 's'} found',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: FontWeight.w500,
                       color: cs.primary,
                     ),

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../constants/ui_breakpoints.dart';
@@ -12,7 +13,7 @@ import '../features/tactics/controllers/tactics_session_controller.dart';
 import '../features/tactics/services/tactics_database.dart';
 import '../theme/app_colors.dart';
 import '../widgets/chess_board_widget.dart';
-import '../widgets/app_mode_menu_button.dart';
+import '../widgets/app_mode_switcher.dart';
 import '../widgets/app_settings_button.dart';
 import '../features/tactics/widgets/tactics_control_panel.dart';
 import '../widgets/training/move_input_widget.dart';
@@ -209,17 +210,54 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     }
 
     return Scaffold(
-      body: IndexedStack(
-        index: _supportedModes.indexOf(activeMode),
-        children: [
-          for (final mode in _supportedModes)
-            _modeViews[mode] ??
-                (mode == activeMode
-                    ? const _ModeLoadingView()
-                    : const SizedBox.shrink()),
-        ],
+      // Ctrl+1…7 (Cmd on macOS) jump between modes in the mode menu's order —
+      // the chords the menu advertises beside each entry. Bound here, once,
+      // above every screen; the screens' own key handlers see the event first
+      // and none of them claims a Ctrl+digit.
+      body: CallbackShortcuts(
+        bindings: {
+          for (final mode in kAppModeMenuOrder) ...{
+            SingleActivator(
+              _digitKey(mode.shortcutNumber),
+              control: true,
+            ): () =>
+                _switchTo(mode),
+            SingleActivator(_digitKey(mode.shortcutNumber), meta: true): () =>
+                _switchTo(mode),
+          },
+        },
+        child: IndexedStack(
+          index: _supportedModes.indexOf(activeMode),
+          children: [
+            for (final mode in _supportedModes)
+              _modeViews[mode] ??
+                  (mode == activeMode
+                      ? const _ModeLoadingView()
+                      : const SizedBox.shrink()),
+          ],
+        ),
       ),
     );
+  }
+
+  static LogicalKeyboardKey _digitKey(int n) => switch (n) {
+    1 => LogicalKeyboardKey.digit1,
+    2 => LogicalKeyboardKey.digit2,
+    3 => LogicalKeyboardKey.digit3,
+    4 => LogicalKeyboardKey.digit4,
+    5 => LogicalKeyboardKey.digit5,
+    6 => LogicalKeyboardKey.digit6,
+    7 => LogicalKeyboardKey.digit7,
+    8 => LogicalKeyboardKey.digit8,
+    _ => LogicalKeyboardKey.digit9,
+  };
+
+  /// Same guard as the menu: no switching while generation holds the app.
+  void _switchTo(AppMode mode) {
+    final appState = _appState ?? context.read<AppState>();
+    if (appState.isRepertoireGenerating) return;
+    if (appState.currentMode == mode) return;
+    appState.setMode(mode);
   }
 
   Widget _createModeView(AppMode mode) {
@@ -322,6 +360,13 @@ class _TacticsModeScaffold extends StatelessWidget {
   /// avoids re-initializing the panel's UI scaffolding on a resize.
   static final GlobalKey _panelKey = GlobalKey();
 
+  /// The home column's width, the same whether it holds the home blocks or
+  /// the puzzle panel: the games list and the board share one left edge, so
+  /// nothing jumps when a session starts. (It used to be 40% of the window
+  /// idle and 50% in a puzzle.) Below the compact breakpoint the column goes
+  /// under the board instead.
+  static const double kTacticsColumnWidth = 380;
+
   @override
   Widget build(BuildContext context) {
     // No AppState watch here: board-state changes rebuild only
@@ -336,10 +381,6 @@ class _TacticsModeScaffold extends StatelessWidget {
     final Widget leftPane = hasPuzzle
         ? const _TacticsBoardPane()
         : const TacticsGamesPane();
-    // Idle, the games list is the star and gets the wider half; during a
-    // session the board reclaims the traditional even split.
-    final leftFlex = hasPuzzle ? 5 : 6;
-    final rightFlex = hasPuzzle ? 5 : 4;
 
     return Scaffold(
       appBar: AppBar(
@@ -350,13 +391,13 @@ class _TacticsModeScaffold extends StatelessWidget {
           title: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Tactics'),
+              AppModeSwitcher(),
               SizedBox(width: 8),
               _TacticsAppBarBackButton(),
             ],
           ),
         ),
-        actions: const [AppSettingsButton(), AppModeMenuButton()],
+        actions: const [AppSettingsButton()],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
@@ -378,10 +419,10 @@ class _TacticsModeScaffold extends StatelessWidget {
                 )
               : Row(
                   children: [
-                    Expanded(flex: leftFlex, child: leftPane),
+                    Expanded(child: leftPane),
                     Container(width: 1, color: AppColors.outline),
-                    Expanded(
-                      flex: rightFlex,
+                    SizedBox(
+                      width: kTacticsColumnWidth,
                       child: Padding(
                         padding: const EdgeInsets.all(8.0),
                         child: TacticsControlPanel(key: _panelKey),

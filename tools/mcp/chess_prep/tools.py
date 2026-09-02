@@ -3,7 +3,10 @@
 Identity / pairing tools need no chess engine and no running app — just the
 shipped directory, the US Chess API, and a roster file. Opening-tree tools
 (`pgn_open`, `pgn_position`, `pgn_walk`, `pgn_eval`, `pgn_audit`) sit beside
-them and need `python-chess` (and Stockfish for eval/audit).
+them and need `python-chess` (and Stockfish for eval/audit). `chessdb_query`
+asks chessdb.cn what holds up in a position — the one source that can rate a
+move nobody plays — and `pgn_audit` uses the same lookup to flag opponent
+replies a file has no answer to.
 
 The hand-off to the app is always a file: `opponents_export` writes an opponent
 list that Player Analysis imports, and `tournament_open` writes a request that
@@ -398,6 +401,10 @@ class Registry:
         from .expectimax import register_expectimax_tools
 
         register_expectimax_tools(self)
+
+        from .chessdb import register_chessdb_tools
+
+        register_chessdb_tools(self)
 
     # ── Handlers ───────────────────────────────────────────────────────────
 

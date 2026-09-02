@@ -376,7 +376,7 @@ class _TacticsEditDialogState extends State<TacticsEditDialog> {
       onChanged: (_) => _onChanged(),
       maxLines: maxLines,
       style: monospace
-          ? const TextStyle(fontFamily: 'monospace', fontSize: 13)
+          ? const TextStyle(fontFamily: 'SourceCodePro', fontSize: 13)
           : null,
       decoration: InputDecoration(
         labelText: label,
@@ -402,7 +402,7 @@ class _TacticsEditDialogState extends State<TacticsEditDialog> {
           Expanded(
             child: SelectableText(
               value,
-              style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+              style: const TextStyle(fontSize: 12, fontFamily: 'SourceCodePro'),
             ),
           ),
         ],

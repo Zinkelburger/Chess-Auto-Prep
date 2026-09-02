@@ -313,7 +313,7 @@ WidgetSpan _buildProseMoveSpan(
           san,
           style: (isActive ? PgnTextStyles.currentMove : PgnTextStyles.move)
               .copyWith(
-                fontSize: 13.5,
+                fontSize: 14,
                 height: 1.5,
                 decoration: isActive ? null : TextDecoration.underline,
                 decorationColor: AppColors.onSurfaceMuted.withValues(
@@ -381,7 +381,7 @@ WidgetSpan _buildCommentMoveSpan(
           '${move.display} ',
           style: (isActiveMove ? PgnTextStyles.currentMove : PgnTextStyles.move)
               .copyWith(
-                fontSize: 13.5,
+                fontSize: 14,
                 height: 1.5,
                 decoration: clickable && !isActiveMove
                     ? TextDecoration.underline

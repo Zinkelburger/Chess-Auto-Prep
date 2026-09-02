@@ -233,7 +233,7 @@ class _HeaderCell extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: active ? FontWeight.w700 : FontWeight.w600,
                   color: active ? AppColors.ink : AppColors.onSurfaceSoft,
                 ),

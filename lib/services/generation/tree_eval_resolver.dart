@@ -13,6 +13,7 @@ import '../eval/cdbdirect_eval_provider.dart';
 import '../eval/chessdb_api_provider.dart';
 import '../eval/db_move_list.dart';
 import '../eval/eval_chain.dart';
+import '../eval/lichess_eval_provider.dart';
 import '../eval/sqlite_eval_provider.dart';
 import '../eval_cache.dart';
 import 'fen_map.dart';
@@ -21,6 +22,7 @@ import 'generation_config.dart';
 class TreeEvalResolver {
   final EvalCache evalCache = EvalCache.instance;
   SqliteEvalProvider? _localChessDb;
+  LichessEvalProvider? _lichessEvals;
   CdbDirectEvalProvider? _cdbDirect;
   ChessDbApiProvider? _chessDbApi;
 
@@ -54,6 +56,13 @@ class TreeEvalResolver {
       }
     }
 
+    if (config.enableLichessEvals && config.lichessEvalsPath.isNotEmpty) {
+      final provider = LichessEvalProvider(directory: config.lichessEvalsPath);
+      if (await provider.init()) {
+        _lichessEvals = provider;
+      }
+    }
+
     if (config.enableChessDbApi) {
       _chessDbApi = ChessDbApiProvider(
         dailyQuota: config.chessDbApiDailyQuota,
@@ -68,6 +77,8 @@ class TreeEvalResolver {
     _localChessDb = null;
     await _cdbDirect?.close();
     _cdbDirect = null;
+    await _lichessEvals?.close();
+    _lichessEvals = null;
     if (_chessDbApi != null) {
       await _chessDbApi!.flushQuota();
       _chessDbApi = null;
@@ -130,6 +141,7 @@ class TreeEvalResolver {
       stats: stats,
       localChessDb: _localChessDb,
       cdbDirect: _cdbDirect,
+      lichessEvals: _lichessEvals,
       chessDbApi: _chessDbApi,
       allowStockfishFallback: false,
       stockfishEval: (_, _) async => (stmCp: 0, depth: 0),
@@ -167,6 +179,7 @@ class TreeEvalResolver {
       stats: stats,
       localChessDb: _localChessDb,
       cdbDirect: _cdbDirect,
+      lichessEvals: _lichessEvals,
       chessDbApi: _chessDbApi,
       extEvalMode: node.extEvalMode,
       canonicalNode: fenMap.getCanonical(node.fen),

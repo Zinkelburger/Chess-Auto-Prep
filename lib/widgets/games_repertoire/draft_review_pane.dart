@@ -232,7 +232,7 @@ class _DraftReviewPaneState extends State<DraftReviewPane> {
             alignment: Alignment.centerLeft,
             child: Text(
               'Tap a line to expand · long-press to preview on the board · 🗑 discards it',
-              style: TextStyle(fontSize: 11, color: AppColors.onSurfaceDim),
+              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceDim),
             ),
           ),
         ),

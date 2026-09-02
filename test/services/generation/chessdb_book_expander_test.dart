@@ -233,6 +233,83 @@ void main() {
     });
 
     test(
+      'a reply window prefers the move leaving fewer good replies',
+      () async {
+        resetNodeIds();
+        final node = _ourRoot();
+        const afterD4 =
+            'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1';
+        // dartchess writes no en-passant square when no capture is possible.
+        const afterE4 =
+            'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+        final source = _FakeMoveSource({
+          kStandardStartFen: const [
+            DbMove(uci: 'e2e4', stmCp: 30),
+            DbMove(uci: 'd2d4', stmCp: 29),
+          ],
+          // After 1.e4 Black has three level replies; after 1.d4 only one.
+          afterE4: const [
+            DbMove(uci: 'e7e5', stmCp: -30),
+            DbMove(uci: 'c7c5', stmCp: -31),
+            DbMove(uci: 'e7e6', stmCp: -35),
+            DbMove(uci: 'a7a5', stmCp: -120),
+          ],
+          afterD4: const [
+            DbMove(uci: 'd7d5', stmCp: -29),
+            DbMove(uci: 'g8f6', stmCp: -70),
+          ],
+        });
+
+        await NodeExpander.forRun(
+          _run(
+            config: _base.copyWith(bookTieBreakWindowCp: 5, replyWindowCp: 20),
+            node: node,
+            pool: FakeStockfishPool(),
+            source: source,
+            // Masters overwhelmingly prefer e4; the reply count outranks them.
+            masterBook: (_) => [_book('e2e4', 9000), _book('d2d4', 100)],
+          ),
+        ).expandOurMove(node, FrontierQueue(bestFirst: true));
+
+        expect(node.children.single.moveSan, 'd4');
+        expect(source.calls, containsAll([afterE4, afterD4]));
+      },
+    );
+
+    test(
+      'a reply window falls back to master practice on equal counts',
+      () async {
+        resetNodeIds();
+        final node = _ourRoot();
+        const afterD4 =
+            'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1';
+        // dartchess writes no en-passant square when no capture is possible.
+        const afterE4 =
+            'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+        final source = _FakeMoveSource({
+          kStandardStartFen: const [
+            DbMove(uci: 'e2e4', stmCp: 30),
+            DbMove(uci: 'd2d4', stmCp: 30),
+          ],
+          afterE4: const [DbMove(uci: 'e7e5', stmCp: -30)],
+          afterD4: const [DbMove(uci: 'd7d5', stmCp: -30)],
+        });
+
+        await NodeExpander.forRun(
+          _run(
+            config: _base.copyWith(replyWindowCp: 20),
+            node: node,
+            pool: FakeStockfishPool(),
+            source: source,
+            masterBook: (_) => [_book('d2d4', 9000), _book('e2e4', 100)],
+          ),
+        ).expandOurMove(node, FrontierQueue(bestFirst: true));
+
+        expect(node.children.single.moveSan, 'd4');
+      },
+    );
+
+    test(
       'a position ChessDB has never seen ends the line by default',
       () async {
         resetNodeIds();

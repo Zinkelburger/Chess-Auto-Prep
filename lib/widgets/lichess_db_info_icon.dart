@@ -134,7 +134,7 @@ class _InfoPopupOverlayState extends State<_InfoPopupOverlay> {
                     const Text(
                       'Log out or switch account in App settings → Accounts.',
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 12,
                         color: AppColors.onSurfaceMuted,
                         height: 1.3,
                       ),

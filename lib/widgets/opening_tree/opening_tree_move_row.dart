@@ -149,7 +149,7 @@ class _OpeningTreeMoveRowState extends State<OpeningTreeMoveRow> {
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 15,
-                            fontFamily: 'monospace',
+                            fontFamily: 'SourceCodePro',
                           ),
                         ),
                       ),

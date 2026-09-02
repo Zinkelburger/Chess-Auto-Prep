@@ -223,7 +223,7 @@ class _EngineWeaknessConfigDialogState
                       'Last downloaded ${widget.playerInfo!.downloadTimeAgo}'
                       ' · fetched ${widget.playerInfo!.rangeDescription}',
                       style: const TextStyle(
-                        fontSize: 11,
+                        fontSize: 12,
                         color: AppColors.onSurfaceMuted,
                         fontStyle: FontStyle.italic,
                       ),

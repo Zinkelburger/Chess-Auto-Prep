@@ -330,7 +330,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
             color: AppColors.warningSurface,
             child: const Text(
               'Current position is out of book — transposing moves still listed',
-              style: TextStyle(fontSize: 11, color: AppColors.onWarning),
+              style: TextStyle(fontSize: 12, color: AppColors.onWarning),
             ),
           ),
 
@@ -421,7 +421,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 12,
                           fontWeight: FontWeight.w600,
                           color: AppColors.inkSoft,
                         ),
@@ -436,7 +436,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                     hintText: 'Type to filter lines...',
                     hintStyle: const TextStyle(
                       color: AppColors.onSurfaceMuted,
-                      fontSize: 11,
+                      fontSize: 12,
                     ),
                     prefixIcon: const Icon(
                       Icons.search,
@@ -478,7 +478,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                       vertical: 8,
                     ),
                   ),
-                  style: const TextStyle(fontSize: 11),
+                  style: const TextStyle(fontSize: 12),
                 ),
 
                 // PGN lines list
@@ -487,7 +487,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                   Text(
                     '${_filteredLines.length} matching line${_filteredLines.length == 1 ? '' : 's'}',
                     style: const TextStyle(
-                      fontSize: 10,
+                      fontSize: 12,
                       color: AppColors.onSurfaceMuted,
                     ),
                   ),
@@ -541,7 +541,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                 '${showReach ? ' • ${reach.percentLabel}% reached' : ''}'
           : '${position.gamesPlayed} $noun'
                 '${position.nodes.length > 1 ? ' • ${position.nodes.length} move orders' : ''}',
-      style: const TextStyle(fontSize: 11, color: AppColors.inkSoft),
+      style: const TextStyle(fontSize: 12, color: AppColors.inkSoft),
     );
     if (!showReach) return text;
     return Tooltip(
@@ -702,7 +702,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
             games.first.title,
             textAlign: TextAlign.center,
             style: const TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               color: AppColors.onSurfaceMuted,
             ),
           ),
@@ -746,7 +746,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                                 game.eloDisplay,
                               ].where((s) => s.isNotEmpty).join(' · '),
                               style: const TextStyle(
-                                fontSize: 10,
+                                fontSize: 12,
                                 color: AppColors.onSurfaceMuted,
                               ),
                             ),
@@ -782,7 +782,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
             // Title
             Text(
               displayTitle,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -796,8 +796,8 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                     line.moves.take(4).join(' '),
                     style: const TextStyle(
                       color: AppColors.onSurfaceSoft,
-                      fontSize: 10,
-                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      fontFamily: 'SourceCodePro',
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -807,7 +807,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                   '${line.moves.length}m',
                   style: const TextStyle(
                     color: AppColors.onSurfaceMuted,
-                    fontSize: 9,
+                    fontSize: 12,
                   ),
                 ),
               ],

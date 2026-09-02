@@ -109,8 +109,9 @@ class BuildTreeNode implements MoveTreeNodeView {
   /// Practical win probability in [0, 1], computed via expectimax.
   double expectimaxValue = 0.0;
 
-  /// Total expected opponent CPL downstream from this node.
-  /// Used by SelectionMode.trappy to pick lines that maximize opponent errors.
+  /// Total expected opponent CPL downstream from this node, probability
+  /// weighted.  Feeds the opponent-mistake boost in move selection
+  /// (`TreeBuildConfig.mistakeWeight`).
   double cplValue = 0.0;
 
   /// Max ply count below this node (0 for leaves).
@@ -400,6 +401,9 @@ class BuildStats {
   int localChessDbMisses = 0;
   int localChessDbShallow = 0;
   int localChessDbHardMisses = 0;
+  int lichessEvalHits = 0;
+  int lichessEvalMisses = 0;
+  int lichessEvalShallow = 0;
 
   int cdbDirectHits = 0;
   int cdbDirectMisses = 0;
@@ -471,6 +475,9 @@ class BuildStats {
     'local_chessdb_misses': localChessDbMisses,
     'local_chessdb_shallow': localChessDbShallow,
     'local_chessdb_hard_misses': localChessDbHardMisses,
+    'lichess_eval_hits': lichessEvalHits,
+    'lichess_eval_misses': lichessEvalMisses,
+    'lichess_eval_shallow': lichessEvalShallow,
     'cdbdirect_hits': cdbDirectHits,
     'cdbdirect_misses': cdbDirectMisses,
     'cdbdirect_shallow': cdbDirectShallow,

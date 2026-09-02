@@ -177,7 +177,7 @@ class _SearchablePickerDialogState<T> extends State<SearchablePickerDialog<T>> {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
-                                    fontSize: 11,
+                                    fontSize: 12,
                                     color: AppColors.onSurfaceMuted,
                                   ),
                                 ),
@@ -197,7 +197,7 @@ class _SearchablePickerDialogState<T> extends State<SearchablePickerDialog<T>> {
                   Text(
                     '${visible.length} of ${widget.items.length}',
                     style: const TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       color: AppColors.onSurfaceMuted,
                     ),
                   ),

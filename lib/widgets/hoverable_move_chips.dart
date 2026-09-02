@@ -132,7 +132,7 @@ class _HoverableMoveChipsState extends State<HoverableMoveChips> {
             style: TextStyle(
               fontSize: widget.fontSize,
               color: numColor,
-              fontFamily: 'monospace',
+              fontFamily: 'SourceCodePro',
               height: 1.5,
             ),
           ),
@@ -143,7 +143,7 @@ class _HoverableMoveChipsState extends State<HoverableMoveChips> {
           text: moves[i],
           style: TextStyle(
             fontSize: widget.fontSize,
-            fontFamily: 'monospace',
+            fontFamily: 'SourceCodePro',
             color: isHighlighted ? hlColor : defaultColor,
             fontWeight: isHighlighted ? FontWeight.bold : FontWeight.normal,
             backgroundColor: isHighlighted

@@ -331,7 +331,7 @@ class _ImportPgnPill extends StatelessWidget {
                 Text(
                   'Import PGN',
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: cs.onPrimaryContainer,
                   ),

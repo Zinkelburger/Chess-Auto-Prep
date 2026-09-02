@@ -848,7 +848,7 @@ class _InlinePgnAttachState extends State<_InlinePgnAttach> {
                           _truncateFilename(_fileName!),
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: 12,
                             fontWeight: FontWeight.w500,
                             color: cs.onPrimaryContainer,
                           ),
@@ -877,7 +877,7 @@ class _InlinePgnAttachState extends State<_InlinePgnAttach> {
             children: [
               Icon(Icons.warning_amber, size: 13, color: cs.error),
               const SizedBox(width: 5),
-              Text(_error!, style: TextStyle(fontSize: 11, color: cs.error)),
+              Text(_error!, style: TextStyle(fontSize: 12, color: cs.error)),
             ],
           ),
         ],

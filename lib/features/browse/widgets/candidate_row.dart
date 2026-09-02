@@ -81,14 +81,14 @@ class CandidateRow extends StatelessWidget {
       if (candidate.dbFrequency != null) ...[
         Text(
           '${(candidate.dbFrequency! * 100).toStringAsFixed(0)}%',
-          style: const TextStyle(fontSize: 11),
+          style: const TextStyle(fontSize: 12),
         ),
         const SizedBox(width: 6),
       ],
       if (candidate.dbGames != null) ...[
         Text(
           _formatGames(candidate.dbGames!),
-          style: const TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+          style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
         ),
         const SizedBox(width: 6),
       ],
@@ -140,9 +140,9 @@ class _EvalChip extends StatelessWidget {
     return Text(
       text,
       style: const TextStyle(
-        fontSize: 11,
+        fontSize: 12,
         fontWeight: FontWeight.w600,
-        fontFamily: 'monospace',
+        fontFamily: 'SourceCodePro',
       ),
     );
   }
@@ -197,7 +197,7 @@ class _TrapBadge extends StatelessWidget {
           Text(
             '$count trap${count == 1 ? '' : 's'}',
             style: const TextStyle(
-              fontSize: 10,
+              fontSize: 12,
               color: AppColors.onSurfaceSoft,
             ),
           ),
@@ -236,7 +236,7 @@ class _CoherenceChip extends StatelessWidget {
       message: 'Coherence ${hint.score.toStringAsFixed(2)}',
       child: Text(
         label,
-        style: const TextStyle(fontSize: 10, color: AppColors.onSurfaceSoft),
+        style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
         overflow: TextOverflow.ellipsis,
       ),
     );
@@ -252,7 +252,7 @@ class _CoverageDelta extends StatelessWidget {
     return Text(
       '+${delta.toStringAsFixed(1)}%',
       style: const TextStyle(
-        fontSize: 10,
+        fontSize: 12,
         color: AppColors.onSurfaceSoft,
         fontWeight: FontWeight.w500,
       ),

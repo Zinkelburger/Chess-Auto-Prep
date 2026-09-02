@@ -57,7 +57,7 @@ class BuildSessionBoardBar extends StatelessWidget {
                 icon: const Icon(Icons.undo, size: 14),
                 label: const Text(
                   'Back to decision point',
-                  style: TextStyle(fontSize: 11),
+                  style: TextStyle(fontSize: 12),
                 ),
                 style: TextButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 8),

@@ -48,7 +48,10 @@ void main() {
     temp = await Directory.systemTemp.createTemp('engine_tournament_screen');
     PathProviderPlatform.instance = _FakePathProvider(temp.path);
     SharedPreferences.setMockInitialValues({});
-    appState = AppState();
+    appState = AppState()
+      // The app-bar title is the mode switcher, which names the *current*
+      // mode — so a standalone screen test has to be in that mode.
+      ..setMode(AppMode.engineTournament);
     controller = EngineTournamentController();
   });
 
@@ -133,7 +136,7 @@ void main() {
 
   testWidgets('with nothing saved it offers to start one', (tester) async {
     await pumpScreen(tester);
-    expect(find.text('Engine Tournament'), findsOneWidget);
+    expect(find.text('Engine tournament'), findsOneWidget);
     expect(find.text('No tournaments yet'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'New tournament'), findsWidgets);
   });

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/app_state.dart';
 import '../../features/games/controllers/recent_games_controller.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import 'accounts_dialog.dart';
 
 /// Who the app downloads games for, as one card with two states.
@@ -31,25 +32,23 @@ class AccountsCard extends StatelessWidget {
     final downloading =
         context.watch<RecentGamesController?>()?.isLoading ?? false;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: hasAny
-              ? _Configured(
-                  lichess: lichess,
-                  chesscom: chesscom,
-                  lichessFetch: app.lichessLastFetch,
-                  chesscomFetch: app.chesscomLastFetch,
-                  downloading: downloading,
-                )
-              // Usernames are read from prefs asynchronously at startup; until
-              // that finishes, "none" may just mean "still loading", so the
-              // prompt waits rather than telling a configured user they have
-              // no accounts. Same shape either way — the card never jumps.
-              : _Empty(loading: !app.usernamesLoaded),
-        ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: hasAny
+            ? _Configured(
+                lichess: lichess,
+                chesscom: chesscom,
+                lichessFetch: app.lichessLastFetch,
+                chesscomFetch: app.chesscomLastFetch,
+                downloading: downloading,
+              )
+            // Usernames are read from prefs asynchronously at startup; until
+            // that finishes, "none" may just mean "still loading", so the
+            // prompt waits rather than telling a configured user they have
+            // no accounts. Same shape either way — the card never jumps.
+            : _Empty(loading: !app.usernamesLoaded),
       ),
     );
   }
@@ -73,10 +72,7 @@ class _Empty extends StatelessWidget {
               color: AppColors.onSurfaceMuted,
             ),
             SizedBox(width: 8),
-            Text(
-              'No accounts set',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-            ),
+            Text('No accounts set', style: AppTextStyles.bodyStrong),
           ],
         ),
         const SizedBox(height: 6),
@@ -84,7 +80,7 @@ class _Empty extends StatelessWidget {
           'Tell the app your Lichess or Chess.com username and it can '
           'download your games, find your mistakes and turn them into '
           'puzzles.',
-          style: TextStyle(fontSize: 12.5, color: AppColors.onSurfaceSoft),
+          style: AppTextStyles.muted,
         ),
         const SizedBox(height: 14),
         SizedBox(
@@ -128,17 +124,13 @@ class _Configured extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: Text(
-                'My accounts',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
+              child: Text('My accounts', style: AppTextStyles.bodyStrong),
             ),
-            TextButton.icon(
+            TextButton(
               key: const Key('accounts-change-button'),
               onPressed: () => showAccountsDialog(context),
-              icon: const Icon(Icons.edit_outlined, size: 16),
-              label: const Text('Change'),
               style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+              child: const Text('Change'),
             ),
           ],
         ),
@@ -163,6 +155,10 @@ class _Configured extends StatelessWidget {
 }
 
 /// One configured account: site, name, and when its games last came down.
+///
+/// Site and name share one ink at body size — the site is the only thing
+/// that differs between the rows, so it is never the smallest thing on the
+/// row. The date is the one secondary fact.
 class _AccountLine extends StatelessWidget {
   const _AccountLine({
     required this.site,
@@ -182,21 +178,12 @@ class _AccountLine extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         children: [
-          SizedBox(
-            width: 74,
-            child: Text(
-              site,
-              style: const TextStyle(
-                fontSize: 11.5,
-                color: AppColors.onSurfaceMuted,
-              ),
-            ),
-          ),
+          SizedBox(width: 84, child: Text(site, style: AppTextStyles.body)),
           Expanded(
             child: Text(
               name,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              style: AppTextStyles.bodyStrong,
             ),
           ),
           Text(
@@ -205,10 +192,7 @@ class _AccountLine extends StatelessWidget {
                 : lastFetch != null
                 ? formatAccountDate(lastFetch!)
                 : 'Not downloaded yet',
-            style: const TextStyle(
-              fontSize: 11.5,
-              color: AppColors.onSurfaceMuted,
-            ),
+            style: AppTextStyles.muted,
           ),
         ],
       ),

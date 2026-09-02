@@ -39,7 +39,7 @@ import '../theme/app_colors.dart';
 import '../widgets/engine/engine_gate.dart';
 import '../widgets/engine_weakness_dialog.dart';
 import '../widgets/app_breadcrumb_trail.dart';
-import '../widgets/app_mode_menu_button.dart';
+import '../widgets/app_mode_switcher.dart';
 import '../widgets/app_overflow_menu.dart';
 import '../widgets/app_settings_button.dart';
 import '../widgets/position_analysis_widget.dart';
@@ -181,7 +181,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text('Player Analysis', style: theme.textTheme.titleMedium),
+        const AppModeSwitcher(),
         if (_currentPlayer != null)
           Text(
             _metadataSubtitle,
@@ -207,7 +207,6 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
             onPressed: _canStartEngineJob ? _showWeaknessConfig : null,
           ),
           _buildActionsMenu(),
-          const AppModeMenuButton(),
         ],
       ),
       body: Column(

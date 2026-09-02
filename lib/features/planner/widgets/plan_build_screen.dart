@@ -517,7 +517,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
               const Text(
                 'PLAN SO FAR',
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 12,
                   letterSpacing: 0.6,
                   fontWeight: FontWeight.w700,
                   color: AppColors.onSurfaceMuted,
@@ -531,7 +531,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                     textAlign: TextAlign.right,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       color: AppColors.onSurfaceMuted,
                     ),
                   ),
@@ -546,7 +546,10 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
               if (_startMoves.isNotEmpty)
                 Text(
                   _movesLabel(_startMoves),
-                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontFamily: 'SourceCodePro',
+                  ),
                 ),
               if (_plan.decisions.isNotEmpty)
                 Theme(
@@ -559,7 +562,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                     title: Text(
                       '${_plan.decisions.length} decision'
                       '${_plan.decisions.length == 1 ? '' : 's'}',
-                      style: const TextStyle(fontSize: 11.5),
+                      style: const TextStyle(fontSize: 12),
                     ),
                     children: [
                       for (final d in _plan.decisions)
@@ -570,7 +573,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                             child: Text(
                               '• $d',
                               style: const TextStyle(
-                                fontSize: 11,
+                                fontSize: 12,
                                 color: AppColors.onSurfaceSoft,
                               ),
                             ),
@@ -584,7 +587,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                 Text(
                   'CHAPTERS · ${chapters.length}',
                   style: const TextStyle(
-                    fontSize: 10,
+                    fontSize: 12,
                     letterSpacing: 0.6,
                     fontWeight: FontWeight.w700,
                     color: AppColors.onSurfaceMuted,
@@ -670,7 +673,10 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                   _boardMoves.isEmpty
                       ? 'Start position'
                       : _movesLabel(_boardMoves),
-                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontFamily: 'SourceCodePro',
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -681,7 +687,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                   }),
                   child: const Text(
                     'back to question',
-                    style: TextStyle(fontSize: 11),
+                    style: TextStyle(fontSize: 12),
                   ),
                 ),
               if (interactive && _startMoves.isNotEmpty)
@@ -820,7 +826,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
         TextField(
           controller: _movesText,
           onChanged: _parseTypedMoves,
-          style: const TextStyle(fontSize: 12.5, fontFamily: 'monospace'),
+          style: const TextStyle(fontSize: 13, fontFamily: 'SourceCodePro'),
           decoration: const InputDecoration(
             labelText: 'Moves',
             isDense: true,
@@ -848,7 +854,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
               : Text(
                   _ownGamesNote!,
                   style: const TextStyle(
-                    fontSize: 11.5,
+                    fontSize: 12,
                     color: AppColors.onSurfaceMuted,
                   ),
                 ),
@@ -942,7 +948,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                         ? '${whiteToMove ? 'White' : 'Black'} (you) to move'
                         : 'Opponent to move',
                     style: const TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       color: AppColors.onSurfaceDim,
                     ),
                   ),
@@ -1064,14 +1070,14 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
             style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              fontFamily: 'monospace',
+              fontFamily: 'SourceCodePro',
             ),
           ),
           const SizedBox(height: 4),
           Text(
             'Same position as ${_movesLabel(step.transposesTo ?? const [])}, '
             'which is already set up.',
-            style: const TextStyle(fontSize: 12.5),
+            style: const TextStyle(fontSize: 13),
           ),
           const SizedBox(height: 16),
           Wrap(
@@ -1121,7 +1127,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
             style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              fontFamily: 'monospace',
+              fontFamily: 'SourceCodePro',
             ),
           ),
           const SizedBox(height: 4),
@@ -1308,7 +1314,7 @@ class _ChapterGroup extends StatelessWidget {
         initiallyExpanded: initiallyExpanded,
         title: Text(
           '$family  ·  ${chapters.length}',
-          style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
         ),
         children: [for (final c in chapters) row(c)],
       ),
@@ -1341,7 +1347,7 @@ class _Steps extends StatelessWidget {
             child: Text(
               labels[i],
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: i == on ? FontWeight.w700 : FontWeight.w400,
                 color: i == on ? AppColors.accent : AppColors.onSurfaceMuted,
               ),
@@ -1368,7 +1374,7 @@ class _SectionTitle extends StatelessWidget {
     child: Text(
       text.toUpperCase(),
       style: const TextStyle(
-        fontSize: 10,
+        fontSize: 12,
         letterSpacing: 0.6,
         fontWeight: FontWeight.w700,
         color: AppColors.onSurfaceMuted,
@@ -1420,7 +1426,7 @@ class _ChapterEditRow extends StatelessWidget {
                     '⚙ ${pt.moves.isEmpty ? 'start position' : pt.moves.join(' ')}'
                     '${pt.excludeReplies.isEmpty ? '' : ' · everything played here except ${pt.excludeReplies.join(', ')} (those have their own lines)'}',
                     style: const TextStyle(
-                      fontSize: 10.5,
+                      fontSize: 12,
                       color: AppColors.onSurfaceDim,
                     ),
                   ),

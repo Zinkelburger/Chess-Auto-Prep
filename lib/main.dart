@@ -94,6 +94,7 @@ class StartupErrorApp extends StatelessWidget {
           error: AppColors.danger,
         ),
         scaffoldBackgroundColor: AppColors.surface,
+        fontFamily: AppTextStyles.uiFamily,
         useMaterial3: true,
       ),
       home: Scaffold(
@@ -196,6 +197,7 @@ class ChessAutoPrepApp extends StatelessWidget {
             onError: AppColors.ink,
           ),
           scaffoldBackgroundColor: AppColors.surface,
+          fontFamily: AppTextStyles.uiFamily,
           dividerColor: AppColors.divider,
           textTheme: AppTextStyles.materialTextTheme(),
           appBarTheme: const AppBarTheme(

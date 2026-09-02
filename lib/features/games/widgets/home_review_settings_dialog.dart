@@ -75,6 +75,7 @@ class HomeReviewSettingsDialog extends StatefulWidget {
 
 class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
   late Set<GameSpeed> _speeds;
+  late bool _autoRun;
   late GamesWindow _window;
   late final TextEditingController _cores;
   late final TextEditingController _depth;
@@ -93,6 +94,7 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
   void initState() {
     super.initState();
     _speeds = {...widget.filters.speeds};
+    _autoRun = widget.filters.autoRun;
     _window = widget.window;
     _cores = TextEditingController(text: '${EngineSettings.instance.workers}');
     _depth = TextEditingController(text: '${MiningSettings.instance.depth}');
@@ -121,10 +123,9 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
         ),
       );
     }
-    // Auto-start is edited on the strip, not here — pass it through untouched.
     Navigator.of(context).pop(
       HomeReviewSettingsResult(
-        filters: widget.filters.copyWith(speeds: _speeds),
+        filters: widget.filters.copyWith(speeds: _speeds, autoRun: _autoRun),
         window: _window,
       ),
     );
@@ -159,6 +160,16 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
                     }
                   }),
                 ),
+              _label('When it runs'),
+              AppCheckbox(
+                key: const Key('review-auto-start'),
+                label: 'Start by itself when there are games to analyse',
+                subtitle:
+                    'On by default. Puts your CPU cores on Stockfish for '
+                    'several minutes; uncheck to start every run by hand.',
+                value: _autoRun,
+                onChanged: (v) => setState(() => _autoRun = v),
+              ),
               _label('How hard it works'),
               _numberField(
                 key: const Key('review-cores-field'),
@@ -184,7 +195,7 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
                 'An analysis already running keeps the settings it started with; '
                 'these apply to the next game it picks up.',
                 style: AppTextStyles.body.copyWith(
-                  fontSize: 11,
+                  fontSize: 12,
                   color: AppColors.onSurfaceMuted,
                 ),
               ),
@@ -241,7 +252,7 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
         Text(
           hint,
           style: AppTextStyles.body.copyWith(
-            fontSize: 11.5,
+            fontSize: 12,
             color: AppColors.onSurfaceMuted,
           ),
         ),

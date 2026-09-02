@@ -1,4 +1,27 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(scripts/doctor.sh:*)",
+      "Bash(scripts/ci.sh:*)",
+      "Bash(python3 .claude/skills/run-chess-auto-prep/driver.py:*)",
+      "Bash(python3 .claude/skills/chess-prep-mcp/mcp_tools.py:*)",
+      "Bash(python3 tools/fetch_assets.py:*)",
+      "Bash(python3 tools/mcp/test_chess_prep.py:*)",
+      "Bash(python3 tools/mcp/test_opening_tree.py:*)",
+      "Bash(python3 tools/mcp/test_expectimax.py:*)",
+      "Bash(python3 tools/mcp/test_engine_tournament.py:*)",
+      "Bash(python3 tools/mcp/test_master_games.py:*)",
+      "mcp__chess-prep__directory_stats",
+      "mcp__chess-prep__roster_get",
+      "mcp__chess-prep__master_status",
+      "mcp__chess-prep__my_games_status",
+      "mcp__chess-prep__expectimax_list",
+      "mcp__chess-prep__expectimax_status",
+      "mcp__chess-prep__tournament_list",
+      "mcp__chess-prep__tournament_status",
+      "mcp__chess-prep__tournament_engines"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {

@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .chessdb import DEFAULT_WINDOW_CP, client_for as chessdb_client, within
 from .tools import ToolError
 
 _CHESS_ERR = (
@@ -565,6 +566,12 @@ def _eval_board(board, depth: int, multipv: int) -> list[dict]:
     return lines
 
 
+def _int_arg(args: dict, key: str, default: int) -> int:
+    """An integer argument where 0 is a real value, not "unset"."""
+    value = args.get(key)
+    return default if value is None else int(value)
+
+
 def _schema(properties: dict, required: list[str] | None = None) -> dict:
     schema: dict[str, Any] = {
         "type": "object",
@@ -668,27 +675,35 @@ def register_opening_tools(registry: Any) -> None:
         side = (args.get("side") or "white").lower()
         depth = int(args.get("depth") or 14)
         threshold = int(args.get("threshold_cp") or 80)
-        max_positions = int(args.get("max_positions") or 20)
+        max_positions = _int_arg(args, "max_positions", 20)
+        check_mistakes = bool(args.get("check_mistakes", True))
+        check_replies = bool(args.get("check_replies", True)) and side != "both"
+        reply_window = _int_arg(args, "reply_window_cp", DEFAULT_WINDOW_CP)
         board = chess.Board()
         checkpoints: list[tuple[list[str], Any, FenStat]] = []
+        # Positions where the *opponent* moves and the file has replies —
+        # where a strong uncovered reply would be a hole.
+        reply_points: list[tuple[list[str], Any, FenStat]] = []
         played: list[str] = []
+
+        def note(path: list[str], b, stat: FenStat | None) -> None:
+            if not stat:
+                return
+            stm = "white" if b.turn else "black"
+            if side == "both" or side == stm:
+                checkpoints.append((path, b.copy(), stat))
+            elif check_replies and stat.moves:
+                reply_points.append((path, b.copy(), stat))
+
         if sans:
             for san in sans:
-                key = fen4(board)
-                stat = g.positions.get(key)
-                stm = "white" if board.turn else "black"
-                if stat and (side == "both" or side == stm):
-                    checkpoints.append((list(played), board.copy(), stat))
+                note(list(played), board, g.positions.get(fen4(board)))
                 try:
                     board.push(board.parse_san(san))
                 except Exception as e:
                     raise ToolError(f'Illegal SAN "{san}": {e}') from e
                 played.append(san)
-            key = fen4(board)
-            stat = g.positions.get(key)
-            stm = "white" if board.turn else "black"
-            if stat and (side == "both" or side == stm):
-                checkpoints.append((list(played), board.copy(), stat))
+            note(list(played), board, g.positions.get(fen4(board)))
         else:
             # Heaviest in-book positions for the requested side.
             ranked = sorted(
@@ -709,14 +724,84 @@ def register_opening_tools(registry: Any) -> None:
                     continue
                 stm = "white" if b.turn else "black"
                 if side != "both" and side != stm:
+                    if check_replies and len(reply_points) < max_positions:
+                        reply_points.append((path, b, stat))
                     continue
                 checkpoints.append((path, b, stat))
                 if len(checkpoints) >= max_positions:
                     break
 
+        # Reply gaps first: a database lookup each, no engine needed, and the
+        # answer stands even when Stockfish is not installed.
+        gaps: list[dict] = []
+        reply_status = "skipped" if not check_replies else "ok"
+        replies_checked = 0
+        engine_status = "ok" if check_mistakes else "skipped"
+        engine_gap_status = "ok"
+        if check_replies:
+            client = chessdb_client(registry)
+            chessdb_down = False
+            for path, b, stat in reply_points[:max_positions]:
+                known: list[dict] = []
+                source = "chessdb"
+                if not chessdb_down:
+                    try:
+                        known = client.query(b.fen())
+                    except ToolError as e:
+                        reply_status = f"chessdb unavailable: {e}"
+                        chessdb_down = True
+                # Stockfish stands in where the database has nothing: it
+                # sees only multipv moves, but it knows every position.
+                if not known and engine_gap_status == "ok":
+                    try:
+                        lines = _eval_board(b, depth=depth, multipv=3)
+                    except ToolError as e:
+                        engine_gap_status = f"unavailable: {e}"
+                        lines = []
+                    stm_sign = 1 if b.turn else -1
+                    known = [
+                        {
+                            "san": ln["san"],
+                            "uci": ln.get("uci", ""),
+                            "score_cp": stm_sign * ln["score_cp_white"],
+                        }
+                        for ln in lines
+                        if ln.get("score_cp_white") is not None and ln.get("san")
+                    ]
+                    known.sort(key=lambda m: -m["score_cp"])
+                    source = "stockfish"
+                if not known:
+                    continue
+                replies_checked += 1
+                covered = set(stat.moves)
+                good = within(known, reply_window)
+                for m in good:
+                    san = m["san"] or b.san(chess.Move.from_uci(m["uci"]))
+                    if san in covered:
+                        continue
+                    gaps.append(
+                        {
+                            "moves": path,
+                            "fen": b.fen(),
+                            "uncovered_reply": san,
+                            "score_cp": m["score_cp"],
+                            "behind_best_cp": known[0]["score_cp"] - m["score_cp"],
+                            "opponent_good_moves": len(good),
+                            "source": source,
+                            "file_replies": sorted(covered),
+                            "chapters": stat.chapters[:4],
+                        }
+                    )
+            if chessdb_down and engine_gap_status != "ok":
+                reply_status = f"{reply_status}; engine {engine_gap_status}"
+            # Sharp positions first: an uncovered level move where the
+            # opponent has two is half their theory; where they have twelve
+            # it is one more quiet move.
+            gaps.sort(key=lambda g: (g["opponent_good_moves"], g["behind_best_cp"]))
+
         findings = []
         checked = 0
-        for path, b, stat in checkpoints:
+        for path, b, stat in checkpoints if check_mistakes else []:
             if checked >= max_positions:
                 break
             if not stat.moves:
@@ -729,7 +814,9 @@ def register_opening_tools(registry: Any) -> None:
             try:
                 lines = _eval_board(b, depth=depth, multipv=3)
             except ToolError as e:
-                return {"error": str(e), "checked": checked, "findings": findings}
+                engine_status = f"unavailable: {e}"
+                checked -= 1
+                break
             if not lines:
                 continue
             best = lines[0]
@@ -776,7 +863,19 @@ def register_opening_tools(registry: Any) -> None:
             "mistakes": len(findings),
             "threshold_cp": threshold,
             "depth": depth,
+            "engine": engine_status,
             "findings": findings,
+            "reply_check": reply_status,
+            "reply_positions_checked": replies_checked,
+            "reply_window_cp": reply_window,
+            "gaps": gaps,
+            "reading": (
+                "findings: your own book move is worse than the engine's. "
+                "gaps: an opponent reply ChessDB (or, where it knows nothing, "
+                "Stockfish MultiPV) scores within reply_window_cp of their best "
+                "that the file does not answer — played or not. Sorted sharpest "
+                "position first (fewest opponent_good_moves)."
+            ),
         }
 
     _path = _s("Absolute path to a .pgn file.")
@@ -849,19 +948,24 @@ def register_opening_tools(registry: Any) -> None:
     )
     registry._add(
         "pgn_audit",
-        "Compare the PGN's most-played move at each position against Stockfish. "
-        "Pass `moves` to audit the positions along a line (what to play against "
-        "a repertoire); omit it to sample the heaviest in-book positions. "
-        "Reports positions where the book move is worse than the engine by "
-        "threshold_cp (White-POV, flipped for Black).",
+        "Audit a repertoire PGN two ways. Along `moves` (or, without them, the "
+        "heaviest in-book positions): (1) where it is `side`'s turn, compare "
+        "the file's most-played move with Stockfish and report ones worse by "
+        "threshold_cp; (2) where it is the opponent's turn, ask ChessDB for "
+        "replies scoring within reply_window_cp of their best and report any "
+        "the file has no answer to — the sound sideline nobody plays yet. "
+        "Part (2) needs no engine.",
         _schema(
             {
                 "path": _path,
                 "moves": _moves,
-                "side": _s("'white', 'black', or 'both' (default white)."),
+                "side": _s("Whose repertoire: 'white', 'black', or 'both' (default white; 'both' skips the reply check)."),
                 "depth": _i("Search depth (default 14)."),
-                "threshold_cp": _i("Flag a gap at least this many cp (default 80)."),
-                "max_positions": _i("Cap on positions evaluated (default 20)."),
+                "threshold_cp": _i("Flag a book move at least this many cp worse than the engine (default 80)."),
+                "max_positions": _i("Cap on positions evaluated per check (default 20)."),
+                "check_mistakes": _b("Compare the file's moves with Stockfish (default true; off needs no engine)."),
+                "check_replies": _b("Look for uncovered strong opponent replies via ChessDB, falling back to Stockfish MultiPV where ChessDB knows nothing (default true)."),
+                "reply_window_cp": _i(f"A reply counts as strong within this many cp of the opponent's best (default {DEFAULT_WINDOW_CP})."),
             },
             ["path"],
         ),

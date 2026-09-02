@@ -403,7 +403,7 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
               child: Text(
                 eco,
                 style: const TextStyle(
-                  fontSize: 10,
+                  fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
               ),

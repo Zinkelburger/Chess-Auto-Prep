@@ -164,7 +164,7 @@ class LineFilterControls extends StatelessWidget {
       label: Text(label),
       selected: selected,
       onSelected: onSelected,
-      labelStyle: const TextStyle(fontSize: 11),
+      labelStyle: const TextStyle(fontSize: 12),
       padding: const EdgeInsets.symmetric(horizontal: 4),
       visualDensity: VisualDensity.compact,
     );
@@ -195,7 +195,7 @@ class _CoverageFilterRow extends StatelessWidget {
       children: [
         const Text(
           'Coverage:',
-          style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+          style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
         ),
         const SizedBox(width: 8),
         Expanded(
@@ -291,7 +291,7 @@ class _CoverageChip extends StatelessWidget {
         child: Text(
           count != null ? '$label $count' : label,
           style: TextStyle(
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
             color: isSelected ? AppColors.ink : AppColors.onSurfaceSoft,
           ),

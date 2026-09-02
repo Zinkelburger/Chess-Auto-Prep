@@ -58,7 +58,7 @@ class SkeletonPlanCard extends StatelessWidget {
           controller: controller.lines,
           minLines: 3,
           maxLines: 8,
-          style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+          style: const TextStyle(fontFamily: 'SourceCodePro', fontSize: 13),
           decoration: const InputDecoration(
             isDense: true,
             border: OutlineInputBorder(),

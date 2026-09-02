@@ -266,7 +266,7 @@ class SettingsSliderTile extends StatelessWidget {
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: AppColors.onSurfaceSoft,
-                  fontFamily: 'monospace',
+                  fontFamily: 'SourceCodePro',
                 ),
               ),
             ],
@@ -395,7 +395,7 @@ class _StepperControl extends StatelessWidget {
             style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              fontFamily: 'monospace',
+              fontFamily: 'SourceCodePro',
             ),
           ),
         ),
@@ -476,7 +476,7 @@ class _LabelBlock extends StatelessWidget {
           Text(
             description!,
             style: const TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               height: 1.3,
               color: AppColors.onSurfaceMuted,
             ),

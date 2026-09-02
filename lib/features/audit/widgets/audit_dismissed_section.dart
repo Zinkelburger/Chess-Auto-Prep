@@ -36,7 +36,7 @@ class AuditDismissedSection extends StatelessWidget {
           Text(
             '$dismissedCount dismissed',
             style: const TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               color: AppColors.onSurfaceMuted,
             ),
           ),
@@ -46,7 +46,7 @@ class AuditDismissedSection extends StatelessWidget {
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 6),
               minimumSize: const Size(0, 20),
-              textStyle: const TextStyle(fontSize: 11),
+              textStyle: const TextStyle(fontSize: 12),
             ),
             child: const Text('Restore all'),
           ),

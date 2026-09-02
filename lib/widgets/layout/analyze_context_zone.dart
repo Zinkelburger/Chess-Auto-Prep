@@ -148,7 +148,7 @@ class _AnalyzeContextZoneState extends State<AnalyzeContextZone> {
             color: isSelected ? AppColors.accent : AppColors.onSurfaceMuted,
           ),
           const SizedBox(width: 4),
-          Text(label, style: const TextStyle(fontSize: 11)),
+          Text(label, style: const TextStyle(fontSize: 12)),
         ],
       ),
       selected: isSelected,

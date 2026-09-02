@@ -9,6 +9,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../core/app_state.dart';
+import '../features/master_games/widgets/master_games_browser.dart';
 import '../services/master_games/master_games_service.dart';
 import '../services/master_games/twic_client.dart';
 import '../theme/app_colors.dart';
@@ -89,6 +91,17 @@ class MasterGamesSettingsPanel extends StatelessWidget {
                   onPressed: service.cancel,
                   child: const Text('Stop'),
                 ),
+              if (stats != null && !stats.isEmpty) ...[
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: () => showMasterGamesBrowser(
+                    context,
+                    appState: context.read<AppState>(),
+                  ),
+                  icon: const Icon(Icons.travel_explore, size: 16),
+                  label: const Text('Browse games…'),
+                ),
+              ],
               const Spacer(),
               TextButton.icon(
                 onPressed: () => launchUrl(
@@ -130,7 +143,7 @@ class MasterGamesSettingsPanel extends StatelessWidget {
             'Games are © The Week in Chess (Mark Crowther) and free for '
             'personal use. Downloads run in the background — see the Jobs '
             'pane — and stopping keeps every issue already imported.',
-            style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
           ),
         ),
       ],

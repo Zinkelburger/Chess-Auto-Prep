@@ -157,7 +157,7 @@ class GlyphButton extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.bold,
-              fontFamily: 'monospace',
+              fontFamily: 'SourceCodePro',
               color: onTap == null
                   ? Colors.grey[700]
                   : (isActive ? color : Colors.grey[400]),

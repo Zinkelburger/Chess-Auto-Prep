@@ -250,7 +250,7 @@ class _DraftRow extends StatelessWidget {
                 '${node.gamesPlayed}',
                 textAlign: TextAlign.right,
                 style: const TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   color: AppColors.onSurfaceDim,
                 ),
               ),
@@ -274,7 +274,7 @@ class _DraftRow extends StatelessWidget {
                 '$winPct%',
                 textAlign: TextAlign.right,
                 style: const TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   color: AppColors.onSurfaceMuted,
                 ),
               ),
@@ -312,7 +312,7 @@ class DraftLegend extends StatelessWidget {
           Text(
             statusLabel(s),
             style: const TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               color: AppColors.onSurfaceMuted,
             ),
           ),

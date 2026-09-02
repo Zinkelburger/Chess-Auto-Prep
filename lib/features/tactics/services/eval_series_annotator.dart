@@ -40,6 +40,14 @@ class PlyEval {
 /// carries no score (a mate-0 has no sign, so the reader takes the result off
 /// the board instead).
 ///
+/// [plyPvs] is indexed the same way but holds the line the engine would play
+/// from the position *before* that move — what the mover should have done, in
+/// SAN — written as `[%pv …]`. The pass already searched every one of those
+/// positions, so this is free to keep and is what lets the viewer's analysis
+/// tab draw a clickable best line for a mistake instead of a bare number.
+/// Entries may be null: a score served from the shared eval cache comes with
+/// no line behind it.
+///
 /// The budget is checked before anything is written, so a game that does not
 /// clear it leaves [moveNodes] untouched rather than half-annotated.
 String? annotateMovetextWithEvals({
@@ -47,6 +55,7 @@ String? annotateMovetextWithEvals({
   required List<PlyEval?> plyEvals,
   required bool lastPlyIsCheckmate,
   required String result,
+  List<List<String>?> plyPvs = const [],
 }) {
   if (moveNodes.isEmpty) return null;
 
@@ -66,15 +75,20 @@ String? annotateMovetextWithEvals({
       scoreMate: eval.mate,
       depth: eval.depth,
     );
+    final pv = i < plyPvs.length ? plyPvs[i] : null;
     final node = moveNodes[i];
     final comments = node.comments;
     // Written into the existing comment rather than beside it, so the clock
     // annotations these games arrive with survive — they are what the tempo
     // flaw tags read on the next pass.
     if (comments != null && comments.isNotEmpty) {
-      comments[0] = setEvalInComment(comments[0], value);
+      var comment = setEvalInComment(comments[0], value);
+      if (pv != null) comment = setPvInComment(comment, pv);
+      comments[0] = comment;
     } else {
-      node.comments = ['[%eval $value]'];
+      var comment = '[%eval $value]';
+      if (pv != null) comment = setPvInComment(comment, pv);
+      node.comments = [comment];
     }
   }
   return buildMovetext(moveNodes, result: result);

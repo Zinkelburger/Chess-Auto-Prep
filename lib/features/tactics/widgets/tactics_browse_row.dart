@@ -207,7 +207,10 @@ class TacticsBrowseRow extends StatelessWidget {
                   // from a one-mover.
                   '${pos.userMove} → ${pos.correctLine.join(' ')}',
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13, fontFamily: 'monospace'),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontFamily: 'SourceCodePro',
+                  ),
                 ),
               ),
               const SizedBox(width: 8),

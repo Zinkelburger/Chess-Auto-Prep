@@ -429,7 +429,7 @@ static TreeNode* cjson_to_node(cJSON *obj, TreeNode *parent,
                                (uint64_t)dr->valuedouble);
     }
     
-    /* Parse maia_frequency (novelty signal for --fresh) */
+    /* Parse maia_frequency (novelty signal for --novelty-weight) */
     cJSON *mf = cJSON_GetObjectItem(obj, "maia_frequency");
     if (mf && cJSON_IsNumber(mf))
         node->maia_frequency = mf->valuedouble;

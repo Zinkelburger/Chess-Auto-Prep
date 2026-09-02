@@ -50,17 +50,20 @@ class _VarRow {
 /// are deliberately no `( )` brackets: indentation, the gutter rule, and the
 /// ink/weight step already say "sideline", and stacked parentheses are exactly
 /// what makes deep trees unreadable.
+///
+/// [nodeVisible] (solitaire) prunes the tree: a node it rejects is not drawn,
+/// and neither is anything below it.
 List<Widget> _buildVariationRowsAtPly(
   PgnMovetextView view,
   int ply, {
-  bool ephemeralOnly = false,
+  bool Function(MoveNode node)? nodeVisible,
   required Set<int> expandedBranches,
   required ValueChanged<int> onToggleBranch,
 }) {
   var roots = view.variationsByPly[ply];
   if (roots == null || roots.isEmpty) return const [];
-  if (ephemeralOnly) {
-    roots = roots.where((r) => r.isEphemeral).toList();
+  if (nodeVisible != null) {
+    roots = roots.where(nodeVisible).toList();
     if (roots.isEmpty) return const [];
   }
 
@@ -80,6 +83,7 @@ List<Widget> _buildVariationRowsAtPly(
       row: row,
       out: rows,
       expandedBranches: expandedBranches,
+      nodeVisible: nodeVisible,
     );
     if (row.isNotEmpty) rows.add(_VarRow(_kRootVariationDepth, row));
   }
@@ -105,6 +109,7 @@ void _walkVariation(
   required List<InlineSpan> row,
   required List<_VarRow> out,
   required Set<int> expandedBranches,
+  bool Function(MoveNode node)? nodeVisible,
 }) {
   final isNullMove = isNullMoveSan(node.san);
 
@@ -139,15 +144,20 @@ void _walkVariation(
     }
   }
 
-  if (node.children.isEmpty) return;
+  // Solitaire hides what the drill has not reached: the line's next move and
+  // any alternatives to it drop out until they are revealed.
+  final children = nodeVisible == null
+      ? node.children
+      : node.children.where(nodeVisible).toList();
+  if (children.isEmpty) return;
 
   final nextMoveNumber = isWhiteTurn ? moveNumber : moveNumber + 1;
   final nextIsWhite = !isWhiteTurn;
 
-  if (node.children.length == 1) {
+  if (children.length == 1) {
     _walkVariation(
       view,
-      node.children.first,
+      children.first,
       moveNumber: nextMoveNumber,
       isWhiteTurn: nextIsWhite,
       isFirstOfRow: isNullMove ? isFirstOfRow : false,
@@ -156,6 +166,7 @@ void _walkVariation(
       row: row,
       out: out,
       expandedBranches: expandedBranches,
+      nodeVisible: nodeVisible,
     );
     return;
   }
@@ -165,7 +176,7 @@ void _walkVariation(
   out.add(_VarRow(depth, List.of(row)));
   row.clear();
 
-  final alternatives = node.children.skip(1).toList();
+  final alternatives = children.skip(1).toList();
   final altDepth = depth + 1;
   final folded = altDepth > _kAlwaysVisibleDepth;
   final open = !folded || expandedBranches.contains(node.id);
@@ -188,6 +199,7 @@ void _walkVariation(
         row: altRow,
         out: out,
         expandedBranches: expandedBranches,
+        nodeVisible: nodeVisible,
       );
       if (altRow.isNotEmpty) out.add(_VarRow(altDepth, altRow));
     }
@@ -196,7 +208,7 @@ void _walkVariation(
   // Resume the continuation on a fresh row at this depth.
   _walkVariation(
     view,
-    node.children.first,
+    children.first,
     moveNumber: nextMoveNumber,
     isWhiteTurn: nextIsWhite,
     isFirstOfRow: true,
@@ -205,6 +217,7 @@ void _walkVariation(
     row: row,
     out: out,
     expandedBranches: expandedBranches,
+    nodeVisible: nodeVisible,
   );
 }
 

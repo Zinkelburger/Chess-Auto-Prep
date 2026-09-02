@@ -51,7 +51,7 @@ class EphemeralFindingBar extends StatelessWidget {
           TextButton.icon(
             onPressed: onGoToPosition,
             icon: const Icon(Icons.open_in_new, size: 14),
-            label: const Text('Go to position', style: TextStyle(fontSize: 11)),
+            label: const Text('Go to position', style: TextStyle(fontSize: 12)),
             style: TextButton.styleFrom(
               foregroundColor: AppColors.info,
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),

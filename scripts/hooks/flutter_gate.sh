@@ -16,9 +16,14 @@ case "$cmd" in
 esac
 
 # `flutter <heavy verb>` — `flutter`, `~/sdk/flutter/bin/flutter`, `fvm flutter`
-# and friends all end in `flutter` before the verb. `dart test` too.
-heavy='(^|[;&|[:space:]])([^[:space:];&|]*/)?(flutter|dart)[[:space:]]+(test|analyze|run|build|drive|pub[[:space:]]+run[[:space:]]+build_runner)([[:space:]]|$)'
-if [[ "$cmd" =~ $heavy ]] || [[ "$cmd" =~ (^|[;&|[:space:]])xvfb-run([[:space:]]|$) ]]; then
+# and friends all end in `flutter` before the verb. For `dart` only `test` and
+# `build_runner` are heavy: `dart run tools/run_engine_tournament.dart` or a
+# `dart run` inside tools/dart_api_test is a plain VM script, not a Flutter
+# build, and the docs tell agents to use those. Keep this list in step with
+# the "Keeping CI green" section of CLAUDE.md.
+flutter_heavy='(^|[;&|[:space:]])([^[:space:];&|]*/)?flutter[[:space:]]+(test|analyze|run|build|drive|pub[[:space:]]+run[[:space:]]+build_runner)([[:space:]]|$)'
+dart_heavy='(^|[;&|[:space:]])([^[:space:];&|]*/)?dart[[:space:]]+(test|run[[:space:]]+build_runner|pub[[:space:]]+run[[:space:]]+build_runner)([[:space:]]|$)'
+if [[ "$cmd" =~ $flutter_heavy ]] || [[ "$cmd" =~ $dart_heavy ]] || [[ "$cmd" =~ (^|[;&|[:space:]])xvfb-run([[:space:]]|$) ]]; then
   reason="Heavy Flutter jobs are serialised machine-wide. Use scripts/ci.sh (analyze | test | integration | lint | format, or 'scripts/ci.sh with -- <cmd>' to queue an arbitrary command), or the app driver .claude/skills/run-chess-auto-prep/driver.py. Both take the shared lock so parallel agents queue instead of crashing the machine."
   python3 - "$reason" <<'EOF'
 import json, sys

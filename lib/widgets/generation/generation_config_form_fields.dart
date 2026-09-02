@@ -76,6 +76,6 @@ mixin _GenerationConfigFields on _GenerationConfigFormStateBase {
   /// Muted single-line caption under a control.
   Widget _caption(String text) => Padding(
     padding: const EdgeInsets.only(top: 4),
-    child: Text(text, style: AppTextStyles.caption.copyWith(fontSize: 11)),
+    child: Text(text, style: AppTextStyles.caption.copyWith(fontSize: 12)),
   );
 }

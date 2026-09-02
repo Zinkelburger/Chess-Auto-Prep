@@ -10,6 +10,7 @@ import '../utils/app_shortcuts.dart';
 
 import '../models/pgn_filter_models.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import 'labeled_toggle.dart';
 import 'shortcut_tooltip.dart';
 import 'game_nav_item.dart';
@@ -50,8 +51,10 @@ class GameNavBar extends StatelessWidget {
   final bool isSolitaireMode;
   final bool solitaireWaitingForUser;
   final bool solitaireCanReveal;
+  final bool solitaireCanHint;
   final int solitaireRevealCountdown;
   final VoidCallback? onReveal;
+  final VoidCallback? onHint;
   final VoidCallback? onExitSolitaire;
 
   const GameNavBar({
@@ -80,8 +83,10 @@ class GameNavBar extends StatelessWidget {
     this.isSolitaireMode = false,
     this.solitaireWaitingForUser = false,
     this.solitaireCanReveal = false,
+    this.solitaireCanHint = false,
     this.solitaireRevealCountdown = 0,
     this.onReveal,
+    this.onHint,
     this.onExitSolitaire,
   });
 
@@ -145,19 +150,66 @@ class GameNavBar extends StatelessWidget {
   Widget _buildSolitaireControls(BuildContext context) {
     final canReveal = solitaireCanReveal;
     final countdown = solitaireRevealCountdown;
+    final waitingText = countdown > 0
+        ? 'Available in ${countdown}s'
+        : 'Available on your turn';
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Always visible so the control is discoverable; grayed out until it
-        // can be used (countdown running or opponent to move).
+        // Both always visible so the controls are discoverable; grayed out
+        // until they can be used (countdown running or opponent to move).
+        // The countdown sits in its own fixed-width slot so the chips do not
+        // change width every second.
+        if (countdown > 0)
+          Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: SizedBox(
+              width: 34,
+              child: Text(
+                '${countdown}s',
+                textAlign: TextAlign.right,
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.onSurfaceMuted,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.only(right: 6),
+          child: ShortcutTooltip(
+            description: solitaireCanHint
+                ? 'Show which piece moves (counts against first-try)'
+                : waitingText,
+            shortcut: AppShortcut.hintMove,
+            child: ActionChip(
+              onPressed: solitaireCanHint ? onHint : null,
+              avatar: Icon(
+                Icons.lightbulb_outline,
+                size: 16,
+                color: solitaireCanHint
+                    ? AppColors.ink
+                    : AppColors.onSurfaceDisabled,
+              ),
+              label: Text(
+                'Hint',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: solitaireCanHint
+                      ? AppColors.ink
+                      : AppColors.onSurfaceDisabled,
+                ),
+              ),
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.only(right: 8),
           child: ShortcutTooltip(
             description: canReveal
                 ? 'Give up and show the correct move'
-                : countdown > 0
-                ? 'Available in ${countdown}s'
-                : 'Available on your turn',
+                : waitingText,
             shortcut: AppShortcut.revealMove,
             child: ActionChip(
               onPressed: canReveal ? onReveal : null,
@@ -169,7 +221,7 @@ class GameNavBar extends StatelessWidget {
                     : AppColors.onSurfaceDisabled,
               ),
               label: Text(
-                countdown > 0 ? 'Reveal in ${countdown}s' : 'Reveal',
+                'Reveal',
                 style: TextStyle(
                   fontSize: 12,
                   color: canReveal
@@ -324,7 +376,7 @@ class GameNavBar extends StatelessWidget {
               GameSortMode.dateDesc => 'Newest first',
               GameSortMode.ratingDesc => 'Stars ↓',
               GameSortMode.ratingAsc => 'Stars ↑',
-            }, style: const TextStyle(fontSize: 11)),
+            }, style: const TextStyle(fontSize: 12)),
           ],
         ),
       ),

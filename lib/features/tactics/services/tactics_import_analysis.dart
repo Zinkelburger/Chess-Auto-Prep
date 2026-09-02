@@ -298,6 +298,12 @@ Future<_GameMineOutcome?> _analyzeGameParallel({
   // and ply `p` (its after-position), so no two sites write the same index
   // and the concurrent fan-out below needs no coordination.
   final plyEvals = List<PlyEval?>.filled(moves.length, null);
+  // The line the engine would play from the position *before* each ply, in
+  // SAN — the other half of what a search returns, which this pass used to
+  // discard. Site `p` searched both of the positions that produce these, so
+  // it writes ply `p` (from its before-position) and ply `p + 1` (from its
+  // after-position): the same disjoint pattern as [plyEvals], one index later.
+  final plyPvs = List<List<String>?>.filled(moves.length, null);
   var sitesDone = 0;
 
   Future<void> evaluateSite(EvalWorker worker, int i) async {
@@ -327,6 +333,7 @@ Future<_GameMineOutcome?> _analyzeGameParallel({
         sideToMoveIsWhite: userColor == Side.white,
       );
     }
+    plyPvs[site.plyIndex] = uciPvToSan(site.fenBefore, evalA.pv);
 
     // evalA is the user's turn → already the user's perspective.
     final wcBefore = _winningChances(evalA.effectiveCp);
@@ -357,6 +364,15 @@ Future<_GameMineOutcome?> _analyzeGameParallel({
         cp: userColor == Side.white ? evalA.effectiveCp : -evalA.effectiveCp,
         depth: evalA.depth,
       );
+      // Its first move is the one that was played, so the rest of the same
+      // line is what the engine plays on from here — no second search to get
+      // the next ply's best line either.
+      if (site.plyIndex + 1 < plyPvs.length) {
+        plyPvs[site.plyIndex + 1] = uciPvToSan(
+          site.fenAfter,
+          evalA.pv.skip(1).toList(),
+        );
+      }
       results[i] = _SiteResult(wcBefore: wcBefore, wcAfter: wcBefore);
       reportDone();
       return;
@@ -400,6 +416,9 @@ Future<_GameMineOutcome?> _analyzeGameParallel({
       evalB,
       sideToMoveIsWhite: userColor != Side.white,
     );
+    if (site.plyIndex + 1 < plyPvs.length) {
+      plyPvs[site.plyIndex + 1] = uciPvToSan(site.fenAfter, evalB.pv);
+    }
 
     // evalB is the opponent's turn → negate for the user's perspective.
     final cpB = -evalB.effectiveCp;
@@ -562,6 +581,7 @@ Future<_GameMineOutcome?> _analyzeGameParallel({
     annotatedMovetext: annotateMovetextWithEvals(
       moveNodes: moveNodes,
       plyEvals: plyEvals,
+      plyPvs: plyPvs,
       lastPlyIsCheckmate: lastPlyIsCheckmate,
       result: gameResult,
     ),

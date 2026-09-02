@@ -144,7 +144,7 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
               child: Text(
                 'Stockfish PV',
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: AppColors.stockfishColor(),
                 ),
@@ -162,7 +162,7 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
             Text(
               'Expectimax · from built tree',
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: AppColors.expectimaxColor(),
               ),
@@ -308,13 +308,13 @@ class _SummaryChip extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text('$label ', style: AppTextStyles.caption.copyWith(fontSize: 11)),
+        Text('$label ', style: AppTextStyles.caption.copyWith(fontSize: 12)),
         Text(
           value,
           style: const TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.bold,
-            fontFamily: 'monospace',
+            fontFamily: 'SourceCodePro',
           ),
         ),
       ],

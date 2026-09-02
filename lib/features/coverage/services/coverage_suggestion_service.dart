@@ -60,6 +60,8 @@ class SuggestedLine {
   });
 }
 
+/// Exponents on each factor of a suggestion's score.  Every one is its own
+/// knob on the panel; there are no bundled profiles.
 class SuggestionWeights {
   final double impactExp;
   final double evalExp;
@@ -74,28 +76,6 @@ class SuggestionWeights {
     this.trapExp = 0.0,
     this.coherenceExp = 0.0,
   });
-
-  static const maxCoverage = SuggestionWeights(
-    impactExp: 1.0,
-    evalExp: 0,
-    easeExp: 0,
-  );
-  static const balanced = SuggestionWeights(
-    impactExp: 0.5,
-    evalExp: 0.3,
-    easeExp: 0.2,
-  );
-  static const playable = SuggestionWeights(
-    impactExp: 0.3,
-    evalExp: 0.2,
-    easeExp: 0.5,
-  );
-  static const trappy = SuggestionWeights(
-    impactExp: 0.4,
-    evalExp: 0.2,
-    easeExp: 0.1,
-    trapExp: 0.3,
-  );
 }
 
 class CoverageSuggestionService {

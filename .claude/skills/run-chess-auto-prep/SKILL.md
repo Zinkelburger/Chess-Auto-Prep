@@ -1,6 +1,6 @@
 ---
 name: run-chess-auto-prep
-description: Build, run, drive and screenshot the Chess Auto Prep Flutter desktop app on Linux from the shell — start the app, tap buttons, type into fields, scroll, take screenshots, hot reload, then stop it. Also how to run the local CI gates (analyze, test, format, lint) without colliding with other agents.
+description: Build, run, drive and screenshot the Chess Auto Prep Flutter desktop app on Linux from the shell — start the app, tap buttons, type into fields, scroll, take screenshots, hot reload, then stop it. Use it whenever a change has a visible surface, the user asks to run, launch, look at or screenshot the app, or you would otherwise be guessing from the code what the UI does. Also how to run the local CI gates (analyze, test, format, lint) without colliding with other agents.
 ---
 
 # Run Chess Auto Prep
@@ -63,6 +63,7 @@ python3 $D ss tactics-session         # → /tmp/chess-auto-prep-driver/shots/ta
 python3 $D tap tooltip="End session"
 python3 $D reload                     # hot reload after editing Dart
 python3 $D restart                    # hot restart (state reset)
+python3 $D settle                     # wait for the UI to go idle (mutating calls do this themselves)
 python3 $D log n=40                   # tail the app's stdout/stderr + flutter progress
 python3 $D status
 python3 $D stop
@@ -85,6 +86,21 @@ Read tool. Everything else (app log, state, socket) is in
 share it or `stop` it. The app talks to the developer's real data (accounts,
 games, engine settings): tapping "Check for new games" downloads games and
 runs Stockfish on half the cores for minutes. Don't, unless that is the test.
+
+## Other entry points
+
+- `/drive <what to look at>` is the slash command that wraps this skill; the
+  built-in `run` skill defers to it too. There is no other launcher — do not
+  write one.
+- The chess-prep MCP server (`.claude/skills/chess-prep-mcp/`) reads the same
+  data without a window: master games, the user's games, expectimax runs,
+  tournaments. Its `tournament_open` / `open_app` tools open the app on a
+  tournament, and if this driver already has an app up that is where the
+  request lands.
+- `scripts/ci.sh integration` runs `integration_test/app_test.dart` against a
+  real window on this display, under the same lock as `start`. It is the boot
+  test CI runs headlessly on tags; it asserts real boot-screen text and
+  tooltips, so rename a boot-screen control and the test in the same commit.
 
 ## Run (human path)
 

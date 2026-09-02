@@ -181,7 +181,7 @@ class TrapNavigationButtons extends StatelessWidget {
                 child: Text(
                   '0 traps in line',
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     color: AppColors.onSurfaceMuted,
                   ),
                 ),

@@ -214,7 +214,6 @@ typedef struct {
     bool our_multipv, max_eval_loss, opp_max_children, opp_mass;
     bool min_eval, max_eval, absolute;
     bool leaf_confidence, novelty_weight;
-    bool preset;
     bool maia_model, maia_elo, maia_min_prob, maia_only, lichess, build_mode;
     bool pgn, db_min_games, db_min_prob, no_freq_cache, min_elo;
     bool event_log, lichess_eval_db, chessdb_eval_db, chessdb_api;
@@ -238,7 +237,6 @@ typedef struct {
     char chessdb_eval_db[PATH_MAX];
     char maia_model[PATH_MAX];
     char build_mode[64];
-    char preset[32];
     char pgn[MAX_PGN_FILES][PATH_MAX];
 #ifdef HAS_CDBDIRECT
     char cdbdirect[PATH_MAX];
@@ -301,7 +299,7 @@ static cJSON *cli_build_config_json(
     const char **pgn_files, int pgn_file_count, int db_min_games, double db_min_prob,
     bool no_freq_cache, int our_multipv, int max_eval_loss, int opp_max_children,
     double opp_mass_target, int min_eval, int max_eval, int novelty_weight,
-    double leaf_confidence, const char *mode_name, bool verbose) {
+    double leaf_confidence, bool verbose) {
     cJSON *obj = cJSON_CreateObject();
     if (!obj) return NULL;
 
@@ -337,7 +335,6 @@ static cJSON *cli_build_config_json(
     cJSON_AddNumberToObject(obj, "min_eval", min_eval);
     cJSON_AddNumberToObject(obj, "max_eval", max_eval);
     cJSON_AddBoolToObject(obj, "absolute", !relative_eval);
-    cli_json_add_str(obj, "preset", mode_name);
     cJSON_AddNumberToObject(obj, "novelty_weight", novelty_weight);
     cJSON_AddNumberToObject(obj, "leaf_confidence", leaf_confidence);
     cJSON_AddStringToObject(obj, "ratings", ratings);
@@ -384,7 +381,7 @@ static bool save_config_to_db(
     bool no_freq_cache, int our_multipv_arg, int max_eval_loss_arg,
     int opp_max_children_arg, double opp_mass_target_arg, int min_eval_arg,
     int max_eval_arg, int novelty_weight_arg, double leaf_confidence_arg,
-    const char *mode_name, bool verbose) {
+    bool verbose) {
     TreeConfig cd = tree_config_default();
     cd.play_as_white = play_as_white;
     tree_config_set_color_defaults(&cd);
@@ -412,8 +409,7 @@ static bool save_config_to_db(
 #endif
         pgn_files, pgn_file_count, db_min_games, db_min_prob, no_freq_cache,
         eff_our_multipv, eff_max_eval_loss, eff_opp_max, eff_opp_mass,
-        eff_min_eval, eff_max_eval, eff_novelty, eff_leaf_conf, mode_name,
-        verbose);
+        eff_min_eval, eff_max_eval, eff_novelty, eff_leaf_conf, verbose);
     if (!obj) return false;
 
     char *json = cJSON_PrintUnformatted(obj);
@@ -430,7 +426,7 @@ static bool save_config_to_db(
 static void print_resume_banner(
     bool play_as_white, const char *start_fen, int max_depth, int eval_depth,
     int num_threads, bool maia_only, const char *ratings, const char *speeds,
-    const char *mode_name, const char *db_path) {
+    const char *db_path) {
     fprintf(stderr, "\n");
     fprintf(stderr, "══════════════════════════════════════════════════════════\n");
     fprintf(stderr, "  Resuming with stored configuration:\n");
@@ -445,8 +441,6 @@ static void print_resume_banner(
         fprintf(stderr, "  Ratings:    %s\n", ratings);
         fprintf(stderr, "  Speeds:     %s\n", speeds);
     }
-    if (mode_name && mode_name[0])
-        fprintf(stderr, "  Preset:     %s\n", mode_name);
     fprintf(stderr, "  Database:   %s\n", db_path);
     fprintf(stderr, "══════════════════════════════════════════════════════════\n\n");
 }
@@ -473,9 +467,7 @@ static bool load_config_from_db(
     double *db_min_prob, bool *no_freq_cache, int *our_multipv_arg,
     int *max_eval_loss_arg, int *opp_max_children_arg, double *opp_mass_target_arg,
     int *min_eval_arg, int *max_eval_arg, int *novelty_weight_arg,
-    double *leaf_confidence_arg, const char **mode_name, int *mode_id,
-    bool *user_min_eval, bool *user_max_eval_loss, bool *user_novelty_weight,
-    bool *verbose) {
+    double *leaf_confidence_arg, bool *verbose) {
     (void)base_name;
 
     if (access(db_path, F_OK) != 0) {
@@ -638,30 +630,13 @@ static bool load_config_from_db(
     LOAD_BOOL(no_freq_cache, "no_freq_cache", no_freq_cache);
     LOAD_NUM(our_multipv, "our_multipv", our_multipv_arg);
     LOAD_NUM(max_eval_loss, "max_eval_loss", max_eval_loss_arg);
-    if (!exp->max_eval_loss && *max_eval_loss_arg >= 0) *user_max_eval_loss = true;
     LOAD_NUM(opp_max_children, "opp_max_children", opp_max_children_arg);
     LOAD_DBL(opp_mass, "opp_mass", opp_mass_target_arg);
     LOAD_NUM(min_eval, "min_eval", min_eval_arg);
-    if (!exp->min_eval && *min_eval_arg != -99999) *user_min_eval = true;
     LOAD_NUM(max_eval, "max_eval", max_eval_arg);
     LOAD_NUM(novelty_weight, "novelty_weight", novelty_weight_arg);
-    if (!exp->novelty_weight && *novelty_weight_arg >= 0) *user_novelty_weight = true;
     LOAD_DBL(leaf_confidence, "leaf_confidence", leaf_confidence_arg);
     LOAD_BOOL(verbose, "verbose", verbose);
-
-    if (!exp->preset) {
-        cJSON *pr = cJSON_GetObjectItemCaseSensitive(root, "preset");
-        if (cJSON_IsString(pr) && pr->valuestring && pr->valuestring[0]) {
-            snprintf(loaded->preset, sizeof(loaded->preset), "%s",
-                     pr->valuestring);
-            *mode_name = loaded->preset;
-            if (strcmp(loaded->preset, "solid") == 0) *mode_id = 1;
-            else if (strcmp(loaded->preset, "practical") == 0) *mode_id = 2;
-            else if (strcmp(loaded->preset, "tricky") == 0) *mode_id = 3;
-            else if (strcmp(loaded->preset, "traps") == 0) *mode_id = 4;
-            else if (strcmp(loaded->preset, "fresh") == 0) *mode_id = 5;
-        }
-    }
 
 #undef LOAD_STR
 #undef LOAD_BOOL
@@ -783,14 +758,10 @@ static void print_usage(const char *prog_name) {
     printf("  --max-eval <cp>        Prune branch if our eval exceeds this [default: color-dependent]\n");
     printf("  --absolute             Use absolute cp thresholds (default: relative to root eval)\n");
     printf("\n");
-    printf("Preset modes (eval tolerance + novelty; omitted flags keep defaults):\n");
-    printf("  --solid                Tight eval window, strict quality floor\n");
-    printf("  --practical            Balanced eval tolerance\n");
-    printf("  --tricky               Wider tolerance for speculative moves\n");
-    printf("  --traps                Widest tolerance + find tricky positions in entire tree\n");
+    printf("Trap finding (no other option changes; widen --max-eval-loss / --min-eval yourself):\n");
+    printf("  --traps                Find tricky positions in the entire tree\n");
     printf("                         (writes <name>.traps.pgn with annotated trap lines)\n");
     printf("  --traps-in-repertoire  Find trap positions in the repertoire only (stdout)\n");
-    printf("  --fresh                Sound but unusual moves; favors rarely-played lines\n");
     printf("\n");
     printf("Expectimax scoring (move selection phase):\n");
     printf("  --novelty-weight <0-100> Boost for rarely-played moves at our-move nodes [default: 0]\n");
@@ -1297,11 +1268,6 @@ int main(int argc, char *argv[]) {
 
     /* Expectimax scoring overrides */
     int novelty_weight_arg = -1;
-    const char *mode_name = NULL;
-    int mode_id = 0;
-    bool user_novelty_weight = false;
-    bool user_min_eval = false;
-    bool user_max_eval_loss = false;
     double leaf_confidence_arg = -1.0;
 
     bool resume_flag = false;
@@ -1354,10 +1320,6 @@ int main(int argc, char *argv[]) {
         /* Expectimax scoring */
         {"leaf-confidence",  required_argument, 0, 2031},
         {"novelty-weight",   required_argument, 0, 2034},
-        {"solid",            no_argument,       0, 2040},
-        {"practical",        no_argument,       0, 2041},
-        {"tricky",           no_argument,       0, 2042},
-        {"fresh",            no_argument,       0, 2044},
         /* Maia */
         /* --sf-threads removed: -t now means total cores */
         {"maia-model",       required_argument, 0, 3001},
@@ -1437,7 +1399,7 @@ int main(int argc, char *argv[]) {
             case 1001: skip_build = true; cli_exp.skip_build = true; break;
             case 1002: build_now = true; skip_build = true; cli_exp.build_now = true; break;
             case 1003: resume_flag = true; break;
-            case 1004: mode_id = 4; find_traps = true; cli_exp.traps = true; break;
+            case 1004: find_traps = true; cli_exp.traps = true; break;
             case 1005: find_traps_in_repertoire = true; cli_exp.traps_in_repertoire = true; break;
             case 1006: lichess_token = optarg; break;
             /* Our-move */
@@ -1447,7 +1409,6 @@ int main(int argc, char *argv[]) {
                 break;
             case 2005:
                 if (!parse_int(optarg, "max-eval-loss", &max_eval_loss_arg)) return 1;
-                user_max_eval_loss = true;
                 cli_exp.max_eval_loss = true;
                 break;
             /* Opponent-move */
@@ -1512,7 +1473,6 @@ int main(int argc, char *argv[]) {
             /* Eval window */
             case 2020:
                 if (!parse_int(optarg, "min-eval", &min_eval_arg)) return 1;
-                user_min_eval = true;
                 cli_exp.min_eval = true;
                 break;
             case 2021:
@@ -1533,14 +1493,9 @@ int main(int argc, char *argv[]) {
                     return 1;
                 }
                 novelty_weight_arg = nw;
-                user_novelty_weight = true;
                 cli_exp.novelty_weight = true;
                 break;
             }
-            case 2040: mode_id = 1; cli_exp.preset = true; break;
-            case 2041: mode_id = 2; cli_exp.preset = true; break;
-            case 2042: mode_id = 3; cli_exp.preset = true; break;
-            case 2044: mode_id = 5; cli_exp.preset = true; break;
             /* 2006 removed: --sf-threads folded into -t */
             /* Maia */
             case 3001: maia_model_path = optarg; cli_exp.maia_model = true; break;
@@ -1652,13 +1607,12 @@ int main(int argc, char *argv[]) {
                 &no_freq_cache, &our_multipv_arg, &max_eval_loss_arg,
                 &opp_max_children_arg, &opp_mass_target_arg, &min_eval_arg,
                 &max_eval_arg, &novelty_weight_arg, &leaf_confidence_arg,
-                &mode_name, &mode_id, &user_min_eval, &user_max_eval_loss,
-                &user_novelty_weight, &verbose)) {
+                &verbose)) {
             return 1;
         }
         print_resume_banner(play_as_white, start_fen, max_depth, eval_depth,
                             num_threads, maia_only, ratings, speeds,
-                            mode_name, db_path);
+                            db_path);
     }
 
     if (build_mode_str) {
@@ -1691,38 +1645,6 @@ int main(int argc, char *argv[]) {
     if (build_mode == BUILD_MODE_DB_EXPLORER && pgn_file_count == 0) {
         fprintf(stderr, "Error: --build-mode db-explorer requires at least one --pgn file\n");
         return 1;
-    }
-
-    /* Preset modes: fill defaults only for options the user did not set */
-    if (mode_id != 0) {
-        switch (mode_id) {
-        case 1:
-            mode_name = "solid";
-            if (!user_min_eval) min_eval_arg = play_as_white ? 0 : -100;
-            if (!user_max_eval_loss) max_eval_loss_arg = 30;
-            break;
-        case 2:
-            mode_name = "practical";
-            if (!user_min_eval) min_eval_arg = play_as_white ? -25 : -200;
-            if (!user_max_eval_loss) max_eval_loss_arg = 50;
-            break;
-        case 3:
-            mode_name = "tricky";
-            if (!user_min_eval) min_eval_arg = play_as_white ? -50 : -250;
-            if (!user_max_eval_loss) max_eval_loss_arg = 75;
-            break;
-        case 4:
-            mode_name = "traps";
-            if (!user_min_eval) min_eval_arg = play_as_white ? -100 : -300;
-            if (!user_max_eval_loss) max_eval_loss_arg = 100;
-            find_traps = true;
-            break;
-        case 5:
-            mode_name = "fresh";
-            if (!user_novelty_weight) novelty_weight_arg = 60;
-            if (!user_max_eval_loss) max_eval_loss_arg = 40;
-            break;
-        }
     }
 
     if (!color_specified) {
@@ -1857,12 +1779,7 @@ int main(int argc, char *argv[]) {
     {
         int nw_banner = novelty_weight_arg >= 0 ? novelty_weight_arg : 0;
         if (nw_banner > 0)
-            printf("  Mode:             %s (novelty=%.2f)\n",
-                   mode_name ? mode_name : "default",
-                   nw_banner / 100.0);
-        else
-            printf("  Mode:             %s\n",
-                   mode_name ? mode_name : "default");
+            printf("  Novelty weight:   %.2f\n", nw_banner / 100.0);
     }
     printf("  Database:         %s\n", db_path);
     if (maia)
@@ -2021,7 +1938,7 @@ int main(int argc, char *argv[]) {
             pgn_files, pgn_file_count, db_min_games, db_min_prob, no_freq_cache,
             our_multipv_arg, max_eval_loss_arg, opp_max_children_arg,
             opp_mass_target_arg, min_eval_arg, max_eval_arg, novelty_weight_arg,
-            leaf_confidence_arg, mode_name, verbose)) {
+            leaf_confidence_arg, verbose)) {
         fprintf(stderr, "Warning: failed to save CLI configuration to database\n");
     }
 

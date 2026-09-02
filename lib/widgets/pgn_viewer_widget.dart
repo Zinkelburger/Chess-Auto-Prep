@@ -23,6 +23,9 @@ import 'package:chess_auto_prep/widgets/study/add_to_study_flow.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_movetext_view.dart';
 import 'package:chess_auto_prep/core/pgn/pgn_viewer_handle.dart';
+import 'package:chess_auto_prep/core/pgn/solitaire_reveal.dart';
+import 'package:chess_auto_prep/core/pgn/solitaire_script.dart'
+    as solitaire_script;
 import 'package:chess_auto_prep/core/pgn/viewer_game_model.dart';
 
 part 'pgn/pgn_viewer_widget_navigation.dart';
@@ -81,6 +84,11 @@ class PgnViewerWidgetController implements PgnViewerHandle {
     _state?._goToMainLineMove(moveIndex);
   }
 
+  @override
+  void goToVariationNode(MoveNode node, int branchPly) {
+    _state?._goToAnalysisNode(node, branchPly);
+  }
+
   /// Park the mainline cursor on the position matching [fen], leaving any
   /// ephemeral analysis in place (unlike [jumpToMove], which discards it).
   ///
@@ -124,6 +132,55 @@ class PgnViewerWidgetController implements PgnViewerHandle {
   @override
   bool get inVariation => _state?._isInVariation ?? false;
 
+  @override
+  int? get currentVariationNodeId {
+    final path = _state?._analysisPath;
+    if (path == null || path.isEmpty) return null;
+    return path.last.id;
+  }
+
+  @override
+  bool get hasSavedSidelines {
+    final state = _state;
+    if (state == null) return false;
+    for (final roots in state._variationsByPly.values) {
+      if (roots.any((r) => !r.isEphemeral)) return true;
+    }
+    return false;
+  }
+
+  @override
+  solitaire_script.SolitaireScript? buildSolitaireScript({
+    required int fromMainlinePly,
+    required bool includeVariations,
+  }) {
+    final state = _state;
+    if (state == null || state._moveHistory.isEmpty) return null;
+    return solitaire_script.buildSolitaireScript(
+      state._m,
+      fromMainlinePly: fromMainlinePly,
+      includeVariations: includeVariations,
+    );
+  }
+
+  @override
+  void setSolitaireReveal(SolitaireReveal? reveal) {
+    final state = _state;
+    if (state == null) return;
+    state._m.reveal = reveal;
+    // The frontier may have moved behind the cursor (a session starting at
+    // the game start while the reader was at move 30): pull the cursor back.
+    final frontier = reveal?.mainlinePly;
+    if (frontier != null &&
+        state._analysisPath.isEmpty &&
+        !state._inlineActive &&
+        state._mainLineIndex > frontier) {
+      state._goToMainLineMove(frontier);
+      return;
+    }
+    state._rebuild();
+  }
+
   /// Jump from the current variation back to the mainline branch point.
   void returnToMainline() => _state?._returnToMainline();
 
@@ -160,6 +217,14 @@ class PgnViewerWidgetController implements PgnViewerHandle {
   void addGuessAnnotations(Map<int, String> notes) =>
       _state?._addGuessAnnotations(notes);
 
+  @override
+  void addGuessNodeAnnotations(Map<int, String> notes) =>
+      _state?._addGuessNodeAnnotations(notes);
+
+  @override
+  void addGuessNodeVariations(Map<int, List<String>> wrongByParentId) =>
+      _state?._addGuessNodeVariations(wrongByParentId);
+
   /// Persist wrong solitaire guesses as sideline variations (keyed by 0-based
   /// mainline ply), promoting the live ephemeral nodes so they survive the save.
   @override
@@ -179,8 +244,9 @@ class PgnViewerWidget extends StatefulWidget {
   final ValueChanged<String>? onCommentsChanged;
   final bool editMode;
 
-  /// When non-null, movetext hides moves at index >= this value.
-  final int? revealedPly;
+  /// Fires once the game has been parsed and is on screen — the moment a
+  /// host that drives this widget (solitaire) can rely on its moves.
+  final VoidCallback? onGameLoaded;
 
   /// Opt-in book-PGN comment formatting (Chessable rich blocks, double-space
   /// paragraph breaks). Off by default — see [PgnMovetextView.bookFormatting].
@@ -198,7 +264,7 @@ class PgnViewerWidget extends StatefulWidget {
     this.showStartEndButtons = true,
     this.onCommentsChanged,
     this.editMode = false,
-    this.revealedPly,
+    this.onGameLoaded,
     this.bookFormatting = false,
   });
 
@@ -248,6 +314,11 @@ abstract class _PgnViewerWidgetStateBase extends State<PgnViewerWidget> {
   bool _inlineFirstIsWhite = true;
 
   bool get _inlineActive => _inlineCursor > 0 && _inlineSans.isNotEmpty;
+
+  /// Repaint after the model changed under the widget's feet.
+  void _rebuild() {
+    if (mounted) setState(() {});
+  }
 
   // Cross-group members: each is implemented in the named part-file mixin.
   void _clearAnalysis(); // move edits
@@ -319,9 +390,6 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
   @override
   void didUpdateWidget(PgnViewerWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.revealedPly != oldWidget.revealedPly) {
-      _m.revealedPly = widget.revealedPly;
-    }
     final gameIdChanged = widget.gameId != oldWidget.gameId;
     final pgnChanged = widget.pgnText != oldWidget.pgnText;
 
@@ -340,13 +408,31 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
             !isOwnEdit &&
             _stripHeaders(widget.pgnText ?? '') !=
                 _stripHeaders(oldWidget.pgnText ?? ''))) {
-      unawaited(_loadGame());
+      // The same game with new annotations on it (an engine pass writing
+      // its scores and lines back) is adopted where the reader is; anything
+      // else is a different game and starts over.
+      if (gameIdChanged || !_adoptAnnotations(widget.pgnText)) {
+        unawaited(_loadGame());
+      }
     } else if (widget.moveNumber != oldWidget.moveNumber ||
         widget.isWhiteToPlay != oldWidget.isWhiteToPlay) {
       _clearAnalysis();
       if (widget.moveNumber != null && widget.isWhiteToPlay != null) {
         _jumpToMove(widget.moveNumber!, widget.isWhiteToPlay!);
       }
+    }
+  }
+
+  /// Try to take [pgnText]'s annotations onto the loaded game in place.
+  /// See [ViewerGameModel.adoptAnnotations].
+  bool _adoptAnnotations(String? pgnText) {
+    if (pgnText == null || _isLoading || _m.game == null) return false;
+    try {
+      final adopted = _m.adoptAnnotations(PgnGame.parsePgn(pgnText));
+      if (adopted) setState(() {});
+      return adopted;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -393,7 +479,6 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
 
       setState(() {
         _m.load(game);
-        _m.revealedPly = widget.revealedPly;
         _gameInfo = _buildGameInfo(game);
         _isLoading = false;
       });
@@ -408,6 +493,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
         } else if (widget.initialFen != null) {
           _jumpToFen(widget.initialFen!);
         }
+        widget.onGameLoaded?.call();
       });
     } catch (e) {
       if (!mounted) return;
@@ -594,7 +680,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
                 onCancelEditingComment: _cancelEditingComment,
                 onGoToAnalysisNode: _goToAnalysisNode,
                 onShowVariationContextMenu: _showVariationContextMenu,
-                revealedPly: widget.revealedPly,
+                reveal: _m.reveal,
                 onPlayInlineLine: _playInlineLine,
                 activeInlineLine: _inlineActive
                     ? (

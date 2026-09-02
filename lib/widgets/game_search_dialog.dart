@@ -389,7 +389,7 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 11,
+                        fontSize: 12,
                         color: AppColors.onSurfaceMuted,
                       ),
                     ),
@@ -402,7 +402,7 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 11,
+                        fontSize: 12,
                         color: AppColors.onSurfaceMuted,
                         fontStyle: FontStyle.italic,
                       ),

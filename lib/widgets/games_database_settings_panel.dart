@@ -63,7 +63,7 @@ class GamesDatabaseSettingsPanel extends StatelessWidget {
               Text(
                 snap.hasData ? snap.data!.path : '',
                 style: const TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   color: AppColors.onSurfaceMuted,
                 ),
               ),

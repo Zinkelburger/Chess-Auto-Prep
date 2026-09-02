@@ -323,7 +323,10 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
                   // comments: it is the pass that classified these moves, and it
                   // survives the evals being pruned from the cache.
                 )
-                ..summary = _storedSummary(record.dedupKey) ?? summaries[i]
+                ..summary = _mergeSummary(
+                  _storedSummary(record.dedupKey),
+                  summaries[i],
+                )
                 // Kept even when the stored counts win above: this is the
                 // "is there a graph on disk" answer, and the counts cannot
                 // give it.
@@ -471,6 +474,26 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
     );
   }
 
+  /// The store's tally wins the numbers; the eval series wins the moves.
+  ///
+  /// When both agree the parsed summary is the same verdict with the mistakes
+  /// themselves attached, which is what the card's strip draws. When they
+  /// disagree the store is the pass that classified the game, and moments
+  /// from a different classification would put the wrong moves on the card.
+  static GameReviewSummary? _mergeSummary(
+    GameReviewSummary? stored,
+    GameReviewSummary? parsed,
+  ) {
+    if (stored == null) return parsed;
+    if (parsed == null || !_sameCounts(stored, parsed)) return stored;
+    return parsed;
+  }
+
+  static bool _sameCounts(GameReviewSummary a, GameReviewSummary b) =>
+      a.blunders == b.blunders &&
+      a.mistakes == b.mistakes &&
+      a.inaccuracies == b.inaccuracies;
+
   /// A game finished its engine pass: adopt the counts for whichever loaded
   /// rows they belong to.
   void _applyStoredSummaries() {
@@ -479,16 +502,36 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
       final stored = _storedSummary(game.record.dedupKey);
       if (stored == null) continue;
       final current = game.summary;
-      if (current != null &&
-          current.blunders == stored.blunders &&
-          current.mistakes == stored.mistakes &&
-          current.inaccuracies == stored.inaccuracies) {
-        continue;
-      }
+      if (current != null && _sameCounts(current, stored)) continue;
       game.summary = stored;
       changed = true;
     }
     if (changed) notifyListeners();
+  }
+
+  /// The engine pass scored one game: read its mistakes off the series so the
+  /// card's strip fills in as the run goes, rather than on the next load.
+  ///
+  /// [movetext] is the annotated movetext the pass produced (headers absent
+  /// or present — the parse takes either). A series that does not parse, or a
+  /// game not in the list, changes nothing.
+  Future<void> applyAnnotatedMovetext(String dedupKey, String movetext) async {
+    RecentGame? game;
+    for (final g in _allGames) {
+      if (g.record.dedupKey == dedupKey) {
+        game = g;
+        break;
+      }
+    }
+    if (game == null || game.meWhite == null) return;
+    final parsed = (await compute(computeReviewSummariesBatch, [
+      (movetext, game.meWhite),
+    ])).first;
+    if (parsed == null) return;
+    // The list may have reloaded meanwhile; only touch the row we looked up.
+    game.summary = _mergeSummary(game.summary, parsed);
+    game.hasStoredEvals = true;
+    notifyListeners();
   }
 
   @override

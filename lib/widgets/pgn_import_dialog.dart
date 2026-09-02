@@ -294,7 +294,7 @@ class _PgnImportDialogState extends State<_PgnImportDialog> {
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   child: Text(
                     'or paste it',
-                    style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                   ),
                 ),
                 Expanded(child: Divider(color: cs.outlineVariant)),
@@ -307,7 +307,7 @@ class _PgnImportDialogState extends State<_PgnImportDialog> {
               autofocus: true,
               maxLines: 8,
               minLines: 5,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              style: const TextStyle(fontFamily: 'SourceCodePro', fontSize: 12),
               decoration: InputDecoration(
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
@@ -407,7 +407,7 @@ class _FilePickTile extends StatelessWidget {
                 Text(
                   'Change',
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     color: cs.onPrimaryContainer.withValues(alpha: 0.75),
                   ),
                 ),
@@ -446,7 +446,7 @@ class _StatusLine extends StatelessWidget {
             child: Text(
               error!,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 11, color: cs.error),
+              style: TextStyle(fontSize: 12, color: cs.error),
             ),
           ),
         ] else if (gameCount > 0) ...[
@@ -455,7 +455,7 @@ class _StatusLine extends StatelessWidget {
           Text(
             '$gameCount line${gameCount == 1 ? '' : 's'} ready to import',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: FontWeight.w500,
               color: cs.primary,
             ),
@@ -470,7 +470,7 @@ class _StatusLine extends StatelessWidget {
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            child: const Text('Clear', style: TextStyle(fontSize: 11)),
+            child: const Text('Clear', style: TextStyle(fontSize: 12)),
           ),
       ],
     );

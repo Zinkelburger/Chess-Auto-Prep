@@ -1,6 +1,7 @@
 import '../../../services/games_library/game_filter.dart';
 import '../../../services/games_library/games_library_service.dart';
 import '../services/game_deviation_service.dart';
+import '../services/game_moments.dart';
 import '../services/game_review_summary.dart';
 
 /// How the game ended, from my side of the board.
@@ -63,6 +64,25 @@ class RecentGame {
   /// graph. That is exactly the game the engine pass must be told to look at
   /// again — see `_needsEnginePassFor` in the home review runner.
   bool hasStoredEvals = false;
+
+  List<GameMoment>? _moments;
+  DeviationReport? _momentsDeviation;
+  GameReviewSummary? _momentsSummary;
+
+  /// The card's strip: where the game left the book and each of my
+  /// mistakes, in game order. Built from [deviation] and [summary] and kept
+  /// until either is reassigned — a replay per game is cheap once, not on
+  /// every scroll frame of the list.
+  List<GameMoment> get moments {
+    if (_moments == null ||
+        !identical(_momentsDeviation, deviation) ||
+        !identical(_momentsSummary, summary)) {
+      _momentsDeviation = deviation;
+      _momentsSummary = summary;
+      _moments = buildGameMoments(this);
+    }
+    return _moments!;
+  }
 
   String get white => record.white;
   String get black => record.black;

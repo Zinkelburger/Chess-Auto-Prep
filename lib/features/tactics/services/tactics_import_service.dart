@@ -22,6 +22,7 @@ import '../../../services/eval_cache.dart';
 import 'tactics_database.dart';
 import '../../../services/pgn_parsing_service.dart';
 import '../../../services/storage/storage_factory.dart';
+import '../../../utils/chess_utils.dart' show uciPvToSan;
 import '../../../utils/chesscom_lichess_elo.dart';
 import '../../../utils/clock_utils.dart';
 import '../../../utils/log.dart';

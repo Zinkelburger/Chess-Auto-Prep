@@ -165,6 +165,7 @@ final class OpenPgnViewer extends PendingHandoff {
     this.gameIndex,
     this.autoAnalyze = false,
     this.tab = PgnViewerTab.game,
+    this.ply,
   });
 
   final String pgnPath;
@@ -190,6 +191,11 @@ final class OpenPgnViewer extends PendingHandoff {
   /// Tab to select on arrival.
   final PgnViewerTab tab;
 
+  /// Mainline position to land on (0-based half-moves from the start), for a
+  /// handoff that names a moment in the game — a mistake, the move that left
+  /// the book — rather than the game as a whole. Null starts at move one.
+  final int? ply;
+
   @override
   AppMode get targetMode => AppMode.pgnViewer;
 
@@ -214,5 +220,5 @@ final class OpenEngineTournament extends PendingHandoff {
 
   @override
   String get defaultHistoryLabel =>
-      tournamentId == null ? 'Engine Tournament' : 'Tournament: $tournamentId';
+      tournamentId == null ? 'Engine tournament' : 'Tournament: $tournamentId';
 }

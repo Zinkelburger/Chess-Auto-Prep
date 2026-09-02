@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'package:chess_auto_prep/core/app_state.dart';
+import 'package:chess_auto_prep/widgets/app_mode_switcher.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
 
 import 'helpers/board_helpers.dart';
@@ -38,7 +39,7 @@ void main() {
       // The games window is not on this pane either — it is a section of the
       // review strip's analysis-settings dialog.
       expect(find.text('Games to download'), findsNothing);
-      expect(find.text('My tactics'), findsOneWidget);
+      expect(find.text('Play tactics'), findsOneWidget);
       // The engine-settings gear is gone: cores and depth are steppers on the
       // review strip, and downloading is the review's play button, so this card
       // has neither a gear nor a per-site Import button.
@@ -72,7 +73,7 @@ void main() {
     testWidgets('popup menu shows the modes', (tester) async {
       await pumpApp(tester);
 
-      await tester.tap(find.byIcon(Icons.view_module));
+      await tester.tap(find.byKey(AppModeSwitcher.switcherKey));
       await tester.pumpAndSettle();
 
       expect(
@@ -85,28 +86,28 @@ void main() {
       expect(
         find.descendant(
           of: find.byType(PopupMenuItem<AppMode>),
-          matching: find.text('Player Analysis'),
+          matching: find.text('Player analysis'),
         ),
         findsOneWidget,
       );
       expect(
         find.descendant(
           of: find.byType(PopupMenuItem<AppMode>),
-          matching: find.text('Repertoire Builder'),
+          matching: find.text('Repertoire builder'),
         ),
         findsOneWidget,
       );
       expect(
         find.descendant(
           of: find.byType(PopupMenuItem<AppMode>),
-          matching: find.text('Repertoire Trainer'),
+          matching: find.text('Repertoire trainer'),
         ),
         findsOneWidget,
       );
       expect(
         find.descendant(
           of: find.byType(PopupMenuItem<AppMode>),
-          matching: find.text('Engine Tournament'),
+          matching: find.text('Engine tournament'),
         ),
         findsOneWidget,
       );
@@ -115,11 +116,11 @@ void main() {
     testWidgets('switches to Repertoire Builder', (tester) async {
       await pumpApp(tester);
 
-      await tester.tap(find.byIcon(Icons.view_module));
+      await tester.tap(find.byKey(AppModeSwitcher.switcherKey));
       await tester.pumpAndSettle();
 
       final menuItem = find.ancestor(
-        of: find.text('Repertoire Builder'),
+        of: find.text('Repertoire builder'),
         matching: find.byType(PopupMenuItem<AppMode>),
       );
       await tester.tap(menuItem);
@@ -133,11 +134,11 @@ void main() {
     testWidgets('switches to Repertoire Trainer', (tester) async {
       await pumpApp(tester);
 
-      await tester.tap(find.byIcon(Icons.view_module));
+      await tester.tap(find.byKey(AppModeSwitcher.switcherKey));
       await tester.pumpAndSettle();
 
       final menuItem = find.ancestor(
-        of: find.text('Repertoire Trainer'),
+        of: find.text('Repertoire trainer'),
         matching: find.byType(PopupMenuItem<AppMode>),
       );
       await tester.tap(menuItem);

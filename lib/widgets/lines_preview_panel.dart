@@ -156,7 +156,7 @@ class _LinesPreviewPanelState extends State<LinesPreviewPanel> {
                 const SizedBox(width: 8),
                 Text(
                   '(${indices.length} shown)',
-                  style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                 ),
               ],
               const Spacer(),
@@ -168,7 +168,7 @@ class _LinesPreviewPanelState extends State<LinesPreviewPanel> {
                   decoration: InputDecoration(
                     hintText: 'Search...',
                     hintStyle: TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       color: cs.onSurfaceVariant,
                     ),
                     prefixIcon: Icon(
@@ -206,7 +206,7 @@ class _LinesPreviewPanelState extends State<LinesPreviewPanel> {
                       borderRadius: BorderRadius.circular(6),
                     ),
                   ),
-                  style: const TextStyle(fontSize: 11),
+                  style: const TextStyle(fontSize: 12),
                   onChanged: (v) => setState(() => _searchQuery = v.trim()),
                 ),
               ),
@@ -318,14 +318,14 @@ class _GameLineRow extends StatelessWidget {
               children: [
                 Text(
                   '${listIndex + 1}.',
-                  style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
+                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                 ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     '$white vs $black',
                     style: const TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: FontWeight.w500,
                     ),
                     maxLines: 1,
@@ -344,7 +344,10 @@ class _GameLineRow extends StatelessWidget {
                     ),
                     child: Text(
                       result,
-                      style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                      ),
                     ),
                   ),
               ],
@@ -354,7 +357,7 @@ class _GameLineRow extends StatelessWidget {
                 padding: const EdgeInsets.only(left: 20, top: 1),
                 child: Text(
                   event,
-                  style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
+                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -367,7 +370,7 @@ class _GameLineRow extends StatelessWidget {
                 child: HoverableMoveChips(
                   moves: moves,
                   maxMoves: 10,
-                  fontSize: 10,
+                  fontSize: 12,
                   boardPreview: boardPreview,
                   ownerTag: ownerTag,
                 ),

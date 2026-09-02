@@ -95,7 +95,7 @@ class EngineMoveRow extends StatelessWidget {
                           move.san,
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
-                            fontFamily: 'monospace',
+                            fontFamily: 'SourceCodePro',
                             fontSize: 15,
                           ),
                           overflow: TextOverflow.ellipsis,
@@ -112,7 +112,7 @@ class EngineMoveRow extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
                       color: evalColor,
-                      fontFamily: 'monospace',
+                      fontFamily: 'SourceCodePro',
                     ),
                     textAlign: TextAlign.center,
                     overflow: TextOverflow.ellipsis,
@@ -139,7 +139,7 @@ class EngineMoveRow extends StatelessWidget {
                         color: move.maiaProb != null
                             ? AppColors.maiaColor(muted: maiaMuted)
                             : AppColors.onSurfaceDim,
-                        fontFamily: 'monospace',
+                        fontFamily: 'SourceCodePro',
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -165,7 +165,7 @@ class EngineMoveRow extends StatelessWidget {
         style: TextStyle(
           fontSize: 13,
           color: lineColor,
-          fontFamily: 'monospace',
+          fontFamily: 'SourceCodePro',
         ),
         maxLines: rows,
         overflow: TextOverflow.ellipsis,

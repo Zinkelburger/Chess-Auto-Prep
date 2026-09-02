@@ -1,6 +1,6 @@
 ; Windows installer. Built by release.yml after `flutter build windows`:
 ;
-;   ISCC.exe /DAppVersion=1.12.2 packaging\windows\installer.iss
+;   ISCC.exe /DAppVersion=1.13.0 packaging\windows\installer.iss
 ;
 ; Per-user install under %LocalAppData%\Programs, so there is no UAC prompt
 ; and no admin account needed. Adds a Start Menu entry, an uninstaller in

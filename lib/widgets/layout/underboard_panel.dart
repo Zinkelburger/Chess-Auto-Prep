@@ -235,7 +235,7 @@ class UnderboardPanelState extends State<UnderboardPanel>
               child: Text(
                 '$count',
                 style: const TextStyle(
-                  fontSize: 10,
+                  fontSize: 12,
                   color: AppColors.onWarning,
                   fontWeight: FontWeight.bold,
                 ),
@@ -256,7 +256,7 @@ class UnderboardPanelState extends State<UnderboardPanel>
           Text(label),
           if (status != null) ...[
             const SizedBox(width: 4),
-            Text(status, style: TextStyle(fontSize: 10, color: color)),
+            Text(status, style: TextStyle(fontSize: 12, color: color)),
           ],
         ],
       ),

@@ -134,12 +134,13 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
               Tooltip(
                 message: _cdbDirectAvailable
                     ? 'Optional eval lookup chain before Stockfish:\n'
-                          'project cache → cdbdirect full dump → local SQLite '
-                          '→ API → engine.\n'
-                          'On HDD, enable read-ahead and batch lookups for '
-                          'cdbdirect.'
+                          'project cache → ChessDB dump → ChessDB slice → '
+                          'Lichess evals → ChessDB API → engine.\n'
+                          'Download either local database from inside this '
+                          'pane.'
                     : 'Optional eval lookup chain before Stockfish:\n'
-                          'project cache → local SQLite → API → engine.',
+                          'project cache → ChessDB slice → Lichess evals → '
+                          'ChessDB API → engine.',
                 child: const Icon(
                   Icons.info_outline,
                   size: 16,

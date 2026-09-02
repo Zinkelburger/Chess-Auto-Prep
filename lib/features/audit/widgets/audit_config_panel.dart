@@ -77,9 +77,13 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
   final TextEditingController _maiaEloCtrl = TextEditingController(
     text: '2200',
   );
+  final TextEditingController _strongReplyWindowCtrl = TextEditingController(
+    text: '50',
+  );
 
   // Mothballed: Lichess Explorer disabled.
   final bool _useLichessDb = false;
+  bool _useChessDb = true;
   bool _auditSubtreeOnly = false;
 
   /// PGN file paths for repertoire-clash checking.
@@ -105,6 +109,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
     _evalDepthCtrl.dispose();
     _maxPlyCtrl.dispose();
     _maiaEloCtrl.dispose();
+    _strongReplyWindowCtrl.dispose();
     super.dispose();
   }
 
@@ -129,6 +134,8 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
       useStockfish: true,
       useLichessDb: _useLichessDb,
       useMaia: true,
+      useChessDb: _useChessDb,
+      strongReplyWindowCp: int.tryParse(_strongReplyWindowCtrl.text) ?? 50,
       clashPgnPaths: List.unmodifiable(_clashPgnPaths),
     );
   }
@@ -246,14 +253,28 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
           ),
           const SizedBox(height: 8),
 
-          // Uses Stockfish + Maia (always on)
-          const Row(
+          // Uses Stockfish + Maia (always on); ChessDB is optional.
+          Row(
             children: [
-              Icon(Icons.memory, size: 13, color: AppColors.onSurfaceMuted),
-              SizedBox(width: 4),
-              Text(
+              const Icon(
+                Icons.memory,
+                size: 13,
+                color: AppColors.onSurfaceMuted,
+              ),
+              const SizedBox(width: 4),
+              const Text(
                 'Stockfish + Maia',
-                style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+              ),
+              const Spacer(),
+              AppCheckbox(
+                label: 'ChessDB replies',
+                value: _useChessDb,
+                onChanged: (v) => setState(() => _useChessDb = v),
+                enabled: !_isAuditing,
+                tooltip:
+                    'Flags uncovered opponent replies ChessDB scores close '
+                    'to their best, played or not. Needs the network.',
               ),
             ],
           ),
@@ -302,7 +323,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
                 const Text(
                   'More thresholds',
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     color: AppColors.onSurfaceMuted,
                   ),
                 ),
@@ -336,6 +357,14 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
                       'Opponent replies predicted below this probability '
                       '(0 to 1) are not checked.',
                 ),
+                _numField(
+                  _strongReplyWindowCtrl,
+                  'Strong reply window (centipawns)',
+                  tooltip:
+                      'An uncovered opponent reply is flagged when Stockfish '
+                      'or ChessDB scores it within this many centipawns of '
+                      'their best move.',
+                ),
               ],
             ),
           ],
@@ -360,7 +389,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
                 child: TextButton.icon(
                   onPressed: _isAuditing ? null : _addClashPgns,
                   icon: const Icon(Icons.add, size: 14),
-                  label: const Text('Add PGN', style: TextStyle(fontSize: 11)),
+                  label: const Text('Add PGN', style: TextStyle(fontSize: 12)),
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     minimumSize: Size.zero,
@@ -380,7 +409,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
                   InputChip(
                     label: Text(
                       p.basenameWithoutExtension(_clashPgnPaths[i]),
-                      style: const TextStyle(fontSize: 11),
+                      style: const TextStyle(fontSize: 12),
                     ),
                     deleteIcon: const Icon(Icons.close, size: 14),
                     onDeleted: _isAuditing
@@ -397,7 +426,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
               padding: EdgeInsets.only(left: 20),
               child: Text(
                 'Check against book & course lines',
-                style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
               ),
             ),
           const SizedBox(height: 10),
@@ -447,7 +476,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
                         '${_progress!.nodesChecked}/${_progress!.totalNodes} · '
                         '$_liveFindingCount findings',
                         style: const TextStyle(
-                          fontSize: 10,
+                          fontSize: 12,
                           color: AppColors.onSurfaceMuted,
                         ),
                       ),

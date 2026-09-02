@@ -219,7 +219,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
     if (!hooks.isProbeRunning) {
       return const Text(
         'A build is running — probes can start once it finishes.',
-        style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+        style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
       );
     }
     return Row(
@@ -235,7 +235,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
           child: Text(
             hooks.status.isEmpty ? 'Computing…' : hooks.status,
             style: const TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               color: AppColors.onSurfaceMuted,
             ),
             overflow: TextOverflow.ellipsis,
@@ -244,7 +244,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
         TextButton(
           onPressed: hooks.cancel,
           style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-          child: const Text('Cancel', style: TextStyle(fontSize: 11)),
+          child: const Text('Cancel', style: TextStyle(fontSize: 12)),
         ),
       ],
     );
@@ -268,7 +268,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
           const SizedBox(width: 6),
           const Text(
             'Computing…',
-            style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
           ),
           IconButton(
             tooltip: 'Cancel the probe',
@@ -396,7 +396,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
                 body,
                 style: const TextStyle(
                   color: AppColors.onSurfaceMuted,
-                  fontSize: 11,
+                  fontSize: 12,
                   height: 1.3,
                 ),
                 textAlign: TextAlign.center,
@@ -422,7 +422,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
           const Text(
             'End of the stored tree — no continuations were explored from '
             'here.',
-            style: TextStyle(color: AppColors.onSurfaceMuted, fontSize: 11),
+            style: TextStyle(color: AppColors.onSurfaceMuted, fontSize: 12),
           ),
           if (actions != null) ...[const SizedBox(height: 8), actions],
         ],
@@ -479,7 +479,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      fontFamily: 'monospace',
+                      fontFamily: 'SourceCodePro',
                       color: AppColors.cpEval(
                         expectedCpFromWinProb(node.expectimaxValue),
                       ),
@@ -489,8 +489,8 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
                     Text(
                       '  engine $engine',
                       style: const TextStyle(
-                        fontSize: 11,
-                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        fontFamily: 'SourceCodePro',
                         color: AppColors.onSurfaceMuted,
                       ),
                     ),
@@ -508,7 +508,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
   /// how likely they are — and the caption row says which one this is.
   Widget _buildColumnHeadings() {
     const style = TextStyle(
-      fontSize: 10,
+      fontSize: 12,
       color: AppColors.onSurfaceMuted,
       fontWeight: FontWeight.w600,
       letterSpacing: 0.3,
@@ -607,7 +607,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
-                  fontFamily: 'monospace',
+                  fontFamily: 'SourceCodePro',
                   color: AppColors.cpEval(line.expectedEvalCp),
                 ),
               ),
@@ -618,8 +618,8 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
             child: Text(
               engine,
               style: const TextStyle(
-                fontSize: 11,
-                fontFamily: 'monospace',
+                fontSize: 12,
+                fontFamily: 'SourceCodePro',
                 color: AppColors.onSurfaceMuted,
               ),
             ),
@@ -635,9 +635,9 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
                 child: Text(
                   'C:${(coherence * 100).round()}',
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: 12,
                     color: AppColors.coherence(coherence),
-                    fontFamily: 'monospace',
+                    fontFamily: 'SourceCodePro',
                   ),
                 ),
               ),
@@ -677,7 +677,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
           if (widget.hooks != null) ...[
             const Text(
               'Probe depth ',
-              style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
             ),
             _probeDepthPicker(),
           ],

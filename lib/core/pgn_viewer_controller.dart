@@ -23,7 +23,9 @@ import '../services/opening_book_service.dart';
 import '../services/storage/storage_factory.dart';
 import 'pgn/pgn_viewer_handle.dart';
 import 'pgn/solitaire_controller.dart';
-export 'pgn/solitaire_controller.dart' show SolitaireController, SolitaireGuess;
+export 'pgn/solitaire_controller.dart'
+    show SolitaireController, SolitaireGuess, SolitaireStep;
+export 'pgn/viewer_solitaire_session.dart' show SolitaireSetup;
 import '../utils/pgn_date_utils.dart';
 import '../utils/safe_change_notifier.dart';
 import '../utils/chess_utils.dart';
@@ -195,28 +197,48 @@ class PgnViewerController extends ChangeNotifier
   late final ViewerSolitaireSession _solitaireSession = ViewerSolitaireSession(
     handle: pgnWidgetController,
     hasGames: () => filteredGames.isNotEmpty,
-    hasFilePath: () => filePath != null,
     userPlaysWhite: () => !boardFlipped,
-    currentPosition: () => currentPosition,
     stopAutoPlay: stopAutoPlay,
     onChanged: notifyListeners,
   );
 
   SolitaireController get solitaire => _solitaireSession.controller;
-  @override
   bool get isSolitaireMode => _solitaireSession.isActive;
+
+  /// The setup strip is open: side, start point and sidelines are being
+  /// chosen, but no session is running yet.
+  bool get isSolitaireSetup => _solitaireSession.isConfiguring;
+  SolitaireSetup? get solitaireSetup => _solitaireSession.setup;
   int get totalTrophyCount => _solitaireSession.totalTrophyCount;
   void noteTrophiesEarned(int count) =>
       _solitaireSession.noteTrophiesEarned(count);
+
+  /// Toolbar button: open setup, or leave the setup / running session.
   void toggleSolitaire() => _solitaireSession.toggle();
+  void updateSolitaireSetup({
+    bool? userIsWhite,
+    bool? fromCurrentMove,
+    bool? includeVariations,
+  }) => _solitaireSession.updateSetup(
+    userIsWhite: userIsWhite,
+    fromCurrentMove: fromCurrentMove,
+    includeVariations: includeVariations,
+  );
+  void beginSolitaire() => _solitaireSession.begin();
+  void cancelSolitaireSetup() => _solitaireSession.cancelSetup();
+  void stopSolitaire() => _solitaireSession.stop();
   Future<void> loadSolitaireSettings() => _solitaireSession.loadSettings();
   Future<void> setSolitaireRevealDelay(int seconds) =>
       _solitaireSession.setRevealDelay(seconds);
   void revealCurrentMove() => _solitaireSession.revealCurrentMove();
+  void hintCurrentMove() => _solitaireSession.hintCurrentMove();
 
-  @override
-  void restartSolitaireForCurrentOrientation() =>
-      _solitaireSession.restartForCurrentOrientation();
+  /// The PGN widget finished loading the game on screen. A running solitaire
+  /// session starts over on it — this, not a post-frame guess, is when the
+  /// new game's moves are actually there to build a script from.
+  void onViewerGameLoaded() {
+    if (isSolitaireMode) _solitaireSession.restartForNewGame();
+  }
 
   @override
   late final PgnFenIndex _fenIndex = PgnFenIndex(
@@ -500,7 +522,8 @@ class PgnViewerController extends ChangeNotifier
     // its results — and its isLoading release — on the cleared state.
     _sliceEpoch++;
     stopAutoPlay();
-    if (isSolitaireMode) solitaire.stop();
+    if (isSolitaireMode) _solitaireSession.stop();
+    _solitaireSession.cancelSetup();
     analysisController.cancel();
     analysisController.clearEvals();
     isLoading = false;
@@ -580,13 +603,25 @@ class PgnViewerController extends ChangeNotifier
     currentPosition = _tryParseFen(pgnInitialFen) ?? Chess.initial;
     orientBoardForCurrentGame();
     final game = filteredGames[currentGameIndex];
-    await analysisController.tryLoadFromPgn(game.pgnText);
+    final restored = await analysisController.tryLoadFromPgn(game.pgnText);
     if (!isActive()) return;
-    if (isSolitaireMode) {
-      schedulePostFrame?.call(_solitaireSession.restartForCurrentOrientation);
-    }
     notifyListeners();
     onReclaimFocus?.call();
+    if (restored) unawaited(_fillMissingBestLines(game));
+  }
+
+  /// A stored graph whose mistakes carry no line gets them now: a few short
+  /// searches, written back onto [game] so it happens once. The widget
+  /// adopts the new comments in place, so the reader is not moved.
+  Future<void> _fillMissingBestLines(PgnGameEntry game) async {
+    await analysisController.fillMissingBestLines(
+      game.pgnText,
+      onAnnotatedMovetext: (movetext) {
+        if (!isActive()) return;
+        persistMoveCommentsFor(game, movetext);
+        notifyListeners();
+      },
+    );
   }
 
   void nextGame() {
@@ -725,7 +760,8 @@ class PgnViewerController extends ChangeNotifier
   }
 
   void toggleOpeningTree() {
-    if (isSolitaireMode) solitaire.stop();
+    if (isSolitaireMode) _solitaireSession.stop();
+    _solitaireSession.cancelSetup();
     if (showOpeningTree) {
       _viewerTree.toggle();
       pgnInitialFen = _gameCursorFen;
@@ -785,6 +821,17 @@ class PgnViewerController extends ChangeNotifier
       pgnWidgetController.clearEphemeralMoves();
       pgnWidgetController.jumpToMove(1, true);
     }
+  }
+
+  /// Park the cursor on a mainline position by half-move index. Out-of-range
+  /// values clamp to the game, so a moment computed from a longer copy of the
+  /// game still lands somewhere in it.
+  void goToPly(int ply) {
+    stopAutoPlay();
+    if (isSolitaireMode || showOpeningTree) return;
+    final len = pgnWidgetController.mainLineLength;
+    pgnWidgetController.clearEphemeralMoves();
+    pgnWidgetController.goToMainLineIndex(ply.clamp(0, len < 0 ? 0 : len));
   }
 
   void navigateToEnd() {

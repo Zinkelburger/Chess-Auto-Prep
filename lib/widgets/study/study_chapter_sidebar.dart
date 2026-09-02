@@ -238,7 +238,7 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
     final ordinal = Text(
       '${index + 1}',
       textAlign: TextAlign.right,
-      style: const TextStyle(fontSize: 11, color: AppColors.onSurfaceDim),
+      style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceDim),
     );
 
     return InkWell(
@@ -268,7 +268,7 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
                 chapter.name,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 12.5,
+                  fontSize: 13,
                   color: active ? AppColors.ink : AppColors.onSurfaceSoft,
                   fontWeight: active ? FontWeight.w600 : FontWeight.w400,
                 ),
@@ -280,7 +280,7 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
                 child: Text(
                   result,
                   style: const TextStyle(
-                    fontSize: 10.5,
+                    fontSize: 12,
                     color: AppColors.onSurfaceDim,
                   ),
                 ),

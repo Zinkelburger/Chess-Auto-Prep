@@ -176,7 +176,10 @@ class _OpponentListImportDialogState extends State<OpponentListImportDialog> {
               TextField(
                 controller: _textController,
                 maxLines: 6,
-                style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontFamily: 'SourceCodePro',
+                ),
                 decoration: const InputDecoration(
                   labelText: 'Or paste the list',
                   alignLabelWithHint: true,

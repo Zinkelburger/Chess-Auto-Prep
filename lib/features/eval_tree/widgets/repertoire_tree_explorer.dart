@@ -140,9 +140,9 @@ class _PositionHeader extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.bodySmall?.copyWith(
-              fontFamily: 'monospace',
+              fontFamily: 'SourceCodePro',
               color: theme.colorScheme.onSurfaceVariant,
-              fontSize: 10,
+              fontSize: 12,
             ),
           ),
         ],
@@ -161,7 +161,7 @@ class _RoleBadge extends StatelessWidget {
     return Text(
       isOurTurn ? 'Our move' : 'Opponent',
       style: const TextStyle(
-        fontSize: 11,
+        fontSize: 12,
         color: AppColors.onSurfaceSoft,
         fontWeight: FontWeight.w600,
       ),
@@ -257,7 +257,7 @@ class _CandidateTableHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const style = TextStyle(
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: FontWeight.w600,
       color: AppColors.onSurfaceMuted,
       letterSpacing: 0.4,
@@ -341,7 +341,7 @@ class _CandidateRow extends StatelessWidget {
                 child: Text(
                   '${row.rank}',
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     color: AppColors.onSurfaceMuted,
                     fontWeight: FontWeight.w500,
                   ),
@@ -366,7 +366,7 @@ class _CandidateRow extends StatelessWidget {
                         node.moveSan,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontFamily: 'monospace',
+                          fontFamily: 'SourceCodePro',
                           fontSize: 15,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -423,9 +423,9 @@ class _CandidateRow extends StatelessWidget {
                   '${(node.moveProbability * 100).toStringAsFixed(0)}%',
                   textAlign: TextAlign.right,
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     color: AppColors.onSurfaceMuted,
-                    fontFamily: 'monospace',
+                    fontFamily: 'SourceCodePro',
                   ),
                 ),
               ),
@@ -448,9 +448,9 @@ class _EvalBadge extends StatelessWidget {
       _formatEval(evalCp),
       textAlign: TextAlign.center,
       style: const TextStyle(
-        fontSize: 11,
+        fontSize: 12,
         fontWeight: FontWeight.bold,
-        fontFamily: 'monospace',
+        fontFamily: 'SourceCodePro',
       ),
     );
   }
@@ -475,8 +475,8 @@ class _MetricText extends StatelessWidget {
       value ?? '—',
       textAlign: align,
       style: TextStyle(
-        fontSize: 11,
-        fontFamily: 'monospace',
+        fontSize: 12,
+        fontFamily: 'SourceCodePro',
         color: color ?? AppColors.onSurfaceSoft,
         fontWeight: value != null ? FontWeight.w600 : FontWeight.normal,
       ),
@@ -498,7 +498,7 @@ class _TrapCountBadge extends StatelessWidget {
       return const Text(
         '—',
         textAlign: TextAlign.right,
-        style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+        style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
       );
     }
 
@@ -508,10 +508,10 @@ class _TrapCountBadge extends StatelessWidget {
         '$count',
         textAlign: TextAlign.right,
         style: const TextStyle(
-          fontSize: 11,
+          fontSize: 12,
           color: AppColors.onSurfaceSoft,
           fontWeight: FontWeight.w600,
-          fontFamily: 'monospace',
+          fontFamily: 'SourceCodePro',
         ),
       ),
     );
@@ -570,11 +570,11 @@ class _StatChip extends StatelessWidget {
       children: [
         Text(
           '$label ',
-          style: const TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+          style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
         ),
         Text(
           value,
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
         ),
       ],
     );

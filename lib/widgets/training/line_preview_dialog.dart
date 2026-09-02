@@ -65,7 +65,7 @@ class _LinePreviewDialogState extends State<LinePreviewDialog> {
                     child: Text(
                       _isBlackLine ? 'Black' : 'White',
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 12,
                         fontWeight: FontWeight.w700,
                         color: theme.colorScheme.onSurface.withValues(
                           alpha: 0.6,

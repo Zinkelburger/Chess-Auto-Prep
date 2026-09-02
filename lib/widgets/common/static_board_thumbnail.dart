@@ -6,12 +6,39 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:dartchess/dartchess.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../theme/app_colors.dart';
 import '../../utils/fen_utils.dart';
 import '../../utils/chess_utils.dart' show roleChar;
+
+/// One move drawn over a [StaticBoardThumbnail], from-square to to-square.
+@immutable
+class BoardArrow {
+  const BoardArrow({required this.uci, required this.color});
+
+  /// Standard UCI ("e2e4"; promotions carry a fifth character that is
+  /// ignored here). Anything that does not parse as two squares draws nothing.
+  final String uci;
+  final Color color;
+
+  Square? get from => _square(uci, 0);
+  Square? get to => _square(uci, 2);
+
+  static Square? _square(String uci, int at) {
+    if (uci.length < at + 2) return null;
+    return Square.parse(uci.substring(at, at + 2));
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is BoardArrow && other.uci == uci && other.color == color;
+
+  @override
+  int get hashCode => Object.hash(uci, color);
+}
 
 /// A static board preview that stays cheap in long lists.
 ///
@@ -25,12 +52,18 @@ import '../../utils/chess_utils.dart' show roleChar;
 /// Oriented so the side to move is at the bottom (same perspective as
 /// training) when the FEN carries a turn field — pass [flipped] to override,
 /// e.g. a games list that always shows the position from *my* side.
+///
+/// [arrows] draws moves over the position — the move that was played, the
+/// move the book wanted — so a thumbnail can show a *moment* rather than
+/// just a position. Drawn in list order, so put the one that should win an
+/// overlap last.
 class StaticBoardThumbnail extends StatefulWidget {
   const StaticBoardThumbnail({
     super.key,
     required this.fen,
     this.size = 60,
     this.flipped,
+    this.arrows = const [],
   });
 
   final String fen;
@@ -38,6 +71,8 @@ class StaticBoardThumbnail extends StatefulWidget {
 
   /// True = Black at the bottom. Null derives it from the FEN's turn field.
   final bool? flipped;
+
+  final List<BoardArrow> arrows;
 
   @override
   State<StaticBoardThumbnail> createState() => _StaticBoardThumbnailState();
@@ -129,6 +164,7 @@ class _StaticBoardThumbnailState extends State<StaticBoardThumbnail> {
             flipped: _flipped,
             bucket: _bucket,
             spritesLoaded: _PieceSprites.isLoaded(_bucket),
+            arrows: widget.arrows,
           ),
           size: Size.square(widget.size),
         ),
@@ -143,12 +179,14 @@ class _ThumbnailPainter extends CustomPainter {
     required this.flipped,
     required this.bucket,
     required this.spritesLoaded,
+    required this.arrows,
   });
 
   final Board board;
   final bool flipped;
   final int bucket;
   final bool spritesLoaded;
+  final List<BoardArrow> arrows;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -200,6 +238,10 @@ class _ThumbnailPainter extends CustomPainter {
       }
     }
 
+    for (final arrow in arrows) {
+      _drawArrow(canvas, arrow, squareSize);
+    }
+
     canvas.drawRect(
       Offset.zero & size,
       Paint()
@@ -209,12 +251,63 @@ class _ThumbnailPainter extends CustomPainter {
     );
   }
 
+  Offset _center(Square square, double squareSize) {
+    final col = flipped ? 7 - square.file : square.file;
+    final row = flipped ? square.rank : 7 - square.rank;
+    return Offset((col + 0.5) * squareSize, (row + 0.5) * squareSize);
+  }
+
+  /// A shaft with a filled head, sized to the square so it reads at any
+  /// thumbnail size: the shaft is a sixth of a square wide, the head a bit
+  /// over half a square long, and the shaft stops where the head begins so
+  /// the two never show through each other at partial opacity.
+  void _drawArrow(Canvas canvas, BoardArrow arrow, double squareSize) {
+    final from = arrow.from;
+    final to = arrow.to;
+    if (from == null || to == null || from == to) return;
+    final start = _center(from, squareSize);
+    final end = _center(to, squareSize);
+    final direction = end - start;
+    final length = direction.distance;
+    final unit = direction / length;
+    final headLength = squareSize * 0.55;
+    final headWidth = squareSize * 0.45;
+    final shaftWidth = squareSize / 6;
+    // Start a little into the from-square so the arrow reads as leaving the
+    // piece rather than being pinned through its middle.
+    final shaftStart = start + unit * (squareSize * 0.2);
+    final headBase = end - unit * headLength;
+    final paint = Paint()
+      ..color = arrow.color
+      ..style = PaintingStyle.fill;
+    if (length > headLength + squareSize * 0.2) {
+      canvas.drawLine(
+        shaftStart,
+        headBase,
+        Paint()
+          ..color = arrow.color
+          ..strokeWidth = shaftWidth
+          ..strokeCap = StrokeCap.round,
+      );
+    }
+    final normal = Offset(-unit.dy, unit.dx) * (headWidth / 2);
+    canvas.drawPath(
+      Path()
+        ..moveTo(end.dx, end.dy)
+        ..lineTo(headBase.dx + normal.dx, headBase.dy + normal.dy)
+        ..lineTo(headBase.dx - normal.dx, headBase.dy - normal.dy)
+        ..close(),
+      paint,
+    );
+  }
+
   @override
   bool shouldRepaint(covariant _ThumbnailPainter old) =>
       board != old.board ||
       flipped != old.flipped ||
       bucket != old.bucket ||
-      spritesLoaded != old.spritesLoaded;
+      spritesLoaded != old.spritesLoaded ||
+      !listEquals(arrows, old.arrows);
 }
 
 /// Smallest sprite raster, in device pixels, that covers a square of

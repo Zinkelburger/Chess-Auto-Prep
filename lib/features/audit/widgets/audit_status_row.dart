@@ -82,7 +82,7 @@ class AuditStatusRow extends StatelessWidget {
                       ? '$nodesChecked / $totalNodes positions · $visibleCount findings'
                       : 'Starting audit...',
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     color: AppColors.onSurfaceMuted,
                   ),
                 ),
@@ -91,7 +91,7 @@ class AuditStatusRow extends StatelessWidget {
                   const Text(
                     'Top',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       color: AppColors.onSurfaceMuted,
                     ),
                   ),
@@ -102,7 +102,7 @@ class AuditStatusRow extends StatelessWidget {
                     child: TextField(
                       controller: capController,
                       style: const TextStyle(
-                        fontSize: 11,
+                        fontSize: 12,
                         color: AppColors.onSurfaceSoft,
                       ),
                       textAlign: TextAlign.center,
@@ -147,7 +147,7 @@ class AuditStatusRow extends StatelessWidget {
                   Text(
                     'of $totalMatching',
                     style: const TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       color: AppColors.onSurfaceMuted,
                     ),
                   ),
@@ -156,7 +156,7 @@ class AuditStatusRow extends StatelessWidget {
                     Text(
                       '· ≥ $reachThreshold reach',
                       style: const TextStyle(
-                        fontSize: 11,
+                        fontSize: 12,
                         color: AppColors.engineLine,
                       ),
                     ),
@@ -165,7 +165,7 @@ class AuditStatusRow extends StatelessWidget {
                   Text(
                     '$visibleCount findings',
                     style: const TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       color: AppColors.onSurfaceMuted,
                     ),
                   ),
@@ -174,7 +174,7 @@ class AuditStatusRow extends StatelessWidget {
                     Text(
                       '· ${_formatTimestamp(resultTimestamp!)}',
                       style: const TextStyle(
-                        fontSize: 11,
+                        fontSize: 12,
                         color: AppColors.onSurfaceMuted,
                       ),
                     ),
@@ -186,7 +186,7 @@ class AuditStatusRow extends StatelessWidget {
                 Text(
                   '${selectedIndex + 1} of $visibleCount',
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     color: AppColors.onSurfaceMuted,
                   ),
                 ),

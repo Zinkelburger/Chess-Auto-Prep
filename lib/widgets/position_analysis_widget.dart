@@ -575,7 +575,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
             padding: WidgetStatePropertyAll(
               EdgeInsets.symmetric(horizontal: 6),
             ),
-            textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 11)),
+            textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 12)),
           ),
         ),
       ),

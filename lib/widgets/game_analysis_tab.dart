@@ -227,7 +227,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
             child: Text(
               'Graph from the games review, at depth $stored.',
               style: const TextStyle(
-                fontSize: 11.5,
+                fontSize: 12,
                 color: AppColors.onSurfaceSoft,
               ),
             ),
@@ -238,7 +238,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
             label: Text('Re-analyze at depth $target'),
             style: TextButton.styleFrom(
               visualDensity: VisualDensity.compact,
-              textStyle: const TextStyle(fontSize: 11.5),
+              textStyle: const TextStyle(fontSize: 12),
             ),
           ),
         ],
@@ -550,7 +550,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
                     e.san,
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontFamily: 'monospace',
+                      fontFamily: 'SourceCodePro',
                       fontSize: 14,
                     ),
                   ),
@@ -558,7 +558,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
                   Text(
                     classLabel,
                     style: const TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       color: AppColors.onSurfaceSoft,
                       fontWeight: FontWeight.bold,
                     ),
@@ -578,7 +578,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
                   Text(
                     evalStr,
                     style: const TextStyle(
-                      fontFamily: 'monospace',
+                      fontFamily: 'SourceCodePro',
                       fontSize: 12,
                       color: AppColors.pgnMove,
                     ),
@@ -621,7 +621,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
     final playedEval = _formatEval(e);
     final bestEval = prevEval != null ? _formatEval(prevEval) : null;
 
-    const monoStyle = TextStyle(fontSize: 11, fontFamily: 'monospace');
+    const monoStyle = TextStyle(fontSize: 12, fontFamily: 'SourceCodePro');
 
     final spans = <InlineSpan>[
       TextSpan(

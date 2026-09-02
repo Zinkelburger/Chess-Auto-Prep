@@ -17,6 +17,7 @@ A cross-platform chess app: opening repertoire builder/trainer, tactics, positio
 Current implementation map: **[docs/COMPONENT_MAP.md](docs/COMPONENT_MAP.md)**  
 Engine-vs-engine matches (in the app, headless, or from an agent): [docs/ENGINE_TOURNAMENT.md](docs/ENGINE_TOURNAMENT.md)  
 Planned / incomplete work: [docs/FUTURE_FEATURES.md](docs/FUTURE_FEATURES.md)
+Running the local CI gates and driving the app from a script (agents and humans): `scripts/ci.sh` and [.claude/skills/run-chess-auto-prep/SKILL.md](.claude/skills/run-chess-auto-prep/SKILL.md)
 
 ## Installing a release
 

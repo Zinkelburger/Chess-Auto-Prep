@@ -39,6 +39,30 @@ void main() {
     expect(asBlack.breakdown, contains('no blunders'));
   });
 
+  test('keeps the counted moves as moments, with the position they were '
+      'played in', () {
+    final asWhite = summarizeGameReview(_foolsMate, meWhite: true)!;
+    expect(asWhite.moments, hasLength(1));
+    final m = asWhite.moments.single;
+    expect(m.ply, 3);
+    expect(m.san, 'g4');
+    expect(m.fenBefore, startsWith('rnbqkbnr/pppp1ppp/8/4p3/8/5P2/PPPPP1PP/'));
+    expect(m.scoreCp, -600);
+    expect(m.bestSan, isNull, reason: 'no [%pv] stored');
+    expect(asWhite.hasMoments, isTrue);
+
+    final asBlack = summarizeGameReview(_foolsMate, meWhite: false)!;
+    expect(asBlack.moments, isEmpty);
+  });
+
+  test('withMoments keeps the counts and swaps the moves', () {
+    const stored = GameReviewSummary(blunders: 1, mistakes: 0, inaccuracies: 0);
+    final parsed = summarizeGameReview(_foolsMate, meWhite: true)!;
+    final merged = stored.withMoments(parsed.moments);
+    expect(merged.blunders, 1);
+    expect(merged.moments, parsed.moments);
+  });
+
   test('a game without eval comments is not analyzed', () {
     expect(summarizeGameReview(_unanalyzed, meWhite: true), isNull);
   });

@@ -119,7 +119,7 @@ class FullscreenGameView extends StatelessWidget {
                           style: const TextStyle(
                             color: AppColors.overlayInkMuted,
                             fontSize: 12,
-                            fontFamily: 'monospace',
+                            fontFamily: 'SourceCodePro',
                           ),
                         ),
                       ),
@@ -261,7 +261,7 @@ class FullscreenGameView extends StatelessWidget {
                           child: Text(
                             'Auto',
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: 12,
                               color: autoNextGame
                                   ? AppColors.starAccent
                                   : AppColors.overlayInkMuted,

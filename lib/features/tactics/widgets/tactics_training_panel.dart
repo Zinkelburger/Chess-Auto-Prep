@@ -414,7 +414,7 @@ class _TacticsStarRating extends StatelessWidget {
             child: Text(
               rating == 1 ? '(hidden from training)' : '',
               style: const TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 color: AppColors.onSurfaceMuted,
               ),
             ),

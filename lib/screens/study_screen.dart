@@ -21,7 +21,7 @@ import '../utils/app_messages.dart';
 import '../utils/app_shortcuts.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_breadcrumb_trail.dart';
-import '../widgets/app_mode_menu_button.dart';
+import '../widgets/app_mode_switcher.dart';
 import '../widgets/app_overflow_menu.dart';
 import '../widgets/app_settings_button.dart';
 import '../widgets/board_editor/board_editor_dialog.dart';
@@ -341,7 +341,7 @@ class _StudyScreenState extends State<StudyScreen> {
             autofocus: true,
             minLines: 6,
             maxLines: 14,
-            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+            style: const TextStyle(fontFamily: 'SourceCodePro', fontSize: 12),
             decoration: const InputDecoration(
               hintText:
                   'Paste one or more games in PGN…\n\n'
@@ -602,8 +602,8 @@ class _StudyScreenState extends State<StudyScreen> {
           title: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Study'),
-              const SizedBox(width: 16),
+              const AppModeSwitcher(),
+              const SizedBox(width: 12),
               Flexible(
                 child: StudyPickerBar(
                   study: _study,
@@ -659,7 +659,6 @@ class _StudyScreenState extends State<StudyScreen> {
               ),
             ],
           ),
-          const AppModeMenuButton(),
         ],
       ),
       body: TrainerKeyboardScope(

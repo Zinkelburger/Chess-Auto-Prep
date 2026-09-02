@@ -18,11 +18,6 @@ mixin _WindowOps on ChangeNotifier {
   abstract bool boardFlipped;
   Future<void> persistMetadata();
 
-  // Perspective and flip changes re-seat an active solitaire session, since
-  // the side being guessed for is derived from board orientation.
-  bool get isSolitaireMode;
-  void restartSolitaireForCurrentOrientation();
-
   bool isFullScreen = false;
 
   void orientBoardForCurrentGame() {
@@ -65,7 +60,6 @@ mixin _WindowOps on ChangeNotifier {
     notifyListeners();
     unawaited(persistPerspective());
     orientBoardForCurrentGame();
-    if (isSolitaireMode) restartSolitaireForCurrentOrientation();
     onReclaimFocus?.call();
   }
 
@@ -93,10 +87,11 @@ mixin _WindowOps on ChangeNotifier {
     await persistMetadata();
   }
 
+  /// Flipping only turns the board: a running solitaire session keeps the
+  /// side it was started for.
   void toggleBoardFlipped() {
     boardFlipped = !boardFlipped;
     notifyListeners();
-    if (isSolitaireMode) restartSolitaireForCurrentOrientation();
   }
 
   Future<void> toggleFullScreen() async {

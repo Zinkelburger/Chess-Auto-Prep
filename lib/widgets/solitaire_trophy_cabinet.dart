@@ -164,14 +164,14 @@ class _SolitaireTrophyCabinetState extends State<SolitaireTrophyCabinet> {
                         text: trophy.userMove,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontFamily: 'monospace',
+                          fontFamily: 'SourceCodePro',
                         ),
                       ),
                       const TextSpan(text: ', GM played '),
                       TextSpan(
                         text: trophy.gmMove,
                         style: const TextStyle(
-                          fontFamily: 'monospace',
+                          fontFamily: 'SourceCodePro',
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -182,8 +182,8 @@ class _SolitaireTrophyCabinetState extends State<SolitaireTrophyCabinet> {
                 Text(
                   '+$advStr advantage  |  ${_formatCp(trophy.userEvalCp)} vs ${_formatCp(trophy.gmEvalCp)}',
                   style: const TextStyle(
-                    fontSize: 11,
-                    fontFamily: 'monospace',
+                    fontSize: 12,
+                    fontFamily: 'SourceCodePro',
                     color: AppColors.onSurfaceSoft,
                   ),
                 ),
@@ -191,7 +191,7 @@ class _SolitaireTrophyCabinetState extends State<SolitaireTrophyCabinet> {
                 Text(
                   gameInfo,
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     color: AppColors.onSurfaceMuted,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -199,7 +199,7 @@ class _SolitaireTrophyCabinetState extends State<SolitaireTrophyCabinet> {
                 Text(
                   _formatDate(trophy.date),
                   style: const TextStyle(
-                    fontSize: 10,
+                    fontSize: 12,
                     color: AppColors.onSurfaceMuted,
                   ),
                 ),

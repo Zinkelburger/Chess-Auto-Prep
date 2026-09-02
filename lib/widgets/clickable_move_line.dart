@@ -115,7 +115,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
           style: TextStyle(
             fontSize: fontSize,
             color: AppColors.pgnMove,
-            fontFamily: 'monospace',
+            fontFamily: 'SourceCodePro',
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -138,7 +138,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
             style: TextStyle(
               fontSize: fontSize,
               color: AppColors.pgnMoveNumber,
-              fontFamily: 'monospace',
+              fontFamily: 'SourceCodePro',
             ),
           ),
         );
@@ -149,7 +149,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
             style: TextStyle(
               fontSize: fontSize,
               color: AppColors.pgnMoveNumber,
-              fontFamily: 'monospace',
+              fontFamily: 'SourceCodePro',
             ),
           ),
         );
@@ -230,7 +230,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
                           color: isActive
                               ? AppColors.pgnMoveCurrentFg
                               : AppColors.pgnMove,
-                          fontFamily: 'monospace',
+                          fontFamily: 'SourceCodePro',
                           fontWeight: isActive
                               ? FontWeight.bold
                               : FontWeight.normal,
@@ -257,7 +257,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
                 fontSize: fontSize - 1,
                 color: annotation.suffixColor ?? AppColors.pgnMove,
                 fontWeight: annotation.suffixFontWeight,
-                fontFamily: 'monospace',
+                fontFamily: 'SourceCodePro',
               ),
             ),
           );
@@ -266,7 +266,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
         spans.add(
           TextSpan(
             text: ' ',
-            style: TextStyle(fontSize: fontSize, fontFamily: 'monospace'),
+            style: TextStyle(fontSize: fontSize, fontFamily: 'SourceCodePro'),
           ),
         );
       } else {
@@ -276,7 +276,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
             style: TextStyle(
               fontSize: fontSize,
               color: AppColors.pgnMove,
-              fontFamily: 'monospace',
+              fontFamily: 'SourceCodePro',
             ),
           ),
         );

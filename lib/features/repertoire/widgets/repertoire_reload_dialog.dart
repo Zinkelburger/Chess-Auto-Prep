@@ -273,7 +273,7 @@ class _Verdict extends StatelessWidget {
               Text(
                 detail,
                 style: const TextStyle(
-                  fontSize: 12.5,
+                  fontSize: 13,
                   color: AppColors.onSurfaceSoft,
                 ),
               ),
@@ -338,7 +338,7 @@ class _LineGroup extends StatelessWidget {
                   child: Text(
                     name,
                     style: const TextStyle(
-                      fontSize: 12.5,
+                      fontSize: 13,
                       color: AppColors.inkSoft,
                     ),
                   ),

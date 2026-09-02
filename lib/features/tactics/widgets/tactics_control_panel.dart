@@ -16,6 +16,7 @@ import '../controllers/tactics_session_controller.dart';
 import '../services/tactics_solution_pgn.dart';
 import '../services/tactics_database.dart';
 import '../../../services/storage/storage_factory.dart';
+import '../../../theme/app_text_styles.dart';
 import '../../../utils/app_messages.dart';
 import '../../../utils/fen_utils.dart';
 import '../../../utils/app_shortcuts.dart';
@@ -302,22 +303,26 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
       child: Column(
         children: [
           if (_database.isExternalSet) _buildReviewBanner(),
-          Row(
-            children: [
-              Expanded(
-                child: TabBar(
-                  controller: _tabController,
-                  tabs: [
-                    const Tab(text: 'Tactic'),
-                    // Second slot: Browse when nothing is loaded, PGN analysis
-                    // while a puzzle is on the board — never both.
-                    Tab(text: _session.hasActivePosition ? 'PGN' : 'Browse'),
-                  ],
+          // Tabs only while a puzzle is up: Puzzle, and the game it came
+          // from. Idle there is nothing to tab between — the column is the
+          // home, and the browse list is a link on it with its own way back.
+          // (A tab that read "Browse" idle and "PGN" in a puzzle was a
+          // control that renamed itself.)
+          if (_session.hasActivePosition)
+            Row(
+              children: [
+                Expanded(
+                  child: TabBar(
+                    controller: _tabController,
+                    tabs: const [
+                      Tab(text: 'Puzzle'),
+                      Tab(text: 'Game'),
+                    ],
+                  ),
                 ),
-              ),
-              if (_session.hasActivePosition) _buildGameMenu(),
-            ],
-          ),
+                _buildGameMenu(),
+              ],
+            ),
           Expanded(
             child: TabBarView(
               controller: _tabController,
@@ -490,8 +495,6 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
                 TacticsImportPanel(
                   isImporting: _import.isImporting,
                   positions: _database.positions,
-                  clearDatabaseEnabled: !_import.isImporting,
-                  onClearDatabase: _confirmClearDatabase,
                   onBrowseTactics: () => _tabController.animateTo(1),
                 ),
             ],
@@ -572,6 +575,37 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
   // ---------------------------------------------------------------------------
 
   Widget _buildBrowseTab() {
+    return Column(
+      children: [
+        // The way back to the home column. Idle there is no tab bar, so the
+        // list carries its own.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 4, 8, 0),
+          child: Row(
+            children: [
+              TextButton.icon(
+                key: const Key('browse-back-button'),
+                onPressed: () => _tabController.animateTo(0),
+                icon: const Icon(Icons.arrow_back, size: 18),
+                label: const Text('Back'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'All tactics (${_database.positions.length})',
+                style: AppTextStyles.bodyStrong,
+              ),
+            ],
+          ),
+        ),
+        Expanded(child: _buildBrowseList()),
+      ],
+    );
+  }
+
+  Widget _buildBrowseList() {
     return TacticsBrowsePanel(
       positions: _database.positions,
       revision: _database.revision,

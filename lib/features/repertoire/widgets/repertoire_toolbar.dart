@@ -4,7 +4,7 @@ import '../../../constants/ui_breakpoints.dart';
 import '../../../models/repertoire_metadata.dart';
 import '../../../theme/app_colors.dart';
 import '../../../widgets/app_breadcrumb_trail.dart';
-import '../../../widgets/app_mode_menu_button.dart';
+import '../../../widgets/app_mode_switcher.dart';
 import '../../../widgets/app_overflow_menu.dart';
 import '../../../widgets/common/searchable_picker_dialog.dart';
 import '../../../widgets/layout/board_zone.dart';
@@ -86,12 +86,21 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     return AppBar(
       titleSpacing: 16,
       title: AppBarTitleWithTrail(
-        title: _titleIsSwitcher
-            ? RepertoireSwitcherTitle(
-                title: title,
-                onTap: generationLocked ? null : onSelectRepertoire,
-              )
-            : title,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const AppModeSwitcher(),
+            const SizedBox(width: 12),
+            Flexible(
+              child: _titleIsSwitcher
+                  ? RepertoireSwitcherTitle(
+                      title: title,
+                      onTap: generationLocked ? null : onSelectRepertoire,
+                    )
+                  : title,
+            ),
+          ],
+        ),
       ),
       actions: [
         BoardZoneControls(trapNavigation: trapNavigation),
@@ -137,7 +146,6 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
             ),
           ],
         ),
-        const AppModeMenuButton(),
       ],
     );
   }
@@ -457,7 +465,7 @@ class RepertoireGenerationStatusChip extends StatelessWidget {
                   Text(
                     isPaused ? 'Paused' : (label ?? 'Building...'),
                     style: const TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       color: AppColors.onSurfaceSoft,
                     ),
                   ),

@@ -370,7 +370,7 @@ mixin _RepertoireTabContent
                             value: false,
                             label: Text(
                               'Lines (${_controller.repertoireLines.length})',
-                              style: const TextStyle(fontSize: 11),
+                              style: const TextStyle(fontSize: 12),
                             ),
                             icon: const Icon(Icons.list, size: 14),
                           ),
@@ -378,7 +378,7 @@ mixin _RepertoireTabContent
                             value: true,
                             label: Text(
                               'Traps (${_trapSession.traps.length})',
-                              style: const TextStyle(fontSize: 11),
+                              style: const TextStyle(fontSize: 12),
                             ),
                             icon: Icon(
                               Icons.warning_amber_rounded,

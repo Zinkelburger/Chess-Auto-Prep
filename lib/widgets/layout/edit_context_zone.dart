@@ -263,7 +263,7 @@ class _EditContextZoneState extends State<EditContextZone> {
                 color: isSelected ? AppColors.accent : AppColors.onSurfaceMuted,
               ),
               const SizedBox(width: 4),
-              Text(spec.label, style: const TextStyle(fontSize: 11)),
+              Text(spec.label, style: const TextStyle(fontSize: 12)),
             ],
           ),
           selected: isSelected,
@@ -458,7 +458,7 @@ class _EditContextZoneState extends State<EditContextZone> {
             child: Text(
               label,
               style: const TextStyle(
-                fontSize: 10,
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: AppColors.onSurfaceSoft,
               ),

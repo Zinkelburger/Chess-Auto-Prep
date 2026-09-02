@@ -38,17 +38,13 @@ const String _startFen = kStandardStartFen;
 
 /// Enum-valued keys, each mapped to a *different but valid* member.
 ///
-/// Deliberately avoiding `trappy` for `selection_mode`: trappy mode widens
-/// the eval window inside `toConfig` (a floor on `max_eval_loss_cp`, another
-/// on `min_eval_cp`), which is a real transform rather than a lost field and
-/// would mask the thing this test is looking for. It gets its own test below.
-/// `db_explorer` for `build_mode` is chosen for the opposite reason: PGN file
-/// paths are only carried in that mode, so any other choice would report
-/// `pgn_file_paths` as lost when it is being cleared on purpose.
+/// `db_explorer` for `build_mode` is chosen because PGN file paths are only
+/// carried in that mode, so any other choice would report `pgn_file_paths`
+/// as lost when it is being cleared on purpose.
 const Map<String, String> _enumAlternatives = {
   'search_algorithm': 'pure',
   'build_mode': 'dbExplorer',
-  'selection_mode': 'playable',
+  'selection_mode': 'engineOnly',
   'annotation_detail': 'none',
 };
 
@@ -83,6 +79,11 @@ const Map<String, String> _knownLossy = {
   'cdbdirect_read_ahead':
       'read from EvalDatabaseSettings, gated on availability',
   'batch_eval_lookups': 'gated on cdb-direct availability, which is probed',
+  // Same story, one source down the chain: the Lichess store is a machine-wide
+  // download, so where it lives and whether it is used are settings, not
+  // per-build knobs a saved config may override.
+  'enable_lichess_evals': 'read from EvalDatabaseSettings',
+  'lichess_evals_path': 'read from EvalDatabaseSettings',
 
   // ── Resolved against the host machine ────────────────────────────────
   // Same reason tree_build_config_roundtrip_test exempts it: the value is
@@ -386,45 +387,6 @@ void main() {
       );
     });
 
-    testWidgets('trappy mode widens the eval window rather than losing it', (
-      tester,
-    ) async {
-      const seed = TreeBuildConfig(
-        startFen: _startFen,
-        playAsWhite: true,
-        selectionMode: SelectionMode.trappy,
-        maxEvalLossCp: 30,
-        minEvalCp: 0,
-      );
-
-      final result = await _throughForm(tester, seed);
-
-      expect(result.selectionMode, SelectionMode.trappy);
-      expect(
-        result.maxEvalLossCp,
-        100,
-        reason: 'trappy lines cost material; a 30cp guard rejects all of them',
-      );
-      expect(result.minEvalCp, -100);
-    });
-
-    testWidgets('a user-set window wider than the trappy floor is kept', (
-      tester,
-    ) async {
-      const seed = TreeBuildConfig(
-        startFen: _startFen,
-        playAsWhite: true,
-        selectionMode: SelectionMode.trappy,
-        maxEvalLossCp: 250,
-        minEvalCp: -400,
-      );
-
-      final result = await _throughForm(tester, seed);
-
-      expect(result.maxEvalLossCp, 250);
-      expect(result.minEvalCp, -400);
-    });
-
     testWidgets('PGN paths are kept in db-explorer mode and cleared outside', (
       tester,
     ) async {
@@ -450,22 +412,6 @@ void main() {
         isEmpty,
         reason: 'only db-explorer builds may consume the sources panel files',
       );
-    });
-
-    testWidgets('a retired build mode falls back instead of crashing', (
-      tester,
-    ) async {
-      // Old snapshots may carry trapFinder, which the dropdown no longer
-      // offers; an unlisted value would trip the dropdown's assert.
-      const seed = TreeBuildConfig(
-        startFen: _startFen,
-        playAsWhite: true,
-        buildMode: BuildMode.trapFinder,
-      );
-
-      final result = await _throughForm(tester, seed);
-
-      expect(result.buildMode, BuildMode.stockfishExpectimax);
     });
 
     testWidgets('a plan point\'s reply exclusions do not leak into the form', (

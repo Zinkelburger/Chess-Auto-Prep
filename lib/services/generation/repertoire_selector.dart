@@ -16,12 +16,6 @@ import 'generation_config.dart';
 import 'node_selection.dart';
 import 'setup_bias.dart';
 
-/// Playable-mode blend: weight of expectimax value vs myEase when scoring
-/// our-move candidates.  60/40 keeps objective strength dominant while
-/// still letting naturalness break real ties.
-const double kPlayabilityExpectimaxWeight = 0.6;
-const double kPlayabilityEaseWeight = 1.0 - kPlayabilityExpectimaxWeight;
-
 class RepertoireSelector {
   final TreeBuildConfig config;
   final ExpectimaxCalculator ecaCalc;
@@ -111,13 +105,11 @@ class RepertoireSelector {
       );
     }
 
-    final winner = switch (config.selectionMode) {
+    final winner = _applyReplyPreference(node, switch (config.selectionMode) {
       SelectionMode.engineOnly => _pickByEngineEval(node),
       SelectionMode.dbWinRateOnly => _pickByDbWinRate(node),
       SelectionMode.expectimax => ecaCalc.scoreOurMoveChildren(node),
-      SelectionMode.playable => _pickByPlayability(node),
-      SelectionMode.trappy => _pickByOpponentCpl(node),
-    };
+    });
     // Layered biases, cheapest-overriding-last so the strongest signal wins:
     //   structure veto  → drop the pick if it walks into a disliked structure
     //   transfer        → prefer the move the skeleton played nearby
@@ -127,6 +119,58 @@ class RepertoireSelector {
     var w = _applyStructureVeto(node, winner);
     w = _applyTransferBias(node, w);
     return _applySetupBias(node, _applyMemorabilityBias(node, w));
+  }
+
+  /// Fewest-good-replies preference ([TreeBuildConfig.replyWindowCp] > 0).
+  ///
+  /// Among the candidates inside the eval-loss guard, the one leaving the
+  /// opponent the fewest replies within the window of their best wins; the
+  /// mode's own pick stands when it is one of them, and otherwise the
+  /// narrowest candidate with the highest expectimax value (then eval)
+  /// replaces it. The count is [goodReplyCount] — the tree's evaluated
+  /// replies — so a candidate whose replies were never expanded cannot be
+  /// compared and drops out, and when none can be compared the mode's pick
+  /// stands untouched.
+  ScoredChild? _applyReplyPreference(BuildTreeNode node, ScoredChild? winner) {
+    final window = config.replyWindowCp;
+    if (window <= 0 || winner == null) return winner;
+
+    final bestCp = bestSiblingEvalCp(
+      node.children,
+      playAsWhite: config.playAsWhite,
+    );
+    final counts = <BuildTreeNode, int>{};
+    for (final child in node.children) {
+      if (!child.hasEngineEval) continue;
+      if (child.evalForUs(config.playAsWhite) < bestCp - config.maxEvalLossCp) {
+        continue;
+      }
+      final n = goodReplyCount(child, window, playAsWhite: config.playAsWhite);
+      if (n != null) counts[child] = n;
+    }
+    if (counts.isEmpty) return winner;
+
+    var fewest = counts.values.first;
+    for (final n in counts.values) {
+      if (n < fewest) fewest = n;
+    }
+    if (counts[winner.child] == fewest) return winner;
+
+    BuildTreeNode? pick;
+    for (final entry in counts.entries) {
+      if (entry.value != fewest) continue;
+      final child = entry.key;
+      if (pick == null || _outranks(child, pick)) pick = child;
+    }
+    return ScoredChild(child: pick!, expectimaxValue: pick.expectimaxValue);
+  }
+
+  /// Ordering among equally narrow candidates: expectimax value, then eval.
+  bool _outranks(BuildTreeNode a, BuildTreeNode b) {
+    if (a.expectimaxValue != b.expectimaxValue) {
+      return a.expectimaxValue > b.expectimaxValue;
+    }
+    return a.evalForUs(config.playAsWhite) > b.evalForUs(config.playAsWhite);
   }
 
   /// The child of [node] that a pin selects, or null when [node] is not a
@@ -281,13 +325,8 @@ class RepertoireSelector {
   /// expectimax values are untouched, and the tolerance is capped at
   /// [TreeBuildConfig.maxEvalLossCp] so the override can never pick a move
   /// the eval-loss guard would reject.  0 disables.
-  ///
-  /// Skipped in trappy mode: a trappy pick deliberately trades eval for
-  /// trickiness, and a naturalness override within the same tolerance
-  /// would silently cancel exactly those picks.
   ScoredChild? _applyMemorabilityBias(BuildTreeNode node, ScoredChild? winner) {
     if (winner == null || config.memorabilityToleranceCp <= 0) return winner;
-    if (config.selectionMode == SelectionMode.trappy) return winner;
 
     final bestCp = bestSiblingEvalCp(
       node.children,
@@ -407,56 +446,6 @@ class RepertoireSelector {
     // Fallback: if no children have DB data, pick by engine eval
     if (bestChild == null) return _pickByEngineEval(node);
 
-    return ScoredChild(
-      child: bestChild,
-      expectimaxValue: bestChild.expectimaxValue,
-    );
-  }
-
-  /// Trappy mode: pick the child whose subtree maximizes total expected
-  /// opponent centipawn loss, subject to the eval-loss filter.
-  ///
-  /// The filtered pass requires an engine eval, but the fallback pass
-  /// historically considered ALL children — hence
-  /// `eligibleGuardsFallback: false`.
-  ScoredChild? _pickByOpponentCpl(BuildTreeNode node) {
-    final bestChild = pickChildByValue(
-      node.children,
-      playAsWhite: config.playAsWhite,
-      maxEvalLossCp: config.maxEvalLossCp,
-      eligible: (child) => child.hasEngineEval,
-      eligibleGuardsFallback: false,
-      value: (child) => child.cplValue,
-    );
-
-    if (bestChild == null) return _pickByEngineEval(node);
-    return ScoredChild(
-      child: bestChild,
-      expectimaxValue: bestChild.expectimaxValue,
-    );
-  }
-
-  /// Playable mode: blend expectimax value (60%) with myEase (40%)
-  /// to prefer moves that are both strong and natural.
-  ScoredChild? _pickByPlayability(BuildTreeNode node) {
-    if (node.children.isEmpty) return null;
-
-    double bestScore = -1.0;
-    BuildTreeNode? bestChild;
-
-    for (final child in node.children) {
-      if (!child.hasExpectimax) continue;
-      final myEase = child.myEase >= 0 ? child.myEase : 0.5;
-      final score =
-          child.expectimaxValue * kPlayabilityExpectimaxWeight +
-          myEase * kPlayabilityEaseWeight;
-      if (score > bestScore) {
-        bestScore = score;
-        bestChild = child;
-      }
-    }
-
-    if (bestChild == null) return _pickByEngineEval(node);
     return ScoredChild(
       child: bestChild,
       expectimaxValue: bestChild.expectimaxValue,

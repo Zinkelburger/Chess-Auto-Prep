@@ -55,32 +55,23 @@ mixin _TacticsImportPanelStartCard on _TacticsImportPanelStateBase {
     );
   }
 
-  // ── Tactics card ───────────────────────────────────────────────────────
+  // ── Play block ─────────────────────────────────────────────────────────
 
-  /// What you can play right now, counted by the only thing that means anything
-  /// here — what kind of mistake it was, and the button that plays them.
+  /// What you can play right now, counted by the only thing that means
+  /// anything here — what kind of mistake it was — and the button that plays
+  /// them. The count and the verb belong together; this is the one play
+  /// button on the screen.
   ///
-  /// That button was moved to the left pane once, on the theory that two play
-  /// buttons half a window apart read as two apps. What it actually produced
-  /// was a card that says "Ready to play: 84 blunders, 51 mistakes" with no way
-  /// to play them — you read the sentence, look for the verb, and it is on the
-  /// other side of the screen under a different heading. The count and the
-  /// button that acts on it belong together; the left pane's Study tactics
-  /// stays as the second half of *that* column's story (analysis → what its
-  /// results are good for), and both ask the session controller to start.
-  ///
-  /// This card used to say "157 of 842 puzzles ready to play". Both numbers
-  /// were true and neither was answerable: 842 counted positions the filters
-  /// have already ruled out (old games, mistake types switched off), so the
-  /// pair read as "684 puzzles are being kept from you" with no way to tell
-  /// why. What you actually want to know before pressing play is what is in
-  /// the queue, and that is "84 blunders, 51 mistakes".
-  Widget _buildStartCard(int positionCount) {
+  /// The line says what is in the queue ("84 blunders, 51 mistakes"), never
+  /// "157 of 842": the second number counted positions the filters have
+  /// already ruled out and read as puzzles being kept from you.
+  Widget _buildPlayBlock(int positionCount) {
     final matchingCount = _matchingCount;
 
-    // A single line; exactly one variant renders so the card height is stable.
+    // A single line; exactly one variant renders so the block height is
+    // stable.
     String line;
-    Color color = AppColors.onSurfaceSoft;
+    Color color = AppColors.onSurfaceMuted;
     if (positionCount == 0) {
       // With auto-start on, the usual reason for an empty database is that the
       // analysis is still working — say so rather than telling the user to
@@ -88,7 +79,7 @@ mixin _TacticsImportPanelStartCard on _TacticsImportPanelStateBase {
       line = widget.isImporting
           ? 'Analysing your games — the first puzzles appear here as they are '
                 'found.'
-          : 'No tactics yet — press Start engine analysis on the left.';
+          : 'No puzzles yet — analyse your games first.';
     } else if (matchingCount == 0) {
       line =
           'Nothing to play: your filters rule out every puzzle you have. '
@@ -97,67 +88,65 @@ mixin _TacticsImportPanelStartCard on _TacticsImportPanelStateBase {
     } else {
       line = 'Ready to play: $_readyBreakdown';
       if (widget.isImporting) {
-        // Green said "well done" about a review that is merely still running.
-        // The sentence carries the news; the colour was decoration.
         line = '$line — more are added as the review finds them';
       }
     }
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'My tactics',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                // The tooltip names what is behind the button, expiry first:
-                // "how long do my puzzles last" is the question people go
-                // looking for and the one a bare "Filters…" hides.
-                Tooltip(
-                  message:
-                      'How long puzzles stay in the queue, which mistake '
-                      'types to practise, and what order they come in',
-                  child: TextButton.icon(
-                    onPressed: _showSessionSettingsDialog,
-                    icon: const Icon(Icons.tune, size: 16),
-                    label: const Text('Filters…'),
-                    style: TextButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(line, style: TextStyle(fontSize: 12.5, color: color)),
-            const SizedBox(height: 12),
-            _buildPlayButton(positionCount, matchingCount),
-          ],
+    return HomeBlock(
+      heading: 'Play',
+      // The tooltip names what is behind the button, expiry first: "how long
+      // do my puzzles last" is the question people go looking for.
+      trailing: Tooltip(
+        message:
+            'How long puzzles stay in the queue, which mistake types to '
+            'practise, and what order they come in',
+        child: TextButton(
+          onPressed: _showSessionSettingsDialog,
+          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+          child: const Text('Filters…'),
         ),
       ),
+      children: [
+        _buildPlayButton(positionCount, matchingCount),
+        const SizedBox(height: 8),
+        Text(line, style: AppTextStyles.muted.copyWith(color: color)),
+        const SizedBox(height: 2),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: _conditionalTooltip(
+            message: positionCount == 0 ? 'No tactics to browse' : null,
+            child: TextButton(
+              key: const Key('browse-tactics-button'),
+              onPressed: positionCount > 0 ? widget.onBrowseTactics : null,
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                positionCount > 0
+                    ? 'Browse all $positionCount →'
+                    : 'Browse all →',
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
-  /// Play what the card just counted.
+  /// Play what the block just counted.
   ///
   /// It stays pressable during a review — the queue is whatever has been mined
-  /// so far, and puzzles keep arriving behind you while you solve. That is the
-  /// point of mining your own games; waiting for a ten-minute engine pass to
-  /// finish before you may look at your first blunder is not.
+  /// so far, and puzzles keep arriving behind you while you solve.
   Widget _buildPlayButton(int positionCount, int matchingCount) {
     final ready = matchingCount > 0;
     return _conditionalTooltip(
       message: ready
           ? null
           : positionCount == 0
-          ? 'Nothing mined yet — press Start engine analysis on the left'
+          ? 'Nothing mined yet — analyse your games first'
           : 'Your filters rule out every puzzle you have; press Filters… to '
                 'loosen them',
       child: SizedBox(
@@ -169,7 +158,7 @@ mixin _TacticsImportPanelStartCard on _TacticsImportPanelStateBase {
           icon: const Icon(Icons.play_arrow, size: 22),
           label: Text(
             ready ? 'Play tactics ($matchingCount)' : 'Play tactics',
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            style: AppTextStyles.bodyStrong,
           ),
         ),
       ),
@@ -177,8 +166,7 @@ mixin _TacticsImportPanelStartCard on _TacticsImportPanelStateBase {
   }
 
   /// The panel owns the board and the session; the request goes through the
-  /// shared controller so this button and the left pane's Study tactics start
-  /// the same thing in the same way.
+  /// shared controller.
   void _startSession() =>
       context.read<TacticsSessionController>().panel?.start?.call();
 

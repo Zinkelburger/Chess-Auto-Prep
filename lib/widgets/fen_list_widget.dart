@@ -333,7 +333,7 @@ class _FenListWidgetState extends State<FenListWidget>
                 ),
                 border: const OutlineInputBorder(),
                 errorText: errorText,
-                errorStyle: const TextStyle(fontSize: 10),
+                errorStyle: const TextStyle(fontSize: 12),
               ),
               onChanged: onChanged,
             ),
@@ -458,7 +458,7 @@ class _FenListWidgetState extends State<FenListWidget>
       ),
       subtitle: Text(
         subtitle,
-        style: const TextStyle(fontSize: 10, fontFamily: 'monospace'),
+        style: const TextStyle(fontSize: 12, fontFamily: 'SourceCodePro'),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),

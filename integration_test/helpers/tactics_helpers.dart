@@ -4,14 +4,15 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/main.dart';
+import 'package:chess_auto_prep/widgets/app_mode_switcher.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
 
 import 'board_helpers.dart';
 
-/// Switch modes through the app-bar mode menu (from a freshly booted app,
-/// where only one screen — and thus one menu button — has been built).
+/// Switch modes through the app-bar title (from a freshly booted app, where
+/// only one screen — and thus one switcher — has been built).
 Future<void> switchToMode(WidgetTester tester, String label) async {
-  await tester.tap(find.byIcon(Icons.view_module).first);
+  await tester.tap(find.byKey(AppModeSwitcher.switcherKey).first);
   await tester.pumpAndSettle();
   final item = find.ancestor(
     of: find.text(label),
@@ -90,7 +91,7 @@ Future<void> importAndWaitForPositions(
     await tester.pump(pollInterval);
   }
   if (reviewButton.evaluate().isEmpty) {
-    fail('The review strip never appeared after setting a username');
+    fail('The Analysis block never appeared after setting a username');
   }
 
   // Give the auto-start a few frames to take hold before deciding.
@@ -110,17 +111,17 @@ Future<void> importAndWaitForPositions(
     if (_studyButton().evaluate().isNotEmpty) return;
   }
   fail(
-    'Study tactics never reported any puzzles after reviewing $gameCount '
+    'Play tactics never reported any puzzles after reviewing $gameCount '
     'games for $username',
   );
 }
 
-/// The Study-tactics button once it has puzzles to offer. Its label carries the
-/// count ("Study tactics (12)"), which is exactly the signal that the review
+/// The Play-tactics button once it has puzzles to offer. Its label carries the
+/// count ("Play tactics (12)"), which is exactly the signal that the review
 /// produced something — with none it renders as a bare, disabled label.
-Finder _studyButton() => find.textContaining(RegExp(r'Study tactics \(\d+\)'));
+Finder _studyButton() => find.textContaining(RegExp(r'Play tactics \(\d+\)'));
 
-/// Tap the Study-tactics button, re-evaluating the finder after pumping so a
+/// Tap the Play-tactics button, re-evaluating the finder after pumping so a
 /// count that ticks up mid-test can't leave a stale reference behind.
 Future<void> tapStartSession(WidgetTester tester) async {
   await tester.ensureVisible(_studyButton());

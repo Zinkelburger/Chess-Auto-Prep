@@ -154,7 +154,7 @@ class _RepertoireTreePaneState extends State<RepertoireTreePane> {
           Text(
             'Repertoire tree',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: FontWeight.w600,
               color: Colors.grey[400],
             ),

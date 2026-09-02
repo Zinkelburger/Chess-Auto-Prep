@@ -24,7 +24,12 @@ enum AuditFindingType {
 enum AuditSeverity { critical, warning, info }
 
 /// Source that detected a missing opponent response.
-enum MissingResponseSource { lichess, maia, clash }
+///
+/// [chessDb] and [engine] are the odd ones out: the other three say the
+/// move is *played*, these say it is *good* — a reply ChessDB or Stockfish's
+/// MultiPV scores close to the opponent's best, whether or not anyone plays
+/// it.
+enum MissingResponseSource { lichess, maia, clash, chessDb, engine }
 
 class AuditFinding {
   final AuditFindingType type;
@@ -59,12 +64,16 @@ class AuditFinding {
   final int? gameCount;
 
   /// For MissingResponse: probability from Maia or play rate from Lichess.
+  /// Null for a ChessDB or engine finding, which rank the move by score,
+  /// not by use.
   final double? probability;
 
   /// For MissingResponse: which source flagged the gap.
   final MissingResponseSource? source;
 
   /// For DeadEnd: how many opponent continuations exist beyond the leaf.
+  /// For a ChessDB MissingResponse: how many opponent moves score inside
+  /// the reply window at this position, the flagged one included.
   final int? continuationCount;
 
   /// For DeadEnd: the specific opponent moves not covered (SAN).
@@ -178,9 +187,12 @@ class AuditFinding {
         final numbered = _sanWithMoveNumber(move, movePath.length);
         final probLabel = _missingMoveLocalProbLabel;
         final transTag = transposesIntoRepertoire ? ' · transposes' : '';
-        final prefix = source == MissingResponseSource.clash
-            ? 'Clash'
-            : 'Missing';
+        final prefix = switch (source) {
+          MissingResponseSource.clash => 'Clash',
+          MissingResponseSource.chessDb ||
+          MissingResponseSource.engine => 'Strong reply',
+          _ => 'Missing',
+        };
         return '$prefix: $numbered ($probLabel$transTag)';
       case AuditFindingType.weakPosition:
         return 'Weak position: eval ${positionEvalCp}cp';
@@ -224,6 +236,19 @@ class AuditFinding {
   }
 
   String get _missingMoveLocalProbLabel {
+    if (source == MissingResponseSource.chessDb ||
+        source == MissingResponseSource.engine) {
+      final who = source == MissingResponseSource.engine
+          ? 'Stockfish'
+          : 'ChessDB';
+      final gap = evalLossCp ?? 0;
+      final gapLabel = gap == 0
+          ? '$who: equal to their best'
+          : '$who: ${gap}cp behind their best';
+      final count = continuationCount;
+      if (count == null) return gapLabel;
+      return '$gapLabel · $count good move${count == 1 ? '' : 's'} here';
+    }
     final p = probability ?? 0;
     final probStr = _formatProbability(p);
     if (source == MissingResponseSource.lichess) {

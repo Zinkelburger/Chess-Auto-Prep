@@ -119,13 +119,15 @@ mixin _MetadataOps on ChangeNotifier {
   /// Like [persistMoveComments] but bound to a specific [game] object, so
   /// debounced edits that flush after the user has switched games still patch
   /// the game they were typed on.
+  ///
+  /// The in-memory game is always updated, so a pasted collection's "Copy
+  /// PGN" carries the edits too; only the write to disk needs a file.
   void persistMoveCommentsFor(PgnGameEntry game, String updatedPgnMovetext) {
-    if (filePath == null) return;
-
     final headerEnd = _headerBlockEndRe.allMatches(game.pgnText).last;
     final headerPart = game.pgnText.substring(0, headerEnd.end);
     game.pgnText = '$headerPart\n$updatedPgnMovetext\n';
 
+    if (filePath == null) return;
     unawaited(persistMetadata());
   }
 }

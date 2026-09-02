@@ -4,15 +4,16 @@
 /// Sits between [SolitaireController] — which owns the guessing rules, timers
 /// and score, and knows nothing about a viewer — and the [PgnViewerHandle]
 /// that drives the board and movetext. Everything here is that translation:
-/// starting a session against the current game, routing a board move to either
-/// a guess or an exploratory variation, and writing the finished guess log back
-/// into the game.
+/// the setup step before a session, starting one against the current game,
+/// routing a board move to either a guess or an exploratory variation, and
+/// writing the finished guess log back into the game.
 ///
 /// `PgnViewerController` keeps its public solitaire API and delegates here, so
 /// call-sites in the screens are unchanged.
 library;
 
-import 'package:dartchess/dartchess.dart';
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -20,16 +21,67 @@ import '../../services/solitaire_trophy_service.dart';
 import 'pgn_viewer_handle.dart';
 import 'solitaire_controller.dart';
 
+/// The choices offered before a session starts. Mutable while the setup strip
+/// is open; read once by [ViewerSolitaireSession.begin].
+class SolitaireSetup {
+  /// Which side's moves to guess. Defaults to the side at the bottom of the
+  /// board.
+  bool userIsWhite;
+
+  /// Begin at the move on screen instead of the start of the game — the
+  /// moves before it stay visible.
+  bool fromCurrentMove;
+
+  /// Also drill the saved sidelines, in movetext order.
+  bool includeVariations;
+
+  /// Mainline ply the cursor was on when setup opened.
+  final int currentMainlinePly;
+
+  /// Whether "from this move" is on offer: the cursor is on the mainline,
+  /// somewhere between the first and last move.
+  final bool canStartHere;
+
+  /// Whether the game has saved sidelines to drill.
+  final bool hasSidelines;
+
+  /// The first move a "from here" session would play — "move 13" or
+  /// "move 13…" — for the setup strip's label. Empty when unknown.
+  final String startHereLabel;
+
+  SolitaireSetup({
+    required this.userIsWhite,
+    required this.fromCurrentMove,
+    required this.includeVariations,
+    required this.currentMainlinePly,
+    required this.canStartHere,
+    required this.hasSidelines,
+    this.startHereLabel = '',
+  });
+
+  /// "move N" / "move N…" from a FEN's side-to-move and fullmove fields.
+  static String labelForFen(String? fen) {
+    if (fen == null) return '';
+    final fields = fen.split(' ');
+    if (fields.length < 6) return '';
+    final number = int.tryParse(fields[5]);
+    if (number == null) return '';
+    return fields[1] == 'w' ? 'move $number' : 'move $number…';
+  }
+}
+
 class ViewerSolitaireSession {
   ViewerSolitaireSession({
     required this.handle,
     required this.hasGames,
-    required this.hasFilePath,
     required this.userPlaysWhite,
-    required this.currentPosition,
     required this.stopAutoPlay,
     required this.onChanged,
-  });
+  }) {
+    controller.addListener(_onControllerChanged);
+    controller.onStepPending = _showBefore;
+    controller.onStepShown = _showAfter;
+  }
 
   /// Board + movetext the session drives. Held directly rather than through a
   /// supplier because the controller never reassigns it.
@@ -39,16 +91,8 @@ class ViewerSolitaireSession {
   /// because the controller replaces its game list on every load and slice.
   final bool Function() hasGames;
 
-  /// Whether the collection came from a file — guess notes are only written
-  /// back when there is something to write them to.
-  final bool Function() hasFilePath;
-
-  /// Which side the user is guessing for (the controller derives this from
-  /// board orientation, which the user can flip mid-session).
+  /// The side at the bottom of the board — the default side to guess for.
   final bool Function() userPlaysWhite;
-
-  /// Board position the next guess will be judged against.
-  final Position Function() currentPosition;
 
   /// Auto-play and solitaire cannot both drive the board.
   final VoidCallback stopAutoPlay;
@@ -62,8 +106,16 @@ class ViewerSolitaireSession {
   final SolitaireController controller = SolitaireController();
 
   static const _revealDelayKey = 'solitaire_reveal_delay_sec';
+  static const _includeVariationsKey = 'solitaire_include_variations';
 
   bool get isActive => controller.active;
+
+  /// The pending setup while the setup strip is open; null otherwise.
+  SolitaireSetup? setup;
+  bool get isConfiguring => setup != null;
+
+  /// Remembered across games within the app: whether sidelines are drilled.
+  bool _includeVariations = false;
 
   /// All-time trophy count, cached from the service so the app-bar counter
   /// doesn't hit storage on every rebuild. New trophies are detected after
@@ -82,18 +134,21 @@ class ViewerSolitaireSession {
     onChanged();
   }
 
+  /// The toolbar button: opens setup, or leaves whatever state is open.
   void toggle() {
     if (isActive) {
-      controller.stop();
-      onChanged();
+      stop();
+    } else if (isConfiguring) {
+      cancelSetup();
     } else {
-      _start();
+      beginSetup();
     }
   }
 
   Future<void> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     controller.revealDelaySec = prefs.getInt(_revealDelayKey) ?? 60;
+    _includeVariations = prefs.getBool(_includeVariationsKey) ?? false;
     final trophies = await SolitaireTrophyService.instance.loadAll();
     totalTrophyCount = trophies.length;
   }
@@ -105,83 +160,175 @@ class ViewerSolitaireSession {
     onChanged();
   }
 
-  void _start() {
-    if (!hasGames()) return;
-    stopAutoPlay();
-    handle.clearEphemeralMoves();
-    handle.goToMainLineIndex(0);
+  // ── Setup ──
 
-    controller.onAdvancePosition = () {
-      // Jump to the frontier rather than stepping forward: the user may have
-      // navigated back into the revealed region when an advance fires.
-      handle.goToMainLineIndex(controller.revealedPly);
-      onChanged();
-    };
-    controller.onResetPosition = () {
-      // no-op: board already shows the pre-move position since the move
-      // wasn't applied to the widget
-    };
-
-    controller.start(
-      mainLineLength: handle.mainLineLength,
-      userPlaysWhite: userPlaysWhite(),
-      whiteToMoveAtStart: currentPosition().turn == Side.white,
-      mainlineSans: handle.mainLineMoves,
+  void beginSetup() {
+    if (!hasGames() || handle.mainLineLength == 0) return;
+    final ply = handle.mainLineIndex;
+    setup = SolitaireSetup(
+      userIsWhite: userPlaysWhite(),
+      fromCurrentMove: false,
+      includeVariations: _includeVariations && handle.hasSavedSidelines,
+      currentMainlinePly: ply,
+      canStartHere:
+          !handle.inVariation && ply > 0 && ply < handle.mainLineLength,
+      hasSidelines: handle.hasSavedSidelines,
+      startHereLabel: SolitaireSetup.labelForFen(handle.currentFen),
     );
-    controller.removeListener(_onControllerChanged);
-    controller.addListener(_onControllerChanged);
     onChanged();
   }
 
-  /// Re-seat the session after the board is flipped or a new game loads: the
-  /// side being guessed for is derived from orientation, so both change it.
-  void restartForCurrentOrientation() {
-    handle.goToMainLineIndex(0);
-    controller.onGameChanged(
-      mainLineLength: handle.mainLineLength,
-      userPlaysWhite: userPlaysWhite(),
-      whiteToMoveAtStart: currentPosition().turn == Side.white,
-      mainlineSans: handle.mainLineMoves,
+  void updateSetup({
+    bool? userIsWhite,
+    bool? fromCurrentMove,
+    bool? includeVariations,
+  }) {
+    final s = setup;
+    if (s == null) return;
+    if (userIsWhite != null) s.userIsWhite = userIsWhite;
+    if (fromCurrentMove != null) s.fromCurrentMove = fromCurrentMove;
+    if (includeVariations != null) s.includeVariations = includeVariations;
+    onChanged();
+  }
+
+  void cancelSetup() {
+    setup = null;
+    onChanged();
+  }
+
+  /// Start the session the setup strip describes.
+  void begin() {
+    final s = setup;
+    if (s == null) return;
+    setup = null;
+    _includeVariations = s.includeVariations;
+    unawaited(
+      SharedPreferences.getInstance().then(
+        (p) => p.setBool(_includeVariationsKey, s.includeVariations),
+      ),
+    );
+    _start(
+      userIsWhite: s.userIsWhite,
+      fromMainlinePly: s.fromCurrentMove && s.canStartHere
+          ? s.currentMainlinePly
+          : 0,
+      includeVariations: s.includeVariations,
     );
   }
 
-  void stop() => controller.stop();
+  void _start({
+    required bool userIsWhite,
+    required int fromMainlinePly,
+    required bool includeVariations,
+  }) {
+    if (!hasGames()) return;
+    final script = handle.buildSolitaireScript(
+      fromMainlinePly: fromMainlinePly,
+      includeVariations: includeVariations,
+    );
+    if (script == null || script.isEmpty) {
+      onChanged();
+      return;
+    }
+    stopAutoPlay();
+    handle.clearEphemeralMoves();
+    // Rewind before the frontier is set, so the jump is not clamped against
+    // a previous session's reveal state.
+    handle.setSolitaireReveal(null);
+    handle.goToMainLineIndex(fromMainlinePly);
+    controller.start(script: script, userPlaysWhite: userIsWhite);
+    onChanged();
+  }
+
+  /// A new game has loaded under a running session: start over on it, with
+  /// the side taken from the board again (a per-game perspective may have
+  /// flipped it) and the same sidelines choice.
+  void restartForNewGame() {
+    if (!isActive) return;
+    _start(
+      userIsWhite: userPlaysWhite(),
+      fromMainlinePly: 0,
+      includeVariations: _includeVariations,
+    );
+  }
+
+  void stop() {
+    if (isActive) controller.stop();
+    onChanged();
+  }
 
   void revealCurrentMove() {
     if (!isActive || !controller.waitingForUser) return;
-    final mainIdx = controller.revealedPly;
-    final moveHistory = handle.mainLineMoves;
-    if (mainIdx >= moveHistory.length) return;
-    controller.revealMove(moveHistory[mainIdx]);
+    controller.revealMove();
   }
 
-  /// Route a board move: a guess at the frontier, exploratory analysis
-  /// anywhere else.
+  void hintCurrentMove() {
+    if (!isActive) return;
+    controller.hintMove();
+  }
+
+  /// Route a board move: a guess when the board sits on the position the
+  /// current step is asked from, exploratory analysis anywhere else.
   ///
-  /// Only a move played at the frontier counts as a guess. Anywhere else —
-  /// browsing the revealed region, inside a variation, or after completion —
-  /// it's exploratory analysis recorded as the user's own variation.
+  /// Browsing the revealed region, sitting inside a sideline the drill is not
+  /// on, or playing on after completion is all recorded as the user's own
+  /// variation, never judged.
   void handleBoardMove(String san) {
+    final step = controller.currentStep;
     if (controller.isComplete ||
-        handle.inVariation ||
-        handle.mainLineIndex != controller.revealedPly) {
+        !controller.waitingForUser ||
+        step == null ||
+        !_boardIsAt(step)) {
       handle.addEphemeralMove(san);
       return;
     }
 
-    final mainIdx = controller.revealedPly;
-    final moveHistory = handle.mainLineMoves;
-    if (mainIdx >= moveHistory.length) return;
-
-    final expectedSan = moveHistory[mainIdx];
-    final correct = controller.handleMove(san, currentPosition(), expectedSan);
+    final correct = controller.handleMove(san);
     if (!correct) {
-      // Show the wrong attempt live as a variation at its ply.
+      // Show the wrong attempt live as an alternative at its position.
       handle.recordVariationMove(san);
     }
   }
 
+  bool _boardIsAt(SolitaireStep step) {
+    final ply = step.mainlinePly;
+    if (ply != null) return !handle.inVariation && handle.mainLineIndex == ply;
+    final parentId = step.parentNodeId;
+    if (parentId == null) {
+      return !handle.inVariation && handle.mainLineIndex == step.branchPly;
+    }
+    return handle.currentVariationNodeId == parentId;
+  }
+
+  // ── Board glue ──
+
+  void _showBefore(SolitaireStep step) {
+    final ply = step.mainlinePly;
+    if (ply != null) {
+      handle.goToMainLineIndex(ply);
+      return;
+    }
+    final parent = step.parentNode;
+    if (parent == null) {
+      handle.goToMainLineIndex(step.branchPly);
+    } else {
+      handle.goToVariationNode(parent, step.branchPly);
+    }
+  }
+
+  void _showAfter(SolitaireStep step) {
+    final ply = step.mainlinePly;
+    if (ply != null) {
+      handle.goToMainLineIndex(ply + 1);
+    } else {
+      handle.goToVariationNode(step.node!, step.branchPly);
+    }
+  }
+
   void _onControllerChanged() {
+    // Pushed before any navigation the controller triggers next, so a jump
+    // to the new frontier is not clamped against the old one.
+    handle.setSolitaireReveal(controller.active ? controller.reveal : null);
     if (controller.isComplete && !_guessesSaved) {
       _guessesSaved = true;
       _injectGuessComments();
@@ -197,17 +344,29 @@ class ViewerSolitaireSession {
   /// "Tried: …") rides on the move's comment. Both persist through the PGN
   /// widget's serializer, so the game's own annotations survive intact.
   void _injectGuessComments() {
-    if (!hasGames() || !hasFilePath()) return;
-    final notes = <int, String>{};
-    final wrongByPly = <int, List<String>>{};
+    if (!hasGames()) return;
+    final mainNotes = <int, String>{};
+    final mainWrong = <int, List<String>>{};
+    final nodeNotes = <int, String>{};
+    final nodeWrong = <int, List<String>>{};
     for (final g in controller.guessLog) {
-      notes[g.ply] = g.note;
-      if (g.wrongAttempts.isNotEmpty) {
-        wrongByPly[g.ply] = g.wrongAttempts;
+      final step = g.step;
+      final ply = step.mainlinePly;
+      if (ply != null) {
+        mainNotes[ply] = g.note;
+        if (g.wrongAttempts.isNotEmpty) mainWrong[ply] = g.wrongAttempts;
+        continue;
+      }
+      nodeNotes[step.node!.id] = g.note;
+      final parentId = step.parentNodeId;
+      if (g.wrongAttempts.isNotEmpty && parentId != null) {
+        nodeWrong[parentId] = g.wrongAttempts;
       }
     }
-    handle.addGuessVariations(wrongByPly);
-    handle.addGuessAnnotations(notes);
+    if (mainWrong.isNotEmpty) handle.addGuessVariations(mainWrong);
+    if (nodeWrong.isNotEmpty) handle.addGuessNodeVariations(nodeWrong);
+    if (mainNotes.isNotEmpty) handle.addGuessAnnotations(mainNotes);
+    if (nodeNotes.isNotEmpty) handle.addGuessNodeAnnotations(nodeNotes);
   }
 
   void dispose() {

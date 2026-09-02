@@ -194,6 +194,9 @@ class AppShortcut {
   ]);
 
   static const revealMove = AppShortcut([KeyChord(LogicalKeyboardKey.keyR)]);
+
+  /// Solitaire only: highlight the piece that moves.
+  static const hintMove = AppShortcut([KeyChord(LogicalKeyboardKey.keyH)]);
   static const pastePgn = AppShortcut([
     KeyChord(LogicalKeyboardKey.keyV, control: true),
   ]);
@@ -264,6 +267,7 @@ class AppShortcut {
     searchGames,
     solitaire,
     revealMove,
+    hintMove,
     pastePgn,
     commentMove,
     browseInViewer,

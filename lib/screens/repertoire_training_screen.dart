@@ -21,7 +21,7 @@ import '../theme/app_text_styles.dart';
 import '../utils/app_shortcuts.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_breadcrumb_trail.dart';
-import '../widgets/app_mode_menu_button.dart';
+import '../widgets/app_mode_switcher.dart';
 import '../widgets/app_overflow_menu.dart';
 import '../widgets/app_settings_button.dart';
 import '../widgets/pgn_viewer_widget.dart';
@@ -329,7 +329,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Repertoire Trainer', style: theme.textTheme.titleMedium),
+            const AppModeSwitcher(),
             if (repertoire != null)
               Text(
                 repertoire.name,
@@ -377,7 +377,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
             ),
           ],
         ),
-        const AppModeMenuButton(),
         const SizedBox(width: 8),
       ],
     );
@@ -966,7 +965,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
             child: Text(
               'Peeking mid-training — clicking moves here won\'t touch the '
               'training board.',
-              style: TextStyle(fontSize: 11, color: Colors.orange[700]),
+              style: TextStyle(fontSize: 12, color: Colors.orange[700]),
             ),
           ),
         Expanded(

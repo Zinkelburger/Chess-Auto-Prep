@@ -27,7 +27,6 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
 
   void _goToMainLineMove(int moveIndex) {
     // Solitaire: the model clamps to the revealed frontier.
-    _m.revealedPly = widget.revealedPly;
     if (!_m.goToMainLineMove(moveIndex)) return;
     setState(_clearInlineLine);
     widget.onPositionChanged?.call(_currentPosition);
@@ -73,8 +72,8 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
       // In solitaire the frontier ply is still being guessed: its mainline
       // move and the source game's alternatives stay hidden there.
       final ply = _mainLineIndex;
-      final atSolitaireFrontier =
-          widget.revealedPly != null && ply >= widget.revealedPly!;
+      final revealedPly = _m.revealedPly;
+      final atSolitaireFrontier = revealedPly != null && ply >= revealedPly;
       var nextPly = ply;
       while (nextPly < _moveHistory.length &&
           isNullMoveSan(_moveHistory[nextPly].san)) {
@@ -91,7 +90,7 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
       for (final root in _playableNodes(
         _variationsByPly[ply] ?? const <MoveNode>[],
       )) {
-        if (atSolitaireFrontier && !root.isEphemeral) continue;
+        if (!_m.isNodeVisible(root, ply)) continue;
         candidates.add((
           san: root.san,
           color: root.isEphemeral
@@ -104,6 +103,7 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
     } else if (_analysisPath.isNotEmpty) {
       // Inside a variation: the children of the current node.
       for (final child in _playableNodes(_analysisPath.last.children)) {
+        if (!_m.isNodeVisible(child, _activeBranchPly)) continue;
         candidates.add((
           san: child.san,
           color: child.isEphemeral
@@ -237,13 +237,18 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
       return;
     }
     if (_analysisPath.isNotEmpty) {
-      final current = _analysisPath.last;
-      if (current.children.isNotEmpty) {
-        _goToAnalysisNode(current.children.first, _activeBranchPly);
-      }
+      final next = _visibleContinuation(_analysisPath.last);
+      if (next != null) _goToAnalysisNode(next, _activeBranchPly);
     } else if (_mainLineIndex < _moveHistory.length) {
       _goToMainLineMove(_mainLineIndex + 1);
     }
+  }
+
+  /// The sideline's own next move, unless solitaire has not revealed it yet.
+  MoveNode? _visibleContinuation(MoveNode node) {
+    if (node.children.isEmpty) return null;
+    final next = node.children.first;
+    return _m.isNodeVisible(next, _activeBranchPly) ? next : null;
   }
 
   void _goToEnd() {
@@ -253,8 +258,12 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
     }
     if (_analysisPath.isNotEmpty) {
       MoveNode current = _analysisPath.last;
-      while (current.children.isNotEmpty) {
-        current = current.children.first;
+      for (
+        var next = _visibleContinuation(current);
+        next != null;
+        next = _visibleContinuation(current)
+      ) {
+        current = next;
       }
       _goToAnalysisNode(current, _activeBranchPly);
     } else {
@@ -401,11 +410,12 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
 
   bool get _canGoForward {
     if (_inlineActive) return _inlineCursor < _inlineSans.length;
-    if (_analysisPath.isNotEmpty && _analysisPath.last.children.isNotEmpty) {
-      return true;
+    if (_analysisPath.isNotEmpty) {
+      return _visibleContinuation(_analysisPath.last) != null;
     }
-    final mainLimit = widget.revealedPly != null
-        ? widget.revealedPly!.clamp(0, _moveHistory.length)
+    final revealedPly = _m.revealedPly;
+    final mainLimit = revealedPly != null
+        ? revealedPly.clamp(0, _moveHistory.length)
         : _moveHistory.length;
     if (_analysisPath.isEmpty && _mainLineIndex < mainLimit) {
       return true;

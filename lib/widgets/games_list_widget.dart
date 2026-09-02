@@ -170,7 +170,7 @@ class _GamesListWidgetState extends State<GamesListWidget> {
                                 Text(
                                   game.eloDisplay,
                                   style: const TextStyle(
-                                    fontSize: 11,
+                                    fontSize: 12,
                                     color: AppColors.starAccent,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -182,7 +182,7 @@ class _GamesListWidgetState extends State<GamesListWidget> {
                             const SizedBox(height: 2),
                             Text(
                               game.subtitle,
-                              style: const TextStyle(fontSize: 11),
+                              style: const TextStyle(fontSize: 12),
                             ),
                           ],
                           if (game.site.isNotEmpty) ...[
@@ -190,7 +190,7 @@ class _GamesListWidgetState extends State<GamesListWidget> {
                             Text(
                               game.site,
                               style: const TextStyle(
-                                fontSize: 10,
+                                fontSize: 12,
                                 color: AppColors.info,
                               ),
                               maxLines: 1,

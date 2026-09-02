@@ -3,7 +3,7 @@ description: Chess tactics trainer and PGN analyzer
 
 publish_to: 'none'
 
-version: 1.12.2
+version: 1.13.0
 
 environment:
   sdk: '>=3.12.0 <4.0.0'
@@ -71,6 +71,33 @@ flutter:
     - tools/assets.lock.json
     - assets/pgn_collections/
     - assets/data/openings/
+
+  # Bundled so every desktop renders the same face: with no fonts here Flutter
+  # falls back to whatever fontconfig (Linux) or the OS (Windows) provides.
+  # Inter for UI text (drawn for screens at 12-14px, tabular figures);
+  # Source Code Pro for moves, FENs and evals. Both SIL OFL, see
+  # assets/fonts/LICENSE-*.txt.
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+        - asset: assets/fonts/Inter-Italic.ttf
+          style: italic
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
+    - family: SourceCodePro
+      fonts:
+        - asset: assets/fonts/SourceCodePro-Regular.ttf
+        - asset: assets/fonts/SourceCodePro-It.ttf
+          style: italic
+        - asset: assets/fonts/SourceCodePro-Semibold.ttf
+          weight: 600
+        - asset: assets/fonts/SourceCodePro-Bold.ttf
+          weight: 700
 
 flutter_launcher_icons:
   android: true

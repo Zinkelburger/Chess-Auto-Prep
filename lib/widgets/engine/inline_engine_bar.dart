@@ -482,7 +482,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                       san,
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontFamily: 'monospace',
+                        fontFamily: 'SourceCodePro',
                         fontSize: 14,
                       ),
                     ),
@@ -498,7 +498,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 13,
-                fontFamily: 'monospace',
+                fontFamily: 'SourceCodePro',
               ),
               textAlign: TextAlign.center,
             ),

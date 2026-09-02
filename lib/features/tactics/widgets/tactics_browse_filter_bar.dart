@@ -171,7 +171,7 @@ class _BrowseFilterBar extends StatelessWidget {
               const SizedBox(width: 8),
               ...TacticsStatusFilter.values.map(
                 (f) => ChoiceChip(
-                  label: Text(f.label, style: const TextStyle(fontSize: 11)),
+                  label: Text(f.label, style: const TextStyle(fontSize: 12)),
                   selected: filter.status == f,
                   onSelected: (_) =>
                       onFilterChanged(filter.copyWith(status: f)),
@@ -202,7 +202,7 @@ class _BrowseFilterBar extends StatelessWidget {
                 (s) => Padding(
                   padding: const EdgeInsets.only(right: 4),
                   child: ChoiceChip(
-                    label: Text(s.label, style: const TextStyle(fontSize: 11)),
+                    label: Text(s.label, style: const TextStyle(fontSize: 12)),
                     selected: filter.sort == s,
                     onSelected: (_) =>
                         onFilterChanged(filter.copyWith(sort: s)),
@@ -235,7 +235,7 @@ class _MistakeTypeChip extends StatelessWidget {
     // The word alone. The chip used to lead with the notation ("?? Blunders")
     // — a glyph and its own translation, side by side, saying one thing.
     return FilterChip(
-      label: Text(label, style: const TextStyle(fontSize: 11)),
+      label: Text(label, style: const TextStyle(fontSize: 12)),
       selected: enabled,
       onSelected: (_) => onToggle(),
       visualDensity: VisualDensity.compact,
@@ -296,7 +296,7 @@ class _FlawTagChip extends StatelessWidget {
             const SizedBox(width: 2),
             Text(
               selected.isEmpty ? 'Any tags' : selected.join(' + '),
-              style: const TextStyle(fontSize: 11),
+              style: const TextStyle(fontSize: 12),
             ),
           ],
         ),
@@ -350,7 +350,7 @@ class _MinRatingChip extends StatelessWidget {
             const SizedBox(width: 2),
             Text(
               minRating > 0 ? '$minRating★ and up' : 'Any star rating',
-              style: const TextStyle(fontSize: 11),
+              style: const TextStyle(fontSize: 12),
             ),
           ],
         ),

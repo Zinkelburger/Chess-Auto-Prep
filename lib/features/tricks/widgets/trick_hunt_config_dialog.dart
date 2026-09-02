@@ -149,7 +149,7 @@ class _TrickHuntConfigDialogState extends State<TrickHuntConfigDialog> {
                 '• A move is reported when its practical value beats even '
                 'the best move\'s raw eval — the expected mistakes outweigh '
                 'what the move concedes',
-                style: TextStyle(fontSize: 12.5, height: 1.35),
+                style: TextStyle(fontSize: 13, height: 1.35),
               ),
               const SizedBox(height: 6),
               const Text(

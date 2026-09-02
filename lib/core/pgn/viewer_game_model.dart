@@ -19,6 +19,7 @@ import '../../utils/pgn_comment_utils.dart' show joinComments, toggleQualityNag;
 import 'mainline_positions.dart';
 import 'pgn_dummy_mainline.dart';
 import 'pgn_variation_extractor.dart';
+import 'solitaire_reveal.dart';
 
 /// What [ViewerGameModel.addMove] did with the move.
 enum ViewerMoveKind {
@@ -48,9 +49,17 @@ class ViewerGameModel {
   int activeBranchPly = -1;
   List<MoveNode> analysisPath = [];
 
-  /// Solitaire frontier: mainline navigation never walks past this ply.
-  /// The widget re-syncs it from its prop before every navigation.
-  int? revealedPly;
+  /// What a running solitaire session lets the reader see: mainline
+  /// navigation never walks past its frontier ply, and sidelines it has not
+  /// reached cannot be entered. Null when no session is running.
+  SolitaireReveal? reveal;
+
+  /// Solitaire mainline frontier, or null when no session is running.
+  int? get revealedPly => reveal?.mainlinePly;
+
+  /// Whether a sideline node may be shown or entered right now.
+  bool isNodeVisible(MoveNode node, int branchPly) =>
+      reveal?.isNodeVisible(node, branchPly) ?? true;
 
   bool get hasAnalysis => variationsByPly.values.any((l) => l.isNotEmpty);
 
@@ -85,6 +94,43 @@ class ViewerGameModel {
     analysisPath = [];
   }
 
+  /// Take the annotations of a re-parsed copy of the loaded game — comments
+  /// and glyphs on the mainline moves — without touching the cursor, the
+  /// sidelines, or any analysis in progress.
+  ///
+  /// This is what an engine pass hands back: the same moves, now with
+  /// `[%eval]`/`[%pv]` comments on them. Reloading for that would park the
+  /// reader back at move one (and restart a solitaire game), so the model
+  /// adopts the new comments in place instead. Returns false when [parsed]
+  /// is not the same game — a different mainline, or a different set of
+  /// stored sidelines — in which case the caller must reload.
+  bool adoptAnnotations(PgnGame parsed) {
+    promoteNullMoveDummyMainline(parsed.moves);
+    final incoming = parsed.moves.mainline().toList();
+    if (incoming.length != moveHistory.length) return false;
+    for (var i = 0; i < incoming.length; i++) {
+      if (incoming[i].san != moveHistory[i].san) return false;
+    }
+    // Sidelines stored in the PGN must be the ones already loaded; only
+    // in-memory analysis (ephemeral nodes) may differ.
+    final storedRoots = extractPgnVariations(parsed, startPosition);
+    for (final ply in {...storedRoots.keys, ...variationsByPly.keys}) {
+      final theirs = storedRoots[ply]?.length ?? 0;
+      final mine = (variationsByPly[ply] ?? const [])
+          .where((n) => !n.isEphemeral)
+          .length;
+      if (theirs != mine) return false;
+    }
+    game = parsed;
+    for (var i = 0; i < incoming.length; i++) {
+      moveHistory[i]
+        ..comments = incoming[i].comments
+        ..startingComments = incoming[i].startingComments
+        ..nags = incoming[i].nags;
+    }
+    return true;
+  }
+
   // ── Navigation ───────────────────────────────────────────────────────
 
   /// Park the cursor after [moveIndex] mainline half-moves (clamped to the
@@ -109,6 +155,7 @@ class ViewerGameModel {
   /// Move the cursor onto [targetNode] inside the sidelines rooted at
   /// [branchPly]. Returns false when the node can't be located.
   bool goToAnalysisNode(MoveNode targetNode, int branchPly) {
+    if (!isNodeVisible(targetNode, branchPly)) return false;
     final roots = variationsByPly[branchPly];
     if (roots == null) return false;
     final path = findPathToNode(targetNode, roots);
@@ -234,11 +281,11 @@ class ViewerGameModel {
     return ViewerMoveKind.variation;
   }
 
-  /// Record [san] as an ephemeral sideline root at the current mainline ply
-  /// without navigating into it (solitaire wrong attempts, shown live).
-  /// Returns whether a node was added.
+  /// Record [san] as an ephemeral alternative at the current position —
+  /// a sideline root on the mainline, a child of the current node inside a
+  /// sideline — without navigating into it (solitaire wrong attempts, shown
+  /// live). Returns whether a node was added.
   bool recordVariationMove(String san) {
-    if (analysisPath.isNotEmpty) return false;
     final parsedMove = currentPosition.parseSan(san);
     if (parsedMove == null) return false;
     final Position newPos;
@@ -247,12 +294,96 @@ class ViewerGameModel {
     } catch (_) {
       return false;
     }
+    if (analysisPath.isNotEmpty) {
+      final parent = analysisPath.last;
+      if (parent.children.any((c) => c.san == san)) return false;
+      parent.addChild(san, newPos.fen, isEphemeral: true);
+      return true;
+    }
     final roots = variationsByPly.putIfAbsent(mainLineIndex, () => []);
     if (roots.any((r) => r.san == san)) return false;
     roots.add(
       MoveNode(san: san, fen: newPos.fen, position: newPos, isEphemeral: true),
     );
     return true;
+  }
+
+  /// The sideline node with [id], wherever it lives; null when absent.
+  MoveNode? findNodeById(int id) {
+    MoveNode? visit(MoveNode n) {
+      if (n.id == id) return n;
+      for (final c in n.children) {
+        final hit = visit(c);
+        if (hit != null) return hit;
+      }
+      return null;
+    }
+
+    for (final roots in variationsByPly.values) {
+      for (final root in roots) {
+        final hit = visit(root);
+        if (hit != null) return hit;
+      }
+    }
+    return null;
+  }
+
+  /// Persist wrong solitaire guesses made inside sidelines as saved
+  /// alternatives under the node they were played from ([wrongByParentId]
+  /// keyed by [MoveNode.id]). Live ephemeral matches are promoted, not
+  /// duplicated. Returns whether anything changed (→ persist).
+  bool addGuessNodeVariations(Map<int, List<String>> wrongByParentId) {
+    var changed = false;
+    wrongByParentId.forEach((parentId, sans) {
+      final parent = findNodeById(parentId);
+      final pos = parent?.positionOrNull;
+      if (parent == null || pos == null) return;
+      for (final san in sans) {
+        MoveNode? existing;
+        for (final c in parent.children) {
+          if (c.san == san) {
+            existing = c;
+            break;
+          }
+        }
+        if (existing != null) {
+          if (existing.isEphemeral) {
+            existing.isEphemeral = false;
+            changed = true;
+          }
+          continue;
+        }
+        final move = pos.parseSan(san);
+        if (move == null) continue;
+        final Position newPos;
+        try {
+          newPos = pos.play(move);
+        } catch (_) {
+          continue;
+        }
+        parent.addChild(san, newPos.fen, isEphemeral: false);
+        changed = true;
+      }
+      // A saved child under an ephemeral ancestor would be dropped by the
+      // serializer.
+      promoteNodeLineage(parent);
+    });
+    return changed;
+  }
+
+  /// Append solitaire guess notes to sideline moves ([notes] keyed by
+  /// [MoveNode.id]), keeping the line's own comments.
+  bool appendGuessNodeNotes(Map<int, String> notes) {
+    var changed = false;
+    notes.forEach((id, note) {
+      final node = findNodeById(id);
+      if (node == null) return;
+      final existing = (node.comment ?? '').trim();
+      if (existing.contains(note)) return;
+      setNodeComment(node, existing.isEmpty ? note : '$existing $note');
+      changed = true;
+    });
+    return changed;
   }
 
   /// Persist wrong solitaire guesses as real (non-ephemeral) sideline roots

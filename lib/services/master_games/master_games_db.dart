@@ -28,6 +28,7 @@ import 'package:sqlite3/sqlite3.dart';
 import '../../utils/pgn_utils.dart';
 import '../storage/app_paths.dart';
 import 'game_authority.dart';
+import 'master_games_query.dart';
 import 'movetext_codec.dart';
 import 'position_key.dart';
 
@@ -169,6 +170,13 @@ class MasterGame {
       ..writeln();
     return b.toString();
   }
+}
+
+/// One imported weekly issue, for the browser's issue picker.
+class TwicIssueSummary {
+  const TwicIssueSummary({required this.issue, required this.games});
+  final int issue;
+  final int games;
 }
 
 /// Coverage summary for the settings/prompt UI.
@@ -456,6 +464,53 @@ class MasterGamesDb {
     );
     final c = codec;
     return [for (final r in rows) _gameFromRow(r, c)];
+  }
+
+  /// Games matching [query].
+  ///
+  /// Every filtered column is indexed, so this is a range scan rather than a
+  /// walk over two million rows — with one exception: an event substring has
+  /// no index and falls back to a scan, which is why the browser only sends
+  /// one alongside something narrower.
+  List<MasterGame> searchGames(MasterGamesQuery query) {
+    final filter = buildMasterGamesWhere(query);
+    final rows = _db.select(
+      'SELECT $_gameCols FROM games'
+      '${filter.where.isEmpty ? '' : ' WHERE ${filter.where}'}'
+      ' ORDER BY ${masterGamesOrderBy(query.order)} LIMIT ? OFFSET ?',
+      [...filter.args, query.limit, query.offset],
+    );
+    final c = codec;
+    return [for (final r in rows) _gameFromRow(r, c)];
+  }
+
+  /// How many games [query] matches, ignoring its limit and offset.
+  int countGames(MasterGamesQuery query) {
+    final filter = buildMasterGamesWhere(query);
+    return _db
+            .select(
+              'SELECT COUNT(*) FROM games'
+              '${filter.where.isEmpty ? '' : ' WHERE ${filter.where}'}',
+              filter.args,
+            )
+            .first
+            .columnAt(0)
+        as int;
+  }
+
+  /// The newest imported issues, newest first, with their game counts.
+  List<TwicIssueSummary> recentIssues({int limit = 12}) {
+    final rows = _db.select(
+      'SELECT issue, games FROM twic_issues ORDER BY issue DESC LIMIT ?',
+      [limit],
+    );
+    return [
+      for (final r in rows)
+        TwicIssueSummary(
+          issue: r.columnAt(0) as int,
+          games: r.columnAt(1) as int,
+        ),
+    ];
   }
 
   static const _gameCols =

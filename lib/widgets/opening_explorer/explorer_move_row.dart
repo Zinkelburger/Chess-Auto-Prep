@@ -180,7 +180,7 @@ class _ExplorerMoveRowState extends State<ExplorerMoveRow> {
                       formatExplorerCount(move.total),
                       textAlign: TextAlign.right,
                       style: const TextStyle(
-                        fontSize: 11,
+                        fontSize: 12,
                         color: AppColors.onSurfaceSoft,
                       ),
                     ),
@@ -191,7 +191,7 @@ class _ExplorerMoveRowState extends State<ExplorerMoveRow> {
                       '${move.playRate.round()}%',
                       textAlign: TextAlign.right,
                       style: const TextStyle(
-                        fontSize: 11,
+                        fontSize: 12,
                         color: AppColors.onSurfaceMuted,
                       ),
                     ),
@@ -222,7 +222,7 @@ class ExplorerTableHeader extends StatelessWidget {
   const ExplorerTableHeader({super.key});
 
   static const _style = TextStyle(
-    fontSize: 10,
+    fontSize: 12,
     color: AppColors.onSurfaceMuted,
     fontWeight: FontWeight.w500,
   );
@@ -298,7 +298,7 @@ class ExplorerTotalsRow extends StatelessWidget {
               formatExplorerCount(response.totalGames),
               textAlign: TextAlign.right,
               style: const TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 color: AppColors.onSurfaceSoft,
               ),
             ),
@@ -308,7 +308,7 @@ class ExplorerTotalsRow extends StatelessWidget {
             child: Text(
               '100%',
               textAlign: TextAlign.right,
-              style: TextStyle(fontSize: 11, color: AppColors.onSurfaceMuted),
+              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
             ),
           ),
           const SizedBox(width: ExplorerColumns.gap),

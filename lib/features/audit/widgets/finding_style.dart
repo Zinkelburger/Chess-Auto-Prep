@@ -27,9 +27,17 @@ Color findingColor(AuditFinding finding) {
 }
 
 IconData findingIcon(AuditFinding finding) {
-  if (finding.type == AuditFindingType.missingResponse &&
-      finding.source == MissingResponseSource.clash) {
-    return Icons.menu_book_outlined;
+  if (finding.type == AuditFindingType.missingResponse) {
+    switch (finding.source) {
+      case MissingResponseSource.clash:
+        return Icons.menu_book_outlined;
+      case MissingResponseSource.chessDb:
+        return Icons.storage_outlined;
+      case MissingResponseSource.engine:
+        return Icons.memory;
+      default:
+        break;
+    }
   }
   return switch (finding.type) {
     AuditFindingType.mistake => Icons.error_outline,

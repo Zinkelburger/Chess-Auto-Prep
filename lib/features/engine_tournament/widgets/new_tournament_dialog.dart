@@ -365,7 +365,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
             children: [
               TextField(
                 controller: _fen,
-                style: AppTextStyles.body.copyWith(fontFamily: 'monospace'),
+                style: AppTextStyles.body.copyWith(fontFamily: 'SourceCodePro'),
                 decoration: InputDecoration(
                   labelText: 'FEN',
                   isDense: true,

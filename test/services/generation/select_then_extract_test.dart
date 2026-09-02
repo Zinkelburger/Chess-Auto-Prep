@@ -167,29 +167,22 @@ void main() {
       expect(lines, isNotEmpty);
     });
 
-    test('playable selection mode produces lines', () {
+    test('an opponent-mistake weight still produces lines', () {
       final t = StandardTree();
-      t.e4.myEase = 0.8;
-      t.d4.myEase = 0.6;
-      t.e4e5nf3.myEase = 0.7;
-      t.e4c5nf3.myEase = 0.5;
-      t.d4d5c4.myEase = 0.6;
-      t.d4nf6c4.myEase = 0.7;
-
       final tree = t.toTree();
       const config = TreeBuildConfig(
         startFen: _startFen,
         playAsWhite: true,
-        selectionMode: SelectionMode.playable,
+        selectionMode: SelectionMode.expectimax,
+        mistakeWeight: 100,
         minProbability: 0.01,
         minEvalCp: -9999,
         maxEvalCp: 9999,
       );
 
-      calculateTreeEase(tree);
-
       final ecaCalc = ExpectimaxCalculator(config: config);
       ecaCalc.calculate(tree);
+      ecaCalc.calculateCplValues(tree.root);
 
       final selector = RepertoireSelector(config: config, ecaCalc: ecaCalc);
       selector.select(tree);

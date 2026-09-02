@@ -103,7 +103,7 @@ class AppCheckbox extends StatelessWidget {
           child: Text(
             subtitle!,
             style: const TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               color: AppColors.onSurfaceSoft,
             ),
           ),

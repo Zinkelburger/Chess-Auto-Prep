@@ -90,7 +90,7 @@ class AddPlayerButton extends StatelessWidget {
                     Text(
                       source.detail,
                       style: const TextStyle(
-                        fontSize: 11.5,
+                        fontSize: 12,
                         color: AppColors.onSurfaceMuted,
                       ),
                     ),

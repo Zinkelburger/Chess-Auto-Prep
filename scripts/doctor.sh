@@ -102,28 +102,75 @@ wt=$(git worktree list 2>/dev/null | grep -cv "^$ROOT ")
 # --------------------------------------------------------------------------
 hdr "Agent contract"
 # --------------------------------------------------------------------------
-# These are what make an agent's runs reproducible on a fresh clone.
-for f in .claude/settings.json .claude/commands/gate.md \
-         .claude/skills/run-chess-auto-prep/SKILL.md \
-         .claude/skills/run-chess-auto-prep/driver.py \
-         scripts/ci.sh scripts/doctor.sh scripts/hooks/flutter_gate.sh \
-         lib/debug/agent_driver.dart; do
+# These are what make an agent's runs reproducible on a fresh clone. The list
+# is the whole contract: CLAUDE.md, the MCP registration, the hook, the slash
+# commands, both skills, the gate scripts and the in-app driver hooks.
+contract=(CLAUDE.md .mcp.json .claude/settings.json
+          .claude/commands/doctor.md .claude/commands/drive.md
+          .claude/commands/gate.md .claude/commands/run-skill-generator.md
+          .claude/skills/run-chess-auto-prep/SKILL.md
+          .claude/skills/run-chess-auto-prep/driver.py
+          .claude/skills/chess-prep-mcp/SKILL.md
+          .claude/skills/chess-prep-mcp/mcp_tools.py
+          scripts/ci.sh scripts/doctor.sh scripts/hooks/flutter_gate.sh
+          lib/debug/agent_driver.dart tools/mcp/chess_prep/__main__.py)
+tracked=0
+for f in "${contract[@]}"; do
   if [[ ! -e "$f" ]]; then
     bad "$f missing"
   elif git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
-    ok "$f tracked"
+    tracked=$((tracked + 1))
   else
     bad "$f is UNTRACKED — it exists only on this machine; a clone gets CLAUDE.md telling it to run a script that is not there"
   fi
 done
+[[ $tracked -eq ${#contract[@]} ]] && ok "all ${#contract[@]} contract files tracked"
+# Anything new under .claude/ that nobody added yet is the same bug in waiting.
+stray=$(git ls-files --others --exclude-standard .claude scripts/hooks 2>/dev/null | grep -v __pycache__ || true)
+[[ -n "$stray" ]] && bad "untracked under .claude/ or scripts/hooks/ — git add or delete: $(tr '\n' ' ' <<<"$stray")"
+# Every skill needs frontmatter with a name and a description that says when
+# to trigger; a skill without one never fires. Stdlib parse, no PyYAML needed.
+for sk in .claude/skills/*/SKILL.md; do
+  if ! python3 - "$sk" <<'PY' 2>/dev/null
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+m = re.match(r"^---\n(.*?)\n---\n", text, re.S)
+fm = m.group(1) if m else ""
+name = re.search(r"^name:\s*(\S+)", fm, re.M)
+desc = re.search(r"^description:\s*(\S.*)", fm, re.M)
+sys.exit(0 if (name and desc and len(desc.group(1)) > 40) else 1)
+PY
+  then bad "$sk: frontmatter needs \`name:\` and a \`description:\` that says when to trigger"; fi
+done
 [[ -x scripts/hooks/flutter_gate.sh ]] || bad "scripts/hooks/flutter_gate.sh is not executable — the gate silently does nothing"
 [[ -x scripts/ci.sh ]] || bad "scripts/ci.sh is not executable"
+grep -q 'scripts/hooks/flutter_gate.sh' .claude/settings.json 2>/dev/null \
+  || bad ".claude/settings.json no longer wires scripts/hooks/flutter_gate.sh as a PreToolUse hook"
 # `driver.py start --worktree` builds HEAD, so the wiring must exist in HEAD —
 # not just in somebody's working tree — or the driver hangs waiting for
 # extensions that were never registered.
 if ! git show HEAD:lib/main.dart 2>/dev/null | grep -q installAgentDriver; then
   bad "HEAD's lib/main.dart does not call installAgentDriver() — \`driver.py start --worktree\` will build an app the driver cannot talk to"
 fi
+
+# --------------------------------------------------------------------------
+hdr "MCP server"
+# --------------------------------------------------------------------------
+# .mcp.json runs the server from the working tree; an import error there
+# takes every mcp__chess-prep__* tool down with it.
+if out=$(python3 .claude/skills/chess-prep-mcp/mcp_tools.py check 2>&1); then
+  ok "$out"
+else
+  bad "chess-prep MCP server does not answer tools/list (python3 .claude/skills/chess-prep-mcp/mcp_tools.py check)"
+  [[ $QUIET -eq 1 ]] || sed 's/^/        /' <<<"$out" | tail -5
+fi
+if python3 -c 'import chess' 2>/dev/null; then
+  ok "python-chess installed (pgn_*, master_*, expectimax_*, chessdb_query work)"
+else
+  note "python-chess missing — pgn_*, master_*, expectimax_* and chessdb_query will fail: pip install -r tools/mcp/requirements.txt"
+fi
+mcp_dirty=$(git status --porcelain tools/mcp 2>/dev/null | grep -v __pycache__ | grep -c .)
+[[ $mcp_dirty -gt 0 ]] && note "$mcp_dirty uncommitted path(s) under tools/mcp — the MCP tools run that in-progress code"
 
 # --------------------------------------------------------------------------
 hdr "Conventions"

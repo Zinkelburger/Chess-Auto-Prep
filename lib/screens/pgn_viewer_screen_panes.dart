@@ -17,6 +17,9 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
   Future<void> _loadFile(String path);
   Future<void> _copyCurrentGamePgn();
   Future<void> _addCurrentGameToStudy();
+  Future<void> _leaveSolitaire();
+  void _analyseSolitaireGame();
+  Future<void> _guardingSolitaireProgress(VoidCallback action);
   void _reclaimFocus();
   List<SolitaireTrophy> get _detectedTrophies;
   Future<void> _detectTrophies();
@@ -80,6 +83,12 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
                 position: _controller.currentPosition,
                 flipped: _controller.boardFlipped,
                 recentMoveSquares: _pgnWidgetController.recentMoveSquares,
+                // A solitaire hint: the square of the piece that moves.
+                highlightedSquares: {
+                  if (_controller.isSolitaireMode &&
+                      solitaire.hintSquare != null)
+                    solitaire.hintSquare!,
+                },
                 onMove: (move) => _controller.onBoardMove(move.san),
                 // In solitaire, moves are allowed while guessing and again
                 // once the game completes (free exploration of the annotated
@@ -232,8 +241,12 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
             isAutoPlaying: _controller.isAutoPlaying,
             autoPlayDelaySec: _controller.autoPlayDelaySec,
             autoNextGame: _controller.autoNextGame,
-            onPrev: _controller.prevGame,
-            onNext: _controller.nextGame,
+            // Switching games throws a half-finished solitaire game away, so
+            // the user is asked first when there is something to lose.
+            onPrev: () =>
+                unawaited(_guardingSolitaireProgress(_controller.prevGame)),
+            onNext: () =>
+                unawaited(_guardingSolitaireProgress(_controller.nextGame)),
             onGoToGame: (index) {
               _controller.goToGame(index);
               // Typing a number leaves focus in the nav bar's box; put it back
@@ -262,11 +275,14 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
                 _controller.solitaire.waitingForUser,
             solitaireCanReveal:
                 _controller.isSolitaireMode && _controller.solitaire.canReveal,
+            solitaireCanHint:
+                _controller.isSolitaireMode && _controller.solitaire.canHint,
             solitaireRevealCountdown: _controller.isSolitaireMode
                 ? _controller.solitaire.revealCountdownSec
                 : 0,
             onReveal: _controller.revealCurrentMove,
-            onExitSolitaire: _controller.toggleSolitaire,
+            onHint: _controller.hintCurrentMove,
+            onExitSolitaire: () => unawaited(_leaveSolitaire()),
           ),
       ],
     );
@@ -428,21 +444,21 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
     final game = _controller.filteredGames[_controller.currentGameIndex];
     return Column(
       children: [
-        if (!_controller.isSolitaireMode)
+        if (!_controller.isSolitaireMode && !_controller.isSolitaireSetup)
           InlineEngineBar(
             fen: _controller.currentPosition.fen,
             onLineMoveTapped: _controller.onEngineLineMoveTapped,
           ),
+        if (_controller.isSolitaireSetup)
+          SolitaireSetupStrip(controller: _controller),
         if (_controller.isSolitaireMode)
-          SolitaireStatusBar(
-            controller: _controller,
-            onReclaimFocus: _reclaimFocus,
-          ),
+          SolitaireStatusBar(controller: _controller),
         if (_controller.isSolitaireMode && _controller.solitaire.isComplete)
           SolitaireCompleteBanner(
             controller: _controller,
             onCopyPgn: _copyCurrentGamePgn,
             onAddToStudy: _addCurrentGameToStudy,
+            onAnalyse: _analyseSolitaireGame,
           ),
         const Divider(height: 1),
         if (_editMode) _buildEditModeBar(),
@@ -461,9 +477,8 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
             onCommentsChanged: (movetext) =>
                 _controller.persistMoveCommentsFor(game, movetext),
             editMode: _editMode,
-            revealedPly: _controller.isSolitaireMode
-                ? _controller.solitaire.revealedPly
-                : null,
+            // Solitaire restarts on the new game once its moves are in.
+            onGameLoaded: _controller.onViewerGameLoaded,
           ),
         ),
       ],
@@ -498,7 +513,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
           Expanded(
             child: Text(
               'Changes are saved to the file',
-              style: AppTextStyles.caption.copyWith(fontSize: 11),
+              style: AppTextStyles.caption.copyWith(fontSize: 12),
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
             ),
@@ -513,7 +528,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
             ),
             label: Text(
               'Exit',
-              style: AppTextStyles.caption.copyWith(fontSize: 11),
+              style: AppTextStyles.caption.copyWith(fontSize: 12),
             ),
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -580,7 +595,7 @@ class _DeviationBanner extends StatelessWidget {
             ),
             child: Text(
               'Show my line',
-              style: AppTextStyles.caption.copyWith(fontSize: 11),
+              style: AppTextStyles.caption.copyWith(fontSize: 12),
             ),
           ),
         ],

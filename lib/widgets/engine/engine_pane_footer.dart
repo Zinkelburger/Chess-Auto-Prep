@@ -52,7 +52,7 @@ class EnginePaneFooter extends StatelessWidget {
                     icon: const Icon(Icons.my_location, size: 14),
                     label: const Text(
                       'Set as root',
-                      style: TextStyle(fontSize: 11),
+                      style: TextStyle(fontSize: 12),
                     ),
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 8),

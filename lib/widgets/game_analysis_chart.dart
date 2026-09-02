@@ -19,7 +19,6 @@ import '../utils/chess_utils.dart' show formatEvalDisplay;
 // These are chart marks — the white/black area fills represent the two sides,
 // not UI chrome.
 const _evalLineColor = AppColors.chartEvalLine;
-const _medianLineColor = AppColors.chartMedianLine;
 const _gridlineColor = AppColors.chartGridline;
 const _whiteAreaFill = AppColors.chartAreaWhite;
 const _blackAreaFill = AppColors.chartAreaBlack;
@@ -118,17 +117,6 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
         ? defaultCap
         : (maxAbs * 1.1).clamp(defaultCap, 800.0);
 
-    // Median evaluation across the game — a quick read on whether you were
-    // generally better, worse, or balanced. Shown as a horizontal reference
-    // line only when there is enough data for it to be meaningful.
-    final cpValues = [for (final e in evals) _clampCp(e).toDouble()]..sort();
-    double? medianCp;
-    if (cpValues.length >= 4) {
-      final mid = cpValues.length ~/ 2;
-      medianCp = cpValues.length.isOdd
-          ? cpValues[mid]
-          : (cpValues[mid - 1] + cpValues[mid]) / 2;
-    }
     const double minPxPerPly = 12.0;
     final plyCount = evals.isEmpty ? 1.0 : evals.last.ply.toDouble();
 
@@ -204,7 +192,7 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
                           return LineTooltipItem(
                             'Start',
                             TextStyle(
-                              fontSize: 11,
+                              fontSize: 12,
                               color: theme.textTheme.bodySmall?.color,
                             ),
                           );
@@ -218,7 +206,7 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
                           '${formatMoveAtPly(ply - 1, e.san)}'
                           '$classStr  $evalStr',
                           TextStyle(
-                            fontSize: 11,
+                            fontSize: 12,
                             color:
                                 _classColor(e.classification) ??
                                 theme.textTheme.bodySmall?.color,
@@ -233,26 +221,6 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
                   ),
                 ),
                 extraLinesData: ExtraLinesData(
-                  horizontalLines: [
-                    if (medianCp != null)
-                      HorizontalLine(
-                        y: medianCp,
-                        color: _medianLineColor.withAlpha(170),
-                        strokeWidth: 1,
-                        dashArray: [2, 4],
-                        label: HorizontalLineLabel(
-                          show: true,
-                          alignment: Alignment.topRight,
-                          padding: const EdgeInsets.only(right: 4, bottom: 2),
-                          style: const TextStyle(
-                            fontSize: 9,
-                            color: _medianLineColor,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          labelResolver: (_) => 'median',
-                        ),
-                      ),
-                  ],
                   verticalLines: [
                     if (currentPly != null &&
                         currentPly! >= 0 &&
@@ -486,7 +454,7 @@ class GameAnalysisSummary extends StatelessWidget {
                 Text(
                   'ACPL: $acpl',
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     color: AppColors.onSurfaceMuted,
                   ),
                 ),

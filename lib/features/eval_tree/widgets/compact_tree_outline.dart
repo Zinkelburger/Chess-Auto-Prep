@@ -276,7 +276,7 @@ class _CompactTreeRow extends StatelessWidget {
                 Text(
                   formatPackedEval(evalCp),
                   style: AppTextStyles.monoDense.copyWith(
-                    fontSize: 11,
+                    fontSize: 12,
                     color: AppColors.cpEval(evalCp),
                   ),
                 ),
@@ -286,7 +286,7 @@ class _CompactTreeRow extends StatelessWidget {
                 Text(
                   'V:${(node.expectimaxValue * 100).round()}%',
                   style: AppTextStyles.monoDense.copyWith(
-                    fontSize: 10,
+                    fontSize: 12,
                     color: AppColors.winProbability(node.expectimaxValue),
                   ),
                 ),
@@ -296,7 +296,7 @@ class _CompactTreeRow extends StatelessWidget {
                 Text(
                   '${(node.moveProbability * 100).round()}%',
                   style: AppTextStyles.monoDense.copyWith(
-                    fontSize: 10,
+                    fontSize: 12,
                     color: AppColors.onSurfaceMuted,
                   ),
                 ),

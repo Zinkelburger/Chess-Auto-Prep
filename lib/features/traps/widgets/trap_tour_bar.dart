@@ -224,7 +224,7 @@ class _TrapTourNarrative extends StatelessWidget {
         Text.rich(
           TextSpan(
             style: const TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               color: AppColors.onSurfaceSoft,
             ),
             children: [

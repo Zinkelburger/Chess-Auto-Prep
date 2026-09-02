@@ -23,10 +23,19 @@ reconstruct them from this file each session:
 | `/drive` | build, launch and drive the real app; screenshot what you changed |
 | `/run-skill-generator` | author or improve a skill, held to this repo's rules |
 
-They live in `.claude/commands/`. That directory, `.claude/skills/`,
-`.claude/settings.json` and `scripts/hooks/` are **tracked in git on purpose**:
-they are the whole reason a fresh clone behaves. `doctor.sh` fails if any of
-them drifts back to untracked.
+Two skills carry the detail the commands point at, and trigger on their own
+when a task matches their description:
+
+| Skill | Owns |
+|---|---|
+| `run-chess-auto-prep` | the app driver (`driver.py`): build, launch, tap, type, screenshot |
+| `chess-prep-mcp` | the chess-prep MCP server: expectimax builds, tournaments, master and own games, PGN trees, rosters; `mcp_tools.py` to call it from a shell |
+
+They live in `.claude/commands/` and `.claude/skills/`. Those directories,
+`.claude/settings.json`, `.mcp.json` and `scripts/hooks/` are **tracked in git
+on purpose**: they are the whole reason a fresh clone behaves. `doctor.sh`
+fails if any of them drifts back to untracked, and checks every skill's
+frontmatter.
 
 ## Keeping CI green (non-negotiable)
 
@@ -60,9 +69,13 @@ What it does, and why it exists:
   build, a one-off `flutter drive`) under the same lock, in your cwd.
 
 A `PreToolUse` hook (`.claude/settings.json` → `scripts/hooks/flutter_gate.sh`)
-denies raw `flutter test|analyze|run|build|drive`, `dart test` and `xvfb-run`
-from agent shells, pointing at `ci.sh` and the driver. It is not a suggestion:
-go through the gate.
+denies raw `flutter test|analyze|run|build|drive`, `dart test`, `build_runner`
+and `xvfb-run` from agent shells, pointing at `ci.sh` and the driver. It is
+not a suggestion: go through the gate. Everything else passes untouched —
+`flutter pub get`, `dart format`, `dart run tools/run_engine_tournament.dart`,
+the Python tests under `tools/mcp/` — because none of those is a Flutter
+build. The hook and this paragraph are kept in step; if you change one,
+change the other.
 
 CI pins Flutter (see `flutter-version` in `ci.yml`) so formatter output can't
 drift between stable releases. If you bump the pin, re-run `dart format` in the
@@ -78,6 +91,10 @@ tag build fails.
   "used after being disposed" teardown races. Already applied to `AppState`,
   `StudyController`, `TacticsDatabase`, `TacticsImportCoordinator`,
   `TacticsSessionController` — follow suit for new notifier services.
+- **`flutter test` blocks real HTTP.** The test binding answers every socket
+  with an empty 400, so a unit test that "downloads" silently gets nothing.
+  Stub the client in unit tests; only the benchmarks under `test/benchmark/`
+  and the Lichess controller test clear `HttpOverrides.global` deliberately.
 - **Integration tests** (`integration_test/app_test.dart`) assert real UI text
   and tooltips on the boot screen (e.g. `find.byTooltip('Engine settings…')`).
   If you rename or move boot-screen controls, update the test in the same
@@ -124,6 +141,27 @@ scripts/ci.sh lint     # layering + the 12px type floor; cheap, never queues
 The allowlist is deliberately one line long
 (`features/repertoire/controllers/build_launcher.dart`, which imports two form
 widgets). Shrink it; do not grow it.
+
+## Tooling beyond `lib/`
+
+Several programs live in this repo that the app does not ship. Know which
+one you are in before editing:
+
+| Path | What | Run it via |
+|---|---|---|
+| `tools/mcp/chess_prep/` | The chess-prep **MCP server** (`.mcp.json`): 44 tools at the time of writing (`mcp_tools.py check` prints the live count) for expectimax builds, engine tournaments, the master-games and own-games databases, PGN trees, ChessDB and roster prep. Appears in a session as `mcp__chess-prep__*`; load one with `ToolSearch "select:mcp__chess-prep__<tool>"`. | the `chess-prep-mcp` skill; `python3 .claude/skills/chess-prep-mcp/mcp_tools.py list\|describe\|call` from a shell; `python3 tools/mcp/test_*.py` |
+| `tools/fetch_assets.py` | Downloads the host Stockfish into `assets/executables/` (gitignored). Required before any build. | `python3 tools/fetch_assets.py` (`--check` to verify) |
+| `tools/run_engine_tournament.dart` | Headless engine-vs-engine matches; same directory layout as the app and the MCP tools (`docs/ENGINE_TOURNAMENT.md`) | `dart run tools/run_engine_tournament.dart …` |
+| `tools/bench/`, `tools/dart_api_test/`, `tools/experiments/` | Benchmarks and API harnesses; nothing here is imported by `lib/` | `dart run`, or `scripts/ci.sh with --` when it is heavy |
+| `tree_builder/` | Standalone C prototype of expectimax and the cdbdirect (local ChessDB) native build; the Dart port in `lib/services/generation/` is canonical | `make` inside it; see its README |
+| `python/twic-position-finder/` | A separate web service (`api.chessautoprep.com`), deployed on its own | its own README |
+| `packaging/`, `install_linux_desktop.sh` | Installers (.deb, flatpak, Windows) built by the release workflow from a release bundle | release CI |
+
+The MCP server and the app share data through files only: the server reads
+the app's `master_games.db` / `app_games.db` read-only, and writes its own
+runs under `~/Documents` and `~/.local/share/chess-prep/`. `expectimax_run`,
+`tournament_run`, `pgn_eval` and `pgn_audit` start Stockfish for minutes and
+are **not** behind the Flutter lock, so start one only when that is the task.
 
 ## Decomposition
 

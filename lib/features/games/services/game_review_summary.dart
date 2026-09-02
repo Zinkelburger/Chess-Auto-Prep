@@ -10,17 +10,67 @@ library;
 
 import '../../../services/game_analysis_controller.dart';
 
+/// One of my classified mistakes, with enough to draw it and open it: the
+/// position it was played in, the move, and what the engine wanted instead
+/// when the stored analysis says.
+class ReviewMoment {
+  const ReviewMoment({
+    required this.ply,
+    required this.san,
+    required this.fenBefore,
+    required this.classification,
+    this.scoreCp,
+    this.scoreMate,
+    this.bestSan,
+  });
+
+  /// 1-based: 1 = White's first move. Also the mainline index *after* the
+  /// move, which is where the viewer lands when the moment is opened.
+  final int ply;
+  final String san;
+  final String fenBefore;
+  final MoveClassification classification;
+
+  /// White-normalized eval after the move, as the graph shows it.
+  final int? scoreCp;
+  final int? scoreMate;
+
+  /// The engine's preferred move in [fenBefore], when a `[%pv]` was stored.
+  final String? bestSan;
+
+  bool get isWhiteMove => ply.isOdd;
+}
+
 /// Mistake counts for one player's moves in one analyzed game.
 class GameReviewSummary {
   const GameReviewSummary({
     required this.blunders,
     required this.mistakes,
     required this.inaccuracies,
+    this.moments = const [],
   });
 
   final int blunders;
   final int mistakes;
   final int inaccuracies;
+
+  /// The counted moves themselves, in game order. Empty when the counts came
+  /// from the review store rather than a stored eval series — the store keeps
+  /// the tally, not the moves.
+  final List<ReviewMoment> moments;
+
+  bool get hasMoments => moments.isNotEmpty;
+
+  /// The same counts, carrying [moments]. Used when a stored tally arrives for
+  /// a game whose eval series was already read: the store's verdict wins the
+  /// numbers, and the moves stay on the card.
+  GameReviewSummary withMoments(List<ReviewMoment> moments) =>
+      GameReviewSummary(
+        blunders: blunders,
+        mistakes: mistakes,
+        inaccuracies: inaccuracies,
+        moments: moments,
+      );
 
   bool get clean => blunders == 0 && mistakes == 0 && inaccuracies == 0;
 
@@ -48,6 +98,7 @@ GameReviewSummary summaryFromEvals(
   required bool meWhite,
 }) {
   var blunders = 0, mistakes = 0, inaccuracies = 0;
+  final moments = <ReviewMoment>[];
   for (final e in evals) {
     if (e.isWhiteMove != meWhite) continue;
     switch (e.classification) {
@@ -59,13 +110,25 @@ GameReviewSummary summaryFromEvals(
         inaccuracies++;
       case MoveClassification.interesting:
       case MoveClassification.normal:
-        break;
+        continue;
     }
+    moments.add(
+      ReviewMoment(
+        ply: e.ply,
+        san: e.san,
+        fenBefore: e.fenBefore,
+        classification: e.classification,
+        scoreCp: e.scoreCp,
+        scoreMate: e.scoreMate,
+        bestSan: e.bestLine.isEmpty ? null : e.bestLine.first,
+      ),
+    );
   }
   return GameReviewSummary(
     blunders: blunders,
     mistakes: mistakes,
     inaccuracies: inaccuracies,
+    moments: moments,
   );
 }
 

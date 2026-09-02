@@ -182,10 +182,10 @@ class BottomPaneState extends State<BottomPane>
               indicatorSize: TabBarIndicatorSize.label,
               dividerHeight: 0,
               labelStyle: const TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
-              unselectedLabelStyle: const TextStyle(fontSize: 11),
+              unselectedLabelStyle: const TextStyle(fontSize: 12),
               tabs: [
                 _buildTab('Findings', widget.findingsBadge, AppColors.warning),
                 _buildTab('Jobs', widget.jobsBadge, AppColors.accent),
@@ -224,7 +224,7 @@ class BottomPaneState extends State<BottomPane>
               child: Text(
                 '$badge',
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 12,
                   fontWeight: FontWeight.bold,
                   color: badgeColor ?? AppColors.onSurfaceMuted,
                 ),

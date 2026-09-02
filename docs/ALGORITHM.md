@@ -155,9 +155,9 @@ V(leaf)     = winProbability(evalCp)
 
 `P(child)` is the Maia/DB frequency of the opponent's move. The result `V` is displayed as "% win" (practical win rate given human opponents).
 
-### 5b. CPL Value Propagation (Trappy Mode)
+### 5b. CPL Value Propagation (Opponent-Mistake Weight)
 
-When `SelectionMode.trappy` is selected, a parallel propagation computes `cplValue` — the total expected centipawn loss by the opponent downstream from each node:
+A parallel propagation computes `cplValue` — the total expected centipawn loss by the opponent downstream from each node:
 
 ```
 cplV(leaf)     = 0
@@ -167,7 +167,7 @@ cplV(our_node) = max over eval-guarded children of cplV(child)
 
 Where `localCpl` is the probability-weighted centipawn loss at a single opponent node (how much the opponent loses on average relative to their best move). The `cplValue` accumulates this across the whole subtree.
 
-**Trappy selection** picks our moves to maximize `cplValue` instead of expectimax `V`. Build tolerances are automatically widened (matching the C `--traps` preset: `maxEvalLossCp` ≥ 100, `minEvalCp` relaxed to -100/-300 for White/Black) so the tree explores speculative territory where traps are more likely.
+**Opponent-mistake weight** (`mistakeWeight`, 0–100) folds this into the ordinary expectimax argmax the same way the novelty boost does: a candidate's value is scaled by `1 + w × min(1, cplValue / 100)` before the pick, inside the eval-loss window only, and the stored `V` stays unboosted. Because `cplValue` is probability weighted, a mistake opponents reach often counts for more than the same mistake deep in a rare line. Nothing widens any tolerance on its own: raise `maxEvalLossCp` to let the weight consider speculative tries, and use Pure search so those get searched subtrees. (There is no separate "trappy" selection mode any more, and no "playable" blend: naturalness is the `memorabilityToleranceCp` tie-break.)
 
 ### 6. Line Quality (Playability)
 
@@ -226,7 +226,9 @@ Traps are indexed by `TrapIndexService` for O(1) lookup by FEN and per-line quer
 | `verifyDepth` | 0 (auto) | TreeBuildConfig | Verification depth; 0 = max(evalDepth + 6, 20) |
 | `setupMoves` | `''` | TreeBuildConfig | Preferred-setup SAN list (consistency bias); empty = off |
 | `setupToleranceCp` | 30 | TreeBuildConfig | Max eval loss for a setup move to be preferred |
-| `selectionMode` | `expectimax` | TreeBuildConfig | `expectimax`, `engineOnly`, `dbWinRateOnly`, `playable`, `trappy` |
+| `selectionMode` | `expectimax` | TreeBuildConfig | `expectimax`, `engineOnly`, `dbWinRateOnly` |
+| `noveltyWeight` | 0 | TreeBuildConfig | 0–100 boost for rarely played sound moves |
+| `mistakeWeight` | 0 | TreeBuildConfig | 0–100 boost for moves whose lines opponents go wrong in |
 | `maiaElo` | 2200 | EngineSettings | Maia model ELO level |
 | `annotationDetail` | `full` | TreeBuildConfig | Per-move PGN annotation level: `none` / `likelihood` / `full` |
 | `organizeIntoChapters` | `true` | TreeBuildConfig | Cut the export into named chapters at branch points |

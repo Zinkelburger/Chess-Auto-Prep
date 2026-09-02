@@ -75,7 +75,7 @@ class _AccountsDialogState extends State<AccountsDialog> {
               'Your public username on each site — no password, no login. '
               'Fill in the ones you play on and the app downloads those '
               'games.',
-              style: TextStyle(fontSize: 12.5, color: AppColors.onSurfaceSoft),
+              style: TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
             ),
             const SizedBox(height: 18),
             _SiteField(
@@ -97,7 +97,7 @@ class _AccountsDialogState extends State<AccountsDialog> {
             const Text(
               'Leave a box empty for a site you do not play on. You can '
               'change these any time.',
-              style: TextStyle(fontSize: 11.5, color: AppColors.onSurfaceMuted),
+              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
             ),
           ],
         ),
@@ -175,7 +175,7 @@ class _SiteFieldState extends State<_SiteField> {
                   ? 'Last downloaded ${formatAccountDate(widget.lastFetch!)}'
                   : 'Not downloaded yet',
               style: const TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 color: AppColors.onSurfaceMuted,
               ),
             ),

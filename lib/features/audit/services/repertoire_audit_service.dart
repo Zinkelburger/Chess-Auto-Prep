@@ -10,6 +10,8 @@ import 'package:flutter/foundation.dart';
 
 import '../../../models/opening_tree.dart';
 import '../../../services/engine/stockfish_pool.dart';
+import '../../../services/eval/chessdb_api_provider.dart';
+import '../../../services/eval/db_move_list.dart';
 import '../../../services/eval/eval_move_helpers.dart';
 import '../../../services/eval_cache.dart';
 import '../../../services/maia/maia_factory.dart';
@@ -42,9 +44,22 @@ class AuditProgress {
 }
 
 class RepertoireAuditService {
-  final StockfishPool _pool = StockfishPool.instance;
+  /// [chessDbProvider] stands in for the chessdb.cn API — a test seam, and
+  /// the hook for a local dump should the audit ever get one. Null means
+  /// the live API, created per run when [AuditConfig.useChessDb] is on.
+  RepertoireAuditService({
+    ExternalMoveProvider? chessDbProvider,
+    StockfishPool? pool,
+  }) : _chessDbOverride = chessDbProvider,
+       _pool = pool ?? StockfishPool.instance;
+
+  final StockfishPool _pool;
   final ProbabilityService _probService = ProbabilityService.instance;
   final EvalCache _evalCache = EvalCache.instance;
+  final ExternalMoveProvider? _chessDbOverride;
+
+  /// The ChessDB source for the run in progress, or null when it is off.
+  ExternalMoveProvider? _chessDb;
 
   bool _cancelled = false;
   bool _paused = false;
@@ -95,6 +110,20 @@ class RepertoireAuditService {
     OpeningTree? clashTree;
     if (config.clashPgnPaths.isNotEmpty) {
       clashTree = await _buildClashTree(config, isWhiteRepertoire);
+    }
+
+    ChessDbApiProvider? liveChessDb;
+    if (config.useChessDb) {
+      final override = _chessDbOverride;
+      if (override != null) {
+        _chessDb = override;
+      } else {
+        liveChessDb = ChessDbApiProvider();
+        await liveChessDb.init();
+        _chessDb = liveChessDb;
+      }
+    } else {
+      _chessDb = null;
     }
 
     final startNode = _resolveStartNode(tree, startFen);
@@ -239,6 +268,7 @@ class RepertoireAuditService {
     }
 
     stopwatch.stop();
+    await liveChessDb?.flushQuota();
 
     // Final progress.
     onProgress?.call(
@@ -492,6 +522,128 @@ class RepertoireAuditService {
       }
     }
 
+    // ChessDB check: replies the database scores close to the opponent's
+    // best, whether or not anyone plays them. This is the only source here
+    // that can flag a move nobody has played yet.
+    final db = _chessDb;
+    if (config.useChessDb && db != null) {
+      try {
+        final list = await db.lookupMoves(node.fen);
+        final best = list.bestStmCp;
+        if (best != null) {
+          final isWhiteTurn = _isWhiteTurnAtNode(node);
+          final good = list.withinCp(config.strongReplyWindowCp);
+          for (final m in good) {
+            final san = _uciToSan(node.fen, m.uci) ?? m.san;
+            if (san.isEmpty) continue;
+            if (coveredMoves.contains(san)) continue;
+            final alreadyReported = findings.any(
+              (f) =>
+                  f.type == AuditFindingType.missingResponse &&
+                  f.missingMove == san,
+            );
+            if (alreadyReported) continue;
+
+            // DbMove.stmCp is the opponent's view of the move; the finding
+            // stores White-POV like every other eval on it.
+            final gap = best - m.stmCp;
+            // A level move matters most where the opponent has few of them.
+            // In a quiet position ChessDB scores a dozen moves 0 and an
+            // uncovered one says little; where only two moves hold, the
+            // second is half the theory.
+            final sharp = good.length <= 4;
+            findings.add(
+              AuditFinding(
+                type: AuditFindingType.missingResponse,
+                severity: gap <= 10 && sharp
+                    ? AuditSeverity.critical
+                    : AuditSeverity.warning,
+                movePath: movePath,
+                fen: node.fen,
+                missingMove: san,
+                evalLossCp: gap,
+                continuationCount: good.length,
+                positionEvalCp: isWhiteTurn ? m.stmCp : -m.stmCp,
+                bestMoveEvalCp: isWhiteTurn ? best : -best,
+                source: MissingResponseSource.chessDb,
+                cumulativeProbability: cumulativeProbability,
+                transposesIntoRepertoire: _doesMoveTranspose(
+                  node.fen,
+                  san,
+                  tree,
+                ),
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('[Audit] ChessDB error at ${node.fen}: $e');
+        }
+      }
+    }
+
+    // Engine check: the MultiPV lines Stockfish rates close to the
+    // opponent's best. Narrower than ChessDB (it sees multiPv moves, not
+    // every move) but it knows every position, including the ones the
+    // database has never seen.
+    if (config.useStockfish) {
+      try {
+        final isWhiteTurn = _isWhiteTurnAtNode(node);
+        final discovery = await _pool.discoverMoves(
+          fen: node.fen,
+          depth: config.evalDepth,
+          multiPv: config.multiPv,
+          isWhiteToMove: isWhiteTurn,
+        );
+        if (discovery.lines.isNotEmpty) {
+          final bestWhite = discovery.lines.first.effectiveCp;
+          _evalCache.putEvalCpWhiteSoon(node.fen, bestWhite, config.evalDepth);
+          int toOpp(int whiteCp) => isWhiteTurn ? whiteCp : -whiteCp;
+          final bestOpp = toOpp(bestWhite);
+          for (final line in discovery.lines) {
+            final san = _uciToSan(node.fen, line.moveUci);
+            if (san == null) continue;
+            if (coveredMoves.contains(san)) continue;
+            final gap = bestOpp - toOpp(line.effectiveCp);
+            if (gap > config.strongReplyWindowCp) continue;
+            final alreadyReported = findings.any(
+              (f) =>
+                  f.type == AuditFindingType.missingResponse &&
+                  f.missingMove == san,
+            );
+            if (alreadyReported) continue;
+
+            findings.add(
+              AuditFinding(
+                type: AuditFindingType.missingResponse,
+                severity: gap <= 10
+                    ? AuditSeverity.critical
+                    : AuditSeverity.warning,
+                movePath: movePath,
+                fen: node.fen,
+                missingMove: san,
+                evalLossCp: gap,
+                positionEvalCp: line.effectiveCp,
+                bestMoveEvalCp: bestWhite,
+                source: MissingResponseSource.engine,
+                cumulativeProbability: cumulativeProbability,
+                transposesIntoRepertoire: _doesMoveTranspose(
+                  node.fen,
+                  san,
+                  tree,
+                ),
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('[Audit] Stockfish reply check error at ${node.fen}: $e');
+        }
+      }
+    }
+
     // Repertoire clashes check (books/courses).
     if (clashTree != null) {
       final key = normalizeFen(node.fen);
@@ -626,6 +778,21 @@ class RepertoireAuditService {
         } catch (_) {
           // Best-effort; failure here is non-fatal and intentionally ignored.
         }
+      }
+    }
+
+    final db = _chessDb;
+    if (moveSet.length < config.deadEndMinContinuations &&
+        config.useChessDb &&
+        db != null) {
+      try {
+        final list = await db.lookupMoves(node.fen);
+        for (final m in list.withinCp(config.strongReplyWindowCp)) {
+          final san = _uciToSan(node.fen, m.uci) ?? m.san;
+          if (san.isNotEmpty) moveSet.add(san);
+        }
+      } catch (_) {
+        // Best-effort; failure here is non-fatal and intentionally ignored.
       }
     }
 

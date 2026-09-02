@@ -181,7 +181,7 @@ class TrapDetailCard extends StatelessWidget {
                 const Text(
                   'YOUR REPLY',
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: 12,
                     fontWeight: FontWeight.bold,
                     color: AppColors.success,
                   ),
@@ -313,7 +313,7 @@ class TrapDetailCard extends StatelessWidget {
               const SizedBox(width: 4),
               Text(
                 classInfo.$1,
-                style: TextStyle(fontSize: 11, color: classInfo.$3),
+                style: TextStyle(fontSize: 12, color: classInfo.$3),
               ),
             ],
           ),
@@ -328,7 +328,7 @@ class TrapDetailCard extends StatelessWidget {
       child: Text(
         text,
         style: const TextStyle(
-          fontSize: 10,
+          fontSize: 12,
           fontWeight: FontWeight.bold,
           color: AppColors.onSurfaceMuted,
         ),
@@ -433,7 +433,7 @@ class _ComparisonBox extends StatelessWidget {
           Text(
             title,
             style: TextStyle(
-              fontSize: 10,
+              fontSize: 12,
               fontWeight: FontWeight.bold,
               color: classColor,
             ),
@@ -454,7 +454,7 @@ class _ComparisonBox extends StatelessWidget {
               Text(
                 classification,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: FontWeight.bold,
                   color: classColor,
                 ),
@@ -483,7 +483,7 @@ class _StatChip extends StatelessWidget {
         ),
         Text(
           label,
-          style: const TextStyle(fontSize: 10, color: AppColors.onSurfaceMuted),
+          style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
         ),
       ],
     );

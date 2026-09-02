@@ -18,6 +18,8 @@
 /// [_needsEnginePassFor]).
 library;
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../../models/engine_settings.dart';
@@ -169,8 +171,11 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
     // The engine pass scores every position it looks at; collect the series so
     // [_review] can put them in the games cache, where the viewer's graph
     // reads them instead of searching the same game again.
-    _import.onGameAnnotated = (dedupKey, movetext) =>
-        _annotations[dedupKey] = movetext;
+    _import.onGameAnnotated = (dedupKey, movetext) {
+      _annotations[dedupKey] = movetext;
+      // The card wants the moves behind its counts as soon as they exist.
+      unawaited(_games.applyAnnotatedMovetext(dedupKey, movetext));
+    };
     try {
       _to(HomeReviewStage.fetching);
       // Whether this run needs to go and look depends on what it is for.

@@ -294,7 +294,7 @@ class _LivePanel extends StatelessWidget {
                         ? 'Waiting for the first move…'
                         : controller.liveMoveLabel,
                     style: AppTextStyles.body.copyWith(
-                      fontFamily: 'monospace',
+                      fontFamily: 'SourceCodePro',
                       color: AppColors.onSurfaceSoft,
                     ),
                   ),

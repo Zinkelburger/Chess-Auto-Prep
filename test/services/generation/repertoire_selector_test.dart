@@ -368,16 +368,19 @@ void main() {
       ).select(noMaia);
       expect(_markedOurMoves(noMaia).map((n) => n.moveSan), ['e4']);
 
-      // Trappy mode ignores memorability (a trappy pick deliberately
-      // trades eval for trickiness).
-      final trappyTree = makeTree(d4Cp: 20);
-      trappyTree.root.children.first.cplValue = 5.0; // e4 is the trap line
-      final trappy = config.copyWith(selectionMode: SelectionMode.trappy);
+      // With memorability off, the opponent-mistake boost alone lifts d4
+      // over e4: opponents are expected to shed a full pawn after d4.
+      final mistakeTree = makeTree(d4Cp: 20);
+      mistakeTree.root.children.last.cplValue = 100.0;
+      final mistakes = config.copyWith(
+        memorabilityToleranceCp: 0,
+        mistakeWeight: 100,
+      );
       RepertoireSelector(
-        config: trappy,
-        ecaCalc: ExpectimaxCalculator(config: trappy),
-      ).select(trappyTree);
-      expect(_markedOurMoves(trappyTree).map((n) => n.moveSan), ['e4']);
+        config: mistakes,
+        ecaCalc: ExpectimaxCalculator(config: mistakes),
+      ).select(mistakeTree);
+      expect(_markedOurMoves(mistakeTree).map((n) => n.moveSan), ['d4']);
 
       // An explicit preferred setup outranks memorability.
       final setupTree = makeTree(d4Cp: 20);

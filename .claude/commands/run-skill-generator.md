@@ -38,6 +38,12 @@ contributor does. Check every draft against these before showing it:
 - **Driving the app** means `.claude/skills/run-chess-auto-prep/driver.py`, not
   a new launcher. If the skill needs to see the UI, compose with that driver
   rather than duplicating it.
+- **Reading chess data** (games, master book, expectimax runs, tournaments,
+  rosters) means the chess-prep MCP server — `mcp__chess-prep__*` in a
+  session, `.claude/skills/chess-prep-mcp/mcp_tools.py call …` from a shell.
+  Do not parse the app's databases or run directories by hand.
+- **The hook's deny list and CLAUDE.md's description of it must agree.** If
+  the skill needs a command the hook blocks, change both in the same commit.
 - **The tree is shared** with other sessions and is routinely mid-refactor. A
   skill that assumes a clean, compiling tree will fail; prefer
   `driver.py start --worktree`, which builds HEAD in a snapshot.
@@ -51,12 +57,13 @@ contributor does. Check every draft against these before showing it:
 
 Do not report a skill as working because the file parses.
 
-1. `python3 -c "import yaml,sys; yaml.safe_load(open('.claude/skills/<name>/SKILL.md').read().split('---')[1])"`
-   — frontmatter must have `name` and a `description` that says *when to
-   trigger*, not just what it does.
+1. `scripts/doctor.sh` parses every `.claude/skills/*/SKILL.md` frontmatter
+   (stdlib, no PyYAML) and blocks on a missing `name` or a `description` too
+   short to say *when to trigger*, not just what the skill does.
 2. Actually run the skill's own commands end to end and paste the real output.
-3. `scripts/doctor.sh` — must stay all-clear.
-4. `git add` the skill. An untracked skill is not shipped.
+3. `git add` the skill, then `scripts/doctor.sh` — must stay all-clear. It
+   blocks on anything untracked under `.claude/`; an untracked skill is not
+   shipped.
 
 Then tell the user, in one line each: what the skill does, what you ran to
 verify it, and anything you could not verify.

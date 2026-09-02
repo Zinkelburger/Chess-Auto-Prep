@@ -388,7 +388,7 @@ class _PasteGameIdsDialogState extends State<_PasteGameIdsDialog> {
               minLines: 5,
               maxLines: 10,
               onChanged: _onChanged,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              style: const TextStyle(fontFamily: 'SourceCodePro', fontSize: 12),
               decoration: const InputDecoration(
                 hintText: 'Paste the page, game links, or game ids…',
                 border: OutlineInputBorder(),

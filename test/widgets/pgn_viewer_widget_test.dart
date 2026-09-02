@@ -11,6 +11,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:chess_auto_prep/core/pgn/solitaire_reveal.dart';
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
 
 /// Mainline e4 e5 Nf3 Nc6 with a multi-block comment on 1. e4, a commented
@@ -30,7 +31,6 @@ Future<List<String>> _pump(
   required PgnViewerWidgetController controller,
   String pgn = _annotatedPgn,
   bool editMode = false,
-  int? revealedPly,
 }) async {
   final emissions = <String>[];
   await tester.pumpWidget(
@@ -44,7 +44,6 @@ Future<List<String>> _pump(
             controller: controller,
             onCommentsChanged: emissions.add,
             editMode: editMode,
-            revealedPly: revealedPly,
           ),
         ),
       ),
@@ -82,6 +81,33 @@ void main() {
     c.goBack();
     await tester.pumpAndSettle();
     expect(c.mainLineIndex, 3);
+  });
+
+  testWidgets('re-annotated movetext keeps the reader where they are', (
+    tester,
+  ) async {
+    final c = PgnViewerWidgetController();
+    await _pump(tester, controller: c);
+    c.goToMainLineIndex(3);
+    await tester.pumpAndSettle();
+
+    // The same game handed back with an engine pass's comments on it — what
+    // the analysis tab and the line fill persist.
+    const annotated =
+        '[Event "Pin"]\n'
+        '[White "Alpha, A"]\n'
+        '[Black "Beta, B"]\n'
+        '[Result "*"]\n'
+        '\n'
+        '1. e4 {first block} {second block} {[%eval 0.20]} '
+        'e5 {[%eval -3.00] [%pv Nf3,Nc6]} '
+        '(1... c5 {Sicilian try} 2. Nf3) '
+        '2. Nf3 \$1 {[%eval 0.25]} Nc6 {[%eval 0.20]} *\n';
+    await _pump(tester, controller: c, pgn: annotated);
+
+    expect(c.mainLineIndex, 3);
+    expect(c.currentFen, _positionAfter(['e4', 'e5', 'Nf3']).fen);
+    expect(c.mainLineMoves, ['e4', 'e5', 'Nf3', 'Nc6']);
   });
 
   testWidgets('goToFen parks on the matching position and reports misses', (
@@ -226,11 +252,11 @@ void main() {
     expect(out, contains('Sicilian try'));
   });
 
-  testWidgets('revealedPly caps forward navigation (solitaire frontier)', (
-    tester,
-  ) async {
+  testWidgets('the solitaire frontier caps forward navigation', (tester) async {
     final c = PgnViewerWidgetController();
-    await _pump(tester, controller: c, revealedPly: 2);
+    await _pump(tester, controller: c);
+    c.setSolitaireReveal(const SolitaireReveal.mainline(2));
+    await tester.pumpAndSettle();
 
     c.goToMainLineIndex(4);
     await tester.pumpAndSettle();

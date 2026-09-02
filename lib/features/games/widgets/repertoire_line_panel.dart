@@ -328,7 +328,7 @@ class _RepertoireLinePanelState extends State<RepertoireLinePanel> {
                             '$landingMoveNumber',
                   overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.body.copyWith(
-                    fontSize: 12.5,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -482,7 +482,7 @@ class _LineChoices extends StatelessWidget {
                           ? 'ends'
                           : formatMoveAtPly(splitPly, move).split(' ').last,
                       style: AppTextStyles.mono.copyWith(
-                        fontSize: 12.5,
+                        fontSize: 13,
                         fontWeight: FontWeight.w700,
                         color: move == null
                             ? AppColors.onSurfaceMuted
@@ -504,7 +504,7 @@ class _LineChoices extends StatelessWidget {
                   Text(
                     '${line.moves.length - splitPly} more',
                     style: AppTextStyles.body.copyWith(
-                      fontSize: 11,
+                      fontSize: 12,
                       color: AppColors.onSurfaceMuted,
                     ),
                   ),
@@ -606,7 +606,7 @@ class _ReportTile extends StatelessWidget {
           Text(
             verdict,
             style: AppTextStyles.body.copyWith(
-              fontSize: 11,
+              fontSize: 12,
               color: AppColors.onSurfaceSoft,
             ),
           ),
@@ -615,7 +615,7 @@ class _ReportTile extends StatelessWidget {
             Text(
               formatNumberedSans(report.pathSans),
               style: AppTextStyles.mono.copyWith(
-                fontSize: 11,
+                fontSize: 12,
                 color: AppColors.onSurfaceMuted,
               ),
             ),

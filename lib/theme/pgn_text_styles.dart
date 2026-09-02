@@ -99,7 +99,7 @@ abstract final class PgnTextStyles {
   /// The "⋯ 3 more lines" disclosure that stands in for collapsed deep
   /// sidelines.
   static const collapsedStub = TextStyle(
-    fontSize: 12.5,
+    fontSize: 13,
     height: 1.4,
     fontWeight: FontWeight.w500,
     color: AppColors.pgnVariationDeepest,
@@ -133,33 +133,33 @@ abstract final class PgnTextStyles {
   // ── Rich comment blocks (Chessable/Forward Chess book formatting) ───────
 
   static const commentHeader = TextStyle(
-    fontSize: 15.5,
+    fontSize: 16,
     fontWeight: FontWeight.bold,
     height: 1.4,
     color: AppColors.pgnComment,
   );
 
   static const commentQuote = TextStyle(
-    fontSize: 13.5,
+    fontSize: 14,
     height: 1.5,
     color: Color(0xDDF2F2F2),
   );
 
   static const commentBracket = TextStyle(
-    fontSize: 13.5,
+    fontSize: 14,
     height: 1.4,
     color: AppColors.pgnComment,
   );
 
   static const commentFen = TextStyle(
-    fontFamily: 'monospace',
-    fontSize: 11.5,
+    fontFamily: 'SourceCodePro',
+    fontSize: 12,
     color: AppColors.pgnComment,
   );
 
   static const commentLink = TextStyle(
-    fontFamily: 'monospace',
-    fontSize: 13.5,
+    fontFamily: 'SourceCodePro',
+    fontSize: 14,
     height: 1.5,
     color: AppColors.info,
     decoration: TextDecoration.underline,

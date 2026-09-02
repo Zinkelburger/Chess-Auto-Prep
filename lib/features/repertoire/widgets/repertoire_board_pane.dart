@@ -85,7 +85,7 @@ class RepertoireBoardPane extends StatelessWidget {
                           'Preview',
                           style: TextStyle(
                             color: AppColors.overlayInk,
-                            fontSize: 11,
+                            fontSize: 12,
                           ),
                         ),
                       ),

@@ -14,7 +14,11 @@ export 'export/move_annotation.dart' show MoveAnnotationDetail;
 
 // ── Selection mode ──────────────────────────────────────────────────────
 
-enum SelectionMode { expectimax, engineOnly, dbWinRateOnly, playable, trappy }
+/// Which value the argmax at our-move nodes ranks by.  These are
+/// different objectives, not presets: none of them rewrites another knob.
+/// Preferences on top of the objective (novelties, opponent mistakes, a
+/// natural move, a preferred setup) are weights and tolerances of their own.
+enum SelectionMode { expectimax, engineOnly, dbWinRateOnly }
 
 // ── Tree build algorithm mode ───────────────────────────────────────────
 
@@ -29,9 +33,6 @@ enum BuildMode {
   /// PGN database-seeded tree: parse game files, build frequency map,
   /// then BFS with eval enrichment — matches C `--build-mode db-explorer`.
   dbExplorer,
-
-  /// Maia × eval surprise highlights — not yet implemented in Flutter.
-  trapFinder,
 
   /// ChessDB mainline book: our move is whatever the database ranks best,
   /// their replies are master practice, and off master practice the line
@@ -129,8 +130,8 @@ class TreeBuildConfig {
   /// sees them (leaf value from the static eval) and the verification pass
   /// deep-checks whatever gets picked, so the insurance subtrees are only
   /// grown for alternatives close enough to plausibly win the argmax.
-  /// 0 disables the gate.  Ignored under trappy selection, where
-  /// worse-eval moves are the point and need their subtrees searched.
+  /// 0 disables the gate.  A build that leans on [mistakeWeight] wants the
+  /// worse-eval candidates searched too — Pure search, or 0 here, does that.
   final int fastAltGapCp;
 
   /// "Wide opening search": our-move nodes at or below this ply get the wide
@@ -200,8 +201,7 @@ class TreeBuildConfig {
   /// Memorability tie-break: within this many centipawns of the best child
   /// eval, selection prefers the our-move with the highest own-side Maia
   /// probability — the move the user would naturally play anyway, which is
-  /// cheaper to memorize.  Capped at [maxEvalLossCp]; ignored in trappy
-  /// mode; 0 disables.
+  /// cheaper to memorize.  Capped at [maxEvalLossCp]; 0 disables.
   final int memorabilityToleranceCp;
 
   // ── Skeleton plan (repertoire planning front door) ──
@@ -359,7 +359,20 @@ class TreeBuildConfig {
   // ── Expectimax / repertoire selection ──
   final SelectionMode selectionMode;
   final double leafConfidence;
+
+  /// Novelty boost at our-move nodes, 0–100.  Scales a candidate's value by
+  /// `1 + w × rarity` inside the eval-loss window; the stored expectimax
+  /// values are untouched.  0 = off.
   final int noveltyWeight;
+
+  /// Opponent-mistake boost at our-move nodes, 0–100.  Scales a candidate's
+  /// value by `1 + w × mistake`, where `mistake` is the expected centipawn
+  /// loss opponents make in its subtree (`cplValue`, so a blunder they
+  /// rarely reach counts for little) capped at one full pawn.  Applied
+  /// inside the eval-loss window only, like the novelty boost, so it can
+  /// tilt between sound moves but never promote a bad one; widen
+  /// [maxEvalLossCp] to let it consider speculative tries.  0 = off.
+  final int mistakeWeight;
 
   // ── DB Explorer (PGN frequency seeding) ──
   final List<String> pgnFilePaths;
@@ -462,6 +475,29 @@ class TreeBuildConfig {
   /// where anything but the database's own ranking has a vote.
   final int bookTieBreakWindowCp;
 
+  /// Prefer the candidate that leaves the opponent the *fewest* good
+  /// replies: a reply counts as good within this many centipawns of the
+  /// opponent's best.  0 — the default — is off.
+  ///
+  /// Two moves an engine scores level can differ a lot here — one leaves the
+  /// opponent a single good answer, the other five — and the narrower one is
+  /// the smaller book to learn.  Expectimax does not see this on its own: an
+  /// opponent node is valued by where the human model's probability lands,
+  /// not by how many moves hold, so a position with one obvious good reply
+  /// scores like one with ten.
+  ///
+  /// Where the count comes from depends on the build:
+  ///  * Expectimax and the other selectors read the tree — a candidate's
+  ///    evaluated opponent children, compared with the best of them — and
+  ///    apply the preference inside the [maxEvalLossCp] window, with the
+  ///    mode's own value separating candidates that count the same
+  ///    (`RepertoireSelector._applyReplyPreference`).
+  ///  * The ChessDB book asks the database for each candidate tied inside
+  ///    [bookTieBreakWindowCp], which counts *every* good reply, played or
+  ///    not, at one lookup per candidate; master practice then separates
+  ///    equal counts.
+  final int replyWindowCp;
+
   /// Minimum engine gain (centipawns, for us) over the master move before a
   /// repertoire move is annotated as an improvement on a cited game.
   final int improvementMinGainCp;
@@ -474,6 +510,10 @@ class TreeBuildConfig {
   final bool cdbDirectReadAhead;
   final bool batchEvalLookups;
   final bool enableLocalChessDb;
+
+  /// Consult the Lichess cloud-evaluation store, and where it lives.
+  final bool enableLichessEvals;
+  final String lichessEvalsPath;
   final String localChessDbPath;
   final bool enableChessDbApi;
   final int chessDbApiDailyQuota;
@@ -533,6 +573,7 @@ class TreeBuildConfig {
     this.selectionMode = SelectionMode.expectimax,
     this.leafConfidence = 1.0,
     this.noveltyWeight = 0,
+    this.mistakeWeight = 0,
     this.pgnFilePaths = const [],
     this.dbMinGames = 5,
     this.useMasterGames = true,
@@ -545,6 +586,7 @@ class TreeBuildConfig {
     this.bookTailMaxPly = 40,
     this.bookEngineFallback = false,
     this.bookTieBreakWindowCp = 0,
+    this.replyWindowCp = 0,
     this.improvementMinGainCp = 40,
     this.dbMinProb = 0.05,
     this.minElo = 0,
@@ -553,6 +595,8 @@ class TreeBuildConfig {
     this.cdbDirectReadAhead = false,
     this.batchEvalLookups = false,
     this.enableLocalChessDb = false,
+    this.enableLichessEvals = false,
+    this.lichessEvalsPath = '',
     this.localChessDbPath = '',
     this.enableChessDbApi = false,
     this.chessDbApiDailyQuota = 5000,
@@ -634,6 +678,7 @@ class TreeBuildConfig {
       selectionMode: _parseSelectionMode(json['selection_mode'] as String?),
       leafConfidence: (json['leaf_confidence'] as num?)?.toDouble() ?? 1.0,
       noveltyWeight: (json['novelty_weight'] as num?)?.toInt() ?? 0,
+      mistakeWeight: (json['mistake_weight'] as num?)?.toInt() ?? 0,
       pgnFilePaths:
           (json['pgn_file_paths'] as List<dynamic>?)?.cast<String>() ??
           const [],
@@ -659,6 +704,8 @@ class TreeBuildConfig {
       cdbDirectReadAhead: json['cdbdirect_read_ahead'] as bool? ?? false,
       batchEvalLookups: json['batch_eval_lookups'] as bool? ?? false,
       enableLocalChessDb: json['enable_local_chessdb'] as bool? ?? false,
+      enableLichessEvals: json['enable_lichess_evals'] as bool? ?? false,
+      lichessEvalsPath: json['lichess_evals_path'] as String? ?? '',
       localChessDbPath: json['local_chessdb_path'] as String? ?? '',
       enableChessDbApi: json['enable_chessdb_api'] as bool? ?? false,
       chessDbApiDailyQuota:
@@ -673,6 +720,7 @@ class TreeBuildConfig {
       bookEngineFallback: json['book_engine_fallback'] as bool? ?? false,
       bookTieBreakWindowCp:
           (json['book_tie_break_window_cp'] as num?)?.toInt() ?? 0,
+      replyWindowCp: (json['reply_window_cp'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -726,7 +774,6 @@ class TreeBuildConfig {
     BuildMode.stockfishExpectimax => 'Stockfish + expectimax',
     BuildMode.maiaDbExplore => 'Maia DB explore',
     BuildMode.dbExplorer => 'DB Explorer',
-    BuildMode.trapFinder => 'Trap finder',
     BuildMode.chessDbBook => 'ChessDB mainline book',
   };
 
@@ -855,7 +902,6 @@ class TreeBuildConfig {
     required int altsAlreadyExpanded,
   }) {
     if (searchAlgorithm == SearchAlgorithm.pure) return true;
-    if (selectionMode == SelectionMode.trappy) return true;
     if (fastAltGapCp <= 0) return true;
     if (gapCp > fastAltGapCp) return false;
     return altsAlreadyExpanded < fastMaxExpandedAlts;
@@ -947,6 +993,7 @@ class TreeBuildConfig {
     'selection_mode': selectionMode.name,
     'leaf_confidence': leafConfidence,
     'novelty_weight': noveltyWeight,
+    'mistake_weight': mistakeWeight,
     'pgn_file_paths': pgnFilePaths,
     'db_min_games': dbMinGames,
     'use_master_games': useMasterGames,
@@ -959,6 +1006,7 @@ class TreeBuildConfig {
     'book_tail_max_ply': bookTailMaxPly,
     'book_engine_fallback': bookEngineFallback,
     'book_tie_break_window_cp': bookTieBreakWindowCp,
+    'reply_window_cp': replyWindowCp,
     'improvement_min_gain_cp': improvementMinGainCp,
     'db_min_prob': dbMinProb,
     'min_elo': minElo,
@@ -967,6 +1015,8 @@ class TreeBuildConfig {
     'cdbdirect_read_ahead': cdbDirectReadAhead,
     'batch_eval_lookups': batchEvalLookups,
     'enable_local_chessdb': enableLocalChessDb,
+    'enable_lichess_evals': enableLichessEvals,
+    'lichess_evals_path': lichessEvalsPath,
     'local_chessdb_path': localChessDbPath,
     'enable_chessdb_api': enableChessDbApi,
     'chessdb_api_daily_quota': chessDbApiDailyQuota,
@@ -1075,6 +1125,7 @@ class TreeBuildConfig {
     SelectionMode? selectionMode,
     double? leafConfidence,
     int? noveltyWeight,
+    int? mistakeWeight,
     List<String>? pgnFilePaths,
     int? dbMinGames,
     bool? useMasterGames,
@@ -1087,6 +1138,7 @@ class TreeBuildConfig {
     int? bookTailMaxPly,
     bool? bookEngineFallback,
     int? bookTieBreakWindowCp,
+    int? replyWindowCp,
     int? improvementMinGainCp,
     double? dbMinProb,
     int? minElo,
@@ -1095,6 +1147,8 @@ class TreeBuildConfig {
     bool? cdbDirectReadAhead,
     bool? batchEvalLookups,
     bool? enableLocalChessDb,
+    bool? enableLichessEvals,
+    String? lichessEvalsPath,
     String? localChessDbPath,
     bool? enableChessDbApi,
     int? chessDbApiDailyQuota,
@@ -1155,6 +1209,7 @@ class TreeBuildConfig {
       selectionMode: selectionMode ?? this.selectionMode,
       leafConfidence: leafConfidence ?? this.leafConfidence,
       noveltyWeight: noveltyWeight ?? this.noveltyWeight,
+      mistakeWeight: mistakeWeight ?? this.mistakeWeight,
       pgnFilePaths: pgnFilePaths ?? this.pgnFilePaths,
       dbMinGames: dbMinGames ?? this.dbMinGames,
       useMasterGames: useMasterGames ?? this.useMasterGames,
@@ -1170,6 +1225,7 @@ class TreeBuildConfig {
       bookTailMaxPly: bookTailMaxPly ?? this.bookTailMaxPly,
       bookEngineFallback: bookEngineFallback ?? this.bookEngineFallback,
       bookTieBreakWindowCp: bookTieBreakWindowCp ?? this.bookTieBreakWindowCp,
+      replyWindowCp: replyWindowCp ?? this.replyWindowCp,
       improvementMinGainCp: improvementMinGainCp ?? this.improvementMinGainCp,
       dbMinProb: dbMinProb ?? this.dbMinProb,
       minElo: minElo ?? this.minElo,
@@ -1178,6 +1234,8 @@ class TreeBuildConfig {
       cdbDirectReadAhead: cdbDirectReadAhead ?? this.cdbDirectReadAhead,
       batchEvalLookups: batchEvalLookups ?? this.batchEvalLookups,
       enableLocalChessDb: enableLocalChessDb ?? this.enableLocalChessDb,
+      enableLichessEvals: enableLichessEvals ?? this.enableLichessEvals,
+      lichessEvalsPath: lichessEvalsPath ?? this.lichessEvalsPath,
       localChessDbPath: localChessDbPath ?? this.localChessDbPath,
       enableChessDbApi: enableChessDbApi ?? this.enableChessDbApi,
       chessDbApiDailyQuota: chessDbApiDailyQuota ?? this.chessDbApiDailyQuota,
@@ -1221,10 +1279,6 @@ SelectionMode _parseSelectionMode(String? value) {
       return SelectionMode.engineOnly;
     case 'dbWinRateOnly':
       return SelectionMode.dbWinRateOnly;
-    case 'playable':
-      return SelectionMode.playable;
-    case 'trappy':
-      return SelectionMode.trappy;
     default:
       return SelectionMode.expectimax;
   }
@@ -1236,8 +1290,6 @@ BuildMode _parseBuildMode(String? value) {
       return BuildMode.maiaDbExplore;
     case 'dbExplorer':
       return BuildMode.dbExplorer;
-    case 'trapFinder':
-      return BuildMode.trapFinder;
     case 'chessdb_book':
     case 'chessDbBook':
       return BuildMode.chessDbBook;

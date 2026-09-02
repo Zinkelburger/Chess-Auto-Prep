@@ -139,7 +139,7 @@ typedef struct TreeNode {
 
     /* Maia-predicted probability that a human would play this move.
      * Populated at our-move children during build.  Used as a novelty
-     * signal when --fresh / --novelty-weight is active.
+     * signal when --novelty-weight is active.
      * -1.0 means not set. */
     double maia_frequency;
 

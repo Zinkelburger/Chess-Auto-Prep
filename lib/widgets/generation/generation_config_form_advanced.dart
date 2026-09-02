@@ -202,6 +202,24 @@ mixin _GenerationConfigAdvanced
                   'always takes the engine-best pick here.'
             : _selectionModeDescription(),
       ),
+      const SizedBox(height: 12),
+      _numField(
+        _mistakeWeightCtrl,
+        'Opponent-mistake weight (0–100)',
+        defaultText: '0',
+        onEdited: refresh,
+        enabled: !isBook && _selectionMode == SelectionMode.expectimax,
+        disabledReason: isBook
+            ? 'The ChessDB book has one move per position'
+            : 'Only weighs into the best-expected-score pick',
+        tooltip:
+            'Favours moves whose lines opponents tend to go wrong in. A '
+            'candidate\'s score is boosted by up to this much of itself when '
+            'opponents are expected to lose a pawn in its subtree, weighted '
+            'by how often they reach each mistake. Only tilts between moves '
+            'inside the eval-loss guard; raise that guard to let it consider '
+            'speculative tries, and use Pure search so those get searched.',
+      ),
     ];
   }
 
@@ -232,8 +250,7 @@ mixin _GenerationConfigAdvanced
   /// The eval window and the practical-play knobs that decide which
   /// candidate moves survive.
   List<Widget> _moveChoiceWindowFields(VoidCallback refresh) {
-    // Trappy selection and a forced setup each disable knobs below.
-    final isTrappy = _selectionMode == SelectionMode.trappy;
+    // Novelties and a forced setup each disable knobs below.
     final hasSetup = _setupMovesCtrl.text.trim().isNotEmpty;
     return [
       const SizedBox(height: 12),
@@ -246,11 +263,10 @@ mixin _GenerationConfigAdvanced
             'Natural-move tolerance (cp)',
             defaultText: '0',
             onEdited: refresh,
-            enabled: !isTrappy && !_preferNovelties,
-            disabledReason: _preferNovelties
-                ? 'Ignored while "Prefer novelties" is on — they pull '
-                      'opposite ways'
-                : 'Ignored when maximizing opponent mistakes',
+            enabled: !_preferNovelties,
+            disabledReason:
+                'Ignored while "Prefer novelties" is on — they pull '
+                'opposite ways',
             tooltip:
                 'Above 0, a move you would play anyway may lose up to this '
                 'many centipawns against the best candidate and still be '
@@ -275,8 +291,18 @@ mixin _GenerationConfigAdvanced
             onEdited: refresh,
             tooltip:
                 'Hard guard: no repertoire move may lose more than this '
-                'against the best sibling. Maximize-mistakes widens it to '
-                'at least 100.',
+                'against the best sibling.',
+          ),
+          _numField(
+            _replyWindowCtrl,
+            'Prefer fewest good replies (cp)',
+            defaultText: '0',
+            onEdited: refresh,
+            tooltip:
+                'Among candidates inside the eval-loss guard, picks the one '
+                'leaving the opponent the fewest replies within this many '
+                'centipawns of their best. 0 is off. The ChessDB book counts '
+                'database replies; other builds count the tree.',
           ),
           _numField(
             _minEvalCtrl,
@@ -346,7 +372,6 @@ mixin _GenerationConfigAdvanced
 
   List<Widget> _searchBudgetSection(VoidCallback refresh) {
     final isPure = _searchAlgorithm == SearchAlgorithm.pure;
-    final isTrappy = _selectionMode == SelectionMode.trappy;
     final isDb = _buildMode == BuildMode.dbExplorer;
     return [
       Text(
@@ -355,7 +380,7 @@ mixin _GenerationConfigAdvanced
                   'Fast-only narrowing knobs are ignored.'
             : 'Fast search is selected on the main form. These control '
                   'how much it narrows rarely-reached lines.',
-        style: AppTextStyles.caption.copyWith(fontSize: 11),
+        style: AppTextStyles.caption.copyWith(fontSize: 12),
       ),
       const SizedBox(height: 10),
       _labeledCheckbox(
@@ -393,12 +418,10 @@ mixin _GenerationConfigAdvanced
             'Skip alternatives behind by (cp)',
             defaultText: '30',
             onEdited: refresh,
-            enabled: !isPure && !isTrappy && !isDb,
+            enabled: !isPure && !isDb,
             disabledReason: isDb
                 ? 'Your PGN files decide which lines grow in this mode'
-                : isPure
-                ? 'Fast search only'
-                : 'Ignored when maximizing opponent mistakes',
+                : 'Fast search only',
             tooltip:
                 'Your alternatives more than this far behind the best '
                 'candidate stay evaluated leaves instead of growing '

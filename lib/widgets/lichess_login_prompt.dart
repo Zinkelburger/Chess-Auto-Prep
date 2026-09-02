@@ -153,7 +153,7 @@ class _LichessLoginButtonState extends State<LichessLoginButton> {
         if (_inProgress)
           TextButton(
             onPressed: _cancel,
-            child: const Text('Cancel', style: TextStyle(fontSize: 11)),
+            child: const Text('Cancel', style: TextStyle(fontSize: 12)),
           ),
         if (_failed)
           const Padding(
@@ -163,7 +163,7 @@ class _LichessLoginButtonState extends State<LichessLoginButton> {
               'access token in App settings → Accounts.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 color: AppColors.onSurfaceMuted,
                 height: 1.3,
               ),
@@ -187,7 +187,7 @@ class _LichessLoginButtonState extends State<LichessLoginButton> {
             "Browser didn't open? Copy the link and paste it there.",
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               color: AppColors.onSurfaceMuted,
               height: 1.3,
             ),
@@ -198,7 +198,7 @@ class _LichessLoginButtonState extends State<LichessLoginButton> {
             icon: Icon(_copied ? Icons.check : Icons.copy, size: 14),
             label: Text(
               _copied ? 'Link copied' : 'Copy login link',
-              style: const TextStyle(fontSize: 11),
+              style: const TextStyle(fontSize: 12),
             ),
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 8),

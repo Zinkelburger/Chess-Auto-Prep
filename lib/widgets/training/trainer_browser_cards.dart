@@ -332,7 +332,7 @@ class _PrimaryAction extends StatelessWidget {
                       enabled ? _subtitle : emptyHint,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: ink,
-                        fontSize: 11,
+                        fontSize: 12,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -631,8 +631,8 @@ class _LineCard extends StatelessWidget {
               '${formatLineMovesText(line, start: introFrom, end: introLength)}'
         : '';
     const moveStyle = TextStyle(
-      fontFamily: 'monospace',
-      fontSize: 11.5,
+      fontFamily: 'SourceCodePro',
+      fontSize: 12,
       height: 1.3,
       color: AppColors.onSurfaceMuted,
     );

@@ -49,6 +49,10 @@ class OpeningReviewEntry {
   /// Games that reached this deviation point, in list (newest-first) order.
   final List<RecentGame> games = [];
 
+  /// True for a book-end entry: the prep stops here rather than saying
+  /// something else. The fix is to extend it, not to correct a move.
+  bool get isBookEnd => expectedSans.isEmpty;
+
   int get moveNumber => matchedPlies ~/ 2 + 1;
 
   /// The matched line as numbered movetext ("1. e4 c5 2. Nf3").
@@ -84,6 +88,25 @@ class OpeningReviewData {
   final bool anyBookDesignated;
 
   bool get isEmpty => mistakes.isEmpty && bookEnds.isEmpty;
+
+  /// The deviation points hit by more than one game, most-repeated first —
+  /// the home column lists the top few inline, because a leak you keep
+  /// walking into is the one worth fixing today. Empty when nothing repeats:
+  /// the block then says nothing rather than promoting a one-off.
+  List<OpeningReviewEntry> repeated({int limit = 3}) {
+    final all = [
+      for (final e in mistakes)
+        if (e.games.length > 1) e,
+      for (final e in bookEnds)
+        if (e.games.length > 1) e,
+    ];
+    all.sort((a, b) {
+      final byCount = b.games.length.compareTo(a.games.length);
+      if (byCount != 0) return byCount;
+      return a.matchedPlies.compareTo(b.matchedPlies);
+    });
+    return all.length > limit ? all.sublist(0, limit) : all;
+  }
 }
 
 /// Collapse the games' per-game deviation reports into review entries.

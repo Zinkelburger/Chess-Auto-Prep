@@ -856,9 +856,8 @@ abstract class NodeExpander {
   /// children stay evaluated leaves: selection still sees them, and a
   /// resume with more budget may deepen them.
   ///
-  /// Everything expands under Pure (exhaustive by contract), under trappy
-  /// selection (worse-eval moves are the point and need searched subtrees),
-  /// in the wide-opening band (the first [TreeBuildConfig.openingWidthPlies]
+  /// Everything expands under Pure (exhaustive by contract), in the
+  /// wide-opening band (the first [TreeBuildConfig.openingWidthPlies]
   /// of our moves grow every in-window alternative), and for preferred-setup
   /// candidates (the setup bias needs them alive).
   List<BuildTreeNode> ourChildrenToExpand(
@@ -867,7 +866,6 @@ abstract class NodeExpander {
   ) {
     final children = List.of(node.children);
     if (config.searchAlgorithm == SearchAlgorithm.pure ||
-        config.selectionMode == SelectionMode.trappy ||
         config.widensOpeningAtPly(node.ply) ||
         config.fastAltGapCp <= 0 ||
         incumbent == null ||

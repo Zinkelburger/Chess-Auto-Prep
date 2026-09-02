@@ -187,7 +187,7 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
           TextField(
             controller: _fenCtrl,
             focusNode: _fenFocus,
-            style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+            style: const TextStyle(fontSize: 12, fontFamily: 'SourceCodePro'),
             decoration: InputDecoration(
               labelText: 'FEN',
               border: const OutlineInputBorder(),

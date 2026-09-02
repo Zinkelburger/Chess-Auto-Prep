@@ -62,8 +62,8 @@ class FindingTile extends StatelessWidget {
                     child: Text(
                       finding.reachProbLabel!,
                       style: TextStyle(
-                        fontSize: 11,
-                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        fontFamily: 'SourceCodePro',
                         fontFeatures: const [FontFeature.tabularFigures()],
                         color: finding.dismissed
                             ? AppColors.onSurfaceDim
@@ -79,8 +79,8 @@ class FindingTile extends StatelessWidget {
                     child: Text(
                       gainLabel!,
                       style: TextStyle(
-                        fontSize: 11,
-                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        fontFamily: 'SourceCodePro',
                         fontFeatures: const [FontFeature.tabularFigures()],
                         color: finding.dismissed
                             ? AppColors.onSurfaceDim
@@ -109,7 +109,7 @@ class FindingTile extends StatelessWidget {
                       Text(
                         finding.movePathString,
                         style: const TextStyle(
-                          fontSize: 11,
+                          fontSize: 12,
                           color: AppColors.onSurfaceMuted,
                         ),
                         maxLines: 1,

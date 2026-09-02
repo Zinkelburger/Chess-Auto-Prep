@@ -35,11 +35,7 @@ mixin _GenerationConfigIo
     _dbMinGamesCtrl.text = config.dbMinGames.toString();
     _dbMinProbCtrl.text = config.dbMinProb.toString();
     _minEloCtrl.text = config.minElo.toString();
-    // Old snapshots may carry trapFinder, which the Build-from dropdown no
-    // longer offers; an unlisted value would crash the dropdown assert.
-    _buildMode = config.buildMode == BuildMode.trapFinder
-        ? BuildMode.stockfishExpectimax
-        : config.buildMode;
+    _buildMode = config.buildMode;
     _selectionMode = config.selectionMode;
     _relativeEval = config.relativeEval;
     _preferNovelties = config.noveltyWeight > 0;
@@ -65,6 +61,8 @@ mixin _GenerationConfigIo
     _offBookOppMaxChildrenCtrl.text = config.offBookOppMaxChildren.toString();
     _bookTailMaxPlyCtrl.text = config.bookTailMaxPly.toString();
     _bookTieBreakCtrl.text = config.bookTieBreakWindowCp.toString();
+    _replyWindowCtrl.text = config.replyWindowCp.toString();
+    _mistakeWeightCtrl.text = config.mistakeWeight.toString();
     // The three sub-editors keep their state in controllers this form owns,
     // so seeding them needs neither a mounted widget nor a post-frame hop.
     //
@@ -110,9 +108,6 @@ mixin _GenerationConfigIo
 
   /// Returns an error message when the current settings cannot start a build.
   String? validateBeforeStart() {
-    if (_buildMode == BuildMode.trapFinder) {
-      return '${_buildModeLabel(_buildMode)} is not yet available in the app.';
-    }
     final numError = _firstNumFieldError();
     if (numError != null) return numError;
     if (_buildMode == BuildMode.dbExplorer && _pgnSources.filePaths.isEmpty) {
@@ -168,12 +163,6 @@ mixin _GenerationConfigIo
         ? clampEngineThreads(rawThreads)
         : defaultEngineThreads();
 
-    final isTrappyMode = _selectionMode == SelectionMode.trappy;
-    final userMaxEvalLoss = int.tryParse(_evalGuardCtrl.text.trim()) ?? 30;
-    // Colour-independent: with relativeEval on (the default) this is an
-    // offset from the root's own eval, and an offset has no colour.
-    final userMinEval = int.tryParse(_minEvalCtrl.text.trim()) ?? -100;
-
     final seed =
         _seedConfig ??
         TreeBuildConfig(startFen: startFen, playAsWhite: playAsWhite);
@@ -203,14 +192,10 @@ mixin _GenerationConfigIo
       minElo: int.tryParse(_minEloCtrl.text.trim()) ?? 0,
       evalDepth: evalDepth,
       engineThreads: engineThreads,
-      maxEvalLossCp: isTrappyMode
-          ? (userMaxEvalLoss < 100 ? 100 : userMaxEvalLoss)
-          : userMaxEvalLoss,
-      minEvalCp: isTrappyMode
-          ? (playAsWhite
-                ? (userMinEval > -100 ? -100 : userMinEval)
-                : (userMinEval > -300 ? -300 : userMinEval))
-          : userMinEval,
+      maxEvalLossCp: int.tryParse(_evalGuardCtrl.text.trim()) ?? 30,
+      // Colour-independent: with relativeEval on (the default) this is an
+      // offset from the root's own eval, and an offset has no colour.
+      minEvalCp: int.tryParse(_minEvalCtrl.text.trim()) ?? -100,
       maxEvalCp: int.tryParse(_maxEvalCtrl.text.trim()) ?? 200,
       maiaElo: int.tryParse(_maiaEloCtrl.text.trim()) ?? 2200,
       oppPolicyTemperature:
@@ -268,6 +253,10 @@ mixin _GenerationConfigIo
           .clamp(0, 200),
       bookTieBreakWindowCp: (int.tryParse(_bookTieBreakCtrl.text.trim()) ?? 0)
           .clamp(0, 200),
+      replyWindowCp: (int.tryParse(_replyWindowCtrl.text.trim()) ?? 0).clamp(
+        0,
+        200,
+      ),
       ourMultipv: int.tryParse(_multipvCtrl.text.trim()) ?? 4,
       oppMaxChildren: int.tryParse(_oppMaxChildrenCtrl.text.trim()) ?? 4,
       oppMassTarget: double.tryParse(_oppMassTargetCtrl.text.trim()) ?? 0.80,
@@ -314,8 +303,8 @@ mixin _GenerationConfigIo
             ),
       relativeEval: _relativeEval,
       // A ChessDB book has one child at each of our nodes, so every
-      // selection mode picks the same move — but trappy would widen the
-      // eval tolerances and change which nodes exist. Pin it.
+      // selection mode picks the same move. Pin it so the form and the
+      // summary say what actually runs.
       selectionMode: _buildMode == BuildMode.chessDbBook
           ? SelectionMode.engineOnly
           : _selectionMode,
@@ -323,6 +312,10 @@ mixin _GenerationConfigIo
       noveltyWeight: _preferNovelties
           ? (seed.noveltyWeight > 0 ? seed.noveltyWeight : 60)
           : 0,
+      mistakeWeight: (int.tryParse(_mistakeWeightCtrl.text.trim()) ?? 0).clamp(
+        0,
+        100,
+      ),
       leafConfidence: double.tryParse(_leafConfidenceCtrl.text.trim()) ?? 1.0,
     );
 

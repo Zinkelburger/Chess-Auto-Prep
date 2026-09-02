@@ -24,13 +24,34 @@ extension AppModeLabel on AppMode {
   /// trail, so a mode is never called two different things.
   String get label => switch (this) {
     AppMode.tactics => 'Tactics',
-    AppMode.positionAnalysis => 'Player Analysis',
-    AppMode.repertoire => 'Repertoire Builder',
-    AppMode.repertoireTrainer => 'Repertoire Trainer',
-    AppMode.pgnViewer => 'PGN Viewer',
+    AppMode.positionAnalysis => 'Player analysis',
+    AppMode.repertoire => 'Repertoire builder',
+    AppMode.repertoireTrainer => 'Repertoire trainer',
+    // Where your games open. "PGN Viewer" named the file format.
+    AppMode.pgnViewer => 'Games',
     AppMode.study => 'Study',
-    AppMode.engineTournament => 'Engine Tournament',
+    AppMode.engineTournament => 'Engine tournament',
   };
+}
+
+/// The mode menu, grouped by what you are doing rather than listed flat.
+/// Also the order of the Ctrl+1…7 shortcuts (see [AppModeShortcut]), so the
+/// menu teaches the chord that makes it unnecessary.
+const List<({String heading, List<AppMode> modes})> kAppModeGroups = [
+  (heading: 'Train', modes: [AppMode.tactics, AppMode.repertoireTrainer]),
+  (heading: 'Build', modes: [AppMode.repertoire, AppMode.study]),
+  (heading: 'Analyse', modes: [AppMode.pgnViewer, AppMode.positionAnalysis]),
+  (heading: 'Lab', modes: [AppMode.engineTournament]),
+];
+
+/// Every mode in menu order — what Ctrl+1…7 index into.
+final List<AppMode> kAppModeMenuOrder = [
+  for (final group in kAppModeGroups) ...group.modes,
+];
+
+extension AppModeShortcut on AppMode {
+  /// 1-based position in the menu: the digit in this mode's Ctrl+digit chord.
+  int get shortcutNumber => kAppModeMenuOrder.indexOf(this) + 1;
 }
 
 extension AppModeEngine on AppMode {
@@ -209,6 +230,7 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
     int? gameIndex,
     bool autoAnalyze = false,
     PgnViewerTab tab = PgnViewerTab.game,
+    int? ply,
     String? historyLabel,
   }) => handOff(
     OpenPgnViewer(
@@ -218,6 +240,7 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
       gameIndex: gameIndex,
       autoAnalyze: autoAnalyze,
       tab: tab,
+      ply: ply,
     ),
     historyLabel: historyLabel,
   );

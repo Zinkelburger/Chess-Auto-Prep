@@ -13,22 +13,30 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 
 import '../../core/pgn/mainline_positions.dart';
+import '../../core/pgn/solitaire_reveal.dart';
 import '../../models/move_tree.dart';
+import '../../services/game_analysis_controller.dart'
+    show MoveClassification, classifyMove, cpToWinningChance;
 import '../../theme/app_colors.dart';
 import '../../theme/pgn_text_styles.dart';
 import 'comment_editor.dart';
 import 'comment_prose_spans.dart';
 import 'movetext_primitives.dart' show MoveChip;
-import '../../utils/chess_utils.dart' show coordsAtPly, isNullMoveSan;
+import '../../utils/chess_utils.dart'
+    show coordsAtPly, formatEvalDisplay, isNullMoveSan;
 import '../../utils/pgn_comment_utils.dart'
     show
         filterDisplayComment,
         hasChessableFormatting,
         parseRichComment,
         parseCommentTokens,
+        parseEvalComment,
+        parsePvComment,
         stripEngineTokens,
+        stripPgnTokens,
         allNagSuffix,
         joinComments,
+        kMaxUnevaluatedPlies,
         CommentToken,
         CommentProse,
         CommentMove,
@@ -39,6 +47,7 @@ import '../../utils/pgn_comment_utils.dart'
 
 part 'pgn_movetext_prose_scan.dart';
 part 'pgn_movetext_comments.dart';
+part 'pgn_movetext_eval_notes.dart';
 part 'pgn_movetext_variations.dart';
 
 /// Border reserved on every non-highlighted move chip so that highlighting or
@@ -109,8 +118,10 @@ class PgnMovetextView extends StatefulWidget {
   final void Function(MoveNode node, int branchPly, Offset globalPosition)?
   onShowVariationContextMenu;
 
-  /// When non-null, moves at index >= revealedPly are hidden (solitaire mode).
-  final int? revealedPly;
+  /// What a running solitaire session lets the reader see: mainline moves
+  /// past its frontier and sidelines it has not reached are not rendered.
+  /// Null when no session is running.
+  final SolitaireReveal? reveal;
 
   /// Attached to the current mainline move so the host can scroll it into view.
   final Key? currentMoveKey;
@@ -158,7 +169,7 @@ class PgnMovetextView extends StatefulWidget {
     required this.onCancelEditingComment,
     required this.onGoToAnalysisNode,
     this.onShowVariationContextMenu,
-    this.revealedPly,
+    this.reveal,
     this.currentMoveKey,
     this.onPlayInlineLine,
     this.activeInlineLine,
@@ -257,15 +268,32 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       }
     }
 
+    /// The engine's line from before a marked move. Its own row, because
+    /// there are only ever a handful of these in a game — unlike the per-ply
+    /// scores they replace, which is the whole reason those are gone.
+    void emitBestLine(_EvalNote note, int moveIndex) {
+      final spans = _bestLineSpans(view, note.pv, moveIndex);
+      if (spans.isEmpty) return;
+      emitFullWidthRow(
+        RichText(
+          text: TextSpan(style: PgnTextStyles.commentAt(0), children: spans),
+        ),
+        vertical: 2,
+      );
+    }
+
     /// Emit every sideline at [ply] as one cohesive block. The breathing room
     /// goes *around* the group, not between its rows — uniform per-row padding
     /// is what turns a page of sidelines into an even gray mass with no
     /// entry points.
-    void emitVariationsAtPly(int ply, {bool ephemeralOnly = false}) {
+    void emitVariationsAtPly(int ply) {
+      final reveal = view.reveal;
       final rows = _buildVariationRowsAtPly(
         view,
         ply,
-        ephemeralOnly: ephemeralOnly,
+        nodeVisible: reveal == null
+            ? null
+            : (node) => reveal.isNodeVisible(node, ply),
         expandedBranches: _expandedBranches,
         onToggleBranch: _toggleBranch,
       );
@@ -280,6 +308,15 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
     // used to legality-check moves mentioned inside prose comments.
     final prefix = _buildPrefixPositions(view);
 
+    // On a game an engine has been over, the per-ply `[%eval]` comments are
+    // not rendered at all — only the moves whose score actually moved get a
+    // mark. A game with no mistakes in it still hides them, which is why this
+    // is a separate flag and not "are there any notes".
+    final machineAnnotated = _isMachineAnnotated(view.moveHistory);
+    final evalNotes = machineAnnotated
+        ? _buildEvalNotes(view)
+        : const <int, _EvalNote>{};
+
     // Game-level comments (before any moves) — common in book PGNs
     if (view.game != null && view.game!.comments.isNotEmpty) {
       for (final comment in view.game!.comments) {
@@ -290,15 +327,12 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
     // Variations at ply 0 (before any move)
     final varsAtZero = view.variationsByPly[0];
     if (varsAtZero != null && varsAtZero.isNotEmpty) {
-      emitVariationsAtPly(
-        0,
-        ephemeralOnly: view.revealedPly != null && view.revealedPly! <= 0,
-      );
+      emitVariationsAtPly(0);
     }
 
     for (int i = 0; i < view.moveHistory.length; i++) {
       // Solitaire mode: stop rendering at the revealed boundary
-      if (view.revealedPly != null && i >= view.revealedPly!) break;
+      if (view.reveal != null && !view.reveal!.isMainlineVisible(i)) break;
 
       final moveData = view.moveHistory[i];
       final san = moveData.san;
@@ -315,15 +349,13 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       // comments and any sidelines that branch after the pass.
       if (isNullMoveSan(san)) {
         for (final c in moveData.comments ?? const <String>[]) {
+          if (machineAnnotated && _isEvalOnlyComment(c)) continue;
           emitComment(c);
         }
         final ply = i + 1;
         final varsHere = view.variationsByPly[ply];
         if (varsHere != null && varsHere.isNotEmpty) {
-          emitVariationsAtPly(
-            ply,
-            ephemeralOnly: view.revealedPly != null && ply >= view.revealedPly!,
-          );
+          emitVariationsAtPly(ply);
         }
         if (!isWhiteTurn) moveNumber++;
         isWhiteTurn = !isWhiteTurn;
@@ -407,13 +439,22 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
           ),
         );
       } else {
+        // The mark on a move that cost something rides inline, right after the
+        // move, so the movetext keeps flowing.
+        final note = evalNotes[i];
+        if (note != null) spans.addAll(_evalNoteSpans(note));
+
         // All of them. A PGN may attach several `{}` blocks to one move (a
         // Lichess study export splits prose from a `[%cal]` block, book PGNs
         // split a header from its text); showing only the first quietly hid
-        // whichever half came second.
+        // whichever half came second. The exception is a bare engine score on
+        // an analyzed game: [evalNotes] already says everything it had to say.
         for (final c in moveData.comments ?? const <String>[]) {
+          if (machineAnnotated && _isEvalOnlyComment(c)) continue;
           emitComment(c, anchorPos: _posAt(prefix, i + 1), anchorPly: i + 1);
         }
+
+        if (note != null) emitBestLine(note, i);
       }
 
       // Variations branch *after* the move at index i (ply = i + 1). In
@@ -421,10 +462,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       final ply = i + 1;
       final varsHere = view.variationsByPly[ply];
       if (varsHere != null && varsHere.isNotEmpty) {
-        emitVariationsAtPly(
-          ply,
-          ephemeralOnly: view.revealedPly != null && ply >= view.revealedPly!,
-        );
+        emitVariationsAtPly(ply);
       }
 
       if (!isWhiteTurn) moveNumber++;

@@ -85,7 +85,7 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
                               ? 'Building ${controller.treeBuildProcessed} / ${controller.treeBuildTotal}'
                               : 'Building tree...',
                           style: AppTextStyles.caption.copyWith(
-                            fontSize: 11,
+                            fontSize: 12,
                             color: AppColors.onSurfaceSoft,
                           ),
                           overflow: TextOverflow.ellipsis,

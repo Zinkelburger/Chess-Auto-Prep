@@ -71,7 +71,10 @@ class PositionFilter extends StatelessWidget {
                     minHeight: 28,
                   ),
                 ),
-                style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontFamily: 'SourceCodePro',
+                ),
               ),
             ),
             if (text.text.isNotEmpty)
@@ -97,7 +100,7 @@ class PositionFilter extends StatelessWidget {
             padding: const EdgeInsets.only(top: 4),
             child: Text(
               parse.error!,
-              style: const TextStyle(fontSize: 11, color: AppColors.danger),
+              style: const TextStyle(fontSize: 12, color: AppColors.danger),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -175,7 +178,7 @@ class _BoardPositionChip extends StatelessWidget {
               Text(
                 'Use board position',
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
                   color: isStart
                       ? AppColors.onSurfaceDisabled
