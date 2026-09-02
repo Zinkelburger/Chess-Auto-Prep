@@ -135,3 +135,10 @@ tools/experiments/fast_vs_pure/results/*/pid
 tools/experiments/benko_master/run_*/
 tools/experiments/benko_master/ab_*/
 tools/experiments/benko_master/LATEST*
+
+# Claude Code. The agent contract — the Flutter-lock gate hook, the app-driver
+# skill, the slash commands — is TRACKED on purpose: it is what makes a fresh
+# clone behave, and scripts/doctor.sh fails if any of it goes untracked.
+# Only per-machine and per-session state is ignored.
+.claude/settings.local.json
+.claude/RESUME.md

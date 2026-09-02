@@ -7,6 +7,7 @@ import 'package:window_manager/window_manager.dart';
 import 'core/app_history.dart';
 import 'core/app_state.dart';
 import 'core/study_controller.dart';
+import 'debug/agent_driver.dart';
 import 'models/engine_settings.dart';
 import 'models/eval_database_settings.dart';
 import 'screens/main_screen.dart';
@@ -24,6 +25,8 @@ void main() {
     runZonedGuarded(
       () async {
         WidgetsFlutterBinding.ensureInitialized();
+        // No-op unless --dart-define=AGENT_DRIVER=true in a debug build.
+        installAgentDriver();
 
         FlutterError.onError = (FlutterErrorDetails details) {
           FlutterError.presentError(details);
