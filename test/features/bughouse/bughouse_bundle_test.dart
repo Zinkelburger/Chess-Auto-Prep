@@ -17,10 +17,26 @@ void main() {
 
   const network = 'assets/bughouse/hivemind.onnx.gz';
 
+  String runtimeKey() {
+    if (Platform.isWindows) return 'assets/bughouse/onnxruntime.dll.gz';
+    if (Platform.isMacOS) return 'assets/bughouse/libonnxruntime.dylib.gz';
+    return 'assets/bughouse/libonnxruntime.so.1.gz';
+  }
+
   tearDown(() => BughouseBundle.setBundledForTesting(null));
 
-  test('engine and network together mean the mode can run', () {
-    expect(BughouseBundle.hasEngineAssets([engineKey(), network]), isTrue);
+  test('engine, runtime and network together mean the mode can run', () {
+    expect(
+      BughouseBundle.hasEngineAssets([engineKey(), runtimeKey(), network]),
+      isTrue,
+    );
+  });
+
+  test('a bundle missing the ONNX runtime does not count', () {
+    // `ensureInstalled` extracts all three and throws over the runtime, so a
+    // probe that ignored it let the mode offer itself and then fail on the
+    // first click — the one thing the probe exists to prevent.
+    expect(BughouseBundle.hasEngineAssets([engineKey(), network]), isFalse);
   });
 
   test('a checkout that never ran the fetch script has neither', () {
@@ -39,12 +55,21 @@ void main() {
     final foreign = Platform.isWindows
         ? 'assets/bughouse/hivemind-linux.gz'
         : 'assets/bughouse/hivemind-windows.exe.gz';
-    expect(BughouseBundle.hasEngineAssets([foreign, network]), isFalse);
+    expect(
+      BughouseBundle.hasEngineAssets([foreign, runtimeKey(), network]),
+      isFalse,
+    );
   });
 
-  test('the network alone is not enough, nor the engine alone', () {
+  test('no two of the three are enough on their own', () {
     expect(BughouseBundle.hasEngineAssets([network]), isFalse);
     expect(BughouseBundle.hasEngineAssets([engineKey()]), isFalse);
+    expect(BughouseBundle.hasEngineAssets([runtimeKey()]), isFalse);
+    expect(
+      BughouseBundle.hasEngineAssets([engineKey(), runtimeKey()]),
+      isFalse,
+    );
+    expect(BughouseBundle.hasEngineAssets([runtimeKey(), network]), isFalse);
   });
 
   test('the probe caches, so the mode menu can ask on every rebuild', () async {

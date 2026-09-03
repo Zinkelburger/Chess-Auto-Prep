@@ -77,10 +77,10 @@ class BughouseJointMove {
 ///
 /// The score deserves a warning, because it is not a chess engine's score.
 /// Hivemind reports `180·tan(1.56·Q)` of an MCTS value, and that value carries
-/// a large constant offset: a dead-level position reads about **-2.3**, not
-/// 0.00, at every node count we have measured (500 to 15 000). What is
-/// meaningful is the *ordering* of the moves in one search and the *gaps*
-/// between them — see [levelBaseline] and [BughouseSearchResult.lines].
+/// a large offset — *and the offset's sign depends on the `TimeAdvantage`
+/// option the search ran under*. See [levelBaselineFor]. What is meaningful is
+/// the ordering of the moves in one search, the gaps between them, and the
+/// score with the right baseline removed ([relativeToLevel]).
 class BughouseInfo {
   const BughouseInfo({
     required this.depth,
@@ -91,6 +91,7 @@ class BughouseInfo {
     required this.pv,
     this.multipv = 1,
     this.mateIn,
+    this.hadTimeAdvantage = false,
   });
 
   final int depth;
@@ -111,16 +112,33 @@ class BughouseInfo {
   /// spanning both boards.
   final List<BughouseJointMove> pv;
 
+  /// Whether the search that produced this line was told the team is up on the
+  /// diagonal clock. It has to travel with the score, because it decides which
+  /// baseline the score is measured against.
+  final bool hadTimeAdvantage;
+
   /// Evaluation on Hivemind's scale, from the searching team's point of view.
   /// Read it against [levelBaseline], not against zero.
   double get scorePawns => scoreCp / 100.0;
 
-  /// Where a balanced position sits on that scale. Measured, not chosen:
-  /// the opening position reads -2.29 to -2.40 from either seat.
-  static const double levelBaseline = -2.3;
+  /// Where a balanced position sits on Hivemind's scale, for a search run
+  /// with [hasTimeAdvantage].
+  ///
+  /// Measured, not chosen — and the sign flips with the option. The starting
+  /// position on both boards reads -2.33 / -2.24 with `TimeAdvantage` off and
+  /// +2.39 / +2.26 with it on, from either seat, at every node count we have
+  /// tried. Subtracting one fixed constant therefore over-reported every
+  /// "we are ahead" search by about 4.6, which is the whole of the phantom
+  /// advantage the clock-scenario table used to show for its first row.
+  static double levelBaselineFor(bool hasTimeAdvantage) =>
+      hasTimeAdvantage ? 2.3 : -2.3;
+
+  /// The baseline this particular line is measured against.
+  double get levelBaseline => levelBaselineFor(hadTimeAdvantage);
 
   /// How much better or worse than level this looks. Still not pawns, but at
-  /// least it is signed the way a reader expects.
+  /// least it is signed the way a reader expects, and zero really is level
+  /// under either clock stance.
   double get relativeToLevel => scorePawns - levelBaseline;
 
   /// The engine's own number, printed — `#3`, `#-2`, or a signed score.
@@ -135,9 +153,11 @@ class BughouseInfo {
   /// that was searched.
   ///
   /// [scoreLabel] prints what the engine said, which for a dead-level position
-  /// is `-2.30` — a number that reads as "losing" to every chess eye that sees
-  /// it. Subtracting the measured baseline is not cosmetic: it is the
-  /// difference between a score a reader can act on and one that misleads.
+  /// is `-2.30` (or `+2.30` when the team was told it may sit) — numbers that
+  /// read as "losing" and "winning" to every chess eye that sees them.
+  /// Subtracting the baseline that applies to *this* search is not cosmetic:
+  /// it is the difference between a score a reader can act on and one that
+  /// misleads by about 4.6 in one of the three clock stances.
   String get evalLabel {
     final mate = mateIn;
     if (mate != null) return mate >= 0 ? '#$mate' : '#-${-mate}';
@@ -147,17 +167,46 @@ class BughouseInfo {
     return '$sign${(hundredths.abs() / 100).toStringAsFixed(2)}';
   }
 
-  /// Where to fill an eval bar for the team that was searched, 0 to 1.
+  /// The MCTS value behind [scoreCp], recovered exactly.
   ///
-  /// The engine's scale is a tangent of an MCTS value, so it has no natural
-  /// units to divide by; the squash below just has to be monotonic and to put
-  /// a level position in the middle. A mate fills the bar.
-  double get barFraction {
+  /// Hivemind reports `180·tan(1.56·Q)` of its search's Q-value, so the
+  /// tangent inverts without a fitted constant and gives back the engine's own
+  /// expected score in [-1, 1]. This is why the number below is not Lichess's
+  /// `2/(1+exp(-0.00368·cp))-1`: that curve is *fitted* to Stockfish
+  /// centipawns because Stockfish has no win probability to ask for. Hivemind
+  /// does, and undoing its tangent is exact where fitting a curve would not
+  /// be.
+  static const double _tangentScale = 180.0;
+  static const double _tangentRate = 1.56;
+
+  double get q => math.atan(scoreCp / _tangentScale) / _tangentRate;
+
+  /// The Q a level position produces, for a search run with
+  /// [hasTimeAdvantage] — the tangent applied to [levelBaselineFor].
+  static double qBaselineFor(bool hasTimeAdvantage) =>
+      math.atan(levelBaselineFor(hasTimeAdvantage) * 100 / _tangentScale) /
+      _tangentRate;
+
+  /// Our team's expected score as a percentage: 50 is level, 100 is winning.
+  ///
+  /// Anchored on three points we actually know — a loss at Q = -1, level at
+  /// [qBaselineFor], a win at Q = +1 — and linear between them. The two
+  /// halves have different slopes because the level baseline sits at about
+  /// -0.58 rather than 0, which is a fact about Hivemind's scale rather than a
+  /// choice made here: there is genuinely less room below level than above it.
+  double get winPercent {
     final mate = mateIn;
-    if (mate != null) return mate >= 0 ? 1.0 : 0.0;
-    final squashed = 2 / (1 + math.exp(-relativeToLevel / 1.6)) - 1;
-    return (0.5 + squashed / 2).clamp(0.0, 1.0);
+    if (mate != null) return mate >= 0 ? 100.0 : 0.0;
+    final base = qBaselineFor(hadTimeAdvantage);
+    final value = q;
+    final fraction = value <= base
+        ? 0.5 * (value + 1) / (base + 1)
+        : 0.5 + 0.5 * (value - base) / (1 - base);
+    return (fraction * 100).clamp(0.0, 100.0);
   }
+
+  /// [winPercent] as a person reads it — `58%`.
+  String get winLabel => '${winPercent.round()}%';
 }
 
 /// Where a team stands on the clock, which in bughouse is a rule input rather
@@ -246,6 +295,29 @@ class BughouseClocks {
   final Duration blackA;
   final Duration whiteB;
   final Duration blackB;
+
+  /// `3:00` — the way a clock is written, and the way one is typed back in.
+  static String format(Duration d) {
+    final minutes = d.inMinutes;
+    final seconds = d.inSeconds % 60;
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  /// Reads `m:ss`, or a bare number of seconds. Null when it is neither.
+  static Duration? tryParse(String raw) {
+    final text = raw.trim();
+    if (text.isEmpty) return null;
+    if (!text.contains(':')) {
+      final seconds = int.tryParse(text);
+      return seconds == null ? null : Duration(seconds: seconds);
+    }
+    final parts = text.split(':');
+    if (parts.length != 2) return null;
+    final minutes = int.tryParse(parts[0]);
+    final seconds = int.tryParse(parts[1]);
+    if (minutes == null || seconds == null) return null;
+    return Duration(minutes: minutes, seconds: seconds);
+  }
 
   Duration of(BughouseBoard board, Side side) => switch ((board, side)) {
     (BughouseBoard.a, Side.white) => whiteA,
@@ -374,16 +446,35 @@ class BughouseState {
       ? (mover == team ? 'A' : 'B')
       : (mover == team.opposite ? 'C' : 'D');
 
+  /// Who that seat is, in two or three words: `you`, `your partner`, `your
+  /// opponent`, `partner's opponent`.
+  ///
+  /// Four people play a bughouse game and a letter alone does not say which
+  /// one you are looking at, so the row beside each board spells it out. The
+  /// fourth seat is the one that needs saying most — it is the player whose
+  /// captures land in your opponent's reserve.
+  String seatRole(BughouseBoard which, Side mover) =>
+      switch (seatLetter(which, mover)) {
+        'A' => 'you',
+        'B' => 'opponent',
+        'C' => 'partner',
+        _ => 'partner\'s opponent',
+      };
+
   /// The same seat spelled out, for a tooltip: `A — you, white on board 1`.
+  ///
+  /// Longer than [seatRole] on purpose. The row beside a board has one line to
+  /// name a person in and repeats the word four times, so it says "opponent";
+  /// a tooltip is read once and can afford to say whose.
   String seatDescription(BughouseBoard which, Side mover) {
-    final letter = seatLetter(which, mover);
-    final who = switch (letter) {
+    final who = switch (seatLetter(which, mover)) {
       'A' => 'you',
       'B' => 'your opponent',
       'C' => 'your partner',
       _ => 'your partner\'s opponent',
     };
-    return '$letter — $who, ${mover.name} on ${which.label.toLowerCase()}';
+    return '${seatLetter(which, mover)} — $who, '
+        '${mover.name} on ${which.label.toLowerCase()}';
   }
 
   /// Both seats of a team, in board order: ours is `A + C`, theirs `B + D`.
@@ -472,12 +563,21 @@ class BughouseState {
   }
 
   /// What [move] captures on [position], including en passant. Drops capture
-  /// nothing.
+  /// nothing, and neither does castling.
   static Piece? _capturedPiece(Crazyhouse position, Move move) {
     if (move is DropMove) return null;
     final normal = move as NormalMove;
     final target = position.board.pieceAt(normal.to);
-    if (target != null) return target;
+    if (target != null) {
+      // Castling is encoded king-takes-own-rook, so the destination square
+      // holds *our* rook and nothing has been captured. Without this guard
+      // every castle handed that rook to the partner board, inventing a piece
+      // out of nothing, and the matching `decrement` of a pocket that never
+      // held it corrupted the counts — the reserves full of impossible queens
+      // (and kings) that a castled game used to show.
+      if (target.color == position.turn) return null;
+      return target;
+    }
     // En passant: the pawn taken is not on the destination square.
     final moving = position.board.pieceAt(normal.from);
     if (moving?.role == Role.pawn && normal.to == position.epSquare) {
@@ -624,9 +724,13 @@ class BughouseState {
 
   // -------------------------------------------------------------------- FEN
 
-  /// Parses `<fenA>|<fenB>`, the form the engine speaks. A single FEN is
-  /// accepted too and applied to both boards, which is what pasting a
-  /// crazyhouse position from elsewhere should do.
+  /// Parses `<fenA>|<fenB>`, the form the engine speaks.
+  ///
+  /// A single FEN is accepted too and means *board A*, leaving board B at the
+  /// standard opening — the same reading `DualBoard.from_dual_fen` gives it in
+  /// the MCP server. The two used to disagree (this side copied the FEN to
+  /// both boards), so the same string pasted into the app and handed to
+  /// `mcp__bughouse__analyse` produced two different positions.
   static BughouseState? tryParseDualFen(
     String raw, {
     Side team = Side.white,
@@ -646,7 +750,7 @@ class BughouseState {
               Setup.parseFen(parts[1].trim()),
               ignoreImpossibleCheck: true,
             )
-          : a;
+          : Crazyhouse.initial;
       return BughouseState(
         boardA: a,
         boardB: b,

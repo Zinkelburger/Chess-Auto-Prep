@@ -89,11 +89,11 @@ class BughouseHistory {
   /// Removes the ply before the cursor and steps back onto its predecessor.
   BughousePly? undo() {
     if (_cursor == 0) return null;
-    final removed = _plies.removeAt(_cursor - 1);
-    _cursor--;
+    final removed = _plies[_cursor - 1];
     // Everything after a removed ply was computed from it, so it cannot be
     // kept — undo in a two-board game is a truncation, not a step back.
-    if (_cursor < _plies.length) _plies.removeRange(_cursor, _plies.length);
+    _plies.removeRange(_cursor - 1, _plies.length);
+    _cursor--;
     return removed;
   }
 
@@ -102,6 +102,50 @@ class BughouseHistory {
   void forward() => goTo(_cursor + 1);
   void toStart() => goTo(0);
   void toEnd() => goTo(_plies.length);
+
+  // ------------------------------------------------------------------ export
+
+  /// [which]'s plies, numbered the way that board counts them.
+  ///
+  /// The rule is the movetext one: a number before white's move, and before a
+  /// black move that opens the column, because a board's line can begin with
+  /// black — the other board moved first.
+  List<BughouseMovetextEntry> movetextOn(BughouseBoard which) {
+    // Read once: `plies` hands back a fresh unmodifiable copy on every call,
+    // so indexing it inside the loop copied the whole line per ply — and the
+    // column built from this rebuilds on every `info` line the engine emits.
+    final plies = _plies;
+    final entries = <BughouseMovetextEntry>[];
+    for (var i = 0; i < plies.length; i++) {
+      final ply = plies[i];
+      if (ply.board != which) continue;
+      entries.add(
+        BughouseMovetextEntry(
+          ply: ply,
+          index: i,
+          showsNumber: ply.side == Side.white || entries.isEmpty,
+        ),
+      );
+    }
+    return entries;
+  }
+
+  /// [which]'s movetext as one line: `1. e4 Nf6 2. e5 Nd5`.
+  String movetextFor(BughouseBoard which) =>
+      movetextOn(which).map((e) => e.text).join(' ');
+
+  /// The whole table as text: each board named, on its own line.
+  ///
+  /// There is no single interleaved line to hand over. The two boards are two
+  /// games with two sets of move numbers, ordered by four clocks rather than
+  /// by turns, so a paste that ran them together would print two `2.`s and
+  /// say nothing about which board either belonged to. A board with nothing
+  /// on it is still named, so the shape of the paste does not change with the
+  /// game.
+  String get tableMovetext => [
+    for (final which in BughouseBoard.values)
+      '${which.label}: ${movetextFor(which)}'.trimRight(),
+  ].join('\n');
 
   /// A fresh history rooted at [state], keeping nothing.
   static BughouseHistory from(BughouseState state) => BughouseHistory(state);
@@ -126,4 +170,29 @@ class BughouseHistory {
       _cursor,
     );
   }
+}
+
+/// One ply as a movetext prints it: the ply, where it sits in the whole line,
+/// and whether a move number is printed before it.
+///
+/// Shared by the drawn column and by the copied text so the two cannot drift
+/// apart — a paste that numbered its moves differently from the column above
+/// it would be a second, quieter answer to "what was played here".
+class BughouseMovetextEntry {
+  const BughouseMovetextEntry({
+    required this.ply,
+    required this.index,
+    required this.showsNumber,
+  });
+
+  final BughousePly ply;
+
+  /// Position in the whole line, which is what the cursor indexes — so a
+  /// click on a column entry still navigates the game as it was played.
+  final int index;
+
+  final bool showsNumber;
+
+  /// `2. e5`, or bare `e5` when the entry before it carried the number.
+  String get text => showsNumber ? '${ply.numberLabel} ${ply.san}' : ply.san;
 }

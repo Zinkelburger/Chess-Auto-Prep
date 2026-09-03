@@ -73,6 +73,12 @@ void showAppSnackBar(
         textAlign: actionLabel == null ? TextAlign.center : TextAlign.start,
       ),
       width: screenWidth < 500 ? screenWidth * 0.85 : 400,
+      // Stated here rather than left to the theme: `width` is only legal on a
+      // floating snackbar, and Flutter asserts rather than ignoring it. The
+      // app's theme happens to set floating, so any surface built without
+      // that theme — a widget test, a dialog rooted elsewhere — turned a
+      // "Copied" message into a framework exception.
+      behavior: SnackBarBehavior.floating,
       duration:
           duration ??
           (isError ? const Duration(days: 365) : const Duration(seconds: 3)),

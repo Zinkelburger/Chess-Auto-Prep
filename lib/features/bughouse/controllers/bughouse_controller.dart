@@ -4,7 +4,10 @@ import 'dart:math' as math;
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../../models/board_annotation.dart';
+import '../../../utils/chess_utils.dart' show roleChar;
 import '../../../utils/safe_change_notifier.dart';
+import '../models/bughouse_engine_settings.dart';
 import '../models/bughouse_history.dart';
 import '../models/bughouse_state.dart';
 import '../services/bughouse_bundle.dart';
@@ -43,10 +46,25 @@ class EraseTool extends SetupTool {
 class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   BughouseController({this.engineOverride}) {
     _history = BughouseHistory(BughouseState.initial());
+    unawaited(_loadEngineSettings());
+  }
+
+  Future<void> _loadEngineSettings() async {
+    final loaded = await BughouseEngineSettings.load();
+    if (isDisposed || loaded == _engineSettings) return;
+    _engineSettings = loaded;
+    // The process, if one is already up, is running on the defaults.
+    _optionsDirty = true;
+    notifyListeners();
   }
 
   /// Injected engine, for tests and for pointing at a local engine build.
-  final BughouseEngine? engineOverride;
+  ///
+  /// Typed as the interface rather than the process client, so a test can hand
+  /// in a scripted fake — the pump, the generation invalidation and the
+  /// scenario comparison are the parts most worth covering and were previously
+  /// unreachable without launching a real 54 MB engine.
+  final BughouseAnalysisEngine? engineOverride;
 
   late BughouseHistory _history;
   BughouseHistory get history => _history;
@@ -78,10 +96,27 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   BughouseJointMove? _hovered;
 
   /// Called by a line in the panel as the pointer enters and leaves it.
-  void hoverAction(BughouseJointMove? action) {
+  ///
+  /// [silently] is for teardown: a row unmounted while the pointer is over it
+  /// clears the highlight from `State.dispose`, which runs inside
+  /// `finalizeTree` where the tree is locked — notifying there threw
+  /// "markNeedsBuild() called when widget tree was locked" on every click of a
+  /// line, the panel's headline interaction. Nothing needs repainting in that
+  /// case anyway: the rows are on their way out.
+  void hoverAction(BughouseJointMove? action, {bool silently = false}) {
     if (identical(_hovered, action)) return;
     _hovered = action;
-    notifyListeners();
+    if (!silently) notifyListeners();
+  }
+
+  /// Drops the highlight only if [action] is the one currently lit.
+  ///
+  /// A row unmounting must not clear a highlight another row has just taken,
+  /// which a bare `hoverAction(null)` did whenever the block rebuilt under the
+  /// pointer.
+  void clearHoverIfOwned(BughouseJointMove action, {bool silently = false}) {
+    if (!identical(_hovered, action)) return;
+    hoverAction(null, silently: silently);
   }
 
   /// The squares [which] should light up because a line is being hovered.
@@ -102,13 +137,83 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
     };
   }
 
+  /// Arrows and drop markers for [which] — the engine's answer, drawn on the
+  /// board instead of only spelled out beside it.
+  ///
+  /// Reading a joint action off a text row is the hard part of bughouse
+  /// notation: two boards move at once, and half the moves are drops with no
+  /// origin square to trace. So the shortlist row under the pointer wins the
+  /// boards outright (blue, both halves), and with nothing hovered the boards
+  /// carry the two standing answers — what our team should play (green) and
+  /// what the other team is about to (red), which is the pair a player checks
+  /// against each other.
+  List<BoardAnnotation> annotationsFor(BughouseBoard which) {
+    if (_mode != BughouseMode.play) return const [];
+    final hovered = _hovered;
+    if (hovered != null) {
+      return _annotate(which, hovered, AnnotationBrush.blue);
+    }
+    return [
+      ..._annotate(which, ours.best, AnnotationBrush.green),
+      ..._annotate(which, theirs.best, AnnotationBrush.red),
+    ];
+  }
+
+  /// One half of a joint action as board shapes: an arrow for a move, and for
+  /// a drop a ring on the landing square badged with the piece, because a drop
+  /// comes from a reserve and so has nowhere to draw an arrow from.
+  List<BoardAnnotation> _annotate(
+    BughouseBoard which,
+    BughouseJointMove? action,
+    AnnotationBrush brush,
+  ) {
+    if (action == null) return const [];
+    final half = action.half(which);
+    final uci = half.uci;
+    if (half.isPass || uci == null) return const [];
+    final position = state.board(which);
+    final move = _parseUci(position, uci);
+    if (move == null || !position.isLegal(move)) return const [];
+    return switch (move) {
+      NormalMove(:final from, :final to) => [
+        BoardAnnotation(orig: from.name, dest: to.name, brush: brush),
+      ],
+      DropMove(:final to, :final role) => [
+        BoardAnnotation(
+          orig: to.name,
+          brush: brush,
+          label: roleChar(role).toUpperCase(),
+        ),
+      ],
+    };
+  }
+
+  /// The last move played on [which], for the readout under that board.
+  ///
+  /// Per board rather than per line: the two boards are two games with two
+  /// move numbers, so "what just happened here" is a different question on
+  /// each of them and the whole-line cursor cannot answer it.
+  BughousePly? lastPlyOn(BughouseBoard which) {
+    final plies = _history.plies;
+    for (var i = _history.cursor - 1; i >= 0; i--) {
+      if (plies[i].board == which) return plies[i];
+    }
+    return null;
+  }
+
   /// A pocket piece the user picked up, awaiting a destination square.
   ({BughouseBoard board, Side side, Role role})? _pendingDrop;
   ({BughouseBoard board, Side side, Role role})? get pendingDrop =>
       _pendingDrop;
 
-  BughouseEngine? _engine;
-  BughouseEngine? get engine => _engine;
+  BughouseAnalysisEngine? _engine;
+  BughouseAnalysisEngine? get engine => _engine;
+
+  /// The launch in flight, if any. Two callers asking for the engine at once
+  /// (the pump plus a "compare clocks" press during the first network load)
+  /// used to start two processes, leak the first `infoStream` subscription and
+  /// orphan whichever process lost the assignment.
+  Future<BughouseAnalysisEngine>? _launching;
 
   bool _starting = false;
   bool get isStarting => _starting;
@@ -118,12 +223,32 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   bool _analysisEnabled = true;
   bool get analysisEnabled => _analysisEnabled;
 
+  /// Whether the pane is the one on screen.
+  ///
+  /// Mode views live in an `IndexedStack` and are built once for the life of
+  /// the app, so leaving Bughouse Lab neither disposes this controller nor
+  /// changes [_mode]. Without this flag the pump kept alternating 30-second
+  /// passes over both teams for the rest of the session — measured at about
+  /// seven cores, indefinitely, in a mode the user had left.
+  bool _onScreen = true;
+
   /// Which team the engine is thinking about this instant, null between
   /// passes. Both teams are searched in turn, so this is what the spinner
   /// should follow rather than a single "is searching" flag.
   Side? _thinkingFor;
   Side? get thinkingFor => _thinkingFor;
   bool get isThinking => _thinkingFor != null;
+
+  /// The generation [_thinkingFor] belongs to.
+  ///
+  /// `info` lines keep arriving for a couple of hundred milliseconds after a
+  /// `stop`, so a move played mid-pass used to have the dying search's last
+  /// line folded into the freshly cleared analysis — and since the team it was
+  /// filed under might now have nothing to move, the panel showed a live score
+  /// for our team directly above the words "nothing to move". A finished
+  /// search is already dropped by generation; this is the same check for the
+  /// lines that stream out of one.
+  int _thinkingGeneration = -1;
 
   /// True while a scenario comparison has the engine to itself.
   bool _comparing = false;
@@ -169,9 +294,34 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   /// shortlist is what makes that readable; a single number is not.
   List<BughouseInfo> get lines => ours.lines;
 
-  /// How many ranked lines to ask for. Not a user knob: three is what fits
-  /// beside the boards, and more lines cost the same search nothing.
-  static const int shortlistSize = 3;
+  /// The engine knobs, loaded from preferences and applied to the process.
+  BughouseEngineSettings _engineSettings = const BughouseEngineSettings();
+  BughouseEngineSettings get engineSettings => _engineSettings;
+
+  /// Whether the live process still has to be told about [_engineSettings].
+  ///
+  /// Applied on the engine's own command queue immediately before a search
+  /// rather than the moment the user turns a dial: a `setoption` sent while a
+  /// pass is in flight would sit behind it anyway, and doing it here means a
+  /// freshly launched process — which is back at the engine's defaults — is
+  /// configured by exactly the same path.
+  bool _optionsDirty = true;
+
+  /// Applies new engine settings and starts the search over on them.
+  void setEngineSettings(BughouseEngineSettings next) {
+    if (next == _engineSettings) return;
+    final before = _engineSettings;
+    _engineSettings = next;
+    unawaited(next.save());
+    if (next.reconfigures(before)) _optionsDirty = true;
+    // Every knob here changes what the engine would answer, so what it has
+    // already answered no longer describes this search.
+    _clearAnalysis();
+    notifyListeners();
+  }
+
+  /// How that shows up in the search: how many ranked lines each pass reports.
+  int get shortlistSize => _engineSettings.lines;
 
   /// How long each pass thinks, doubling until it caps.
   ///
@@ -181,8 +331,10 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   /// every time, measured), so a longer pass is the only way to a deeper
   /// answer, and the first ones are short so a number appears immediately.
   static const int _firstPassMs = 2000;
-  static const int _longestPassMs = 30000;
   static const int _comparePassMs = 6000;
+
+  /// Where the doubling stops — the user's "how hard should it think".
+  int get _longestPassMs => _engineSettings.thinkSeconds * 1000;
 
   int _passMs = _firstPassMs;
 
@@ -198,6 +350,11 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   StreamSubscription<BughouseInfo>? _infoSub;
 
   String get backendLabel => _engine?.backend ?? '';
+
+  /// What the running engine reported about workers, threads and batch — the
+  /// honest answer to "how many cores is it using", since Hivemind fixes its
+  /// worker count and has no `Threads` option to offer.
+  String get backendDetail => _engine?.backendDetail ?? '';
   bool get isReady => _engine != null;
 
   // ------------------------------------------------------------------- modes
@@ -253,8 +410,12 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   void setClock(BughouseBoard board, Side side, Duration value) {
+    // Re-rooting the line rebuilds every recorded position and throws the
+    // analysis away, so a "change" that changes nothing must not happen.
+    final clamped = value.isNegative ? Duration.zero : value;
+    if (state.clocks.of(board, side) == clamped) return;
     _applyToLine((s) {
-      final clocks = s.clocks.withClock(board, side, value);
+      final clocks = s.clocks.withClock(board, side, clamped);
       return s.copyWith(
         clocks: clocks,
         timeStance: deriveTimeAdvantageFromClocks
@@ -266,11 +427,18 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
 
   // ------------------------------------------------------------------- setup
 
-  void applyTool(BughouseBoard which, Square square) {
-    final piece = switch (_tool) {
-      PlaceTool(:final piece) => piece,
-      EraseTool() => null,
-    };
+  /// Places or clears a square in the editor.
+  ///
+  /// [erase] is the right-click path, which clears whatever is there whichever
+  /// tool is selected — the same bargain every position editor makes, and the
+  /// reason the eraser tool is a convenience rather than the only way out.
+  void applyTool(BughouseBoard which, Square square, {bool erase = false}) {
+    final piece = erase
+        ? null
+        : switch (_tool) {
+            PlaceTool(:final piece) => piece,
+            EraseTool() => null,
+          };
     final next = state.withPieceAt(which, square, piece);
     if (next == null) {
       _fail('That leaves an impossible position.');
@@ -451,14 +619,28 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   /// half the reason to look at their search at all.
   void playJoint(BughouseJointMove? best) {
     if (best == null || best.isEmpty) return;
-    var played = false;
+    // Both halves are resolved against the position the engine saw, before
+    // either is applied. Resolving B after playing A would let a piece
+    // captured on A pay for a drop on B in the same action — the engine never
+    // chose that, because it decided both halves from one position.
+    final before = state;
+    final resolved = <BughouseBoard, Move>{};
     for (final which in BughouseBoard.values) {
       final half = best.half(which);
-      if (half.isPass || half.uci == null) continue;
-      final move = _parseUci(state.board(which), half.uci!);
-      if (move != null && _play(which, move)) played = true;
+      final uci = half.uci;
+      if (half.isPass || uci == null) continue;
+      final position = before.board(which);
+      final move = _parseUci(position, uci);
+      if (move != null && position.isLegal(move)) resolved[which] = move;
     }
-    if (!played) _fail('The engine\'s move is not legal here.');
+    if (resolved.isEmpty) {
+      _fail('The engine\'s move is not legal here.');
+      notifyListeners();
+      return;
+    }
+    for (final entry in resolved.entries) {
+      _play(entry.key, entry.value);
+    }
     notifyListeners();
   }
 
@@ -522,15 +704,102 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
     return rows.isEmpty ? '—' : rows.map((r) => r.move).join('  ·  ');
   }
 
+  /// The engine's whole line in SAN, ply by ply, split across the two seats
+  /// that carry it.
+  ///
+  /// The engine speaks board-prefixed UCI and its `pv` is a list of *joint*
+  /// actions, so printed raw it reads `(g1f3,pass) (b8c6,e2e4)` — which is not
+  /// a line anyone can follow. Replaying it gives SAN, and splitting each ply
+  /// by board gives the two columns the panel lays it out in: our seats are A
+  /// on board 1 and C on board 2, theirs B and D.
+  ///
+  /// Both halves of a ply are resolved against the position *before* either is
+  /// applied, matching [playJoint] — the engine decided them together, so a
+  /// piece captured on one board must not pay for a drop on the other in the
+  /// same ply. Replay stops at the first half that will not play, which is
+  /// what a line from a superseded position looks like.
+  ///
+  /// Which team acts is read off the position for each ply rather than fixed
+  /// to [team], because a variation alternates: the searched team moves, then
+  /// the other two answer. That is what decides whether a `pass` in a ply is a
+  /// deliberate sit or simply the half of a joint action nobody owned, and it
+  /// is why each step carries the seats that played it.
+  List<BughousePvStep> describePv(
+    BughouseInfo info, {
+    required Side team,
+    int maxPlies = 6,
+  }) {
+    var position = state;
+    final steps = <BughousePvStep>[];
+    for (final action in info.pv) {
+      if (steps.length >= maxPlies) break;
+
+      // A real half is played by whoever is on turn on that board, and that
+      // names the team for the whole ply — the two halves of a joint action
+      // always belong to the same team.
+      Side? acting;
+      for (final which in BughouseBoard.values) {
+        final half = action.half(which);
+        if (half.isPass || half.uci == null) continue;
+        final turn = position.board(which).turn;
+        acting = which == BughouseBoard.a ? turn : turn.opposite;
+        break;
+      }
+      // An all-pass ply names no team, so it stays with whoever moved last —
+      // or, at the head of the line, with the team that was searched.
+      acting ??= steps.isEmpty ? team : steps.last.team;
+
+      final sans = <BughouseBoard, String>{};
+      var next = position;
+      var stalled = false;
+      for (final which in BughouseBoard.values) {
+        final mover = which == BughouseBoard.a ? acting : acting.opposite;
+        final half = action.half(which);
+        final uci = half.uci;
+        if (half.isPass || uci == null) {
+          // Sitting is only a decision on a board the team is actually on move
+          // on; elsewhere the pass is just the shape of a joint action.
+          if (position.board(which).turn == mover) sans[which] = 'sit';
+          continue;
+        }
+        final board = position.board(which);
+        final move = _parseUci(board, uci);
+        if (move == null || !board.isLegal(move)) {
+          stalled = true;
+          break;
+        }
+        sans[which] = board.makeSan(move).$2;
+        final played = next.playMove(which, move);
+        if (played == null) {
+          stalled = true;
+          break;
+        }
+        next = played;
+      }
+      if (stalled || sans.isEmpty) break;
+      steps.add(
+        BughousePvStep(
+          team: acting,
+          seats: state.teamLetters(acting),
+          onA: sans[BughouseBoard.a],
+          onB: sans[BughouseBoard.b],
+        ),
+      );
+      position = next;
+    }
+    return steps;
+  }
+
   /// Parses the engine's UCI, including `P@e5` drops.
   static Move? _parseUci(Crazyhouse position, String uci) {
     final move = Move.parse(uci);
     if (move == null) return null;
     if (move is NormalMove && move.promotion == null) {
-      // A pawn reaching the last rank without an explicit promotion is a queen
-      // by convention.
+      // Belt and braces: Hivemind spells its promotions out (`b7a8q`), so this
+      // has never fired against the real engine — but a bare `e7e8` is legal
+      // UCI elsewhere, and a queen is the convention.
       final piece = position.board.pieceAt(move.from);
-      final lastRank = position.turn == Side.white ? 7 : 0;
+      final lastRank = piece?.color == Side.white ? 7 : 0;
       if (piece?.role == Role.pawn && move.to.rank == lastRank) {
         return NormalMove(from: move.from, to: move.to, promotion: Role.queen);
       }
@@ -563,7 +832,46 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
 
   /// Whether the engine should be thinking at all right now.
   bool get _wantsAnalysis =>
-      _analysisEnabled && _mode == BughouseMode.play && !isDisposed;
+      _analysisEnabled &&
+      _onScreen &&
+      _mode == BughouseMode.play &&
+      !isDisposed;
+
+  /// Told by the pane as it comes and goes.
+  ///
+  /// Leaving stops the search *and* shuts the process down: an idle Hivemind
+  /// still holds its 54 MB network and spins ONNX Runtime's thread pools at
+  /// about a third of a core, which is not worth keeping across a session for
+  /// the second or two a relaunch costs.
+  void setOnScreen(bool value) {
+    if (_onScreen == value) return;
+    _onScreen = value;
+    if (value) {
+      _passMs = _firstPassMs;
+      startAnalysis();
+    } else {
+      // Everything on the panel described a position nobody is looking at any
+      // more, and will be recomputed on the way back in.
+      _generation++;
+      _analyses = const {};
+      scenarios = const [];
+      _passMs = _firstPassMs;
+      _engine?.stop();
+      unawaited(_shutDownEngine());
+    }
+    notifyListeners();
+  }
+
+  /// Lets go of the engine, and stops the process unless it is one a caller
+  /// handed us — an injected engine outlives the pane by definition.
+  Future<void> _shutDownEngine() async {
+    final engine = _engine;
+    if (engine == null) return;
+    _release();
+    if (identical(engine, engineOverride)) return;
+    await engine.dispose();
+    notifyListeners();
+  }
 
   /// Asks for analysis to be running. Called by the pane when it appears, so
   /// that merely constructing a controller never loads a 54 MB network.
@@ -620,7 +928,7 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
         final generation = _generation;
         final position = state;
 
-        final BughouseEngine engine;
+        final BughouseAnalysisEngine engine;
         try {
           engine = await _ensureEngine();
         } catch (e) {
@@ -655,14 +963,16 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
 
   /// One pass for one team. Results from a stale generation are discarded.
   Future<void> _think(
-    BughouseEngine engine,
+    BughouseAnalysisEngine engine,
     BughouseState position,
     Side team,
     int generation,
   ) async {
     _thinkingFor = team;
+    _thinkingGeneration = generation;
     notifyListeners();
     try {
+      await _applyEngineOptions(engine);
       await engine.configure(
         team: team,
         hasTimeAdvantage: position.timeAdvantageFor(team),
@@ -702,12 +1012,12 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   /// team is on move we do not — there is no move for us to search — so the
   /// opponents' number is turned around and shown instead, which is a truer
   /// answer than an empty pane.
-  ({String label, double fraction, bool borrowed})? get eval {
+  ({String label, double winPercent, bool borrowed})? get eval {
     final mine = ours.latest;
     if (mine != null) {
       return (
         label: mine.evalLabel,
-        fraction: mine.barFraction,
+        winPercent: mine.winPercent,
         borrowed: false,
       );
     }
@@ -715,7 +1025,9 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
     if (other == null) return null;
     return (
       label: flipEval(other.evalLabel),
-      fraction: 1 - other.barFraction,
+      // Their expected score is ours subtracted from the whole, for the same
+      // reason the label is flipped: the panel only ever answers for us.
+      winPercent: 100 - other.winPercent,
       borrowed: true,
     );
   }
@@ -739,7 +1051,7 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
     // prints the ranked block once, at the end of a pass.
     if (info.multipv != 1) return;
     final team = _thinkingFor;
-    if (team == null) return;
+    if (team == null || _thinkingGeneration != _generation) return;
     final current = _analysisFor(team);
     _analyses = {..._analyses, team: current.withLatest(info)};
     notifyListeners();
@@ -770,6 +1082,7 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
 
     final position = state;
+    final generation = _generation;
     final runs = <({String label, bool advantage, RequireMoveOn require})>[
       (label: 'Ahead (may sit)', advantage: true, require: RequireMoveOn.none),
       (label: 'Level or behind', advantage: false, require: RequireMoveOn.none),
@@ -783,8 +1096,13 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
     final collected = <BughouseScenarioResult>[];
     try {
       final engine = await _ensureEngine();
+      await _applyEngineOptions(engine);
       for (final run in runs) {
-        if (isDisposed) return;
+        // The boards stay live while this runs, so a move played mid-comparison
+        // bumps the generation and cuts the search in flight short. Without
+        // this check the loop kept filling in a table for a position that is
+        // no longer on screen, one of whose rows was truncated.
+        if (isDisposed || generation != _generation) return;
         await engine.configure(
           team: position.team,
           hasTimeAdvantage: run.advantage,
@@ -794,6 +1112,7 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
         final result = await engine.search(
           movetime: const Duration(milliseconds: _comparePassMs),
         );
+        if (generation != _generation) return;
         collected.add(
           BughouseScenarioResult(
             label: run.label,
@@ -805,7 +1124,11 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      _error = _describe(e, 'Comparison failed');
+      // A search that was cut short because the user moved on is not a
+      // failure to report — the generation says which it was.
+      if (generation == _generation) {
+        _error = _describe(e, 'Comparison failed');
+      }
     } finally {
       _comparing = false;
       _analysisEnabled = resume;
@@ -815,12 +1138,35 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
-  Future<BughouseEngine> _ensureEngine() async {
+  /// Pushes [_engineSettings] into the process, once per change.
+  ///
+  /// `Hash` and `BatchSize` are the two that reconfigure the engine itself;
+  /// `MultiPV` rides along on every [BughouseAnalysisEngine.configure] and the
+  /// think time never leaves this class.
+  Future<void> _applyEngineOptions(BughouseAnalysisEngine engine) async {
+    if (!_optionsDirty) return;
+    // Cleared first: a failure must not retry on every pass forever, and the
+    // error is surfaced by the caller either way.
+    _optionsDirty = false;
+    await engine.setOption('Hash', _engineSettings.hashMb);
+    await engine.setOption('BatchSize', _engineSettings.batchSize);
+  }
+
+  Future<BughouseAnalysisEngine> _ensureEngine() {
     final existing = _engine ?? engineOverride;
-    if (existing != null) {
-      _engine = existing;
-      return existing;
+    // A process that has exited is not an engine. Without this the controller
+    // kept handing back a corpse and every pass waited out its full timeout.
+    if (existing != null && existing.isAlive) {
+      if (!identical(_engine, existing)) _adopt(existing);
+      return Future.value(existing);
     }
+    if (existing != null && !existing.isAlive) {
+      _release();
+    }
+    return _launching ??= _launch();
+  }
+
+  Future<BughouseAnalysisEngine> _launch() async {
     _starting = true;
     notifyListeners();
     try {
@@ -830,19 +1176,36 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
         modelPath: BughouseBundle.modelPath!,
         libraryPath: BughouseBundle.libraryPath,
       );
-      _infoSub = engine.infoStream.listen(_onInfo);
-      _engine = engine;
+      _adopt(engine);
       return engine;
     } finally {
+      _launching = null;
       _starting = false;
       notifyListeners();
     }
+  }
+
+  /// Takes ownership of [engine] and starts folding its `info` lines in.
+  void _adopt(BughouseAnalysisEngine engine) {
+    unawaited(_infoSub?.cancel() ?? Future.value());
+    _infoSub = engine.infoStream.listen(_onInfo);
+    _engine = engine;
+    // A process we have not configured yet is on the engine's own defaults.
+    _optionsDirty = true;
+  }
+
+  /// Lets go of a dead engine so the next request starts a fresh one.
+  void _release() {
+    unawaited(_infoSub?.cancel() ?? Future.value());
+    _infoSub = null;
+    _engine = null;
   }
 
   @override
   void dispose() {
     unawaited(_infoSub?.cancel() ?? Future.value());
     unawaited(_engine?.dispose() ?? Future.value());
+    _engine = null;
     super.dispose();
   }
 }
@@ -880,6 +1243,36 @@ class BughouseTeamAnalysis {
 
   BughouseTeamAnalysis withLatest(BughouseInfo info) =>
       BughouseTeamAnalysis(team: team, latest: info, lines: lines, best: best);
+}
+
+/// One ply of a principal variation, as the two seats that play it.
+///
+/// A bughouse ply is a decision about two boards at once, so it has two cells,
+/// not one move. Either may be absent: a seat that is not on move has nothing
+/// to decide there, which is a blank rather than a `sit`.
+class BughousePvStep {
+  const BughousePvStep({
+    required this.team,
+    required this.seats,
+    required this.onA,
+    required this.onB,
+  });
+
+  /// The team that plays this ply — it alternates down the variation.
+  final Side team;
+
+  /// That team's two seats, `A + C` or `B + D`, so a continuation row says
+  /// whose move it is without the reader counting plies.
+  final String seats;
+
+  /// SAN for the seat on board 1 — `Nf3`, `P@e5`, or `sit` for a deliberate
+  /// pass. Null when that seat had no move to make.
+  final String? onA;
+
+  /// The same for board 2.
+  final String? onB;
+
+  String? on(BughouseBoard which) => which == BughouseBoard.a ? onA : onB;
 }
 
 /// One row of a scenario comparison.

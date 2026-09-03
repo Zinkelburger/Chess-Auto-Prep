@@ -198,12 +198,17 @@ void main() {
       expect(reparsed!.dualFen, original.dualFen);
     });
 
-    test('a single FEN applies to both boards', () {
-      final state = BughouseState.tryParseDualFen(
-        'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1',
-      );
+    test('a single FEN means board A, and leaves board B at the start', () {
+      // The same reading the MCP server gives it. The two used to disagree —
+      // this side copied the FEN onto both boards — so one string pasted into
+      // the app and handed to `mcp__bughouse__analyse` produced two different
+      // positions.
+      const boardA =
+          'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR[] b KQkq - 0 1';
+      final state = BughouseState.tryParseDualFen(boardA);
       expect(state, isNotNull);
-      expect(state!.boardA.fen, state.boardB.fen);
+      expect(state!.boardA.fen, boardA);
+      expect(state.boardB.fen, Crazyhouse.initial.fen);
     });
 
     test('nonsense FEN is rejected, not thrown', () {

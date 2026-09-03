@@ -26,8 +26,9 @@ class BughouseBundle {
   /// Extracted FP32 network.
   static String? get modelPath => _cached?.model;
 
-  /// Directory containing libonnxruntime, or null when the platform links it
-  /// statically / the engine was found on PATH.
+  /// Directory containing libonnxruntime. Null only for a local build pointed
+  /// at by [useLocalBuild] that did not name one — every shipped target
+  /// carries the runtime as a separate file.
   static String? get libraryPath => _cached?.libraryDir;
 
   /// Whether this build actually carries an engine for this platform.
@@ -63,13 +64,17 @@ class BughouseBundle {
 
   /// The decision itself, over a list of asset keys.
   ///
-  /// Both halves are required: a release job fetches one platform's engine, so
-  /// a bundle can hold a Linux engine and no Windows one, and the network is
-  /// fetched separately from the pair and could be the piece that is missing.
+  /// All three parts are required: a release job fetches one platform's pair,
+  /// so a bundle can hold a Linux engine and no Windows one; the network is
+  /// fetched separately from the pair; and the ONNX runtime is a third file
+  /// that [ensureInstalled] extracts unconditionally. Leaving the runtime out
+  /// of this check let a partial bundle offer the mode in the menu and then
+  /// throw on the first click — exactly what the probe exists to prevent.
   @visibleForTesting
   static bool hasEngineAssets(Iterable<String> assetKeys) {
     final keys = assetKeys.toSet();
     return keys.contains('assets/bughouse/${_binaryName()}.gz') &&
+        keys.contains('assets/bughouse/${_runtimeName()}.gz') &&
         keys.contains('assets/bughouse/hivemind.onnx.gz');
   }
 
@@ -93,10 +98,18 @@ class BughouseBundle {
   /// there, and returns the engine path. Throws [BughouseBundleMissing] when
   /// the app was built without the bughouse assets, which is the normal state
   /// of a checkout that has not run `tools/fetch_bughouse.py`.
-  static Future<String> ensureInstalled() async {
+  static Future<String> ensureInstalled() {
     final cached = _cached;
-    if (cached != null) return cached.executable;
+    if (cached != null) return Future.value(cached.executable);
+    // One extraction at a time. Two callers arriving together (the analysis
+    // pump and a button press during the first launch) would otherwise write
+    // the same 54 MB network concurrently.
+    return _installing ??= _install().whenComplete(() => _installing = null);
+  }
 
+  static Future<String>? _installing;
+
+  static Future<String> _install() async {
     final dir = await AppPaths.supportDirectory();
     final target = Directory(p.join(dir.path, 'bughouse'));
     await target.create(recursive: true);
@@ -106,21 +119,17 @@ class BughouseBundle {
     final model = p.join(target.path, 'hivemind.onnx');
     final runtime = p.join(target.path, _runtimeName());
 
-    await _installAsset(
-      asset: 'assets/bughouse/${_binaryName()}.gz',
-      target: executable,
-      expectedSize: manifest['engine'],
-    );
-    await _installAsset(
-      asset: 'assets/bughouse/${_runtimeName()}.gz',
-      target: runtime,
-      expectedSize: manifest['runtime'],
-    );
-    await _installAsset(
-      asset: 'assets/bughouse/hivemind.onnx.gz',
-      target: model,
-      expectedSize: manifest['model'],
-    );
+    // Sizes are keyed by extracted filename, so a checkout holding more than
+    // one platform's pair describes each of them rather than only whichever
+    // fetch ran last.
+    for (final file in [executable, runtime, model]) {
+      final name = p.basename(file);
+      await _installAsset(
+        asset: 'assets/bughouse/$name.gz',
+        target: file,
+        expectedSize: manifest[name],
+      );
+    }
 
     if (!Platform.isWindows) {
       await Process.run('chmod', ['+x', executable]);

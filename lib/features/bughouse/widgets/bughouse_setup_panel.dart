@@ -38,8 +38,9 @@ class _BughouseSetupPanelState extends State<BughouseSetupPanel> {
         const Text('Place pieces', style: AppTextStyles.subtitle),
         const SizedBox(height: 2),
         const Text(
-          'Pick a piece, then click a square on either board. '
-          'Click a reserve slot to add, right-click to remove.',
+          'Pick a piece, then click a square on either board; right-click a '
+          'square to clear it. Click a reserve slot to add one, right-click '
+          'to take one away.',
           style: AppTextStyles.caption,
         ),
         const SizedBox(height: 8),
