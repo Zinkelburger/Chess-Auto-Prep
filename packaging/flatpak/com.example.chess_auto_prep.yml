@@ -10,6 +10,16 @@ runtime: org.freedesktop.Platform
 runtime-version: '24.08'
 sdk: org.freedesktop.Sdk
 command: chess_auto_prep
+# freedesktop 24.08 dropped the `appstream-compose` binary, and only
+# flatpak-builder >= 1.4 knows to call `appstreamcli compose` on the host
+# instead. Release CI builds on ubuntu-22.04 — whose flatpak-builder is 1.2.x —
+# because that is what sets the glibc floor for the app itself, so the build
+# died in cleanup with "bwrap: execvp appstream-compose: No such file or
+# directory" and no release was published at all. Skipping the compose step
+# costs a sideloaded bundle nothing that matters: metainfo.xml, the .desktop
+# entry and the hicolor icon are still installed and still exported, so the
+# app installs on a double-click and lands in the menu with its icon.
+appstream-compose: false
 finish-args:
   - --socket=wayland
   - --socket=fallback-x11
