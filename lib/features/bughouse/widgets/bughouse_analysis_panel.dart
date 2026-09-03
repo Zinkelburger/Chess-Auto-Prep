@@ -4,6 +4,7 @@ import 'package:flutter/scheduler.dart';
 
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
+import '../../../widgets/copy_button.dart';
 import '../controllers/bughouse_controller.dart';
 import '../models/bughouse_engine_settings.dart';
 import '../models/bughouse_eval.dart';
@@ -58,7 +59,11 @@ class _BughouseAnalysisPanelState extends State<BughouseAnalysisPanel> {
         _Eval(controller: controller),
         if (controller.error != null) ...[
           const SizedBox(height: 10),
-          _Banner(message: controller.error!, isError: true),
+          _Banner(
+            message: controller.error!,
+            isError: true,
+            details: controller.errorReport,
+          ),
         ],
         if (controller.notice != null) ...[
           const SizedBox(height: 10),
@@ -864,26 +869,120 @@ class _Label extends StatelessWidget {
   );
 }
 
-class _Banner extends StatelessWidget {
-  const _Banner({required this.message, required this.isError});
+/// A message, and — when the failure came with a diagnostic — one button that
+/// puts the whole thing on the clipboard.
+///
+/// The button exists because of how these failures are actually resolved: the
+/// person who hits one is not the person who can read it, so what matters is
+/// that they can hand it over without having to understand or retype any of
+/// it. The details stay collapsed, because they are pages long and nobody
+/// reading the banner wants them on screen; copying does not require opening
+/// them.
+class _Banner extends StatefulWidget {
+  const _Banner({required this.message, required this.isError, this.details});
+
   final String message;
   final bool isError;
+
+  /// The full report, or null when the failure had nothing more to say.
+  final String? details;
+
+  @override
+  State<_Banner> createState() => _BannerState();
+}
+
+class _BannerState extends State<_Banner> {
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final foreground = widget.isError
+        ? scheme.onErrorContainer
+        : scheme.onSurfaceVariant;
+    final details = widget.details;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: isError ? scheme.errorContainer : scheme.surfaceContainerHighest,
+        color: widget.isError
+            ? scheme.errorContainer
+            : scheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Text(
-        message,
-        style: AppTextStyles.caption.copyWith(
-          color: isError ? scheme.onErrorContainer : scheme.onSurfaceVariant,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SelectableText(
+            widget.message,
+            style: AppTextStyles.caption.copyWith(color: foreground),
+          ),
+          if (details != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                CopyButton(
+                  key: const Key('bughouse-copy-diagnostics'),
+                  label: 'Copy diagnostics',
+                  foreground: foreground,
+                  dense: true,
+                  text: () => '${widget.message}\n\n$details',
+                ),
+                const SizedBox(width: 4),
+                TextButton(
+                  key: const Key('bughouse-toggle-diagnostics'),
+                  onPressed: () => setState(() => _expanded = !_expanded),
+                  style: TextButton.styleFrom(
+                    foregroundColor: foreground,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text(
+                    _expanded ? 'Hide details' : 'Show details',
+                    style: AppTextStyles.caption.copyWith(color: foreground),
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              'Send this to whoever is looking at the bug — it names every '
+              'file, its size and where the engine looked for it.',
+              style: AppTextStyles.caption.copyWith(
+                color: foreground.withValues(alpha: 0.75),
+              ),
+            ),
+            if (_expanded) ...[
+              const SizedBox(height: 8),
+              // Bounded and separately scrollable: the report is longer than
+              // the panel and the eval above it must not be pushed away.
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 240),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: scheme.surface,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: SingleChildScrollView(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: SelectableText(
+                        details,
+                        style: AppTextStyles.monoDense,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ],
       ),
     );
   }

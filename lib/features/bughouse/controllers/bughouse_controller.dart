@@ -274,6 +274,15 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   String? _error;
   String? get error => _error;
 
+  /// The full diagnostic behind [error], when the failure came with one.
+  ///
+  /// Kept apart from [error] because the banner wants one sentence and a bug
+  /// report wants the file sizes, the command line, the library resolution
+  /// table and the engine's own stderr. The panel shows the first and offers
+  /// to copy the second.
+  String? _errorReport;
+  String? get errorReport => _errorReport;
+
   String? _notice;
   String? get notice => _notice;
 
@@ -948,6 +957,7 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
     _analyses = const {};
     _passMs = _firstPassMs;
     _error = null;
+    _errorReport = null;
     _notice = null;
     scenarios = const [];
     // Cuts the pass in flight short; its result is dropped by generation.
@@ -957,7 +967,14 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
 
   void _fail(String message) {
     _error = message;
+    _errorReport = null;
     notifyListeners();
+  }
+
+  /// Records a failure and, when the engine attached one, the report behind it.
+  void _failWith(Object e, String fallback) {
+    _error = _describe(e, fallback);
+    _errorReport = e is BughouseEngineFailure ? e.report : null;
   }
 
   /// Keeps thinking about the current position, alternating teams and giving
@@ -977,7 +994,7 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
           // A missing bundle or a network that will not load is permanent
           // until the user does something about it: say so once and stop,
           // rather than failing in a loop.
-          _error = _describe(e, 'Analysis failed');
+          _failWith(e, 'Analysis failed');
           _analysisEnabled = false;
           notifyListeners();
           return;
@@ -1048,7 +1065,7 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
       if (measured != null) _carried = measured;
     } catch (e) {
       if (generation != _generation) return;
-      _error = _describe(e, 'Analysis failed');
+      _failWith(e, 'Analysis failed');
       _analysisEnabled = false;
     } finally {
       _thinkingFor = null;
@@ -1119,12 +1136,18 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
-  static String _describe(Object e, String fallback) =>
-      e is BughouseEngineFailure ||
-          e is BughouseBundleMissing ||
-          e is BughouseBundleBroken
-      ? e.toString()
-      : '$fallback: $e';
+  /// What to put in the banner.
+  ///
+  /// [BughouseEngineFailure.toString] prefixes its own class name, which is
+  /// meaningless to the person reading it and was the first thing on screen
+  /// when the engine failed to start; the message alone is the sentence that
+  /// was written to be read. The two bundle exceptions already read as plain
+  /// English, so they keep their [Object.toString].
+  static String _describe(Object e, String fallback) => switch (e) {
+    BughouseEngineFailure() => e.message,
+    BughouseBundleMissing() || BughouseBundleBroken() => e.toString(),
+    _ => '$fallback: $e',
+  };
 
   /// Runs the same position under every clock scenario and tabulates them.
   ///
@@ -1151,6 +1174,7 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
     _engine?.stop();
     _comparing = true;
     _error = null;
+    _errorReport = null;
     _notice = null;
     scenarios = const [];
     notifyListeners();
@@ -1222,7 +1246,7 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
       // A search that was cut short because the user moved on is not a
       // failure to report — the generation says which it was.
       if (generation == _generation) {
-        _error = _describe(e, 'Comparison failed');
+        _failWith(e, 'Comparison failed');
       }
     } finally {
       _comparing = false;

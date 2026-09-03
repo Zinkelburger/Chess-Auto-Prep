@@ -13,6 +13,7 @@ import '../models/opening_tree.dart';
 import '../models/position_analysis.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
+import 'copy_button.dart';
 import '../utils/fen_utils.dart';
 import 'common/list_nav.dart';
 
@@ -465,20 +466,13 @@ class _FenListWidgetState extends State<FenListWidget>
       trailing: SizedBox(
         width: 28,
         height: 28,
-        child: IconButton(
-          icon: const Icon(
-            Icons.copy,
-            size: 14,
-            color: AppColors.onSurfaceSoft,
-          ),
-          padding: EdgeInsets.zero,
+        child: CopyButton.icon(
           tooltip: 'Copy FEN',
-          onPressed: () {
-            unawaited(
-              Clipboard.setData(ClipboardData(text: expandFen(stats.fen))),
-            );
-            showAppSnackBar(context, AppMessages.fenCopied);
-          },
+          iconSize: 14,
+          dense: true,
+          foreground: AppColors.onSurfaceSoft,
+          snackBarMessage: AppMessages.fenCopied,
+          text: () => expandFen(stats.fen),
         ),
       ),
       onTap: () {

@@ -87,18 +87,24 @@ jobs:
 
       # Live. Extracts the way BughouseBundle does — same names, same size
       # check against manifest.json — then loads the network and searches.
+      # The directory has a space in its name on purpose. The app extracts the
+      # engine under "…\Chess Auto Prep\bughouse", so every path it hands the
+      # engine has one, and a Windows command line splits on spaces unless the
+      # launcher quotes them. A diagnosis on a user's machine once produced
+      # "Unknown UCI option: Auto" for exactly that reason. Nothing in this
+      # repo has a space in its path, so without this the runners never ask.
       - name: Load the network and search
         timeout-minutes: 10
-        run: python tools/test_bughouse_engine.py run --install-to engine-under-test
+        run: python tools/test_bughouse_engine.py run --install-to "engine under test"
 
       - run: flutter pub get
 
       - name: Drive the engine through the app's client
         timeout-minutes: 10
         env:
-          HIVEMIND_BIN: ${{ matrix.os == 'windows-latest' && 'engine-under-test/hivemind-windows.exe' || 'engine-under-test/hivemind-linux' }}
-          HIVEMIND_MODEL: engine-under-test/hivemind.onnx
-          HIVEMIND_LIB: engine-under-test
+          HIVEMIND_BIN: ${{ matrix.os == 'windows-latest' && 'engine under test/hivemind-windows.exe' || 'engine under test/hivemind-linux' }}
+          HIVEMIND_MODEL: engine under test/hivemind.onnx
+          HIVEMIND_LIB: engine under test
         run: flutter test test/features/bughouse/bughouse_engine_test.dart
 
   macos:

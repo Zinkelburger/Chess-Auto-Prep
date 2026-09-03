@@ -26,6 +26,7 @@ import '../../../theme/app_text_styles.dart';
 import '../../../utils/open_in_file_manager.dart';
 import '../controllers/master_games_browser_controller.dart';
 import '../services/twic_repertoire_scan.dart';
+import '../../../widgets/copy_button.dart';
 
 /// Opens the browser over the current screen.
 Future<void> showMasterGamesBrowser(
@@ -640,16 +641,11 @@ class _MasterGamesBrowserState extends State<MasterGamesBrowser> {
                 ),
               ),
               const SizedBox(width: 8),
-              IconButton(
+              CopyButton.icon(
                 tooltip: 'Copy PGN',
-                onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: game.toPgn()));
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text('PGN copied')));
-                },
-                icon: const Icon(Icons.copy, size: 18),
+                iconSize: 18,
+                snackBarMessage: 'PGN copied',
+                text: game.toPgn,
               ),
             ],
           ),

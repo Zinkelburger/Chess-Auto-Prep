@@ -116,6 +116,23 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+def payload_sha256(path: Path) -> str:
+    """Hash of what comes *out* of a gzip file, not of the container.
+
+    The container is not reproducible: gzip output depends on the zlib the
+    machine happens to have, so the same upstream binary recompressed on CI and
+    on a developer laptop gives two different `output_sha256` values for byte-
+    identical contents. Hashing the payload is the check that actually answers
+    "is this the file we pinned", and it is the one `--check` can be trusted
+    on after a fetch has rewritten the lock in the same run.
+    """
+    h = hashlib.sha256()
+    with gzip.open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def host_target() -> str:
     plat, machine = sys.platform, platform.machine().lower()
     if plat.startswith("linux"):
@@ -256,11 +273,18 @@ def write_manifest(sizes: dict[str, int]) -> None:
 def dest_is_current(key: str, dest: Path, lock: dict) -> bool:
     if not dest.exists():
         return False
-    expected = lock.get(key, {}).get("output_sha256")
+    entry = lock.get(key, {})
+    expected = entry.get("output_sha256")
     if not expected:
         return True
     actual = sha256_file(dest)
     if actual == expected:
+        return True
+    # A different container is not yet a different file. Recompressing on a
+    # machine with another zlib changes these bytes and nothing else, and
+    # treating that as staleness re-downloaded 43 MB on every single run.
+    wanted_payload = entry.get("payload_sha256")
+    if wanted_payload and payload_sha256(dest) == wanted_payload:
         return True
     print(
         f"[stale] {key}: {dest.relative_to(REPO_ROOT)} hash mismatch "
@@ -298,6 +322,7 @@ def fetch_network(lock: dict, force: bool) -> None:
         "url": url,
         "source_sha256": digest,
         "output_sha256": sha256_file(dest),
+        "payload_sha256": payload_sha256(dest),
         "output_bytes": dest.stat().st_size,
         "uncompressed_bytes": size,
     }
@@ -364,11 +389,13 @@ def fetch(name: str, lock: dict, force: bool) -> None:
     lock[name] = {"url": url, "source_sha256": digest}
     lock[f"{name}:engine"] = {
         "output_sha256": sha256_file(engine_path),
+        "payload_sha256": hashlib.sha256(engine_bytes).hexdigest(),
         "output_bytes": engine_path.stat().st_size,
         "uncompressed_bytes": len(engine_bytes),
     }
     lock[f"{name}:runtime"] = {
         "output_sha256": sha256_file(runtime_path),
+        "payload_sha256": hashlib.sha256(runtime_bytes).hexdigest(),
         "output_bytes": runtime_path.stat().st_size,
         "uncompressed_bytes": len(runtime_bytes),
     }
@@ -465,9 +492,22 @@ def check(names: list[str], lock: dict) -> int:
             print(f"[MISS] {key}: {rel}")
             problems.append(key)
             continue
-        expected = lock.get(key, {}).get("output_sha256")
-        if expected and sha256_file(path) != expected:
+        entry = lock.get(key, {})
+        wanted_payload = entry.get("payload_sha256")
+        if wanted_payload:
+            # The payload, not the container: this is the only hash here that
+            # a fetch in the same job cannot have made true by writing it.
+            if payload_sha256(path) != wanted_payload:
+                print(f"[HASH] {key}: {rel} is not the file bughouse.lock.json pins")
+                problems.append(key)
+                continue
+        elif entry.get("output_sha256") and sha256_file(path) != entry["output_sha256"]:
             print(f"[HASH] {key}: {rel} does not match bughouse.lock.json")
+            problems.append(key)
+            continue
+        expected_size = entry.get("uncompressed_bytes")
+        if expected_size is not None and gunzipped_size(path) != expected_size:
+            print(f"[SIZE] {key}: {rel} does not unpack to {expected_size} bytes")
             problems.append(key)
             continue
         print(f"[ok  ] {key}: {rel} ({human(path.stat().st_size)})")

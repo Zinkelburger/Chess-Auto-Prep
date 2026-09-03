@@ -26,13 +26,61 @@ void main() {
       );
       expect(
         BughouseEngine.describeExit(0xC000007B),
-        contains('wrong architecture'),
+        contains('invalid 64-bit image'),
       );
     });
 
     test('an ordinary exit stays an ordinary exit', () {
       expect(BughouseEngine.describeExit(1), 'Engine exited (1)');
       expect(BughouseEngine.describeExit(0), 'Engine exited (0)');
+    });
+
+    // Unix says the same things in a different alphabet, and "-4" on its own
+    // was every bit as unhelpful as "-1073741515" was on Windows. The two
+    // readings share one function because a signal number never exceeds 64,
+    // so a more negative value can only be an NTSTATUS that arrived signed.
+    test('a signal is named, not printed as a negative number', () {
+      expect(
+        BughouseEngine.describeExit(-4, isWindows: false),
+        contains('does not support an instruction'),
+      );
+      expect(
+        BughouseEngine.describeExit(-9, isWindows: false),
+        contains('out-of-memory'),
+      );
+      expect(
+        BughouseEngine.describeExit(-11, isWindows: false),
+        contains('crashed'),
+      );
+      expect(
+        BughouseEngine.describeExit(-31, isWindows: false),
+        'Engine exited on signal 31',
+      );
+    });
+
+    /// 127 is what the dynamic loader exits with when it cannot open a shared
+    /// library, which on Linux and macOS is the whole "the engine will not
+    /// start" story. It reached users as "Engine exited (127)".
+    test('a loader failure is named on Unix too', () {
+      for (final code in [126, 127]) {
+        expect(
+          BughouseEngine.describeExit(code, isWindows: false),
+          contains('could not load one of its shared libraries'),
+        );
+      }
+      // On Windows the same numbers are ordinary exit codes.
+      expect(
+        BughouseEngine.describeExit(127, isWindows: true),
+        'Engine exited (127)',
+      );
+    });
+
+    test('a signed NTSTATUS is still read as one off Windows', () {
+      // -1073741515 is 0xC0000135 signed, and is well past any signal.
+      expect(
+        BughouseEngine.describeExit(-1073741515, isWindows: false),
+        contains('Redistributable'),
+      );
     });
   });
 

@@ -4,14 +4,31 @@ import 'dart:io';
 
 import 'package:dartchess/dartchess.dart' hide File;
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
+import '../../../app_version.dart';
+import '../../../utils/log.dart';
 import '../models/bughouse_engine_settings.dart';
 import '../models/bughouse_state.dart';
+import 'bughouse_bundle.dart';
+import 'windows_loader_check.dart';
 
 /// Thrown when the engine cannot be started or does not answer in time.
 class BughouseEngineFailure implements Exception {
-  BughouseEngineFailure(this.message);
+  BughouseEngineFailure(this.message, {this.report});
+
+  /// One line, for the banner.
   final String message;
+
+  /// Everything a bug report needs, or null when there was nothing to gather.
+  ///
+  /// Separate from [message] because they have different readers: the banner
+  /// wants a sentence, and whoever has to fix it wants the file sizes, the
+  /// command line, the library resolution table and the engine's own stderr.
+  /// Putting both in one string meant the panel either showed a wall of text
+  /// or threw the useful half away.
+  final String? report;
+
   @override
   String toString() => 'BughouseEngineFailure: $message';
 }
@@ -102,6 +119,10 @@ class BughouseEngine implements BughouseAnalysisEngine {
         .transform(const LineSplitter())
         .listen((line) {
           _spoke = true;
+          // The first handful only, and only for a failure report: the banner
+          // and the backend line say what the engine thought it was doing, and
+          // after that it is search output nobody wants pasted into an issue.
+          if (_stdoutLines.length < 24) _stdoutLines.add(line.trimRight());
           _onLine(line);
         });
     _stderrSub = _process.stderr
@@ -114,6 +135,7 @@ class BughouseEngine implements BughouseAnalysisEngine {
     unawaited(
       _process.exitCode.then((code) {
         _exited = true;
+        _exitStatus = code;
         if (!_disposed) _failPending(describeExit(code));
       }),
     );
@@ -127,6 +149,17 @@ class BughouseEngine implements BughouseAnalysisEngine {
   late final StreamSubscription<String> _stderrSub;
 
   final List<String> _stderrLines = [];
+  final List<String> _stdoutLines = [];
+
+  /// How the process was started, kept for the failure report. A user who has
+  /// to reproduce the launch by hand needs the exact command line, and the
+  /// working directory is load-bearing on Windows.
+  late final List<String> _argv;
+  late final String _workingDirectory;
+  late final Map<String, String> _childEnvironment;
+
+  /// The exit code, once there is one.
+  int? _exitStatus;
 
   /// Whether the process has ever written a line to stdout.
   ///
@@ -186,8 +219,23 @@ class BughouseEngine implements BughouseAnalysisEngine {
   /// Runs [body] after every command already queued, so two callers cannot
   /// interleave `setoption`/`position`/`go` on one stdin or race for the
   /// single-slot completers. A failure does not poison the queue.
+  ///
+  /// Also the one place every command failure passes through, so it is where a
+  /// diagnostic gets attached. A launch that never answered was already
+  /// reported in full; an engine that died *during* a session was not, and
+  /// reached the user as "Engine exited (139)" with nothing behind it — the
+  /// same unreadable failure in a different place.
   Future<T> _serialise<T>(Future<T> Function() body) {
-    final result = _queue.then((_) => body());
+    final result = _queue.then((_) => body()).onError<BughouseEngineFailure>((
+      e,
+      stack,
+    ) async {
+      if (e.report != null) throw e;
+      throw BughouseEngineFailure(
+        e.message,
+        report: await buildReport(headline: e.message),
+      );
+    });
     _queue = result.then((_) {}, onError: (_) {});
     return result;
   }
@@ -213,11 +261,37 @@ class BughouseEngine implements BughouseAnalysisEngine {
       throw BughouseEngineFailure('Network not found: $modelPath');
     }
 
-    // Windows has no loader-path variable to set: it resolves a process's
-    // imports against the directory of the process's own image first, which
-    // is where BughouseBundle puts every library the engine needs.
+    final engineDir = File(executablePath).parent.path;
     final environment = <String, String>{};
-    if (libraryPath != null && !Platform.isWindows) {
+    if (Platform.isWindows) {
+      // Windows has no loader-path variable to set: it resolves a process's
+      // imports against the directory of the process's own image first, which
+      // is where BughouseBundle puts every library the engine needs. The rest
+      // of the search order — the working directory, then everything on PATH —
+      // is the user's machine, and it is pure risk: a 32-bit MSVCP140.dll left
+      // on PATH by some unrelated toolchain is loaded ahead of the system one
+      // and stops the engine before `main` with STATUS_INVALID_IMAGE_FORMAT,
+      // which the app can only see as a process that started, said nothing and
+      // exited. Nothing the engine imports lives outside its own directory or
+      // System32, so cutting PATH down to those takes that entire class of
+      // machine-specific failure away.
+      //
+      // The variable keeps whatever spelling the parent used: Windows
+      // environment names are case-insensitive, but the block handed to
+      // CreateProcess is an ordered list, so adding a second "PATH" beside an
+      // inherited "Path" would leave which of them wins to chance.
+      final root = Platform.environment['SystemRoot'] ?? r'C:\Windows';
+      final key = Platform.environment.keys.firstWhere(
+        (k) => k.toLowerCase() == 'path',
+        orElse: () => 'PATH',
+      );
+      environment[key] = [
+        engineDir,
+        p.join(root, 'System32'),
+        root,
+        p.join(root, 'System32', 'Wbem'),
+      ].join(';');
+    } else if (libraryPath != null) {
       final key = Platform.isMacOS ? 'DYLD_LIBRARY_PATH' : 'LD_LIBRARY_PATH';
       final existing = Platform.environment[key];
       environment[key] = existing == null || existing.isEmpty
@@ -225,11 +299,27 @@ class BughouseEngine implements BughouseAnalysisEngine {
           : '$libraryPath:$existing';
     }
 
+    // The model is named relative to the working directory whenever it sits
+    // beside the engine, which is every shipped install.
+    //
+    // Not a micro-optimisation: the support directory is
+    // `…\com.example\Chess Auto Prep\bughouse` on Windows, so the absolute
+    // path contains spaces, and every path this feature was ever tested
+    // against — this repo, both CI runners, both temp directories — does not.
+    // Whether an argument survives the round trip through a Windows command
+    // line is then a question the tests cannot ask. A bare filename cannot be
+    // split by any quoting rule, so the question stops being one.
+    final argv = <String>['--model', modelArgument(modelPath, engineDir)];
+
     final Process process;
     try {
       process = await Process.start(
         executablePath,
-        ['--model', modelPath],
+        argv,
+        // The engine's own directory, so the last unpinned entry in the
+        // loader's search order is one we control too. It is also simply the
+        // right answer: every file the engine touches lives there.
+        workingDirectory: engineDir,
         environment: environment.isEmpty ? null : environment,
         includeParentEnvironment: true,
       );
@@ -237,15 +327,40 @@ class BughouseEngine implements BughouseAnalysisEngine {
       throw BughouseEngineFailure('Could not start the engine: ${e.message}');
     }
 
-    final engine = BughouseEngine._(process, executablePath, modelPath);
+    final engine = BughouseEngine._(process, executablePath, modelPath)
+      .._argv = argv
+      .._workingDirectory = engineDir
+      .._childEnvironment = {...Platform.environment, ...environment};
     try {
       await engine._handshake(timeout);
-    } catch (_) {
+    } catch (e) {
+      // The one moment worth spending real time on diagnosis: a first launch
+      // that never answered is the failure users actually hit, and "did not
+      // answer" on its own tells them nothing they can act on.
+      final report = await engine.buildReport(
+        headline: e is BughouseEngineFailure ? e.message : '$e',
+      );
       await engine.dispose();
-      rethrow;
+      final message = e is BughouseEngineFailure ? e.message : '$e';
+      log.e('Bughouse engine failed to start\n$report');
+      throw BughouseEngineFailure(message, report: report);
     }
     return engine;
   }
+
+  /// How the network is named on the command line, given that the process is
+  /// started with [engineDir] as its working directory.
+  ///
+  /// The bare filename whenever the network sits beside the engine, which is
+  /// every shipped install. See the comment at the call site: the support
+  /// directory contains a space on Windows and no path this feature has ever
+  /// been tested against does, so an absolute path here is the one argument
+  /// whose survival through a command line nothing has checked.
+  @visibleForTesting
+  static String modelArgument(String modelPath, String engineDir) =>
+      p.equals(p.dirname(modelPath), engineDir)
+      ? p.basename(modelPath)
+      : modelPath;
 
   Future<void> _handshake(Duration timeout) async {
     _uciOkCompleter = Completer<void>();
@@ -466,25 +581,224 @@ class BughouseEngine implements BughouseAnalysisEngine {
   /// "Engine exited (-1073741515)" is the single least actionable thing this
   /// class can say, and it is also the most likely thing it will ever say on a
   /// machine that has never installed the Visual C++ redistributable.
+  ///
+  /// Unix has the same problem in a different alphabet: a process killed by a
+  /// signal reaches Dart as the negated signal number, so "Engine exited (-4)"
+  /// is how "this CPU does not have AVX" and "the OOM killer took it" both
+  /// look. [isWindows] chooses the alphabet rather than reading [Platform] so
+  /// both readings stay testable on one machine.
   @visibleForTesting
-  static String describeExit(int code) {
+  static String describeExit(int code, {bool? isWindows}) {
+    final windows = isWindows ?? Platform.isWindows;
+    // A process killed by a signal reaches Dart as the negated signal number,
+    // and signals stop at 64; anything more negative is a Windows NTSTATUS
+    // that arrived through a signed path, which is why the two readings can
+    // share one function without a platform flag at every call site.
+    if (!windows && (code == 126 || code == 127)) {
+      // What the dynamic loader exits with when it cannot start the program at
+      // all. 127 in particular is what a missing or unreadable
+      // libonnxruntime.so.1 looks like, and the loader has already written the
+      // name of the library it could not open to stderr — which the report
+      // below quotes, so this only has to point at it.
+      return 'The bughouse engine could not start: the system could not load '
+          'one of its shared libraries (exit $code). The engine\'s own error '
+          'below names which one.';
+    }
+    if (!windows && code < 0 && -code <= 64) {
+      final hint = switch (-code) {
+        4 =>
+          'this CPU does not support an instruction the engine was built with '
+              '(SIGILL).',
+        6 =>
+          'it aborted (SIGABRT) — the stderr above says why, if anything does.',
+        7 || 10 =>
+          'it died on a bus error (SIGBUS), usually a truncated or '
+              'corrupted network file.',
+        9 =>
+          'the system killed it outright (SIGKILL), which on a desktop is '
+              'almost always the out-of-memory killer. The network needs about '
+              '1 GB of RAM to load.',
+        11 => 'it crashed (SIGSEGV).',
+        _ => null,
+      };
+      return hint == null
+          ? 'Engine exited on signal ${-code}'
+          : 'The bughouse engine could not start: $hint';
+    }
     final status = code < 0 ? code + 0x100000000 : code;
     final hint = switch (status) {
       0xC0000135 =>
         'a library it needs is missing. Install the Microsoft Visual C++ '
             'Redistributable (x64) and try again.',
+      0xC0000139 =>
+        'one of its libraries is the wrong version — it loaded, but does not '
+            'have a function the engine needs.',
       0xC0000142 => 'one of its libraries failed to initialise.',
       0xC000007B =>
-        'one of its libraries is the wrong architecture (32-bit against '
-            '64-bit).',
+        'Windows refused one of its libraries as an invalid 64-bit image. '
+            'That is either a 32-bit copy of it found ahead of the right one, '
+            'or a file that did not finish being written.',
       0xC000001D =>
         'this CPU does not support an instruction the engine was built with.',
       0xC0000005 => 'it crashed (access violation).',
+      0xC0000409 => 'it was stopped by a stack buffer overrun check.',
       _ => null,
     };
     return hint == null
         ? 'Engine exited ($code)'
         : 'The bughouse engine could not start: $hint';
+  }
+
+  /// Everything a bug report about a failed launch needs, as one block of
+  /// text the user can copy in a single click.
+  ///
+  /// Assembled rather than logged piecemeal because the reader is usually not
+  /// the person who can read a log: the whole point is that someone can send
+  /// this back without knowing what any of it means. Best effort by
+  /// construction — it only ever runs on a path that has already failed, so
+  /// anything it threw would replace a real diagnosis with a worse one.
+  Future<String> buildReport({required String headline}) async {
+    try {
+      final directory = await describeDirectory(
+        _workingDirectory,
+        BughouseBundle.expectedSizes,
+      );
+      List<DllResolution>? libraries;
+      if (Platform.isWindows) {
+        libraries = await WindowsLoaderCheck.resolveAll(
+          engineDir: _workingDirectory,
+          environment: _childEnvironment,
+        );
+      }
+      final loaderVariable = Platform.isMacOS
+          ? 'DYLD_LIBRARY_PATH'
+          : 'LD_LIBRARY_PATH';
+      return formatReport(
+        headline: headline,
+        executablePath: executablePath,
+        argv: _argv,
+        workingDirectory: _workingDirectory,
+        exitCode: _exitStatus,
+        spoke: _spoke,
+        directory: directory,
+        libraries: libraries,
+        stdout: _stdoutLines,
+        stderr: _stderrLines,
+        loaderPath: Platform.isWindows
+            ? null
+            : '$loaderVariable=${_childEnvironment[loaderVariable] ?? '(not set)'}',
+      );
+    } catch (e) {
+      return 'Chess Auto Prep $kAppVersion — bughouse engine diagnostics\n'
+          '$headline\n'
+          '(the diagnostic itself failed: $e)';
+    }
+  }
+
+  /// The report itself, with every fact already gathered.
+  ///
+  /// Pure and static so the exact text a user will paste can be asserted in a
+  /// test on any platform, rather than only being seen when something breaks.
+  @visibleForTesting
+  static String formatReport({
+    required String headline,
+    required String executablePath,
+    required List<String> argv,
+    required String workingDirectory,
+    required int? exitCode,
+    required bool spoke,
+    required List<String> directory,
+    required List<DllResolution>? libraries,
+    required List<String> stdout,
+    required List<String> stderr,
+    String? loaderPath,
+  }) {
+    final out = StringBuffer()
+      ..writeln('Chess Auto Prep $kAppVersion — bughouse engine diagnostics')
+      ..writeln('Problem     : $headline')
+      ..writeln(
+        'Exit        : ${exitCode == null ? 'still running when it was given up on' : '$exitCode — ${describeExit(exitCode)}'}',
+      )
+      ..writeln(
+        'Spoke       : ${spoke ? 'yes, the engine printed at least one line' : 'no — it never reached its own startup banner'}',
+      )
+      ..writeln('OS          : ${Platform.operatingSystemVersion}')
+      ..writeln('Engine      : $executablePath')
+      ..writeln('Command     : ${argv.join(' ')}')
+      ..writeln('Working dir : $workingDirectory');
+    if (loaderPath != null) out.writeln('Library path: $loaderPath');
+
+    out
+      ..writeln()
+      ..writeln('Files beside the engine');
+    out.writeln(directory.isEmpty ? '  (none)' : directory.join('\n'));
+
+    if (libraries != null) {
+      out
+        ..writeln()
+        ..writeln('Where Windows resolves each library the engine needs')
+        ..writeln(WindowsLoaderCheck.report(libraries));
+      final problem = WindowsLoaderCheck.describe(libraries);
+      if (problem != null) {
+        out
+          ..writeln()
+          ..writeln('!! $problem');
+      }
+    }
+
+    out
+      ..writeln()
+      ..writeln('Engine stderr')
+      ..writeln(
+        stderr.isEmpty
+            ? '  (nothing — which is itself the finding when it also never '
+                  'printed to stdout)'
+            : stderr.map((l) => '  $l').join('\n'),
+      )
+      ..writeln()
+      ..writeln('Engine stdout')
+      ..writeln(
+        stdout.isEmpty ? '  (nothing)' : stdout.map((l) => '  $l').join('\n'),
+      );
+    return out.toString().trimRight();
+  }
+
+  /// One line per file in [directory]: its size, the size it should be, and on
+  /// Windows the architecture of its image.
+  ///
+  /// A wrong size is what an interrupted extraction looks like, and Windows
+  /// rejects a truncated DLL with the same status it uses for a 32-bit one —
+  /// so having both readings side by side is what tells those two apart.
+  @visibleForTesting
+  static Future<List<String>> describeDirectory(
+    String directory,
+    Map<String, int> expected,
+  ) async {
+    final dir = Directory(directory);
+    if (!await dir.exists()) return ['  (the directory does not exist)'];
+    final lines = <String>[];
+    await for (final entry in dir.list(followLinks: false)) {
+      if (entry is! File) continue;
+      final name = p.basename(entry.path);
+      final size = await entry.length();
+      final want = expected[name];
+      final buffer = StringBuffer(
+        '  ${name.padRight(28)}${size.toString().padLeft(12)} bytes',
+      );
+      if (want != null) {
+        buffer.write(size == want ? '  (size ok)' : '  SHOULD BE $want');
+      }
+      if (Platform.isWindows &&
+          (name.toLowerCase().endsWith('.dll') ||
+              name.toLowerCase().endsWith('.exe'))) {
+        buffer.write(
+          '  [${WindowsLoaderCheck.describeMachine(await WindowsLoaderCheck.machineOfFile(entry))}]',
+        );
+      }
+      lines.add(buffer.toString());
+    }
+    lines.sort();
+    return lines;
   }
 
   void _failPending(String message) {

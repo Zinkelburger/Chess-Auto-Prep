@@ -17,6 +17,7 @@ void main() {
   }
 
   const network = 'assets/bughouse/hivemind.onnx.gz';
+  const manifest = 'assets/bughouse/manifest.json';
 
   String runtimeKey() {
     if (Platform.isWindows) return 'assets/bughouse/onnxruntime.dll.gz';
@@ -26,9 +27,14 @@ void main() {
 
   tearDown(() => BughouseBundle.setBundledForTesting(null));
 
-  test('engine, runtime and network together mean the mode can run', () {
+  test('engine, runtime, network and manifest mean the mode can run', () {
     expect(
-      BughouseBundle.hasEngineAssets([engineKey(), runtimeKey(), network]),
+      BughouseBundle.hasEngineAssets([
+        engineKey(),
+        runtimeKey(),
+        network,
+        manifest,
+      ]),
       isTrue,
     );
   });
@@ -37,7 +43,21 @@ void main() {
     // `ensureInstalled` extracts all three and throws over the runtime, so a
     // probe that ignored it let the mode offer itself and then fail on the
     // first click — the one thing the probe exists to prevent.
-    expect(BughouseBundle.hasEngineAssets([engineKey(), network]), isFalse);
+    expect(
+      BughouseBundle.hasEngineAssets([engineKey(), network, manifest]),
+      isFalse,
+    );
+  });
+
+  /// Without it nothing ever checks an already-extracted file's size again, so
+  /// a half-written DLL from a killed launch survives every later launch — and
+  /// Windows rejects a truncated image with the same status it uses for a
+  /// 32-bit one, which is the least diagnosable failure this feature has.
+  test('a bundle with no size manifest does not count', () {
+    expect(
+      BughouseBundle.hasEngineAssets([engineKey(), runtimeKey(), network]),
+      isFalse,
+    );
   });
 
   test('a checkout that never ran the fetch script has neither', () {
@@ -57,20 +77,30 @@ void main() {
         ? 'assets/bughouse/hivemind-linux.gz'
         : 'assets/bughouse/hivemind-windows.exe.gz';
     expect(
-      BughouseBundle.hasEngineAssets([foreign, runtimeKey(), network]),
+      BughouseBundle.hasEngineAssets([
+        foreign,
+        runtimeKey(),
+        network,
+        manifest,
+      ]),
       isFalse,
     );
   });
 
-  test('no two of the three are enough on their own', () {
+  test('no subset of the four is enough on its own', () {
     expect(BughouseBundle.hasEngineAssets([network]), isFalse);
     expect(BughouseBundle.hasEngineAssets([engineKey()]), isFalse);
     expect(BughouseBundle.hasEngineAssets([runtimeKey()]), isFalse);
+    expect(BughouseBundle.hasEngineAssets([manifest]), isFalse);
     expect(
       BughouseBundle.hasEngineAssets([engineKey(), runtimeKey()]),
       isFalse,
     );
     expect(BughouseBundle.hasEngineAssets([runtimeKey(), network]), isFalse);
+    expect(
+      BughouseBundle.hasEngineAssets([engineKey(), runtimeKey(), manifest]),
+      isFalse,
+    );
   });
 
   test('the probe caches, so the mode menu can ask on every rebuild', () async {

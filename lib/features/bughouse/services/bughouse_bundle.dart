@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../services/storage/app_paths.dart';
 import '../../../utils/log.dart';
+import 'windows_loader_check.dart';
 
 /// Resolves the three files Hivemind needs at runtime, extracting them from
 /// the asset bundle on first use — the same shape as [StockfishBundle], with
@@ -30,6 +31,20 @@ class BughouseBundle {
   /// at by [useLocalBuild] that did not name one — every shipped target
   /// carries the runtime as a separate file.
   static String? get libraryPath => _cached?.libraryDir;
+
+  /// The sizes the shipped manifest says each extracted file should be, or
+  /// empty before an install has run. What a diagnostic compares the files on
+  /// disk against.
+  static Map<String, int> get expectedSizes => _sizes;
+  static Map<String, int> _sizes = const {};
+
+  /// The three files this platform extracts, by the names they are written
+  /// under. Public so a failure report can say which of them is wrong.
+  static List<String> get installedFileNames => [
+    _binaryName(),
+    _runtimeName(),
+    'hivemind.onnx',
+  ];
 
   /// Whether this build actually carries an engine for this platform.
   ///
@@ -70,12 +85,20 @@ class BughouseBundle {
   /// that [ensureInstalled] extracts unconditionally. Leaving the runtime out
   /// of this check let a partial bundle offer the mode in the menu and then
   /// throw on the first click — exactly what the probe exists to prevent.
+  ///
+  /// The manifest counts as a fourth part, because without it [_installAsset]
+  /// has no size to check an already-extracted file against and therefore
+  /// trusts whatever is on disk forever. A half-written 16 MB DLL left behind
+  /// by a killed launch would then never be replaced, and Windows rejects a
+  /// truncated image with the same status it uses for a 32-bit one — which is
+  /// as obscure a failure as this feature can produce.
   @visibleForTesting
   static bool hasEngineAssets(Iterable<String> assetKeys) {
     final keys = assetKeys.toSet();
     return keys.contains('assets/bughouse/${_binaryName()}.gz') &&
         keys.contains('assets/bughouse/${_runtimeName()}.gz') &&
-        keys.contains('assets/bughouse/hivemind.onnx.gz');
+        keys.contains('assets/bughouse/hivemind.onnx.gz') &&
+        keys.contains('assets/bughouse/manifest.json');
   }
 
   /// Test seam: pretend the engine is (or is not) bundled.
@@ -115,6 +138,7 @@ class BughouseBundle {
     await target.create(recursive: true);
 
     final manifest = await _loadManifest();
+    _sizes = manifest;
     final executable = p.join(target.path, _binaryName());
     final model = p.join(target.path, 'hivemind.onnx');
     final runtime = p.join(target.path, _runtimeName());
@@ -132,10 +156,26 @@ class BughouseBundle {
     }
 
     if (Platform.isWindows) {
-      await installWindowsRuntime(
+      final copied = await installWindowsRuntime(
         source: applicationDirectory(),
         target: target,
       );
+      // Say so at install time, not at first search. Whether the engine then
+      // starts depends on the machine having the redistributable system-wide,
+      // which most do — so this is a warning rather than a failure, but it is
+      // the single most useful line in the log when it does not.
+      final absent = [
+        for (final name in WindowsLoaderCheck.appSuppliedDependencies)
+          if (!copied.any((c) => c.toLowerCase() == name.toLowerCase())) name,
+      ];
+      if (absent.isNotEmpty) {
+        log.w(
+          'The bughouse engine has no app-supplied copy of '
+          '${absent.join(', ')} in ${target.path}. It will start only on a '
+          'machine that has the Microsoft Visual C++ Redistributable (x64) '
+          'installed system-wide.',
+        );
+      }
     } else {
       final chmod = await Process.run('chmod', ['+x', executable]);
       if (chmod.exitCode != 0) {
@@ -145,6 +185,21 @@ class BughouseBundle {
       }
     }
 
+    // Check what actually landed, rather than assuming the writes above did
+    // what they were told. A file that came out the wrong size is not a
+    // theoretical worry here: Windows keeps its own `onnxruntime.dll` in
+    // System32, so an engine whose copy is missing or half-written does not
+    // fail to start — it silently loads the operating system's ONNX Runtime
+    // instead, and fails somewhere far less legible.
+    final problems = await verifyExtraction(target.path, manifest);
+    if (problems.isNotEmpty) {
+      throw BughouseBundleBroken(
+        'The bughouse engine did not extract correctly:\n'
+        '${problems.map((p) => '  $p').join('\n')}\n'
+        'Delete ${target.path} and open Bughouse Lab again.',
+      );
+    }
+
     _cached = _Resolved(
       executable: executable,
       model: model,
@@ -152,6 +207,42 @@ class BughouseBundle {
     );
     log.i('Bughouse engine installed at $executable');
     return executable;
+  }
+
+  /// What is wrong with the extraction in [directory], one line each.
+  ///
+  /// Sizes only, and only the ones [manifest] describes: hashing 70 MB on every
+  /// launch would cost more than it is worth, and a wrong size is what every
+  /// failure mode this catches actually looks like — an interrupted write, a
+  /// full disk, an antivirus that truncated the file it was scanning.
+  ///
+  /// An empty [manifest] means the bundle shipped without one, which
+  /// [hasEngineAssets] already refuses; there is nothing to check against, so
+  /// nothing is reported.
+  @visibleForTesting
+  static Future<List<String>> verifyExtraction(
+    String directory,
+    Map<String, int> manifest,
+  ) async {
+    if (manifest.isEmpty) return const [];
+    final problems = <String>[];
+    for (final name in installedFileNames) {
+      final expected = manifest[name];
+      if (expected == null) continue;
+      final file = File(p.join(directory, name));
+      if (!await file.exists()) {
+        problems.add('$name is missing');
+        continue;
+      }
+      final actual = await file.length();
+      if (actual != expected) {
+        problems.add(
+          '$name is $actual bytes, but should be $expected '
+          '(the extraction did not finish)',
+        );
+      }
+    }
+    return problems;
   }
 
   /// The directory the app itself was launched from, which is where the
@@ -268,7 +359,13 @@ class BughouseBundle {
       final raw = await rootBundle.loadString('assets/bughouse/manifest.json');
       final json = jsonDecode(raw) as Map<String, dynamic>;
       return json.map((k, v) => MapEntry(k, (v as num).toInt()));
-    } catch (_) {
+    } catch (e) {
+      // Not fatal — the extraction still works — but it turns off the only
+      // check that ever notices a half-written file, so it is worth a line.
+      log.w(
+        'The bughouse asset manifest could not be read ($e); an '
+        'incomplete extraction will not be detected.',
+      );
       return const {};
     }
   }

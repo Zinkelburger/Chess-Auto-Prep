@@ -85,6 +85,20 @@ jobs:
       - name: Build Linux release
         run: flutter build linux --release
 
+      # `flutter build` treats a *missing* asset directory as a printed warning
+      # and exits 0, so nothing before this point can tell a build that bundled
+      # the engine from one that quietly did not. Looking inside the artifact is
+      # the only thing that can, and this is the failure it exists for: a green
+      # release whose Bughouse Lab is simply absent.
+      - name: Verify the engine is in the built bundle
+        run: |
+          set -euo pipefail
+          DIR=build/linux/x64/release/bundle/data/flutter_assets/assets/bughouse
+          for f in hivemind-linux.gz libonnxruntime.so.1.gz hivemind.onnx.gz manifest.json; do
+            test -s "$DIR/$f" || { echo "MISSING $DIR/$f"; ls -la "$DIR" || true; exit 1; }
+          done
+          ls -la "$DIR"
+
       # libcdbdirect.so dynamically links libraries end users won't have
       # (boost_fiber, TBB, jemalloc, snappy, ...). It is linked with an
       # $ORIGIN rpath, so copying them next to it makes them resolve both in
@@ -188,6 +202,27 @@ jobs:
 
       - name: Build Windows release
         run: flutter build windows --release
+
+      # `flutter build` treats a *missing* asset directory as a printed warning
+      # and exits 0, so nothing before this point can tell a build that bundled
+      # the engine from one that quietly did not. Looking inside the artifact is
+      # the only thing that can, and this is the failure it exists for: a green
+      # release whose Bughouse Lab is simply absent.
+      - name: Verify the engine is in the built bundle
+        shell: pwsh
+        run: |
+          $dir = "build/windows/x64/runner/Release/data/flutter_assets/assets/bughouse"
+          $missing = @()
+          foreach ($f in @('hivemind-windows.exe.gz','onnxruntime.dll.gz','hivemind.onnx.gz','manifest.json')) {
+            $p = Join-Path $dir $f
+            if (-not (Test-Path $p) -or ((Get-Item $p).Length -eq 0)) { $missing += $f }
+          }
+          if ($missing.Count -gt 0) {
+            Write-Host "Bundle is missing: $($missing -join ', ')"
+            Get-ChildItem $dir -ErrorAction SilentlyContinue
+            exit 1
+          }
+          Get-ChildItem $dir | ForEach-Object { "  $($_.Name)  $($_.Length) bytes" }
 
       # The four DLLs windows/CMakeLists.txt deploys app-locally. Asserted
       # rather than assumed for the same reason the asset fetches are: the app
@@ -328,6 +363,21 @@ jobs:
           echo "Main: $(lipo -info "$APP/Contents/MacOS/$EXEC")"
           find "$APP/Contents/Frameworks" \( -name FlutterMacOS -o -name 'libonnxruntime*' \) ! -type l -print0 \
             | while IFS= read -r -d '' f; do echo "$f: $(lipo -info "$f")"; done
+
+      # `flutter build` treats a *missing* asset directory as a printed warning
+      # and exits 0, so nothing before this point can tell a build that bundled
+      # the engine from one that quietly did not. Looking inside the artifact is
+      # the only thing that can, and this is the failure it exists for: a green
+      # release whose Bughouse Lab is simply absent.
+      - name: Verify the engine is in the built app
+        run: |
+          set -euo pipefail
+          APP=$(ls -d build/macos/Build/Products/Release/*.app)
+          DIR="$APP/Contents/Frameworks/App.framework/Resources/flutter_assets/assets/bughouse"
+          for f in hivemind-macos.gz libonnxruntime.dylib.gz hivemind.onnx.gz manifest.json; do
+            test -s "$DIR/$f" || { echo "MISSING $DIR/$f"; ls -la "$DIR" || true; exit 1; }
+          done
+          ls -la "$DIR"
 
       - name: Zip app bundle
         run: |

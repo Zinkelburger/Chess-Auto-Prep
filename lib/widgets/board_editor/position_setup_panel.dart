@@ -3,14 +3,13 @@
 /// primary action gated on position validity.
 library;
 
-import 'dart:async';
-
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/board_editor_controller.dart';
 import '../../utils/app_messages.dart';
+import '../copy_button.dart';
 import '../labeled_toggle.dart';
 
 class PositionSetupPanel extends StatefulWidget {
@@ -195,15 +194,11 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
               suffixIcon: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.copy, size: 16),
+                  CopyButton.icon(
                     tooltip: 'Copy FEN',
-                    onPressed: () {
-                      unawaited(
-                        Clipboard.setData(ClipboardData(text: _editor.fen)),
-                      );
-                      showAppSnackBar(context, 'FEN copied.');
-                    },
+                    iconSize: 16,
+                    snackBarMessage: 'FEN copied.',
+                    text: () => _editor.fen,
                   ),
                   IconButton(
                     icon: const Icon(Icons.content_paste, size: 16),

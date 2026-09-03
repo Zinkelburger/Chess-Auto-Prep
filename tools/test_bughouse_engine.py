@@ -74,6 +74,15 @@ WINDOWS_SYSTEM_DLLS = {
     "wldap32.dll",
 }
 
+# The KnownDLLs list Windows maps from System32 before it searches anywhere,
+# so no directory earlier in the search order can shadow one of these. Every
+# other system DLL can be, which is what makes it worth diagnosing.
+WINDOWS_KNOWN_DLLS = {
+    "advapi32.dll", "combase.dll", "crypt32.dll", "gdi32.dll", "kernel32.dll",
+    "kernelbase.dll", "ntdll.dll", "ole32.dll", "oleaut32.dll", "psapi.dll",
+    "rpcrt4.dll", "shell32.dll", "shlwapi.dll", "user32.dll", "ws2_32.dll",
+}
+
 # Present on any glibc Linux desktop the app supports.
 LINUX_SYSTEM_LIBS = {
     "libc.so.6", "libm.so.6", "libdl.so.2", "libpthread.so.0", "librt.so.1",
@@ -173,7 +182,28 @@ def version_tuple(tag: str) -> tuple[int, ...]:
 # --------------------------------------------------------------------- deps
 
 BUNDLE_DART = REPO_ROOT / "lib/features/bughouse/services/bughouse_bundle.dart"
+LOADER_DART = REPO_ROOT / "lib/features/bughouse/services/windows_loader_check.dart"
 CMAKE_WINDOWS = REPO_ROOT / "windows/CMakeLists.txt"
+
+
+def require_diagnosable(dll: str) -> None:
+    """Check the app can still say which file went wrong when this one does.
+
+    `WindowsLoaderCheck` walks the loader's search order and reads each
+    candidate's PE header, which is how a user finds out that the 32-bit
+    MSVCP140.dll some other toolchain left on their PATH is what stopped the
+    engine. It can only report a library it knows to look for, so a new
+    external import that nobody adds to that list is a new failure that reports
+    itself as silence.
+    """
+    listed = LOADER_DART.read_text().lower()
+    if f"'{dll.lower()}'" not in listed:
+        fail(
+            f"{dll} is resolved by search, so it can be shadowed, but "
+            f"{LOADER_DART.relative_to(REPO_ROOT)} does not list it in "
+            "engineDependencies — a machine where it goes wrong would get no "
+            "diagnosis at all."
+        )
 
 
 def require_app_deploys(dll: str) -> None:
@@ -225,12 +255,21 @@ def audit_target(name: str, workdir: Path) -> list[str]:
         for role, path in files.items():
             for dll in pe_imports(path.read_bytes()):
                 low = dll.lower()
-                if low.startswith("api-ms-win-") or low in WINDOWS_SYSTEM_DLLS:
+                if low.startswith("api-ms-win-"):
+                    continue
+                if low in WINDOWS_SYSTEM_DLLS:
+                    # KnownDLLs can only ever come from System32; the rest of
+                    # System32 can be shadowed by an earlier directory, so the
+                    # app has to be able to name them.
+                    if low not in WINDOWS_KNOWN_DLLS:
+                        require_diagnosable(dll)
                     continue
                 if low in deployed:
+                    require_diagnosable(dll)
                     continue
                 if low.startswith(WINDOWS_APP_DEPLOYED_PREFIXES):
                     require_app_deploys(low)
+                    require_diagnosable(dll)
                     notes.append(
                         f"{path.name} needs {dll} — not part of Windows, "
                         "covered only because the app copies it beside the engine"
