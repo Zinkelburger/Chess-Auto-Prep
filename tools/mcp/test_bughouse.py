@@ -32,9 +32,15 @@ from bughouse.board import (  # noqa: E402
 )
 from bughouse.analysis import (  # noqa: E402
     answering_team,
-    baseline_for,
     by_strength,
-    relative_score,
+)
+from bughouse.calibration import (  # noqa: E402
+    SIT_BIT_Q,
+    assumed_offset,
+    evaluate,
+    measure_offset,
+    to_q,
+    to_score,
 )
 from bughouse.engine import JointMove, HivemindEngine, Line  # noqa: E402
 from bughouse.server import Server  # noqa: E402
@@ -417,11 +423,12 @@ class WithEngine(unittest.TestCase):
         self.assertEqual(out["answered_by"], "white")
         self.assertNotIn("error", out["ranked"][0])
 
-    def test_the_baseline_moves_with_time_advantage(self):
-        """The engine's zero point is not a constant, so `relative` has to be
-        read against the option the search actually ran under."""
+    def test_a_level_position_reads_as_level_under_either_stance(self):
+        """The zero point is measured from both teams, not assumed, so a
+        position that is level by symmetry has to read level whichever stance
+        the search ran under — and the raw numbers it is read from straddle
+        zero, which is what made one fixed baseline impossible."""
         level = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1"
-        seen = {}
         for advantage in (False, True):
             out = self.registry.call(
                 "analyse",
@@ -431,35 +438,123 @@ class WithEngine(unittest.TestCase):
                     "nodes": 600,
                 },
             )
-            seen[advantage] = out
-            self.assertEqual(out["baseline"], baseline_for(advantage))
-            self.assertLess(
-                abs(out["relative"]),
-                1.5,
-                f"a level position should read near 0.00, got {out['relative']}",
-            )
-        # And the raw numbers really do straddle zero, which is the whole point.
-        self.assertLess(seen[False]["lines"][0]["cp"], 0)
-        self.assertGreater(seen[True]["lines"][0]["cp"], 0)
+            self.assertEqual(out["calibration"]["source"], "measured")
+            self.assertEqual(out["calibration"]["searches"], 2)
+            if advantage:
+                # We may sit and they may not, so the two searches agree and
+                # what is left is the clock advantage itself — which is real.
+                self.assertGreater(out["advantage"], 0.3)
+            else:
+                self.assertLess(
+                    abs(out["advantage"]),
+                    0.15,
+                    f"a level position should read level, got {out['advantage']}",
+                )
+                self.assertLess(out["cp"], 0, "and the raw score does not")
+
+    def test_a_symmetric_middlegame_reads_level_too(self):
+        """Not just the opening. The offset is different in every position, so
+        one measured on the start position does not transfer."""
+        italian = (
+            "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R[] w KQkq - 4 4"
+        )
+        out = self.registry.call(
+            "analyse", {"dual_fen": f"{italian}|{italian}", "nodes": 800}
+        )
+        self.assertLess(abs(out["advantage"]), 0.15)
+
+    def test_calibrate_false_costs_one_search_and_says_so(self):
+        out = self.registry.call(
+            "analyse", {"moves": "e4", "nodes": 300, "calibrate": False}
+        )
+        self.assertEqual(out["calibration"]["searches"], 1)
+        self.assertEqual(out["calibration"]["source"], "assumed")
+        self.assertIn("Uncalibrated", out["note"])
+
+    def test_compare_reports_how_far_each_candidate_falls_short(self):
+        out = self.registry.call(
+            "compare", {"moves": ["e4"], "candidates": ["e5", "c5"], "nodes": 300}
+        )
+        self.assertEqual(out["ranked"][0]["loss_vs_best"], 0.0)
+        for row in out["ranked"][1:]:
+            self.assertGreaterEqual(row["loss_vs_best"], 0)
 
 
 class Scores(unittest.TestCase):
     """The score arithmetic, without an engine."""
 
-    def test_the_baseline_flips_sign_with_time_advantage(self):
-        self.assertLess(baseline_for(False), 0)
-        self.assertGreater(baseline_for(True), 0)
+    def test_the_tangent_inverts_exactly(self):
+        # Hivemind reports 180*tan(1.56*Q), so no constant is fitted.
+        self.assertAlmostEqual(to_q(0), 0.0, places=9)
+        self.assertAlmostEqual(to_q(-230), -SIT_BIT_Q, places=3)
+        self.assertAlmostEqual(to_q(230), SIT_BIT_Q, places=3)
+        self.assertAlmostEqual(to_score(to_q(-140)), -1.40, places=2)
 
-    def test_a_level_position_reads_as_level_under_either_option(self):
-        # The raw numbers we measured from the engine at the start position.
-        self.assertAlmostEqual(relative_score(-233, False), -0.03, places=2)
-        self.assertAlmostEqual(relative_score(239, True), 0.09, places=2)
+    def test_the_offset_is_measured_from_the_pair(self):
+        # A symmetric Italian on both boards, as the engine scored it: -3.07
+        # from our seat and -3.20 from theirs. Level by construction.
+        offset = measure_offset(-307, -320)
+        self.assertAlmostEqual(offset, -0.672, places=2)
+        self.assertLess(abs(evaluate(-307, None, offset)["advantage"]), 0.02)
 
-    def test_the_note_names_the_baseline_that_applies(self):
+    def test_the_offset_is_not_the_same_number_in_every_position(self):
+        # Three exactly symmetric two-board positions, all dead equal. One
+        # fixed constant read the third as more than a pawn up.
+        for ours, theirs in ((-229, -222), (-307, -320), (-93, -117)):
+            offset = measure_offset(ours, theirs)
+            self.assertLess(abs(evaluate(ours, None, offset)["advantage"]), 0.05)
+        self.assertAlmostEqual(measure_offset(-229, -222), -0.575, places=2)
+        self.assertAlmostEqual(measure_offset(-93, -117), -0.337, places=2)
+
+    def test_a_mate_leaves_nothing_to_calibrate_with(self):
+        self.assertIsNone(measure_offset(None, -230))
+        self.assertEqual(evaluate(None, 3, -0.58)["win_percent"], 100.0)
+        self.assertEqual(evaluate(None, -3, -0.58)["win_percent"], 0.0)
+
+    def test_the_assumed_offset_follows_who_may_sit(self):
+        self.assertAlmostEqual(assumed_offset(False, False), -SIT_BIT_Q, places=3)
+        self.assertAlmostEqual(assumed_offset(True, False), 0.0, places=3)
+        self.assertAlmostEqual(assumed_offset(False, True), 0.0, places=3)
+
+    def test_a_queen_is_worth_the_same_under_either_stance(self):
+        """The bug this replaces: the offset was taken off the raw score
+        rather than off the value it is a tangent of, so the same material
+        moved by half a pawn when only the clock stance changed."""
+        level = assumed_offset(False, False)
+        ahead = assumed_offset(True, False)
+        gain_level = (
+            evaluate(-139, None, level)["advantage"]
+            - evaluate(-233, None, level)["advantage"]
+        )
+        gain_ahead = (
+            evaluate(367, None, ahead)["advantage"]
+            - evaluate(236, None, ahead)["advantage"]
+        )
+        self.assertAlmostEqual(gain_level, 0.16, places=2)
+        self.assertAlmostEqual(gain_ahead, 0.13, places=2)
+        self.assertLess(abs(gain_level - gain_ahead), 0.05)
+
+        # Subtracting in the score instead inflates both, unequally.
+        self.assertAlmostEqual((-1.39 + 2.30) - (-2.33 + 2.30), 0.94, places=2)
+        self.assertAlmostEqual((3.67 - 2.30) - (2.36 - 2.30), 1.31, places=2)
+
+    def test_the_percentage_is_symmetric_about_level(self):
+        # The piecewise map this replaces was anchored on -0.58, so a queen up
+        # read +5% and a queen down -16%.
+        offset = -SIT_BIT_Q
+        up = evaluate(-139, None, offset)
+        down = evaluate(-371, None, offset)
+        self.assertGreater(up["win_percent"], 55)
+        self.assertLess(down["win_percent"], 45)
+        self.assertAlmostEqual(
+            up["win_percent"] - 50, 50 - down["win_percent"], delta=2
+        )
+
+    def test_the_note_says_which_number_to_read(self):
         from bughouse.analysis import _score_note
 
-        self.assertIn("-2.30", _score_note(False))
-        self.assertIn("+2.30", _score_note(True))
+        self.assertIn("advantage", _score_note(True))
+        self.assertIn("Uncalibrated", _score_note(False))
 
 
 class AnsweringTeam(unittest.TestCase):

@@ -80,6 +80,15 @@ if [[ ! -f assets/bughouse/.gitkeep ]]; then
 elif [[ -f tools/fetch_bughouse.py ]]; then
   if out=$(python3 tools/fetch_bughouse.py --check 2>&1); then
     ok "bughouse engine present ($(grep -c '^\[ok' <<<"$out") files)"
+    # Cheap and static: reads the fetched binaries' own import tables. It is
+    # what says a Windows bundle needs a DLL nobody ships, which is invisible
+    # on any machine that happens to have it.
+    if deps=$(python3 tools/test_bughouse_engine.py deps --all 2>&1); then
+      ok "bughouse engine dependencies all guaranteed or shipped"
+    else
+      bad "bughouse engine has an unmet dependency:"
+      sed 's/^/    /' <<<"$deps" | tail -3
+    fi
   else
     note "bughouse engine not fetched — Bughouse Lab stays hidden. To enable: python3 tools/fetch_bughouse.py"
   fi

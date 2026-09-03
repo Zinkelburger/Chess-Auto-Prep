@@ -86,9 +86,12 @@ BUDGET_ARGS = {
 RULE_ARGS = {
     "time_advantage": _b(
         "True when our team is ahead on the diagonal clock, which is the only "
-        "thing that makes sitting on both boards legal. Default false. It also "
-        "moves the scale's zero point (see `baseline` in the result), so never "
-        "compare a score from one setting against a score from the other."
+        "thing that makes sitting on both boards legal. Default false. The "
+        "network reads this one bit as about ±0.58 of its value — more than a "
+        "queen — so it is most of what a raw `score` is made of, and two raw "
+        "scores from different settings are not comparable at all. "
+        "`advantage` is, because its zero is measured under the settings the "
+        "search actually ran with."
     ),
     "require_move_on": _s(
         'Forbid passing on a board: "A", "B", or "none" (default). This is how '
@@ -170,15 +173,24 @@ class Registry:
             "ranked shortlist of root moves from the same search, which is the "
             "cheapest way to see what it considered, ordered best-first by "
             "score rather than by the engine's own visit count. Read "
-            "`relative` (0.00 = level) rather than the raw `score`: Hivemind's "
-            "scale carries a large offset whose sign depends on "
-            "time_advantage. See the note in the result.",
+            "`advantage` (0.00 = level, + is good for us, a queen is about "
+            "0.14) rather than the raw `score`: Hivemind's value carries a "
+            "large offset that is different in every position, so it is "
+            "measured here from a second search of the same position from the "
+            "other seat. That makes the default cost **two** searches; pass "
+            "calibrate=false for one, and read only the ordering.",
             _obj(
                 {
                     **POSITION_ARGS,
                     **RULE_ARGS,
                     **BUDGET_ARGS,
                     "multipv": _i("How many ranked root moves to report (default 1)."),
+                    "calibrate": _b(
+                        "Measure the score's offset with a second search from "
+                        "the other team's seat, so `advantage` means something "
+                        "(default true). False halves the cost and leaves only "
+                        "the raw score and the ordering."
+                    ),
                 }
             ),
             self.analyse,
@@ -308,6 +320,7 @@ class Registry:
             multipv=int(args.get("multipv", 1)),
             movetime_ms=args.get("movetime_ms"),
             nodes=args.get("nodes"),
+            calibrate=bool(args.get("calibrate", True)),
         )
 
     def compare(self, args: dict) -> dict:

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dartchess/dartchess.dart' hide File;
+import 'package:flutter/foundation.dart';
 
 import '../models/bughouse_engine_settings.dart';
 import '../models/bughouse_state.dart';
@@ -99,7 +100,10 @@ class BughouseEngine implements BughouseAnalysisEngine {
     _stdoutSub = _process.stdout
         .transform(utf8.decoder)
         .transform(const LineSplitter())
-        .listen(_onLine);
+        .listen((line) {
+          _spoke = true;
+          _onLine(line);
+        });
     _stderrSub = _process.stderr
         .transform(utf8.decoder)
         .transform(const LineSplitter())
@@ -110,7 +114,7 @@ class BughouseEngine implements BughouseAnalysisEngine {
     unawaited(
       _process.exitCode.then((code) {
         _exited = true;
-        if (!_disposed) _failPending('Engine exited ($code)');
+        if (!_disposed) _failPending(describeExit(code));
       }),
     );
   }
@@ -123,6 +127,16 @@ class BughouseEngine implements BughouseAnalysisEngine {
   late final StreamSubscription<String> _stderrSub;
 
   final List<String> _stderrLines = [];
+
+  /// Whether the process has ever written a line to stdout.
+  ///
+  /// The difference between "the engine is loading a 54 MB network slowly" and
+  /// "the engine never ran at all" — Hivemind prints its banner before it
+  /// touches the network, so an engine that has said nothing has not reached
+  /// `main`. On Windows that is what a missing DLL looks like from here: the
+  /// loader stops the process with a modal error, so it neither speaks nor
+  /// exits, and a bare timeout is the least informative thing to report.
+  bool _spoke = false;
   final _infoController = StreamController<BughouseInfo>.broadcast();
 
   Completer<void>? _readyCompleter;
@@ -143,8 +157,9 @@ class BughouseEngine implements BughouseAnalysisEngine {
   String _backendDetail = '';
 
   /// The `TimeAdvantage` the current search was configured with. Stamped onto
-  /// every parsed line, because it decides which baseline that line's score is
-  /// measured against — see [BughouseInfo.levelBaselineFor].
+  /// every parsed line, because it is most of what that line's raw score is
+  /// made of — the network reads the bit as about ±0.58 of Q — and so decides
+  /// which searches may be read against each other at all.
   bool _timeAdvantage = false;
 
   /// Serialises every command: one process answers one question at a time.
@@ -198,8 +213,11 @@ class BughouseEngine implements BughouseAnalysisEngine {
       throw BughouseEngineFailure('Network not found: $modelPath');
     }
 
+    // Windows has no loader-path variable to set: it resolves a process's
+    // imports against the directory of the process's own image first, which
+    // is where BughouseBundle puts every library the engine needs.
     final environment = <String, String>{};
-    if (libraryPath != null) {
+    if (libraryPath != null && !Platform.isWindows) {
       final key = Platform.isMacOS ? 'DYLD_LIBRARY_PATH' : 'LD_LIBRARY_PATH';
       final existing = Platform.environment[key];
       environment[key] = existing == null || existing.isEmpty
@@ -391,15 +409,82 @@ class BughouseEngine implements BughouseAnalysisEngine {
   Future<T> _await<T>(Completer<T> completer, Duration timeout, String what) {
     return completer.future.timeout(
       timeout,
-      onTimeout: () {
-        final why = _stderrLines.isEmpty
-            ? ''
-            : '\n${_stderrLines.take(8).join('\n')}';
-        throw BughouseEngineFailure(
-          'Engine did not answer "$what" within ${timeout.inSeconds}s$why',
-        );
-      },
+      onTimeout: () => throw BughouseEngineFailure(
+        stalledMessage(
+          what: what,
+          timeout: timeout,
+          spoke: _spoke,
+          stderr: _stderrLines,
+          isWindows: Platform.isWindows,
+        ),
+      ),
     );
+  }
+
+  /// What to say when the engine is still running but has stopped answering.
+  ///
+  /// Split out and pure because the interesting case is the one that is
+  /// hardest to reproduce: a Windows machine where the process exists, has
+  /// printed nothing, and never will. Hivemind's banner goes out before it
+  /// opens the network, so silence is not slowness — it is a process the
+  /// loader stopped before `main`, which on Windows means a missing DLL and
+  /// usually a modal error box behind the app window.
+  @visibleForTesting
+  static String stalledMessage({
+    required String what,
+    required Duration timeout,
+    required bool spoke,
+    required List<String> stderr,
+    required bool isWindows,
+  }) {
+    final buffer = StringBuffer(
+      'Engine did not answer "$what" within ${timeout.inSeconds}s',
+    );
+    if (stderr.isNotEmpty) {
+      buffer.write('\n${stderr.take(8).join('\n')}');
+    } else if (!spoke) {
+      buffer.write(
+        '\nThe engine started but printed nothing at all, so it never got as '
+        'far as loading the network.',
+      );
+      if (isWindows) {
+        buffer.write(
+          ' On Windows that is what a missing system library looks like — '
+          'check for an error box behind the app window, and install the '
+          'Microsoft Visual C++ Redistributable (x64) if one names a DLL.',
+        );
+      }
+    }
+    return buffer.toString();
+  }
+
+  /// A process exit turned into something worth showing a user.
+  ///
+  /// Windows reports a loader failure as an NTSTATUS in the exit code, which
+  /// reaches Dart as either the unsigned DWORD or its signed reading depending
+  /// on the path it took — both spellings are matched here. A bare
+  /// "Engine exited (-1073741515)" is the single least actionable thing this
+  /// class can say, and it is also the most likely thing it will ever say on a
+  /// machine that has never installed the Visual C++ redistributable.
+  @visibleForTesting
+  static String describeExit(int code) {
+    final status = code < 0 ? code + 0x100000000 : code;
+    final hint = switch (status) {
+      0xC0000135 =>
+        'a library it needs is missing. Install the Microsoft Visual C++ '
+            'Redistributable (x64) and try again.',
+      0xC0000142 => 'one of its libraries failed to initialise.',
+      0xC000007B =>
+        'one of its libraries is the wrong architecture (32-bit against '
+            '64-bit).',
+      0xC000001D =>
+        'this CPU does not support an instruction the engine was built with.',
+      0xC0000005 => 'it crashed (access violation).',
+      _ => null,
+    };
+    return hint == null
+        ? 'Engine exited ($code)'
+        : 'The bughouse engine could not start: $hint';
   }
 
   void _failPending(String message) {

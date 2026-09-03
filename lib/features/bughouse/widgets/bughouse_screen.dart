@@ -25,6 +25,7 @@ import 'package:provider/provider.dart';
 import '../../../core/app_state.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
+import '../../../utils/keyboard_shortcut_utils.dart';
 import '../../../widgets/app_breadcrumb_trail.dart';
 import '../../../widgets/app_mode_switcher.dart';
 import '../../../widgets/app_settings_button.dart';
@@ -101,19 +102,30 @@ class _BughouseScreenState extends State<BughouseScreen> {
           ),
           body: CallbackShortcuts(
             bindings: {
+              // Every binding defers to a text field with focus: `f`, `g` and
+              // space are letters someone types into a clock or a FEN, and
+              // the arrows move the caret there. The app's other boards make
+              // the same check.
               const SingleActivator(LogicalKeyboardKey.arrowLeft):
-                  controller.back,
+                  _unlessTyping(controller.back),
               const SingleActivator(LogicalKeyboardKey.arrowRight):
-                  controller.forward,
-              const SingleActivator(LogicalKeyboardKey.home):
-                  controller.toStart,
-              const SingleActivator(LogicalKeyboardKey.end): controller.toEnd,
-              const SingleActivator(LogicalKeyboardKey.keyF): () =>
-                  controller.toggleFlip(BughouseBoard.a),
-              const SingleActivator(LogicalKeyboardKey.keyG): () =>
-                  controller.toggleFlip(BughouseBoard.b),
-              const SingleActivator(LogicalKeyboardKey.space): () =>
-                  controller.setAnalysisEnabled(!controller.analysisEnabled),
+                  _unlessTyping(controller.forward),
+              const SingleActivator(LogicalKeyboardKey.home): _unlessTyping(
+                controller.toStart,
+              ),
+              const SingleActivator(LogicalKeyboardKey.end): _unlessTyping(
+                controller.toEnd,
+              ),
+              const SingleActivator(LogicalKeyboardKey.keyF): _unlessTyping(
+                () => controller.toggleFlip(BughouseBoard.a),
+              ),
+              const SingleActivator(LogicalKeyboardKey.keyG): _unlessTyping(
+                () => controller.toggleFlip(BughouseBoard.b),
+              ),
+              const SingleActivator(LogicalKeyboardKey.space): _unlessTyping(
+                () =>
+                    controller.setAnalysisEnabled(!controller.analysisEnabled),
+              ),
             },
             child: Focus(
               focusNode: _keys,
@@ -172,6 +184,12 @@ class _BughouseScreenState extends State<BughouseScreen> {
     );
   }
 }
+
+/// A shortcut that stands down while a text field has the keyboard.
+VoidCallback _unlessTyping(VoidCallback action) => () {
+  if (isTextInputFocused()) return;
+  action();
+};
 
 /// The two boards side by side, and the one control that spans them.
 class _Boards extends StatelessWidget {

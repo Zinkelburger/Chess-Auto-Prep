@@ -38,7 +38,7 @@ python3 .claude/skills/chess-prep-mcp/mcp_tools.py --server bughouse call analys
 | `status` | which Hivemind build is installed, and does it start | starts it |
 | `position` | play a line, read both boards back: FENs, turn, reserves, each board's own movetext | no |
 | `legal_moves` | every legal move on one board, drops included (`drops_only=true` for just the reserves) | no |
-| `analyse` | the best joint action here, with `multipv` giving the engine's ranked shortlist from the same search | yes |
+| `analyse` | the best joint action here, with `multipv` giving the engine's ranked shortlist from the same search — and a readable `advantage`, which costs a second search | yes, ×2 |
 | `compare` | rank *named* candidate moves: each is played, the opponent answers it under the same budget, lowest score for them wins | yes |
 | `playout` | the engine on both sides for a few joint actions, so you see the piece flow a line really produces | yes |
 
@@ -62,20 +62,41 @@ minutes of engine time on the wrong position.
 
 ## Reading the score
 
-**Hivemind's score is not pawns, and zero is not level.** It reports
-`180·tan(1.56·Q)` of an MCTS value carrying a large constant offset: the
-balanced starting position reads about **−2.3** from either seat, measured
-across node counts from 500 to 15 000. Mate scores (`#3`, `#-2`) are signed
-the way you expect; centipawn scores are not calibrated.
+**Read `advantage`, never `score`.** Hivemind reports `180·tan(1.56·Q)` of an
+MCTS value, and that value is not an evaluation of the position: it carries a
+large offset the network reads mostly off its `TimeAdvantage` input — the bit
+alone is worth about ±0.58 of Q, more than a queen. So a *balanced* position
+reads about −2.3 from both seats when neither team may sit.
 
-So:
+The offset is **not a constant**. It is what the clock advantage is worth *in
+this position*, so it is large in a piece-rich opening and small in a bare
+endgame. Measured across exactly symmetric two-board positions — identical FEN
+on both boards, so the true value is 0 — it ranged from −0.31 to −0.67 of Q:
 
-* **Compare within one call at one budget.** `compare` exists for exactly this
-  — every candidate is searched from the same seat under the same budget, and
-  the ranking is what you read.
-* **Do not compare across `team`, across budgets, or against Stockfish.**
-* A gap of 0.1 at a few thousand nodes is noise. Re-run the top few candidates
-  at 4–8× the nodes before believing an ordering.
+| position (all dead equal) | raw `score` | offset (Q) |
+|---|---|---|
+| the opening | −2.29 | −0.575 |
+| a symmetric Italian on both boards | −3.07 | −0.672 |
+| a mirrored king-and-pawn ending | −0.93 | −0.337 |
+
+So it is measured, not assumed. `analyse` searches the position from *both*
+seats and takes `offset = (q_ours + q_theirs)/2`, leaving
+`advantage = (q_ours − q_theirs)/2`. That is what `advantage` (Q units, 0 is
+level), `advantage_score` (the same put back on the engine's scale) and
+`win_percent` are. **This makes `analyse` cost two searches**; pass
+`calibrate=false` for one, and then read only the ordering.
+
+A rough sense of scale in `advantage`: a queen is about **0.14**, and anything
+under **0.02** at a few thousand nodes is noise.
+
+Two things follow:
+
+* **`compare` needs no calibration.** Every candidate is searched from the same
+  seat under the same settings, so they share one offset and it cancels in a
+  difference — which is what `loss_vs_best` is. The ranking is the answer.
+* **Never compare a raw `score` across calls**, across `team`, across budgets,
+  across `time_advantage`, or against Stockfish. Two `advantage` values from
+  calls with the same settings are comparable; two `score` values are not.
 
 ## Budgets
 
@@ -91,8 +112,10 @@ is wall-clock. Rough costs per search:
 | 30 000 | ~90 s | deciding between the top two or three |
 
 `compare` runs one search *per candidate*, so twelve candidates at 8 000 nodes
-is about five minutes. Start a long sweep in the background and do something
-else.
+is about five minutes. `analyse` runs **two** — the position from both seats,
+which is what makes its `advantage` readable — so double the table above, or
+pass `calibrate=false` when the ordering is all you want. Start a long sweep in
+the background and do something else.
 
 ## Where the engine comes from
 

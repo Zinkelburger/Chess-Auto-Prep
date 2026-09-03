@@ -1,0 +1,132 @@
+# Does the bughouse engine actually run on the platforms we ship it to?
+#
+# It exists because the answer was "no on Windows" and nothing here could tell
+# us: the engine is fetched at release time, never built, and the app's own
+# tests drive a fake. A friend's Windows machine showed "Loading the network…"
+# and then a 90-second timeout, because onnxruntime.dll imports the Visual C++
+# runtime and the engine runs as a separate process out of %APPDATA%, where
+# the copy the app ships beside its own exe is not on the loader's path.
+#
+# Three things are checked, and only the first can catch that particular bug:
+#
+#   deps    A static audit of the shipped binaries' own import tables. Every
+#           hosted image has the Visual C++ redistributable installed, so a
+#           runner cannot pretend to be a clean machine — but it can read what
+#           the binaries ask for and insist each of those is either part of
+#           the OS or shipped by us.
+#
+#   run     A real launch: extract the way the app does, load the 54 MB
+#           network, handshake, search, and require a joint move back.
+#
+#   client  The same three files through the app's own Dart client, which is
+#           where the two-board dialect, the joint-move parsing and the
+#           handshake timeout live.
+#
+# Runs on demand, on release tags, and when anything in the bughouse stack
+# changes — not on every push, for the same reason ci.yml does not.
+
+name: Bughouse engine
+
+on:
+  push:
+    tags:
+      - 'v*'
+    paths:
+      - 'tools/fetch_bughouse.py'
+      - 'tools/bughouse.lock.json'
+      - 'tools/test_bughouse_engine.py'
+      - 'lib/features/bughouse/services/**'
+      - 'windows/CMakeLists.txt'
+      - '.github/workflows/bughouse.yml'
+  pull_request:
+    paths:
+      - 'tools/fetch_bughouse.py'
+      - 'tools/bughouse.lock.json'
+      - 'tools/test_bughouse_engine.py'
+      - 'lib/features/bughouse/services/**'
+      - 'windows/CMakeLists.txt'
+      - '.github/workflows/bughouse.yml'
+  workflow_dispatch:
+
+jobs:
+  engine:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Pinned to match ci.yml and release.yml.
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.1
+          channel: stable
+          cache: true
+
+      - name: Cache bughouse engine
+        uses: actions/cache@v4
+        with:
+          path: assets/bughouse
+          key: bughouse-${{ hashFiles('tools/bughouse.lock.json') }}-${{ matrix.os }}
+
+      - name: Fetch the engine for this platform
+        run: |
+          python tools/fetch_bughouse.py
+          python tools/fetch_bughouse.py --check
+
+      # Static, and the only check here that a hosted runner cannot fake.
+      - name: Audit what the binaries need
+        run: python tools/test_bughouse_engine.py deps
+
+      # Live. Extracts the way BughouseBundle does — same names, same size
+      # check against manifest.json — then loads the network and searches.
+      - name: Load the network and search
+        timeout-minutes: 10
+        run: python tools/test_bughouse_engine.py run --install-to engine-under-test
+
+      - run: flutter pub get
+
+      - name: Drive the engine through the app's client
+        timeout-minutes: 10
+        env:
+          HIVEMIND_BIN: ${{ matrix.os == 'windows-latest' && 'engine-under-test/hivemind-windows.exe' || 'engine-under-test/hivemind-linux' }}
+          HIVEMIND_MODEL: engine-under-test/hivemind.onnx
+          HIVEMIND_LIB: engine-under-test
+        run: flutter test test/features/bughouse/bughouse_engine_test.dart
+
+  macos:
+    # Ten times the minutes of a Linux runner, so only when it is asked for or
+    # when a release is being cut.
+    if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache bughouse engine
+        uses: actions/cache@v4
+        with:
+          path: assets/bughouse
+          key: bughouse-${{ hashFiles('tools/bughouse.lock.json') }}-macos
+
+      - name: Fetch the engine for this platform
+        run: |
+          python3 tools/fetch_bughouse.py
+          python3 tools/fetch_bughouse.py --check
+
+      - name: Audit what the binaries need
+        run: python3 tools/test_bughouse_engine.py deps
+
+      - name: Load the network and search
+        timeout-minutes: 10
+        run: python3 tools/test_bughouse_engine.py run

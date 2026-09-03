@@ -8,6 +8,7 @@ import '../../../models/board_annotation.dart';
 import '../../../utils/chess_utils.dart' show roleChar;
 import '../../../utils/safe_change_notifier.dart';
 import '../models/bughouse_engine_settings.dart';
+import '../models/bughouse_eval.dart';
 import '../models/bughouse_history.dart';
 import '../models/bughouse_state.dart';
 import '../services/bughouse_bundle.dart';
@@ -92,49 +93,59 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
     return manual ? !natural : natural;
   }
 
-  /// The joint action the pointer is over in the panel, lit up on the boards.
-  BughouseJointMove? _hovered;
-
-  /// Called by a line in the panel as the pointer enters and leaves it.
+  /// What a move under the pointer in the panel puts on the boards.
   ///
-  /// [silently] is for teardown: a row unmounted while the pointer is over it
-  /// clears the highlight from `State.dispose`, which runs inside
-  /// `finalizeTree` where the tree is locked — notifying there threw
-  /// "markNeedsBuild() called when widget tree was locked" on every click of a
-  /// line, the panel's headline interaction. Nothing needs repainting in that
-  /// case anyway: the rows are on their way out.
-  void hoverAction(BughouseJointMove? action, {bool silently = false}) {
-    if (identical(_hovered, action)) return;
-    _hovered = action;
-    if (!silently) notifyListeners();
+  /// A [ValueNotifier] rather than controller state, so that hovering redraws
+  /// the two boards and nothing else: going through [notifyListeners] rebuilt
+  /// the whole pane — both boards, four reserves, every shortlist row — on
+  /// every pointer enter and exit, which is what made the panel feel as if
+  /// something happened each time the pointer crossed a line.
+  final ValueNotifier<BughouseHover?> hover = ValueNotifier(null);
+
+  /// Lights [step] up on the boards, on behalf of [owner].
+  ///
+  /// The annotations are worked out here and now, against the position the
+  /// ply is actually played from, because a line's third ply is not a move on
+  /// the position currently on screen — parsing it there gave the wrong
+  /// squares or none at all.
+  void hoverStep(BughousePvStep step, {required Object owner}) {
+    hover.value = BughouseHover(
+      owner: owner,
+      a: _annotate(
+        BughouseBoard.a,
+        step.action,
+        AnnotationBrush.blue,
+        on: step.before,
+      ),
+      b: _annotate(
+        BughouseBoard.b,
+        step.action,
+        AnnotationBrush.blue,
+        on: step.before,
+      ),
+    );
   }
 
-  /// Drops the highlight only if [action] is the one currently lit.
+  /// Lights a joint action on the current position up. Null clears.
+  void hoverAction(BughouseJointMove? action, {Object? owner}) {
+    if (action == null) {
+      hover.value = null;
+      return;
+    }
+    hover.value = BughouseHover(
+      owner: owner ?? action,
+      a: _annotate(BughouseBoard.a, action, AnnotationBrush.blue),
+      b: _annotate(BughouseBoard.b, action, AnnotationBrush.blue),
+    );
+  }
+
+  /// Drops the highlight, but only if [owner] is the one holding it.
   ///
-  /// A row unmounting must not clear a highlight another row has just taken,
-  /// which a bare `hoverAction(null)` did whenever the block rebuilt under the
+  /// A row leaving the screen must not clear a highlight another row has just
+  /// taken, which a bare clear did whenever the block rebuilt under the
   /// pointer.
-  void clearHoverIfOwned(BughouseJointMove action, {bool silently = false}) {
-    if (!identical(_hovered, action)) return;
-    hoverAction(null, silently: silently);
-  }
-
-  /// The squares [which] should light up because a line is being hovered.
-  ///
-  /// A joint action moves on two boards at once, so hovering one row lights
-  /// both — which is the whole reason to do it rather than print more text.
-  Set<String> hoveredSquares(BughouseBoard which) {
-    final action = _hovered;
-    if (action == null) return const {};
-    final half = action.half(which);
-    final uci = half.uci;
-    if (half.isPass || uci == null) return const {};
-    final move = _parseUci(state.board(which), uci);
-    return switch (move) {
-      NormalMove(:final from, :final to) => {from.name, to.name},
-      DropMove(:final to) => {to.name},
-      _ => const {},
-    };
+  void clearHover(Object owner) {
+    if (hover.value?.owner == owner) hover.value = null;
   }
 
   /// Arrows and drop markers for [which] — the engine's answer, drawn on the
@@ -142,17 +153,15 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   ///
   /// Reading a joint action off a text row is the hard part of bughouse
   /// notation: two boards move at once, and half the moves are drops with no
-  /// origin square to trace. So the shortlist row under the pointer wins the
-  /// boards outright (blue, both halves), and with nothing hovered the boards
-  /// carry the two standing answers — what our team should play (green) and
-  /// what the other team is about to (red), which is the pair a player checks
+  /// origin square to trace. So the move under the pointer wins the boards
+  /// outright (blue, both halves), and with nothing hovered the boards carry
+  /// the two standing answers — what our team should play (green) and what
+  /// the other team is about to (red), which is the pair a player checks
   /// against each other.
   List<BoardAnnotation> annotationsFor(BughouseBoard which) {
     if (_mode != BughouseMode.play) return const [];
-    final hovered = _hovered;
-    if (hovered != null) {
-      return _annotate(which, hovered, AnnotationBrush.blue);
-    }
+    final hovered = hover.value;
+    if (hovered != null) return hovered.on(which);
     return [
       ..._annotate(which, ours.best, AnnotationBrush.green),
       ..._annotate(which, theirs.best, AnnotationBrush.red),
@@ -165,13 +174,14 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   List<BoardAnnotation> _annotate(
     BughouseBoard which,
     BughouseJointMove? action,
-    AnnotationBrush brush,
-  ) {
+    AnnotationBrush brush, {
+    BughouseState? on,
+  }) {
     if (action == null) return const [];
     final half = action.half(which);
     final uci = half.uci;
     if (half.isPass || uci == null) return const [];
-    final position = state.board(which);
+    final position = (on ?? state).board(which);
     final move = _parseUci(position, uci);
     if (move == null || !position.isLegal(move)) return const [];
     return switch (move) {
@@ -604,7 +614,7 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
         after: after,
       ),
     );
-    _clearAnalysis();
+    _clearAnalysis(keepCalibration: true);
     return true;
   }
 
@@ -619,6 +629,29 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   /// half the reason to look at their search at all.
   void playJoint(BughouseJointMove? best) {
     if (best == null || best.isEmpty) return;
+    if (!_playJoint(best)) _fail('The engine\'s move is not legal here.');
+    notifyListeners();
+  }
+
+  /// Plays an engine line up to and including [throughPly], the way clicking
+  /// a move in any engine's principal variation plays the line to there.
+  ///
+  /// The steps are replayed from the position on screen, not trusted: a click
+  /// can land after the search that produced the line has been superseded,
+  /// and a line that stops playing is left where it stopped.
+  void playLine(List<BughousePvStep> steps, {required int throughPly}) {
+    var played = 0;
+    for (final step in steps.take(throughPly + 1)) {
+      if (!_playJoint(step.action)) break;
+      played++;
+    }
+    if (played == 0) _fail('That line no longer fits the position.');
+    notifyListeners();
+  }
+
+  /// The plies of one joint action, without a notification. False when
+  /// neither half is playable here.
+  bool _playJoint(BughouseJointMove action) {
     // Both halves are resolved against the position the engine saw, before
     // either is applied. Resolving B after playing A would let a piece
     // captured on A pay for a drop on B in the same action — the engine never
@@ -626,22 +659,18 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
     final before = state;
     final resolved = <BughouseBoard, Move>{};
     for (final which in BughouseBoard.values) {
-      final half = best.half(which);
+      final half = action.half(which);
       final uci = half.uci;
       if (half.isPass || uci == null) continue;
       final position = before.board(which);
       final move = _parseUci(position, uci);
       if (move != null && position.isLegal(move)) resolved[which] = move;
     }
-    if (resolved.isEmpty) {
-      _fail('The engine\'s move is not legal here.');
-      notifyListeners();
-      return;
-    }
+    if (resolved.isEmpty) return false;
     for (final entry in resolved.entries) {
       _play(entry.key, entry.value);
     }
-    notifyListeners();
+    return true;
   }
 
   /// One half of a joint action as SAN on the current position — `Nxf7+`
@@ -779,6 +808,8 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
       if (stalled || sans.isEmpty) break;
       steps.add(
         BughousePvStep(
+          action: action,
+          before: position,
           team: acting,
           seats: state.teamLetters(acting),
           onA: sans[BughouseBoard.a],
@@ -812,7 +843,7 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   void goTo(int index) {
     _history.goTo(index);
     _pendingDrop = null;
-    _clearAnalysis();
+    _clearAnalysis(keepCalibration: true);
     notifyListeners();
   }
 
@@ -824,7 +855,7 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   void undo() {
     if (_history.undo() == null) return;
     _pendingDrop = null;
-    _clearAnalysis();
+    _clearAnalysis(keepCalibration: true);
     notifyListeners();
   }
 
@@ -901,8 +932,19 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
 
   /// Drops what the engine said and starts it over on the position as it is
   /// now. Every edit, move and rule change goes through here.
-  void _clearAnalysis() {
+  ///
+  /// [keepCalibration] is what separates the two kinds of change. A move keeps
+  /// the measured offset, because the next position is one ply away and its
+  /// offset is all but the same — and that is exactly the case where the pair
+  /// may be unobtainable, since a team with nothing to move gets no score at
+  /// all. A change of the rules or a wholly new position does not: a different
+  /// stance is a different pair of searches, and its offset is a different
+  /// number.
+  void _clearAnalysis({bool keepCalibration = false}) {
     _generation++;
+    // Whatever was lit up described a position or a search that is gone.
+    hover.value = null;
+    if (!keepCalibration) _carried = null;
     _analyses = const {};
     _passMs = _firstPassMs;
     _error = null;
@@ -996,6 +1038,14 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
           best: result.best,
         ),
       };
+      // A pass that completes the pair re-measures the offset. Kept on the
+      // controller so the next position — which may be one where our team has
+      // nothing to move, and so can never be measured — still has one.
+      final measured = BughouseCalibration.measure(
+        ours.principal,
+        theirs.principal,
+      );
+      if (measured != null) _carried = measured;
     } catch (e) {
       if (generation != _generation) return;
       _error = _describe(e, 'Analysis failed');
@@ -1006,41 +1056,53 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
-  /// The position as our team reads it: one number, one bar fraction.
+  /// What has to come out of a raw score before it means anything here.
+  ///
+  /// Measured from the two searches this pane already runs every pass, because
+  /// the offset is not a constant — it is the network's estimate of what the
+  /// clock advantage is worth *in this position*, which is large in the
+  /// opening and small in an endgame. See [BughouseCalibration].
+  ///
+  /// Falls back to the last position's measurement, and then to the opening
+  /// position's, so a state where one team holds both moves — the one case
+  /// where a pair cannot be had at all, since the engine answers a team with
+  /// nothing to move with no score whatsoever — still prints a number.
+  BughouseCalibration get calibration =>
+      BughouseCalibration.measure(ours.principal, theirs.principal) ??
+      _carried?.asCarried ??
+      BughouseCalibration.assumed(
+        weMaySit: state.timeAdvantageFor(state.team),
+        theyMaySit: state.timeAdvantageFor(state.team.opposite),
+      );
+
+  /// The last offset actually measured, kept across moves.
+  ///
+  /// Not across a change of the rules: a different stance is a different pair
+  /// of searches, and its offset is a different number.
+  BughouseCalibration? _carried;
+
+  /// The position as our team reads it: one number, one percentage.
   ///
   /// Our own search answers this whenever we have one. When the whole opposing
   /// team is on move we do not — there is no move for us to search — so the
   /// opponents' number is turned around and shown instead, which is a truer
   /// answer than an empty pane.
-  ({String label, double winPercent, bool borrowed})? get eval {
+  BughouseEval? get eval {
+    final applies = calibration;
     final mine = ours.latest;
-    if (mine != null) {
-      return (
-        label: mine.evalLabel,
-        winPercent: mine.winPercent,
-        borrowed: false,
-      );
-    }
+    if (mine != null) return BughouseEval.of(mine, applies);
     final other = theirs.latest;
     if (other == null) return null;
-    return (
-      label: flipEval(other.evalLabel),
-      // Their expected score is ours subtracted from the whole, for the same
-      // reason the label is flipped: the panel only ever answers for us.
-      winPercent: 100 - other.winPercent,
-      borrowed: true,
-    );
+    // Their search, read from our seat. Both halves of the turn are now
+    // measured against the same offset, so the headline no longer jumps by
+    // the width of the clock advantage as the move passes between teams.
+    return BughouseEval.of(other, applies, borrowed: true).flipped;
   }
 
-  /// The same evaluation seen from the other side of the table, so that every
-  /// number on the panel answers "how does this leave *our* team" — including
-  /// the ones that came out of the opponents' search.
-  static String flipEval(String label) {
-    if (label.startsWith('#-')) return '#${label.substring(2)}';
-    if (label.startsWith('#')) return '#-${label.substring(1)}';
-    if (label.startsWith('+')) return '-${label.substring(1)}';
-    if (label.startsWith('-')) return '+${label.substring(1)}';
-    return label;
+  /// One line of either team's search, always read from our seat.
+  BughouseEval evalOf(BughouseInfo info, {required Side team}) {
+    final read = BughouseEval.of(info, calibration);
+    return team == state.team ? read : read.flipped;
   }
 
   /// Folds a live `info` line into the team currently being searched, so the
@@ -1058,7 +1120,9 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   static String _describe(Object e, String fallback) =>
-      e is BughouseEngineFailure || e is BughouseBundleMissing
+      e is BughouseEngineFailure ||
+          e is BughouseBundleMissing ||
+          e is BughouseBundleBroken
       ? e.toString()
       : '$fallback: $e';
 
@@ -1068,6 +1132,16 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   /// the engine's clock model is one bit, so "level" and "behind" search
   /// identically and are reported as one row. The third row forces a move,
   /// which is the case those two cannot express.
+  ///
+  /// Every row costs **two** searches, one per team, and that is the whole
+  /// point of the table. The offset in a raw score is mostly the network
+  /// reading its own `TimeAdvantage` bit, so it is a different number in the
+  /// row where we may sit than in the rows where we may not — and a table that
+  /// took one fixed number out of all three rows reported sitting as worth
+  /// about half a pawn more than the engine actually said it was. Measuring
+  /// each row's offset from its own pair is what makes the rows comparable at
+  /// all, and it is why they are the same searches the pump runs rather than
+  /// something cheaper.
   Future<void> compareScenarios() async {
     if (_comparing) return;
     // The pump has to let go of the engine first: one process, one search.
@@ -1103,21 +1177,42 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
         // this check the loop kept filling in a table for a position that is
         // no longer on screen, one of whose rows was truncated.
         if (isDisposed || generation != _generation) return;
-        await engine.configure(
+        final ours = await _scenarioSearch(
+          engine,
+          position,
           team: position.team,
           hasTimeAdvantage: run.advantage,
           requireMoveOn: run.require,
         );
-        await engine.setPosition(position);
-        final result = await engine.search(
-          movetime: const Duration(milliseconds: _comparePassMs),
+        if (generation != _generation) return;
+
+        // The other team under the complementary stance: if we may sit they
+        // may not, and in the rows where we may not, neither may they. The
+        // constraint is ours alone.
+        final theirs = await _scenarioSearch(
+          engine,
+          position,
+          team: position.team.opposite,
+          hasTimeAdvantage: false,
+          requireMoveOn: RequireMoveOn.none,
         );
         if (generation != _generation) return;
+
+        final measured = BughouseCalibration.measure(
+          ours.principal,
+          theirs.principal,
+        );
         collected.add(
           BughouseScenarioResult(
             label: run.label,
-            best: result.best,
-            info: result.lastInfo,
+            best: ours.best,
+            info: ours.principal,
+            calibration:
+                measured ??
+                BughouseCalibration.assumed(
+                  weMaySit: run.advantage,
+                  theyMaySit: false,
+                ),
           ),
         );
         scenarios = List.unmodifiable(collected);
@@ -1136,6 +1231,25 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
       startAnalysis();
       notifyListeners();
     }
+  }
+
+  /// One configured search for the scenario table.
+  Future<BughouseSearchResult> _scenarioSearch(
+    BughouseAnalysisEngine engine,
+    BughouseState position, {
+    required Side team,
+    required bool hasTimeAdvantage,
+    required RequireMoveOn requireMoveOn,
+  }) async {
+    await engine.configure(
+      team: team,
+      hasTimeAdvantage: hasTimeAdvantage,
+      requireMoveOn: requireMoveOn,
+    );
+    await engine.setPosition(position);
+    return engine.search(
+      movetime: const Duration(milliseconds: _comparePassMs),
+    );
   }
 
   /// Pushes [_engineSettings] into the process, once per change.
@@ -1204,8 +1318,15 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   @override
   void dispose() {
     unawaited(_infoSub?.cancel() ?? Future.value());
-    unawaited(_engine?.dispose() ?? Future.value());
+    // An injected engine outlives the pane by definition — see
+    // [_shutDownEngine]; only a process this controller launched is ours to
+    // stop.
+    final engine = _engine;
+    if (engine != null && !identical(engine, engineOverride)) {
+      unawaited(engine.dispose());
+    }
     _engine = null;
+    hover.dispose();
     super.dispose();
   }
 }
@@ -1239,6 +1360,13 @@ class BughouseTeamAnalysis {
   /// The joint action the last finished pass settled on.
   final BughouseJointMove? best;
 
+  /// The line to calibrate and to head the table with.
+  ///
+  /// The finished block is preferred over the live line because calibration
+  /// pairs two teams' searches and the finished ones are the pair that ran to
+  /// the same budget. Before any pass has finished there is only [latest].
+  BughouseInfo? get principal => lines.isNotEmpty ? lines.first : latest;
+
   bool get isEmpty => latest == null && best == null && lines.isEmpty;
 
   BughouseTeamAnalysis withLatest(BughouseInfo info) =>
@@ -1252,11 +1380,22 @@ class BughouseTeamAnalysis {
 /// to decide there, which is a blank rather than a `sit`.
 class BughousePvStep {
   const BughousePvStep({
+    required this.action,
+    required this.before,
     required this.team,
     required this.seats,
     required this.onA,
     required this.onB,
   });
+
+  /// The joint action itself, as the engine spelled it — what gets played
+  /// when the step is clicked.
+  final BughouseJointMove action;
+
+  /// The two-board position this ply is played from: the one on screen for
+  /// the first step, and the line's own positions after that. It is what the
+  /// boards draw the ply against when it is hovered.
+  final BughouseState before;
 
   /// The team that plays this ply — it alternates down the variation.
   final Side team;
@@ -1273,17 +1412,52 @@ class BughousePvStep {
   final String? onB;
 
   String? on(BughouseBoard which) => which == BughouseBoard.a ? onA : onB;
+
+  /// The seat letter that plays [which] on this ply: A or B on board 1, C or
+  /// D on board 2, by which team is acting.
+  String seatOn(BughouseBoard which, BughouseState state) =>
+      state.seatLetter(which, which == BughouseBoard.a ? team : team.opposite);
+}
+
+/// What a hovered move puts on the two boards, and who put it there.
+///
+/// Held as finished annotations rather than as the move, because a move deep
+/// in a line belongs to a position that is not the one on screen, and only
+/// the panel row that owns the hover knows which.
+@immutable
+class BughouseHover {
+  const BughouseHover({required this.owner, required this.a, required this.b});
+
+  /// Who set it — so a row leaving the screen clears only its own highlight.
+  final Object owner;
+
+  final List<BoardAnnotation> a;
+  final List<BoardAnnotation> b;
+
+  List<BoardAnnotation> on(BughouseBoard which) =>
+      which == BughouseBoard.a ? a : b;
 }
 
 /// One row of a scenario comparison.
+///
+/// Carries the offset measured for *this row*, because that is the thing the
+/// rows do not share: the network reads the `TimeAdvantage` bit as most of the
+/// raw score, so the row where we may sit sits on a different zero from the
+/// rows where we may not.
 class BughouseScenarioResult {
   const BughouseScenarioResult({
     required this.label,
     required this.best,
     required this.info,
+    required this.calibration,
   });
 
   final String label;
   final BughouseJointMove? best;
   final BughouseInfo? info;
+  final BughouseCalibration calibration;
+
+  /// The row's score from our seat, on the one scale every row shares.
+  BughouseEval? get eval =>
+      info == null ? null : BughouseEval.of(info!, calibration);
 }

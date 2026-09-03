@@ -1,10 +1,12 @@
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../controllers/bughouse_controller.dart';
 import '../models/bughouse_engine_settings.dart';
+import '../models/bughouse_eval.dart';
 import '../models/bughouse_state.dart';
 
 /// What the engine thinks, kept running.
@@ -89,10 +91,11 @@ class _BughouseAnalysisPanelState extends State<BughouseAnalysisPanel> {
 
 /// The score, as prominent as it is on a board being analysed.
 ///
-/// One number and one bar, always from our team's seat, so the sign means what
-/// a reader assumes it means. The engine's own number is nowhere near this
-/// readable — see [BughouseInfo.evalLabel] — and stays in the tooltip for
-/// anyone comparing with the MCP tools.
+/// One number and one percentage, always from our team's seat, so the sign
+/// means what a reader assumes it means. Both are read off the same
+/// [BughouseEval], which is the engine's value with the offset measured for
+/// *this* position taken out; the engine's own raw number is nowhere near
+/// readable and stays in the tooltip for anyone comparing with the MCP tools.
 ///
 /// Play/pause leads the row rather than trailing it: it is the control that
 /// governs everything to its right, and a transport button belongs before what
@@ -123,7 +126,7 @@ class _Eval extends StatelessWidget {
             ),
             const SizedBox(width: 4),
             Tooltip(
-              message: _tooltip(info),
+              message: _tooltip(info, eval, controller.calibration),
               child: Text(
                 eval?.label ?? '—',
                 style: AppTextStyles.mono.copyWith(
@@ -136,14 +139,15 @@ class _Eval extends StatelessWidget {
             const SizedBox(width: 12),
             // The percentage rather than a bar: Hivemind's score is an MCTS
             // Q-value, so an expected score is the one reading of it that is
-            // exact rather than drawn to scale.
+            // exact rather than drawn to scale. Read off the same value as the
+            // number beside it, so the two cannot disagree.
             if (eval != null)
               Tooltip(
                 message:
                     'Our team\'s expected score, from the engine\'s own '
                     'value. 50% is level.',
                 child: Text(
-                  '${eval.winPercent.round()}% for us',
+                  '${eval.winLabel} for us',
                   style: AppTextStyles.body.copyWith(
                     color: AppColors.onSurfaceMuted,
                   ),
@@ -184,18 +188,34 @@ class _Eval extends StatelessWidget {
         '${(info.timeMs / 1000).round()}s$borrowed';
   }
 
-  static String _tooltip(BughouseInfo? info) {
+  static String _tooltip(
+    BughouseInfo? info,
+    BughouseEval? eval,
+    BughouseCalibration calibration,
+  ) {
     const scale = 'Our team\'s advantage: 0.00 is level, + is good for us.';
-    if (info == null) return scale;
-    // Which baseline applies depends on the clock stance the search ran under,
-    // so name the one that produced this number rather than a fixed figure.
-    return '$scale\nEngine says ${info.scoreLabel}; its own scale reads '
-        '${info.levelBaseline.toStringAsFixed(2)} for a level position '
-        '${info.hadTimeAdvantage ? 'when the team may sit' : 'when it may not'}.';
+    if (info == null || eval == null) return scale;
+    // Where the zero came from, not a fixed figure: the offset in a raw score
+    // is measured from both teams' searches and is different in every
+    // position.
+    return '$scale\nEngine says ${info.scoreLabel}. ${calibration.note}';
   }
 }
 
-/// One team's shortlist, laid out as a table of the two seats that play it.
+/// One team's shortlist: the ranked lines of its last finished pass, laid
+/// out the way every engine pane in this app lays lines out — a score, then
+/// the line in SAN with every move of it clickable.
+///
+/// The first ply of a line is the candidate the row is ranked by, drawn
+/// heavier; what follows is the continuation the engine expects. A bughouse
+/// ply is a joint action on two boards, so each move carries the letter of
+/// the seat that plays it — `A d4` is ours on board 1, `D d5` is their
+/// partner's on board 2 — and plies are separated by a dot. Hovering a move
+/// draws it on the boards; clicking one plays the line through it, and
+/// clicking the row plays its first ply. Nothing about a row changes shape
+/// when the pointer crosses it: the continuation used to unfold under the
+/// pointer, which moved every row below it and put a different row under the
+/// pointer than the one it had entered.
 class _TeamLines extends StatelessWidget {
   const _TeamLines({required this.controller, required this.analysis});
 
@@ -212,29 +232,13 @@ class _TeamLines extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = controller.state;
     final onMove = state.hasMoveFor(analysis.team);
-    final best = analysis.best;
-    // Every row in this block comes from the same finished search. The primary
-    // used to show `latest`, which advances live during the pass in progress
-    // while the alternatives still hold the previous pass's block — and since
-    // passes double up to the think-time cap, the numbers being compared side
-    // by side came from budgets a factor of two apart. `latest` still drives
-    // the headline eval and the depth caption, where a live figure is what a
-    // reader wants.
-    final ranked = analysis.lines;
-    final primary = ranked.isNotEmpty ? ranked.first : analysis.latest;
-    final alternatives = ranked.length > 1
-        ? ranked.skip(1).toList()
-        : const <BughouseInfo>[];
-
-    // Our seats are A (board 1) and C (board 2); theirs are B and D. Naming
-    // the columns is what turns a row of moves into "who plays what".
-    final seats = [
-      for (final which in BughouseBoard.values)
-        state.seatLetter(
-          which,
-          which == BughouseBoard.a ? analysis.team : analysis.team.opposite,
-        ),
-    ];
+    // Every row comes from the same finished search. Showing `latest` in the
+    // top row while the others held the previous block put numbers from
+    // budgets a factor of two apart side by side; `latest` still drives the
+    // headline eval, where a live figure is what a reader wants.
+    final rows = analysis.lines.isNotEmpty
+        ? analysis.lines
+        : [?analysis.latest];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -255,99 +259,83 @@ class _TeamLines extends StatelessWidget {
                 ),
               ),
             ),
-            if (onMove && best != null && !best.isEmpty)
-              Text(
-                'click to play',
-                style: AppTextStyles.caption.copyWith(
-                  color: AppColors.onSurfaceMuted,
-                ),
-              ),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         if (!onMove)
-          Text(
+          const Text(
             'Nothing to move — both boards are the other team\'s.',
             style: AppTextStyles.muted,
           )
-        else if (best == null)
+        else if (rows.isEmpty && analysis.best == null)
           const Text('Thinking…', style: AppTextStyles.muted)
         else ...[
-          _ColumnHeader(seats: seats),
-          _LineRow(
-            controller: controller,
-            team: analysis.team,
-            action: best,
-            info: primary,
-            primary: true,
-          ),
-          for (final line in alternatives)
-            if (line.pv.isNotEmpty)
+          for (var i = 0; i < rows.length; i++)
+            if (rows[i].pv.isNotEmpty)
               _LineRow(
+                // Keyed by content, so a row whose line changes under the
+                // pointer is a new row: the pointer leaves the old one and
+                // enters the new, instead of the old highlight outliving it.
+                key: ValueKey('${analysis.team.name}:$i:${rows[i].pv}'),
                 controller: controller,
                 team: analysis.team,
-                action: line.pv.first,
-                info: line,
-                primary: false,
+                steps: controller.describePv(rows[i], team: analysis.team),
+                label: controller.evalOf(rows[i], team: analysis.team).label,
+                primary: i == 0,
               ),
+          // A `bestmove` with no line behind it — the engine's first word
+          // before any `info` — is still worth a row.
+          if (rows.every((r) => r.pv.isEmpty) && analysis.best != null)
+            _LineRow(
+              key: ValueKey('${analysis.team.name}:best:${analysis.best}'),
+              controller: controller,
+              team: analysis.team,
+              steps: controller.describePv(
+                BughouseInfo(
+                  depth: 0,
+                  scoreCp: 0,
+                  nodes: 0,
+                  nps: 0,
+                  timeMs: 0,
+                  pv: [analysis.best!],
+                ),
+                team: analysis.team,
+              ),
+              label: '—',
+              primary: true,
+            ),
         ],
       ],
     );
   }
 }
 
-/// `      A        C` — the seats the two move columns belong to.
-class _ColumnHeader extends StatelessWidget {
-  const _ColumnHeader({required this.seats});
-
-  final List<String> seats;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 2),
-      child: Row(
-        children: [
-          const SizedBox(width: _TeamLines.evalWidth),
-          for (final seat in seats)
-            Expanded(
-              child: Text(
-                seat,
-                style: AppTextStyles.mono.copyWith(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.onSurfaceMuted,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// `+0.02   Nc3   exd5` — one line of a search, hoverable and playable.
+/// `+0.02   A Nf3 · B e5 D d5 · A Nc3` — one line of a search.
 ///
-/// Hovering lights the move up on the boards themselves *and* draws it as an
-/// arrow, which is the reply to "what does that do" that a two-board position
-/// most needs: both halves of a joint action land at once, on two boards, and
-/// reading them off a text row is what makes bughouse notation hard. Hovering
-/// also opens the line's continuation underneath, in SAN and in the same two
-/// columns — the engine's `pv` is a list of joint actions in board-prefixed
-/// UCI, which is unreadable as printed and is why it was never shown at all.
+/// Stateful for one bit, whether the pointer is over it, which tints the row
+/// and is what the boards' highlight follows. The state object doubles as the
+/// highlight's owner: a row that is unmounted while lit clears its own
+/// highlight and nobody else's, after the frame, because `dispose` runs with
+/// the tree locked and the boards listening to the highlight would rebuild.
 class _LineRow extends StatefulWidget {
   const _LineRow({
+    super.key,
     required this.controller,
     required this.team,
-    required this.action,
-    required this.info,
+    required this.steps,
+    required this.label,
     required this.primary,
   });
 
   final BughouseController controller;
   final Side team;
-  final BughouseJointMove action;
-  final BughouseInfo? info;
+
+  /// The line, replayed from the position on screen. Empty when it no longer
+  /// fits — what a line from a superseded search looks like.
+  final List<BughousePvStep> steps;
+
+  /// The score, already printed from our seat.
+  final String label;
 
   /// The line the search settled on, drawn heavier than the ones it beat.
   final bool primary;
@@ -357,87 +345,117 @@ class _LineRow extends StatefulWidget {
 }
 
 class _LineRowState extends State<_LineRow> {
-  bool _hovering = false;
+  bool _lit = false;
 
-  void _setHover(bool hovering) {
-    if (_hovering == hovering) return;
-    setState(() => _hovering = hovering);
-    widget.controller.hoverAction(hovering ? widget.action : null);
+  BughouseController get _controller => widget.controller;
+
+  void _enterRow() {
+    setState(() => _lit = true);
+    if (widget.steps.isNotEmpty) {
+      _controller.hoverStep(widget.steps.first, owner: this);
+    }
+  }
+
+  void _exitRow() {
+    setState(() => _lit = false);
+    _controller.clearHover(this);
+  }
+
+  /// Leaving a move falls back to the row's own candidate rather than to
+  /// nothing: the pointer is still on the row.
+  void _exitStep() {
+    if (_lit && widget.steps.isNotEmpty) {
+      _controller.hoverStep(widget.steps.first, owner: this);
+    }
   }
 
   @override
   void dispose() {
-    // Only if this row still owns the highlight — another row may have taken
-    // it already — and never with a notification, because `dispose` runs with
-    // the tree locked.
-    if (_hovering) {
-      widget.controller.clearHoverIfOwned(widget.action, silently: true);
+    if (_lit) {
+      final controller = _controller;
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (!controller.isDisposed) controller.clearHover(this);
+      });
     }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final controller = widget.controller;
-    final ours = widget.team == controller.state.team;
-    final info = widget.info;
-    final label = info == null
-        ? '—'
-        : ours
-        ? info.evalLabel
-        : BughouseController.flipEval(info.evalLabel);
-    final seats = controller.describeSeats(widget.action, team: widget.team);
+    final steps = widget.steps;
+    final state = _controller.state;
     final ink = widget.primary ? AppColors.ink : AppColors.onSurfaceMuted;
     final weight = widget.primary ? FontWeight.w600 : FontWeight.w400;
 
-    // Keyed by board so the two columns line up down the table even when one
-    // seat has nothing to play on a given line.
-    final byBoard = {for (final seat in seats) seat.board: seat};
-
     return MouseRegion(
-      onEnter: (_) => _setHover(true),
-      onExit: (_) => _setHover(false),
+      cursor: steps.isEmpty
+          ? SystemMouseCursors.basic
+          : SystemMouseCursors.click,
+      onEnter: (_) => _enterRow(),
+      onExit: (_) => _exitRow(),
       child: GestureDetector(
-        onTap: () => controller.playJoint(widget.action),
+        behavior: HitTestBehavior.opaque,
+        onTap: steps.isEmpty
+            ? null
+            : () => _controller.playLine(steps, throughPly: 0),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-          color: _hovering ? AppColors.hoverOverlay : Colors.transparent,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          decoration: BoxDecoration(
+            color: _lit ? AppColors.hoverOverlay : Colors.transparent,
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  SizedBox(
-                    width: _TeamLines.evalWidth,
-                    child: Text(
-                      label,
-                      style: AppTextStyles.mono.copyWith(
-                        color: ink,
-                        fontWeight: weight,
-                      ),
+              SizedBox(
+                width: _TeamLines.evalWidth,
+                child: Padding(
+                  // Sits on the first line of the moves beside it.
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Text(
+                    widget.label,
+                    style: AppTextStyles.mono.copyWith(
+                      color: ink,
+                      fontWeight: weight,
                     ),
                   ),
-                  for (final which in BughouseBoard.values)
-                    Expanded(
-                      child: Tooltip(
-                        message: byBoard[which]?.hint ?? '',
-                        child: Text(
-                          byBoard[which]?.move ?? '',
-                          style: AppTextStyles.mono.copyWith(
-                            color: ink,
-                            fontWeight: weight,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              if (_hovering && info != null)
-                _Continuation(
-                  controller: controller,
-                  info: info,
-                  team: widget.team,
                 ),
+              ),
+              Expanded(
+                child: steps.isEmpty
+                    ? Text(
+                        'no longer fits this position',
+                        style: AppTextStyles.monoDense.copyWith(
+                          color: AppColors.onSurfaceMuted,
+                        ),
+                      )
+                    : Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        runSpacing: 2,
+                        children: [
+                          for (var i = 0; i < steps.length; i++) ...[
+                            if (i > 0) const _PlyDot(),
+                            for (final which in BughouseBoard.values)
+                              if (steps[i].on(which) case final san?)
+                                _MoveToken(
+                                  seat: steps[i].seatOn(which, state),
+                                  san: san,
+                                  ink: i == 0 ? ink : AppColors.onSurfaceMuted,
+                                  weight: i == 0 ? weight : FontWeight.w400,
+                                  onEnter: () => _controller.hoverStep(
+                                    steps[i],
+                                    owner: this,
+                                  ),
+                                  onExit: _exitStep,
+                                  onTap: () => _controller.playLine(
+                                    steps,
+                                    throughPly: i,
+                                  ),
+                                ),
+                          ],
+                        ],
+                      ),
+              ),
             ],
           ),
         ),
@@ -446,57 +464,77 @@ class _LineRowState extends State<_LineRow> {
   }
 }
 
-/// The rest of the engine's line, in SAN, under the row it belongs to.
-class _Continuation extends StatelessWidget {
-  const _Continuation({
-    required this.controller,
-    required this.info,
-    required this.team,
+/// The gap between two plies of a line. A dot rather than a move number,
+/// because a line across two boards has no single number to count by: each
+/// board counts its own moves, and a ply here may touch both.
+class _PlyDot extends StatelessWidget {
+  const _PlyDot();
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 3),
+    child: Text(
+      '·',
+      style: AppTextStyles.monoDense.copyWith(color: AppColors.onSurfaceDim),
+    ),
+  );
+}
+
+/// One seat's move in a line: the seat letter, muted, then the SAN — `A Nf3`,
+/// `D P@e5`, `C sit`. Dotted-underlined the way the app's other engine lines
+/// mark a move that can be clicked.
+class _MoveToken extends StatelessWidget {
+  const _MoveToken({
+    required this.seat,
+    required this.san,
+    required this.ink,
+    required this.weight,
+    required this.onEnter,
+    required this.onExit,
+    required this.onTap,
   });
 
-  final BughouseController controller;
-  final BughouseInfo info;
-  final Side team;
+  final String seat;
+  final String san;
+  final Color ink;
+  final FontWeight weight;
+  final VoidCallback onEnter;
+  final VoidCallback onExit;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    // The first ply is the row above; what is worth showing is what follows.
-    final steps = controller.describePv(info, team: team, maxPlies: 5);
-    if (steps.length < 2) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 3),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final step in steps.skip(1))
-            Row(
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => onEnter(),
+      onExit: (_) => onExit(),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: Text.rich(
+            TextSpan(
               children: [
-                // A variation alternates teams, so the columns stop belonging
-                // to the seats in the header after the first ply. Naming the
-                // pair that plays each row is what keeps it readable — the
-                // columns themselves stay boards throughout.
-                SizedBox(
-                  width: _TeamLines.evalWidth,
-                  child: Text(
-                    step.seats,
-                    style: AppTextStyles.monoDense.copyWith(
-                      color: AppColors.onSurfaceMuted,
-                    ),
+                TextSpan(
+                  text: '$seat ',
+                  style: AppTextStyles.monoDense.copyWith(
+                    color: AppColors.onSurfaceMuted,
                   ),
                 ),
-                for (final which in BughouseBoard.values)
-                  Expanded(
-                    child: Text(
-                      step.on(which) ?? '',
-                      style: AppTextStyles.monoDense.copyWith(
-                        color: AppColors.onSurfaceMuted,
-                      ),
-                    ),
+                TextSpan(
+                  text: san,
+                  style: AppTextStyles.mono.copyWith(
+                    color: ink,
+                    fontWeight: weight,
+                    decoration: TextDecoration.underline,
+                    decorationStyle: TextDecorationStyle.dotted,
+                    decorationColor: AppColors.onSurfaceDim,
                   ),
+                ),
               ],
             ),
-        ],
+          ),
+        ),
       ),
     );
   }
@@ -877,7 +915,7 @@ class _ScenarioTable extends StatelessWidget {
                 SizedBox(
                   width: _TeamLines.evalWidth,
                   child: Text(
-                    row.info?.evalLabel ?? '—',
+                    row.eval?.label ?? '—',
                     style: AppTextStyles.monoDense,
                   ),
                 ),

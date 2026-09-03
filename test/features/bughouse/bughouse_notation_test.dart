@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/features/bughouse/controllers/bughouse_controller.dart';
+import 'package:chess_auto_prep/features/bughouse/models/bughouse_eval.dart';
 import 'package:chess_auto_prep/features/bughouse/models/bughouse_history.dart';
 import 'package:chess_auto_prep/features/bughouse/models/bughouse_state.dart';
 import 'package:chess_auto_prep/features/bughouse/services/bughouse_engine.dart';
@@ -384,68 +385,211 @@ void main() {
       expect(info(mate: -2).scoreLabel, '#-2');
     });
 
-    test('reads level as 0.00, whatever the engine calls it', () {
-      // The engine says -2.30 for a dead-level position, which every chess eye
-      // reads as losing. What the panel shows is measured against that.
-      expect(info(cp: -230).evalLabel, '0.00');
-      expect(info(cp: -230).scoreLabel, '-2.30');
-      expect(info(cp: -74).evalLabel, '+1.56');
-      expect(info(cp: -546).evalLabel, '-3.16');
-      expect(info(mate: 3).evalLabel, '#3');
-      expect(info(mate: -2).evalLabel, '#-2');
+    test('inverts the engine\'s tangent exactly', () {
+      // Hivemind reports `180*tan(1.56*Q)`, so the tangent comes back out
+      // without a fitted constant. -230 is what a balanced position reads
+      // when neither team may sit.
+      expect(info(cp: 0).q, closeTo(0, 1e-9));
+      expect(info(cp: -230).q, closeTo(-0.5814, 0.001));
+      expect(info(cp: 230).q, closeTo(0.5814, 0.001));
+    });
+  });
+
+  group('the offset in a raw score', () {
+    BughouseInfo line(int cp, {int? mate}) => BughouseInfo(
+      depth: 5,
+      scoreCp: cp,
+      nodes: 100,
+      nps: 10,
+      timeMs: 1000,
+      mateIn: mate,
+      pv: const [],
+    );
+
+    test('is measured from the two teams, not assumed', () {
+      // Both teams searching the same position report `±advantage + offset`,
+      // so the pair gives both without a constant. Measured numbers: a
+      // symmetric Italian on both boards, where the true value is 0.
+      final calibration = BughouseCalibration.measure(line(-307), line(-320))!;
+      expect(calibration.source, BughouseCalibrationSource.measured);
+      expect(calibration.offsetQ, closeTo(-0.672, 0.005));
+      expect(
+        BughouseEval.of(line(-307), calibration).advantage,
+        closeTo(0, 0.01),
+        reason: 'a position symmetric on both boards is exactly level',
+      );
     });
 
-    test('reads as an expected score, with a mate certain', () {
-      // Hivemind reports `180*tan(1.56*Q)`, so the tangent inverts exactly and
-      // the percentage is the engine's own value rather than a curve fitted to
-      // it. Level is 50 whatever the raw number says.
-      expect(info(cp: -230).winPercent, closeTo(50, 0.5));
-      expect(info(cp: -74).winPercent, greaterThan(60));
-      expect(info(cp: -546).winPercent, lessThan(25));
-      expect(info(mate: 2).winPercent, 100.0);
-      expect(info(mate: -2).winPercent, 0.0);
-      expect(info(cp: -230).winLabel, '50%');
+    test('is not the same number in every position', () {
+      // Three exactly symmetric two-board positions, all of them dead equal
+      // by construction, as the engine actually scored them. The offset is
+      // the network's estimate of what the clock advantage is worth *here*,
+      // so it is large in the opening and small in a bare endgame — which is
+      // why one fixed constant read a drawn K+P ending as more than a pawn up.
+      for (final (ours, theirs) in [
+        (-229, -222), // the opening
+        (-307, -320), // a symmetric Italian
+        (-93, -117), // a mirrored king-and-pawn ending
+      ]) {
+        final calibration = BughouseCalibration.measure(
+          line(ours),
+          line(theirs),
+        )!;
+        expect(
+          BughouseEval.of(line(ours), calibration).advantage,
+          closeTo(0, 0.05),
+        );
+      }
+      // And the offsets themselves are nowhere near each other.
+      expect(
+        BughouseCalibration.measure(line(-229), line(-222))!.offsetQ,
+        closeTo(-0.575, 0.01),
+      );
+      expect(
+        BughouseCalibration.measure(line(-93), line(-117))!.offsetQ,
+        closeTo(-0.337, 0.01),
+      );
     });
 
-    test('the expected score moves the same way the score does', () {
-      // Monotonic: a better number for us is never a worse percentage.
+    test('a mate score carries no value to calibrate with', () {
+      expect(BughouseCalibration.measure(line(0, mate: 3), line(-230)), isNull);
+      expect(BughouseCalibration.measure(line(-230), null), isNull);
+    });
+
+    test('the assumed offset follows who may sit, not a constant', () {
+      // The network reads its own `TimeAdvantage` bit as about ±0.58 of Q, and
+      // the offset is the average of the two teams' readings. So it is -0.58
+      // when neither may sit and zero when exactly one may — which is why
+      // subtracting one fixed number mis-read every "we may sit" search.
+      expect(
+        BughouseCalibration.assumed(weMaySit: false, theyMaySit: false).offsetQ,
+        closeTo(-0.5814, 0.001),
+      );
+      expect(
+        BughouseCalibration.assumed(weMaySit: true, theyMaySit: false).offsetQ,
+        closeTo(0, 0.001),
+      );
+      expect(
+        BughouseCalibration.assumed(weMaySit: false, theyMaySit: true).offsetQ,
+        closeTo(0, 0.001),
+      );
+    });
+
+    test('a queen is worth the same whichever stance we searched', () {
+      // Four measured scores: the opening and the same position a queen up on
+      // board 1, each searched with the team told it may not sit and told it
+      // may. What a queen is worth cannot depend on which of those we asked.
+      const startLevel = -233, queenLevel = -139;
+      const startAhead = 236, queenAhead = 367;
+
+      double gainIn(BughouseCalibration c, int before, int after) =>
+          BughouseEval.of(line(after), c).advantage -
+          BughouseEval.of(line(before), c).advantage;
+
+      final level = gainIn(
+        BughouseCalibration.assumed(weMaySit: false, theyMaySit: false),
+        startLevel,
+        queenLevel,
+      );
+      final ahead = gainIn(
+        BughouseCalibration.assumed(weMaySit: true, theyMaySit: false),
+        startAhead,
+        queenAhead,
+      );
+      expect(level, closeTo(0.16, 0.01));
+      expect(ahead, closeTo(0.13, 0.01));
+      expect(
+        (level - ahead).abs(),
+        lessThan(0.05),
+        reason: 'the engine moved by the same amount in both',
+      );
+
+      // Taking the offset out of the raw score instead — a subtraction in the
+      // engine's own tangent space rather than in the value it is a tangent
+      // of — inflates both, and by different amounts, so the same queen reads
+      // half a pawn bigger under one stance than the other.
+      double rawGain(double baseline, int before, int after) =>
+          (after / 100 - baseline) - (before / 100 - baseline);
+      expect(rawGain(-2.30, startLevel, queenLevel), closeTo(0.94, 0.01));
+      expect(rawGain(2.30, startAhead, queenAhead), closeTo(1.31, 0.01));
+    });
+  });
+
+  group('an evaluation', () {
+    BughouseEval eval(double advantage, {int? mate}) => BughouseEval(
+      advantage: advantage,
+      mateIn: mate,
+      source: BughouseCalibrationSource.measured,
+    );
+
+    test('prints level as 0.00 and a mate as a mate', () {
+      expect(eval(0).label, '0.00');
+      expect(eval(0.5).label, '+1.78');
+      expect(eval(-0.5).label, '-1.78');
+      expect(eval(0, mate: 3).label, '#3');
+      expect(eval(0, mate: -2).label, '#-2');
+    });
+
+    test('is symmetric: the same swing reads the same size either way', () {
+      // The piecewise map this replaces was anchored on a level point of
+      // -0.58, so a queen up read +5% and a queen down -16%.
+      expect(eval(0).winPercent, 50);
+      expect(eval(0.15).winPercent, closeTo(57.5, 0.01));
+      expect(eval(-0.15).winPercent, closeTo(42.5, 0.01));
+      expect(eval(0).winLabel, '50%');
+      expect(eval(0, mate: 2).winPercent, 100.0);
+      expect(eval(0, mate: -2).winPercent, 0.0);
+    });
+
+    test('the number and the percentage cannot disagree', () {
+      // Both are read off `advantage`, so a positive one is a positive other.
+      for (final advantage in [-0.9, -0.4, -0.05, 0.0, 0.05, 0.4, 0.9]) {
+        final e = eval(advantage);
+        expect(e.score.sign, advantage.sign);
+        expect(e.winPercent > 50, advantage > 0);
+      }
+    });
+
+    test('moves the same way the engine\'s value does', () {
       var previous = -1.0;
-      for (final cp in [-2000, -1030, -546, -330, -230, -130, 70, 370, 2000]) {
-        final percent = info(cp: cp).winPercent;
+      for (final advantage in [-0.9, -0.5, -0.2, 0.0, 0.2, 0.5, 0.9]) {
+        final percent = eval(advantage).winPercent;
         expect(percent, greaterThan(previous));
         previous = percent;
       }
     });
 
     test('turned around, it describes the other side of the table', () {
-      expect(BughouseController.flipEval('+1.56'), '-1.56');
-      expect(BughouseController.flipEval('-3.16'), '+3.16');
-      expect(BughouseController.flipEval('0.00'), '0.00');
-      expect(BughouseController.flipEval('#3'), '#-3');
-      expect(BughouseController.flipEval('#-3'), '#3');
+      expect(eval(0.4).flipped.label, eval(-0.4).label);
+      expect(
+        eval(0.4).flipped.winPercent,
+        closeTo(100 - eval(0.4).winPercent, 1e-9),
+      );
+      expect(eval(0, mate: 3).flipped.label, '#-3');
+      expect(eval(0, mate: -3).flipped.label, '#3');
+      expect(eval(0).flipped.label, '0.00');
     });
 
-    test('is read against a measured baseline, not against zero', () {
-      // The opening position reads about -2.30 from either seat, so that is
-      // where "level" sits on this scale.
-      expect(BughouseInfo.levelBaselineFor(false), -2.3);
-      expect(info(cp: -230).relativeToLevel, closeTo(0, 0.001));
-      expect(info(cp: -74).relativeToLevel, greaterThan(1));
-      expect(info(cp: -546).relativeToLevel, lessThan(-3));
+    test('a runaway value still prints a number', () {
+      // The tangent goes to infinity at ±1, and a won position is a mate long
+      // before it gets there.
+      expect(eval(1.0).label, eval(0.9).label);
+      expect(eval(1.0).winPercent, 100);
+      expect(eval(-1.0).winPercent, 0);
     });
+  });
 
-    test('the baseline follows the clock stance, and changes sign with it', () {
-      // Measured: the same level position reads about -2.3 when the team may
-      // not sit and about +2.3 when it may. One fixed constant reported the
-      // second case as a +4.6 advantage that was not there — and the
-      // clock-scenario table showed exactly that in its first row, always.
-      expect(BughouseInfo.levelBaselineFor(true), 2.3);
-      expect(info(cp: 239, ahead: true).relativeToLevel, closeTo(0.09, 0.001));
-      expect(info(cp: 239, ahead: true).evalLabel, '+0.09');
-      expect(info(cp: 239, ahead: true).winPercent, closeTo(50, 2));
-      // The same raw number read against the wrong baseline is the bug.
-      expect(info(cp: 239).evalLabel, '+4.69');
-    });
+  group('a search result', () {
+    BughouseInfo info({int cp = 0, int? mate, int rank = 1}) => BughouseInfo(
+      depth: 5,
+      scoreCp: cp,
+      nodes: 100,
+      nps: 10,
+      timeMs: 1000,
+      multipv: rank,
+      mateIn: mate,
+      pv: const [],
+    );
 
     test('only the last state of each ranked line survives a search', () {
       final result = BughouseSearchResult(

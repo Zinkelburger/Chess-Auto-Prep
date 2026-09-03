@@ -112,6 +112,67 @@ void main() {
       },
     );
 
+    test('a hovered move deep in a line is drawn from its own position', () {
+      // 1.e4 on board 1, then Black's e5 — a move that is not legal on the
+      // position on screen, where e5 is not yet reachable.
+      final line = BughouseInfo(
+        depth: 6,
+        scoreCp: 0,
+        nodes: 900,
+        nps: 300,
+        timeMs: 2000,
+        pv: [
+          BughouseJointMove.tryParse('(e2e4,pass)')!,
+          BughouseJointMove.tryParse('(e7e5,d2d4)')!,
+        ],
+      );
+      final steps = controller.describePv(line, team: Side.white);
+      expect(steps, hasLength(2));
+
+      controller.hoverStep(steps[1], owner: 'row');
+
+      expect(controller.annotationsFor(BughouseBoard.a), [
+        const BoardAnnotation(
+          orig: 'e7',
+          dest: 'e5',
+          brush: AnnotationBrush.blue,
+        ),
+      ], reason: 'parsed against the position after 1.e4, not the start');
+      expect(controller.annotationsFor(BughouseBoard.b), [
+        const BoardAnnotation(
+          orig: 'd2',
+          dest: 'd4',
+          brush: AnnotationBrush.blue,
+        ),
+      ]);
+    });
+
+    test('a row clears only the highlight it owns', () {
+      final action = BughouseJointMove.tryParse('(g1f3,pass)')!;
+      controller.hoverAction(action, owner: 'first');
+      controller.clearHover('second');
+      expect(controller.hover.value, isNotNull, reason: 'not its to clear');
+      controller.clearHover('first');
+      expect(controller.hover.value, isNull);
+    });
+
+    test('hovering never rebuilds the pane, only the boards', () {
+      var notified = 0;
+      controller.addListener(() => notified++);
+      controller.hoverAction(BughouseJointMove.tryParse('(g1f3,pass)'));
+      controller.hoverAction(null);
+      expect(notified, 0);
+    });
+
+    test('a move played drops the highlight — the position it lit is gone', () {
+      controller.hoverAction(BughouseJointMove.tryParse('(g1f3,pass)'));
+      controller.playMove(
+        BughouseBoard.a,
+        const NormalMove(from: Square.e2, to: Square.e4),
+      );
+      expect(controller.hover.value, isNull);
+    });
+
     test('the editor draws none: there is no search to illustrate', () async {
       engine.resultsByTeam[Side.white] = scripted(best: '(e2e4,pass)');
       await settle();
@@ -183,6 +244,57 @@ void main() {
         team: Side.white,
       );
       expect(steps, hasLength(1));
+    });
+  });
+
+  group('playing a line', () {
+    BughouseInfo lineOf(List<String> actions) => BughouseInfo(
+      depth: 6,
+      scoreCp: 0,
+      nodes: 900,
+      nps: 300,
+      timeMs: 2000,
+      pv: [for (final a in actions) BughouseJointMove.tryParse(a)!],
+    );
+
+    test('clicking a move plays the line through it, on both boards', () {
+      final steps = controller.describePv(
+        lineOf(['(e2e4,pass)', '(e7e5,d2d4)', '(g1f3,pass)']),
+        team: Side.white,
+      );
+      controller.playLine(steps, throughPly: 1);
+
+      // Three half-moves landed: e4, then e5 on board 1 and d4 on board 2.
+      expect(controller.history.length, 3);
+      expect(controller.history.movetextFor(BughouseBoard.a), '1. e4 e5');
+      expect(controller.history.movetextFor(BughouseBoard.b), '1. d4');
+      // The third ply was not asked for.
+      expect(controller.state.boardA.turn, Side.white);
+    });
+
+    test('clicking the row plays just its candidate', () {
+      final steps = controller.describePv(
+        lineOf(['(e2e4,pass)', '(e7e5,d2d4)']),
+        team: Side.white,
+      );
+      controller.playLine(steps, throughPly: 0);
+      expect(controller.history.length, 1);
+      expect(controller.history.movetextFor(BughouseBoard.a), '1. e4');
+    });
+
+    test('a line that no longer fits stops where it stops', () {
+      final steps = controller.describePv(
+        lineOf(['(e2e4,pass)', '(e7e5,d2d4)']),
+        team: Side.white,
+      );
+      // The position moves on under the line before it is clicked.
+      controller.playMove(
+        BughouseBoard.a,
+        const NormalMove(from: Square.d2, to: Square.d4),
+      );
+      controller.playLine(steps, throughPly: 1);
+      expect(controller.history.length, 1, reason: 'e4 is not legal now');
+      expect(controller.error, isNotNull);
     });
   });
 

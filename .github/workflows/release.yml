@@ -73,6 +73,15 @@ jobs:
           python3 tools/fetch_bughouse.py --only bughouse-linux
           python3 tools/fetch_bughouse.py --check --only bughouse-linux
 
+      # A release must not ship an engine that cannot start. The audit reads
+      # the binaries' imports and insists every one is either part of the OS
+      # or shipped by us; the run loads the network and searches for real.
+      - name: Verify the bughouse engine runs
+        timeout-minutes: 10
+        run: |
+          python3 tools/test_bughouse_engine.py deps
+          python3 tools/test_bughouse_engine.py run
+
       - name: Build Linux release
         run: flutter build linux --release
 
@@ -168,6 +177,15 @@ jobs:
           python tools/fetch_bughouse.py --only bughouse-windows
           python tools/fetch_bughouse.py --check --only bughouse-windows
 
+      # A release must not ship an engine that cannot start. The audit reads
+      # the binaries' imports and insists every one is either part of the OS
+      # or shipped by us; the run loads the network and searches for real.
+      - name: Verify the bughouse engine runs
+        timeout-minutes: 10
+        run: |
+          python tools/test_bughouse_engine.py deps
+          python tools/test_bughouse_engine.py run
+
       - name: Build Windows release
         run: flutter build windows --release
 
@@ -177,6 +195,13 @@ jobs:
       # nothing earlier in this job would have said so. Whether CMake's redist
       # list carries MSVCP140_1.dll varies by toolchain, and onnxruntime.dll
       # needs it, so it is named here explicitly.
+      #
+      # The bughouse engine depends on this step twice over: it runs as its
+      # own process out of the support directory, so BughouseBundle copies
+      # these four on from here to sit beside it. A bundle without them leaves
+      # the engine unable to start on any machine that has never installed the
+      # redistributable — and unable to say why, because the Windows loader
+      # stops it before it can print anything.
       - name: Verify the VC++ runtime is bundled
         shell: pwsh
         run: |
@@ -262,6 +287,15 @@ jobs:
         run: |
           python3 tools/fetch_bughouse.py --only bughouse-macos-${{ matrix.arch }}
           python3 tools/fetch_bughouse.py --check --only bughouse-macos-${{ matrix.arch }}
+
+      # A release must not ship an engine that cannot start. The audit reads
+      # the binaries' imports and insists every one is either part of the OS
+      # or shipped by us; the run loads the network and searches for real.
+      - name: Verify the bughouse engine runs
+        timeout-minutes: 10
+        run: |
+          python3 tools/test_bughouse_engine.py deps
+          python3 tools/test_bughouse_engine.py run
 
       - name: Build macOS ${{ matrix.arch }} release
         env:

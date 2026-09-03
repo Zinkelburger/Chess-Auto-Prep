@@ -12,14 +12,20 @@ Three shapes of question, on top of :mod:`engine` and :mod:`board`:
                 only way to see the piece flow a line actually produces.
 
 A word on the score, because it is not a chess engine's score. Hivemind
-reports ``180·tan(1.56·Q)`` of an MCTS Q-value, and that carries a large
-offset whose *sign depends on the* ``TimeAdvantage`` *option*: a balanced
-position reads about −2.3 with the option off and about +2.3 with it on. See
-:data:`LEVEL_BASELINE`. Every result here therefore reports ``relative`` — the
-score with the right baseline removed, where 0.00 is level — alongside the
-engine's raw number, and never compares two searches run under different
-options. Within one search at one budget the ordering and the gaps are
-meaningful; across budgets, or against a chess engine's pawns, they are not.
+reports ``180·tan(1.56·Q)`` of an MCTS Q-value, and that value is not an
+evaluation of the position alone: it carries a large offset that the network
+reads mostly off its ``TimeAdvantage`` input. The offset is **not a constant**
+— it is what the clock advantage is worth *in this position*, large in a
+piece-rich opening and small in a bare endgame — so it has to be measured
+rather than assumed. Two searches of one position, one per team, give it:
+
+    offset    = (q_ours + q_theirs) / 2
+    advantage = (q_ours - q_theirs) / 2
+
+which is what :func:`analyse` does by default (``calibrate=True``, two
+searches). See :mod:`calibration`. Within one search at one budget the
+ordering and the gaps are meaningful without any of this; across budgets, or
+against a chess engine's pawns, they are not.
 """
 
 from __future__ import annotations
@@ -29,6 +35,7 @@ from dataclasses import dataclass
 import chess
 
 from .board import BOARD_NAMES, DualBoard, IllegalMove, board_index, parse_move_list, san
+from .calibration import assumed_offset, evaluate, measure_offset, to_q
 from .engine import HivemindEngine, JointMove, Line, SearchResult, shared
 
 DEFAULT_MOVETIME_MS = 5000
@@ -102,37 +109,25 @@ def _named(dual: DualBoard, which: int, uci: str | None) -> str | None:
         return uci
 
 
-LEVEL_BASELINE = {False: -2.30, True: 2.30}
-"""Where a dead-level position sits on Hivemind's scale, per ``TimeAdvantage``.
-
-Measured, not chosen, and the *sign flips with the bit*: the starting position
-on both boards reads -2.33/-2.24 with the option off and +2.39/+2.26 with it
-on, from either seat, at every node count we have tried. Subtracting one fixed
-constant therefore mis-reads every ``time_advantage=True`` search by about 4.6
-— which is exactly the size of the "sitting is worth a lot" illusion it used to
-produce.
-"""
-
-
-def baseline_for(time_advantage: bool) -> float:
-    """The zero point of the scale for a search run under this option."""
-    return LEVEL_BASELINE[bool(time_advantage)]
-
-
-def relative_score(cp: int | None, time_advantage: bool) -> float | None:
-    """The score with the baseline taken out: 0.00 is level, + is good for us."""
-    return None if cp is None else round(cp / 100.0 - baseline_for(time_advantage), 2)
-
-
-def _score_note(time_advantage: bool) -> str:
+def _score_note(calibrated: bool) -> str:
+    if calibrated:
+        return (
+            "`advantage` is the number to read: the engine's own value with "
+            "the offset measured here removed, so 0.00 is level and + is good "
+            "for us, on a scale where a queen is worth about 0.4. `score` is "
+            "what the engine literally said and is not readable on its own — "
+            "it carries an offset that is mostly the network reading its "
+            "`TimeAdvantage` input, is different in every position, and is "
+            "not comparable across calls."
+        )
     return (
-        "Hivemind's score is an MCTS Q-value on a tangent scale with a large "
-        f"offset: a balanced position reads about {baseline_for(time_advantage):+.2f} "
-        f"with time_advantage={time_advantage}, not 0.00 — and that offset "
-        "changes sign with the option, so scores from calls made under "
-        "different time_advantage values are not comparable at all. Read "
-        "`relative` (the score with the baseline removed, 0.00 = level) rather "
-        "than `score`, and compare moves within one call at one budget."
+        "Uncalibrated: `score` is the engine's raw number and carries a large "
+        "offset that is different in every position and changes with "
+        "time_advantage, so it means nothing on its own and nothing across "
+        "calls. What is meaningful here is the *ordering* of the moves in "
+        "this one call at this one budget, and `delta_q` — how far each line "
+        "is from the best one, in the engine's own value. Pass "
+        "calibrate=true for a number you can read."
     )
 
 
@@ -178,10 +173,20 @@ def analyse(
     multipv: int = 1,
     movetime_ms: int | None = None,
     nodes: int | None = None,
+    calibrate: bool = True,
     engine: HivemindEngine | None = None,
 ) -> dict:
-    """One search. With ``multipv`` > 1 the engine's ranked root moves come
-    back too, which is the cheapest way to see its shortlist."""
+    """One search, plus the mirror search that makes its score readable.
+
+    With ``multipv`` > 1 the engine's ranked root moves come back too, which is
+    the cheapest way to see its shortlist.
+
+    ``calibrate`` costs a **second search** — the same position from the other
+    team's seat — and buys the only thing that turns a raw score into a number:
+    the offset it carries, measured here rather than assumed. See
+    :mod:`calibration`. Turn it off when you only want the ordering of the
+    lines, which one search already gives.
+    """
     dual = position_from(dual_fen, moves, team)
     budget = Budget.of(movetime_ms, nodes)
     engine = engine or shared()
@@ -194,6 +199,35 @@ def analyse(
         multipv=multipv,
         budget=budget,
     )
+
+    offset = None
+    mirror = None
+    if calibrate:
+        # The other team, under the complementary stance: if we may sit they
+        # may not, and the constraint is ours alone. Their seat is our seat's
+        # opposite colour on board A.
+        mirror = _search(
+            engine,
+            dual,
+            team=not dual.team,
+            time_advantage=False,
+            require_move_on="none",
+            multipv=1,
+            budget=budget,
+        )
+        offset = measure_offset(
+            result.top.score_cp if result.top else None,
+            mirror.top.score_cp if mirror.top else None,
+        )
+    measured = offset is not None
+    if offset is None:
+        offset = assumed_offset(bool(time_advantage), False)
+
+    def read(line: Line | None) -> dict:
+        if line is None:
+            return evaluate(None, None, offset)
+        return evaluate(line.score_cp, line.mate, offset)
+
     return {
         "position": dual.describe(),
         "budget": budget.as_dict(),
@@ -203,11 +237,17 @@ def analyse(
             "require_move_on": require_move_on,
         },
         "best": describe_joint(dual, result.best),
+        **read(result.top),
         "score": result.top.score if result.top else None,
-        "relative": relative_score(
-            result.top.score_cp if result.top else None, time_advantage
-        ),
-        "baseline": baseline_for(time_advantage),
+        "cp": result.top.score_cp if result.top else None,
+        "calibration": {
+            "offset_q": None if offset is None else round(offset, 3),
+            "source": "measured" if measured else "assumed",
+            "searches": 2 if calibrate else 1,
+            "their_score": (
+                mirror.top.score if mirror is not None and mirror.top else None
+            ),
+        },
         "depth": result.top.depth if result.top else 0,
         "nodes": result.top.nodes if result.top else 0,
         # Best first by score, not by the engine's own MultiPV order — that is
@@ -215,12 +255,12 @@ def analyse(
         "lines": [
             {
                 **line.as_dict(),
-                "relative": relative_score(line.score_cp, time_advantage),
+                **read(line),
                 "best": describe_joint(dual, line.pv[0] if line.pv else None),
             }
             for line in by_strength(result.lines)
         ],
-        "note": _score_note(time_advantage),
+        "note": _score_note(measured),
     }
 
 
@@ -279,8 +319,14 @@ def compare(
                 "move": ply.san,
                 "uci": ply.uci,
                 "their_score": result.top.score if result.top else None,
-                "their_relative": relative_score(
-                    result.top.score_cp if result.top else None, time_advantage
+                "their_q": (
+                    None
+                    if result.top is None
+                    else (
+                        None
+                        if result.top.mate is not None
+                        else round(to_q(result.top.score_cp) or 0.0, 3)
+                    )
                 ),
                 "their_cp": result.top.score_cp if result.top else None,
                 "their_mate": result.top.mate if result.top else None,
@@ -294,6 +340,21 @@ def compare(
         (r for r in rows if "error" not in r),
         key=lambda r: _sort_key(r),
     )
+    # Every row was searched from the same seat under the same settings, so
+    # they all carry the same offset and it cancels in a difference. That is
+    # what makes a gap between two candidates meaningful without a second
+    # search per row — and it has to be taken in the engine's value, not in
+    # its score, because the tangent is far steeper away from zero than at it.
+    best_q = next((r["their_q"] for r in ranked if r.get("their_q") is not None), None)
+    for row in ranked:
+        row["loss_vs_best"] = (
+            None
+            if best_q is None or row.get("their_q") is None
+            # Lower is better for us, so a candidate that leaves them happier
+            # than the best one does is worse by that much.
+            else round(row["their_q"] - best_q, 3)
+        )
+
     return {
         "position": start.describe(),
         "board": name,
@@ -304,8 +365,11 @@ def compare(
         "note": (
             "Ranked by the opponent's score after the move, ascending — lower "
             "is better for us. `answered_by` names the team that was searched "
-            "to produce it (a team is named by its colour on board A). "
-            + _score_note(time_advantage)
+            "to produce it (a team is named by its colour on board A). Read "
+            "`loss_vs_best`: how much worse than the best candidate each move "
+            "is, in the engine's own value, where a queen is about 0.14 and "
+            "anything under 0.02 at a few thousand nodes is noise. "
+            + _score_note(False)
         ),
     }
 
@@ -388,8 +452,14 @@ def playout(
         entry = {
             "team": _team_name(dual, mover),
             "score": result.top.score if result.top else None,
-            "relative": relative_score(
-                result.top.score_cp if result.top else None, time_advantage
+            # No calibration here: a playout alternates teams, so each ply is
+            # already the mirror of the one before it. Comparing consecutive
+            # plies is what the raw scores are good for; reading one of them
+            # as an evaluation is not.
+            "q": (
+                None
+                if result.top is None or result.top.mate is not None
+                else round(to_q(result.top.score_cp) or 0.0, 3)
             ),
             **{k: v for k, v in (describe_joint(dual, result.best) or {}).items()},
         }
@@ -407,7 +477,12 @@ def playout(
         "plies": played,
         "final": dual.describe(),
         "budget": budget.as_dict(),
-        "note": _score_note(time_advantage),
+        "note": (
+            "Each ply is searched from the seat of the team that plays it, so "
+            "consecutive `q` values are from opposite sides of the table and "
+            "roughly negate each other. What a playout is for is the piece "
+            "flow, not the numbers. " + _score_note(False)
+        ),
     }
 
 

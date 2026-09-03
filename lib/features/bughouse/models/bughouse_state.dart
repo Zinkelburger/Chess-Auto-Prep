@@ -77,10 +77,11 @@ class BughouseJointMove {
 ///
 /// The score deserves a warning, because it is not a chess engine's score.
 /// Hivemind reports `180·tan(1.56·Q)` of an MCTS value, and that value carries
-/// a large offset — *and the offset's sign depends on the `TimeAdvantage`
-/// option the search ran under*. See [levelBaselineFor]. What is meaningful is
-/// the ordering of the moves in one search, the gaps between them, and the
-/// score with the right baseline removed ([relativeToLevel]).
+/// a large offset that is not a property of the position alone. Nothing here
+/// turns it into a number for a reader: that needs both teams' searches, and
+/// lives in `BughouseCalibration` / `BughouseEval`. What one line offers on
+/// its own is [scoreLabel] — what the engine literally said — and [q], its
+/// value recovered exactly.
 class BughouseInfo {
   const BughouseInfo({
     required this.depth,
@@ -113,33 +114,16 @@ class BughouseInfo {
   final List<BughouseJointMove> pv;
 
   /// Whether the search that produced this line was told the team is up on the
-  /// diagonal clock. It has to travel with the score, because it decides which
-  /// baseline the score is measured against.
+  /// diagonal clock. It travels with the score because it is most of what the
+  /// raw number is made of: the network reads that one bit as about ±0.58 of
+  /// Q, which is more than a queen is worth.
   final bool hadTimeAdvantage;
 
-  /// Evaluation on Hivemind's scale, from the searching team's point of view.
-  /// Read it against [levelBaseline], not against zero.
-  double get scorePawns => scoreCp / 100.0;
-
-  /// Where a balanced position sits on Hivemind's scale, for a search run
-  /// with [hasTimeAdvantage].
+  /// Evaluation on Hivemind's scale, exactly as the engine printed it.
   ///
-  /// Measured, not chosen — and the sign flips with the option. The starting
-  /// position on both boards reads -2.33 / -2.24 with `TimeAdvantage` off and
-  /// +2.39 / +2.26 with it on, from either seat, at every node count we have
-  /// tried. Subtracting one fixed constant therefore over-reported every
-  /// "we are ahead" search by about 4.6, which is the whole of the phantom
-  /// advantage the clock-scenario table used to show for its first row.
-  static double levelBaselineFor(bool hasTimeAdvantage) =>
-      hasTimeAdvantage ? 2.3 : -2.3;
-
-  /// The baseline this particular line is measured against.
-  double get levelBaseline => levelBaselineFor(hadTimeAdvantage);
-
-  /// How much better or worse than level this looks. Still not pawns, but at
-  /// least it is signed the way a reader expects, and zero really is level
-  /// under either clock stance.
-  double get relativeToLevel => scorePawns - levelBaseline;
+  /// Not a number to show a reader: it carries the offset described above.
+  /// `BughouseEval` is what turns it into one.
+  double get scorePawns => scoreCp / 100.0;
 
   /// The engine's own number, printed — `#3`, `#-2`, or a signed score.
   String get scoreLabel {
@@ -147,24 +131,6 @@ class BughouseInfo {
     if (mate != null) return mate >= 0 ? '#$mate' : '#-${-mate}';
     final sign = scorePawns > 0 ? '+' : '';
     return '$sign${scorePawns.toStringAsFixed(2)}';
-  }
-
-  /// The number to show a person: zero is level, positive is good for the team
-  /// that was searched.
-  ///
-  /// [scoreLabel] prints what the engine said, which for a dead-level position
-  /// is `-2.30` (or `+2.30` when the team was told it may sit) — numbers that
-  /// read as "losing" and "winning" to every chess eye that sees them.
-  /// Subtracting the baseline that applies to *this* search is not cosmetic:
-  /// it is the difference between a score a reader can act on and one that
-  /// misleads by about 4.6 in one of the three clock stances.
-  String get evalLabel {
-    final mate = mateIn;
-    if (mate != null) return mate >= 0 ? '#$mate' : '#-${-mate}';
-    final hundredths = (relativeToLevel * 100).round();
-    if (hundredths == 0) return '0.00';
-    final sign = hundredths > 0 ? '+' : '-';
-    return '$sign${(hundredths.abs() / 100).toStringAsFixed(2)}';
   }
 
   /// The MCTS value behind [scoreCp], recovered exactly.
@@ -176,37 +142,15 @@ class BughouseInfo {
   /// centipawns because Stockfish has no win probability to ask for. Hivemind
   /// does, and undoing its tangent is exact where fitting a curve would not
   /// be.
+  ///
+  /// This is the space every comparison belongs in. Two scores differ by what
+  /// their Q differs by; subtracting one raw score from another does not say
+  /// the same thing, because the tangent is far steeper away from zero than
+  /// at it.
   static const double _tangentScale = 180.0;
   static const double _tangentRate = 1.56;
 
   double get q => math.atan(scoreCp / _tangentScale) / _tangentRate;
-
-  /// The Q a level position produces, for a search run with
-  /// [hasTimeAdvantage] — the tangent applied to [levelBaselineFor].
-  static double qBaselineFor(bool hasTimeAdvantage) =>
-      math.atan(levelBaselineFor(hasTimeAdvantage) * 100 / _tangentScale) /
-      _tangentRate;
-
-  /// Our team's expected score as a percentage: 50 is level, 100 is winning.
-  ///
-  /// Anchored on three points we actually know — a loss at Q = -1, level at
-  /// [qBaselineFor], a win at Q = +1 — and linear between them. The two
-  /// halves have different slopes because the level baseline sits at about
-  /// -0.58 rather than 0, which is a fact about Hivemind's scale rather than a
-  /// choice made here: there is genuinely less room below level than above it.
-  double get winPercent {
-    final mate = mateIn;
-    if (mate != null) return mate >= 0 ? 100.0 : 0.0;
-    final base = qBaselineFor(hadTimeAdvantage);
-    final value = q;
-    final fraction = value <= base
-        ? 0.5 * (value + 1) / (base + 1)
-        : 0.5 + 0.5 * (value - base) / (1 - base);
-    return (fraction * 100).clamp(0.0, 100.0);
-  }
-
-  /// [winPercent] as a person reads it — `58%`.
-  String get winLabel => '${winPercent.round()}%';
 }
 
 /// Where a team stands on the clock, which in bughouse is a rule input rather

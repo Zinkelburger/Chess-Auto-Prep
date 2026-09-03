@@ -131,8 +131,18 @@ class BughouseBundle {
       );
     }
 
-    if (!Platform.isWindows) {
-      await Process.run('chmod', ['+x', executable]);
+    if (Platform.isWindows) {
+      await installWindowsRuntime(
+        source: applicationDirectory(),
+        target: target,
+      );
+    } else {
+      final chmod = await Process.run('chmod', ['+x', executable]);
+      if (chmod.exitCode != 0) {
+        throw BughouseBundleBroken(
+          'Could not make $executable executable: ${chmod.stderr}',
+        );
+      }
     }
 
     _cached = _Resolved(
@@ -142,6 +152,101 @@ class BughouseBundle {
     );
     log.i('Bughouse engine installed at $executable');
     return executable;
+  }
+
+  /// The directory the app itself was launched from, which is where the
+  /// Windows build deploys its shared libraries.
+  ///
+  /// Wrapped because [Platform.resolvedExecutable] is documented as able to
+  /// throw, and a bughouse feature is not worth taking the app down over.
+  @visibleForTesting
+  static Directory applicationDirectory() {
+    try {
+      return File(Platform.resolvedExecutable).parent;
+    } catch (_) {
+      return Directory.current;
+    }
+  }
+
+  /// Whether [fileName] is one of the Visual C++ runtime libraries the
+  /// Windows build deploys beside the app.
+  ///
+  /// A prefix match rather than a fixed list on purpose: which of
+  /// MSVCP140.dll / MSVCP140_1.dll / MSVCP140_2.dll / VCRUNTIME140.dll /
+  /// VCRUNTIME140_1.dll / CONCRT140.dll CMake's `InstallRequiredSystemLibraries`
+  /// actually emits varies with the toolchain, and a list here that drifts
+  /// from what the build deploys fails in exactly the way this whole function
+  /// exists to prevent.
+  @visibleForTesting
+  static bool isWindowsRuntimeLibrary(String fileName) {
+    final name = fileName.toLowerCase();
+    if (!name.endsWith('.dll')) return false;
+    return name.startsWith('msvcp140') ||
+        name.startsWith('vcruntime140') ||
+        name.startsWith('concrt140');
+  }
+
+  /// Copies the Visual C++ runtime from [source] next to the engine in
+  /// [target], and returns the names copied.
+  ///
+  /// This is the difference between the mode working on a fresh Windows
+  /// machine and not working at all. `onnxruntime.dll` imports MSVCP140.dll,
+  /// MSVCP140_1.dll, VCRUNTIME140.dll and VCRUNTIME140_1.dll, none of which is
+  /// part of a clean Windows install — they come with the Visual C++
+  /// redistributable, which most machines have only because some other program
+  /// installed it. windows/CMakeLists.txt therefore deploys them beside
+  /// `chess_auto_prep.exe`, and that is enough for the app itself and for the
+  /// ONNX runtime it loads in-process.
+  ///
+  /// It is *not* enough for the bughouse engine, because that is a separate
+  /// process: Windows resolves a process's imports against the directory of
+  /// **its own** image, never the parent's. `hivemind.exe` lives in the
+  /// support directory, so it looked for MSVCP140.dll there, in System32, and
+  /// on PATH, found it in none of them, and was stopped by the loader before
+  /// `main` — which the app saw as a live process that never answered `uci`.
+  ///
+  /// Copying rather than putting the app directory on the child's PATH
+  /// because the engine's own directory is the *first* place the loader
+  /// looks, ahead of every registry knob that can reorder the rest of the
+  /// search, and because the runtime the engine ships is already installed
+  /// there by the same step.
+  ///
+  /// Missing sources are not an error: a machine that has the redistributable
+  /// system-wide runs fine without any of this, and the exit code the engine
+  /// dies with says so plainly if it does not.
+  @visibleForTesting
+  static Future<List<String>> installWindowsRuntime({
+    required Directory source,
+    required Directory target,
+  }) async {
+    final copied = <String>[];
+    if (!await source.exists()) return copied;
+    await for (final entry in source.list(followLinks: false)) {
+      if (entry is! File) continue;
+      final name = p.basename(entry.path);
+      if (!isWindowsRuntimeLibrary(name)) continue;
+      final dest = File(p.join(target.path, name));
+      final length = await entry.length();
+      if (await dest.exists() && await dest.length() == length) {
+        copied.add(name);
+        continue;
+      }
+      try {
+        await entry.copy(dest.path);
+        copied.add(name);
+      } catch (e) {
+        // A locked or in-use DLL is survivable — the system copy may still
+        // be there — so say so and carry on rather than failing the launch.
+        log.w('Could not copy $name beside the bughouse engine: $e');
+      }
+    }
+    if (copied.isEmpty) {
+      log.w(
+        'No Visual C++ runtime found in ${source.path} to place beside the '
+        'bughouse engine; it will have to come from the system.',
+      );
+    }
+    return copied;
   }
 
   /// Point the feature at a locally built engine instead of the bundle —
@@ -205,6 +310,15 @@ class BughouseBundleMissing implements Exception {
   @override
   String toString() =>
       'This build does not include the bughouse engine (missing $asset).';
+}
+
+/// The assets are there, but installing them did not produce a usable engine.
+class BughouseBundleBroken implements Exception {
+  BughouseBundleBroken(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
 }
 
 class _Resolved {

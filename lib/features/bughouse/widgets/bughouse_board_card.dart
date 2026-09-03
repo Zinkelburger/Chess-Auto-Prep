@@ -64,31 +64,33 @@ class BughouseBoardCard extends StatelessWidget {
             controller: controller,
             which: which,
             flipped: flipped,
-            child: ChessBoardWidget(
-              position: position,
-              flipped: flipped,
-              enableUserMoves: controller.mode == BughouseMode.play,
-              recentMoveSquares: recent,
-              annotations: controller.annotationsFor(which),
-              highlightedSquares: {
-                ..._dropTargets(),
-                ...controller.hoveredSquares(which),
-              },
-              onSquareClicked: _onSquareClicked,
-              onMove: (completed) {
-                if (controller.mode != BughouseMode.play) return;
-                final from = parseSquare(completed.from);
-                final to = parseSquare(completed.to);
-                if (from == null || to == null) return;
-                controller.playMove(
-                  which,
-                  NormalMove(
-                    from: from,
-                    to: to,
-                    promotion: _promotionOf(completed.uci),
-                  ),
-                );
-              },
+            // Only the boards listen to the hover, so a pointer crossing a
+            // line in the panel redraws two boards and nothing else.
+            child: ValueListenableBuilder<BughouseHover?>(
+              valueListenable: controller.hover,
+              builder: (context, _, _) => ChessBoardWidget(
+                position: position,
+                flipped: flipped,
+                enableUserMoves: controller.mode == BughouseMode.play,
+                recentMoveSquares: recent,
+                annotations: controller.annotationsFor(which),
+                highlightedSquares: _dropTargets(),
+                onSquareClicked: _onSquareClicked,
+                onMove: (completed) {
+                  if (controller.mode != BughouseMode.play) return;
+                  final from = parseSquare(completed.from);
+                  final to = parseSquare(completed.to);
+                  if (from == null || to == null) return;
+                  controller.playMove(
+                    which,
+                    NormalMove(
+                      from: from,
+                      to: to,
+                      promotion: _promotionOf(completed.uci),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         ),
