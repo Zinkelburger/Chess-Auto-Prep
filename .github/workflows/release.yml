@@ -167,6 +167,28 @@ jobs:
       - name: Build Windows release
         run: flutter build windows --release
 
+      # The four DLLs windows/CMakeLists.txt deploys app-locally. Asserted
+      # rather than assumed for the same reason the asset fetches are: the app
+      # imports these, so a bundle without them does not start at all, and
+      # nothing earlier in this job would have said so. Whether CMake's redist
+      # list carries MSVCP140_1.dll varies by toolchain, and onnxruntime.dll
+      # needs it, so it is named here explicitly.
+      - name: Verify the VC++ runtime is bundled
+        shell: pwsh
+        run: |
+          $bundle = "build/windows/x64/runner/Release"
+          $missing = @()
+          foreach ($dll in @('MSVCP140.dll','MSVCP140_1.dll','VCRUNTIME140.dll','VCRUNTIME140_1.dll')) {
+            if (-not (Test-Path (Join-Path $bundle $dll))) { $missing += $dll }
+          }
+          if ($missing.Count -gt 0) {
+            Write-Host "Bundle is missing: $($missing -join ', ')"
+            Get-ChildItem $bundle -Filter *.dll | Select-Object -ExpandProperty Name
+            exit 1
+          }
+          Write-Host "VC++ runtime bundled:"
+          Get-ChildItem $bundle -Filter *140*.dll | ForEach-Object { "  $($_.Name)  $($_.Length) bytes" }
+
       - name: Zip bundle (portable)
         shell: pwsh
         run: |

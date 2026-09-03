@@ -92,6 +92,31 @@ if(PLUGIN_BUNDLED_LIBRARIES)
     COMPONENT Runtime)
 endif()
 
+# Ship the Visual C++ runtime beside the executable.
+#
+# chess_auto_prep.exe itself imports MSVCP140.dll and VCRUNTIME140(_1).dll, as
+# do five bundled plugin DLLs and both copies of onnxruntime.dll — the app's
+# own (Maia) and the one the bughouse engine loads. None of that is part of a
+# clean Windows install, and Flutter's template does not copy it, so the app
+# died on first launch with "VCRUNTIME140.dll was not found" on any machine
+# that had never installed the redistributable through some other program.
+# That is a launch failure, not a degraded feature: it happens before any UI.
+#
+# App-local deployment rather than chaining vc_redist.exe from the installer,
+# because it fixes the portable zip too, needs no elevation, and cannot
+# conflict with a system-wide copy — Windows resolves these from the exe's own
+# directory first. SKIP populates the variable without generating CMake's own
+# install rule, so the files land beside the exe instead of in a default
+# location. UCRT libraries are deliberately not included: api-ms-win-crt-* is
+# part of Windows 10 and 11 already.
+set(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_SKIP TRUE)
+include(InstallRequiredSystemLibraries)
+if(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS)
+  install(FILES ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS}
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+endif()
+
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"
