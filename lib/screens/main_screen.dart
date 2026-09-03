@@ -390,18 +390,10 @@ class _TacticsModeScaffold extends StatelessWidget {
       appBar: AppBar(
         titleSpacing: 16,
         // The back arrow sits in the title row (not the `leading` slot) so
-        // the title doesn't shift right when the arrow appears/disappears.
-        title: const AppBarTitleWithTrail(
-          title: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AppModeSwitcher(),
-              SizedBox(width: 8),
-              _TacticsAppBarBackButton(),
-            ],
-          ),
-        ),
-        actions: const [AppSettingsButton()],
+        // the breadcrumb trail doesn't shift right when the arrow appears
+        // and disappears.
+        title: const AppBarTitleWithTrail(title: _TacticsAppBarBackButton()),
+        actions: const [AppModeSwitcher(), AppSettingsButton()],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {

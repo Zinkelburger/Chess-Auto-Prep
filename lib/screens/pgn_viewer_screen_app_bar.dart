@@ -50,8 +50,6 @@ mixin _AppBarBuildersMixin
       title: AppBarTitleWithTrail(
         title: Row(
           children: [
-            const AppModeSwitcher(),
-            const SizedBox(width: 12),
             Flexible(child: _buildOpenPgnMenuButton(fileName)),
             if (_controller.allGames.isNotEmpty &&
                 !_controller.isSolitaireMode &&
@@ -134,6 +132,7 @@ mixin _AppBarBuildersMixin
         // One overflow for the whole bar, present in every state — solitaire
         // included, which is how the trophy cabinet and app settings stay
         // reachable there without icons of their own.
+        const AppModeSwitcher(),
         AppOverflowMenu(entries: _overflowEntries()),
       ],
     );

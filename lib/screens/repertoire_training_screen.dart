@@ -325,20 +325,14 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     return AppBar(
       titleSpacing: 16,
       title: AppBarTitleWithTrail(
-        title: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const AppModeSwitcher(),
-            if (repertoire != null)
-              Text(
+        title: repertoire == null
+            ? const SizedBox.shrink()
+            : Text(
                 repertoire.name,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.bodySmall,
               ),
-          ],
-        ),
       ),
       actions: [
         // Choosing what to train is the one thing this screen is for, so it
@@ -349,6 +343,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
           label: const Text('Select repertoire'),
           onPressed: _selectRepertoire,
         ),
+        const AppModeSwitcher(),
         AppOverflowMenu(
           entries: [
             if (repertoire != null)

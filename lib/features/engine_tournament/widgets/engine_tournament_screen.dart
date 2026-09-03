@@ -114,7 +114,7 @@ class _EngineTournamentScreenState extends State<EngineTournamentScreen> {
         return Scaffold(
           appBar: AppBar(
             titleSpacing: 16,
-            title: const AppBarTitleWithTrail(title: AppModeSwitcher()),
+            title: const AppBreadcrumbTrail(),
             actions: [
               FilledButton.icon(
                 onPressed: _controller.isRunning ? null : _newTournament,
@@ -122,6 +122,7 @@ class _EngineTournamentScreenState extends State<EngineTournamentScreen> {
                 label: const Text('New tournament'),
               ),
               const SizedBox(width: 8),
+              const AppModeSwitcher(),
               AppOverflowMenu(
                 entries: [
                   AppMenuEntry(

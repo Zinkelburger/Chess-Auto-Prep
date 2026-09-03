@@ -86,21 +86,12 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     return AppBar(
       titleSpacing: 16,
       title: AppBarTitleWithTrail(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const AppModeSwitcher(),
-            const SizedBox(width: 12),
-            Flexible(
-              child: _titleIsSwitcher
-                  ? RepertoireSwitcherTitle(
-                      title: title,
-                      onTap: generationLocked ? null : onSelectRepertoire,
-                    )
-                  : title,
-            ),
-          ],
-        ),
+        title: _titleIsSwitcher
+            ? RepertoireSwitcherTitle(
+                title: title,
+                onTap: generationLocked ? null : onSelectRepertoire,
+              )
+            : title,
       ),
       actions: [
         BoardZoneControls(trapNavigation: trapNavigation),
@@ -121,6 +112,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
           RepertoireTrainButton(
             onPressed: generationLocked ? null : onTrainRepertoire,
           ),
+        const AppModeSwitcher(),
         AppOverflowMenu(
           entries: [
             if (onOpenAudit != null)

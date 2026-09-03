@@ -599,24 +599,15 @@ class _StudyScreenState extends State<StudyScreen> {
       appBar: AppBar(
         titleSpacing: 16,
         title: AppBarTitleWithTrail(
-          title: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const AppModeSwitcher(),
-              const SizedBox(width: 12),
-              Flexible(
-                child: StudyPickerBar(
-                  study: _study,
-                  focusNode: _focusNode,
-                  onNewStudy: () => unawaited(_newStudy()),
-                  onPickStudy: () => unawaited(_pickStudy()),
-                  onImportUrl: () => unawaited(_importFromUrl()),
-                  onImportPgn: () => unawaited(_importPgn()),
-                  onExportPgn: () => unawaited(_exportPgn()),
-                  onDeleteStudy: () => unawaited(_deleteCurrentStudy()),
-                ),
-              ),
-            ],
+          title: StudyPickerBar(
+            study: _study,
+            focusNode: _focusNode,
+            onNewStudy: () => unawaited(_newStudy()),
+            onPickStudy: () => unawaited(_pickStudy()),
+            onImportUrl: () => unawaited(_importFromUrl()),
+            onImportPgn: () => unawaited(_importPgn()),
+            onExportPgn: () => unawaited(_exportPgn()),
+            onDeleteStudy: () => unawaited(_deleteCurrentStudy()),
           ),
         ),
         actions: [
@@ -642,6 +633,7 @@ class _StudyScreenState extends State<StudyScreen> {
             tooltip: 'Flip board',
             onPressed: _study.toggleFlipped,
           ),
+          const AppModeSwitcher(),
           AppOverflowMenu(
             entries: [
               AppMenuEntry(

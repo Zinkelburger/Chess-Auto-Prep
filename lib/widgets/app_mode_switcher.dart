@@ -1,11 +1,13 @@
-/// The app-bar title that is also the navigation.
+/// The labelled mode picker that is also the navigation.
 ///
-/// Every screen's title reads `Tactics ▾`: the current mode, and the menu of
-/// the others behind it. This replaced an unlabelled grid icon at the far
-/// right of the bar that opened seven 44px rows with a glyph each — a phone
-/// menu on a desktop app. The menu is now grouped (Train / Build / Analyse /
-/// Lab), text only, 13px rows via [AppMenuEntryRow] like every other menu in
-/// the app, and shows the Ctrl+digit chord beside each mode.
+/// It reads `Tactics ▾`: the current mode, and the menu of the others behind
+/// it. It sits at the **right** end of every app bar, immediately before that
+/// bar's settings control (a gear, or the "App settings…" row of its overflow
+/// menu), because that is the side the pointer already lives on — it spent a
+/// while as the bar's title on the left, which meant crossing the window for
+/// every mode switch. The menu is grouped (Train / Build / Analyse / Lab),
+/// text only, 13px rows via [AppMenuEntryRow] like every other menu in the
+/// app, and shows the Ctrl+digit chord beside each mode.
 ///
 /// The chords themselves are bound once in `MainScreen`, not here.
 library;

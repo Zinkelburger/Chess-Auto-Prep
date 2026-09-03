@@ -177,20 +177,14 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final titleBlock = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const AppModeSwitcher(),
-        if (_currentPlayer != null)
-          Text(
+    final titleBlock = _currentPlayer == null
+        ? const SizedBox.shrink()
+        : Text(
             _metadataSubtitle,
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
-          ),
-      ],
-    );
+          );
 
     return Scaffold(
       appBar: AppBar(
@@ -206,6 +200,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
             label: Text(_hasEvals ? 'Re-analyze' : 'Analyze with Engine'),
             onPressed: _canStartEngineJob ? _showWeaknessConfig : null,
           ),
+          const AppModeSwitcher(),
           _buildActionsMenu(),
         ],
       ),
