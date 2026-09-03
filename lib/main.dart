@@ -7,6 +7,7 @@ import 'package:window_manager/window_manager.dart';
 import 'core/app_history.dart';
 import 'core/app_state.dart';
 import 'core/study_controller.dart';
+import 'features/bughouse/services/bughouse_bundle.dart';
 import 'debug/agent_driver.dart';
 import 'models/engine_settings.dart';
 import 'models/eval_database_settings.dart';
@@ -56,10 +57,16 @@ Future<void> _initializeApp() async {
   // concurrently instead of serially so the first frame isn't gated on three
   // sequential disk round-trips. They must finish before runApp so the first
   // render reflects the user's saved engine/eval preferences.
+  //
+  // The bughouse probe joins them for the same reason: the mode menu is built
+  // in the first frame, and a mode that appears and then vanishes is worse
+  // than one that was never offered. It reads the asset manifest, so it costs
+  // a manifest parse rather than a disk round-trip.
   await Future.wait([
     EngineSettings.instance.loadFromPrefs(),
     EvalDatabaseSettings.instance.load(),
     EngineLifecycle.instance.loadPersistedState(),
+    _resolveOptionalModes(),
   ]);
 
   // The persistent eval cache opens a SQLite database — nothing on the first
@@ -75,6 +82,20 @@ Future<void> _initializeApp() async {
   );
 
   unawaited(DefaultPgnService.ensureExtracted());
+}
+
+/// Decides which optional modes this build can actually run, so the mode menu
+/// only ever offers something that works.
+///
+/// Bughouse ships an engine that is downloaded into `assets/bughouse/` at
+/// release time rather than tracked in git, and Flutter does not fail a build
+/// whose declared asset directory is missing — so "no engine in this build" is
+/// an ordinary state, and every developer checkout is in it until
+/// `tools/fetch_bughouse.py` has run.
+Future<void> _resolveOptionalModes() async {
+  if (!await BughouseBundle.probeBundled()) {
+    unavailableModes.add(AppMode.bughouse);
+  }
 }
 
 /// Shown when startup initialization fails before [ChessAutoPrepApp] can run.

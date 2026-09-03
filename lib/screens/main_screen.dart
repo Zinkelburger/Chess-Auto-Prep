@@ -21,6 +21,7 @@ import '../widgets/training/move_input_widget.dart';
 import '../features/games/controllers/recent_games_controller.dart';
 import '../features/games/services/home_review_runner.dart';
 import '../features/engine_tournament/services/tournament_open_watcher.dart';
+import '../features/bughouse/widgets/bughouse_screen.dart';
 import '../features/engine_tournament/widgets/engine_tournament_screen.dart';
 import '../features/games/widgets/tactics_games_pane.dart';
 import '../services/engine/engine_lifecycle.dart';
@@ -49,6 +50,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     AppMode.pgnViewer,
     AppMode.study,
     AppMode.engineTournament,
+    AppMode.bughouse,
   ];
 
   final Map<AppMode, Widget> _modeViews = <AppMode, Widget>{};
@@ -210,13 +212,13 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     }
 
     return Scaffold(
-      // Ctrl+1…7 (Cmd on macOS) jump between modes in the mode menu's order —
+      // Ctrl+1…8 (Cmd on macOS) jump between modes in the mode menu's order —
       // the chords the menu advertises beside each entry. Bound here, once,
       // above every screen; the screens' own key handlers see the event first
       // and none of them claims a Ctrl+digit.
       body: CallbackShortcuts(
         bindings: {
-          for (final mode in kAppModeMenuOrder) ...{
+          for (final mode in availableModeMenuOrder()) ...{
             SingleActivator(
               _digitKey(mode.shortcutNumber),
               control: true,
@@ -276,6 +278,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         return const StudyScreen();
       case AppMode.engineTournament:
         return const EngineTournamentScreen();
+      case AppMode.bughouse:
+        return const BughouseScreen();
     }
   }
 }

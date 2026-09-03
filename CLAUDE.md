@@ -23,13 +23,14 @@ reconstruct them from this file each session:
 | `/drive` | build, launch and drive the real app; screenshot what you changed |
 | `/run-skill-generator` | author or improve a skill, held to this repo's rules |
 
-Two skills carry the detail the commands point at, and trigger on their own
+Three skills carry the detail the commands point at, and trigger on their own
 when a task matches their description:
 
 | Skill | Owns |
 |---|---|
 | `run-chess-auto-prep` | the app driver (`driver.py`): build, launch, tap, type, screenshot |
 | `chess-prep-mcp` | the chess-prep MCP server: expectimax builds, tournaments, master and own games, PGN trees, rosters; `mcp_tools.py` to call it from a shell |
+| `bughouse-mcp` | the bughouse MCP server: Hivemind on two boards, joint actions, candidate ranking, and why its score is not pawns |
 
 They live in `.claude/commands/` and `.claude/skills/`. Those directories,
 `.claude/settings.json`, `.mcp.json` and `scripts/hooks/` are **tracked in git
@@ -150,6 +151,9 @@ one you are in before editing:
 | Path | What | Run it via |
 |---|---|---|
 | `tools/mcp/chess_prep/` | The chess-prep **MCP server** (`.mcp.json`): 44 tools at the time of writing (`mcp_tools.py check` prints the live count) for expectimax builds, engine tournaments, the master-games and own-games databases, PGN trees, ChessDB and roster prep. Appears in a session as `mcp__chess-prep__*`; load one with `ToolSearch "select:mcp__chess-prep__<tool>"`. | the `chess-prep-mcp` skill; `python3 .claude/skills/chess-prep-mcp/mcp_tools.py list\|describe\|call` from a shell; `python3 tools/mcp/test_*.py` |
+| `tools/mcp/bughouse/` | The bughouse **MCP server** (`.mcp.json`): six tools that put Hivemind's two-board search in reach of an agent — `position`, `legal_moves`, `analyse`, `compare`, `playout`, `status`. Appears as `mcp__bughouse__*`. Shares the app's engine bundle read-only and its transport with chess-prep. | the `bughouse-mcp` skill; `mcp_tools.py --server bughouse …`; `python3 tools/mcp/test_bughouse.py [--engine]` |
+| `tools/mcp/mcp_stdio.py` | The JSON-RPC-over-stdio transport both servers use. Zero dependencies, because an MCP client starts a server from a bare `command`/`args`. | imported by each server's `server.py` |
+| `tools/fetch_bughouse.py` | Downloads the Hivemind CPU build (engine + ONNX Runtime + FP32 network) into `assets/bughouse/` (gitignored), exactly the way `fetch_assets.py` fetches Stockfish — same `--only`/`--check`/`--force`, pinned in `tools/bughouse.lock.json`. `--hivemind <checkout>` packs a local engine build instead. The app **hides** Bughouse Lab when these are absent, so a checkout without them is fine. | `python3 tools/fetch_bughouse.py` |
 | `tools/fetch_assets.py` | Downloads the host Stockfish into `assets/executables/` (gitignored). Required before any build. | `python3 tools/fetch_assets.py` (`--check` to verify) |
 | `tools/run_engine_tournament.dart` | Headless engine-vs-engine matches; same directory layout as the app and the MCP tools (`docs/ENGINE_TOURNAMENT.md`) | `dart run tools/run_engine_tournament.dart …` |
 | `tools/bench/`, `tools/dart_api_test/`, `tools/experiments/` | Benchmarks and API harnesses; nothing here is imported by `lib/` | `dart run`, or `scripts/ci.sh with --` when it is heavy |

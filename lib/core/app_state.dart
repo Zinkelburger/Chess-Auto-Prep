@@ -17,6 +17,7 @@ enum AppMode {
   pgnViewer,
   study,
   engineTournament,
+  bughouse,
 }
 
 extension AppModeLabel on AppMode {
@@ -31,6 +32,7 @@ extension AppModeLabel on AppMode {
     AppMode.pgnViewer => 'Games',
     AppMode.study => 'Study',
     AppMode.engineTournament => 'Engine tournament',
+    AppMode.bughouse => 'Bughouse lab',
   };
 }
 
@@ -41,16 +43,55 @@ const List<({String heading, List<AppMode> modes})> kAppModeGroups = [
   (heading: 'Train', modes: [AppMode.tactics, AppMode.repertoireTrainer]),
   (heading: 'Build', modes: [AppMode.repertoire, AppMode.study]),
   (heading: 'Analyse', modes: [AppMode.pgnViewer, AppMode.positionAnalysis]),
-  (heading: 'Lab', modes: [AppMode.engineTournament]),
+  (heading: 'Lab', modes: [AppMode.engineTournament, AppMode.bughouse]),
 ];
 
-/// Every mode in menu order — what Ctrl+1…7 index into.
+/// Every mode in menu order — what Ctrl+1…8 index into.
 final List<AppMode> kAppModeMenuOrder = [
   for (final group in kAppModeGroups) ...group.modes,
 ];
 
+/// Modes that are compiled in but that *this build* cannot run.
+///
+/// Bughouse is the only member today, and the reason the concept exists: its
+/// engine is a ~43 MB download that `tools/fetch_bughouse.py` puts into
+/// `assets/bughouse/` at release time rather than something tracked in git,
+/// and a build made without it must not offer a mode whose only possible
+/// outcome is an error. Populated once at startup by the composition root —
+/// core deliberately does not know how the question is answered, only that
+/// the answer exists.
+final Set<AppMode> unavailableModes = <AppMode>{};
+
+extension AppModeAvailability on AppMode {
+  bool get isAvailable => !unavailableModes.contains(this);
+}
+
+/// The mode menu with anything this build cannot run removed, and any group
+/// that leaves empty dropped with it.
+List<({String heading, List<AppMode> modes})> availableAppModeGroups() => [
+  for (final group in kAppModeGroups)
+    if (group.modes.any((m) => m.isAvailable))
+      (
+        heading: group.heading,
+        modes: [
+          for (final m in group.modes)
+            if (m.isAvailable) m,
+        ],
+      ),
+];
+
+/// Menu order, filtered the same way — the modes a chord may reach.
+List<AppMode> availableModeMenuOrder() => [
+  for (final mode in kAppModeMenuOrder)
+    if (mode.isAvailable) mode,
+];
+
 extension AppModeShortcut on AppMode {
   /// 1-based position in the menu: the digit in this mode's Ctrl+digit chord.
+  ///
+  /// Numbered from the *full* menu, so a mode's chord is the same on every
+  /// machine whether or not an optional one is installed. Bughouse is last,
+  /// so today nothing renumbers either way.
   int get shortcutNumber => kAppModeMenuOrder.indexOf(this) + 1;
 }
 
@@ -66,7 +107,11 @@ extension AppModeEngine on AppMode {
     AppMode.study => true,
     // Two engines are already playing each other in there; the analysis pool
     // would only compete with them for the same cores.
-    AppMode.repertoireTrainer || AppMode.engineTournament => false,
+    // The bughouse network wants the cores the analysis pool would take,
+    // and it is a different game — a standard-chess eval says nothing here.
+    AppMode.repertoireTrainer ||
+    AppMode.engineTournament ||
+    AppMode.bughouse => false,
   };
 }
 

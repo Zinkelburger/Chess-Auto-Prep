@@ -1,8 +1,7 @@
-"""MCP stdio server for the prep tools.
+"""MCP stdio server for the bughouse tools.
 
-The wire layer lives in `tools/mcp/mcp_stdio.py` and is shared with the other
-servers in this directory; what is here is only this server's identity and its
-registry.
+The wire layer is shared with the other servers under `tools/mcp/`; what is
+here is this server's identity and its registry.
 """
 
 from __future__ import annotations
@@ -14,11 +13,11 @@ from typing import TextIO
 if __package__ in (None, ""):  # pragma: no cover - direct execution
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from mcp_stdio import DEFAULT_PROTOCOL, StdioServer  # noqa: F401,E402
+from mcp_stdio import StdioServer  # noqa: E402
 
 from .tools import Registry, ToolError  # noqa: E402
 
-SERVER_NAME = "chess-prep"
+SERVER_NAME = "bughouse"
 SERVER_VERSION = "1.0.0"
 
 
@@ -37,4 +36,9 @@ class Server(StdioServer):
 
 
 def main() -> None:
-    Server().serve_forever()
+    try:
+        Server().serve_forever()
+    finally:
+        from .engine import close_shared
+
+        close_shared()

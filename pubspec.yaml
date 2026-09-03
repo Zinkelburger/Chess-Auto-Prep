@@ -68,6 +68,7 @@ flutter:
     - assets/data/all_moves_maia3.json
     - assets/data/all_moves_maia3_reversed.json
     - assets/executables/
+    - assets/bughouse/
     - tools/assets.lock.json
     - assets/pgn_collections/
     - assets/data/openings/

@@ -1,0 +1,65 @@
+{
+  "bughouse-linux": {
+    "source_sha256": "ee7e0787a4b8575efd250daf4f9311a99b04fa9a16495cc9f13b1a626cb63a53",
+    "url": "https://github.com/Zinkelburger/hivemind/releases/download/engine-v0.1.0/hivemind-linux-x64.tar.gz"
+  },
+  "bughouse-linux:engine": {
+    "output_bytes": 1312125,
+    "output_sha256": "b777e0390f6757e1aa5848d577b24f46d4822167c69d66c6d3b4e9473165f936",
+    "uncompressed_bytes": 3729088
+  },
+  "bughouse-linux:runtime": {
+    "output_bytes": 10778441,
+    "output_sha256": "22c877d447f857efbac5aa81fe941e7177b2b049d7bc5c9eab76485b0c331810",
+    "uncompressed_bytes": 28497752
+  },
+  "bughouse-macos-arm64": {
+    "source_sha256": "98e9bc05a1f0a5efee80142915714f48877849f2fabbce9c056c8bfe66fd9b3f",
+    "url": "https://github.com/Zinkelburger/hivemind/releases/download/engine-v0.1.0/hivemind-macos-arm64.tar.gz"
+  },
+  "bughouse-macos-arm64:engine": {
+    "output_bytes": 374746,
+    "output_sha256": "3f9c3bb12ccb8a96194e17374c6c58dcb87655de982759f04d17cd8dcacc3030",
+    "uncompressed_bytes": 978928
+  },
+  "bughouse-macos-arm64:runtime": {
+    "output_bytes": 12009835,
+    "output_sha256": "890871a38821effde0dabb2abf3e4d9e3162cce9b1613c8d9004b8fe68090b7d",
+    "uncompressed_bytes": 42918624
+  },
+  "bughouse-macos-x86_64": {
+    "source_sha256": "1c31b6af7dbbdd774914e6fb721eba44b92aa136acf7974abdf1dc42eb6347ba",
+    "url": "https://github.com/Zinkelburger/hivemind/releases/download/engine-v0.1.0/hivemind-macos-x86_64.tar.gz"
+  },
+  "bughouse-macos-x86_64:engine": {
+    "output_bytes": 403580,
+    "output_sha256": "ecd869fcea9d88d24d24ab9a410fba314821a8fa374934321101b969267556d5",
+    "uncompressed_bytes": 1015072
+  },
+  "bughouse-macos-x86_64:runtime": {
+    "output_bytes": 11372808,
+    "output_sha256": "98d5b51d6f6b724de8c45c0f0c54e82eb87ca4a47ff5f64984f5a57303cbcc94",
+    "uncompressed_bytes": 39567520
+  },
+  "bughouse-windows": {
+    "source_sha256": "2c7ddf7672791ce9006b128db72be16329eac9e30f0c73646fc99b4a59bada2c",
+    "url": "https://github.com/Zinkelburger/hivemind/releases/download/engine-v0.1.0/hivemind-windows-x64.zip"
+  },
+  "bughouse-windows:engine": {
+    "output_bytes": 1472897,
+    "output_sha256": "0f2f7e2ce19718dde14778341e2633319e9b8cd03b4aaaa80fd43451006af85d",
+    "uncompressed_bytes": 5161647
+  },
+  "bughouse-windows:runtime": {
+    "output_bytes": 5900343,
+    "output_sha256": "2cd52fcf64cb02a68abdd9a276552ba5a22f0c50b9f51763366928300d5918a6",
+    "uncompressed_bytes": 16149344
+  },
+  "network": {
+    "output_bytes": 31699868,
+    "output_sha256": "a18e2e9f30561101a33ace14d8e383dce9067fd3bb1d0c5209a319e50e5dddad",
+    "source_sha256": "a18e2e9f30561101a33ace14d8e383dce9067fd3bb1d0c5209a319e50e5dddad",
+    "uncompressed_bytes": 54415625,
+    "url": "https://github.com/Zinkelburger/hivemind/releases/download/engine-v0.1.0/hivemind-network-fp32.onnx.gz"
+  }
+}

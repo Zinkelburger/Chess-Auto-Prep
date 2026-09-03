@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
-"""Talk to the chess-prep MCP server from a shell. Stdlib only.
+"""Talk to this repo's MCP servers from a shell. Stdlib only.
 
     mcp_tools.py check                   # does the server start and list its tools? exit 1 if not
     mcp_tools.py list [prefix]           # every tool on one line; `list expectimax` filters
     mcp_tools.py describe <tool>         # the full description and every argument
     mcp_tools.py call <tool> [k=v …]     # call one tool; values parse as JSON where they can
 
-Spawns `python3 tools/mcp/chess_prep/__main__.py` for one request, exactly as
-`.mcp.json` does, so what this prints is what the `mcp__chess-prep__*` tools
-in a Claude session do. Reach for it when the MCP is not attached to the
-session you are in (a subagent, a fresh clone before the server is trusted),
-to read a tool's contract before calling it, or to prove the server still
-starts after editing `tools/mcp/`.
+    mcp_tools.py --server bughouse list  # the same, against the bughouse server
+
+Spawns `python3 tools/mcp/<server>/__main__.py` for one request, exactly as
+`.mcp.json` does, so what this prints is what the `mcp__<server>__*` tools in
+a Claude session do. `--server` (default `chess_prep`, also spelled
+`chess-prep`) names any server directory under `tools/mcp/`. Reach for it when
+the MCP is not attached to the session you are in (a subagent, a fresh clone
+before the server is trusted), to read a tool's contract before calling it, or
+to prove the server still starts after editing `tools/mcp/`.
 
 Values: `k=v` is a string unless `v` parses as JSON, so `games=4` is a number,
 `open_app=false` a bool, `moves="1. d4 Nf6"` a string, `engines='["a","b"]'`
@@ -27,8 +30,17 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]  # .claude/skills/chess-prep-mcp → repo root
-SERVER = REPO / "tools/mcp/chess_prep/__main__.py"
 TIMEOUT = int(os.environ.get("MCP_TOOLS_TIMEOUT", "600"))
+
+SERVER_NAME = "chess_prep"
+SERVER = REPO / "tools/mcp/chess_prep/__main__.py"
+
+
+def select_server(name: str) -> None:
+    """Point every later call at `tools/mcp/<name>/`."""
+    global SERVER_NAME, SERVER
+    SERVER_NAME = name.replace("-", "_")
+    SERVER = REPO / "tools/mcp" / SERVER_NAME / "__main__.py"
 
 INIT = {
     "jsonrpc": "2.0",
@@ -111,7 +123,7 @@ def cmd_check() -> None:
     tools = list_tools()
     if not tools:
         sys.exit("server answered tools/list with no tools")
-    print(f"chess-prep MCP server answers tools/list ({len(tools)} tools)")
+    print(f"{SERVER_NAME} MCP server answers tools/list ({len(tools)} tools)")
 
 
 def cmd_list(prefix: str | None) -> None:
@@ -169,9 +181,16 @@ def cmd_call(name: str, argv: list[str]) -> None:
 
 
 def main(argv: list[str]) -> None:
+    if argv and argv[0] == "--server":
+        if len(argv) < 2:
+            sys.exit("--server <name>")
+        select_server(argv[1])
+        argv = argv[2:]
     if not argv or argv[0] in ("-h", "--help"):
         print(__doc__)
         return
+    if not SERVER.exists():
+        sys.exit(f"no server at {SERVER} — `--server <name>` names a directory under tools/mcp/")
     cmd, rest = argv[0], argv[1:]
     if cmd == "check":
         cmd_check()

@@ -34,13 +34,13 @@ class AppModeSwitcher extends StatelessWidget {
       key: switcherKey,
       tooltip: locked
           ? 'Locked — repertoire generation in progress'
-          : 'Switch mode (Ctrl+1…${kAppModeMenuOrder.length})',
+          : 'Switch mode (Ctrl+1…${availableModeMenuOrder().length})',
       enabled: !locked,
       onSelected: context.read<AppState>().setMode,
       position: PopupMenuPosition.under,
       padding: EdgeInsets.zero,
       itemBuilder: (context) => [
-        for (final group in kAppModeGroups) ...[
+        for (final group in availableAppModeGroups()) ...[
           PopupMenuItem<AppMode>(
             enabled: false,
             height: 28,

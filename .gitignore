@@ -142,3 +142,15 @@ tools/experiments/benko_master/LATEST*
 # Only per-machine and per-session state is ignored.
 .claude/settings.local.json
 .claude/RESUME.md
+
+# Bughouse engine bundle: the Hivemind CPU build (engine + ONNX Runtime +
+# FP32 network, ~43 MB gzipped). Downloaded by tools/fetch_bughouse.py, the
+# same way Stockfish is fetched rather than tracked.
+#
+# .gitkeep is tracked on purpose, exactly as it is under assets/executables.
+# pubspec.yaml declares this whole directory as an asset, and a *missing*
+# asset directory is not a build failure -- `flutter build` prints
+# "unable to find directory entry in pubspec.yaml" and exits 0. Without a
+# tracked file here, a release would build green and ship with no engine.
+assets/bughouse/*.gz
+assets/bughouse/manifest.json

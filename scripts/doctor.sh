@@ -70,6 +70,21 @@ fi
 [[ -f assets/maia3_simplified.onnx ]] && ok "maia3_simplified.onnx present" \
   || bad "assets/maia3_simplified.onnx missing — it has no upstream, restore it from git"
 
+# The bughouse engine is optional: the app hides Bughouse Lab when it is not
+# bundled, so a checkout without it is fine and only worth a note. What is NOT
+# fine is the directory itself going missing -- pubspec.yaml declares it, and
+# `flutter build` treats a missing asset directory as a warning and exits 0, so
+# losing .gitkeep means a release silently ships with no engine.
+if [[ ! -f assets/bughouse/.gitkeep ]]; then
+  bad "assets/bughouse/.gitkeep is missing — restore it from git, or a release will build green with no bughouse engine"
+elif [[ -f tools/fetch_bughouse.py ]]; then
+  if out=$(python3 tools/fetch_bughouse.py --check 2>&1); then
+    ok "bughouse engine present ($(grep -c '^\[ok' <<<"$out") files)"
+  else
+    note "bughouse engine not fetched — Bughouse Lab stays hidden. To enable: python3 tools/fetch_bughouse.py"
+  fi
+fi
+
 # --------------------------------------------------------------------------
 hdr "Shared machine"
 # --------------------------------------------------------------------------
@@ -112,8 +127,10 @@ contract=(CLAUDE.md .mcp.json .claude/settings.json
           .claude/skills/run-chess-auto-prep/driver.py
           .claude/skills/chess-prep-mcp/SKILL.md
           .claude/skills/chess-prep-mcp/mcp_tools.py
+          .claude/skills/bughouse-mcp/SKILL.md
           scripts/ci.sh scripts/doctor.sh scripts/hooks/flutter_gate.sh
-          lib/debug/agent_driver.dart tools/mcp/chess_prep/__main__.py)
+          lib/debug/agent_driver.dart tools/mcp/chess_prep/__main__.py
+          tools/mcp/mcp_stdio.py tools/mcp/bughouse/__main__.py)
 tracked=0
 for f in "${contract[@]}"; do
   if [[ ! -e "$f" ]]; then
@@ -158,12 +175,14 @@ hdr "MCP server"
 # --------------------------------------------------------------------------
 # .mcp.json runs the server from the working tree; an import error there
 # takes every mcp__chess-prep__* tool down with it.
-if out=$(python3 .claude/skills/chess-prep-mcp/mcp_tools.py check 2>&1); then
-  ok "$out"
-else
-  bad "chess-prep MCP server does not answer tools/list (python3 .claude/skills/chess-prep-mcp/mcp_tools.py check)"
-  [[ $QUIET -eq 1 ]] || sed 's/^/        /' <<<"$out" | tail -5
-fi
+for server in chess_prep bughouse; do
+  if out=$(python3 .claude/skills/chess-prep-mcp/mcp_tools.py --server "$server" check 2>&1); then
+    ok "$out"
+  else
+    bad "$server MCP server does not answer tools/list (python3 .claude/skills/chess-prep-mcp/mcp_tools.py --server $server check)"
+    [[ $QUIET -eq 1 ]] || sed 's/^/        /' <<<"$out" | tail -5
+  fi
+done
 if python3 -c 'import chess' 2>/dev/null; then
   ok "python-chess installed (pgn_*, master_*, expectimax_*, chessdb_query work)"
 else

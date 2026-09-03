@@ -59,6 +59,20 @@ jobs:
           python3 tools/fetch_assets.py --only stockfish-linux
           python3 tools/fetch_assets.py --check --only stockfish-linux
 
+      - name: Cache bughouse engine
+        uses: actions/cache@v4
+        with:
+          path: assets/bughouse
+          key: bughouse-${{ hashFiles('tools/bughouse.lock.json') }}-linux
+
+      # --check is not belt-and-braces here: a *missing* asset directory is
+      # only a warning to `flutter build`, so a failed fetch would otherwise
+      # sail through and ship an installer whose Bughouse Lab is simply absent.
+      - name: Fetch bughouse engine (Linux)
+        run: |
+          python3 tools/fetch_bughouse.py --only bughouse-linux
+          python3 tools/fetch_bughouse.py --check --only bughouse-linux
+
       - name: Build Linux release
         run: flutter build linux --release
 
@@ -139,6 +153,17 @@ jobs:
           python tools/fetch_assets.py --only stockfish-windows
           python tools/fetch_assets.py --check --only stockfish-windows
 
+      - name: Cache bughouse engine
+        uses: actions/cache@v4
+        with:
+          path: assets/bughouse
+          key: bughouse-${{ hashFiles('tools/bughouse.lock.json') }}-windows
+
+      - name: Fetch bughouse engine (Windows)
+        run: |
+          python tools/fetch_bughouse.py --only bughouse-windows
+          python tools/fetch_bughouse.py --check --only bughouse-windows
+
       - name: Build Windows release
         run: flutter build windows --release
 
@@ -200,6 +225,17 @@ jobs:
         run: |
           python3 tools/fetch_assets.py --only ${{ matrix.stockfish }}
           python3 tools/fetch_assets.py --check --only ${{ matrix.stockfish }}
+
+      - name: Cache bughouse engine
+        uses: actions/cache@v4
+        with:
+          path: assets/bughouse
+          key: bughouse-${{ hashFiles('tools/bughouse.lock.json') }}-${{ matrix.arch }}
+
+      - name: Fetch bughouse engine (${{ matrix.arch }})
+        run: |
+          python3 tools/fetch_bughouse.py --only bughouse-macos-${{ matrix.arch }}
+          python3 tools/fetch_bughouse.py --check --only bughouse-macos-${{ matrix.arch }}
 
       - name: Build macOS ${{ matrix.arch }} release
         env:
