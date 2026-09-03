@@ -86,7 +86,9 @@ BUDGET_ARGS = {
 RULE_ARGS = {
     "time_advantage": _b(
         "True when our team is ahead on the diagonal clock, which is the only "
-        "thing that makes sitting on both boards legal. Default false."
+        "thing that makes sitting on both boards legal. Default false. It also "
+        "moves the scale's zero point (see `baseline` in the result), so never "
+        "compare a score from one setting against a score from the other."
     ),
     "require_move_on": _s(
         'Forbid passing on a board: "A", "B", or "none" (default). This is how '
@@ -166,8 +168,11 @@ class Registry:
             "action — one decision per board, where sitting is a real move — "
             "plus its principal variation. With multipv > 1 you also get its "
             "ranked shortlist of root moves from the same search, which is the "
-            "cheapest way to see what it considered. Scores are Hivemind's "
-            "MCTS scale, not pawns: see the note in the result.",
+            "cheapest way to see what it considered, ordered best-first by "
+            "score rather than by the engine's own visit count. Read "
+            "`relative` (0.00 = level) rather than the raw `score`: Hivemind's "
+            "scale carries a large offset whose sign depends on "
+            "time_advantage. See the note in the result.",
             _obj(
                 {
                     **POSITION_ARGS,
@@ -184,7 +189,9 @@ class Registry:
             "Rank named candidate moves against each other. Each candidate is "
             "played, then the opponent is asked to answer it under the same "
             "budget, and the candidates are ordered by how good the position "
-            "then looks *to the opponent* — lower is better for us. This is "
+            "then looks *to the opponent* — lower is better for us. The "
+            "answering team is worked out from the position, so candidates on "
+            "either board and lines of any length are handled alike. This is "
             "the tool for 'what should I play here', because MultiPV only "
             "ranks moves the search chose to visit, and it also hands back the "
             "reply you have to be ready for.",
@@ -239,7 +246,7 @@ class Registry:
             raise ToolError(str(e)) from None
 
     @staticmethod
-    def _run(fn, args: dict, **extra) -> Any:
+    def _run(fn, **extra) -> Any:
         engine = Registry._engine()
         try:
             return fn(engine=engine, **extra)
@@ -258,7 +265,15 @@ class Registry:
         if args.get("probe", True):
             engine = self._engine()
             result.update(
-                {"running": True, "name": engine.name, "backend": engine.backend}
+                {
+                    "running": True,
+                    "name": engine.name,
+                    "backend": engine.backend,
+                    # Workers, intra-op threads and inference batch, as the
+                    # engine reported them. Fixed by the build: there is no
+                    # `Threads` option to set.
+                    "backend_detail": engine.backend_detail,
+                }
             )
         return result
 
@@ -285,7 +300,6 @@ class Registry:
     def analyse(self, args: dict) -> dict:
         return self._run(
             analysis.analyse,
-            args,
             dual_fen=args.get("dual_fen"),
             moves=args.get("moves"),
             team=args.get("team", "white"),
@@ -302,7 +316,6 @@ class Registry:
             raise ToolError("compare needs at least one candidate move.")
         return self._run(
             analysis.compare,
-            args,
             candidates=[str(c) for c in candidates],
             board=args.get("board", "A"),
             dual_fen=args.get("dual_fen"),
@@ -317,7 +330,6 @@ class Registry:
     def playout(self, args: dict) -> dict:
         return self._run(
             analysis.playout,
-            args,
             plies=int(args.get("plies", 6)),
             dual_fen=args.get("dual_fen"),
             moves=args.get("moves"),

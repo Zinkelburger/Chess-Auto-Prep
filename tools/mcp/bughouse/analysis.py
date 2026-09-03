@@ -12,13 +12,14 @@ Three shapes of question, on top of :mod:`engine` and :mod:`board`:
                 only way to see the piece flow a line actually produces.
 
 A word on the score, because it is not a chess engine's score. Hivemind
-reports ``180·tan(1.56·Q)`` of an MCTS Q-value that starts at −1 and is pulled
-towards the truth by visits, so at small node counts every score carries a
-large negative offset — the balanced starting position reads about −2.3, not
-0.00. Within one search at one budget the ordering is meaningful and the gaps
-are meaningful; across budgets, or against a chess engine's pawns, they are
-not. Everything here therefore compares like with like: one budget, one
-perspective, one batch.
+reports ``180·tan(1.56·Q)`` of an MCTS Q-value, and that carries a large
+offset whose *sign depends on the* ``TimeAdvantage`` *option*: a balanced
+position reads about −2.3 with the option off and about +2.3 with it on. See
+:data:`LEVEL_BASELINE`. Every result here therefore reports ``relative`` — the
+score with the right baseline removed, where 0.00 is level — alongside the
+engine's raw number, and never compares two searches run under different
+options. Within one search at one budget the ordering and the gaps are
+meaningful; across budgets, or against a chess engine's pawns, they are not.
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ from dataclasses import dataclass
 import chess
 
 from .board import BOARD_NAMES, DualBoard, IllegalMove, board_index, parse_move_list, san
-from .engine import HivemindEngine, JointMove, SearchResult, shared
+from .engine import HivemindEngine, JointMove, Line, SearchResult, shared
 
 DEFAULT_MOVETIME_MS = 5000
 
@@ -101,6 +102,62 @@ def _named(dual: DualBoard, which: int, uci: str | None) -> str | None:
         return uci
 
 
+LEVEL_BASELINE = {False: -2.30, True: 2.30}
+"""Where a dead-level position sits on Hivemind's scale, per ``TimeAdvantage``.
+
+Measured, not chosen, and the *sign flips with the bit*: the starting position
+on both boards reads -2.33/-2.24 with the option off and +2.39/+2.26 with it
+on, from either seat, at every node count we have tried. Subtracting one fixed
+constant therefore mis-reads every ``time_advantage=True`` search by about 4.6
+— which is exactly the size of the "sitting is worth a lot" illusion it used to
+produce.
+"""
+
+
+def baseline_for(time_advantage: bool) -> float:
+    """The zero point of the scale for a search run under this option."""
+    return LEVEL_BASELINE[bool(time_advantage)]
+
+
+def relative_score(cp: int | None, time_advantage: bool) -> float | None:
+    """The score with the baseline taken out: 0.00 is level, + is good for us."""
+    return None if cp is None else round(cp / 100.0 - baseline_for(time_advantage), 2)
+
+
+def _score_note(time_advantage: bool) -> str:
+    return (
+        "Hivemind's score is an MCTS Q-value on a tangent scale with a large "
+        f"offset: a balanced position reads about {baseline_for(time_advantage):+.2f} "
+        f"with time_advantage={time_advantage}, not 0.00 — and that offset "
+        "changes sign with the option, so scores from calls made under "
+        "different time_advantage values are not comparable at all. Read "
+        "`relative` (the score with the baseline removed, 0.00 = level) rather "
+        "than `score`, and compare moves within one call at one budget."
+    )
+
+
+SCORE_NOTE = _score_note(False)
+
+
+def by_strength(lines: list[Line]) -> list[Line]:
+    """The engine's MultiPV block, reordered best-first by score.
+
+    Hivemind ranks MultiPV by MCTS visit count, not by evaluation, so its
+    rank 3 routinely scores better than its rank 2. Rank 1 is left pinned at
+    the front because that is the line ``bestmove`` is aligned with — the
+    engine's own solver-aware choice, which is not always its highest score.
+    """
+    def strength(line: Line) -> tuple:
+        """Higher is better for the team that was searched."""
+        if line.mate is not None:
+            # We mate: best, and sooner is better. They mate: worst, and later
+            # is less bad. Negating in both branches gives that ordering.
+            return (2 if line.mate > 0 else 0, -line.mate)
+        return (1, line.score_cp if line.score_cp is not None else 0)
+
+    return lines[:1] + sorted(lines[1:], key=strength, reverse=True)
+
+
 def describe_joint(dual: DualBoard, move: JointMove | None) -> dict | None:
     if move is None:
         return None
@@ -147,25 +204,25 @@ def analyse(
         },
         "best": describe_joint(dual, result.best),
         "score": result.top.score if result.top else None,
+        "relative": relative_score(
+            result.top.score_cp if result.top else None, time_advantage
+        ),
+        "baseline": baseline_for(time_advantage),
         "depth": result.top.depth if result.top else 0,
         "nodes": result.top.nodes if result.top else 0,
+        # Best first by score, not by the engine's own MultiPV order — that is
+        # an MCTS visit count, so rank 3 routinely outscores rank 2.
         "lines": [
             {
                 **line.as_dict(),
+                "relative": relative_score(line.score_cp, time_advantage),
                 "best": describe_joint(dual, line.pv[0] if line.pv else None),
             }
-            for line in result.lines
+            for line in by_strength(result.lines)
         ],
-        "note": SCORE_NOTE,
+        "note": _score_note(time_advantage),
     }
 
-
-SCORE_NOTE = (
-    "Hivemind's score is an MCTS Q-value on a tangent scale, biased negative at "
-    "low node counts: a balanced position reads about -2.3 at a few thousand "
-    "nodes, not 0.00. Compare moves within one call at one budget; do not read "
-    "the absolute number as pawns."
-)
 
 
 def compare(
@@ -187,13 +244,17 @@ def compare(
     to read is the ordering: a lower score for the opponent is a better move
     for us. The opponent's own best reply comes back with it, which is usually
     the more useful half of the answer.
+
+    "The opponent" is decided by the position, not by the board: a candidate is
+    played by whoever is on turn there, and the team that has to answer is the
+    one holding the *other* seat on that board. See :func:`answering_team`.
     """
     start = position_from(dual_fen, moves, team)
     which = board_index(board)
     name = BOARD_NAMES[which]
     budget = Budget.of(movetime_ms, nodes)
     engine = engine or shared()
-    opponent = not start.team
+    answers = answering_team(start, which)
 
     rows: list[dict] = []
     for text in candidates:
@@ -207,7 +268,7 @@ def compare(
             engine,
             after,
             # The seat changes hands: whoever must answer is now "the team".
-            team=opponent if which == 0 else start.team,
+            team=answers,
             time_advantage=time_advantage,
             require_move_on=name if force_reply else "none",
             multipv=1,
@@ -218,6 +279,9 @@ def compare(
                 "move": ply.san,
                 "uci": ply.uci,
                 "their_score": result.top.score if result.top else None,
+                "their_relative": relative_score(
+                    result.top.score_cp if result.top else None, time_advantage
+                ),
                 "their_cp": result.top.score_cp if result.top else None,
                 "their_mate": result.top.mate if result.top else None,
                 "their_best_reply": describe_joint(after, result.best),
@@ -236,18 +300,48 @@ def compare(
         "budget": budget.as_dict(),
         "ranked": ranked + [r for r in rows if "error" in r],
         "best": ranked[0]["move"] if ranked else None,
+        "answered_by": "white" if answers == chess.WHITE else "black",
         "note": (
             "Ranked by the opponent's score after the move, ascending — lower "
-            "is better for us. " + SCORE_NOTE
+            "is better for us. `answered_by` names the team that was searched "
+            "to produce it (a team is named by its colour on board A). "
+            + _score_note(time_advantage)
         ),
     }
 
 
+def answering_team(dual: DualBoard, which: int) -> chess.Color:
+    """Which team has to answer a move played on board ``which``.
+
+    A team is named by its colour on board A, and the two seats of a board
+    belong to opposite teams. So the answer is not "the opponent of whoever
+    called this" — it is derived from the position:
+
+        board A   the mover is a colour on A, so the answering team is the
+                  other colour on A: ``not mover``.
+        board B   a colour on B belongs to the team playing the *other* colour
+                  on A, so the mover's team is ``not mover`` and the answering
+                  team is ``mover`` itself.
+
+    Keying this off the board index instead — assuming A is always ours and B
+    always our partner's — searches the wrong team whenever the caller hands in
+    a position where the other side is on move there, which an odd-length line
+    or any board-B candidate does.
+    """
+    mover = dual.boards[which].turn
+    return (not mover) if which == 0 else mover
+
+
 def _sort_key(row: dict) -> tuple:
-    """Mate for them sorts worst, mate for us best; otherwise by their score."""
+    """Mate for them sorts worst, mate for us best; otherwise by their score.
+
+    Within each mate group the *faster* mate sorts first, which for a mate
+    against them (a negative number) means ordering by distance, not by the
+    signed value: #-1 has to beat #-8.
+    """
     mate = row.get("their_mate")
     if mate is not None:
-        return (1, -mate) if mate > 0 else (-1, mate)
+        return (1, -mate) if mate > 0 else (-1, -mate)
     return (0, row.get("their_cp") if row.get("their_cp") is not None else 0)
 
 
@@ -294,6 +388,9 @@ def playout(
         entry = {
             "team": _team_name(dual, mover),
             "score": result.top.score if result.top else None,
+            "relative": relative_score(
+                result.top.score_cp if result.top else None, time_advantage
+            ),
             **{k: v for k, v in (describe_joint(dual, result.best) or {}).items()},
         }
         for board_i, name in enumerate(BOARD_NAMES):
@@ -310,7 +407,7 @@ def playout(
         "plies": played,
         "final": dual.describe(),
         "budget": budget.as_dict(),
-        "note": SCORE_NOTE,
+        "note": _score_note(time_advantage),
     }
 
 

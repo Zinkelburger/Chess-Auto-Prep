@@ -38,6 +38,7 @@ import gzip
 import hashlib
 import io
 import os
+import pathlib
 import json
 import platform
 import shutil
@@ -213,12 +214,27 @@ def gunzipped_size(path: Path) -> int:
     return total
 
 
+def manifest_key(dest: str) -> str:
+    """The manifest key for an asset: the name it is extracted under.
+
+    Keyed by filename rather than by role ("engine"/"runtime"), because a
+    checkout can hold more than one platform's pair — fetch Linux then Windows
+    and a role-keyed manifest describes only whichever ran last, so the app's
+    size check deletes and re-extracts the other one on every single launch
+    without ever converging.
+    """
+    name = pathlib.PurePosixPath(dest).name
+    return name[:-3] if name.endswith(".gz") else name
+
+
 def write_manifest(sizes: dict[str, int]) -> None:
-    """Record uncompressed sizes, merging with whatever is already there.
+    """Record uncompressed sizes by extracted filename, merging with whatever
+    is already there.
 
     The app compares each extracted file against these to notice a half-written
     or superseded extraction. Merging matters because the network is fetched
-    independently of the platform pair.
+    independently of the platform pair, and because a checkout may hold several
+    platforms at once.
     """
     current: dict[str, int] = {}
     if MANIFEST.exists():
@@ -227,6 +243,13 @@ def write_manifest(sizes: dict[str, int]) -> None:
         except json.JSONDecodeError:
             pass
     current.update(sizes)
+    # Drop anything that is not an asset we ship, so a manifest left behind by
+    # an older, role-keyed version of this script heals itself on the next run
+    # instead of carrying two spellings of the same size forever.
+    known = {manifest_key(NETWORK["dest"])} | {
+        manifest_key(spec[role][1]) for spec in TARGETS.values() for role in ("engine", "runtime")
+    }
+    current = {k: v for k, v in current.items() if k in known}
     MANIFEST.write_text(json.dumps(current, indent=2, sort_keys=True) + "\n")
 
 
@@ -250,7 +273,7 @@ def fetch_network(lock: dict, force: bool) -> None:
     dest = REPO_ROOT / NETWORK["dest"]
     if dest_is_current("network", dest, lock) and not force:
         print(f"[ok]   network: {NETWORK['dest']} present ({human(dest.stat().st_size)})")
-        write_manifest({"model": gunzipped_size(dest)})
+        write_manifest({manifest_key(NETWORK["dest"]): gunzipped_size(dest)})
         return
 
     url = f"{ENGINE_BASE}/{NETWORK['asset']}"
@@ -270,7 +293,7 @@ def fetch_network(lock: dict, force: bool) -> None:
         shutil.copyfile(tmp, dest)
 
     size = gunzipped_size(dest)
-    write_manifest({"model": size})
+    write_manifest({manifest_key(NETWORK["dest"]): size})
     lock["network"] = {
         "url": url,
         "source_sha256": digest,
@@ -302,8 +325,8 @@ def fetch(name: str, lock: dict, force: bool) -> None:
         print(f"[ok]   {name}: {engine_dest} + {runtime_dest} present")
         write_manifest(
             {
-                "engine": lock[f"{name}:engine"]["uncompressed_bytes"],
-                "runtime": lock[f"{name}:runtime"]["uncompressed_bytes"],
+                manifest_key(engine_dest): lock[f"{name}:engine"]["uncompressed_bytes"],
+                manifest_key(runtime_dest): lock[f"{name}:runtime"]["uncompressed_bytes"],
             }
         )
         return
@@ -331,7 +354,12 @@ def fetch(name: str, lock: dict, force: bool) -> None:
 
     write_gz(engine_bytes, engine_path)
     write_gz(runtime_bytes, runtime_path)
-    write_manifest({"engine": len(engine_bytes), "runtime": len(runtime_bytes)})
+    write_manifest(
+        {
+            manifest_key(engine_dest): len(engine_bytes),
+            manifest_key(runtime_dest): len(runtime_bytes),
+        }
+    )
 
     lock[name] = {"url": url, "source_sha256": digest}
     lock[f"{name}:engine"] = {
@@ -412,9 +440,9 @@ def install_from_build(checkout: Path, build: str) -> int:
 
     write_manifest(
         {
-            "engine": len(engine_bytes),
-            "runtime": len(runtime_bytes),
-            "model": len(payload),
+            manifest_key(engine_dest): len(engine_bytes),
+            manifest_key(runtime_dest): len(runtime_bytes),
+            manifest_key(NETWORK["dest"]): len(payload),
         }
     )
     total = sum(f.stat().st_size for f in ASSETS.glob("*.gz"))
@@ -449,7 +477,11 @@ def check(names: list[str], lock: dict) -> int:
         problems.append("manifest")
     else:
         keys = set(json.loads(MANIFEST.read_text()))
-        missing = {"engine", "runtime", "model"} - keys
+        wanted = {manifest_key(NETWORK["dest"])}
+        for n in names:
+            wanted.add(manifest_key(TARGETS[n]["engine"][1]))
+            wanted.add(manifest_key(TARGETS[n]["runtime"][1]))
+        missing = wanted - keys
         if missing:
             print(f"[BAD ] manifest: missing {', '.join(sorted(missing))}")
             problems.append("manifest")

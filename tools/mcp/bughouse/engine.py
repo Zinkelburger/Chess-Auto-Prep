@@ -19,6 +19,7 @@ commands back to back.
 from __future__ import annotations
 
 import os
+import platform
 import queue
 import re
 import subprocess
@@ -135,11 +136,22 @@ class HivemindEngine:
     """One engine process. Not thread-safe: one search at a time, by design —
     the network already saturates the cores it was given."""
 
-    def __init__(self, files: EngineFiles | None = None, *, threads: int | None = None):
+    def __init__(
+        self,
+        files: EngineFiles | None = None,
+        *,
+        hash_mb: int | None = None,
+        batch_size: int | None = None,
+    ):
         self.files = files or locate()
         env = dict(os.environ)
-        if self.files.library_dir:
-            key = "DYLD_LIBRARY_PATH" if os.uname().sysname == "Darwin" else "LD_LIBRARY_PATH"
+        # Windows needs nothing here: the loader searches the executable's own
+        # directory, which is the cwd we start it in. (`os.uname` does not even
+        # exist there, so asking would raise rather than degrade.)
+        key = {"Darwin": "DYLD_LIBRARY_PATH", "Windows": None}.get(
+            platform.system(), "LD_LIBRARY_PATH"
+        )
+        if self.files.library_dir and key:
             env[key] = os.pathsep.join(
                 p for p in (str(self.files.library_dir), env.get(key)) if p
             )
@@ -161,10 +173,11 @@ class HivemindEngine:
         self._stderr: list[str] = []
         self.name = "hivemind"
         self.backend = ""
+        self.backend_detail = ""
         self._reader = threading.Thread(target=self._pump, daemon=True)
         self._reader.start()
         threading.Thread(target=self._pump_stderr, daemon=True).start()
-        self._handshake(threads)
+        self._handshake(hash_mb, batch_size)
 
     # ── Process plumbing ──────────────────────────────────────────────────
 
@@ -222,14 +235,24 @@ class HivemindEngine:
         elif line.startswith("info string backend "):
             rest = line[len("info string backend ") :]
             self.backend = rest.split(" model ")[0].strip()
+            # "... batch 8 workers 4 intra-op threads 5" — what the engine
+            # chose, which is the only answer there is to "how many cores".
+            self.backend_detail = rest
 
     # ── Protocol ──────────────────────────────────────────────────────────
 
-    def _handshake(self, threads: int | None) -> None:
+    def _handshake(self, hash_mb: int | None, batch_size: int | None) -> None:
         self.send("uci")
         self._read_until(lambda l: l.strip() == "uciok", 120, "uci")
-        if threads:
-            self.set_option("Threads", threads)
+        # These two are the only resource knobs Hivemind advertises. There is
+        # deliberately no `Threads`: `uci` never offers one, and a
+        # `setoption name Threads` is swallowed without changing the "workers
+        # N intra-op threads N" the engine reports — so setting it, as this
+        # did, only looked like it was doing something.
+        if hash_mb:
+            self.set_option("Hash", hash_mb)
+        if batch_size:
+            self.set_option("BatchSize", batch_size)
         self.is_ready()
 
     def is_ready(self, timeout: float = 120) -> None:
@@ -249,7 +272,10 @@ class HivemindEngine:
         require_move_on: str = "none",
         multipv: int = 1,
     ) -> None:
-        self.set_option("Team", "white" if team in (True, "white") else "black")
+        # Accepts "white"/"black" in any case, and a bare bool the way the
+        # engine's own option reads. `team in (True, "white")` used to make 1
+        # mean white and "White" mean black.
+        self.set_option("Team", "white" if str(team).lower().startswith(("w", "t")) else "black")
         self.set_option("TimeAdvantage", bool(time_advantage))
         self.set_option("RequireMoveOn", {"a": "A", "b": "B"}.get(str(require_move_on).lower(), "none"))
         self.set_option("MultiPV", max(1, int(multipv)))

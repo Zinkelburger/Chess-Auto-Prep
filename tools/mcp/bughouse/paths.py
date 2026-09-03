@@ -23,7 +23,30 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
 ASSETS = REPO / "assets" / "bughouse"
-APP_SUPPORT = Path.home() / ".local/share/com.example.chess_auto_prep/bughouse"
+
+
+def _app_support() -> Path:
+    """Where the desktop app extracts its copy of the bundle.
+
+    This mirrors `path_provider`'s `getApplicationSupportDirectory()` on each
+    desktop platform, keyed off the same identifiers the Flutter runners are
+    built with — `APPLICATION_ID` on Linux, `PRODUCT_BUNDLE_IDENTIFIER` on
+    macOS, and the `CompanyName`/`ProductName` pair in `Runner.rc` on Windows.
+    We only ever read from here; the server writes under `OWN_SUPPORT`.
+    """
+    system = platform.system()
+    if system == "Windows":
+        base = Path(os.environ.get("APPDATA", Path.home() / "AppData/Roaming"))
+        return base / "com.example" / "Chess Auto Prep" / "bughouse"
+    if system == "Darwin":
+        return (
+            Path.home()
+            / "Library/Application Support/com.example.chessAutoPrep/bughouse"
+        )
+    return Path.home() / ".local/share/com.example.chess_auto_prep/bughouse"
+
+
+APP_SUPPORT = _app_support()
 OWN_SUPPORT = Path.home() / ".local/share/chess-prep/bughouse"
 
 
@@ -108,8 +131,17 @@ def _unpack_assets() -> EngineFiles | None:
         source = ASSETS / f"{name}.gz"
         if target.exists() and target.stat().st_mtime >= source.stat().st_mtime:
             continue
-        with gzip.open(source, "rb") as fin, open(target, "wb") as fout:
-            shutil.copyfileobj(fin, fout)
+        # Unpack beside the target and rename into place. Writing the 54 MB
+        # network straight to its final path means one interrupted run leaves a
+        # truncated file that the mtime check then skips forever, and the only
+        # symptom is an engine that will not load.
+        tmp = target.with_name(target.name + f".part{os.getpid()}")
+        try:
+            with gzip.open(source, "rb") as fin, open(tmp, "wb") as fout:
+                shutil.copyfileobj(fin, fout)
+            os.replace(tmp, target)
+        finally:
+            tmp.unlink(missing_ok=True)
     wanted[binary_name()].chmod(0o755)
     return _from_directory(OWN_SUPPORT, "unpacked from assets/bughouse")
 

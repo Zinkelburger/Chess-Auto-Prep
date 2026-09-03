@@ -30,7 +30,13 @@ from bughouse.board import (  # noqa: E402
     board_index,
     parse_move_list,
 )
-from bughouse.engine import JointMove, HivemindEngine  # noqa: E402
+from bughouse.analysis import (  # noqa: E402
+    answering_team,
+    baseline_for,
+    by_strength,
+    relative_score,
+)
+from bughouse.engine import JointMove, HivemindEngine, Line  # noqa: E402
 from bughouse.server import Server  # noqa: E402
 from bughouse.tools import Registry, ToolError  # noqa: E402
 
@@ -378,6 +384,135 @@ class WithEngine(unittest.TestCase):
         self.assertNotEqual(
             out["final"]["dual_fen"], DualBoard().dual_fen, "nothing was played"
         )
+
+    def test_compare_ranks_the_partners_moves_on_board_b(self):
+        """The same question asked on board B, where the mover is our partner.
+
+        `compare` used to pick the answering team from the board index, so this
+        searched *our* team and ranked the two candidates in exactly the wrong
+        order — it recommended hanging the queen.
+        """
+        start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1"
+        # Board B, black (our partner) to move: Qxe5 wins a queen, Qxd2 hangs one.
+        b = "rnb1kbnr/ppp1pppp/8/3qQ3/8/8/PPPP1PPP/RNB1KBNR[] b KQkq - 0 1"
+        out = self.registry.call(
+            "compare",
+            {
+                "dual_fen": f"{start}|{b}",
+                "board": "B",
+                "candidates": ["Qxe5", "Qxd2"],
+                "nodes": 1200,
+            },
+        )
+        self.assertEqual(out["answered_by"], "black", "the opponents must answer")
+        self.assertEqual(out["best"], "Qxe5+")
+
+    def test_compare_answers_an_odd_length_line_from_the_right_seat(self):
+        """A line ending on Black's move makes the candidates Black's, so the
+        team that has to answer is ours — not the opponent the board index
+        would have named."""
+        out = self.registry.call(
+            "compare", {"moves": ["e4"], "candidates": ["e5", "c5"], "nodes": 300}
+        )
+        self.assertEqual(out["answered_by"], "white")
+        self.assertNotIn("error", out["ranked"][0])
+
+    def test_the_baseline_moves_with_time_advantage(self):
+        """The engine's zero point is not a constant, so `relative` has to be
+        read against the option the search actually ran under."""
+        level = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1"
+        seen = {}
+        for advantage in (False, True):
+            out = self.registry.call(
+                "analyse",
+                {
+                    "dual_fen": f"{level}|{level}",
+                    "time_advantage": advantage,
+                    "nodes": 600,
+                },
+            )
+            seen[advantage] = out
+            self.assertEqual(out["baseline"], baseline_for(advantage))
+            self.assertLess(
+                abs(out["relative"]),
+                1.5,
+                f"a level position should read near 0.00, got {out['relative']}",
+            )
+        # And the raw numbers really do straddle zero, which is the whole point.
+        self.assertLess(seen[False]["lines"][0]["cp"], 0)
+        self.assertGreater(seen[True]["lines"][0]["cp"], 0)
+
+
+class Scores(unittest.TestCase):
+    """The score arithmetic, without an engine."""
+
+    def test_the_baseline_flips_sign_with_time_advantage(self):
+        self.assertLess(baseline_for(False), 0)
+        self.assertGreater(baseline_for(True), 0)
+
+    def test_a_level_position_reads_as_level_under_either_option(self):
+        # The raw numbers we measured from the engine at the start position.
+        self.assertAlmostEqual(relative_score(-233, False), -0.03, places=2)
+        self.assertAlmostEqual(relative_score(239, True), 0.09, places=2)
+
+    def test_the_note_names_the_baseline_that_applies(self):
+        from bughouse.analysis import _score_note
+
+        self.assertIn("-2.30", _score_note(False))
+        self.assertIn("+2.30", _score_note(True))
+
+
+class AnsweringTeam(unittest.TestCase):
+    """Who has to reply to a move played on a given board."""
+
+    def test_our_move_on_board_a_is_answered_by_them(self):
+        dual = DualBoard()  # white to move on A, and we are white
+        self.assertEqual(answering_team(dual, 0), chess.BLACK)
+
+    def test_their_move_on_board_a_is_answered_by_us(self):
+        dual = DualBoard()
+        dual.push("A", "e4")  # now Black is on move on A
+        self.assertEqual(answering_team(dual, 0), chess.WHITE)
+
+    def test_a_move_on_board_b_names_the_team_by_its_colour_on_a(self):
+        dual = DualBoard()
+        # White is on move on board B; White on B belongs to the team that is
+        # Black on board A, so the team answering is White-on-A: us.
+        self.assertEqual(answering_team(dual, 1), chess.WHITE)
+        dual.push("B", "d4")
+        self.assertEqual(answering_team(dual, 1), chess.BLACK)
+
+
+class Shortlist(unittest.TestCase):
+    """MultiPV comes back in visit order, which is not score order."""
+
+    @staticmethod
+    def _line(rank: int, cp: int | None = None, mate: int | None = None) -> Line:
+        return Line(depth=5, multipv=rank, score_cp=cp, mate=mate)
+
+    def test_rank_one_stays_pinned_and_the_rest_sort_by_score(self):
+        # The block we actually measured: rank 3 outscores rank 2.
+        ordered = by_strength(
+            [
+                self._line(1, 8),
+                self._line(2, -61),
+                self._line(3, -38),
+                self._line(4, -46),
+            ]
+        )
+        self.assertEqual([l.multipv for l in ordered], [1, 3, 4, 2])
+
+    def test_a_mate_for_us_outranks_any_score(self):
+        ordered = by_strength(
+            [self._line(1, 8), self._line(2, -10), self._line(3, mate=3)]
+        )
+        self.assertEqual([l.multipv for l in ordered], [1, 3, 2])
+
+    def test_a_mate_against_us_sorts_last(self):
+        ordered = by_strength(
+            [self._line(1, 8), self._line(2, mate=-2), self._line(3, -400)]
+        )
+        self.assertEqual([l.multipv for l in ordered], [1, 3, 2])
 
 
 if __name__ == "__main__":
