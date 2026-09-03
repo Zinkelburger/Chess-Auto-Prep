@@ -302,3 +302,5 @@ jobs:
             **Linux:** `linux-amd64.deb` for Debian/Ubuntu/Mint (double-click, or `sudo apt install ./chess-auto-prep-*.deb`); `linux.flatpak` for everything else (double-click, or `flatpak install chess-auto-prep-*.flatpak`). Both register the app for `.pgn` files. The `linux.zip` is portable — unzip and run; the app offers to add itself to your menu.
 
             **Which macOS zip?** Apple Silicon (M1/M2/M3/M4) → `macos-arm64`. Intel → `macos-x86_64`. Each build includes the matching Stockfish; they are not a universal binary.
+
+            **Bughouse Lab** (Lab → Bughouse lab, or Ctrl+8) bundles the Hivemind neural-network engine and runs it on the CPU — no GPU, no separate download, nothing to install.
