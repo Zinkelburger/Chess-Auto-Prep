@@ -30,7 +30,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            cmake ninja-build clang libgtk-3-dev pkg-config git g++ make \
+            cmake ninja-build clang libgtk-3-dev pkg-config git g++ make rpm \
             libsnappy-dev liblz4-dev libzstd-dev libbz2-dev \
             libboost-fiber-dev libboost-context-dev libtbb-dev libjemalloc-dev zlib1g-dev
 
@@ -104,6 +104,9 @@ jobs:
           mv "chess-auto-prep-$VERSION-linux-amd64.deb" \
              "chess-auto-prep-${{ github.ref_name }}-linux-amd64.deb"
 
+      - name: Build .rpm
+        run: packaging/rpm/build_rpm.sh "${{ github.ref_name }}" build/linux/x64/release/bundle .
+
       - name: Install flatpak-builder
         run: sudo apt-get install -y flatpak flatpak-builder
 
@@ -126,6 +129,7 @@ jobs:
             chess-auto-prep-${{ github.ref_name }}-linux.zip
             chess-auto-prep-${{ github.ref_name }}-linux.flatpak
             chess-auto-prep-${{ github.ref_name }}-linux-amd64.deb
+            chess-auto-prep-${{ github.ref_name }}-linux-x86_64.rpm
 
   build-windows:
     runs-on: windows-latest
@@ -325,9 +329,8 @@ jobs:
             |---|---|
             | Windows | `windows-setup.exe` — or `windows.zip`, portable |
             | Debian / Ubuntu / Mint | `linux-amd64.deb` |
+            | Fedora / RHEL / openSUSE | `linux-x86_64.rpm` |
             | Other Linux | `linux.flatpak` — or `linux.zip`, portable |
             | macOS | `macos-arm64` (M1–M4) · `macos-x86_64` (Intel) |
-
-            None of these are code-signed, so your OS warns once: Windows **More info → Run anyway**, macOS right-click → **Open**.
 
             [Full install notes](https://github.com/Zinkelburger/Chess-Auto-Prep#installing-a-release)

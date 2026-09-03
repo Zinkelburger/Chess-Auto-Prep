@@ -29,6 +29,7 @@ Grab the file for your system from the
 | Windows | `…-windows-setup.exe` | Installs for your user (no admin prompt), Start Menu entry, opens `.pgn` files. Unsigned, so SmartScreen warns once: **More info → Run anyway**. |
 | Windows (portable) | `…-windows.zip` | Unzip anywhere and run. The app offers to register itself for `.pgn` files on first run. |
 | Debian / Ubuntu / Mint | `…-linux-amd64.deb` | Double-click, or `sudo apt install ./chess-auto-prep-*.deb`. |
+| Fedora / RHEL / openSUSE | `…-linux-x86_64.rpm` | Double-click, or `sudo dnf install ./chess-auto-prep-*.rpm`. |
 | Other Linux | `…-linux.flatpak` | Double-click, or `flatpak install chess-auto-prep-*.flatpak`. |
 | Linux (portable) | `…-linux.zip` | Unzip and run. The app offers to add itself to your menu and take over `.pgn` files. |
 | macOS | `…-macos-arm64.zip` / `…-macos-x86_64.zip` | Apple Silicon / Intel. Unsigned: right-click → Open the first time. |
@@ -39,7 +40,9 @@ there is one. Windows and most Linux desktops still ask you to confirm the
 first time if another app already owns `.pgn`.
 
 Packaging lives in `packaging/` (`windows/installer.iss`, `deb/build_deb.sh`,
-`flatpak/`) and is driven by `.github/workflows/release.yml` on `v*` tags.
+`rpm/build_rpm.sh`, `flatpak/`) and is driven by `.github/workflows/release.yml`
+on `v*` tags. All Linux artifacts are x86_64: there is no arm64 build because
+Stockfish ships no Linux arm64 binary and `libcdbdirect` has no arm64 target.
 
 ## Getting Started
 
