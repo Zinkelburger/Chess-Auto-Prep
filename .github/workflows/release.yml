@@ -319,10 +319,15 @@ jobs:
           files: artifacts/*
           generate_release_notes: true
           body: |
-            **Windows:** `windows-setup.exe` — installs for your user (no admin), adds a Start Menu entry, and opens `.pgn` files. SmartScreen will warn because the installer is not code-signed: click **More info → Run anyway**. The `windows.zip` is the same app, portable — unzip and run.
+            ## Download
 
-            **Linux:** `linux-amd64.deb` for Debian/Ubuntu/Mint (double-click, or `sudo apt install ./chess-auto-prep-*.deb`); `linux.flatpak` for everything else (double-click, or `flatpak install chess-auto-prep-*.flatpak`). Both register the app for `.pgn` files. The `linux.zip` is portable — unzip and run; the app offers to add itself to your menu.
+            | System | File |
+            |---|---|
+            | Windows | `windows-setup.exe` — or `windows.zip`, portable |
+            | Debian / Ubuntu / Mint | `linux-amd64.deb` |
+            | Other Linux | `linux.flatpak` — or `linux.zip`, portable |
+            | macOS | `macos-arm64` (M1–M4) · `macos-x86_64` (Intel) |
 
-            **Which macOS zip?** Apple Silicon (M1/M2/M3/M4) → `macos-arm64`. Intel → `macos-x86_64`. Each build includes the matching Stockfish; they are not a universal binary.
+            None of these are code-signed, so your OS warns once: Windows **More info → Run anyway**, macOS right-click → **Open**.
 
-            **Bughouse Lab** (Lab → Bughouse lab, or Ctrl+8) bundles the Hivemind neural-network engine and runs it on the CPU — no GPU, no separate download, nothing to install.
+            [Full install notes](https://github.com/Zinkelburger/Chess-Auto-Prep#installing-a-release)
