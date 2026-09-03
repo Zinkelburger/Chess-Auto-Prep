@@ -261,7 +261,17 @@ class BughouseEngine implements BughouseAnalysisEngine {
       throw BughouseEngineFailure('Network not found: $modelPath');
     }
 
-    final engineDir = File(executablePath).parent.path;
+    // Resolved against the directory this process is in *now*, because the
+    // child is started somewhere else. On POSIX the working directory is
+    // changed before the executable is looked up, so a relative path — which
+    // is what a local engine build or a test fixture is given as — would be
+    // resolved a second time inside the engine's own directory and not found.
+    // Windows hides the mistake: it resolves the executable against the parent
+    // process's directory and ignores workingDirectory entirely, so the same
+    // call works there and fails everywhere else.
+    final executable = File(executablePath).absolute.path;
+    final model = File(modelPath).absolute.path;
+    final engineDir = File(executable).parent.path;
     final environment = <String, String>{};
     if (Platform.isWindows) {
       // Windows has no loader-path variable to set: it resolves a process's
@@ -309,12 +319,12 @@ class BughouseEngine implements BughouseAnalysisEngine {
     // Whether an argument survives the round trip through a Windows command
     // line is then a question the tests cannot ask. A bare filename cannot be
     // split by any quoting rule, so the question stops being one.
-    final argv = <String>['--model', modelArgument(modelPath, engineDir)];
+    final argv = <String>['--model', modelArgument(model, engineDir)];
 
     final Process process;
     try {
       process = await Process.start(
-        executablePath,
+        executable,
         argv,
         // The engine's own directory, so the last unpinned entry in the
         // loader's search order is one we control too. It is also simply the
@@ -327,7 +337,7 @@ class BughouseEngine implements BughouseAnalysisEngine {
       throw BughouseEngineFailure('Could not start the engine: ${e.message}');
     }
 
-    final engine = BughouseEngine._(process, executablePath, modelPath)
+    final engine = BughouseEngine._(process, executable, model)
       .._argv = argv
       .._workingDirectory = engineDir
       .._childEnvironment = {...Platform.environment, ...environment};
