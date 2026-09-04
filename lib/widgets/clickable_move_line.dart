@@ -63,7 +63,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
   /// Maximum number of moves to display (default 8).
   final int maxMoves;
 
-  /// Font size for move text (default 11).
+  /// Font size for move text (default 13 — readable at desktop 1×).
   final double fontSize;
 
   /// Padding around each clickable move (larger = easier to tap).
@@ -88,7 +88,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
     this.label,
     this.startIndex = 0,
     this.maxMoves = 8,
-    this.fontSize = 11,
+    this.fontSize = 13,
     this.movePadding = const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
     this.singleLine = true,
     this.maxLines = 1,
@@ -200,46 +200,47 @@ class ClickableMoveLineWidget extends StatelessWidget {
                         }
                       : null,
                   onExit: onHoverExit != null ? (_) => onHoverExit!() : null,
-                  child: GestureDetector(
-                    onTap: onMoveTapped != null
-                        ? () => onMoveTapped!(idx)
-                        : null,
-                    child: Container(
-                      padding: movePadding,
-                      decoration: isActive
-                          ? BoxDecoration(
-                              color: AppColors.pgnMoveCurrentBg,
-                              borderRadius: BorderRadius.circular(2),
-                              border: Border.all(
-                                color: AppColors.pgnMoveCurrent,
-                                width: 1,
+                  child: Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(4),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: onMoveTapped != null
+                          ? () => onMoveTapped!(idx)
+                          : null,
+                      hoverColor: AppColors.pgnMoveHoverBg,
+                      child: Container(
+                        padding: movePadding,
+                        decoration: isActive
+                            ? BoxDecoration(
+                                color: AppColors.pgnMoveCurrentBg,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: AppColors.pgnMoveCurrent,
+                                  width: 1,
+                                ),
+                              )
+                            // Reserve the border width so activating a move
+                            // doesn't reflow the line.
+                            : BoxDecoration(
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: Colors.transparent,
+                                  width: 1,
+                                ),
                               ),
-                            )
-                          // Reserve the border width so activating a move
-                          // doesn't reflow the line.
-                          : BoxDecoration(
-                              borderRadius: BorderRadius.circular(2),
-                              border: Border.all(
-                                color: Colors.transparent,
-                                width: 1,
-                              ),
-                            ),
-                      child: Text(
-                        sanMoves[i],
-                        style: TextStyle(
-                          fontSize: fontSize,
-                          color: isActive
-                              ? AppColors.pgnMoveCurrentFg
-                              : AppColors.pgnMove,
-                          fontFamily: AppTextStyles.monoFamily,
-                          fontWeight: isActive
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                          decoration: (isActive || onMoveTapped == null)
-                              ? null
-                              : TextDecoration.underline,
-                          decorationColor: Colors.white38,
-                          decorationStyle: TextDecorationStyle.dotted,
+                        child: Text(
+                          sanMoves[i],
+                          style: TextStyle(
+                            fontSize: fontSize,
+                            color: isActive
+                                ? AppColors.pgnMoveCurrentFg
+                                : AppColors.pgnMove,
+                            fontFamily: AppTextStyles.monoFamily,
+                            fontWeight: isActive
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
                         ),
                       ),
                     ),

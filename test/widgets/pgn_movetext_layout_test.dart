@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/widgets/pgn/movetext_primitives.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_movetext_view.dart';
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
 
@@ -112,7 +113,7 @@ void main() {
     expect(commentRt.text.toPlainText(), isNot(contains('d4')));
   });
 
-  testWidgets('movetext is proportional throughout — no monospace spans', (
+  testWidgets('notation is mono while comment prose remains the UI face', (
     tester,
   ) async {
     await pumpMovetext(
@@ -134,20 +135,96 @@ void main() {
     expect(rowFinder, findsOneWidget);
     final row = tester.widget<RichText>(rowFinder);
 
-    // Text.rich inherits the theme face (Roboto here). That's still
-    // proportional — the thing we refuse is an explicit monospace family.
-    expect(row.text.style?.fontFamily, isNot('monospace'));
-
-    // The pane is a flowing wrap, not an aligned column, so nothing in it
-    // opts into monospace — that texture read as a code listing.
+    var sawProse = false;
     row.text.visitChildren((span) {
-      expect(
-        span.style?.fontFamily,
-        isNot('monospace'),
-        reason: 'movetext span leaked a monospace family',
-      );
+      if (span.toPlainText().contains('a fighting choice')) {
+        sawProse = true;
+        expect(span.style?.fontFamily, 'Inter');
+      }
       return true;
     });
+    expect(sawProse, isTrue);
+    final c5 = tester
+        .widgetList<MoveChip>(find.byType(MoveChip))
+        .singleWhere((chip) => chip.san == 'c5');
+    expect(c5.sanStyle.fontFamily, 'SourceCodePro');
+  });
+
+  testWidgets('brief simple variation stays inline and parenthesized', (
+    tester,
+  ) async {
+    final c5 = MoveNode(san: 'c5', fen: 'f1');
+    c5.children.add(MoveNode(san: 'Nf3', fen: 'f2'));
+    await pumpMovetext(
+      tester,
+      moveHistory: [
+        PgnNodeData(san: 'e4'),
+        PgnNodeData(san: 'e5'),
+      ],
+      variationsByPly: {
+        1: [c5],
+      },
+    );
+    await tester.pump();
+
+    final texts = richPlainTexts(tester);
+    expect(
+      texts.any(
+        (text) =>
+            text.contains('(1...') && text.contains('2.') && text.contains(')'),
+      ),
+      isTrue,
+      reason: 'short variation should read as an inline aside: $texts',
+    );
+  });
+
+  testWidgets('commented variation gets a separate unbracketed row', (
+    tester,
+  ) async {
+    await pumpMovetext(
+      tester,
+      moveHistory: [
+        PgnNodeData(san: 'e4'),
+        PgnNodeData(san: 'e5'),
+      ],
+      variationsByPly: {
+        1: [MoveNode(san: 'c5', fen: 'f1', comment: 'The Sicilian')],
+      },
+    );
+    await tester.pump();
+
+    final row = richPlainTexts(
+      tester,
+    ).firstWhere((text) => text.contains('The Sicilian'));
+    expect(row, isNot(contains('(')));
+    expect(row, isNot(contains(')')));
+    expect(
+      tester
+          .widgetList<MoveChip>(find.byType(MoveChip))
+          .any((chip) => chip.san == 'c5'),
+      isTrue,
+    );
+  });
+
+  testWidgets('long plain comments receive a dedicated reading surface', (
+    tester,
+  ) async {
+    final longComment = List.filled(
+      35,
+      'This explanation needs room to breathe in a course chapter.',
+    ).join(' ');
+    await pumpPgn(tester, '1. d4 {$longComment} d5 *');
+    await tester.pumpAndSettle();
+
+    final text = find.textContaining(
+      'This explanation needs room',
+      findRichText: true,
+    );
+    expect(text, findsOneWidget);
+    expect(
+      find.ancestor(of: text, matching: find.byType(Container)),
+      findsWidgets,
+    );
   });
 
   testWidgets('sub-variations get their own row, indented past their parent', (

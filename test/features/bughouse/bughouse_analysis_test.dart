@@ -141,7 +141,7 @@ void main() {
         // Play a move while the search is in flight.
         controller.playMove(
           BughouseBoard.a,
-          NormalMove(from: Square.e2, to: Square.e4),
+          const NormalMove(from: Square.e2, to: Square.e4),
         );
         await Future<void>.delayed(const Duration(milliseconds: 40));
 
@@ -270,7 +270,7 @@ void main() {
 
         controller.playMove(
           BughouseBoard.a,
-          NormalMove(from: Square.e2, to: Square.e4),
+          const NormalMove(from: Square.e2, to: Square.e4),
         );
         expect(controller.calibration.offsetQ, measured);
         expect(
@@ -383,7 +383,7 @@ void main() {
       await engine.searchStarted!.future;
       controller.playMove(
         BughouseBoard.a,
-        NormalMove(from: Square.e2, to: Square.e4),
+        const NormalMove(from: Square.e2, to: Square.e4),
       );
       await running;
 

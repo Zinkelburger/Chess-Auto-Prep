@@ -203,7 +203,7 @@ mixin _GenerationConfigCard
           ),
           _numField(
             _multipvCtrl,
-            'Your candidate moves per position',
+            'Candidate moves per position',
             defaultText: '4',
             onEdited: () => setState(() {}),
             enabled:
@@ -219,7 +219,7 @@ mixin _GenerationConfigCard
           ),
           _numField(
             _timeBudgetCtrl,
-            'Stop after (minutes, 0 = no limit)',
+            'Stop after (minutes)',
             defaultText: '0',
             onEdited: () => setState(() {}),
             tooltip:
@@ -511,6 +511,8 @@ mixin _GenerationConfigCard
       BuildMode.chessDbBook => 'ChessDB mainlines',
     };
     final parts = [
+      // Whose repertoire this is decides every move in it, so it leads.
+      widget.playAsWhite ? 'As White' : 'As Black',
       _searchAlgorithm == SearchAlgorithm.fast ? 'Fast search' : 'Pure search',
       'vs ~$elo',
       source,
@@ -520,8 +522,6 @@ mixin _GenerationConfigCard
         _effectiveSelectionMode,
       ).replaceAll(' (recommended)', '').toLowerCase(),
       if (_preferNovelties) 'novelties',
-      if ((int.tryParse(_mistakeWeightCtrl.text.trim()) ?? 0) > 0)
-        'mistake weight ${_mistakeWeightCtrl.text.trim()}',
       if (_trapsOnly) 'traps only',
       if (_verifyFinal && !_noVerifyMode) 'verified',
       if (budget > 0) 'stops after ${budget}m',

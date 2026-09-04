@@ -40,16 +40,17 @@ frontmatter.
 
 ## Keeping CI green (non-negotiable)
 
-CI (`.github/workflows/ci.yml`) runs format check → analyze → unit tests, plus a
-headless integration test job — but **only on `v*` tags or manual dispatch**, to
-conserve free Actions minutes. That means local checks are the *only* gate on
-regular pushes, which makes them mandatory, not advisory. Before **every**
-commit run the gates through the one script that serialises them:
+CI (`.github/workflows/ci.yml`) runs format check → analyze → coverage-enforced
+Flutter tests → offline Python tool tests, plus a headless integration test.
+It runs for pull requests and pushes to `main`, and the release workflow calls
+it before any platform build. Local checks remain mandatory before **every**
+commit; run them through the one script that serialises Flutter work:
 
 ```
-scripts/ci.sh              # format + analyze + test + lint greps
-scripts/ci.sh analyze      # or any subset: format analyze test lint integration
+scripts/ci.sh              # format + analyze + coverage tests + tools + lint
+scripts/ci.sh analyze      # any subset: format analyze test tools lint integration
 scripts/ci.sh status       # who holds the lock, what is cached for this tree
+scripts/ci.sh unlock       # clear a lock left behind by a job that is gone
 ```
 
 What it does, and why it exists:
@@ -58,6 +59,55 @@ What it does, and why it exists:
   launch `flutter test` / `flutter analyze` at once and crash the machine.
   `ci.sh` takes a `flock` (`/tmp/chess-auto-prep-flutter.lock`, shared with
   the app driver below), so parallel callers queue instead of piling up.
+- **The lock dies with the job that took it.** A flock lives on the open file
+  description, which every forked child shares — so on 2026-09-04 a killed
+  `flutter test` left ten `flutter_tester` isolates behind, each still holding
+  the inherited fd, and the lock stayed taken for 45 minutes by a process that
+  no longer existed. Every agent on the machine queued behind it. Three things
+  keep that shut, and if you touch the locking code, keep all three:
+  `capped()` runs every heavy command with `9>&-` so nothing but `ci.sh`
+  itself ever holds the fd; `sweep_stale_scopes` stops any `chess-prep-ci-*`
+  cgroup whose owning pid is gone, on the way in, so even a SIGKILLed run
+  (which fires no trap) is tidied by whoever comes next; and `doctor.sh`
+  reports a lock whose recorded holder is dead as a **blocking** problem
+  rather than an ordinary busy lock, pointing at `scripts/ci.sh unlock`.
+  `driver.py` shares the lock and was never affected — Python has opened
+  descriptors non-inheritable by default since PEP 446. Do not "fix" it with
+  `os.set_inheritable()`.
+- **One runaway cannot take the machine with it.** The lock stops *many* heavy
+  jobs at once; it does nothing about *one* job going runaway, which is what
+  has actually OOM-killed this machine. Two layers now:
+  `ci.sh` runs every heavy command — including `ci.sh with -- …` — inside its
+  own transient cgroup capped at `CHESS_PREP_MEM_MAX` (default 8G, `0` to opt
+  out, swap denied); and `scripts/oom_containment.sh` caps the *desktop app
+  scopes* your session actually lives in (10G each, 24G for all of them), so a
+  script you write and background yourself is bounded too. Those numbers are
+  measured, not guessed — a VS Code window running six agent sessions holds
+  3.7G of real memory, and the caps are ~2-3x that; `oom_containment.sh`
+  documents the measurements. If a step dies with rc=137 and no test failure it
+  hit a ceiling: find the leak, don't just raise the cap.
+
+  The second layer exists because of what happened on 2026-09-04, and the
+  lesson is not the one it looks like. A mutation harness set
+  `_COLOR_SEARCH_WINDOW = 4` to `10**9`; the *test file imports that constant*
+  and sizes a list with it (`range(_COLOR_SEARCH_WINDOW)`), so the child asked
+  for a billion objects. Two rules fall out:
+
+  - **A mutation harness must assume any mutant can explode.** Not just loop
+    forever or print forever — *allocate* forever, in the test process, when a
+    test is coupled to a constant in the module under mutation. That coupling
+    is good test design; it is also what makes it dangerous to mutate.
+  - **`OOMPolicy=stop` is the real blast radius.** The kernel killed exactly
+    one process; systemd then tore down the whole scope around it and seven
+    unrelated agent sessions died. `scripts/doctor.sh` checks this is fixed.
+
+  The caps hold because cgroup membership is inherited on fork — `setsid`,
+  `nohup`, `disown` and a background `&` all stay inside them, and there is no
+  step to remember. They are **not** tamper-proof: everything under
+  `user@.service` is user-owned, so an agent can raise its own limit if it
+  decides to. Don't. If a cap is genuinely too low, say so and raise it
+  deliberately via `CHESS_PREP_*_MAX`, so the new number is measured and
+  written down rather than silently lifted.
 - **Identical requests share one run.** A passing `analyze`/`test` result is
   cached under a hash of HEAD + your diff + untracked source files; a second
   caller on the same tree replays the log instead of re-running. Any edit
@@ -107,9 +157,9 @@ Two layouts coexist. Both are intentional; the rule for choosing is:
 
 - **`lib/features/<name>/`** — everything owned by one feature, in
   `controllers/ models/ services/ widgets/`. Use this for new features and
-  when growing an existing one (`audit`, `browse`, `coverage`, `engine_tournament`,
-  `eval_tree`, `games`, `holes`, `master_games`, `planner`, `repertoire`,
-  `tactics`, `traps`, `tricks`).
+  when growing an existing one (`audit`, `browse`, `coverage`, `databases`,
+  `engine_tournament`, `eval_tree`, `games`, `holes`, `master_games`,
+  `planner`, `repertoire`, `tactics`, `traps`, `tricks`).
 - **`lib/core/ models/ services/ widgets/`** — genuinely cross-cutting code
   used by three or more features or screens. `TrapLineInfo` lives in
   `lib/models/` for exactly this reason: 27 files across four layers use it,
@@ -155,7 +205,7 @@ one you are in before editing:
 | `tools/mcp/mcp_stdio.py` | The JSON-RPC-over-stdio transport both servers use. Zero dependencies, because an MCP client starts a server from a bare `command`/`args`. | imported by each server's `server.py` |
 | `tools/fetch_bughouse.py` | Downloads the Hivemind CPU build (engine + ONNX Runtime + FP32 network) into `assets/bughouse/` (gitignored), exactly the way `fetch_assets.py` fetches Stockfish — same `--only`/`--check`/`--force`, pinned in `tools/bughouse.lock.json`. `--hivemind <checkout>` packs a local engine build instead. The app **hides** Bughouse Lab when these are absent, so a checkout without them is fine. | `python3 tools/fetch_bughouse.py` |
 | `tools/test_bughouse_engine.py` | Whether the fetched bughouse engine can actually **run** where we ship it. `deps` reads each binary's own import table and insists every dependency is either part of the OS or shipped beside the engine — the check that catches a Windows bundle needing a DLL nobody ships, which is invisible on a machine that happens to have it. `run` extracts the way `BughouseBundle` does, loads the network and searches. `.github/workflows/bughouse.yml` runs both on Linux and Windows; `release.yml` gates every release on them. | `python3 tools/test_bughouse_engine.py [deps [--all] \| run]` |
-| `tools/diagnose_bughouse_windows.ps1` | Why the bughouse engine will not start on **someone else's** Windows machine. Self-contained (no checkout, no Python): it reads the extracted engine's sizes and PE headers, walks the loader's own search order for every library the engine imports, names any that resolve to a 32-bit or truncated file, and then starts the engine for real. This is what to send a user who reports "could not start". | `powershell -ExecutionPolicy Bypass -File diagnose_bughouse_windows.ps1` on the failing machine |
+| `tools/diagnose_bughouse_windows.ps1` | Why the bughouse engine will not start on **someone else's** Windows machine. Self-contained (no checkout, no Python): it reads the extracted engine's sizes and PE headers, checks every shipped file's SHA-256 against the bytes the release actually published (the one failure the sizes cannot see, and the one the app cannot repair on its own), walks the loader's own search order for every library the engine imports, names any that resolve to a 32-bit or truncated file, reports any per-image Exploit Protection mitigation, and then starts the engine for real. This is what to send a user who reports "could not start". | `powershell -ExecutionPolicy Bypass -File diagnose_bughouse_windows.ps1` on the failing machine |
 | `tools/bughouse_db/` | The FICS **bughouse archive** as an opening book: `fetch` the yearly BPGN dumps from bughouse-db.org (2.1 GB, kept compressed), `index` them into a `bughouse_book.db` sqlite book, `explore` a two-board position in it, `status` for what is on disk. Both live under `~/.local/share/chess-prep/bughouse-db/`, never in the repo or in `assets/`. Offline tooling — nothing in `lib/` opens that book yet. | `python3 -m bughouse_db <command>` from `tools/`; `python3 tools/test_bughouse_db.py` |
 | `tools/fetch_assets.py` | Downloads the host Stockfish into `assets/executables/` (gitignored). Required before any build. | `python3 tools/fetch_assets.py` (`--check` to verify) |
 | `tools/run_engine_tournament.dart` | Headless engine-vs-engine matches; same directory layout as the app and the MCP tools (`docs/ENGINE_TOURNAMENT.md`) | `dart run tools/run_engine_tournament.dart …` |
@@ -248,7 +298,7 @@ should print nothing (board coordinates excepted).
 - `scripts/doctor.sh` first — it is read-only, takes no lock, and catches the
   things that otherwise waste a whole build (missing fetched assets, a held
   lock, a Flutter/CI version mismatch, a tree someone else has half-refactored).
-- `scripts/ci.sh` (analyze + tests) plus code reading is the baseline. For
+- `scripts/ci.sh` (analyze + coverage + Flutter/tool tests) plus code reading is the baseline. For
   anything with a visible surface, **also run the app and look at it**: the
   `/run-chess-auto-prep` skill (`.claude/skills/run-chess-auto-prep/`) builds
   and launches the real desktop app, then drives it from the shell —

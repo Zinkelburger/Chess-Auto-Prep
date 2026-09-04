@@ -17,7 +17,12 @@ abstract class StorageService {
 
   /// Write [content] to the file at [path], creating parent directories as
   /// needed.  Uses an atomic temp-file rename when possible.
-  Future<void> writeFile(String path, String content);
+  Future<void> writeFile(
+    String path,
+    String content, {
+    bool createOnly = false,
+    String? expectedContent,
+  });
 
   /// Whether a file exists at the given [path].
   Future<bool> fileExists(String path);

@@ -18,6 +18,7 @@ import '../services/storage/storage_factory.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
+import '../utils/safe_file_name.dart';
 import '../utils/time_format.dart';
 import 'common/list_search_field.dart';
 import 'layout/empty_state_placeholder.dart';
@@ -494,8 +495,9 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
             FilledButton(
               onPressed: () {
                 final name = nameController.text.trim();
-                if (name.isEmpty) {
-                  setState(() => nameError = 'Please enter a name');
+                final unsafeName = validateSafeFileName(name);
+                if (unsafeName != null) {
+                  setState(() => nameError = unsafeName);
                   return;
                 }
                 final exists = _repertoires.any(
@@ -583,7 +585,8 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
       builder: (context) => AlertDialog(
         title: const Text('Delete Repertoire'),
         content: Text(
-          'Delete repertoire "${repertoire.name}"? This action cannot be undone.',
+          'Delete repertoire "${repertoire.name}"? Its files will be moved '
+          'to Chess Auto Prep recovery trash.',
         ),
         actions: [
           TextButton(
@@ -627,13 +630,14 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
       confirmLabel: 'Rename',
       initialValue: repertoire.name,
       validate: (name) =>
-          _repertoires.any(
-            (r) =>
-                r.name.toLowerCase() == name.toLowerCase() &&
-                r.filePath != repertoire.filePath,
-          )
-          ? 'A repertoire named "$name" already exists'
-          : null,
+          validateSafeFileName(name) ??
+          (_repertoires.any(
+                (r) =>
+                    r.name.toLowerCase() == name.toLowerCase() &&
+                    r.filePath != repertoire.filePath,
+              )
+              ? 'A repertoire named "$name" already exists'
+              : null),
     );
 
     if (result != null && result.isNotEmpty) {

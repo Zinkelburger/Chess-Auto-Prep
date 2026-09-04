@@ -15,6 +15,8 @@
 /// starts every game from.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
@@ -427,7 +429,7 @@ class _NewBughouseMatchDialogState extends State<_NewBughouseMatchDialog> {
       variety: _variety,
     );
     Navigator.of(context).pop();
-    widget.controller.tournaments.start(config);
+    unawaited(widget.controller.tournaments.start(config));
   }
 }
 

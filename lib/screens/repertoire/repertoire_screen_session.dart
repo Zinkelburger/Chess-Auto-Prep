@@ -471,7 +471,8 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
         title: const Text('Discard this build?'),
         content: const Text(
           'The paused build and everything it has explored so far will be '
-          'deleted. This cannot be undone.',
+          'moved to Chess Auto Prep recovery trash and will no longer be '
+          'resumable.',
         ),
         actions: [
           TextButton(

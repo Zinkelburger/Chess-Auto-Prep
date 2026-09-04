@@ -99,9 +99,14 @@ class _OpeningTreeMoveRowState extends State<OpeningTreeMoveRow> {
     }
 
     final reach = widget.reachEstimate;
+    // Unscored repertoire/course PGNs fold their RAVs into this count. Those
+    // are continuation paths, not games; use the same WDL-based distinction
+    // as the position header so a 300-chapter course never claims thousands
+    // of games were loaded.
+    final noun = entry.hasWdl ? 'games' : 'lines';
     final frequency = entry.viaTransposition
-        ? '${entry.gamesPlayed} games (transp.)'
-        : '${entry.gamesPlayed} games · ${playedPercent.round()}%';
+        ? '${entry.gamesPlayed} $noun (transp.)'
+        : '${entry.gamesPlayed} $noun · ${playedPercent.round()}%';
 
     return MouseRegion(
       cursor: widget.onTap == null

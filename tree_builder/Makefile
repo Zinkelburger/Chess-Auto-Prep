@@ -185,6 +185,25 @@ directories:
 	@mkdir -p $(BUILD_DIR)
 	@mkdir -p $(BIN_DIR)
 
+# Feature flags are part of an object's identity.
+#
+# NO_MAIA (and HAS_CDBDIRECT) change CFLAGS, not the sources, so plain
+# timestamp rules leave stale objects in place: `make` then `make NO_MAIA=1`
+# used to relink a maia.o still compiled with -DHAVE_ONNXRUNTIME and fail
+# with `undefined reference to OrtGetApiBase`, which reads like a missing
+# library rather than a stale build. The stamp records the flags in force
+# and is only rewritten when they actually change, so an ordinary rebuild
+# stays incremental.
+FLAG_STAMP = $(BUILD_DIR)/.buildflags
+
+.PHONY: flagcheck
+flagcheck:
+	@mkdir -p $(BUILD_DIR)
+	@printf '%s\n' '$(CFLAGS) $(LDFLAGS)' | cmp -s - $(FLAG_STAMP) 2>/dev/null || \
+	  printf '%s\n' '$(CFLAGS) $(LDFLAGS)' > $(FLAG_STAMP)
+
+$(FLAG_STAMP): flagcheck ;
+
 $(TARGET): $(OBJS)
 	$(CC) $(OBJS) -o $@ $(LOCAL_LIB) $(LDFLAGS)
 	@echo ""
@@ -193,15 +212,15 @@ $(TARGET): $(OBJS)
 	@echo "══════════════════════════════════════════"
 	@echo ""
 
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c $(FLAG_STAMP)
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 # chesslib (third-party): suppress warnings
-$(BUILD_DIR)/chesslib_%.o: $(CHESSLIB_DIR)/%.c
+$(BUILD_DIR)/chesslib_%.o: $(CHESSLIB_DIR)/%.c $(FLAG_STAMP)
 	$(CC) -std=gnu11 -O2 -g -w -I$(CHESSLIB_DIR) -c $< -o $@
 
 # SQLite3 amalgamation: suppress all warnings (third-party code)
-$(BUILD_DIR)/sqlite3_amalg.o: $(SRC_DIR)/sqlite3_amalg.c
+$(BUILD_DIR)/sqlite3_amalg.o: $(SRC_DIR)/sqlite3_amalg.c $(FLAG_STAMP)
 	$(CC) -std=gnu11 -O2 -g -w $(INCLUDES) -DSQLITE_THREADSAFE=1 -DSQLITE_OMIT_LOAD_EXTENSION -c $< -o $@
 
 # Header dependencies

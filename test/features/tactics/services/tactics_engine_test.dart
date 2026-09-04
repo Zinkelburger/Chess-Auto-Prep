@@ -21,11 +21,13 @@ const _afterE4E5Nf3Nc6 =
 TacticsPosition _position({
   required String fen,
   required List<String> correctLine,
+  List<String> solutionPv = const [],
 }) {
   return TacticsPosition(
     fen: fen,
     userMove: '??',
     correctLine: correctLine,
+    solutionPv: solutionPv,
     mistakeType: '??',
     mistakeAnalysis: 'test',
     gameWhite: 'White',
@@ -274,6 +276,42 @@ void main() {
       );
 
       expect(engine.correctLineToSan(position), ['e4', 'e5', 'Nf3']);
+    });
+
+    test('solutionLineToSan returns the entire stored engine PV', () {
+      const fullPv = [
+        'e4',
+        'e5',
+        'Nf3',
+        'Nc6',
+        'Bb5',
+        'a6',
+        'Ba4',
+        'Nf6',
+        'O-O',
+        'Be7',
+        'Re1',
+        'b5',
+        'Bb3',
+        'd6',
+      ];
+      final position = _position(
+        fen: _startFen,
+        correctLine: const ['e4'],
+        solutionPv: fullPv,
+      );
+
+      expect(engine.solutionLineToSan(position), fullPv);
+      expect(engine.correctLineToSan(position), const ['e4']);
+    });
+
+    test('solutionLineToSan falls back for legacy tactics', () {
+      final position = _position(
+        fen: _startFen,
+        correctLine: const ['e4', 'e5', 'Nf3'],
+      );
+
+      expect(engine.solutionLineToSan(position), const ['e4', 'e5', 'Nf3']);
     });
 
     test('empty expected SAN never matches a legal move', () {

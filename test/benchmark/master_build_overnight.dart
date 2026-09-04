@@ -215,7 +215,6 @@ void main() {
     final eca = ExpectimaxCalculator(config: anchored, fenMap: fenMap);
     eca.calculate(tree);
     eca.computeTrapScores(tree.root);
-    eca.calculateCplValues(tree.root);
     calculateMyEase(tree, playAsWhite: anchored.playAsWhite);
     final selected = RepertoireSelector(
       config: anchored,

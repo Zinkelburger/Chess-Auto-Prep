@@ -26,7 +26,14 @@ void main() {
       );
       expect(
         BughouseEngine.describeExit(0xC000007B),
-        contains('invalid 64-bit image'),
+        contains('refused one of its files as an invalid image'),
+      );
+      // The wording has to keep pointing at the file rather than at the
+      // architecture: on every machine this failure has actually been seen on,
+      // every library resolved to a 64-bit image and one of them was damaged.
+      expect(
+        BughouseEngine.describeExit(0xC000007B),
+        contains('damaged on disk'),
       );
     });
 

@@ -59,7 +59,7 @@ void main() {
     }, timeout: const Timeout(Duration(minutes: 3)));
 
     test('honours a node budget and a dual FEN', () async {
-      final state = BughouseState(
+      const state = BughouseState(
         boardA: Crazyhouse.initial,
         boardB: Crazyhouse.initial,
       );

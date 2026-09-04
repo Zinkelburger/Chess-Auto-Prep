@@ -102,7 +102,13 @@ class _StorageDestinationPickerState extends State<StorageDestinationPicker> {
     // turns out to be too small.
     if (oldWidget.requiredBytes == null && widget.requiredBytes != null) {
       setState(() => _volume ??= _bestDefault(_volumes));
-      _notify();
+      // Deferred, not `_notify()` directly. [didUpdateWidget] runs inside the
+      // build phase, and every host answers `onChanged` with a `setState` of
+      // its own — which threw "setState() called during build" and replaced
+      // the whole dialog with a red error box the moment the size probe
+      // returned. That is the normal path, so both database downloads were
+      // unreachable from the UI.
+      _notifyAfterFrame();
     }
   }
 
@@ -115,6 +121,17 @@ class _StorageDestinationPickerState extends State<StorageDestinationPicker> {
       _volume ??= _bestDefault(volumes);
     });
     _notify();
+  }
+
+  /// [_notify] once the frame that asked for it has been built.
+  ///
+  /// The `mounted` check is not decoration: a dialog dismissed in the same
+  /// frame its size resolves leaves this callback queued against a state that
+  /// is already disposed.
+  void _notifyAfterFrame() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _notify();
+    });
   }
 
   void _notify() {

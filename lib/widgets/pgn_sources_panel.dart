@@ -55,13 +55,13 @@ class _PgnSourcesPanelState extends State<PgnSourcesPanel> {
 
   Future<void> _addFromFile() async {
     try {
-      final result = await FilePicker.pickFiles(
+      final files = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pgn', 'txt'],
       );
-      if (result == null || result.files.isEmpty) return;
+      if (files.isEmpty) return;
 
-      for (final file in result.files) {
+      for (final file in files) {
         final path = file.path;
         if (path == null) continue;
         // Dedupe by path
@@ -419,30 +419,88 @@ class _SourceRow extends StatelessWidget {
           ),
           // Expanded slice editor
           if (isExpanded && source.rawPgnContent != null)
-            _buildSliceEditor(context),
+            _SliceEditor(
+              source: source,
+              currentFen: currentFen,
+              boardPreview: boardPreview,
+              onSliceResult: onSliceResult,
+            ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildSliceEditor(BuildContext context) {
-    final games = _parseGames(source.rawPgnContent!);
-    return InlineSliceEditor(
-      allGames: games,
-      initialConfig: source.sliceConfig,
-      currentFen: currentFen,
-      boardPreview: boardPreview,
-      ownerTag: source.id,
-      onResult: onSliceResult,
-    );
+/// Splits the source's PGN into games once, and hands them to the editor.
+///
+/// Deliberately its own stateful widget rather than a method on [_SourceRow]:
+/// as a method it was called from `build`, so `splitPgnIntoGames` plus a
+/// header regex per game ran over the *entire* picked file on every rebuild
+/// of the panel — every hover, every parent `setState`, every animation frame
+/// for as long as a source was expanded. Here the work happens when the
+/// content actually changes.
+class _SliceEditor extends StatefulWidget {
+  const _SliceEditor({
+    required this.source,
+    required this.currentFen,
+    required this.boardPreview,
+    required this.onSliceResult,
+  });
+
+  final PgnSource source;
+  final String? currentFen;
+  final BoardPreviewController? boardPreview;
+  final SliceResultCallback onSliceResult;
+
+  @override
+  State<_SliceEditor> createState() => _SliceEditorState();
+}
+
+class _SliceEditorState extends State<_SliceEditor> {
+  late List<GameRecord> _games;
+
+  /// Compared with [identical], not `==`: the content is a whole PGN file, and
+  /// a full string comparison on every rebuild is the cost this cache exists
+  /// to avoid. A genuinely new string re-parses, which is correct.
+  String? _parsedFrom;
+
+  @override
+  void initState() {
+    super.initState();
+    _parse();
   }
 
-  List<GameRecord> _parseGames(String content) {
-    final chunks = pgn.splitPgnIntoGames(content);
-    return chunks.map((chunk) {
-      final headers = pgn.extractHeaders(chunk);
-      return (headers: headers, pgnText: chunk);
-    }).toList();
+  @override
+  void didUpdateWidget(covariant _SliceEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _parse();
+  }
+
+  void _parse() {
+    final content = widget.source.rawPgnContent;
+    if (content == null) {
+      _parsedFrom = null;
+      _games = const [];
+      return;
+    }
+    if (identical(content, _parsedFrom)) return;
+    _parsedFrom = content;
+    _games = [
+      for (final chunk in pgn.splitPgnIntoGames(content))
+        (headers: pgn.extractHeaders(chunk), pgnText: chunk),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InlineSliceEditor(
+      allGames: _games,
+      initialConfig: widget.source.sliceConfig,
+      currentFen: widget.currentFen,
+      boardPreview: widget.boardPreview,
+      ownerTag: widget.source.id,
+      onResult: widget.onSliceResult,
+    );
   }
 }
 
@@ -606,7 +664,7 @@ class _CompactPasteDialogState extends State<_CompactPasteDialog> {
               ),
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
-                contentPadding: const EdgeInsets.all(10),
+                contentPadding: EdgeInsets.all(10),
               ),
               onChanged: (_) => _recount(),
             ),

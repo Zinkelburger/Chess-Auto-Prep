@@ -60,6 +60,7 @@ class _StudyScreenState extends State<StudyScreen> {
   /// the screen existed is not re-announced.
   final StudyImportController _import = StudyImportController.instance;
   late int _seenImportGeneration;
+  String? _reportedSaveError;
 
   @override
   void initState() {
@@ -130,7 +131,17 @@ class _StudyScreenState extends State<StudyScreen> {
   }
 
   void _onStudyChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    final error = _study.saveError;
+    if (error == null) {
+      _reportedSaveError = null;
+    } else if (error != _reportedSaveError) {
+      _reportedSaveError = error;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) showAppSnackBar(context, error, isError: true);
+      });
+    }
   }
 
   // ── Keyboard ─────────────────────────────────────────────────────────
@@ -150,7 +161,7 @@ class _StudyScreenState extends State<StudyScreen> {
       _study.goForward,
       repeats: true,
     ),
-    // Home/End jump to the line's ends (as in the PGN viewer); P/S (and ↓/↑)
+    // Home/End jump to the line's ends (as in the PGN viewer); ↑/↓
     // step the queue in front of you, which here is the chapter list.
     ...KeyBinding.forShortcut(
       AppShortcut.goToStart,
@@ -394,7 +405,7 @@ class _StudyScreenState extends State<StudyScreen> {
     final confirmed = await confirmAction(
       context,
       title: 'Delete study "${_study.doc.name}"?',
-      message: 'The PGN file will be permanently deleted.',
+      message: 'The PGN file will be moved to Chess Auto Prep recovery trash.',
       confirmLabel: 'Delete',
     );
     if (confirmed) await _study.deleteStudy(path);

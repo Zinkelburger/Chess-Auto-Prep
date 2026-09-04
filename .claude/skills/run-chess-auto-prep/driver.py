@@ -24,6 +24,7 @@ import fcntl
 import json
 import os
 import shlex
+import shutil
 import socket
 import subprocess
 import sys
@@ -39,6 +40,7 @@ STATE = STATE_DIR / "state.json"
 APP_LOG = STATE_DIR / "app.log"
 SHOTS = STATE_DIR / "shots"
 LOCK = Path(os.environ.get("CHESS_PREP_LOCK", "/tmp/chess-auto-prep-flutter.lock"))
+START_LOCK = STATE_DIR / "start.lock"
 BUILD_TIMEOUT = int(os.environ.get("CHESS_PREP_BUILD_TIMEOUT", "900"))
 
 
@@ -50,6 +52,43 @@ def flutter_bin() -> str:
     if home.exists():
         return str(home)
     return "flutter"
+
+
+def resource_scoped_command(cmd: list[str]) -> tuple[list[str], str | None]:
+    """Put the build, app and its engines in a separate user cgroup on Linux.
+
+    Keep this driver's daemon outside the scope: if the app exceeds its memory
+    budget, the daemon remains alive to record and report the failure.
+    """
+    enabled = os.environ.get("CHESS_PREP_DRIVER_SCOPE", "1").lower()
+    systemd_run = shutil.which("systemd-run")
+    user_bus = Path(f"/run/user/{os.getuid()}/bus")
+    if enabled in {"0", "false", "no"} or not systemd_run or not user_bus.exists():
+        return cmd, None
+
+    unit = f"chess-prep-driver-{os.getpid()}-{time.time_ns()}"
+    wrapped = [
+        systemd_run,
+        "--user",
+        "--scope",
+        "--quiet",
+        "--collect",
+        "--unit",
+        unit,
+        "-p",
+        "CPUWeight=50",
+        "-p",
+        "MemoryAccounting=yes",
+        "-p",
+        "OOMPolicy=continue",
+    ]
+    memory_max = os.environ.get("CHESS_PREP_DRIVER_MEM_MAX", "8G").strip()
+    if memory_max and memory_max != "0":
+        wrapped.extend(
+            ["-p", f"MemoryMax={memory_max}", "-p", "MemorySwapMax=0"]
+        )
+    wrapped.extend(["--", *cmd])
+    return wrapped, f"{unit}.scope"
 
 
 def read_state() -> dict:
@@ -174,12 +213,24 @@ class Daemon:
             flutter_bin(), "run", "-d", "linux", "--machine",
             "--dart-define=AGENT_DRIVER=true",
         ]
+        launch_cmd, resource_scope = resource_scoped_command(cmd)
         self.logline(f"launch: {shlex.join(cmd)} (cwd {self.src})")
+        if resource_scope:
+            self.logline(f"resource scope: {resource_scope}")
+        else:
+            self.logline("resource scope: unavailable or disabled")
         write_state(status="building", pid=os.getpid(), src=str(self.src),
-                    appId=None, vmService=None)
+                    appId=None, vmService=None, resourceScope=resource_scope)
         # The build is the heavy part — hold the machine-wide Flutter lock
         # (shared with scripts/ci.sh) until the app is up, then release it so
         # CI can run while the app just sits there.
+        #
+        # os.open gives a non-inheritable descriptor (PEP 446), which is what
+        # keeps `flutter run` from carrying the lock off with it: a child that
+        # inherits this fd holds the flock too, and a build killed halfway then
+        # leaves the whole machine locked by a process that no longer exists.
+        # That is exactly what happened to ci.sh's bash `exec 9>` on
+        # 2026-09-04. Do not add os.set_inheritable() or pass_fds here.
         lock_fd = os.open(LOCK, os.O_WRONLY | os.O_CREAT, 0o644)
         try:
             fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -193,7 +244,7 @@ class Daemon:
             f"pid {os.getpid()} · driver.py start · {time.strftime('%H:%M:%S')}\n")
         write_state(status="building")
         self.proc = subprocess.Popen(
-            cmd, cwd=self.src, env=env, text=True, bufsize=1,
+            launch_cmd, cwd=self.src, env=env, text=True, bufsize=1,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.log,
         )
         threading.Thread(target=self.reader, daemon=True).start()
@@ -355,7 +406,10 @@ def parse_args(argv: list[str]) -> tuple[dict, list[str]]:
 
 def print_dump(result: dict) -> None:
     w, h = result.get("size", [0, 0])
-    print(f"window {w}x{h}; {len(result.get('items', []))} visible items")
+    print(
+        f"window {w}x{h}; {len(result.get('items', []))} visible items; "
+        f"keyboard focus: {result.get('focus', '?')}"
+    )
     for it in result.get("items", []):
         x, y, rw, rh = it["rect"]
         print(f"  {it['kind']:<8} {json.dumps(it['value']):<50} @ {x},{y} {rw}x{rh}")
@@ -371,47 +425,61 @@ def tail(path: Path, n: int) -> str:
 
 def cmd_start(argv: list[str]) -> None:
     kv, rest = parse_args(argv)
-    src = REPO
-    if "--src" in rest:
-        src = Path(rest[rest.index("--src") + 1]).resolve()
-    elif "--worktree" in rest:
-        # Build from a clean snapshot of HEAD plus the driver files, so a
-        # half-edited shared working tree cannot break the launch.
-        src = make_worktree()
-    st = read_state()
-    if SOCK.exists() and pid_alive(st.get("pid")):
-        print(f"already running (pid {st['pid']}, src {st.get('src')}); use it or `driver.py stop`")
-        return
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    for f in (SOCK, STATE):
-        try:
-            f.unlink()
-        except OSError:
-            pass
-    APP_LOG.write_text("")
-    child = subprocess.Popen(
-        [sys.executable, str(Path(__file__).resolve()), "_serve", str(src)],
-        start_new_session=True, stdin=subprocess.DEVNULL,
-        stdout=open(STATE_DIR / "daemon.out", "w"), stderr=subprocess.STDOUT,
-    )
-    print(f"building + launching from {src} (daemon pid {child.pid}); log: {APP_LOG}")
-    deadline = time.time() + BUILD_TIMEOUT
-    last = ""
-    while time.time() < deadline:
+    start_lock_fd = os.open(START_LOCK, os.O_WRONLY | os.O_CREAT, 0o644)
+    fcntl.flock(start_lock_fd, fcntl.LOCK_EX)
+    try:
+        src = REPO
+        if "--src" in rest:
+            src = Path(rest[rest.index("--src") + 1]).resolve()
+        elif "--worktree" in rest:
+            # Build from a clean snapshot of HEAD plus the driver files, so a
+            # half-edited shared working tree cannot break the launch.
+            src = make_worktree()
         st = read_state()
-        status = st.get("status")
-        if status != last:
-            print(f"  {status}")
-            last = status or ""
-        if status == "running" and SOCK.exists():
-            print(f"ready: appId={st.get('appId')} vm={st.get('vmService')}")
+        if SOCK.exists() and pid_alive(st.get("pid")):
+            print(
+                f"already running (pid {st['pid']}, src {st.get('src')}); "
+                "use it or `driver.py stop`"
+            )
             return
-        if status in ("failed", "stopped") or child.poll() is not None:
-            print(tail(APP_LOG, 40))
-            print(tail(STATE_DIR / "daemon.out", 20))
-            sys.exit("launch failed — see above")
-        time.sleep(1)
-    sys.exit(f"gave up after {BUILD_TIMEOUT}s; see {APP_LOG}")
+        for f in (SOCK, STATE):
+            try:
+                f.unlink()
+            except OSError:
+                pass
+        APP_LOG.write_text("")
+        child = subprocess.Popen(
+            [sys.executable, str(Path(__file__).resolve()), "_serve", str(src)],
+            start_new_session=True,
+            stdin=subprocess.DEVNULL,
+            stdout=open(STATE_DIR / "daemon.out", "w"),
+            stderr=subprocess.STDOUT,
+        )
+        print(
+            f"building + launching from {src} (daemon pid {child.pid}); "
+            f"log: {APP_LOG}"
+        )
+        deadline = time.time() + BUILD_TIMEOUT
+        last = ""
+        while time.time() < deadline:
+            st = read_state()
+            status = st.get("status")
+            if status != last:
+                print(f"  {status}")
+                last = status or ""
+            if status == "running" and SOCK.exists():
+                print(f"ready: appId={st.get('appId')} vm={st.get('vmService')}")
+                return
+            if status in ("failed", "stopped") or child.poll() is not None:
+                print(tail(APP_LOG, 40))
+                print(tail(STATE_DIR / "daemon.out", 20))
+                sys.exit("launch failed — see above")
+            time.sleep(1)
+        sys.exit(f"gave up after {BUILD_TIMEOUT}s; see {APP_LOG}")
+    finally:
+        fcntl.flock(start_lock_fd, fcntl.LOCK_UN)
+        os.close(start_lock_fd)
 
 
 def make_worktree() -> Path:

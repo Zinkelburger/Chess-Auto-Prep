@@ -80,6 +80,8 @@ class Registry:
         self._directory: PlayerDirectory | None = None
         self.tools: dict[str, dict] = {}
         self._handlers: dict[str, Callable[[dict], Any]] = {}
+        self._close_callbacks: list[Callable[[], None]] = []
+        self._closed = False
         self._register_all()
 
     # ── Lazily loaded directory ────────────────────────────────────────────
@@ -110,10 +112,27 @@ class Registry:
         return list(self.tools.values())
 
     def call(self, name: str, args: dict) -> Any:
+        if self._closed:
+            raise RuntimeError("Tool registry is closed.")
         handler = self._handlers.get(name)
         if handler is None:
             raise ToolError(f'Unknown tool "{name}".')
         return handler(args or {})
+
+    def add_close_callback(self, callback: Callable[[], None]) -> None:
+        """Register ownership cleanup for a lazily-created tool resource."""
+        if self._closed:
+            callback()
+            return
+        self._close_callbacks.append(callback)
+
+    def close(self) -> None:
+        """Release open databases and other resources owned by the registry."""
+        if self._closed:
+            return
+        self._closed = True
+        while self._close_callbacks:
+            self._close_callbacks.pop()()
 
     # ── Tools ──────────────────────────────────────────────────────────────
 

@@ -9,6 +9,7 @@ import 'engine_tail.dart';
 import 'dart:io';
 
 import '../../constants/chess_constants.dart';
+import '../../utils/atomic_file.dart';
 import '../../utils/fen_utils.dart';
 import 'export/move_annotation.dart';
 import 'export/pgn_game_writer.dart';
@@ -34,9 +35,7 @@ class PgnBatchWriter {
     if (_lineCount == 0) return;
     final payload = _buffer.toString();
     clear();
-    await File(
-      filePath,
-    ).writeAsString(payload, mode: FileMode.append, flush: true);
+    await appendTextFileAtomically(File(filePath), payload);
   }
 
   void clear() {

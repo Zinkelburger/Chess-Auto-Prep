@@ -201,7 +201,6 @@ void main() {
       organizeIntoChapters: true,
       chaptersByEco: true,
       minLinesPerChapter: _minLinesPerChapter,
-      targetLineCount: _targetLines,
       modelGameCount: _modelGames,
     );
     _say('root after "${sans.join(' ')}" = $startFen');
@@ -245,11 +244,9 @@ void main() {
     // Phase 3: extract, prune, compose.
     final extractor = LineExtractor(config: anchored, fenMap: fenMap);
     final raw = extractor.extract(tree);
-    final lines = LinePruner.prune(
-      raw,
-      targetCount: anchored.targetLineCount,
-      coverageTarget: anchored.lineCoverageTarget,
-    )..sort((a, b) => b.probability.compareTo(a.probability));
+    final slice = LinePruner.rank(raw);
+    final lines = (_targetLines > 0 ? slice.take(_targetLines) : slice.all)
+      ..sort((a, b) => b.probability.compareTo(a.probability));
     _say('phase3: ${raw.length} lines extracted, ${lines.length} kept');
 
     final namer = CourseNamer(

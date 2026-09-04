@@ -94,13 +94,13 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
     }
   }
 
-  /// Start the review as soon as there is something to review.
+  /// Check for new games and start the review after the first cached load.
   ///
   /// On by default (see [GamesListFilters.autoRun]), which is what makes
   /// setting a username enough: the save loads the list, the list's first
-  /// notification lands here, and the download-and-analyse run begins without
-  /// anyone pressing anything. Unchecking Auto-start in the analysis settings
-  /// stops that.
+  /// completed load lands here, and a fresh download-and-analyse run begins
+  /// without anyone pressing anything. Unchecking Auto-start in the analysis
+  /// settings stops that.
   ///
   /// The one-shot guard is only spent on a run that really starts. A pane that
   /// loaded with no account, or while a run was already going, stays armed —
@@ -114,7 +114,7 @@ class _TacticsGamesPaneState extends State<TacticsGamesPane> {
     if (!controller.filters.autoRun || _autoRunAttempted) return;
     if (!runner.hasAnySource || runner.isRunning) return;
     _autoRunAttempted = true;
-    unawaited(runner.start());
+    unawaited(runner.start(checkForNewGames: true));
   }
 
   void _openGame(RecentGame game, {PgnViewerTab tab = PgnViewerTab.game}) =>

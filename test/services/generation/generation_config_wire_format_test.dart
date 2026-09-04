@@ -35,7 +35,6 @@ const expectedKeys = <String>{
   'alternative_lines',
   'annotate_move_probabilities',
   'annotation_detail',
-  'batch_eval_lookups',
   'best_first',
   'build_mode',
   'cdbdirect_path',
@@ -57,6 +56,9 @@ const expectedKeys = <String>{
   'fast_alt_gap_cp',
   'improvement_min_gain_cp',
   'leaf_confidence',
+  'line_max_fold_plies',
+  'line_max_overlap',
+  'line_min_new_share',
   'local_chessdb_path',
   'maia_elo',
   'maia_min_prob',
@@ -85,7 +87,6 @@ const expectedKeys = <String>{
   'book_tie_break_window_cp',
   'reply_window_cp',
   'novelty_weight',
-  'mistake_weight',
   'opening_width_plies',
   'organize_into_chapters',
   'opp_mass_target',
@@ -102,11 +103,9 @@ const expectedKeys = <String>{
   'selection_mode',
   'engine_tail_depth',
   'engine_tail_plies',
-  'line_coverage_target',
   'setup_moves',
   'skeleton_plan',
   'setup_tolerance_cp',
-  'target_line_count',
   'time_budget_minutes',
   'traps_only',
   'use_master_games',
@@ -170,9 +169,48 @@ void main() {
       expect(restored.maxEvalLossCp, original.maxEvalLossCp);
       expect(restored.coverMinProb, original.coverMinProb);
       expect(restored.verifyFinal, original.verifyFinal);
-      expect(restored.targetLineCount, original.targetLineCount);
       expect(restored.trapsOnly, original.trapsOnly);
     });
+
+    test('the diversity bar survives, including a deliberate zero', () {
+      // A build that asked for no bar at all must not have one restored on
+      // resume: `?? 0.25` on a *missing* key is the migration default, and a
+      // present 0.0 has to beat it.
+      final off = TreeBuildConfig.fromJson(
+        config().copyWith(lineMinNewShare: 0, lineMaxOverlap: 1).toJson(),
+        startFen: startFen,
+      );
+      expect(off.lineMinNewShare, 0);
+      expect(off.lineMaxOverlap, 1);
+
+      final tuned = TreeBuildConfig.fromJson(
+        config()
+            .copyWith(
+              lineMinNewShare: 0.4,
+              lineMaxOverlap: 0.55,
+              lineMaxFoldPlies: 3,
+            )
+            .toJson(),
+        startFen: startFen,
+      );
+      expect(tuned.lineMinNewShare, 0.4);
+      expect(tuned.lineMaxOverlap, 0.55);
+      expect(tuned.lineMaxFoldPlies, 3);
+    });
+
+    test(
+      'a tree written before the diversity bar existed gets the default',
+      () {
+        final legacy = config().toJson()
+          ..remove('line_min_new_share')
+          ..remove('line_max_overlap')
+          ..remove('line_max_fold_plies');
+        final restored = TreeBuildConfig.fromJson(legacy, startFen: startFen);
+        expect(restored.lineMinNewShare, 0.25);
+        expect(restored.lineMaxOverlap, 0.7);
+        expect(restored.lineMaxFoldPlies, 6);
+      },
+    );
 
     test('every enum survives every value', () {
       for (final algorithm in SearchAlgorithm.values) {

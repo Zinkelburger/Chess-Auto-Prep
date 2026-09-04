@@ -152,30 +152,34 @@ class ExpectimaxCalculator {
   }
 
   /// Pick the child with the highest expectimax value among candidates
-  /// passing the eval-loss filter, with the optional novelty and
-  /// opponent-mistake boosts.  Falls back to all children if none pass.
+  /// passing the eval-loss filter, with the optional novelty boost.  Falls
+  /// back to all children if none pass.
   ///
   /// Novelty boost (matches C `score_our_move_children`):
   ///   novelty = 1 - child.totalGames/parent.totalGames (if both have games)
   ///           = 1 - child.maiaFrequency (if Maia data available)
   ///   v_adj = v * (1 + nw * novelty)
-  /// Mistake boost (Dart only; see [TreeBuildConfig.mistakeWeight]):
-  ///   mistake = min(1, child.cplValue / kMistakeFullBoostCp)
-  ///   v_adj  *= 1 + mw * mistake
   /// The stored expectimax_value uses the *unboosted* child V.
+  ///
+  /// There is deliberately no second boost for "opponents blunder in this
+  /// subtree".  Expectimax already counts that: an opponent node is the
+  /// probability-weighted average of where its children land, so a line the
+  /// opponent goes wrong in scores higher *because* the wrong moves lead to
+  /// better positions for us.  A separate weight on top double-counted the
+  /// same effect, and because it read a value computed in a later pass it
+  /// tilted selection without tilting the values selection was compared
+  /// against.
   ScoredChild? scoreOurMoveChildren(BuildTreeNode node) {
     if (node.children.isEmpty) return null;
 
     final nw = config.noveltyWeight / 100.0;
-    final mw = config.mistakeWeight / 100.0;
 
     final bestChild = pickChildByValue(
       node.children,
       playAsWhite: config.playAsWhite,
       maxEvalLossCp: config.maxEvalLossCp,
       eligible: (child) => child.hasExpectimax,
-      value: (child) =>
-          _noveltyAdjustedValue(node, child, nw) * _mistakeBoost(child, mw),
+      value: (child) => _noveltyAdjustedValue(node, child, nw),
     );
 
     if (bestChild == null) return null;
@@ -206,70 +210,6 @@ class ExpectimaxCalculator {
     return v * (1.0 + nw * novelty);
   }
 
-  /// Expected opponent centipawn loss in the subtree, as a mistake boost
-  /// factor: `1 + mw × min(1, cplValue / kMistakeFullBoostCp)`.  1.0 when
-  /// [mw] is 0.  [calculateCplValues] must have run for the value to mean
-  /// anything; before it every node reads 0 and the factor is 1.
-  double _mistakeBoost(BuildTreeNode child, double mw) {
-    if (mw <= 0.0) return 1.0;
-    var mistake = child.cplValue / kMistakeFullBoostCp;
-    if (mistake > 1.0) mistake = 1.0;
-    if (mistake < 0.0) mistake = 0.0;
-    return 1.0 + mw * mistake;
-  }
-
-  /// Run CPL value propagation on the full tree.
-  ///
-  /// Bottom-up DFS that computes cumulative expected opponent centipawn loss.
-  /// At opponent nodes: cplV = localCpl + Σ(p_i * cplV(child_i))
-  /// At our nodes: cplV = max(cplV(child_i)) among eval-guarded children.
-  /// Feeds the opponent-mistake boost in [scoreOurMoveChildren]; the
-  /// probability weighting is what makes a mistake near the root count for
-  /// more than the same mistake ten moves deep.
-  void calculateCplValues(BuildTreeNode root) {
-    _cplRecursive(root);
-  }
-
-  void _cplRecursive(BuildTreeNode node) {
-    for (final child in node.children) {
-      _cplRecursive(child);
-    }
-
-    if (node.children.isEmpty) {
-      node.cplValue = 0.0;
-      return;
-    }
-
-    final isOurMove = node.isWhiteToMove == config.playAsWhite;
-
-    if (isOurMove) {
-      final best = _pickByCplValue(node);
-      node.cplValue = best?.cplValue ?? 0.0;
-    } else {
-      double covered = 0.0;
-      double v = node.localCpl;
-      for (final child in node.children) {
-        covered += child.moveProbability;
-        v += child.moveProbability * child.cplValue;
-      }
-      if (covered > 1.0) covered = 1.0;
-      node.cplValue = v;
-    }
-  }
-
-  /// Pick the child with the highest CPL value among eval-guarded candidates.
-  ///
-  /// Unlike [scoreOurMoveChildren], no eligibility guard: children without
-  /// engine evals enter the filter with `evalForUs == 0`.
-  BuildTreeNode? _pickByCplValue(BuildTreeNode node) {
-    return pickChildByValue(
-      node.children,
-      playAsWhite: config.playAsWhite,
-      maxEvalLossCp: config.maxEvalLossCp,
-      value: (child) => child.cplValue,
-    );
-  }
-
   /// Compute trap scores on opponent-move nodes throughout the tree.
   /// Trap score measures how often opponents play suboptimal moves;
   /// see [analyzeTrapScore] for the shared formula.
@@ -293,12 +233,6 @@ class ExpectimaxCalculator {
     node.trapScore = analysis.trapScore;
   }
 }
-
-/// Expected opponent centipawn loss at which the mistake boost saturates:
-/// a subtree where opponents are expected to shed a full pawn gets the whole
-/// of [TreeBuildConfig.mistakeWeight], and nothing counts for more.  The
-/// same 100cp-per-unit scale the trap score uses for its eval gap.
-const double kMistakeFullBoostCp = 100.0;
 
 class ScoredChild {
   final BuildTreeNode child;

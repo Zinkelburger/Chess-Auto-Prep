@@ -37,26 +37,42 @@ List<InlineSpan> _plainCommentSpans(
 
 /// Decide how to render a mainline-move comment: a flowing inline span list
 /// for short single-paragraph prose, or a bordered block for anything with
-/// embedded moves, Chessable markers, or multiple paragraphs. Without
-/// [bookFormatting], always plain flowing prose.
+/// embedded moves, Chessable markers, or multiple paragraphs. Recognizable
+/// book formatting is automatic; short ordinary comments stay plain prose.
 ({Widget? block, List<InlineSpan> spans}) _renderComment(
   PgnMovetextView view,
   String raw, {
   Position? anchorPos,
   int anchorPly = 0,
 }) {
-  if (!view.bookFormatting) {
-    return (
-      block: null,
-      spans: _plainCommentSpans(
-        view,
-        raw,
-        anchorPos: anchorPos,
-        anchorPly: anchorPly,
-      ),
+  // Explicit Chessable / Forward Chess markup is safe to recognize
+  // automatically. The opt-in remains relevant for ambiguous double spaces
+  // in ordinary PGNs, but a real header/quote/FEN marker should never be shown
+  // as a raw wall of punctuation.
+  final richFormatting = hasChessableFormatting(raw);
+  if (!view.bookFormatting && !richFormatting) {
+    final spans = _plainCommentSpans(
+      view,
+      raw,
+      anchorPos: anchorPos,
+      anchorPly: anchorPly,
     );
+    // Long prose gets a reading surface even in ordinary PGNs. It remains one
+    // paragraph (no risky double-space interpretation), but the inset measure
+    // and leading keep course-sized explanations from merging with movetext.
+    if (filterDisplayComment(raw).length >= 180 && spans.isNotEmpty) {
+      return (
+        block: _proseContainer(
+          Text.rich(
+            TextSpan(style: PgnTextStyles.commentAt(0), children: spans),
+          ),
+        ),
+        spans: const [],
+      );
+    }
+    return (block: null, spans: spans);
   }
-  if (hasChessableFormatting(raw)) {
+  if (richFormatting) {
     final segments = parseRichComment(raw);
     if (segments.isNotEmpty) {
       return (
@@ -103,14 +119,14 @@ List<InlineSpan> _plainCommentSpans(
 Widget _proseContainer(Widget child) {
   return Container(
     width: double.infinity,
-    margin: const EdgeInsets.symmetric(vertical: 6),
-    padding: const EdgeInsets.all(10),
+    margin: const EdgeInsets.symmetric(vertical: 8),
+    padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
     decoration: BoxDecoration(
       color: AppColors.pgnCommentBlockBg,
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(8),
       border: Border(
         left: BorderSide(
-          color: AppColors.pgnComment.withValues(alpha: 0.55),
+          color: AppColors.accent.withValues(alpha: 0.9),
           width: 3,
         ),
       ),
@@ -331,8 +347,9 @@ WidgetSpan _buildProseMoveSpan(
 WidgetSpan _buildCommentMoveSpan(
   PgnMovetextView view,
   CommentMove move,
-  List<CommentMove> run,
-) {
+  List<CommentMove> run, {
+  TextStyle? moveStyle,
+}) {
   final clickable = move.isClickable && view.onPlayInlineLine != null;
   final idxInRun = run.indexOf(move);
 
@@ -348,6 +365,7 @@ WidgetSpan _buildCommentMoveSpan(
       idxInRun == active.cursor - 1 &&
       listEquals(active.sans, run.map((m) => m.san).toList());
 
+  final baseMoveStyle = moveStyle ?? PgnTextStyles.move;
   return WidgetSpan(
     alignment: PlaceholderAlignment.baseline,
     baseline: TextBaseline.alphabetic,
@@ -379,18 +397,24 @@ WidgetSpan _buildCommentMoveSpan(
               ),
         child: Text(
           '${move.display} ',
-          style: (isActiveMove ? PgnTextStyles.currentMove : PgnTextStyles.move)
-              .copyWith(
-                fontSize: 14,
-                height: 1.5,
-                decoration: clickable && !isActiveMove
-                    ? TextDecoration.underline
-                    : null,
-                decorationColor: AppColors.onSurfaceMuted.withValues(
-                  alpha: 0.5,
-                ),
-                decorationStyle: TextDecorationStyle.dotted,
-              ),
+          style:
+              (isActiveMove
+                      ? baseMoveStyle.copyWith(
+                          color: AppColors.pgnMoveCurrentFg,
+                          fontWeight: FontWeight.w600,
+                        )
+                      : baseMoveStyle)
+                  .copyWith(
+                    fontSize: 14,
+                    height: 1.5,
+                    decoration: clickable && !isActiveMove
+                        ? TextDecoration.underline
+                        : null,
+                    decorationColor: AppColors.onSurfaceMuted.withValues(
+                      alpha: 0.5,
+                    ),
+                    decorationStyle: TextDecorationStyle.dotted,
+                  ),
         ),
       ),
     ),

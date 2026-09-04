@@ -99,15 +99,6 @@ void main() {
       );
     });
 
-    test('a mistake weight does not widen the gate on its own', () {
-      final weighted = makeConfig().copyWith(mistakeWeight: 100);
-      expect(
-        weighted.expandAlternative(gapCp: 400, altsAlreadyExpanded: 10),
-        isFalse,
-        reason: 'the user chooses Pure search or a 0 gap; nothing rewrites it',
-      );
-    });
-
     test('Fast gates by eval gap', () {
       final c = makeConfig();
       expect(c.expandAlternative(gapCp: 30, altsAlreadyExpanded: 0), isTrue);

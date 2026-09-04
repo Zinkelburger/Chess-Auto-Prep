@@ -102,6 +102,7 @@ void main(List<String> args) {
   io.stdout.writeln('games with an illegal/unparsed move : $illegal');
   io.stdout.writeln('MATERIAL VIOLATIONS  : $violations');
   io.stdout.writeln('largest queen reserve seen : $worstQueens');
-  if (firstFailure != null)
+  if (firstFailure != null) {
     io.stdout.writeln('\nfirst failure:\n$firstFailure');
+  }
 }

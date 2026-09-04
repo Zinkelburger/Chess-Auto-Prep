@@ -34,8 +34,8 @@ class GamesListFilters {
 
   final Set<GameSpeed> speeds;
 
-  /// Whether the review run (analysis, deviations, mining) starts on its own
-  /// once the list has games.
+  /// Whether startup checks for new games and runs the review (analysis,
+  /// deviations, mining) on its own once the initial cached load completes.
   ///
   /// **On by default.** It costs minutes of every core, so this was opt-in —
   /// but the state it left behind was a home screen where nothing had

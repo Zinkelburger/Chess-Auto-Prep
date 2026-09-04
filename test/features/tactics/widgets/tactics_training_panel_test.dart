@@ -33,6 +33,7 @@ Widget _panel(
   bool solved = false,
   bool showSolution = false,
   List<String> solutionSan = const [],
+  List<String> trainableSan = const [],
   int currentMoveIndex = 0,
   String feedback = '',
 }) {
@@ -55,6 +56,7 @@ Widget _panel(
           onCopyFen: () {},
           onSetRating: (_) {},
           solutionSanMoves: solutionSan,
+          trainableSanMoves: trainableSan,
         ),
       ),
     ),
@@ -115,6 +117,24 @@ void main() {
       expect(line.sanMoves, ['Qf3', 'Kh8']);
       expect(line.onMoveTapped, isNull);
     });
+
+    testWidgets('shows the trained branch before revealing a different PV', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _panel(
+          _position(line: ['e4', 'c5', 'Nf3']),
+          solutionSan: const ['e4', 'e5', 'Nf3', 'Nc6'],
+          trainableSan: const ['e4', 'c5', 'Nf3'],
+          currentMoveIndex: 2,
+        ),
+      );
+
+      final line = tester.widget<ClickableMoveLineWidget>(
+        find.byKey(const Key('tactic-solution-line')),
+      );
+      expect(line.sanMoves, const ['e4', 'c5']);
+    });
   });
 
   group('once solved or revealed', () {
@@ -161,6 +181,24 @@ void main() {
       );
       expect(line.sanMoves, ['Qf3', 'Kh8', 'Rxh7']);
       expect(find.text('Show Solution'), findsNothing);
+    });
+
+    testWidgets('reveals the full PV even when only one move is trainable', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _panel(
+          _position(line: ['e4']),
+          solved: true,
+          solutionSan: const ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6'],
+          trainableSan: const ['e4'],
+        ),
+      );
+
+      final line = tester.widget<ClickableMoveLineWidget>(
+        find.byKey(const Key('tactic-solution-line')),
+      );
+      expect(line.sanMoves, const ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6']);
     });
 
     testWidgets('feedback is plain text', (tester) async {

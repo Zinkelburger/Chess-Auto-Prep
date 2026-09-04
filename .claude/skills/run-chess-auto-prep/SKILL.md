@@ -32,6 +32,15 @@ shells, so use these two entry points.
 scripts/ci.sh status        # who holds the lock; what is cached for this tree
 ```
 
+On Linux, the driver also puts `flutter run`, the app, and every engine it
+starts in a dedicated systemd user scope. The driver daemon remains in the
+agent's scope so it can report an app-side OOM. The development scope defaults
+to `CPUWeight=50`, `MemoryMax=8G`, and no swap: it can still use every idle CPU,
+but yields to sibling agents under contention and cannot consume the whole
+machine. Set `CHESS_PREP_DRIVER_MEM_MAX=12G` to choose another ceiling, `=0`
+for no explicit memory ceiling, or `CHESS_PREP_DRIVER_SCOPE=0` to disable the
+scope on a machine where systemd user scopes are unsuitable.
+
 ## Run (agent path)
 
 ```
@@ -46,12 +55,18 @@ as-is; `--src DIR` builds any other checkout, e.g. your own worktree.
 
 `start` daemonises, prints `queued` / `building` / `running`, and returns when
 the app is up (9 s when the build is cached, about 2 min for a fresh
-worktree; it gives up after `CHESS_PREP_BUILD_TIMEOUT`, default 900 s). Then:
+worktree; it gives up after `CHESS_PREP_BUILD_TIMEOUT`, default 900 s).
+Concurrent `start` calls serialize on `start.lock`; once the first app is up,
+the others reuse it instead of racing two daemons into the shared state dir.
+Then:
 
 ```
 D=.claude/skills/run-chess-auto-prep/driver.py
 python3 $D ping                       # {"ok": true}
 python3 $D dump                       # every visible text / tooltip / key / field, with rects
+                                      # (its header line names what owns the keyboard —
+                                      #  a `… Focus Scope` there means nothing focusable
+                                      #  does, so keys reach no panel handler)
 python3 $D dump kinds=tooltip,key     # narrower
 python3 $D tap tooltip="Switch mode"  # tap by tooltip, text, key, or x= y=
 python3 $D tap key=accounts-change-button
@@ -68,6 +83,8 @@ python3 $D log n=40                   # tail the app's stdout/stderr + flutter p
 python3 $D status
 python3 $D stop
 ```
+
+`status` includes the transient `resourceScope` name for the current run.
 
 Targets: `text=` / `tooltip=` / `key=` / `field=` match exactly first, then as
 a case-insensitive substring; `index=N` picks the Nth match. `tap` also takes
@@ -114,8 +131,8 @@ driver, no extensions. Agents should not use it (the hook blocks it anyway).
 ## CI gates
 
 ```
-scripts/ci.sh                 # format (writes) + analyze + test + lint greps
-scripts/ci.sh analyze         # any subset: format analyze test lint integration
+scripts/ci.sh                 # format + analyze + coverage tests + tools + lint
+scripts/ci.sh analyze         # any subset: format analyze test tools lint integration
 scripts/ci.sh --fresh test    # ignore the cached pass for this tree
 scripts/ci.sh with -- <cmd…>  # run anything else under the lock, in your cwd
 ```
@@ -123,6 +140,8 @@ scripts/ci.sh with -- <cmd…>  # run anything else under the lock, in your cwd
 Passing `analyze`/`test` results are cached per working-tree hash, so a second
 agent on the same tree replays the log instead of re-running. Failures are
 never cached. `analyze` fails on any `error •`/`warning •` line, as CI does.
+`test` enforces the line-coverage floor; `tools` runs every deterministic,
+offline Python MCP/database test with leaked-resource warnings made fatal.
 `integration` runs `integration_test/app_test.dart` on the Linux device — a
 window opens on the display.
 

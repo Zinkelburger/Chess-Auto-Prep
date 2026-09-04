@@ -130,8 +130,8 @@ class TreeBuildConfig {
   /// sees them (leaf value from the static eval) and the verification pass
   /// deep-checks whatever gets picked, so the insurance subtrees are only
   /// grown for alternatives close enough to plausibly win the argmax.
-  /// 0 disables the gate.  A build that leans on [mistakeWeight] wants the
-  /// worse-eval candidates searched too — Pure search, or 0 here, does that.
+  /// 0 disables the gate.  Pure search, or 0 here, searches the worse-eval
+  /// candidates too.
   final int fastAltGapCp;
 
   /// "Wide opening search": our-move nodes at or below this ply get the wide
@@ -270,30 +270,12 @@ class TreeBuildConfig {
   /// the position than the truncated search that stopped there.
   final int engineTailDepth;
 
-  /// Share (0..1) of reachable value the exported lines should cover.
-  ///
-  /// This is the knob that decides how big a repertoire is. Extracted lines
-  /// are reduced by greedy set cover over the decisions each one teaches —
-  /// "in this position, play this move" — and the export keeps the shortest
-  /// run of that greedy order reaching this share. Lines that only repeat
-  /// decisions already covered, whether by answering a different opponent
-  /// try or by transposing in from another move order, contribute nothing
-  /// and never make the cut.
-  ///
-  /// Expressed as coverage rather than as a line count because coverage
-  /// transfers between repertoires and a line count does not: on one Benko
-  /// tree 300 lines was 92% and on a shallower one the same 300 would be
-  /// everything twice over. 1.0 keeps every line that teaches anything new.
-  final double lineCoverageTarget;
-
-  /// Hard cap on exported lines, applied on top of [lineCoverageTarget].
-  /// 0 means no cap, which is the default — [lineCoverageTarget] is meant to
-  /// be what decides the size.
-  ///
-  /// Note that 0 no longer means "no pruning": pruning always runs now. It
-  /// only ever drops a line whose every decision is taught by a line that
-  /// was kept, so the old opt-out bought nothing but duplicates.
-  final int targetLineCount;
+  // How big the repertoire is is no longer decided here.  A build exports
+  // every line that teaches something new, in the order the greedy set
+  // cover ranked them, and the size is chosen afterwards against a live
+  // line count — see `LineSlice` and the Generate tab's slice card.  Asking
+  // for a coverage share up front meant guessing before there was anything
+  // to look at, and the guess was baked into the file.
 
   /// Export only the lines that run through a trap — a position where the
   /// opponent has a tempting move that loses material or the evaluation.
@@ -304,6 +286,26 @@ class TreeBuildConfig {
 
   /// Sort extracted lines by cumulative probability (most likely first).
   final bool rankLinesByImportance;
+
+  // ── How different a line has to be to get its own entry ──
+  // Set cover admits a line the moment it teaches one decision nothing else
+  // teaches, which on a real build leaves a book where nine lines in ten are
+  // a tail-only variant of another one.  These two are the bar it has to
+  // clear as well; `LineDiversity` in `line_pruner.dart` is where they are
+  // explained and measured.  Failing the bar does not lose the line — it is
+  // written as a sideline off the line it parts from.
+
+  /// Share of a line's decisions that must be new to the book.  0 admits
+  /// anything that teaches one new decision, which is the old behaviour.
+  final double lineMinNewShare;
+
+  /// Largest decision-set Jaccard a line may share with any single line
+  /// already kept.  1 disables the cap.
+  final double lineMaxOverlap;
+
+  /// Longest sideline a fold may write, in plies.  Beyond this the line is
+  /// dropped rather than buried inside another one.
+  final int lineMaxFoldPlies;
 
   /// How much per-move detail the exported PGN carries.  The pipeline
   /// computes eval, ease, naturalness and practical scores for every node
@@ -364,15 +366,6 @@ class TreeBuildConfig {
   /// `1 + w × rarity` inside the eval-loss window; the stored expectimax
   /// values are untouched.  0 = off.
   final int noveltyWeight;
-
-  /// Opponent-mistake boost at our-move nodes, 0–100.  Scales a candidate's
-  /// value by `1 + w × mistake`, where `mistake` is the expected centipawn
-  /// loss opponents make in its subtree (`cplValue`, so a blunder they
-  /// rarely reach counts for little) capped at one full pawn.  Applied
-  /// inside the eval-loss window only, like the novelty boost, so it can
-  /// tilt between sound moves but never promote a bad one; widen
-  /// [maxEvalLossCp] to let it consider speculative tries.  0 = off.
-  final int mistakeWeight;
 
   // ── DB Explorer (PGN frequency seeding) ──
   final List<String> pgnFilePaths;
@@ -508,7 +501,6 @@ class TreeBuildConfig {
   final bool enableCdbDirect;
   final String cdbDirectPath;
   final bool cdbDirectReadAhead;
-  final bool batchEvalLookups;
   final bool enableLocalChessDb;
 
   /// Consult the Lichess cloud-evaluation store, and where it lives.
@@ -557,10 +549,11 @@ class TreeBuildConfig {
     this.oppPolicyTemperature = 1.0,
     this.engineTailPlies = 6,
     this.engineTailDepth = 0,
-    this.lineCoverageTarget = 0.92,
-    this.targetLineCount = 0,
     this.trapsOnly = false,
     this.rankLinesByImportance = true,
+    this.lineMinNewShare = 0.25,
+    this.lineMaxOverlap = 0.7,
+    this.lineMaxFoldPlies = 6,
     this.annotationDetail = MoveAnnotationDetail.full,
     this.organizeIntoChapters = true,
     this.maxLinesPerChapter = 40,
@@ -573,7 +566,6 @@ class TreeBuildConfig {
     this.selectionMode = SelectionMode.expectimax,
     this.leafConfidence = 1.0,
     this.noveltyWeight = 0,
-    this.mistakeWeight = 0,
     this.pgnFilePaths = const [],
     this.dbMinGames = 5,
     this.useMasterGames = true,
@@ -593,7 +585,6 @@ class TreeBuildConfig {
     this.enableCdbDirect = false,
     this.cdbDirectPath = '',
     this.cdbDirectReadAhead = false,
-    this.batchEvalLookups = false,
     this.enableLocalChessDb = false,
     this.enableLichessEvals = false,
     this.lichessEvalsPath = '',
@@ -609,13 +600,6 @@ class TreeBuildConfig {
     Map<String, dynamic> json, {
     required String startFen,
   }) {
-    // A config written before [lineCoverageTarget] existed sizes the export
-    // with `target_line_count`, whose default was 100. Carrying that value
-    // forward would cap every re-export of an older tree at 100 lines and
-    // silently defeat the coverage target it is now asked for, so a legacy
-    // map drops it and lets coverage decide. Anything this build wrote has
-    // the coverage key, so an explicit cap set today still survives.
-    final legacy = !json.containsKey('line_coverage_target');
     return TreeBuildConfig(
       startFen: startFen,
       playAsWhite: json['play_as_white'] as bool? ?? true,
@@ -658,13 +642,11 @@ class TreeBuildConfig {
           (json['opp_policy_temperature'] as num?)?.toDouble() ?? 1.0,
       engineTailPlies: (json['engine_tail_plies'] as num?)?.toInt() ?? 6,
       engineTailDepth: (json['engine_tail_depth'] as num?)?.toInt() ?? 0,
-      lineCoverageTarget:
-          (json['line_coverage_target'] as num?)?.toDouble() ?? 0.92,
-      targetLineCount: legacy
-          ? 0
-          : ((json['target_line_count'] as num?)?.toInt() ?? 0),
       trapsOnly: json['traps_only'] as bool? ?? false,
       rankLinesByImportance: json['rank_lines_by_importance'] as bool? ?? true,
+      lineMinNewShare: (json['line_min_new_share'] as num?)?.toDouble() ?? 0.25,
+      lineMaxOverlap: (json['line_max_overlap'] as num?)?.toDouble() ?? 0.7,
+      lineMaxFoldPlies: json['line_max_fold_plies'] as int? ?? 6,
       annotationDetail: _parseAnnotationDetail(json),
       organizeIntoChapters: json['organize_into_chapters'] as bool? ?? true,
       maxLinesPerChapter:
@@ -678,7 +660,6 @@ class TreeBuildConfig {
       selectionMode: _parseSelectionMode(json['selection_mode'] as String?),
       leafConfidence: (json['leaf_confidence'] as num?)?.toDouble() ?? 1.0,
       noveltyWeight: (json['novelty_weight'] as num?)?.toInt() ?? 0,
-      mistakeWeight: (json['mistake_weight'] as num?)?.toInt() ?? 0,
       pgnFilePaths:
           (json['pgn_file_paths'] as List<dynamic>?)?.cast<String>() ??
           const [],
@@ -702,7 +683,6 @@ class TreeBuildConfig {
       enableCdbDirect: json['enable_cdbdirect'] as bool? ?? false,
       cdbDirectPath: json['cdbdirect_path'] as String? ?? '',
       cdbDirectReadAhead: json['cdbdirect_read_ahead'] as bool? ?? false,
-      batchEvalLookups: json['batch_eval_lookups'] as bool? ?? false,
       enableLocalChessDb: json['enable_local_chessdb'] as bool? ?? false,
       enableLichessEvals: json['enable_lichess_evals'] as bool? ?? false,
       lichessEvalsPath: json['lichess_evals_path'] as String? ?? '',
@@ -974,10 +954,11 @@ class TreeBuildConfig {
     'opp_policy_temperature': oppPolicyTemperature,
     'engine_tail_plies': engineTailPlies,
     'engine_tail_depth': engineTailDepth,
-    'line_coverage_target': lineCoverageTarget,
-    'target_line_count': targetLineCount,
     'traps_only': trapsOnly,
     'rank_lines_by_importance': rankLinesByImportance,
+    'line_min_new_share': lineMinNewShare,
+    'line_max_overlap': lineMaxOverlap,
+    'line_max_fold_plies': lineMaxFoldPlies,
     'annotation_detail': annotationDetail.name,
     // Legacy key so a build of the app predating [annotationDetail] can still
     // read this tree's metadata without losing the setting entirely.
@@ -993,7 +974,6 @@ class TreeBuildConfig {
     'selection_mode': selectionMode.name,
     'leaf_confidence': leafConfidence,
     'novelty_weight': noveltyWeight,
-    'mistake_weight': mistakeWeight,
     'pgn_file_paths': pgnFilePaths,
     'db_min_games': dbMinGames,
     'use_master_games': useMasterGames,
@@ -1013,7 +993,6 @@ class TreeBuildConfig {
     'enable_cdbdirect': enableCdbDirect,
     'cdbdirect_path': cdbDirectPath,
     'cdbdirect_read_ahead': cdbDirectReadAhead,
-    'batch_eval_lookups': batchEvalLookups,
     'enable_local_chessdb': enableLocalChessDb,
     'enable_lichess_evals': enableLichessEvals,
     'lichess_evals_path': lichessEvalsPath,
@@ -1109,10 +1088,11 @@ class TreeBuildConfig {
     double? oppPolicyTemperature,
     int? engineTailPlies,
     int? engineTailDepth,
-    double? lineCoverageTarget,
-    int? targetLineCount,
     bool? trapsOnly,
     bool? rankLinesByImportance,
+    double? lineMinNewShare,
+    double? lineMaxOverlap,
+    int? lineMaxFoldPlies,
     MoveAnnotationDetail? annotationDetail,
     bool? organizeIntoChapters,
     int? maxLinesPerChapter,
@@ -1125,7 +1105,6 @@ class TreeBuildConfig {
     SelectionMode? selectionMode,
     double? leafConfidence,
     int? noveltyWeight,
-    int? mistakeWeight,
     List<String>? pgnFilePaths,
     int? dbMinGames,
     bool? useMasterGames,
@@ -1145,7 +1124,6 @@ class TreeBuildConfig {
     bool? enableCdbDirect,
     String? cdbDirectPath,
     bool? cdbDirectReadAhead,
-    bool? batchEvalLookups,
     bool? enableLocalChessDb,
     bool? enableLichessEvals,
     String? lichessEvalsPath,
@@ -1192,11 +1170,12 @@ class TreeBuildConfig {
       oppPolicyTemperature: oppPolicyTemperature ?? this.oppPolicyTemperature,
       engineTailPlies: engineTailPlies ?? this.engineTailPlies,
       engineTailDepth: engineTailDepth ?? this.engineTailDepth,
-      lineCoverageTarget: lineCoverageTarget ?? this.lineCoverageTarget,
-      targetLineCount: targetLineCount ?? this.targetLineCount,
       trapsOnly: trapsOnly ?? this.trapsOnly,
       rankLinesByImportance:
           rankLinesByImportance ?? this.rankLinesByImportance,
+      lineMinNewShare: lineMinNewShare ?? this.lineMinNewShare,
+      lineMaxOverlap: lineMaxOverlap ?? this.lineMaxOverlap,
+      lineMaxFoldPlies: lineMaxFoldPlies ?? this.lineMaxFoldPlies,
       annotationDetail: annotationDetail ?? this.annotationDetail,
       organizeIntoChapters: organizeIntoChapters ?? this.organizeIntoChapters,
       maxLinesPerChapter: maxLinesPerChapter ?? this.maxLinesPerChapter,
@@ -1209,7 +1188,6 @@ class TreeBuildConfig {
       selectionMode: selectionMode ?? this.selectionMode,
       leafConfidence: leafConfidence ?? this.leafConfidence,
       noveltyWeight: noveltyWeight ?? this.noveltyWeight,
-      mistakeWeight: mistakeWeight ?? this.mistakeWeight,
       pgnFilePaths: pgnFilePaths ?? this.pgnFilePaths,
       dbMinGames: dbMinGames ?? this.dbMinGames,
       useMasterGames: useMasterGames ?? this.useMasterGames,
@@ -1232,7 +1210,6 @@ class TreeBuildConfig {
       enableCdbDirect: enableCdbDirect ?? this.enableCdbDirect,
       cdbDirectPath: cdbDirectPath ?? this.cdbDirectPath,
       cdbDirectReadAhead: cdbDirectReadAhead ?? this.cdbDirectReadAhead,
-      batchEvalLookups: batchEvalLookups ?? this.batchEvalLookups,
       enableLocalChessDb: enableLocalChessDb ?? this.enableLocalChessDb,
       enableLichessEvals: enableLichessEvals ?? this.enableLichessEvals,
       lichessEvalsPath: lichessEvalsPath ?? this.lichessEvalsPath,

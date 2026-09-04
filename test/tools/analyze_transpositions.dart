@@ -76,7 +76,6 @@ void main() {
     final eca = ExpectimaxCalculator(config: config, fenMap: fenMap);
     eca.calculate(tree);
     eca.computeTrapScores(tree.root);
-    eca.calculateCplValues(tree.root);
     calculateMyEase(tree, playAsWhite: config.playAsWhite);
     RepertoireSelector(
       config: config,
@@ -133,14 +132,11 @@ void main() {
     );
 
     final t1 = sw.elapsedMilliseconds;
-    final pruned = LinePruner.prune(
-      lines,
-      targetCount: config.targetLineCount,
-      coverageTarget: config.lineCoverageTarget,
-    );
+    final slice = LinePruner.rank(lines);
+    final pruned = slice.all;
     stdout.writeln(
-      'pruner: ${lines.length} -> ${pruned.length} '
-      '(target ${config.targetLineCount}, coverage ${config.lineCoverageTarget}) '
+      'ranker: ${lines.length} -> ${pruned.length} lines that teach something '
+      '(${(slice.coverageAt(slice.length) * 100).toStringAsFixed(1)}% coverage) '
       'in ${sw.elapsedMilliseconds - t1}ms',
     );
     final prunedLeaves = {

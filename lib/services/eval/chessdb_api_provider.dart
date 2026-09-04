@@ -217,7 +217,7 @@ class ChessDbApiProvider implements ExternalEvalProvider, ExternalMoveProvider {
       final board = Uri.encodeComponent(canonicalizeFen4(fen));
       final uri = Uri.parse('$_defaultBaseUrl?action=queryscore&board=$board');
       final fetch = httpFetch ?? http.get;
-      final response = await fetch(uri);
+      final response = await fetch(uri).timeout(_requestTimeout);
 
       if (_isRateLimitResponse(response)) {
         _noteRateLimited();
@@ -273,7 +273,7 @@ class ChessDbApiProvider implements ExternalEvalProvider, ExternalMoveProvider {
       await _acquireSlot();
       final http.Response response;
       try {
-        response = await (httpFetch ?? http.get)(uri);
+        response = await (httpFetch ?? http.get)(uri).timeout(_requestTimeout);
       } catch (e) {
         if (kDebugMode) debugPrint('[ChessDbApiProvider] queryall failed: $e');
         return DbMoveList.empty;
@@ -340,6 +340,19 @@ class ChessDbApiProvider implements ExternalEvalProvider, ExternalMoveProvider {
   }
 
   static const Duration _maxWaitForCooldown = Duration(seconds: 90);
+
+  /// How long one HTTP request may take before it is abandoned.
+  ///
+  /// `package:http` has no default timeout, and both lookups run inside a
+  /// [concurrency]-wide slot. A server that accepts the connection and then
+  /// never answers therefore used to hold its slot for the life of the
+  /// process: with the default two slots, two such requests wedged every
+  /// later lookup behind a [Completer] that nothing would ever complete.
+  /// Timing out is what lets the `finally` release the slot.
+  ///
+  /// Generous on purpose — this is the "it is never coming" bound, not a
+  /// latency target. A slow answer is still an answer.
+  static const Duration _requestTimeout = Duration(seconds: 20);
 
   /// Attempts a refused book lookup gets before giving up on the position.
   ///

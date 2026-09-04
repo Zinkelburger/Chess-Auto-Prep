@@ -67,6 +67,18 @@ const int kCdbDownloadHeadroomBytes = 2 * 1000 * 1000 * 1000;
 /// download does not leave the volume with nothing to work in.
 const int kCdbRecommendedHeadroomBytes = 20 * 1000 * 1000 * 1000;
 
+/// How much downloaded data may sit in the sink's buffer before the read loop
+/// waits for the disk to catch up.
+///
+/// [IOSink.add] neither blocks nor reports a full buffer, so a loop that only
+/// calls `add` never applies backpressure: on a network faster than the disk
+/// the whole transfer accumulates in memory.  A multi-GB dump fetched by
+/// several workers at once is how that becomes an OOM rather than a slow
+/// download.  Awaiting a flush suspends the enclosing `await for`, which
+/// pauses the HTTP subscription — so this constant is the real cap on how
+/// much of the file is resident, per worker.
+const int _sinkBufferBytes = 8 * 1024 * 1024;
+
 class CdbSnapshotDownloadController extends ChangeNotifier
     with SafeChangeNotifier {
   CdbSnapshotDownloadController({
@@ -489,6 +501,7 @@ class CdbSnapshotDownloadController extends ChangeNotifier
     );
     var stopped = false;
     try {
+      var buffered = 0;
       await for (final chunk in response) {
         if (_stopRequested) {
           stopped = true;
@@ -496,6 +509,13 @@ class CdbSnapshotDownloadController extends ChangeNotifier
         }
         sink.add(chunk);
         _bytesDone += chunk.length;
+        buffered += chunk.length;
+        if (buffered >= _sinkBufferBytes) {
+          // Suspends this loop, which pauses the response subscription until
+          // the bytes are on disk.  Without it the sink queues without bound.
+          await sink.flush();
+          buffered = 0;
+        }
       }
     } finally {
       await sink.flush();

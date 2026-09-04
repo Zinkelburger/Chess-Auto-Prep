@@ -26,8 +26,16 @@ class _TempStorage implements StorageService {
   Future<bool> fileExists(String path) async => File(path).existsSync();
 
   @override
-  Future<void> writeFile(String path, String content) async {
+  Future<void> writeFile(
+    String path,
+    String content, {
+    bool createOnly = false,
+    String? expectedContent,
+  }) async {
     if (failWrites) throw const FileSystemException('disk full');
+    if (createOnly && File(path).existsSync()) {
+      throw const FileSystemException('file exists');
+    }
     File(path).writeAsStringSync(content);
   }
 

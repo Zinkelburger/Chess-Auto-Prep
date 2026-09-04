@@ -40,7 +40,6 @@ class EvalSourcesController extends ChangeNotifier with SafeChangeNotifier {
   /// floor", which is the one value whose display is not its number.
   final TextEditingController minEvalDepthField = TextEditingController();
 
-  bool _batchEvalLookups = false;
   bool _enableLocalChessDb = false;
   // On by default: the ChessDB cloud is a fallback consulted *before* the
   // engine, so it only speeds things up when no local dump is configured, and
@@ -52,10 +51,6 @@ class EvalSourcesController extends ChangeNotifier with SafeChangeNotifier {
   bool? _localChessDbFileValid;
   int _apiUsedToday = 0;
   int _apiQuotaLimit = _defaultDailyQuota;
-
-  bool get batchEvalLookups => _batchEvalLookups;
-  set batchEvalLookups(bool value) =>
-      _set(_batchEvalLookups, value, (v) => _batchEvalLookups = v);
 
   bool get enableLocalChessDb => _enableLocalChessDb;
   set enableLocalChessDb(bool value) =>
@@ -130,7 +125,6 @@ class EvalSourcesController extends ChangeNotifier with SafeChangeNotifier {
   /// told what they were, so reopening the form on a saved config or a preset
   /// silently reset all eight to the defaults above.
   void applyConfig(TreeBuildConfig config) {
-    _batchEvalLookups = config.batchEvalLookups;
     _enableLocalChessDb = config.enableLocalChessDb;
     localChessDbPathField.text = config.localChessDbPath;
     // Re-validated lazily; the path came from a config that was built with
@@ -168,7 +162,6 @@ class EvalSourcesController extends ChangeNotifier with SafeChangeNotifier {
       enableCdbDirect: cdbDirectAvailable && databases.enableCdbDirect,
       cdbDirectPath: cdbDirectAvailable ? databases.cdbDirectPath : '',
       cdbDirectReadAhead: cdbDirectAvailable && databases.cdbDirectReadAhead,
-      batchEvalLookups: cdbDirectAvailable && _batchEvalLookups,
       enableLichessEvals:
           databases.enableLichessEvals && databases.lichessEvalsPath.isNotEmpty,
       lichessEvalsPath: databases.lichessEvalsPath,

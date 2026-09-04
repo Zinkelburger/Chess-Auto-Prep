@@ -73,7 +73,11 @@ void main() {
     main_ = p.join(root, 'Main.pgn');
     csv = _CsvStorage();
     splitter = ChapterSplitter(
-      storage: IOStorageService(),
+      storage: IOStorageService(
+        documentsRoot: tmp,
+        supportRoot: tmp,
+        repertoiresRoot: Directory(root),
+      ),
       review: RepertoireReviewService(storage: csv),
     );
   });

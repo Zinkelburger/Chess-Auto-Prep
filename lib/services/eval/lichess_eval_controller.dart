@@ -47,10 +47,9 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
   LichessEvalController({
     LichessEvalSource? source,
     Uri Function()? urlBuilder,
-    bool spawnIsolate = true,
+    this._spawnIsolate = true,
   }) : _source = source ?? LichessEvalSource(),
-       _urlBuilder = urlBuilder ?? (() => Uri.parse(kLichessEvalUrl)),
-       _spawnIsolate = spawnIsolate;
+       _urlBuilder = urlBuilder ?? (() => Uri.parse(kLichessEvalUrl));
 
   static final LichessEvalController instance = LichessEvalController();
 
@@ -204,7 +203,10 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
   /// Ask Lichess how big the file is today.
   Future<LichessEvalSourceInfo> refreshSource() async {
     _phase = LichessEvalPhase.probing;
-    notifyListeners();
+    // The download dialog starts this from its `initState`, so everything up
+    // to the first await runs inside the build phase. See
+    // [SafeChangeNotifier.notifyListenersOutsideBuild].
+    notifyListenersOutsideBuild();
     final info = _info = await _source.probe();
     _archiveTotal = info.bytes;
     _phase = isReady
@@ -403,10 +405,39 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
 
     final receive = ReceivePort();
     final finished = Completer<void>();
+    // The completer is also completed from `onExit`/`onError` below, which can
+    // land before the `await` further down attaches. A second, swallowing
+    // listener keeps that from surfacing as an unhandled async error; the real
+    // await still receives it.
+    unawaited(finished.future.catchError((_) {}));
     receive.listen((message) {
       if (message is SendPort) {
         _isolateControl = message;
         if (_stopRequested) message.send('cancel');
+        return;
+      }
+      // This port is also the isolate's `onExit` and `onError` port, so it
+      // carries two messages that are not progress reports. Dropping them —
+      // which is what the `is!` check below used to do on its own — meant an
+      // isolate that died from an uncaught error never completed [finished],
+      // never reached the `finally` that kills it, and left the job showing
+      // "importing" until the two-day timeout.
+      if (message == null) {
+        // onExit. Harmless after a `done`/`failed` report; the only signal
+        // there is when the isolate died without sending one.
+        if (!finished.isCompleted) {
+          finished.completeError(
+            StateError('the import isolate stopped before it finished'),
+          );
+        }
+        return;
+      }
+      if (message is List) {
+        // onError sends [error, stackTrace], both already stringified.
+        if (!finished.isCompleted) {
+          final error = message.isNotEmpty ? message.first : 'unknown error';
+          finished.completeError(StateError('import failed: $error'));
+        }
         return;
       }
       if (message is! LichessImportProgress) return;

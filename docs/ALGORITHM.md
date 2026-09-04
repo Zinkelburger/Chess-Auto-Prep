@@ -155,19 +155,24 @@ V(leaf)     = winProbability(evalCp)
 
 `P(child)` is the Maia/DB frequency of the opponent's move. The result `V` is displayed as "% win" (practical win rate given human opponents).
 
-### 5b. CPL Value Propagation (Opponent-Mistake Weight)
+### 5b. Opponent mistakes are already in `V`
 
-A parallel propagation computes `cplValue` — the total expected centipawn loss by the opponent downstream from each node:
+There is deliberately **no** separate opponent-mistake weight. Expectimax
+already prices a line by how opponents actually play it: an opponent node is
+the probability-weighted average of where its children land, so a line the
+opponent goes wrong in scores higher *because* the wrong moves lead to
+positions that are better for us, weighted by how often they are chosen.
 
-```
-cplV(leaf)     = 0
-cplV(opp_node) = localCpl + Σ P(child) × cplV(child)
-cplV(our_node) = max over eval-guarded children of cplV(child)
-```
+A second knob scaling the argmax by accumulated centipawn loss double-counted
+that, and because the value it read (`cplValue`) was computed in a later pass
+than the propagation that consumed it, the boost tilted *selection* without
+tilting the values selection was compared against — a node's stored `V`
+described a move the repertoire did not play. Both the knob and the
+propagation were removed.
 
-Where `localCpl` is the probability-weighted centipawn loss at a single opponent node (how much the opponent loses on average relative to their best move). The `cplValue` accumulates this across the whole subtree.
-
-**Opponent-mistake weight** (`mistakeWeight`, 0–100) folds this into the ordinary expectimax argmax the same way the novelty boost does: a candidate's value is scaled by `1 + w × min(1, cplValue / 100)` before the pick, inside the eval-loss window only, and the stored `V` stays unboosted. Because `cplValue` is probability weighted, a mistake opponents reach often counts for more than the same mistake deep in a rare line. Nothing widens any tolerance on its own: raise `maxEvalLossCp` to let the weight consider speculative tries, and use Pure search so those get searched subtrees. (There is no separate "trappy" selection mode any more, and no "playable" blend: naturalness is the `memorabilityToleranceCp` tie-break.)
+`localCpl` — the probability-weighted centipawn loss at a single opponent
+node, relative to their best move — is still computed and is still shown in
+the eval tree. It is a diagnostic, not an input to selection.
 
 ### 6. Line Quality (Playability)
 
@@ -228,7 +233,6 @@ Traps are indexed by `TrapIndexService` for O(1) lookup by FEN and per-line quer
 | `setupToleranceCp` | 30 | TreeBuildConfig | Max eval loss for a setup move to be preferred |
 | `selectionMode` | `expectimax` | TreeBuildConfig | `expectimax`, `engineOnly`, `dbWinRateOnly` |
 | `noveltyWeight` | 0 | TreeBuildConfig | 0–100 boost for rarely played sound moves |
-| `mistakeWeight` | 0 | TreeBuildConfig | 0–100 boost for moves whose lines opponents go wrong in |
 | `maiaElo` | 2200 | EngineSettings | Maia model ELO level |
 | `annotationDetail` | `full` | TreeBuildConfig | Per-move PGN annotation level: `none` / `likelihood` / `full` |
 | `organizeIntoChapters` | `true` | TreeBuildConfig | Cut the export into named chapters at branch points |
@@ -238,6 +242,67 @@ Traps are indexed by `TrapIndexService` for O(1) lookup by FEN and per-line quer
 | `modelGameMinElo` | 2200 | TreeBuildConfig | Rating floor for a model game; unrated games stay eligible |
 | `refutationLines` | `true` | TreeBuildConfig | Show the engine's punishment of a reply that ends a line won |
 | `alternativeLines` | `true` | TreeBuildConfig | Show the engine's answer to a natural move the book leaves out |
+| `lineMinNewShare` | 0.25 | TreeBuildConfig | Share of a line's decisions that must be new to the book; 0 = off |
+| `lineMaxOverlap` | 0.7 | TreeBuildConfig | Largest decision-set Jaccard a line may share with any kept line; 1 = off |
+| `lineMaxFoldPlies` | 6 | TreeBuildConfig | Longest sideline a fold may write before the line is dropped instead |
+
+### 9b. Line Ranking and the Diversity Bar (Phase 3)
+
+Extraction hands the pruner every root-to-leaf line.
+`LinePruner.rank` orders them by **greedy weighted set cover** over the
+*decisions* each teaches — a `LineCoverageUnit` keyed by the canonical FEN of
+the position faced plus the UCI played in it, valued at that position's reach
+probability scaled up for an only-move.  Two lines share a unit whenever they
+put you in front of the same choice, so a transposition is recognised as the
+same idea however it was reached.  The greedy runs to exhaustion and the
+*order* is the answer to "which lines matter most"; how many to keep is chosen
+afterwards on the Generate tab, against a live count.
+
+**"Teaches something new" is not a high enough bar.**  Set cover admits a line
+the moment it carries one uncovered unit.  Measured on the 40k-node Benko
+build, that gave 519 lines from 753 extracted, and the *median* kept line
+shared 12 of its 14 plies with another kept line, had 6 of its 7 decisions
+taught elsewhere, and differed from its nearest twin only in the last move or
+two — 90% of the book was a tail-only variant of something already in it.
+
+Two counted tests close that gap:
+
+- `lineMinNewShare` — at least this share of a line's decisions must be ones
+  no kept line teaches (against the book as a whole).
+- `lineMaxOverlap` — a cap on the decision-set Jaccard against any *single*
+  kept line.  The ladder is coarse because lines are short: for two
+  seven-decision lines, sharing six scores 0.75 and sharing five scores 0.56,
+  so 0.7 means "differ by more than one decision".
+
+Both count decisions and neither weighs them, which is deliberate.  A
+value-weighted floor was tried and is structurally broken: unit value is reach
+probability, so a line's value is dominated by the first two or three
+decisions — precisely the ones every sibling shares — and once the first pick
+covers them a 10% floor keeps 11 lines out of 753.  Reach value answers "how
+much does this line matter", not "how much of it is new".
+
+**A line that fails the bar is folded, not dropped.**  It still teaches a
+decision nothing else does; it is just not worth its own chapter entry to say
+so.  So it is attached to the kept line it shares the longest move prefix
+with, and the export writes it as a PGN variation hanging off the ply where
+the two part (repeating the host's last move when the fold *continues* the
+host rather than diverging from it).  A fold whose sideline would run longer
+than `lineMaxFoldPlies` is a second line written inside the first, so that one
+is dropped.  At the defaults the Benko build gives **197 mainlines + 321
+folded sidelines, nothing dropped**, and tail-only twins fall from 90% to 12%.
+
+A line whose every decision is already in the document — as a mainline or as
+a sideline — is suppressed rather than folded again.  Rejecting a line does
+not mark its decisions covered (marginal value is measured against mainlines,
+and crediting a sideline there would let a fold pay for a mainline), so
+without that check each near-identical sibling wins a round with the *same*
+uncovered decision and gets its own fold: the first cut of this wrote
+`11. Qc2 Nxa6` seven times into one game, once per unplayed White 12th move.
+
+Coverage is therefore reported twice: `coverageAt` counts mainlines only —
+what training will quiz — and `answeredCoverageAt` adds the folded sidelines,
+which is what the file answers if you read it.  Without a bar the two are
+identical.
 
 ### 10. Course Composition (Phase 3.5)
 
@@ -317,6 +382,9 @@ own PGN game, so training, browsing and per-line statistics are unchanged.
 - `lib/services/coherence_service.dart` — FP-Growth coherence analysis
 - `lib/features/eval_tree/services/eval_tree_line_metrics.dart` — line quality metrics
 - `lib/core/generated_repertoire.dart` — single derived bundle (tree + FenMap + snapshot + traps)
+- `lib/services/generation/line_extractor.dart` — the valued tree walked into lines, transpositions merged
+- `lib/services/generation/line_pruner.dart` — greedy set cover, the diversity bar, and folding
+- `lib/services/generation/repertoire_slice.dart` — re-cutting a finished build's ranking without rebuilding
 - `lib/services/generation/course/` — chapter planning, ECO naming, model-game selection, PGN composition
 - `lib/services/generation/export/` — the single PGN emitter and the per-move annotation model
 - `lib/services/generation/pgn_freq_map.dart` / `pgn_freq_parser.dart` / `pgn_freq_cache.dart` — human-practice statistics from a PGN database

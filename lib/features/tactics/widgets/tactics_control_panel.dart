@@ -7,9 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_state.dart';
-import '../../../models/engine_settings.dart';
 import '../models/tactics_session_settings.dart';
-import '../../../services/engine/stockfish_pool.dart';
 import '../../../services/maia/maia_factory.dart';
 import '../services/tactics_import_coordinator.dart';
 import '../controllers/tactics_session_controller.dart';
@@ -96,9 +94,9 @@ abstract class _TacticsControlPanelStateBase extends State<TacticsControlPanel>
   bool _showRecap = false;
 
   // Focus node for keyboard shortcuts during training
-  final FocusNode _focusNode = FocusNode();
+  final FocusNode _focusNode = FocusNode(debugLabel: 'tactics panel');
 
-  /// Deferred engine/Maia warm-up (see initState); cancelled on dispose so a
+  /// Deferred Maia warm-up (see initState); cancelled on dispose so a
   /// short-lived panel never leaves the FFI init running behind it.
   Timer? _warmUpTimer;
 
@@ -124,7 +122,7 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
     _solutionNav = TacticsSolutionNavigator(
       pgn: _pgnViewerController,
       currentTactic: () => _session.currentPosition,
-      solutionToSan: (tactic) => _session.engine.correctLineToSan(tactic),
+      solutionToSan: (tactic) => _session.engine.solutionLineToSan(tactic),
       setBoardPosition: (position) =>
           context.read<AppState>().setCurrentPosition(position),
     );
@@ -196,10 +194,13 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
     // Auto-load positions on startup
     unawaited(_loadPositions());
 
-    // Pre-warm Stockfish pool + Maia so imports start instantly — but off the
-    // startup frame burst. The 45MB Maia ONNX parse is synchronous FFI;
-    // running it during first paint janked startup. Imports still lazily force
-    // init if the user is quicker than this.
+    // Pre-warm Maia off the startup frame burst. The 45MB ONNX parse is
+    // synchronous FFI, so running it during first paint janked startup.
+    //
+    // Do not pre-spawn Stockfish here. On a 22-core machine that meant merely
+    // opening Tactics left 11 processes and about 2.3 GiB of private memory
+    // resident indefinitely. Engine consumers call ensureWorkers themselves,
+    // so the configured parallel workers now start only when work begins.
     //
     // A plain delay, not scheduleTask(Priority.idle). An idle task is refused
     // while anything animates, and SchedulerBinding then re-posts a
@@ -209,14 +210,12 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
     // frame that would end it. The result is a test that spins at 100% CPU and
     // allocates until it is OOM-killed. It also means that in the real app the
     // warm-up never ran while any spinner was on screen.
-    _warmUpTimer = Timer(const Duration(seconds: 2), _warmUpEngines);
+    _warmUpTimer = Timer(const Duration(seconds: 2), _warmUpMaia);
   }
 
-  /// Spawn Stockfish workers and load the Maia ONNX model while the user is
-  /// still looking at the home panel, so the first import starts instantly.
-  Future<void> _warmUpEngines() async {
-    await StockfishPool.instance.ensureWorkers(EngineSettings.instance.workers);
-    // Maia init is cheap after the first call (singleton).
+  /// Load the Maia ONNX model while the user is still looking at the home
+  /// panel. Maia init is cheap after the first call (singleton).
+  Future<void> _warmUpMaia() async {
     if (MaiaFactory.isAvailable) {
       try {
         await MaiaFactory.instance?.initialize();
@@ -293,8 +292,8 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
   Widget build(BuildContext context) {
     // holdsFocus: the panel keeps keyboard focus for its navigation shortcuts
     // and hands focus to the move input when typing is wanted. While the move
-    // input owns focus, keys that navigate the trainer (Space, S/P, J,
-    // arrows) are routed back here through _handleTrainerNavigationKey — the
+    // input owns focus, keys that navigate the trainer (Space, arrows, and J)
+    // are routed back here through _handleTrainerNavigationKey — the
     // field is a focus-tree sibling, so they can't bubble to _handleKeyEvent.
     return TrainerKeyboardScope(
       holdsFocus: true,
@@ -430,6 +429,9 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
         final solutionSan = current != null
             ? _solutionNav.sanMoves
             : const <String>[];
+        final trainableSan = current != null
+            ? _session.engine.correctLineToSan(current)
+            : const <String>[];
         final revealed =
             current != null &&
             (_session.showSolution || _session.positionSolved);
@@ -471,6 +473,7 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
                     setState(() {});
                   },
                   solutionSanMoves: solutionSan,
+                  trainableSanMoves: trainableSan,
                   solutionStartPly: solutionStartPly,
                   activeSolutionMoveIndex: _solutionNav.activeIndex,
                   onSolutionMoveTapped: revealed && solutionSan.isNotEmpty
@@ -519,7 +522,9 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
     }
 
     final tactic = _session.currentPosition!;
-    final cacheKey = '${tactic.fen}|${tactic.correctLine.join(' ')}';
+    final cacheKey =
+        '${tactic.fen}|${tactic.correctLine.join(' ')}|'
+        '${tactic.solutionPv.join(' ')}';
     if (_solutionPgnKey != cacheKey) {
       _solutionPgnKey = cacheKey;
       // Prefer the full source game captured at mine time — it's self-contained
@@ -528,7 +533,7 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
       final sourceGame = buildSourceGamePgn(tactic);
       _solutionPgnText = sourceGame.isNotEmpty
           ? sourceGame
-          : buildSolutionPgn(tactic, _session.engine.correctLineToSan(tactic));
+          : buildSolutionPgn(tactic, _session.engine.solutionLineToSan(tactic));
     }
     final pgnText = _solutionPgnText!;
 

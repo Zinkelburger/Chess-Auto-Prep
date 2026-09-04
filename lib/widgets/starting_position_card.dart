@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import '../constants/chess_constants.dart';
 import '../utils/movetext_builder.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import 'chess_board_widget.dart';
 
 class StartingPositionCard extends StatelessWidget {
@@ -21,6 +22,7 @@ class StartingPositionCard extends StatelessWidget {
     required this.fen,
     required this.moveSans,
     this.flipped = false,
+    this.sideLabel,
   });
 
   /// Small all-caps heading, e.g. 'GENERATING FROM' or 'SESSION STARTS FROM'.
@@ -34,6 +36,11 @@ class StartingPositionCard extends StatelessWidget {
 
   /// Orient the preview from Black's side (black repertoires).
   final bool flipped;
+
+  /// Which side the run is for, e.g. 'as Black'.  Sits under the position so
+  /// the most consequential setting of a build is not left to be inferred
+  /// from which way the little board happens to face.
+  final String? sideLabel;
 
   static const double _boardSize = 108;
 
@@ -82,6 +89,10 @@ class StartingPositionCard extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+                if (sideLabel != null) ...[
+                  const SizedBox(height: 2),
+                  Text(sideLabel!, style: AppTextStyles.caption),
+                ],
               ],
             ),
           ),

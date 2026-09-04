@@ -29,6 +29,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../utils/lru_map.dart';
 import 'eval/eval_canonicalize.dart';
 import 'storage/app_paths.dart';
 
@@ -50,10 +51,22 @@ class EvalCache {
   Database? _db;
   Future<void>? _initFuture;
 
+  /// Entries held in the L1 mirror before the least recently used is
+  /// dropped.  A key is a canonical 4-field FEN (~55 bytes) and an [_Entry]
+  /// is two ints, so 100k entries is on the order of 20 MB — bounded, and
+  /// still far more than the working set of any one search.  The mirror
+  /// exists only to save SQLite round-trips; every evicted entry is still on
+  /// disk, so eviction costs a query, never a re-evaluation.
+  ///
+  /// It used to be uncapped, which meant a deep build that touched millions
+  /// of distinct positions retained every one of them for the life of the
+  /// process.
+  static const int _memoryEntries = 100000;
+
   /// L1 mirror, canonical key → entry.  A miss is remembered as
   /// [_Entry.miss] so a position the database has never seen costs one
   /// query, not one per candidate that reaches it.
-  final Map<String, _Entry> _mem = {};
+  final LruMap<String, _Entry> _mem = LruMap(maxEntries: _memoryEntries);
 
   final _WriteQueue _writes = _WriteQueue();
 
@@ -469,8 +482,18 @@ class MaiaCache {
   static final MaiaCache instance = MaiaCache._();
   MaiaCache._();
 
-  final Map<String, Map<String, double>> _mem = {};
-  final Map<String, double> _winMem = {};
+  /// Entries held in memory before the least recently used is dropped.  One
+  /// entry is a policy over ~30 moves — a `Map<String, double>` of roughly
+  /// 2.5 kB — so 20k entries is on the order of 50 MB.  Heavier per entry
+  /// than the eval mirror, hence the smaller cap.
+  ///
+  /// Policy and win probability live in one entry so the two cannot evict
+  /// independently.  They used to be two uncapped maps with nothing that ever
+  /// removed from either and no [clear] at all, so every Maia inference the
+  /// process performed was retained for its lifetime.
+  static const int _memoryEntries = 20000;
+
+  final LruMap<String, _MaiaEntry> _mem = LruMap(maxEntries: _memoryEntries);
 
   String _key(String fen, int elo) => '${canonicalizeFen4(fen)}|$elo';
 
@@ -479,9 +502,8 @@ class MaiaCache {
     int elo,
   ) async {
     final k = _key(fen, elo);
-    if (_mem.containsKey(k)) {
-      return (policy: _mem[k]!, winProb: _winMem[k] ?? 0.0);
-    }
+    final hit = _mem[k];
+    if (hit != null) return (policy: hit.policy, winProb: hit.winProb);
 
     await EvalCache.instance.init();
     final db = EvalCache.instance._db;
@@ -498,8 +520,7 @@ class MaiaCache {
       final json = rows.first['policy_json'] as String;
       final winProb = (rows.first['win_prob'] as num).toDouble();
       final map = _decodePolicyJson(json);
-      _mem[k] = map;
-      _winMem[k] = winProb;
+      _mem[k] = _MaiaEntry(map, winProb);
       return (policy: map, winProb: winProb);
     } catch (e) {
       if (kDebugMode) debugPrint('[MaiaCache] read failed: $e');
@@ -516,8 +537,7 @@ class MaiaCache {
     double winProb,
   ) async {
     final k = _key(fen, elo);
-    _mem[k] = policy;
-    _winMem[k] = winProb;
+    _mem[k] = _MaiaEntry(policy, winProb);
 
     await EvalCache.instance.init();
     if (EvalCache.instance._db == null) return;
@@ -541,6 +561,22 @@ class MaiaCache {
     double winProb,
   ) {
     unawaited(put(fen, elo, policy, winProb));
+  }
+
+  /// Drop every cached policy, in memory and on disk.  The eval side has had
+  /// this since it shipped; this side did not, so a settings-level "clear
+  /// cache" could not reach the Maia rows at all.
+  Future<void> clear() async {
+    _mem.clear();
+    await EvalCache.instance.init();
+    final db = EvalCache.instance._db;
+    if (db == null) return;
+    try {
+      await EvalCache.instance._writes.settle();
+      await db.delete('maia_cache');
+    } catch (e) {
+      if (kDebugMode) debugPrint('[MaiaCache] clear failed: $e');
+    }
   }
 
   static String _encodePolicyJson(Map<String, double> policy) {
@@ -568,4 +604,10 @@ class MaiaCache {
     }
     return map;
   }
+}
+
+class _MaiaEntry {
+  final Map<String, double> policy;
+  final double winProb;
+  const _MaiaEntry(this.policy, this.winProb);
 }

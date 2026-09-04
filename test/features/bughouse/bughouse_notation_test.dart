@@ -19,27 +19,27 @@ void main() {
     final controller = BughouseController();
     controller.playMove(
       BughouseBoard.a,
-      NormalMove(from: Square.e2, to: Square.e4),
+      const NormalMove(from: Square.e2, to: Square.e4),
     );
     controller.playMove(
       BughouseBoard.b,
-      NormalMove(from: Square.d2, to: Square.d4),
+      const NormalMove(from: Square.d2, to: Square.d4),
     );
     controller.playMove(
       BughouseBoard.a,
-      NormalMove(from: Square.g8, to: Square.f6),
+      const NormalMove(from: Square.g8, to: Square.f6),
     );
     controller.playMove(
       BughouseBoard.b,
-      NormalMove(from: Square.d7, to: Square.d5),
+      const NormalMove(from: Square.d7, to: Square.d5),
     );
     controller.playMove(
       BughouseBoard.a,
-      NormalMove(from: Square.e4, to: Square.e5),
+      const NormalMove(from: Square.e4, to: Square.e5),
     );
     controller.playMove(
       BughouseBoard.a,
-      NormalMove(from: Square.f6, to: Square.d5),
+      const NormalMove(from: Square.f6, to: Square.d5),
     );
     return controller;
   }

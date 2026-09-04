@@ -63,7 +63,12 @@ class GameCard extends StatelessWidget {
   /// board, two caption lines and the scrollbar fit in [boardSize].
   static const double momentSize = 100;
 
-  static const double _gap = 10;
+  /// Space between the three visual regions of a card. The moment boards are
+  /// a second, denser piece of visual information, so they need a little more
+  /// separation from the game summary than the summary needs from the main
+  /// board.
+  static const double _boardBodyGap = 16;
+  static const double _bodyMomentsGap = 24;
 
   final RecentGame game;
 
@@ -82,7 +87,8 @@ class GameCard extends StatelessWidget {
   /// Whether a card [width] wide (inside its padding) has room for the strip:
   /// the board, the text at its fixed width, and at least one moment.
   static bool stripFits(double width) =>
-      width >= boardSize + _gap + bodyWidth + _gap + momentSize;
+      width >=
+      boardSize + _boardBodyGap + bodyWidth + _bodyMomentsGap + momentSize;
 
   @override
   Widget build(BuildContext context) {
@@ -114,12 +120,12 @@ class GameCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     _buildBoard(),
-                    const SizedBox(width: _gap),
+                    const SizedBox(width: _boardBodyGap),
                     if (!showStrip)
                       Expanded(child: _buildBody(context))
                     else ...[
                       SizedBox(width: bodyWidth, child: _buildBody(context)),
-                      const SizedBox(width: _gap),
+                      const SizedBox(width: _bodyMomentsGap),
                       Expanded(
                         child: MomentsStrip(
                           moments: moments,
@@ -159,10 +165,13 @@ class GameCard extends StatelessWidget {
       message: 'Final position after ${game.moveCount} moves',
       waitDuration: const Duration(milliseconds: 600),
       // Always from my side of the board — the same orientation I played it in.
-      child: StaticBoardThumbnail(
-        fen: fen,
-        size: boardSize,
-        flipped: game.meWhite == false,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: StaticBoardThumbnail(
+          fen: fen,
+          size: boardSize,
+          flipped: game.meWhite == false,
+        ),
       ),
     );
   }
@@ -618,11 +627,14 @@ class MomentTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              StaticBoardThumbnail(
-                fen: moment.fen,
-                size: GameCard.momentSize,
-                flipped: flipped,
-                arrows: arrows,
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: StaticBoardThumbnail(
+                  fen: moment.fen,
+                  size: GameCard.momentSize,
+                  flipped: flipped,
+                  arrows: arrows,
+                ),
               ),
               const SizedBox(height: 3),
               Text(

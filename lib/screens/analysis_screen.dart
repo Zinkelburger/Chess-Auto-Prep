@@ -627,6 +627,13 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
         _showError('Re-download failed: $e');
       }
       return false;
+    } finally {
+      // Safe while the dialog is still animating out: `removeListener` is the
+      // one ChangeNotifier method that does not assert on a disposed
+      // notifier, so the ValueListenableBuilder can still detach.  Same shape
+      // as PlayerDownloadRunner.downloadOne, which is where this dialog came
+      // from; without it one notifier leaked per re-download.
+      progress.dispose();
     }
   }
 

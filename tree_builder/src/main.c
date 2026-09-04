@@ -677,6 +677,15 @@ static Tree *g_tree = NULL;
 static EnginePool *g_engine_pool = NULL;
 volatile int g_interrupted = 0;
 
+/* Set when every request to the opponent-move source failed.
+ *
+ * A build whose opponent source is entirely dead still "succeeds": our own
+ * moves come from the engine, so the tree grows one ply and stops, and the
+ * run prints "Done!" over a repertoire consisting of a single first move.
+ * That is a failed run wearing a success message, so it is recorded here
+ * and turned into a non-zero exit. */
+static bool g_opp_source_dead = false;
+
 /** Default -t: half of online CPU cores, at least 1. */
 static int default_thread_count(void) {
     long n = sysconf(_SC_NPROCESSORS_ONLN);
@@ -947,15 +956,39 @@ static const char* find_maia_model(const char *user_path) {
     return NULL;
 }
 
+/* Say why Stockfish could not be resolved.
+ *
+ * An explicit -S that did not resolve is the user's own answer to "where is
+ * Stockfish": name *that* path and why it failed, instead of reciting the
+ * default search list, which reads as though -S was never passed. */
+static void report_stockfish_not_found(const char *user_path) {
+    if (user_path && *user_path) {
+        fprintf(stderr, "Error: -S %s is not an executable file", user_path);
+        if (access(user_path, F_OK) != 0)
+            fprintf(stderr, " (no such file).\n");
+        else if (access(user_path, X_OK) != 0)
+            fprintf(stderr, " (not executable — chmod +x it).\n");
+        else
+            fprintf(stderr, ".\n");
+        fprintf(stderr,
+                "  The app ships Stockfish gzipped, so a path into "
+                "assets/executables/ needs extracting first:\n"
+                "    gunzip -c assets/executables/stockfish-linux.gz "
+                "> /tmp/stockfish && chmod +x /tmp/stockfish\n");
+        return;
+    }
+    fprintf(stderr, "Error: Stockfish not found. Use -S <path>.\n");
+    fprintf(stderr, "  Searched: ");
+    for (int i = 0; STOCKFISH_SEARCH_PATHS[i]; i++)
+        fprintf(stderr, "%s ", STOCKFISH_SEARCH_PATHS[i]);
+    fprintf(stderr, "\n");
+}
+
 static EnginePool *create_stockfish_engine_pool(const char *stockfish_path,
                                                 int num_threads, int eval_depth) {
     const char *sf_path = find_stockfish(stockfish_path);
     if (!sf_path) {
-        fprintf(stderr, "Error: Stockfish not found. Use -S <path>.\n");
-        fprintf(stderr, "  Searched: ");
-        for (int i = 0; STOCKFISH_SEARCH_PATHS[i]; i++)
-            fprintf(stderr, "%s ", STOCKFISH_SEARCH_PATHS[i]);
-        fprintf(stderr, "\n");
+        report_stockfish_not_found(stockfish_path);
         return NULL;
     }
 
@@ -2034,11 +2067,7 @@ int main(int argc, char *argv[]) {
             if (defer_engine_pool) {
                 const char *sf_path = find_stockfish(stockfish_path);
                 if (!sf_path) {
-                    fprintf(stderr, "Error: Stockfish not found. Use -S <path>.\n");
-                    fprintf(stderr, "  Searched: ");
-                    for (int i = 0; STOCKFISH_SEARCH_PATHS[i]; i++)
-                        fprintf(stderr, "%s ", STOCKFISH_SEARCH_PATHS[i]);
-                    fprintf(stderr, "\n");
+                    report_stockfish_not_found(stockfish_path);
                     if (maia) maia_destroy(maia);
                     rdb_close(db);
                     return 1;
@@ -2049,11 +2078,7 @@ int main(int argc, char *argv[]) {
             } else {
                 const char *sf_path = find_stockfish(stockfish_path);
                 if (!sf_path) {
-                    fprintf(stderr, "Error: Stockfish not found. Use -S <path>.\n");
-                    fprintf(stderr, "  Searched: ");
-                    for (int i = 0; STOCKFISH_SEARCH_PATHS[i]; i++)
-                        fprintf(stderr, "%s ", STOCKFISH_SEARCH_PATHS[i]);
-                    fprintf(stderr, "\n");
+                    report_stockfish_not_found(stockfish_path);
                     if (maia) maia_destroy(maia);
                     rdb_close(db);
                     return 1;
@@ -2083,11 +2108,7 @@ int main(int argc, char *argv[]) {
     } else if (build_mode != BUILD_MODE_MAIA_DB_EXPLORE) {
         const char *sf_path = find_stockfish(stockfish_path);
         if (!sf_path) {
-            fprintf(stderr, "Error: Stockfish not found. Use -S <path>.\n");
-            fprintf(stderr, "  Searched: ");
-            for (int i = 0; STOCKFISH_SEARCH_PATHS[i]; i++)
-                fprintf(stderr, "%s ", STOCKFISH_SEARCH_PATHS[i]);
-            fprintf(stderr, "\n");
+            report_stockfish_not_found(stockfish_path);
             if (maia) maia_destroy(maia);
             rdb_close(db);
             return 1;
@@ -2746,6 +2767,9 @@ int main(int argc, char *argv[]) {
 
         if (explorer) {
             lichess_explorer_print_stats(explorer);
+            uint64_t total = 0, failed = 0;
+            lichess_explorer_get_request_counts(explorer, &total, &failed);
+            if (total > 0 && failed == total) g_opp_source_dead = true;
             lichess_explorer_destroy(explorer);
         }
         } /* !built_from_db timing breakdown */
@@ -3007,7 +3031,18 @@ int main(int argc, char *argv[]) {
                         (pipeline_end.tv_nsec - pipeline_start.tv_nsec) / 1e9;
     printf("\n  Total time: %.1f seconds (%.1f minutes)\n",
            total_time, total_time / 60.0);
-    printf("\nDone! Repertoire saved to %s\n\n", pgn_path);
+    if (g_opp_source_dead) {
+        fprintf(stderr,
+                "\nError: every request to the Lichess opening explorer "
+                "failed.\n"
+                "  Opponent replies are what the tree branches on, so nothing "
+                "past our own first move could be built.\n"
+                "  %s holds whatever was reached; check the network (or pass "
+                "--maia-model to predict replies locally) and re-run.\n\n",
+                pgn_path);
+    } else {
+        printf("\nDone! Repertoire saved to %s\n\n", pgn_path);
+    }
 
     if (!g_interrupted) {
         char last_run[32];
@@ -3044,5 +3079,6 @@ cleanup:
     if (db) rdb_close(db);
     free(token_buf);
 
-    return g_interrupted ? 130 : 0;
+    if (g_interrupted) return 130;
+    return g_opp_source_dead ? 1 : 0;
 }

@@ -2,7 +2,7 @@
 /// hole/trick findings). One controller shape and one header row so every
 /// list answers to the same keys — the app-wide convention is **←/→ move
 /// through a game, [AppShortcut.previousItem]/[AppShortcut.nextItem] step
-/// whatever queue is in front of you**. That pair is P/S plus ↑/↓; the labels
+/// whatever queue is in front of you**. That pair is ↑/↓; the labels
 /// on the buttons come from the registry, so they cannot drift from the keys
 /// the screens actually bind.
 library;

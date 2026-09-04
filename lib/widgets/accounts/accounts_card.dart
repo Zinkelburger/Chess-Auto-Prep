@@ -123,7 +123,7 @@ class _Configured extends StatelessWidget {
       children: [
         Row(
           children: [
-            Expanded(
+            const Expanded(
               child: Text('My accounts', style: AppTextStyles.bodyStrong),
             ),
             TextButton(

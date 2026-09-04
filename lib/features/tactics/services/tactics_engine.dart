@@ -9,9 +9,6 @@ import 'tactics_database.dart';
 
 /// Engine for checking tactical solutions - Flutter port of Python's TacticsEngine
 class TacticsEngine {
-  /// Max plies stored from Stockfish PV for solution display (not training length).
-  static const int maxSolutionPvPlies = 12;
-
   /// Max user moves in a trainable tactic line.
   static const int maxTrainableUserMoves = 5;
 
@@ -293,10 +290,7 @@ class TacticsEngine {
       (position.correctLine.length + 1) ~/ 2;
 
   /// Line shown in **Show Solution** (full PV when stored, else trainable line).
-  List<String> solutionLineToSan(
-    TacticsPosition position, {
-    int maxMoves = maxSolutionPvPlies,
-  }) {
+  List<String> solutionLineToSan(TacticsPosition position, {int? maxMoves}) {
     final moves = position.solutionPv.isNotEmpty
         ? position.solutionPv
         : position.correctLine;
@@ -304,11 +298,7 @@ class TacticsEngine {
   }
 
   /// SAN moves for [moves] played from [fen] (UCI or SAN tokens).
-  List<String> lineToSan(
-    String fen,
-    List<String> moves, {
-    int maxMoves = maxSolutionPvPlies,
-  }) {
+  List<String> lineToSan(String fen, List<String> moves, {int? maxMoves}) {
     if (moves.isEmpty) return const [];
 
     try {
@@ -316,7 +306,7 @@ class TacticsEngine {
       final result = <String>[];
 
       for (final raw in moves) {
-        if (result.length >= maxMoves) break;
+        if (maxMoves != null && result.length >= maxMoves) break;
         final token = raw.trim();
         if (token.isEmpty) continue;
 

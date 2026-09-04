@@ -16,6 +16,7 @@ import 'dart:async';
 
 import '../models/explorer_response.dart';
 import '../utils/fen_utils.dart';
+import '../utils/lru_map.dart';
 import 'lichess_api_client.dart';
 
 /// Which Explorer database to query, plus its filters.
@@ -81,8 +82,9 @@ class ExplorerCacheService {
 
   static const int _maxEntries = 2000;
 
-  /// LinkedHashMap insertion order doubles as LRU recency order.
-  final Map<String, ExplorerResponse> _cache = {};
+  final LruMap<String, ExplorerResponse> _cache = LruMap(
+    maxEntries: _maxEntries,
+  );
   final Map<String, Future<ExplorerResponse?>> _inFlight = {};
 
   /// Whether the underlying client is inside a 429-backoff window.
@@ -100,11 +102,8 @@ class ExplorerCacheService {
   Future<ExplorerResponse?> fetch(String fen, ExplorerSourceConfig source) {
     final key = _key(fen, source);
 
-    final cached = _cache.remove(key);
-    if (cached != null) {
-      _cache[key] = cached; // re-insert as most recently used
-      return Future.value(cached);
-    }
+    final cached = _cache[key];
+    if (cached != null) return Future.value(cached);
 
     final pending = _inFlight[key];
     if (pending != null) return pending;
@@ -117,12 +116,7 @@ class ExplorerCacheService {
           useMasters: source.useMasters,
         )
         .then((response) {
-          if (response != null) {
-            _cache[key] = response;
-            while (_cache.length > _maxEntries) {
-              _cache.remove(_cache.keys.first);
-            }
-          }
+          if (response != null) _cache[key] = response;
           return response;
         })
         .whenComplete(() {
@@ -140,21 +134,14 @@ class ExplorerCacheService {
   /// entry's recency, since a peek that hits is a use.
   ExplorerResponse? peek(String fen, ExplorerSourceConfig source) {
     final key = _key(fen, source);
-    final cached = _cache.remove(key);
-    if (cached != null) _cache[key] = cached;
-    return cached;
+    return _cache[key];
   }
 
   /// Store a response fetched elsewhere (the live panel fetches through its
   /// own debounced path but shares this store, so a position browsed in the
   /// panel is a hit for the candidate service and vice versa).
   void put(String fen, ExplorerSourceConfig source, ExplorerResponse response) {
-    final key = _key(fen, source);
-    _cache.remove(key);
-    _cache[key] = response;
-    while (_cache.length > _maxEntries) {
-      _cache.remove(_cache.keys.first);
-    }
+    _cache[_key(fen, source)] = response;
   }
 
   void clear() => _cache.clear();

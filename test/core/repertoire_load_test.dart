@@ -41,7 +41,15 @@ class _GatedStorage implements StorageService {
   }
 
   @override
-  Future<void> writeFile(String path, String content) async {
+  Future<void> writeFile(
+    String path,
+    String content, {
+    bool createOnly = false,
+    String? expectedContent,
+  }) async {
+    if (createOnly && files.containsKey(path)) {
+      throw StateError('file exists');
+    }
     files[path] = content;
   }
 

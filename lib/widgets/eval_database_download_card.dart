@@ -32,6 +32,7 @@ class ChessDbDumpCard extends StatefulWidget {
     super.key,
     required this.canDownload,
     required this.configured,
+    this.cannotDownloadReason,
     this.controller,
   });
 
@@ -39,6 +40,11 @@ class ChessDbDumpCard extends StatefulWidget {
   /// would read the result is not loaded, since the download is 1.2 TB of
   /// files nothing on this machine can open.
   final bool canDownload;
+
+  /// Why the button is off, shown on the button. A greyed control whose
+  /// explanation lives in a banner elsewhere on the page is a control the
+  /// reader has to go hunting for; this card used to be exactly that.
+  final String? cannotDownloadReason;
 
   /// Whether a valid dump is already pointed at, which only changes the copy
   /// on the idle card.
@@ -164,18 +170,29 @@ class _ChessDbDumpCardState extends State<ChessDbDumpCard> {
           style: AppTextStyles.caption,
         ),
         const SizedBox(height: 10),
-        FilledButton.icon(
-          onPressed: widget.canDownload
-              ? () => unawaited(_startDownload())
-              : null,
-          icon: const Icon(Icons.download_outlined, size: 18),
-          label: Text(
-            widget.configured
-                ? 'Download a newer snapshot…'
-                : 'Download database…',
-          ),
-        ),
+        _downloadButton(),
       ],
+    );
+  }
+
+  /// [Tooltip] does not fire on a disabled child, so a reason has to hang on
+  /// a wrapper that is still hit-testable.
+  Widget _downloadButton() {
+    final button = FilledButton.icon(
+      onPressed: widget.canDownload ? () => unawaited(_startDownload()) : null,
+      icon: const Icon(Icons.download_outlined, size: 18),
+      label: Text(
+        widget.configured ? 'Download a newer snapshot…' : 'Download database…',
+      ),
+    );
+    final reason = widget.cannotDownloadReason;
+    if (widget.canDownload || reason == null) return button;
+    return Tooltip(
+      message: reason,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.basic,
+        child: AbsorbPointer(child: button),
+      ),
     );
   }
 

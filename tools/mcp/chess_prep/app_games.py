@@ -111,6 +111,13 @@ def register_app_games_tools(registry: Any) -> None:
 
     handles: dict[str, AppGamesDb] = {}
 
+    def _close_handles() -> None:
+        for db in handles.values():
+            db.close()
+        handles.clear()
+
+    registry.add_close_callback(_close_handles)
+
     def _db(args: dict) -> AppGamesDb:
         key = str(args.get("db") or "")
         if key not in handles:

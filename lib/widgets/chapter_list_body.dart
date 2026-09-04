@@ -17,6 +17,7 @@ import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/storage/storage_factory.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
+import '../utils/safe_file_name.dart';
 import 'common/list_search_field.dart';
 import 'layout/empty_state_placeholder.dart';
 
@@ -261,7 +262,8 @@ class _ChapterListBodyState extends State<ChapterListBody> {
       confirmLabel: 'Create',
       allowUnchanged: true,
       validate: (value) =>
-          _nameTaken(value) ? 'A chapter named "$value" exists' : null,
+          validateSafeFileName(value) ??
+          (_nameTaken(value) ? 'A chapter named "$value" exists' : null),
     );
     if (name == null) return;
 
@@ -301,9 +303,11 @@ class _ChapterListBodyState extends State<ChapterListBody> {
       fieldLabel: 'Chapter Name',
       confirmLabel: 'Rename',
       initialValue: chapter.name,
-      validate: (value) => _nameTaken(value, except: chapter.name)
-          ? 'A chapter named "$value" exists'
-          : null,
+      validate: (value) =>
+          validateSafeFileName(value) ??
+          (_nameTaken(value, except: chapter.name)
+              ? 'A chapter named "$value" exists'
+              : null),
     );
     if (newName == null || newName.isEmpty) return;
 
@@ -326,7 +330,8 @@ class _ChapterListBodyState extends State<ChapterListBody> {
       builder: (context) => AlertDialog(
         title: const Text('Delete Chapter'),
         content: Text(
-          'Delete chapter "${chapter.name}"? This cannot be undone.',
+          'Delete chapter "${chapter.name}"? Its file will be moved to '
+          'Chess Auto Prep recovery trash.',
         ),
         actions: [
           TextButton(

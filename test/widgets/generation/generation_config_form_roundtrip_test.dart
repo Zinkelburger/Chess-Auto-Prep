@@ -52,11 +52,7 @@ const Map<String, String> _enumAlternatives = {
 /// `toConfig` legitimately applies, mapped to a valid in-range alternative.
 /// Being clamped is correct behaviour, not a lost field, so the probe value
 /// has to respect the range or the test reports a false failure.
-const Map<String, Object> _inRangeAlternatives = {
-  // Clamped to 0.05..1.0, and stored in the form as an integer percent, so
-  // the probe must be a whole number of percent.
-  'line_coverage_target': 0.85,
-};
+const Map<String, Object> _inRangeAlternatives = {};
 
 /// Fields that deliberately do **not** survive the form, each with the reason.
 ///
@@ -78,7 +74,6 @@ const Map<String, String> _knownLossy = {
   'cdbdirect_path': 'read from EvalDatabaseSettings, gated on availability',
   'cdbdirect_read_ahead':
       'read from EvalDatabaseSettings, gated on availability',
-  'batch_eval_lookups': 'gated on cdb-direct availability, which is probed',
   // Same story, one source down the chain: the Lichess store is a machine-wide
   // download, so where it lives and whether it is used are settings, not
   // per-build knobs a saved config may override.

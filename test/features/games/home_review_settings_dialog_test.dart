@@ -1,5 +1,5 @@
 /// The review strip's one gear dialog: which games and how hard the engine
-/// works, applied by one button. (Auto-start lives on the strip itself.)
+/// works, applied by one button, including the startup check preference.
 library;
 
 import 'package:chess_auto_prep/features/games/controllers/recent_games_controller.dart';
@@ -154,5 +154,26 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(closed.single?.filters.speeds, {GameSpeed.blitz, GameSpeed.rapid});
+  });
+
+  testWidgets('startup check is explicit and can be disabled', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    restoreDepth();
+
+    final closed = await open(tester);
+    expect(
+      find.text('Check for new games when the app starts'),
+      findsOneWidget,
+    );
+    final autoStart = find.byKey(const Key('review-auto-start'));
+    await tester.ensureVisible(autoStart);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(of: autoStart, matching: find.byType(Checkbox)),
+    );
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+
+    expect(closed.single?.filters.autoRun, isFalse);
   });
 }

@@ -15,7 +15,12 @@ import 'windows_loader_check.dart';
 
 /// Thrown when the engine cannot be started or does not answer in time.
 class BughouseEngineFailure implements Exception {
-  BughouseEngineFailure(this.message, {this.report});
+  BughouseEngineFailure(this.message, {this.report, this.helpUrl});
+
+  /// Something the user can install to fix this, when there is one. Set only
+  /// for the failures it would actually fix, so a button offering it never
+  /// sends someone to download 25 MB that changes nothing.
+  final String? helpUrl;
 
   /// One line, for the banner.
   final String message;
@@ -347,13 +352,26 @@ class BughouseEngine implements BughouseAnalysisEngine {
       // The one moment worth spending real time on diagnosis: a first launch
       // that never answered is the failure users actually hit, and "did not
       // answer" on its own tells them nothing they can act on.
-      final report = await engine.buildReport(
-        headline: e is BughouseEngineFailure ? e.message : '$e',
-      );
-      await engine.dispose();
       final message = e is BughouseEngineFailure ? e.message : '$e';
+      // Hashing 70 MB is far too slow to do on the way in and exactly right
+      // here: the launch has already failed, and a file that is the right size
+      // and the wrong bytes is the one cause every other check in the report
+      // reads as healthy. It repairs what it finds, so the answer the user
+      // gets is "try again", not a paragraph to send to a developer.
+      final integrity = await BughouseBundle.verifyAndRepair();
+      final report = await engine.buildReport(
+        headline: message,
+        integrity: integrity,
+      );
+      final helpUrl = await engine.redistributableHelp();
+      await engine.dispose();
       log.e('Bughouse engine failed to start\n$report');
-      throw BughouseEngineFailure(message, report: report);
+      final repaired = integrity.repairedMessage;
+      throw BughouseEngineFailure(
+        repaired == null ? message : '$message $repaired',
+        report: report,
+        helpUrl: helpUrl,
+      );
     }
     return engine;
   }
@@ -575,8 +593,9 @@ class BughouseEngine implements BughouseAnalysisEngine {
       if (isWindows) {
         buffer.write(
           ' On Windows that is what a missing system library looks like — '
-          'check for an error box behind the app window, and install the '
-          'Microsoft Visual C++ Redistributable (x64) if one names a DLL.',
+          'check for an error box behind the app window, and if one names a '
+          'DLL, install the Microsoft Visual C++ Redistributable (x64) from '
+          '${WindowsLoaderCheck.redistributableUrl}.',
         );
       }
     }
@@ -639,15 +658,17 @@ class BughouseEngine implements BughouseAnalysisEngine {
     final hint = switch (status) {
       0xC0000135 =>
         'a library it needs is missing. Install the Microsoft Visual C++ '
-            'Redistributable (x64) and try again.',
+            'Redistributable (x64) — '
+            '${WindowsLoaderCheck.redistributableUrl} — and try again.',
       0xC0000139 =>
         'one of its libraries is the wrong version — it loaded, but does not '
             'have a function the engine needs.',
       0xC0000142 => 'one of its libraries failed to initialise.',
       0xC000007B =>
-        'Windows refused one of its libraries as an invalid 64-bit image. '
-            'That is either a 32-bit copy of it found ahead of the right one, '
-            'or a file that did not finish being written.',
+        'Windows refused one of its files as an invalid image. Almost always '
+            'that file is damaged on disk rather than the wrong architecture — '
+            'the section below says which one, and the app has already '
+            'replaced it if so.',
       0xC000001D =>
         'this CPU does not support an instruction the engine was built with.',
       0xC0000005 => 'it crashed (access violation).',
@@ -659,6 +680,34 @@ class BughouseEngine implements BughouseAnalysisEngine {
         : 'The bughouse engine could not start: $hint';
   }
 
+  /// The redistributable download to put in front of the user, or null when
+  /// installing it would change nothing.
+  ///
+  /// Two failures it fixes, and only two: the loader saying outright that a
+  /// DLL is missing, and one of the four libraries the app is supposed to have
+  /// copied beside the engine resolving nowhere at all. Offered any wider —
+  /// for a damaged file, for a CPU that is too old — it sends someone off to
+  /// install something that cannot help, and costs us the one time it could.
+  Future<String?> redistributableHelp() async {
+    if (!Platform.isWindows) return null;
+    final status = _exitStatus;
+    if (status != null &&
+        (status < 0 ? status + 0x100000000 : status) == 0xC0000135) {
+      return WindowsLoaderCheck.redistributableUrl;
+    }
+    try {
+      final resolutions = await WindowsLoaderCheck.resolveAll(
+        engineDir: _workingDirectory,
+        environment: _childEnvironment,
+      );
+      return WindowsLoaderCheck.needsRedistributable(resolutions)
+          ? WindowsLoaderCheck.redistributableUrl
+          : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Everything a bug report about a failed launch needs, as one block of
   /// text the user can copy in a single click.
   ///
@@ -667,7 +716,10 @@ class BughouseEngine implements BughouseAnalysisEngine {
   /// this back without knowing what any of it means. Best effort by
   /// construction — it only ever runs on a path that has already failed, so
   /// anything it threw would replace a real diagnosis with a worse one.
-  Future<String> buildReport({required String headline}) async {
+  Future<String> buildReport({
+    required String headline,
+    ContentVerification? integrity,
+  }) async {
     try {
       final directory = await describeDirectory(
         _workingDirectory,
@@ -685,6 +737,7 @@ class BughouseEngine implements BughouseAnalysisEngine {
           : 'LD_LIBRARY_PATH';
       return formatReport(
         headline: headline,
+        integrity: integrity,
         executablePath: executablePath,
         argv: _argv,
         workingDirectory: _workingDirectory,
@@ -713,6 +766,7 @@ class BughouseEngine implements BughouseAnalysisEngine {
   static String formatReport({
     required String headline,
     required String executablePath,
+    ContentVerification? integrity,
     required List<String> argv,
     required String workingDirectory,
     required int? exitCode,
@@ -753,6 +807,22 @@ class BughouseEngine implements BughouseAnalysisEngine {
         out
           ..writeln()
           ..writeln('!! $problem');
+      }
+    }
+
+    // Last, because it is the answer when everything above it looks right —
+    // and on the machines this report was written for, everything above it
+    // does look right.
+    if (integrity != null && !integrity.isEmpty) {
+      out
+        ..writeln()
+        ..writeln('Whether those files are the ones this build carries')
+        ..writeln(integrity.lines.join('\n'));
+      final repaired = integrity.repairedMessage;
+      if (repaired != null) {
+        out
+          ..writeln()
+          ..writeln('!! $repaired');
       }
     }
 

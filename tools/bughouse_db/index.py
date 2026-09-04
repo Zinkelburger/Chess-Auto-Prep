@@ -176,9 +176,9 @@ def build(
     )
 
     print("merging…")
-    if out.exists():
-        out.unlink()
-    con = _connect(out)
+    building = out.with_name(out.name + ".building")
+    building.unlink(missing_ok=True)
+    con = _connect(building)
     for _, partial, _, _ in tasks:
         if not partial.exists():
             continue
@@ -221,6 +221,9 @@ def build(
     con.commit()
     con.execute("VACUUM")
     con.close()
+    # Keep the previous, usable book until the new database has completed and
+    # closed successfully. os.replace is one same-filesystem commit.
+    building.replace(out)
     for _, partial, _, _ in tasks:
         partial.unlink(missing_ok=True)
     scratch.rmdir()

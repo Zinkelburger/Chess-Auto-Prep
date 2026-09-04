@@ -1,15 +1,15 @@
-/// Offline eval configuration: download the ChessDB full dump, or point the
-/// reader at a copy you already have.
+/// The settings half of the offline ChessDB dump: whether to consult it,
+/// where it is, and how to read it.
 ///
-/// Shown on Linux when the native reader is available; mounted from
-/// [SettingsScreen] under the Database section. The status-and-download half
-/// lives in [ChessDbDumpCard], which the repertoire builder's eval-sources
-/// pane mounts as well; what stays here is the settings this screen owns.
+/// Mounted by the Databases page inside a database card's disclosure. The
+/// card above it owns the *status* half — what is on disk, and the transfer
+/// controls — through [ChessDbDumpCard], which the repertoire builder's
+/// eval-sources pane mounts as well. This file deliberately holds no card, no
+/// banner and no title: it is the knobs, and the knobs only matter once the
+/// question of whether you have a dump has been answered somewhere else.
 library;
 
 import 'dart:async';
-
-import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -22,9 +22,9 @@ import '../services/eval/cdb_snapshot_catalog.dart';
 import '../services/eval/cdb_snapshot_download.dart';
 import '../services/eval/cdbdirect_eval_provider.dart';
 import '../services/eval/cdbdirect_parse.dart';
+import '../services/eval/storage_volumes.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/open_in_file_manager.dart';
-import 'eval_database_download_card.dart';
 import 'labeled_toggle.dart';
 
 /// Command for anyone who would rather run the transfer outside the app.
@@ -32,8 +32,34 @@ String chessDbRsyncCommand(String snapshotId) =>
     'rsync -av --partial --progress '
     'rsync://ftp.chessdb.cn/ftp/pub/chessdb/$snapshotId/ /path/to/chessdb/';
 
+/// Why the local ChessDB reader cannot be used here, in the reader's terms —
+/// or null when it can.
+///
+/// This used to read "Run `make setup-cdbdirect` in tree_builder/, then launch
+/// with `./run_with_cdbdirect.sh`". That is a build instruction for this
+/// checkout, and it was rendered to every user of a `.deb`, a flatpak or the
+/// Windows installer — none of whom have a checkout, a `make`, or any reason
+/// to open a terminal. A user-facing string may describe what is missing; it
+/// may not hand out someone else's homework.
+String? chessDbUnavailableReason(CdbDirectLibraryStatus status) {
+  if (status.isAvailable) return null;
+  if (!status.showFeatureUi) {
+    return 'Reading a local ChessDB dump needs a native component that is '
+        'only built for Linux. On ${status.platformName} the app uses the '
+        'Lichess evaluations and the engine instead.';
+  }
+  return 'This build does not include the native ChessDB reader, so a dump '
+      'on disk could not be read. The Lichess evaluations above need no '
+      'native component and cover the same job for most repertoires.';
+}
+
 class EvalDatabaseSettingsPanel extends StatefulWidget {
-  const EvalDatabaseSettingsPanel({super.key});
+  const EvalDatabaseSettingsPanel({super.key, required this.libraryAvailable});
+
+  /// Whether the native reader loaded. The controls are visible either way —
+  /// a setting you cannot reach is harder to reason about than one that is
+  /// visibly off — but nothing here is interactive without it.
+  final bool libraryAvailable;
 
   @override
   State<EvalDatabaseSettingsPanel> createState() =>
@@ -46,10 +72,8 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
       CdbSnapshotDownloadController.instance;
   final TextEditingController _pathCtrl = TextEditingController();
 
-  bool? _featureVisible;
-  bool _libraryAvailable = false;
-  String? _unavailableReason;
   CdbDirectDirValidation? _dirValidation;
+  StorageMedia? _pathMedia;
   bool _setupExpanded = false;
 
   @override
@@ -57,30 +81,9 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
     super.initState();
     _settings.addListener(_onSettingsChanged);
     _download.addListener(_onDownloadChanged);
-    unawaited(_bootstrap());
-  }
-
-  Future<void> _bootstrap() async {
-    if (!Platform.isLinux) {
-      if (!mounted) return;
-      setState(() {
-        _featureVisible = true;
-        _libraryAvailable = false;
-        _unavailableReason =
-            'The local ChessDB dump reader is only available on Linux.';
-      });
-      return;
-    }
-
-    final status = await CdbDirectEvalProvider.libraryStatus();
-    if (!mounted) return;
     _pathCtrl.text = _settings.cdbDirectPath;
-    setState(() {
-      _featureVisible = status.showFeatureUi;
-      _libraryAvailable = status.isAvailable;
-    });
-    if (_libraryAvailable && _settings.cdbDirectPath.isNotEmpty) {
-      await _validatePath(_settings.cdbDirectPath);
+    if (widget.libraryAvailable && _settings.cdbDirectPath.isNotEmpty) {
+      unawaited(_validatePath(_settings.cdbDirectPath));
     }
   }
 
@@ -106,16 +109,25 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
 
   Future<void> _validatePath(String path) async {
     if (path.trim().isEmpty) {
-      if (mounted) setState(() => _dirValidation = null);
+      if (mounted) {
+        setState(() {
+          _dirValidation = null;
+          _pathMedia = null;
+        });
+      }
       return;
     }
     final result = await validateCdbDirectDataDirDetailed(path);
+    final volume = await volumeForPath(path);
     if (!mounted) return;
-    setState(() => _dirValidation = result);
+    setState(() {
+      _dirValidation = result;
+      _pathMedia = volume?.media;
+    });
   }
 
   Future<void> _pickDirectory() async {
-    if (!_libraryAvailable) return;
+    if (!widget.libraryAvailable) return;
     final result = await FilePicker.getDirectoryPath(
       dialogTitle: 'Select ChessDB data directory',
     );
@@ -143,77 +155,76 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
 
   @override
   Widget build(BuildContext context) {
-    if (_featureVisible != true) return const SizedBox.shrink();
-
-    // No heading of its own: the enclosing settings card already names this
-    // section, and two titles stacked read as two sections.
+    final available = widget.libraryAvailable;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            icon: const Icon(Icons.info_outline, size: 16),
-            label: const Text(
-              'What offline evals are',
-              style: AppTextStyles.caption,
-            ),
-            style: TextButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-            ),
-            onPressed: () => _showInfoDialog(context),
-          ),
+        AppSwitch(
+          label: 'Look here before the engine',
+          value: _settings.enableCdbDirect,
+          onChanged: (v) => _settings.setEnableCdbDirect(v),
+          enabled: available,
+          tooltip:
+              'Answer eval lookups from the dump on disk before trying the '
+              'chessdb.cn API or the engine.',
+          disabledReason: 'The native ChessDB reader is not loaded.',
         ),
-        const SizedBox(height: 4),
-        if (!_libraryAvailable)
-          _banner(
-            AppColors.warning,
-            Icons.warning_amber_rounded,
-            _unavailableReason ??
-                'Native library not found. Run `make setup-cdbdirect` in '
-                    'tree_builder/, then launch with `./run_with_cdbdirect.sh`.',
-          ),
-        if (_unavailableReason == null) ...[
-          const SizedBox(height: 12),
-          ChessDbDumpCard(
-            canDownload: _libraryAvailable,
-            configured: _dirValidation?.isValid == true,
-          ),
-          const SizedBox(height: 16),
-          AppSwitch(
-            label: 'Local ChessDB (full dump)',
-            value: _settings.enableCdbDirect,
-            onChanged: (v) => _settings.setEnableCdbDirect(v),
-            enabled: _libraryAvailable,
-            tooltip:
-                'Answer eval lookups from the dump on disk before trying the '
-                'chessdb.cn API or the engine.',
-            disabledReason: 'The native reader is not loaded.',
-          ),
-          const SizedBox(height: 8),
-          _pathField(),
-          const SizedBox(height: 8),
-          AppSwitch(
-            label: 'HDD read-ahead hint',
-            value: _settings.cdbDirectReadAhead,
-            onChanged: (v) => _settings.setCdbDirectReadAhead(v),
-            enabled: _libraryAvailable && _settings.enableCdbDirect,
-            tooltip:
-                'Reads a larger block around each lookup — worth it on a '
-                'spinning disk, wasted work on an SSD.',
-            disabledReason: 'Requires Local ChessDB (full dump) to be enabled.',
-          ),
-          const SizedBox(height: 12),
-          _manualSetupTile(),
+        const SizedBox(height: 8),
+        _pathField(available),
+        const SizedBox(height: 8),
+        _readAheadSwitch(available),
+        const SizedBox(height: 12),
+        _manualSetupTile(),
+      ],
+    );
+  }
+
+  // ── Read-ahead ────────────────────────────────────────────────────────────
+
+  /// The switch, plus what we already know about the drive it applies to.
+  ///
+  /// "HDD read-ahead hint" asked the reader a question the app can answer
+  /// itself: [volumeForPath] reports the media, so the advice line says which
+  /// way to set it instead of leaving a piece of storage trivia on screen for
+  /// someone to look up. It stays a switch rather than becoming automatic
+  /// because the detection is a heuristic over `/sys/block`, and being wrong
+  /// about it silently is worse than being overridable.
+  Widget _readAheadSwitch(bool available) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppSwitch(
+          label: 'Read in larger blocks',
+          value: _settings.cdbDirectReadAhead,
+          onChanged: (v) => _settings.setCdbDirectReadAhead(v),
+          enabled: available && _settings.enableCdbDirect,
+          tooltip:
+              'Reads a larger block around each lookup — worth it on a '
+              'spinning disk, wasted work on an SSD.',
+          disabledReason: 'Turn on "Look here before the engine" first.',
+        ),
+        if (_mediaAdvice != null) ...[
+          const SizedBox(height: 2),
+          Text(_mediaAdvice!, style: AppTextStyles.caption),
         ],
       ],
     );
   }
 
+  String? get _mediaAdvice => switch (_pathMedia) {
+    StorageMedia.ssd =>
+      'That folder is on an SSD — leave this off; it only adds work.',
+    StorageMedia.hardDisk =>
+      'That folder is on a spinning disk — turn this on.',
+    StorageMedia.network =>
+      'That folder is on a network share. Random 4 kB reads over a network '
+          'make the dump slower than the engine it replaces.',
+    _ => null,
+  };
+
   // ── Path field ────────────────────────────────────────────────────────────
 
-  Widget _pathField() {
+  Widget _pathField(bool available) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -238,10 +249,15 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
               ),
             ),
             const SizedBox(width: 4),
-            IconButton(
-              onPressed: _libraryAvailable ? _pickDirectory : null,
-              icon: const Icon(Icons.folder_open),
-              tooltip: 'Browse for the data/ folder',
+            Tooltip(
+              message: available
+                  ? 'Browse for the data/ folder'
+                  : 'The native ChessDB reader is not loaded, so a dump here '
+                        'could not be read.',
+              child: IconButton(
+                onPressed: available ? _pickDirectory : null,
+                icon: const Icon(Icons.folder_open),
+              ),
             ),
             if (_pathCtrl.text.isNotEmpty)
               IconButton(
@@ -253,7 +269,10 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
               IconButton(
                 onPressed: () async {
                   await _settings.setCdbDirectPath('');
-                  setState(() => _dirValidation = null);
+                  setState(() {
+                    _dirValidation = null;
+                    _pathMedia = null;
+                  });
                 },
                 icon: const Icon(Icons.clear),
                 tooltip: 'Clear path',
@@ -355,68 +374,53 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
       ),
     );
   }
+}
 
-  Widget _banner(Color color, IconData icon, String message) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(width: 8),
-          Expanded(child: Text(message, style: const TextStyle(fontSize: 12))),
+/// What the offline ChessDB dump is and where it sits in the eval chain.
+///
+/// Reached from the Databases page's ⋮ menu rather than a text button beside
+/// the title: it is background, and background that is always on screen is
+/// what pushed the actual controls below the fold on the page this replaced.
+void showOfflineChessDbInfo(BuildContext context) {
+  unawaited(
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Offline ChessDB'),
+        content: const SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'chessdb.cn holds a scored evaluation for tens of billions '
+                'of positions. Online, the app queries it a position at a '
+                'time and lives inside the site\'s rate limits. The full '
+                'dump puts the same data on your disk: every lookup is a '
+                'local read, and a build that would spend hours waiting on '
+                'the API runs at disk speed.',
+              ),
+              SizedBox(height: 12),
+              Text(
+                'It is a directory of TerarkDB .sst files — roughly 1.2 TB, '
+                'read with random 4 KB lookups. An SSD makes the difference '
+                'between instant and unusable.',
+              ),
+              SizedBox(height: 12),
+              Text(
+                'Eval chain: local dump → SQLite slice → ChessDB API → '
+                'Stockfish.',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
         ],
       ),
-    );
-  }
-
-  void _showInfoDialog(BuildContext context) {
-    unawaited(
-      showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Offline ChessDB'),
-          content: const SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'chessdb.cn holds a scored evaluation for tens of billions '
-                  'of positions. Online, the app queries it a position at a '
-                  'time and lives inside the site\'s rate limits. The full '
-                  'dump puts the same data on your disk: every lookup is a '
-                  'local read, and a build that would spend hours waiting on '
-                  'the API runs at disk speed.',
-                ),
-                SizedBox(height: 12),
-                Text(
-                  'It is a directory of TerarkDB .sst files — roughly 1.2 TB, '
-                  'read with random 4 KB lookups. An SSD makes the difference '
-                  'between instant and unusable.',
-                ),
-                SizedBox(height: 12),
-                Text(
-                  'Eval chain: local dump → SQLite slice → ChessDB API → '
-                  'Stockfish.',
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Close'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+    ),
+  );
 }

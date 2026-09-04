@@ -38,6 +38,10 @@ class EngineResourcesSection extends StatelessWidget {
     final threads =
         int.tryParse(threadsController.text.trim()) ?? defaultEngineThreads();
     final clamped = threads.clamp(1, cores);
+    final workers = StockfishPool.laneCountFor(clamped);
+    final threadsPerWorker = StockfishPool.threadsPerLane(clamped, workers);
+    final activeThreads = workers * threadsPerWorker;
+    final hashMb = workers * kPoolHashPerWorkerMb;
     final scheme = Theme.of(context).colorScheme;
 
     return Container(
@@ -64,7 +68,8 @@ class EngineResourcesSection extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             'Your system has $cores logical core${cores == 1 ? '' : 's'}. '
-            'Tree build uses 1 Stockfish worker with UCI Threads set below.',
+            'The number below is the total CPU budget. For bulk throughput, '
+            'the build divides it across independent Stockfish processes.',
             style: AppTextStyles.caption,
           ),
           const SizedBox(height: 10),
@@ -94,9 +99,15 @@ class EngineResourcesSection extends StatelessWidget {
                 ),
               ),
               _ConfigStatChip(
-                label: '$clamped thread${clamped == 1 ? '' : 's'} active',
+                label:
+                    '$workers process${workers == 1 ? '' : 'es'} × '
+                    '$threadsPerWorker thread${threadsPerWorker == 1 ? '' : 's'}',
               ),
-              const _ConfigStatChip(label: '$kPoolHashPerWorkerMb MB hash'),
+              _ConfigStatChip(
+                label:
+                    '$activeThreads of $clamped threads active · '
+                    '$hashMb MB hash + engine memory',
+              ),
             ],
           ),
           if (!enabled) ...[

@@ -15,14 +15,18 @@ permissions:
 # matching Stockfish in the same stockfish-macos.gz slot.
 
 jobs:
+  quality-gate:
+    uses: ./.github/workflows/ci.yml
+
   build-linux:
+    needs: quality-gate
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.47.1
+          flutter-version: 3.47.2
           channel: stable
           cache: true
 
@@ -155,19 +159,38 @@ jobs:
             chess-auto-prep-${{ github.ref_name }}-linux-x86_64.rpm
 
   build-windows:
-    runs-on: windows-latest
+    needs: quality-gate
+    # The supported client floor is Windows 10. Do not silently move the build
+    # to VS 2026/Server 2025 through windows-latest: v1.15.3 did exactly that,
+    # then shipped runtime files that had never been exercised as a bundle.
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.47.1
+          flutter-version: 3.47.2
           channel: stable
           cache: true
 
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      - name: Fetch the pinned Microsoft VC++ prerequisite
+        shell: pwsh
+        run: |
+          python tools/fetch_vc_redist.py
+          python tools/fetch_vc_redist.py --check
+          $redist = "packaging\windows\prerequisites\VC_redist.x64.exe"
+          $signature = Get-AuthenticodeSignature $redist
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft') {
+            Write-Host "VC++ prerequisite is not validly signed by Microsoft:"
+            $signature | Format-List
+            exit 1
+          }
+          Get-FileHash $redist -Algorithm SHA256
+          $signature.SignerCertificate | Select-Object Subject, Thumbprint
 
       - name: Cache Stockfish
         uses: actions/cache@v4
@@ -241,6 +264,7 @@ jobs:
         shell: pwsh
         run: |
           $bundle = "build/windows/x64/runner/Release"
+          $redist = Get-Content tools\vc_redist.lock.json | ConvertFrom-Json
           $missing = @()
           foreach ($dll in @('MSVCP140.dll','MSVCP140_1.dll','VCRUNTIME140.dll','VCRUNTIME140_1.dll')) {
             if (-not (Test-Path (Join-Path $bundle $dll))) { $missing += $dll }
@@ -252,6 +276,28 @@ jobs:
           }
           Write-Host "VC++ runtime bundled:"
           Get-ChildItem $bundle -Filter *140*.dll | ForEach-Object { "  $($_.Name)  $($_.Length) bytes" }
+
+          # The installer omits these loose files and uses the pinned central
+          # redistributable. Never let a newer compiler silently create an app
+          # that requires exports the pinned prerequisite does not provide.
+          $builtRuntime = (Get-Item (Join-Path $bundle 'MSVCP140.dll')).VersionInfo.FileVersionRaw
+          $prerequisite = [version]$redist.version
+          if ($builtRuntime -gt $prerequisite) {
+            Write-Host "Built runtime $builtRuntime is newer than pinned prerequisite $prerequisite."
+            Write-Host "Update tools/vc_redist.lock.json to a supported Microsoft release."
+            exit 1
+          }
+
+      # The earlier live check runs before Flutter builds and therefore sees
+      # the hosted runner's centrally installed runtime. Re-run with the exact
+      # DLLs from the final app bundle beside Hivemind: that is what the
+      # portable zip installs and what v1.15.3 accidentally left untested.
+      - name: Verify Hivemind with the final portable runtime
+        timeout-minutes: 10
+        run: >-
+          python tools/test_bughouse_engine.py run
+          --install-to "final engine under test"
+          --windows-runtime-from build/windows/x64/runner/Release
 
       - name: Zip bundle (portable)
         shell: pwsh
@@ -269,8 +315,30 @@ jobs:
             $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           }
           $version = "${{ github.ref_name }}".TrimStart("v")
-          & $iscc "/DAppVersion=$version" packaging\windows\installer.iss
+          $redist = Get-Content tools\vc_redist.lock.json | ConvertFrom-Json
+          & $iscc "/DAppVersion=$version" `
+            "/DVCRedistVersion=$($redist.version)" `
+            "/DVCRedistMajor=$($redist.major)" `
+            "/DVCRedistMinor=$($redist.minor)" `
+            "/DVCRedistBuild=$($redist.build)" `
+            packaging\windows\installer.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          # Compile-time exclusions are easy to get subtly wrong. Install the
+          # finished setup silently on the runner and prove the installed app
+          # uses the central runtime while the separate zip keeps its fallback.
+          $setup = "dist\chess-auto-prep-$version-windows-setup.exe"
+          $installDir = Join-Path $env:RUNNER_TEMP "Chess Auto Prep installer test"
+          & $setup /VERYSILENT /SUPPRESSMSGBOXES /NORESTART "/DIR=$installDir"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $looseRuntime = Get-ChildItem $installDir -File | Where-Object {
+            $_.Name -match '^(concrt140|msvcp140|vcruntime140).*\.dll$'
+          }
+          if ($looseRuntime) {
+            Write-Host "Installer unexpectedly deployed loose VC++ DLLs:"
+            $looseRuntime | Select-Object -ExpandProperty Name
+            exit 1
+          }
           Move-Item "dist\chess-auto-prep-$version-windows-setup.exe" "chess-auto-prep-${{ github.ref_name }}-windows-setup.exe"
 
       - uses: actions/upload-artifact@v4
@@ -281,6 +349,7 @@ jobs:
             chess-auto-prep-${{ github.ref_name }}-windows-setup.exe
 
   build-macos:
+    needs: quality-gate
     runs-on: macos-latest
     strategy:
       fail-fast: false
@@ -297,7 +366,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.47.1
+          flutter-version: 3.47.2
           channel: stable
           cache: true
 

@@ -14,6 +14,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../../../services/storage/file_mutation_service.dart';
+import '../../../utils/atomic_file.dart';
 import '../models/stored_tournament.dart';
 import '../models/tournament_config.dart';
 import '../models/tournament_game.dart';
@@ -42,6 +44,7 @@ class TournamentStore {
     final out = <StoredTournament>[];
     await for (final entity in root.list(followLinks: false)) {
       if (entity is! Directory) continue;
+      if (p.basename(entity.path).startsWith('.')) continue;
       final loaded = await load(p.basename(entity.path));
       if (loaded != null) out.add(loaded);
     }
@@ -82,14 +85,18 @@ class TournamentStore {
       status: TournamentStatus.pending,
     );
     await save(tournament);
-    await File(tournament.pgnPath).writeAsString('');
+    await writeTextFileAtomically(
+      File(tournament.pgnPath),
+      '',
+      createOnly: true,
+    );
     return tournament;
   }
 
   Future<void> save(StoredTournament tournament) async {
     final file = File(metadataPathFor(tournament.id));
     await file.parent.create(recursive: true);
-    await _writeAtomically(
+    await writeTextFileAtomically(
       file,
       const JsonEncoder.withIndent('  ').convert(tournament.toJson()),
     );
@@ -103,12 +110,16 @@ class TournamentStore {
   Future<void> writeGamesPgn(String id, List<String> games) async {
     final file = File(pgnPathFor(id));
     await file.parent.create(recursive: true);
-    await _writeAtomically(file, games.join('\n'));
+    await writeTextFileAtomically(file, games.join('\n'));
   }
 
   Future<void> delete(String id) async {
     final dir = Directory(directoryFor(id));
-    if (await dir.exists()) await dir.delete(recursive: true);
+    await FileMutationService.instance.quarantineDirectory(
+      dir,
+      allowedRoot: root,
+      quarantineRoot: Directory(p.join(root.path, '.trash')),
+    );
   }
 
   Future<void> rename(String id, String newName) async {
@@ -128,12 +139,6 @@ class TournamentStore {
       suffix++;
     }
     return candidate;
-  }
-
-  static Future<void> _writeAtomically(File file, String content) async {
-    final tmp = File('${file.path}.tmp');
-    await tmp.writeAsString(content, flush: true);
-    await tmp.rename(file.path);
   }
 }
 

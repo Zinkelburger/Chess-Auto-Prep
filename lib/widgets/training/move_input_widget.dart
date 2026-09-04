@@ -48,7 +48,7 @@ class MoveInputWidget extends StatefulWidget {
 
 class MoveInputWidgetState extends State<MoveInputWidget> {
   final _controller = TextEditingController();
-  final _focusNode = FocusNode();
+  final _focusNode = FocusNode(debugLabel: 'move input');
   String? _error;
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
@@ -346,6 +346,19 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
         // Grab focus as soon as the field becomes the user's input target so
         // typed moves land here rather than an ancestor Focus node.
         autofocus: widget.enabled,
+        // This is a move catcher, not a document editor. Keep keyboard input
+        // live without advertising text-editing focus with a blinking caret.
+        showCursor: false,
+        // A click on the board must not kill typing. Flutter's default
+        // tap-outside behaviour unfocuses a text field on every pointer down
+        // elsewhere in the window — and on desktop that includes the board
+        // right above this box. Focus then lands on the enclosing route scope,
+        // which is an *ancestor* of the trainer panel's Focus, so neither this
+        // field nor the panel's shortcut handler is in the key-dispatch chain
+        // any more: typing a move and every trainer key silently stop working
+        // until something focusable is clicked. The box is the trainer's
+        // keyboard home while a move is wanted, so it keeps focus instead.
+        onTapOutside: (_) {},
         autocorrect: false,
         enableSuggestions: false,
         textCapitalization: TextCapitalization.none,
@@ -382,20 +395,28 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
             minWidth: 28,
             minHeight: 0,
           ),
-          suffixIcon: inputText.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.clear, size: 14),
-                  onPressed: () {
-                    _controller.clear();
-                    setState(() => _error = null);
-                  },
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 24,
-                    minHeight: 24,
-                  ),
-                )
-              : null,
+          // Keep this slot present in both states. Adding a suffix icon only
+          // after the first character makes InputDecorator adopt Flutter's
+          // 48px icon minimum inside this 36px field, visibly jolting the box.
+          suffixIcon: IgnorePointer(
+            ignoring: inputText.isEmpty,
+            child: Opacity(
+              opacity: inputText.isEmpty ? 0 : 1,
+              child: IconButton(
+                icon: const Icon(Icons.clear, size: 14),
+                onPressed: () {
+                  _controller.clear();
+                  setState(() => _error = null);
+                },
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+              ),
+            ),
+          ),
+          suffixIconConstraints: const BoxConstraints(
+            minWidth: 28,
+            minHeight: 0,
+          ),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 4,
             vertical: 8,

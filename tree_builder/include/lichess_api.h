@@ -179,5 +179,10 @@ bool lichess_explorer_get_opening(LichessExplorer *explorer, const char *fen,
  */
 void lichess_explorer_print_stats(const LichessExplorer *explorer);
 
+/* Request counters, for callers that need to act on a dead source rather
+ * than just print it.  Either out-pointer may be NULL. */
+void lichess_explorer_get_request_counts(const LichessExplorer *explorer,
+                                         uint64_t *total, uint64_t *failed);
+
 #endif /* LICHESS_API_H */
 

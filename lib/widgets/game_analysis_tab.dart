@@ -407,8 +407,8 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
           const SizedBox(height: 10),
           // A button on an empty pane with no idea what it costs. Stockfish
           // runs over every move, which is minutes, so say so before it goes.
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 32),
             child: Text(
               'Runs the engine over every move — an eval graph, the mistakes '
               'it found, and the line it wanted instead. Takes a few minutes.',
@@ -462,6 +462,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
             interesting[index],
             index: index,
             nearestIdx: nearestIdx,
+            isCurrent: interesting[index].ply == widget.currentPly,
             evalByPly: evalByPly,
             hasTrophy: trophyFens.contains(interesting[index].fenBefore),
           ),
@@ -503,6 +504,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
     MoveEval e, {
     required int index,
     required int nearestIdx,
+    required bool isCurrent,
     required Map<int, MoveEval> evalByPly,
     bool hasTrophy = false,
   }) {
@@ -512,7 +514,8 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
     );
     final isNearest = index == nearestIdx;
 
-    // The word carries the severity; no colour ramp, no pill.
+    // Keep severity as a readable word; color is a secondary scan aid rather
+    // than a pill the reader has to decode.
     final classLabel = switch (e.classification) {
       MoveClassification.blunder => 'Blunder',
       MoveClassification.mistake => 'Mistake',
@@ -522,97 +525,127 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
     };
 
     final evalStr = e.evalDisplay;
+    final classificationColor = switch (e.classification) {
+      MoveClassification.blunder => AppColors.danger,
+      MoveClassification.mistake => AppColors.warning,
+      MoveClassification.inaccuracy => AppColors.info,
+      MoveClassification.interesting => AppColors.maia,
+      MoveClassification.normal => AppColors.onSurfaceMuted,
+    };
 
     return Container(
       key: isNearest ? _nearestItemKey : null,
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: isNearest ? AppColors.hoverOverlay : null,
-        // Always reserve the accent strip (transparent when idle): gaining
-        // the highlight must never shift the row's content sideways.
-        border: Border(
-          left: BorderSide(
-            color: isNearest ? AppColors.accent : Colors.transparent,
-            width: 3,
-          ),
+        color: isCurrent
+            ? AppColors.surfaceContainer
+            : AppColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isCurrent ? AppColors.pgnMoveCurrent : AppColors.divider,
+          width: isCurrent ? 1 : 0.5,
         ),
       ),
-      child: InkWell(
-        onTap: () => _onCardTapped(e.ply),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  SizedBox(
-                    width: 48,
-                    child: Text(numberLabel, style: AppTextStyles.caption),
-                  ),
-                  Text(
-                    e.san,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontFamily: AppTextStyles.monoFamily,
-                      fontSize: 14,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => _onCardTapped(e.ply),
+          hoverColor: AppColors.hoverOverlay,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 11),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 44,
+                      child: Text(
+                        numberLabel,
+                        style: AppTextStyles.monoDense.copyWith(
+                          color: AppColors.pgnMoveNumber,
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    classLabel,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceSoft,
-                      fontWeight: FontWeight.bold,
+                    Text(
+                      e.san,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontFamily: AppTextStyles.monoFamily,
+                        fontSize: 14,
+                      ),
                     ),
-                  ),
-                  if (hasTrophy) ...[
-                    const SizedBox(width: 6),
-                    const Tooltip(
-                      message: 'You found a better move here!',
-                      child: Icon(
-                        Icons.emoji_events,
-                        color: AppColors.starAccent,
-                        size: 16,
+                    const SizedBox(width: 8),
+                    Text(
+                      classLabel,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: classificationColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (hasTrophy) ...[
+                      const SizedBox(width: 6),
+                      const Tooltip(
+                        message: 'You found a better move here!',
+                        child: Icon(
+                          Icons.emoji_events,
+                          color: AppColors.starAccent,
+                          size: 16,
+                        ),
+                      ),
+                    ],
+                    const Spacer(),
+                    Text(
+                      evalStr,
+                      style: const TextStyle(
+                        fontFamily: AppTextStyles.monoFamily,
+                        fontSize: 12,
+                        color: AppColors.pgnMove,
                       ),
                     ),
                   ],
-                  const Spacer(),
-                  Text(
-                    evalStr,
-                    style: const TextStyle(
-                      fontFamily: AppTextStyles.monoFamily,
-                      fontSize: 12,
-                      color: AppColors.pgnMove,
+                ),
+                if (e.classification == MoveClassification.interesting &&
+                    e.maiaProb != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 44, top: 6),
+                    child: _buildInterestingMoveInfo(e, evalByPly),
+                  ),
+                if (e.bestLine.isNotEmpty)
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(top: 7),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceInset,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border(
+                        left: BorderSide(color: classificationColor, width: 2),
+                      ),
+                    ),
+                    child: ClickableMoveLineWidget(
+                      sanMoves: e.bestLine,
+                      startPly: e.ply - 1,
+                      activeMoveIndex: _activeBestLinePly == e.ply
+                          ? _computeBestLineMoveIdx()
+                          : null,
+                      onMoveTapped: (idx) => _onBestLineMoveClicked(e, idx),
+                      fontSize: 14,
+                      movePadding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 4,
+                      ),
+                      singleLine: false,
                     ),
                   ),
-                ],
-              ),
-              if (e.classification == MoveClassification.interesting &&
-                  e.maiaProb != null)
-                Padding(
-                  padding: const EdgeInsets.only(left: 48, top: 3),
-                  child: _buildInterestingMoveInfo(e, evalByPly),
-                ),
-              if (e.bestLine.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(left: 48, top: 3),
-                  child: ClickableMoveLineWidget(
-                    sanMoves: e.bestLine,
-                    startPly: e.ply - 1,
-                    activeMoveIndex: _activeBestLinePly == e.ply
-                        ? _computeBestLineMoveIdx()
-                        : null,
-                    onMoveTapped: (idx) => _onBestLineMoveClicked(e, idx),
-                    label: 'Best: ',
-                    fontSize: 14,
-                    movePadding: const EdgeInsets.symmetric(
-                      horizontal: 5,
-                      vertical: 4,
-                    ),
-                  ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

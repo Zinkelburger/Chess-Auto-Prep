@@ -122,7 +122,6 @@ void main() {
                 windowLabel: 'last 20 games',
                 onStart: onStart ?? () {},
                 onPause: onPause ?? () {},
-                onRefresh: () {},
                 onSettings: onSettings ?? () {},
               ),
               OpeningsBlock(
@@ -156,6 +155,8 @@ void main() {
     // 3 of 20 left: the app was closed mid-review, so the button must not
     // pretend this is a fresh start.
     expect(find.text('Resume analysis'), findsOneWidget);
+    expect(find.byIcon(Icons.analytics_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.play_arrow), findsNothing);
   });
 
   testWidgets('a first run says how many games it will analyse', (
@@ -182,6 +183,8 @@ void main() {
     await pump(tester, runner: h.runner, coordinator: h.co, unreviewed: 0);
 
     expect(find.text('Check for new games'), findsOneWidget);
+    expect(find.byIcon(Icons.refresh), findsOneWidget);
+    expect(find.byIcon(Icons.play_arrow), findsNothing);
     expect(find.text('Finished analysing 20 games'), findsOneWidget);
     expect(
       find.text('Your last 20 games are downloaded and analysed'),

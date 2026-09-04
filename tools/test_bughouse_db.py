@@ -18,6 +18,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -189,6 +190,7 @@ class TestIndexAndBook(unittest.TestCase):
         self.assertEqual(move["games"], 2)
         self.assertEqual(move["play_rate"], 100.0)
 
+
     def test_results_are_team_relative(self):
         from bughouse_db.book import explore
 
@@ -228,6 +230,34 @@ class TestIndexAndBook(unittest.TestCase):
         data = explore(self.con, empty, empty)
         self.assertEqual(data["games"], 0)
         self.assertEqual(data["moves"], [])
+
+
+class TestIndexReplacementSafety(unittest.TestCase):
+    def test_failed_final_replace_preserves_the_previous_book(self):
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            os.environ["BUGHOUSE_DB_HOME"] = tmp.name
+            corpus = Path(tmp.name) / "corpus"
+            corpus.mkdir(parents=True)
+            (corpus / "export2016.bpgn.bz2").write_bytes(
+                bz2.compress(FIXTURE.encode("latin-1"))
+            )
+            old_book = Path(tmp.name) / "bughouse_book.db"
+            old_book.write_bytes(b"previous usable book")
+            from bughouse_db.index import build
+
+            with mock.patch.object(
+                Path,
+                "replace",
+                side_effect=OSError("injected commit failure"),
+            ):
+                with self.assertRaisesRegex(OSError, "injected commit failure"):
+                    build(None, max_ply=16, min_games=1, min_elo=0, jobs=1)
+
+            self.assertEqual(old_book.read_bytes(), b"previous usable book")
+        finally:
+            os.environ.pop("BUGHOUSE_DB_HOME", None)
+            tmp.cleanup()
 
 
 class TestUnreplayableGamesLeaveNoTrace(unittest.TestCase):

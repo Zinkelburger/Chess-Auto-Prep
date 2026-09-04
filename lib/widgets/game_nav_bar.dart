@@ -5,12 +5,12 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../utils/app_shortcuts.dart';
 
 import '../models/pgn_filter_models.dart';
 import '../theme/app_colors.dart';
-import 'labeled_toggle.dart';
 import 'shortcut_tooltip.dart';
 import 'game_nav_item.dart';
 import 'game_number_field.dart';
@@ -21,6 +21,11 @@ export 'game_nav_item.dart' show GameNavItem;
 
 /// Speed options shared between the nav bar and fullscreen overlay.
 const kAutoPlaySpeeds = [0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 8.0, 10.0];
+
+const _previousGameShortcut = AppShortcut([
+  KeyChord(LogicalKeyboardKey.arrowUp),
+]);
+const _nextGameShortcut = AppShortcut([KeyChord(LogicalKeyboardKey.arrowDown)]);
 
 class GameNavBar extends StatelessWidget {
   final List<GameNavItem> games;
@@ -128,7 +133,7 @@ class GameNavBar extends StatelessWidget {
       children: [
         ShortcutTooltip(
           description: 'Previous game',
-          shortcut: AppShortcut.previousItem,
+          shortcut: _previousGameShortcut,
           child: TextButton.icon(
             onPressed: currentIndex > 0 ? onPrev : null,
             icon: const Icon(Icons.skip_previous, size: 20),
@@ -139,7 +144,7 @@ class GameNavBar extends StatelessWidget {
         const SizedBox(width: 16),
         ShortcutTooltip(
           description: 'Next game',
-          shortcut: AppShortcut.nextItem,
+          shortcut: _nextGameShortcut,
           child: TextButton.icon(
             onPressed: currentIndex < games.length - 1 ? onNext : null,
             icon: const Icon(Icons.skip_next, size: 20),
@@ -151,117 +156,136 @@ class GameNavBar extends StatelessWidget {
   }
 
   Widget _buildNormalLayout(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Wrap(
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 4,
-          runSpacing: 4,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final navigator = Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ..._buildStarRating(currentRating),
-                const SizedBox(width: 8),
-                _buildSortDropdown(),
-              ],
-            ),
-            _buildGameCounter(context),
-            _buildAutoPlayControls(),
-          ],
-        ),
-        const SizedBox(height: 4),
-        _buildPrevNextRow(
-          middle: ShortcutTooltip(
-            description: 'Amend game',
-            shortcut: AppShortcut.amendGame,
-            child: IconButton(
-              onPressed: onToggleEditMode,
-              icon: Icon(
-                Icons.edit_note,
-                size: 22,
-                color: isEditMode ? AppColors.starAccent : null,
-              ),
-              style: isEditMode
-                  ? IconButton.styleFrom(
-                      backgroundColor: AppColors.starAccent.withValues(
-                        alpha: 0.12,
-                      ),
-                    )
-                  : null,
+            ShortcutIconButton(
+              description: 'Previous game',
+              shortcut: _previousGameShortcut,
+              onPressed: currentIndex > 0 ? onPrev : null,
+              icon: const Icon(Icons.chevron_left, size: 24),
               visualDensity: VisualDensity.compact,
             ),
-          ),
-        ),
-      ],
+            const SizedBox(width: 2),
+            _buildGameCounter(context),
+            const SizedBox(width: 2),
+            ShortcutIconButton(
+              description: 'Next game',
+              shortcut: _nextGameShortcut,
+              onPressed: currentIndex < games.length - 1 ? onNext : null,
+              icon: const Icon(Icons.chevron_right, size: 24),
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
+        );
+        final readingActions = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            GameSearchButton(
+              shortcut: AppShortcut.searchGames,
+              onPressed: games.isEmpty ? null : () => _openGameSearch(context),
+            ),
+            ShortcutIconButton(
+              description: isAutoPlaying ? 'Pause' : 'Watch game',
+              shortcut: AppShortcut.autoPlay,
+              onPressed: games.isNotEmpty ? onToggleAutoPlay : null,
+              icon: Icon(
+                isAutoPlaying ? Icons.pause_circle : Icons.play_circle,
+                size: 28,
+                color: isAutoPlaying ? AppColors.starAccent : null,
+              ),
+            ),
+            _buildMoreMenu(context),
+          ],
+        );
+
+        // On a normal viewer pane the game coordinate stays truly centered;
+        // the rating and reading tools are independently edge-aligned. This
+        // avoids the visibly drifting "Game N of total" caused by Wrap's
+        // unequal children.
+        if (constraints.maxWidth >= 640) {
+          return SizedBox(
+            height: 40,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: _buildRatingMenu(),
+                ),
+                navigator,
+                Align(alignment: Alignment.centerRight, child: readingActions),
+              ],
+            ),
+          );
+        }
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            navigator,
+            const SizedBox(height: 4),
+            Row(children: [_buildRatingMenu(), const Spacer(), readingActions]),
+          ],
+        );
+      },
     );
   }
 
-  Widget _buildSortDropdown() {
-    return PopupMenuButton<GameSortMode>(
-      tooltip: 'Sort games',
-      onSelected: onSetSortMode,
-      itemBuilder: (ctx) => [
-        for (final mode in GameSortMode.values)
+  Widget _buildRatingMenu() {
+    return PopupMenuButton<int>(
+      tooltip: 'Rate this game',
+      enabled: onSetRating != null,
+      onSelected: (rating) => onSetRating?.call(rating),
+      itemBuilder: (_) => [
+        for (var rating = 0; rating <= 5; rating++)
           PopupMenuItem(
-            value: mode,
+            value: rating,
             child: Row(
               children: [
-                if (mode == sortMode)
-                  const Icon(Icons.check, size: 16)
-                else
-                  const SizedBox(width: 16),
-                const SizedBox(width: 8),
-                Text(switch (mode) {
-                  GameSortMode.fileOrder => 'File order',
-                  GameSortMode.dateDesc => 'Newest first',
-                  GameSortMode.ratingDesc => 'Stars (high first)',
-                  GameSortMode.ratingAsc => 'Stars (low first)',
-                }),
+                SizedBox(
+                  width: 92,
+                  child: Text(
+                    rating == 0 ? 'Unrated' : '★' * rating,
+                    style: TextStyle(
+                      color: rating == 0
+                          ? AppColors.onSurfaceMuted
+                          : AppColors.starAccent,
+                    ),
+                  ),
+                ),
+                if (rating == currentRating) const Icon(Icons.check, size: 16),
               ],
             ),
           ),
       ],
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        height: kGameNavControlHeight,
+        padding: const EdgeInsets.symmetric(horizontal: 9),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(6),
           border: Border.all(color: AppColors.outline),
+          borderRadius: BorderRadius.circular(6),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.sort, size: 16, color: AppColors.onSurfaceSoft),
+            Icon(
+              currentRating == 0 ? Icons.star_border : Icons.star,
+              size: 18,
+              color: currentRating == 0
+                  ? AppColors.starEmpty
+                  : AppColors.starAccent,
+            ),
             const SizedBox(width: 4),
-            Text(switch (sortMode) {
-              GameSortMode.fileOrder => 'File order',
-              GameSortMode.dateDesc => 'Newest first',
-              GameSortMode.ratingDesc => 'Stars ↓',
-              GameSortMode.ratingAsc => 'Stars ↑',
-            }, style: const TextStyle(fontSize: 12)),
+            Text(
+              currentRating == 0 ? 'Rate' : '$currentRating',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
           ],
         ),
       ),
     );
-  }
-
-  List<Widget> _buildStarRating(int current) {
-    return List.generate(5, (i) {
-      final star = i + 1;
-      return Tooltip(
-        message: 'Rate $star star${star > 1 ? 's' : ''}',
-        child: GestureDetector(
-          onTap: () => onSetRating?.call(current == star ? 0 : star),
-          child: Icon(
-            star <= current ? Icons.star : Icons.star_border,
-            size: 22,
-            color: star <= current ? AppColors.starAccent : AppColors.starEmpty,
-          ),
-        ),
-      );
-    });
   }
 
   Widget _buildGameCounter(BuildContext context) {
@@ -285,11 +309,6 @@ class GameNavBar extends StatelessWidget {
               'Game ${currentIndex + 1} of ${games.length}, $ordering.\n'
               'Type a game number and press Enter to jump there (G)',
         ),
-        const SizedBox(width: 8),
-        GameSearchButton(
-          shortcut: AppShortcut.searchGames,
-          onPressed: games.isEmpty ? null : () => _openGameSearch(context),
-        ),
       ],
     );
   }
@@ -303,89 +322,87 @@ class GameNavBar extends StatelessWidget {
     if (selected != null) onGoToGame?.call(selected);
   }
 
-  Widget _buildAutoPlayControls() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        ShortcutIconButton(
-          description: isAutoPlaying ? 'Pause' : 'Watch game',
-          shortcut: AppShortcut.autoPlay,
-          onPressed: games.isNotEmpty ? onToggleAutoPlay : null,
-          icon: Icon(
-            isAutoPlaying ? Icons.pause_circle : Icons.play_circle,
-            size: 28,
-            color: isAutoPlaying ? AppColors.starAccent : null,
-          ),
-        ),
-        ShortcutIconButton(
-          description: 'Fullscreen',
-          shortcut: AppShortcut.fullScreen,
-          onPressed: games.isNotEmpty ? onToggleFullScreen : null,
-          icon: const Icon(
-            Icons.fullscreen,
-            size: 24,
-            color: AppColors.onSurfaceSoft,
-          ),
-          visualDensity: VisualDensity.compact,
-        ),
-        IconButton(
-          onPressed: games.isNotEmpty ? onCopyPgn : null,
-          icon: const Icon(
-            Icons.copy_outlined,
-            size: 20,
-            color: AppColors.onSurfaceSoft,
-          ),
-          tooltip: 'Copy current game PGN',
-          visualDensity: VisualDensity.compact,
-        ),
-        IconButton(
-          onPressed: games.isNotEmpty && hasEphemeralAnnotations
-              ? onClearAnnotations
-              : null,
-          icon: Icon(
-            Icons.layers_clear_outlined,
-            size: 20,
-            color: hasEphemeralAnnotations
-                ? AppColors.onSurfaceSoft
-                : AppColors.onSurfaceDisabled,
-          ),
-          tooltip: 'Clear analysis annotations',
-          visualDensity: VisualDensity.compact,
-        ),
-        PopupMenuButton<double>(
-          tooltip: 'Auto-play speed',
-          icon: const Icon(
-            Icons.speed,
-            size: 20,
-            color: AppColors.onSurfaceSoft,
-          ),
-          onSelected: onSetSpeed,
-          itemBuilder: (ctx) => [
-            for (final s in kAutoPlaySpeeds)
-              PopupMenuItem(
-                value: s,
-                child: Row(
-                  children: [
-                    if (s == autoPlayDelaySec)
-                      const Icon(Icons.check, size: 16)
-                    else
-                      const SizedBox(width: 16),
-                    const SizedBox(width: 8),
-                    Text('${s}s / move'),
-                  ],
+  Widget _buildMoreMenu(BuildContext context) {
+    return MenuAnchor(
+      builder: (context, controller, child) => IconButton(
+        onPressed: () =>
+            controller.isOpen ? controller.close() : controller.open(),
+        icon: const Icon(Icons.tune, size: 20),
+        tooltip: 'Reading options',
+        visualDensity: VisualDensity.compact,
+      ),
+      menuChildren: [
+        SubmenuButton(
+          menuChildren: [
+            for (final mode in GameSortMode.values)
+              MenuItemButton(
+                onPressed: () => onSetSortMode?.call(mode),
+                leadingIcon: Icon(
+                  mode == sortMode ? Icons.check : null,
+                  size: 16,
                 ),
+                child: Text(switch (mode) {
+                  GameSortMode.fileOrder => 'File order',
+                  GameSortMode.dateDesc => 'Newest first',
+                  GameSortMode.ratingDesc => 'Stars, high first',
+                  GameSortMode.ratingAsc => 'Stars, low first',
+                }),
               ),
           ],
+          leadingIcon: const Icon(Icons.sort, size: 18),
+          child: const Text('Sort games'),
         ),
-        ShortcutTooltip(
-          description: 'Auto next game',
-          shortcut: AppShortcut.autoNextGame,
-          child: AppSwitch(
-            label: 'Auto',
-            value: autoNextGame,
-            onChanged: (v) => onSetAutoNext?.call(v),
-            enabled: onSetAutoNext != null,
+        SubmenuButton(
+          menuChildren: [
+            for (final speed in kAutoPlaySpeeds)
+              MenuItemButton(
+                onPressed: onSetSpeed == null
+                    ? null
+                    : () => onSetSpeed?.call(speed),
+                leadingIcon: Icon(
+                  speed == autoPlayDelaySec ? Icons.check : null,
+                  size: 16,
+                ),
+                child: Text('${speed}s per move'),
+              ),
+          ],
+          leadingIcon: const Icon(Icons.speed, size: 18),
+          child: Text('Playback speed · ${autoPlayDelaySec}s'),
+        ),
+        CheckboxMenuButton(
+          value: autoNextGame,
+          onChanged: onSetAutoNext == null
+              ? null
+              : (value) {
+                  if (value != null) onSetAutoNext?.call(value);
+                },
+          child: const Text('Continue to next game'),
+        ),
+        const Divider(height: 8),
+        MenuItemButton(
+          onPressed: onToggleFullScreen,
+          leadingIcon: const Icon(Icons.fullscreen, size: 18),
+          child: const Text('Fullscreen'),
+        ),
+        MenuItemButton(
+          onPressed: onCopyPgn,
+          leadingIcon: const Icon(Icons.copy_outlined, size: 18),
+          child: const Text('Copy game PGN'),
+        ),
+        if (hasEphemeralAnnotations)
+          MenuItemButton(
+            onPressed: onClearAnnotations,
+            leadingIcon: const Icon(Icons.layers_clear_outlined, size: 18),
+            child: const Text('Clear analysis marks'),
           ),
+        MenuItemButton(
+          onPressed: onToggleEditMode,
+          leadingIcon: Icon(
+            isEditMode ? Icons.edit : Icons.edit_outlined,
+            size: 18,
+            color: isEditMode ? AppColors.starAccent : null,
+          ),
+          child: Text(isEditMode ? 'Finish amending' : 'Amend game'),
         ),
       ],
     );

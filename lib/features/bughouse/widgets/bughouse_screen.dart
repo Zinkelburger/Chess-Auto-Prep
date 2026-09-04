@@ -306,7 +306,7 @@ class _SidePanel extends StatelessWidget {
                   child: Text(switch (mode) {
                     BughouseMode.setup => 'EDITING THE POSITION',
                     BughouseMode.tournament => 'MATCHES',
-                    BughouseMode.play => 'HIVEMIND',
+                    BughouseMode.play => 'ENGINE ANALYSIS',
                   }, style: AppTextStyles.eyebrow),
                 ),
                 _ModeButton(

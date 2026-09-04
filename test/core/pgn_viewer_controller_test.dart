@@ -1,9 +1,29 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chess_auto_prep/core/pgn_viewer_controller.dart';
 import 'package:chess_auto_prep/models/pgn_filter_models.dart';
 import 'package:chess_auto_prep/services/game_analysis_controller.dart';
+import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
+import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
+
+class _GatedStorage extends IOStorageService {
+  final reads = <String, Completer<String?>>{};
+
+  @override
+  Future<bool> fileExists(String path) async => !path.endsWith('.fenidx');
+
+  @override
+  Future<String?> readFile(String path) =>
+      (reads[path] ??= Completer<String?>()).future;
+
+  @override
+  Future<({int size, DateTime modified})?> fileStat(String path) async =>
+      (size: 1, modified: DateTime.fromMillisecondsSinceEpoch(1));
+}
 
 /// Stub analysis controller: no isolates, no engine, no IO. Lets us exercise
 /// `loadCurrentGame` (called by every navigation/slice method) deterministically.
@@ -41,6 +61,66 @@ void _seed(PgnViewerController c, List<PgnGameEntry> games) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
+  tearDown(() {
+    StorageFactory.instanceForTest = null;
+  });
+
+  group('load ordering', () {
+    test('a slower file read cannot replace the newest selection', () async {
+      final storage = _GatedStorage();
+      StorageFactory.instanceForTest = storage;
+      final c = _makeController();
+      addTearDown(c.dispose);
+
+      final oldLoad = c.loadFile('/tmp/old.pgn');
+      await Future<void>.delayed(Duration.zero);
+      final newLoad = c.loadFile('/tmp/new.pgn');
+      await Future<void>.delayed(Duration.zero);
+
+      storage.reads['/tmp/new.pgn']!.complete(
+        '[Event "New"]\n[White "New"]\n[Black "B"]\n\n1. d4 d5 *',
+      );
+      await newLoad;
+      expect(c.filePath, '/tmp/new.pgn');
+      expect(c.allGames.single.headers['Event'], 'New');
+
+      storage.reads['/tmp/old.pgn']!.complete(
+        '[Event "Old"]\n[White "Old"]\n[Black "B"]\n\n1. e4 e5 *',
+      );
+      await oldLoad;
+
+      expect(c.filePath, '/tmp/new.pgn');
+      expect(
+        c.allGames.single.headers['Event'],
+        'New',
+        reason: 'late work must not land on the selected collection',
+      );
+    });
+
+    test('closing the viewer invalidates a pending file read', () async {
+      final storage = _GatedStorage();
+      StorageFactory.instanceForTest = storage;
+      final c = _makeController();
+      addTearDown(c.dispose);
+
+      final load = c.loadFile('/tmp/pending.pgn');
+      await Future<void>.delayed(Duration.zero);
+      c.closeFile();
+      storage.reads['/tmp/pending.pgn']!.complete(
+        '[Event "Late"]\n[White "A"]\n[Black "B"]\n\n1. e4 e5 *',
+      );
+      await load;
+
+      expect(c.filePath, isNull);
+      expect(c.allGames, isEmpty);
+      expect(c.isLoading, isFalse);
+    });
+  });
 
   group('game navigation', () {
     test('goToGame moves to a valid index', () {

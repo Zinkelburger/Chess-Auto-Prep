@@ -607,6 +607,37 @@ void main() {
     expect(library.forcedFetches, [false]);
   });
 
+  test(
+    'startup checks for new games even with cached analysis waiting',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final library = _OneGameLibrary();
+      final games = RecentGamesController(
+        lichessUsername: () => 'me',
+        chesscomUsername: () => null,
+        library: library,
+        windowSettings: GamesWindowSettings.forTest(),
+      );
+      final runner = HomeReviewRunner(
+        games: games,
+        importCoordinator: _RecordingCoordinator(),
+        lichessUsername: () => 'me',
+        chesscomUsername: () => null,
+        windowSettings: GamesWindowSettings.forTest(),
+        miningSettings: MiningSettings.forTest(),
+      );
+      addTearDown(games.dispose);
+      addTearDown(runner.dispose);
+
+      // Mirrors the cached list load followed by TacticsGamesPane's auto-run.
+      await games.refresh();
+      library.forcedFetches.clear();
+      await runner.start(checkForNewGames: true);
+
+      expect(library.forcedFetches, [true]);
+    },
+  );
+
   test('a resumed run carries on rather than re-downloading', () async {
     SharedPreferences.setMockInitialValues({});
     final h = build();

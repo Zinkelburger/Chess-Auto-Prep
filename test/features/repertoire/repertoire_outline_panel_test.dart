@@ -34,7 +34,13 @@ void main() {
       '// Color: Black\n\n${_game('Exchange', '1. e4 e6 2. d4 d5 3. exd5')}\n',
     );
     controller = RepertoireOutlineController(
-      service: RepertoireOutlineService(storage: IOStorageService()),
+      service: RepertoireOutlineService(
+        storage: IOStorageService(
+          documentsRoot: tmp,
+          supportRoot: tmp,
+          repertoiresRoot: Directory(root),
+        ),
+      ),
     );
     await controller.open(
       rootPath: root,

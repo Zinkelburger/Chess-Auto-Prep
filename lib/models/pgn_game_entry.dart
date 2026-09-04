@@ -25,9 +25,26 @@ class PgnGameEntry {
     final bStr = _eloSuffix(b, bElo);
     final d = formatPgnDate(headers['Date']);
 
-    final title = _courseStyleTitle(wStr, bStr, w, b, wElo, bElo);
+    final title = _courseStyleTitle(wStr, bStr, w, b);
     if (d.isEmpty) return title;
     return '$title  $d';
+  }
+
+  /// Course exports use White as a chapter/theme and Black as the line title,
+  /// with an unfinished result and no player ratings. The viewer uses this to
+  /// choose book typography and its focused one-note-at-a-time reader.
+  bool get isCourseStyle {
+    final white = (headers['White'] ?? '').trim();
+    final result = (headers['Result'] ?? '').trim();
+    final hasRating = ['WhiteElo', 'BlackElo'].any((key) {
+      final value = (headers[key] ?? '').trim();
+      return value.isNotEmpty && value != '?';
+    });
+    return result == '*' &&
+        !hasRating &&
+        white.isNotEmpty &&
+        white != '?' &&
+        !white.contains(',');
   }
 
   static String _eloSuffix(String name, String? elo) {
@@ -39,20 +56,8 @@ class PgnGameEntry {
   /// Result `*` and no ratings. Player games (rated, or "Last, First") stay
   /// "White vs Black". [Result] must be present as `*` so unlabeled test
   /// fixtures and real games that omitted the header don't get a chapter dash.
-  String _courseStyleTitle(
-    String wStr,
-    String bStr,
-    String w,
-    String b,
-    String? wElo,
-    String? bElo,
-  ) {
-    final result = headers['Result']?.trim();
-    final rated =
-        (wElo != null && wElo.isNotEmpty && wElo != '?') ||
-        (bElo != null && bElo.isNotEmpty && bElo != '?');
-    final course =
-        result == '*' && !rated && w.isNotEmpty && w != '?' && !w.contains(',');
+  String _courseStyleTitle(String wStr, String bStr, String w, String b) {
+    final course = isCourseStyle;
     if (!course) return '$wStr vs $bStr';
     if (b.isEmpty || b == '?' || b == w) return wStr;
     return '$wStr — $bStr';

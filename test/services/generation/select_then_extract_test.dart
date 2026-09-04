@@ -166,31 +166,5 @@ void main() {
 
       expect(lines, isNotEmpty);
     });
-
-    test('an opponent-mistake weight still produces lines', () {
-      final t = StandardTree();
-      final tree = t.toTree();
-      const config = TreeBuildConfig(
-        startFen: _startFen,
-        playAsWhite: true,
-        selectionMode: SelectionMode.expectimax,
-        mistakeWeight: 100,
-        minProbability: 0.01,
-        minEvalCp: -9999,
-        maxEvalCp: 9999,
-      );
-
-      final ecaCalc = ExpectimaxCalculator(config: config);
-      ecaCalc.calculate(tree);
-      ecaCalc.calculateCplValues(tree.root);
-
-      final selector = RepertoireSelector(config: config, ecaCalc: ecaCalc);
-      selector.select(tree);
-
-      final extractor = LineExtractor(config: config);
-      final lines = extractor.extract(tree);
-
-      expect(lines, isNotEmpty);
-    });
   });
 }

@@ -199,6 +199,58 @@ void main() {
         contains('Redistributable'),
       );
     });
+
+    /// Naming the redistributable is no use to someone who then has to find
+    /// it. The link is the difference between a fixable machine and a user
+    /// who gives up, so it travels with the sentence.
+    test('gives the download, not just the name of it', () {
+      expect(
+        WindowsLoaderCheck.describe(const [
+          DllResolution(name: 'VCRUNTIME140.dll', path: null, machine: null),
+        ]),
+        contains(WindowsLoaderCheck.redistributableUrl),
+      );
+    });
+  });
+
+  group('needsRedistributable', () {
+    test('is true when a library the app owes resolves nowhere', () {
+      expect(
+        WindowsLoaderCheck.needsRedistributable(const [
+          DllResolution(name: 'MSVCP140_1.dll', path: null, machine: null),
+        ]),
+        isTrue,
+      );
+    });
+
+    /// The offer has to be narrow. Installing 25 MB of Microsoft runtime does
+    /// nothing for a file that is present and damaged, or for a library
+    /// Windows itself owns — and having sent someone there once for nothing,
+    /// we do not get to send them again for the case it would have fixed.
+    test(
+      'is false for a library that is present, whatever is wrong with it',
+      () {
+        expect(
+          WindowsLoaderCheck.needsRedistributable(const [
+            DllResolution(
+              name: 'MSVCP140.dll',
+              path: r'C:\e\MSVCP140.dll',
+              machine: 0x014c,
+            ),
+          ]),
+          isFalse,
+        );
+      },
+    );
+
+    test('is false for a missing library Windows itself ships', () {
+      expect(
+        WindowsLoaderCheck.needsRedistributable(const [
+          DllResolution(name: 'dxgi.dll', path: null, machine: null),
+        ]),
+        isFalse,
+      );
+    });
   });
 
   group('report', () {

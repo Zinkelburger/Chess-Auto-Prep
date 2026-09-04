@@ -207,10 +207,19 @@ class RepertoireLoader {
 }
 
 /// Reads the `// Color:` / `// Root:` comment block off [pgnText].
+///
+/// A file with no `// Color:` line is not automatically a question for the
+/// user: a repertoire this app generated says whose it is in its own first
+/// `[Event]` tag ("… : Repertoire for Black", written by
+/// [CourseTitles.courseTitle]), and an imported course usually says the same
+/// thing in the same words. Reading it there is strictly better than asking,
+/// because the file is the authority and the user is guessing at what is in
+/// it.
 @visibleForTesting
 RepertoireHeaders parseRepertoireHeaders(String pgnText) {
   String? color;
   String? rootMoves;
+  bool? inferred;
   // The block lives above the first game — [upsertMetadataComment] puts it
   // there — so the scan stops at the first `[Event ` line instead of
   // splitting the whole file into lines to look at its top.
@@ -225,14 +234,29 @@ RepertoireHeaders parseRepertoireHeaders(String pgnText) {
     } else if (trimmed.startsWith('// Root:')) {
       rootMoves = trimmed.substring(8).trim();
     } else if (trimmed.startsWith('[Event ')) {
+      inferred = _colorFromEventTag(trimmed);
       break;
     }
   }
   return RepertoireHeaders(
     rootMoves: rootMoves ?? '',
-    isWhite: color != 'Black',
-    needsColorSelection: color == null,
+    isWhite: color != null ? color != 'Black' : (inferred ?? true),
+    // Only ask when neither the comment nor the file's own title says.
+    needsColorSelection: color == null && inferred == null,
   );
+}
+
+/// Whose repertoire an `[Event ...]` tag says it is, or null when it does not
+/// say. Matches the phrasing this app writes and the one Chessable-style
+/// course exports use; anything else stays null rather than guessing from,
+/// say, an opening name that merely sounds like a defence.
+bool? _colorFromEventTag(String eventLine) {
+  final lower = eventLine.toLowerCase();
+  final white = lower.contains('for white');
+  final black = lower.contains('for black');
+  // Both, or neither, is not evidence.
+  if (white == black) return null;
+  return white;
 }
 
 /// Replaces the `$prefix ...` comment line in [content], or inserts one above

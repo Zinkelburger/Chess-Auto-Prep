@@ -28,8 +28,8 @@ void main() {
     });
 
     test('everyScreen entries are move-text safe on every chord', () {
-      // This is the invariant that forces previous/next to be P/S. If
-      // someone "improves" nextItem to N, this fails: the tactics panel's
+      // This is the invariant that keeps previous/next away from move-text
+      // keys. If someone changes nextItem to N, the tactics panel's
       // always-hot move box would type "N" instead of stepping the queue.
       for (final shortcut in AppShortcut.all) {
         if (shortcut.scope != ShortcutScope.everyScreen) continue;
@@ -55,8 +55,8 @@ void main() {
 
     test('previous/next are the documented pair', () {
       // A change here is a deliberate app-wide decision, not a refactor.
-      expect(AppShortcut.previousItem.label, 'P or ↑');
-      expect(AppShortcut.nextItem.label, 'S or ↓');
+      expect(AppShortcut.previousItem.label, '↑');
+      expect(AppShortcut.nextItem.label, '↓');
     });
   });
 
@@ -122,7 +122,7 @@ void main() {
       );
       expect(bindings.every((b) => b.alwaysConsumes), isFalse);
 
-      final result = runKeyBindings(bindings, LogicalKeyboardKey.keyS);
+      final result = runKeyBindings(bindings, LogicalKeyboardKey.arrowDown);
       expect(result, KeyEventResult.ignored);
       expect(asked, 1, reason: 'declining lets a later binding have the key');
     });

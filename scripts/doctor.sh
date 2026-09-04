@@ -98,10 +98,33 @@ fi
 hdr "Shared machine"
 # --------------------------------------------------------------------------
 LOCK=${CHESS_PREP_LOCK:-/tmp/chess-auto-prep-flutter.lock}
-if [[ -r "$LOCK.holder" ]] && ! flock -n "$LOCK" true 2>/dev/null; then
-  note "Flutter lock held by: $(cat "$LOCK.holder") — heavy jobs will queue behind it"
+if ! flock -n "$LOCK" true 2>/dev/null; then
+  lock_owner=""
+  [[ -r "$LOCK.holder" ]] && lock_owner=$(awk '{print $2}' "$LOCK.holder")
+  # A lock outliving its owner is the failure that cost this machine 45
+  # minutes on 2026-09-04: `flutter test` was killed, its test isolates
+  # survived holding the inherited lock fd, and every agent queued behind a
+  # holder that had been dead for the whole time. ci.sh no longer leaks the fd,
+  # so this should be unreachable — which is exactly why it is worth naming
+  # loudly rather than reporting as an ordinary busy lock.
+  if [[ -n $lock_owner && $lock_owner =~ ^[0-9]+$ ]] && ! kill -0 "$lock_owner" 2>/dev/null; then
+    bad "Flutter lock held by pid $lock_owner, which is GONE — orphans hold it. Run: scripts/ci.sh unlock"
+  else
+    note "Flutter lock held by: $(cat "$LOCK.holder" 2>/dev/null || echo 'an unrecorded job') — heavy jobs will queue behind it"
+  fi
 else
   ok "Flutter lock free"
+fi
+
+# One runaway process must not take every session on this machine with it.
+# On 2026-09-04 it did: a mutated constant made a test ask for 582 GB, and
+# systemd's default OOMPolicy=stop answered the resulting OOM kill by tearing
+# down the whole editor scope — seven agent sessions, none of them at fault.
+if oom=$(scripts/oom_containment.sh --check 2>&1); then
+  ok "OOM containment in place (one runaway dies alone)"
+else
+  bad "OOM containment missing — run \`scripts/oom_containment.sh\`"
+  [[ $QUIET -eq 1 ]] || sed 's/^/      /' <<<"$oom"
 fi
 
 drv=$(python3 .claude/skills/run-chess-auto-prep/driver.py status 2>/dev/null)

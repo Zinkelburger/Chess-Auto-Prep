@@ -10,11 +10,11 @@ import 'app_colors.dart';
 import 'app_text_styles.dart';
 
 abstract final class PgnTextStyles {
-  /// Movetext is **proportional**, not monospace. The pane is a flowing wrap,
-  /// not an aligned column, so equal advance widths buy no alignment while
-  /// costing ~15% width and giving notation a code-listing texture. Print
-  /// chess (and Lichess) set movetext proportional for the same reason.
-  /// Monospace survives only where characters must line up: [commentFen].
+  /// Chess notation and prose deliberately use different faces. SAN and move
+  /// numbers use the bundled Source Code Pro: its unambiguous `O`/`0`, compact
+  /// punctuation and even rhythm make dense variations easy to scan. Comments
+  /// inherit Inter from the app theme, so a course chapter still reads like a
+  /// book instead of a code listing.
 
   /// Indent applied per nesting level by the movetext view.
   static const depthIndent = 15.0;
@@ -23,7 +23,7 @@ abstract final class PgnTextStyles {
   /// changes. Three visible steps is the practical ceiling for value scales.
   static const maxStyledDepth = 3;
 
-  static const _sizes = <double>[14.5, 13.5, 13.0, 13.0];
+  static const _sizes = <double>[15.0, 13.5, 13.0, 12.5];
 
   static const _inks = <Color>[
     AppColors.pgnMove,
@@ -52,11 +52,12 @@ abstract final class PgnTextStyles {
   /// value, size, and indentation, which have more usable steps.
   ///
   /// Note the current move does **not** get extra weight: the pill marks it.
-  /// A weight change on navigation would reflow the whole wrapped pane now
-  /// that the face is proportional.
+  /// A weight change on navigation would still alter glyph widths and reflow
+  /// the wrapped pane, even in the notation face.
   static TextStyle moveAt(int depth, {bool ephemeral = false}) => TextStyle(
+    fontFamily: AppTextStyles.monoFamily,
     fontSize: sizeAt(depth),
-    height: 1.4,
+    height: 1.45,
     fontWeight: depth == 0 ? FontWeight.w600 : FontWeight.w400,
     // Ephemeral (scratch / solitaire) moves italicize rather than take a hue:
     // "unsaved" is orthogonal to depth, so it gets an orthogonal axis.
@@ -67,8 +68,20 @@ abstract final class PgnTextStyles {
   /// `1.` / `2...` at [depth] — always regular weight, always a step below its
   /// move's ink.
   static TextStyle moveNumberAt(int depth) => TextStyle(
+    fontFamily: AppTextStyles.monoFamily,
     fontSize: sizeAt(depth),
-    height: 1.4,
+    height: 1.45,
+    color: _numberInks[_clamp(depth)],
+  );
+
+  /// Parentheses are only used for short inline alternatives. Block
+  /// variations already have a gutter and indent, so brackets there would be
+  /// redundant visual noise.
+  static TextStyle parenthesisAt(int depth) => TextStyle(
+    fontFamily: AppTextStyles.monoFamily,
+    fontSize: sizeAt(depth),
+    height: 1.45,
+    fontWeight: FontWeight.w600,
     color: _numberInks[_clamp(depth)],
   );
 
@@ -76,8 +89,9 @@ abstract final class PgnTextStyles {
   /// and italicizing the whole pane makes the moves harder to scan. Depth
   /// still recedes via ink and size.
   static TextStyle commentAt(int depth) => TextStyle(
-    fontSize: depth == 0 ? 14 : 13,
-    height: 1.5,
+    fontFamily: AppTextStyles.uiFamily,
+    fontSize: depth == 0 ? 14.5 : 13,
+    height: depth == 0 ? 1.6 : 1.5,
     color: depth == 0 ? AppColors.pgnComment : inkAt(depth),
   );
 
@@ -85,20 +99,22 @@ abstract final class PgnTextStyles {
   /// data rather than commentary, and a step quieter than the moves they
   /// describe so a line of them never competes with the movetext.
   static TextStyle metricsAt(int depth) => TextStyle(
+    fontFamily: AppTextStyles.uiFamily,
     fontSize: depth == 0 ? 12.5 : 12,
     height: 1.5,
     color: AppColors.onSurfaceMuted,
   );
 
-  /// Root style for a movetext row's RichText at [depth]. Font-family-free by
-  /// construction (everything here is proportional), and weight-free so that
-  /// prose spans inside a mainline row don't inherit the mainline's semibold.
+  /// Root style for a movetext row's RichText at [depth]. Individual notation
+  /// and prose spans set their own family; keeping the root neutral prevents a
+  /// comment from accidentally inheriting the mono face.
   static TextStyle rowRootAt(int depth) =>
       TextStyle(fontSize: sizeAt(depth), height: 1.4, color: inkAt(depth));
 
   /// The "⋯ 3 more lines" disclosure that stands in for collapsed deep
   /// sidelines.
   static const collapsedStub = TextStyle(
+    fontFamily: AppTextStyles.uiFamily,
     fontSize: 13,
     height: 1.4,
     fontWeight: FontWeight.w500,
@@ -115,15 +131,16 @@ abstract final class PgnTextStyles {
   static TextStyle get currentMove =>
       moveAt(0).copyWith(color: AppColors.pgnMoveCurrentFg);
 
-  /// Branch-picker chips under the movetext. Proportional to match the
-  /// movetext they mirror.
+  /// Branch-picker chips under the movetext mirror the notation face.
   static const branchChip = TextStyle(
+    fontFamily: AppTextStyles.monoFamily,
     fontSize: 15,
     height: 1.2,
     color: AppTextStyles.ink,
   );
 
   static const branchChipBadge = TextStyle(
+    fontFamily: AppTextStyles.uiFamily,
     fontSize: 12,
     height: 1.1,
     fontWeight: FontWeight.w600,

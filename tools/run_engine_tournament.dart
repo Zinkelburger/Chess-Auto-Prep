@@ -22,7 +22,6 @@ import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/features/engine_tournament/models/adjudication_rules.dart';
 import 'package:chess_auto_prep/features/engine_tournament/models/engine_spec.dart';
 import 'package:chess_auto_prep/features/engine_tournament/models/stored_tournament.dart';
-import 'package:chess_auto_prep/features/engine_tournament/models/tournament_game.dart';
 import 'package:chess_auto_prep/features/engine_tournament/models/time_control.dart';
 import 'package:chess_auto_prep/features/engine_tournament/models/tournament_config.dart';
 import 'package:chess_auto_prep/services/crosstable_builder.dart';

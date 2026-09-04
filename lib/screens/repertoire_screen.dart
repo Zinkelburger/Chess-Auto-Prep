@@ -291,6 +291,13 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
                   (moves: l.moves, title: l.title, pgn: l.pgn),
               ]);
             },
+            onTrimLines: (droppedKeys) => _controller.deleteLines([
+              for (final line in _controller.repertoireLines)
+                // Match on the same identity the export writes with, so a
+                // line the user added by hand is never caught by a cut of
+                // the generated ones.
+                if (droppedKeys.contains(line.moves.join(' '))) line,
+            ]),
           ),
         ),
       ),
@@ -547,6 +554,18 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
   /// the position zones need to hear about.
   int _structureSeen = -1;
 
+  /// The repertoire the colour question has already been put for, and whether
+  /// that dialog is on screen right now.
+  ///
+  /// The dialog is dismissable ("Not now"), but the check that posts it lives
+  /// outside the repertoire-switch guard and runs on *every* structure change
+  /// — so without these two, dismissing it once meant it came back on the
+  /// next move played, and a burst of structure changes could stack several
+  /// copies of it. Asked once per repertoire per session; switching away and
+  /// back asks again, which is what "asks again next time" meant.
+  String? _colorPromptAskedFor;
+  bool _colorPromptOpen = false;
+
   void _onRepertoireChanged() {
     if (!mounted) return;
 
@@ -588,7 +607,10 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
           newRepertoireId = currentId;
         }
 
-        if (_controller.needsColorSelection) {
+        if (_controller.needsColorSelection &&
+            !_colorPromptOpen &&
+            _colorPromptAskedFor != currentId) {
+          _colorPromptAskedFor = currentId;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) unawaited(_showColorSelectionDialog());
           });
@@ -856,17 +878,33 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
   }
 
   Future<void> _showColorSelectionDialog() async {
+    if (_colorPromptOpen) return;
+    _colorPromptOpen = true;
+    try {
+      await _askRepertoireColor();
+    } finally {
+      _colorPromptOpen = false;
+    }
+  }
+
+  Future<void> _askRepertoireColor() async {
     final name = _controller.currentRepertoire?.name ?? 'this repertoire';
     final isWhite = await showDialog<bool>(
       context: context,
-      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('Which color is this repertoire for?'),
         content: Text(
-          '"$name" doesn\'t have a color set yet. '
-          'This will be saved so you won\'t be asked again.',
+          '"$name" doesn\'t say, and nothing in the file does either. '
+          'Your answer is saved, so this is asked once.',
         ),
         actions: [
+          // Escapable on purpose: the question is worth asking, but not
+          // worth trapping someone who only wanted to look at the file.
+          // Dismissing leaves the colour unset and asks again next time.
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Not now'),
+          ),
           TextButton.icon(
             onPressed: () => Navigator.pop(context, false),
             // Near-black fill + visible outline: a plain black disc is
@@ -888,8 +926,14 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         ],
       ),
     );
-    if (isWhite != null) {
+    if (isWhite != null && mounted) {
       await _controller.setRepertoireColor(isWhite);
+      // The flip is chosen when a repertoire is opened, which for a file
+      // with no colour happens before the colour is known. Re-apply it now
+      // rather than leaving a Black repertoire looking at White's side.
+      if (mounted) {
+        setState(() => _boardFlipped = !_controller.isRepertoireWhite);
+      }
     }
   }
 

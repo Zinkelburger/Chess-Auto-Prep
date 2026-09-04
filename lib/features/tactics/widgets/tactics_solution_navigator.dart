@@ -34,7 +34,8 @@ class TacticsSolutionNavigator {
   /// The tactic currently loaded, or `null` when none is active.
   final TacticsPosition? Function() currentTactic;
 
-  /// Computes the SAN solution line for a tactic.
+  /// Computes the full SAN engine PV for a tactic, falling back to the
+  /// trainable line for legacy puzzles that did not store one.
   final List<String> Function(TacticsPosition) solutionToSan;
 
   /// Writes a board position to the app/board state.

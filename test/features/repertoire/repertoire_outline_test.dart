@@ -59,10 +59,15 @@ void main() {
     File(p.join(root, 'Sidelines', 'Exchange.pgn')).writeAsStringSync(
       '// Color: Black\n\n${_game('Exchange', '1. e4 e6 2. d4 d5 3. exd5 exd5')}\n',
     );
+    final storage = IOStorageService(
+      documentsRoot: tmp,
+      supportRoot: tmp,
+      repertoiresRoot: Directory(root),
+    );
     service = RepertoireOutlineService(
-      storage: IOStorageService(),
+      storage: storage,
       splitter: ChapterSplitter(
-        storage: IOStorageService(),
+        storage: storage,
         review: RepertoireReviewService(storage: _CsvStorage()),
       ),
     );

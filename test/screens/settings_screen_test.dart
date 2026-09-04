@@ -49,6 +49,50 @@ void main() {
       240,
       scrollable: find.byType(Scrollable).first,
     );
+    expect(find.text('About & open source'), findsOneWidget);
+    expect(find.text('Chess Auto Prep on GitHub'), findsOneWidget);
+    expect(find.textContaining('Includes Hivemind by aminwoo'), findsOneWidget);
     expect(find.text('Reset All to Defaults'), findsOneWidget);
+  });
+
+  testWidgets('the database sections are a pointer, not a panel', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 700);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AppState>(create: (_) => AppState()),
+          ChangeNotifierProvider<EvalDatabaseSettings>.value(
+            value: EvalDatabaseSettings.instance,
+          ),
+          ChangeNotifierProvider<MasterGamesService>(
+            create: (_) => MasterGamesService(),
+          ),
+        ],
+        child: const MaterialApp(home: SettingsScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Open Databases'),
+      240,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    // Master games, your games and the two evaluation stores each had a
+    // section here and between them filled more of this screen than
+    // everything else put together — while still not answering "how much disk
+    // is this using", because no section could see the others. They live on
+    // the Databases page now. Re-adding one here is the regression this
+    // guards: it would be invisible until the two copies disagreed.
+    expect(find.textContaining('Years of games'), findsNothing);
+    expect(find.textContaining('ChessDB data directory'), findsNothing);
+    expect(find.textContaining('games indexed'), findsNothing);
+    expect(find.text('Download evaluations…'), findsNothing);
   });
 }

@@ -19,6 +19,7 @@ import 'services/default_pgn_service.dart';
 import 'services/engine/engine_lifecycle.dart';
 import 'services/eval_cache.dart';
 import 'services/master_games/master_games_service.dart';
+import 'services/bundled_licenses.dart';
 import 'widgets/escape_to_pop_scope.dart';
 
 void main() {
@@ -26,6 +27,7 @@ void main() {
     runZonedGuarded(
       () async {
         WidgetsFlutterBinding.ensureInitialized();
+        registerBundledLicenses();
         // No-op unless --dart-define=AGENT_DRIVER=true in a debug build.
         installAgentDriver();
 

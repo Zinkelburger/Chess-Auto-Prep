@@ -126,26 +126,31 @@ class StdioServer:
     # ── Loop ───────────────────────────────────────────────────────────────
 
     def serve_forever(self) -> None:
-        for line in self.stdin:
-            stripped = line.strip()
-            if not stripped:
-                continue
+        try:
+            for line in self.stdin:
+                stripped = line.strip()
+                if not stripped:
+                    continue
 
-            try:
-                message = json.loads(stripped)
-            except json.JSONDecodeError:
-                self._send(
-                    {
-                        "jsonrpc": "2.0",
-                        "id": None,
-                        "error": {"code": -32700, "message": "Parse error"},
-                    }
-                )
-                continue
+                try:
+                    message = json.loads(stripped)
+                except json.JSONDecodeError:
+                    self._send(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": None,
+                            "error": {"code": -32700, "message": "Parse error"},
+                        }
+                    )
+                    continue
 
-            try:
-                self.handle(message)
-            except Exception as e:  # noqa: BLE001 - never die on one message
-                request_id = message.get("id")
-                if request_id is not None:
-                    self._error(request_id, -32603, f"{type(e).__name__}: {e}")
+                try:
+                    self.handle(message)
+                except Exception as e:  # noqa: BLE001 - never die on one message
+                    request_id = message.get("id")
+                    if request_id is not None:
+                        self._error(request_id, -32603, f"{type(e).__name__}: {e}")
+        finally:
+            close = getattr(self.registry, "close", None)
+            if close is not None:
+                close()

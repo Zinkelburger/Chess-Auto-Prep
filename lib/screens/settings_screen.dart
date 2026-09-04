@@ -22,20 +22,19 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../core/app_state.dart';
 import '../features/games/widgets/my_repertoires_section.dart';
 import '../models/engine_settings.dart';
 import '../models/eval_database_settings.dart';
 import '../theme/app_text_styles.dart';
+import '../utils/app_messages.dart';
 import '../utils/system_info.dart';
 import '../widgets/common/confirm_dialog.dart';
-import '../widgets/eval_database_settings_panel.dart';
-import '../widgets/lichess_eval_settings_panel.dart';
 import '../widgets/labeled_toggle.dart';
-import '../widgets/master_games_settings_panel.dart';
-import '../widgets/games_database_settings_panel.dart';
-import '../services/master_games/master_games_service.dart';
 import '../widgets/settings/account_settings_section.dart';
 import '../widgets/settings/settings_widgets.dart';
 
@@ -47,6 +46,10 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  static final _projectUri = Uri.parse(
+    'https://github.com/Zinkelburger/Chess-Auto-Prep',
+  );
+
   final _engine = EngineSettings.instance;
 
   @override
@@ -97,24 +100,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       // ── Engine ───────────────────────────────────
                       _buildEngineSection(cores),
 
-                      // ── Master games ─────────────────────────────
-                      Builder(
-                        builder: (context) {
-                          context.watch<MasterGamesService>();
-                          return _buildMasterGamesSection();
-                        },
-                      ),
+                      // ── Databases ────────────────────────────────
+                      _buildDatabasesSection(),
 
-                      // ── Your games ───────────────────────────────
-                      _buildGamesDatabaseSection(),
-
-                      // ── Database ─────────────────────────────────
-                      Builder(
-                        builder: (context) {
-                          context.watch<EvalDatabaseSettings>();
-                          return _buildDatabaseSection();
-                        },
-                      ),
+                      // ── About ────────────────────────────────────
+                      _buildAboutSection(),
 
                       // ── Reset ────────────────────────────────────
                       const SizedBox(height: 24),
@@ -127,6 +117,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         );
       },
+    );
+  }
+
+  Future<void> _openProject() async {
+    var opened = false;
+    try {
+      opened = await launchUrl(
+        _projectUri,
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {
+      opened = false;
+    }
+    if (!opened && mounted) {
+      showAppSnackBar(
+        context,
+        'Could not open the Chess Auto Prep GitHub page',
+        isError: true,
+      );
+    }
+  }
+
+  Widget _buildAboutSection() {
+    return SettingsGroup(
+      title: 'About & open source',
+      icon: Icons.info_outline,
+      subtitle:
+          'Chess Auto Prep is open source. Follow development, report an '
+          'issue, or inspect the software and third-party licenses.',
+      children: [
+        ListTile(
+          leading: SizedBox.square(
+            dimension: 22,
+            child: SvgPicture.asset('assets/icons/github-mark-white.svg'),
+          ),
+          title: const Text('Chess Auto Prep on GitHub'),
+          subtitle: const Text('Source code, releases, and issue tracker'),
+          trailing: const Icon(Icons.open_in_new, size: 17),
+          onTap: () => unawaited(_openProject()),
+        ),
+        const Divider(height: 1, indent: 16, endIndent: 16),
+        ListTile(
+          leading: const Icon(Icons.balance_outlined, size: 22),
+          title: const Text('Open-source licenses'),
+          subtitle: const Text(
+            'Includes Hivemind by aminwoo, the MIT-licensed bughouse engine',
+          ),
+          trailing: const Icon(Icons.chevron_right, size: 20),
+          onTap: () => showLicensePage(
+            context: context,
+            applicationName: 'Chess Auto Prep',
+          ),
+        ),
+      ],
     );
   }
 
@@ -144,10 +188,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'off with the ⚡ button next to the board.',
       children: [
         SettingsStepperTile(
-          label: 'Engine copies for analysis',
+          label: 'Parallel workers for bulk analysis',
           description:
-              'More copies analyze games and build repertoires faster, but '
-              'leave less of the machine for everything else.',
+              'Runs one Stockfish process per worker: 1 CPU thread and '
+              '128 MB hash each, plus engine memory. More workers analyse '
+              'independent positions faster; fewer use less memory and leave '
+              'the computer freer.',
           value: _engine.workers,
           min: 1,
           max: cores,
@@ -155,10 +201,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onChanged: (v) => _engine.workers = v,
         ),
         SettingsStepperTile(
-          label: 'Threads for the board engine bar',
+          label: 'Threads for one board engine',
           description:
-              'Used by the single engine readout under the board in the PGN '
-              'viewer and study.',
+              'The engine bar uses one Stockfish process with this many CPU '
+              'threads. This is best for one position; bulk analysis uses '
+              'the parallel workers above.',
           value: _engine.inlineThreads,
           min: 1,
           max: cores,
@@ -180,54 +227,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ── Master games section ───────────────────────────────────────────────────
+  // ── Databases section ──────────────────────────────────────────────────────
 
-  Widget _buildMasterGamesSection() {
-    return const SettingsGroup(
-      title: 'Master games database',
-      icon: Icons.library_books_outlined,
-      subtitle:
-          'Titled-player games from The Week in Chess, stored locally so '
-          'repertoires are built on master practice: opponent replies, model '
-          'games, and "improves on … in <game>" notes.',
-      children: [MasterGamesSettingsPanel()],
-    );
-  }
-
-  // ── Your games section ─────────────────────────────────────────────────────
-
-  Widget _buildGamesDatabaseSection() {
-    return const SettingsGroup(
-      title: 'Your games database',
-      icon: Icons.inventory_2_outlined,
-      subtitle:
-          'Every game the app downloads or imports — Player Analysis, the '
-          'home games library, the tactics archive — parsed once into a local '
-          'database with indexed players, dates and opening positions.',
-      children: [GamesDatabaseSettingsPanel()],
-    );
-  }
-
-  // ── Database section ───────────────────────────────────────────────────────
-
-  Widget _buildDatabaseSection() {
+  /// A pointer, not a panel.
+  ///
+  /// Master games, your own games and the two offline evaluation stores each
+  /// had a section here, and between them they filled more of this screen than
+  /// everything else put together — while still not answering "how much disk
+  /// is this using", because no section could see the others. They live on the
+  /// Databases page now (Ctrl+9). What stays is the one switch that is a
+  /// preference about *this machine's* network use rather than a fact about a
+  /// store on its disk.
+  Widget _buildDatabasesSection() {
     return SettingsGroup(
-      title: 'Offline evaluation databases',
+      title: 'Databases',
       icon: Icons.storage,
       subtitle:
-          'Optional. A local copy of ChessDB or of the Lichess cloud '
-          'evaluations answers "how good is this position?" instantly, so the '
-          'engine only runs for positions nobody has looked at yet.',
+          'Master games, your own games, and the offline evaluation stores — '
+          'what is downloaded, how much disk it uses, and how to refresh it.',
       children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: EvalDatabaseSettingsPanel(),
+        ListTile(
+          leading: const Icon(Icons.dns_outlined, size: 22),
+          title: const Text('Open Databases'),
+          subtitle: const Text(
+            'Everything the app keeps on this machine, on one page',
+          ),
+          trailing: const Icon(Icons.chevron_right, size: 20),
+          // Settings is a pushed route over the mode host, so switching mode
+          // without popping would change the screen underneath and leave the
+          // user still looking at Settings.
+          onTap: () {
+            final appState = context.read<AppState>();
+            Navigator.pop(context);
+            appState.setMode(AppMode.databases);
+          },
         ),
-        const Divider(height: 24, indent: 16, endIndent: 16),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: LichessEvalSettingsPanel(),
-        ),
+        const Divider(height: 1, indent: 16, endIndent: 16),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: ListenableBuilder(

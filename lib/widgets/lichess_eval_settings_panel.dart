@@ -6,9 +6,9 @@
 /// ChessDB is far broader, Lichess is far smaller and needs no native code —
 /// so both can be on at once and the chain asks ChessDB first.
 ///
-/// The status-and-download half lives in [LichessEvalCard], which the
-/// repertoire builder's eval-sources pane mounts as well; what stays here is
-/// the settings this screen owns.
+/// The status-and-download half lives in [LichessEvalCard], which both the
+/// Databases page and the repertoire builder's eval-sources pane mount; what
+/// stays here is the settings, shown in the card's disclosure.
 library;
 
 import 'dart:async';
@@ -21,7 +21,6 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/open_in_file_manager.dart';
 import 'labeled_toggle.dart';
-import 'lichess_eval_download_card.dart';
 
 class LichessEvalSettingsPanel extends StatefulWidget {
   const LichessEvalSettingsPanel({super.key});
@@ -58,10 +57,8 @@ class _LichessEvalSettingsPanelState extends State<LichessEvalSettingsPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const LichessEvalCard(),
-        const SizedBox(height: 16),
         AppSwitch(
-          label: 'Lichess cloud evaluations',
+          label: 'Look here before the engine',
           value: _settings.enableLichessEvals,
           onChanged: (v) => unawaited(_settings.setEnableLichessEvals(v)),
           enabled: _controller.isReady,

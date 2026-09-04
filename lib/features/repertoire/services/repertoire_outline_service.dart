@@ -19,6 +19,7 @@ import '../../../models/repertoire_metadata.dart';
 import '../../../services/repertoire_service.dart';
 import '../../../services/storage/storage_factory.dart';
 import '../../../services/storage/storage_service.dart';
+import '../../../utils/safe_file_name.dart';
 import '../models/repertoire_outline.dart';
 import 'chapter_splitter.dart';
 import 'chapter_store.dart';
@@ -178,21 +179,10 @@ class RepertoireOutlineService {
 
   // ── Names ──────────────────────────────────────────────────────────────
 
-  static final _illegal = RegExp(r'[<>:"/\\|?*\x00-\x1F]');
-
   /// Returns a problem with [name] as a chapter or folder name, or null when
   /// it is fine. The same rules for both: a chapter is a file and a folder is
   /// a folder, and neither can hold a path separator.
-  static String? validateName(String name) {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) return 'Enter a name.';
-    if (_illegal.hasMatch(trimmed)) {
-      return r'Names cannot contain < > : " / \ | ? *';
-    }
-    if (trimmed == '.' || trimmed == '..') return 'That name is reserved.';
-    if (trimmed.endsWith('.')) return 'Names cannot end with a dot.';
-    return null;
-  }
+  static String? validateName(String name) => validateSafeFileName(name);
 
   static String _clean(String name) => name.trim();
 

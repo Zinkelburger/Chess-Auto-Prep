@@ -40,10 +40,6 @@ mixin _GenerationConfigIo
     _relativeEval = config.relativeEval;
     _preferNovelties = config.noveltyWeight > 0;
     _engineTailCtrl.text = config.engineTailPlies.toString();
-    _lineCoverageCtrl.text = (config.lineCoverageTarget * 100)
-        .round()
-        .toString();
-    _targetLinesCtrl.text = config.targetLineCount.toString();
     _rankLinesByImportance = config.rankLinesByImportance;
     _annotationDetail = config.annotationDetail;
     _organizeIntoChapters = config.organizeIntoChapters;
@@ -62,7 +58,6 @@ mixin _GenerationConfigIo
     _bookTailMaxPlyCtrl.text = config.bookTailMaxPly.toString();
     _bookTieBreakCtrl.text = config.bookTieBreakWindowCp.toString();
     _replyWindowCtrl.text = config.replyWindowCp.toString();
-    _mistakeWeightCtrl.text = config.mistakeWeight.toString();
     // The three sub-editors keep their state in controllers this form owns,
     // so seeding them needs neither a mounted widget nor a post-frame hop.
     //
@@ -207,15 +202,6 @@ mixin _GenerationConfigIo
         0,
         40,
       ),
-      lineCoverageTarget:
-          ((double.tryParse(_lineCoverageCtrl.text.trim()) ?? 92) / 100).clamp(
-            0.05,
-            1.0,
-          ),
-      targetLineCount: (int.tryParse(_targetLinesCtrl.text.trim()) ?? 0).clamp(
-        0,
-        100000,
-      ),
       trapsOnly: _trapsOnly,
       rankLinesByImportance: _rankLinesByImportance,
       annotationDetail: _annotationDetail,
@@ -312,10 +298,6 @@ mixin _GenerationConfigIo
       noveltyWeight: _preferNovelties
           ? (seed.noveltyWeight > 0 ? seed.noveltyWeight : 60)
           : 0,
-      mistakeWeight: (int.tryParse(_mistakeWeightCtrl.text.trim()) ?? 0).clamp(
-        0,
-        100,
-      ),
       leafConfidence: double.tryParse(_leafConfidenceCtrl.text.trim()) ?? 1.0,
     );
 

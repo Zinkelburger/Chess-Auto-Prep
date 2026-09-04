@@ -111,7 +111,7 @@ class RepertoireShortcuts extends StatelessWidget {
       'Toggle engine',
       onToggleEngine,
     ),
-    // P/S (and ↓/↑) step the active list — trap tour stops while the tour is
+    // ↑/↓ step the active list — trap tour stops while the tour is
     // open, audit findings otherwise. Same pair as games and chapters.
     ...KeyBinding.forShortcutIf(
       AppShortcut.nextItem,
@@ -136,7 +136,7 @@ class RepertoireShortcuts extends StatelessWidget {
       () => onFocusComment?.call() ?? false,
     ),
     // Shift+←/→ jump between traps *inside the current line* — a different
-    // axis from P/S, which step the trap list. They fall back to plain move
+    // axis from ↑/↓, which step the trap list. They fall back to plain move
     // navigation when there is no trap to jump to.
     ...KeyBinding.forShortcut(
       AppShortcut.previousTrapInLine,

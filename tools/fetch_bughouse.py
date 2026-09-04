@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Fetch the Hivemind bughouse engine for this machine (not tracked in git).
 
+Hivemind is Copyright (c) 2026 aminwoo and distributed under the MIT License.
+The complete notice shipped in the app is assets/licenses/HIVEMIND_LICENSE.txt.
+Upstream source: https://github.com/aminwoo/hivemind
+Portable-build fork: https://github.com/Zinkelburger/hivemind
+
 Same contract as `fetch_assets.py`: these files are bundled by `pubspec.yaml`
 and read from the Flutter root bundle at runtime, so they must exist *before*
 `flutter build` runs. Unlike Stockfish there is no upstream download to point
@@ -21,7 +26,7 @@ engine -- stays available:
 
 Three files land in assets/bughouse/: the engine, the ONNX Runtime it links
 against, and the FP32 network, each gzipped, plus a manifest of uncompressed
-sizes the app uses to spot a stale extraction.
+sizes and SHA-256 values the app uses to spot a stale or corrupt extraction.
 
 IMPORTANT: assets/bughouse/.gitkeep is tracked on purpose. pubspec.yaml
 declares the directory as an asset, and Flutter treats a *missing* asset
@@ -244,22 +249,28 @@ def manifest_key(dest: str) -> str:
     return name[:-3] if name.endswith(".gz") else name
 
 
-def write_manifest(sizes: dict[str, int]) -> None:
-    """Record uncompressed sizes by extracted filename, merging with whatever
-    is already there.
+def manifest_entry(size: int, sha256: str) -> dict[str, object]:
+    return {"bytes": size, "sha256": sha256}
 
-    The app compares each extracted file against these to notice a half-written
-    or superseded extraction. Merging matters because the network is fetched
-    independently of the platform pair, and because a checkout may hold several
-    platforms at once.
+
+def write_manifest(entries: dict[str, dict[str, object]]) -> None:
+    """Record uncompressed sizes and hashes by extracted filename.
+
+    The app compares each extracted file against these to notice a half-written,
+    corrupted or superseded extraction. Merging matters because the network is
+    fetched independently of the platform pair, and because a checkout may hold
+    several platforms at once.
     """
-    current: dict[str, int] = {}
+    current: dict[str, dict[str, object]] = {}
     if MANIFEST.exists():
         try:
-            current = json.loads(MANIFEST.read_text())
-        except json.JSONDecodeError:
+            decoded = json.loads(MANIFEST.read_text())
+            current = {
+                key: value for key, value in decoded.items() if isinstance(value, dict)
+            }
+        except (json.JSONDecodeError, AttributeError):
             pass
-    current.update(sizes)
+    current.update(entries)
     # Drop anything that is not an asset we ship, so a manifest left behind by
     # an older, role-keyed version of this script heals itself on the next run
     # instead of carrying two spellings of the same size forever.
@@ -297,7 +308,13 @@ def fetch_network(lock: dict, force: bool) -> None:
     dest = REPO_ROOT / NETWORK["dest"]
     if dest_is_current("network", dest, lock) and not force:
         print(f"[ok]   network: {NETWORK['dest']} present ({human(dest.stat().st_size)})")
-        write_manifest({manifest_key(NETWORK["dest"]): gunzipped_size(dest)})
+        write_manifest(
+            {
+                manifest_key(NETWORK["dest"]): manifest_entry(
+                    gunzipped_size(dest), payload_sha256(dest)
+                )
+            }
+        )
         return
 
     url = f"{ENGINE_BASE}/{NETWORK['asset']}"
@@ -317,7 +334,13 @@ def fetch_network(lock: dict, force: bool) -> None:
         shutil.copyfile(tmp, dest)
 
     size = gunzipped_size(dest)
-    write_manifest({manifest_key(NETWORK["dest"]): size})
+    write_manifest(
+        {
+            manifest_key(NETWORK["dest"]): manifest_entry(
+                size, payload_sha256(dest)
+            )
+        }
+    )
     lock["network"] = {
         "url": url,
         "source_sha256": digest,
@@ -350,8 +373,14 @@ def fetch(name: str, lock: dict, force: bool) -> None:
         print(f"[ok]   {name}: {engine_dest} + {runtime_dest} present")
         write_manifest(
             {
-                manifest_key(engine_dest): lock[f"{name}:engine"]["uncompressed_bytes"],
-                manifest_key(runtime_dest): lock[f"{name}:runtime"]["uncompressed_bytes"],
+                manifest_key(engine_dest): manifest_entry(
+                    lock[f"{name}:engine"]["uncompressed_bytes"],
+                    lock[f"{name}:engine"]["payload_sha256"],
+                ),
+                manifest_key(runtime_dest): manifest_entry(
+                    lock[f"{name}:runtime"]["uncompressed_bytes"],
+                    lock[f"{name}:runtime"]["payload_sha256"],
+                ),
             }
         )
         return
@@ -381,8 +410,12 @@ def fetch(name: str, lock: dict, force: bool) -> None:
     write_gz(runtime_bytes, runtime_path)
     write_manifest(
         {
-            manifest_key(engine_dest): len(engine_bytes),
-            manifest_key(runtime_dest): len(runtime_bytes),
+            manifest_key(engine_dest): manifest_entry(
+                len(engine_bytes), hashlib.sha256(engine_bytes).hexdigest()
+            ),
+            manifest_key(runtime_dest): manifest_entry(
+                len(runtime_bytes), hashlib.sha256(runtime_bytes).hexdigest()
+            ),
         }
     )
 
@@ -467,9 +500,15 @@ def install_from_build(checkout: Path, build: str) -> int:
 
     write_manifest(
         {
-            manifest_key(engine_dest): len(engine_bytes),
-            manifest_key(runtime_dest): len(runtime_bytes),
-            manifest_key(NETWORK["dest"]): len(payload),
+            manifest_key(engine_dest): manifest_entry(
+                len(engine_bytes), hashlib.sha256(engine_bytes).hexdigest()
+            ),
+            manifest_key(runtime_dest): manifest_entry(
+                len(runtime_bytes), hashlib.sha256(runtime_bytes).hexdigest()
+            ),
+            manifest_key(NETWORK["dest"]): manifest_entry(
+                len(payload), hashlib.sha256(payload).hexdigest()
+            ),
         }
     )
     total = sum(f.stat().st_size for f in ASSETS.glob("*.gz"))
@@ -516,7 +555,8 @@ def check(names: list[str], lock: dict) -> int:
         print(f"[MISS] manifest: {MANIFEST.relative_to(REPO_ROOT)}")
         problems.append("manifest")
     else:
-        keys = set(json.loads(MANIFEST.read_text()))
+        manifest = json.loads(MANIFEST.read_text())
+        keys = set(manifest)
         wanted = {manifest_key(NETWORK["dest"])}
         for n in names:
             wanted.add(manifest_key(TARGETS[n]["engine"][1]))
@@ -526,7 +566,22 @@ def check(names: list[str], lock: dict) -> int:
             print(f"[BAD ] manifest: missing {', '.join(sorted(missing))}")
             problems.append("manifest")
         else:
-            print(f"[ok  ] manifest: {MANIFEST.relative_to(REPO_ROOT)}")
+            malformed = [
+                name
+                for name in wanted
+                if not isinstance(manifest.get(name), dict)
+                or not isinstance(manifest[name].get("bytes"), int)
+                or not isinstance(manifest[name].get("sha256"), str)
+                or len(manifest[name]["sha256"]) != 64
+            ]
+            if malformed:
+                print(
+                    f"[BAD ] manifest: invalid integrity record for "
+                    f"{', '.join(sorted(malformed))}"
+                )
+                problems.append("manifest")
+            else:
+                print(f"[ok  ] manifest: {MANIFEST.relative_to(REPO_ROOT)}")
 
     if problems:
         print(

@@ -72,8 +72,9 @@ STOCKFISH_ASSETS = {
 # Maia is NOT fetched. `assets/maia3_simplified.onnx` is a local torch.onnx.export
 # artifact with no upstream equivalent -- CSSLab/maia3 publishes PyTorch
 # checkpoints on Hugging Face and ships no ONNX at all -- so there is nothing to
-# download and no release asset behind it. It stays tracked in git, and is the
-# only copy that exists. See "Regenerating the Maia model" in README.md.
+# download and no release asset behind it. It stays tracked in git; its checksum,
+# tensor contract, and known provenance live in tools/maia_model.lock.json. See
+# "Regenerating the Maia model" in README.md.
 
 TARGETS = {
     "stockfish-linux": {

@@ -445,9 +445,10 @@ Future<_GameMineOutcome?> _analyzeGameParallel({
         tempPos = newPos;
       }
 
-      final solutionPv = allPvSan
-          .take(TacticsEngine.maxSolutionPvPlies)
-          .toList();
+      // Keep every legal ply Stockfish returned. The shorter line below is
+      // deliberately the only one constrained by what makes a good training
+      // prompt; revealing the answer should still show the engine's full PV.
+      final solutionPv = List<String>.of(allPvSan);
       final correctLine = await TacticsEngine.buildTrainableLine(
         allPvSan,
         maia: maia,

@@ -27,6 +27,15 @@ abstract interface class PgnViewerHandle {
   /// Drop all ephemeral analysis lines and return to the game moves.
   void clearEphemeralMoves();
 
+  /// Whether the reader currently carries user-added, unsaved analysis moves.
+  bool get hasEphemeralMoves;
+
+  /// Squares used to mark the most recent move(s) on the shared board.
+  Set<String> get recentMoveSquares;
+
+  /// Leave a sideline or inline preview and return to its mainline anchor.
+  void returnToMainline();
+
   /// Jump to the position after [moveNumber] (1-based full moves), from the
   /// side-to-move perspective given by [isWhiteToPlay].
   void jumpToMove(int moveNumber, bool isWhiteToPlay);

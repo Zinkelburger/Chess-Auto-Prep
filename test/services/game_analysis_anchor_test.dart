@@ -94,7 +94,7 @@ void main() {
       // not turn "already winning" into a first-move blunder.
       const fen =
           'r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4';
-      final pgn =
+      const pgn =
           '[Event "Test"]\n'
           '[SetUp "1"]\n'
           '[FEN "$fen"]\n'

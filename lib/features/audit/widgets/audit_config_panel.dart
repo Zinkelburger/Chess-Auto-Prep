@@ -143,14 +143,14 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
   }
 
   Future<void> _addClashPgns() async {
-    final result = await FilePicker.pickFiles(
+    final files = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pgn', 'txt'],
     );
-    if (result == null || result.files.isEmpty) return;
+    if (files.isEmpty) return;
     if (!mounted) return;
     setState(() {
-      for (final file in result.files) {
+      for (final file in files) {
         final filePath = file.path;
         if (filePath != null && !_clashPgnPaths.contains(filePath)) {
           _clashPgnPaths.add(filePath);

@@ -25,9 +25,8 @@ class HomeReviewSettingsResult {
 }
 
 /// The dialog behind the review strip's gear — the only one there is. Which
-/// time controls count as "my games", and how hard the engine is allowed to
-/// work. Whether the analysis starts by itself is not here: that checkbox sits
-/// on the strip next to the refresh and gear buttons, in plain sight.
+/// time controls count as "my games", whether startup checks for new games,
+/// and how hard the engine is allowed to work.
 ///
 /// Titled "Analysis settings", matching its button: "Review settings" was a
 /// third thing called a review, next to Opening review and the analysis run.
@@ -163,10 +162,10 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
               _label('When it runs'),
               AppCheckbox(
                 key: const Key('review-auto-start'),
-                label: 'Start by itself when there are games to analyse',
+                label: 'Check for new games when the app starts',
                 subtitle:
-                    'On by default. Puts your CPU cores on Stockfish for '
-                    'several minutes; uncheck to start every run by hand.',
+                    'On by default. New and unfinished games are analysed '
+                    'automatically; the run can be paused from Tactics.',
                 value: _autoRun,
                 onChanged: (v) => setState(() => _autoRun = v),
               ),

@@ -21,6 +21,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../utils/lru_map.dart';
 import '../../utils/safe_change_notifier.dart';
 
 /// One game's mistake tally for the player whose games these are.
@@ -65,7 +66,7 @@ class GameReviewStore extends ChangeNotifier with SafeChangeNotifier {
   /// means least recently reviewed, not least recently played.
   static const int maxEntries = 500;
 
-  final Map<String, ReviewCounts> _counts = {};
+  final LruMap<String, ReviewCounts> _counts = LruMap(maxEntries: maxEntries);
   bool _loaded = false;
   Future<void>? _loading;
 
@@ -105,27 +106,22 @@ class GameReviewStore extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
-  ReviewCounts? countsFor(String dedupKey) => _counts[dedupKey];
+  /// [LruMap.peek], not `[]`: recency is meant to track *reviews*, and the
+  /// games pane reads this for every visible card on every rebuild.
+  ReviewCounts? countsFor(String dedupKey) => _counts.peek(dedupKey);
 
   /// Record one game's counts. Re-recording moves the game to the front of the
   /// eviction order, since a fresh review is the most relevant entry there is.
   Future<void> record(String dedupKey, ReviewCounts counts) async {
     if (dedupKey.isEmpty) return;
     await ensureLoaded();
-    if (_counts[dedupKey] == counts) {
+    if (_counts.peek(dedupKey) == counts) {
       // Same verdict as the stored one: nothing to notify or rewrite, but keep
       // it fresh in the eviction order.
-      _counts
-        ..remove(dedupKey)
-        ..[dedupKey] = counts;
+      _counts[dedupKey] = counts;
       return;
     }
-    _counts
-      ..remove(dedupKey)
-      ..[dedupKey] = counts;
-    while (_counts.length > maxEntries) {
-      _counts.remove(_counts.keys.first);
-    }
+    _counts[dedupKey] = counts;
     notifyListeners();
     await _save();
   }

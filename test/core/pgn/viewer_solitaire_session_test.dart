@@ -59,6 +59,12 @@ class _FakeHandle implements PgnViewerHandle {
   String? get currentFen => model.currentPosition.fen;
 
   @override
+  bool get hasEphemeralMoves => ephemeralMoves.isNotEmpty;
+
+  @override
+  Set<String> get recentMoveSquares => const {};
+
+  @override
   void addEphemeralMove(String san) => ephemeralMoves.add(san);
 
   @override
@@ -68,7 +74,13 @@ class _FakeHandle implements PgnViewerHandle {
   }
 
   @override
-  void clearEphemeralMoves() => clearEphemeralCount++;
+  void clearEphemeralMoves() {
+    clearEphemeralCount++;
+    ephemeralMoves.clear();
+  }
+
+  @override
+  void returnToMainline() => forceInVariation = false;
 
   @override
   void goToMainLineIndex(int moveIndex) {

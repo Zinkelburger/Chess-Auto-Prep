@@ -27,7 +27,6 @@ void main() {
       expectTacticLoaded();
 
       final allMoves = await showSolutionAndParseMoves(tester);
-      print('Solution moves: $allMoves');
 
       await playTacticMoves(tester, allMoves);
       await expectTacticCompleted(tester);

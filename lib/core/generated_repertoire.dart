@@ -63,6 +63,40 @@ class GeneratedRepertoire {
   /// Every tree in the database, main tree first.
   List<BuildTree> get allTrees => [tree, ...probes];
 
+  /// The same repertoire with a different probe set.
+  ///
+  /// [snapshot], [metricsCache] and [traps] describe [tree] alone — probes are
+  /// deliberately not part of the graph or the trap index (see [probes]) — so
+  /// a probe landing cannot invalidate them. Only [fenMap] spans the whole
+  /// database.
+  ///
+  /// Going back through [fromTree] for this, which is what the probe path used
+  /// to do, redid all four: a full flatten of the build's own tree, the metric
+  /// pass over that snapshot, and a full trap extraction, every time a probe
+  /// was added — none of which could produce a different answer.
+  GeneratedRepertoire withProbes(List<BuildTree> newProbes) {
+    return GeneratedRepertoire(
+      tree: tree,
+      playAsWhite: playAsWhite,
+      fenMap: _mapOver(tree, newProbes),
+      snapshot: snapshot,
+      metricsCache: metricsCache,
+      traps: traps,
+      config: config,
+      probes: List.unmodifiable(newProbes),
+    );
+  }
+
+  /// Transposition map over the whole database, main tree first so a position
+  /// both hold resolves to the build's own node.
+  static FenMap _mapOver(BuildTree tree, List<BuildTree> probes) {
+    final fenMap = FenMap()..populate(tree.root);
+    for (final probe in probes) {
+      fenMap.populate(probe.root);
+    }
+    return fenMap..freeze();
+  }
+
   /// Derive every artifact from [tree] exactly once.
   ///
   /// The tree must already be cooked (expectimax + trap scores computed) for
@@ -74,13 +108,7 @@ class GeneratedRepertoire {
     TreeBuildConfig? config,
     List<BuildTree> probes = const [],
   }) {
-    // The main tree registers first, so a position both hold resolves to
-    // the build's own node.
-    final fenMap = FenMap()..populate(tree.root);
-    for (final probe in probes) {
-      fenMap.populate(probe.root);
-    }
-    fenMap.freeze();
+    final fenMap = _mapOver(tree, probes);
     final snapshot = EvalTreeSnapshotAdapter.fromBuildTree(
       tree,
       playAsWhite: playAsWhite,

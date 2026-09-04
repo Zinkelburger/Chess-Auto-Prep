@@ -175,8 +175,13 @@ MoveClassification classifyMove(double delta) {
 /// [kMaxUnevaluatedPlies] plies lack an eval).
 /// Public because the games list derives its review summaries from the same
 /// parse (see `features/games/services/game_review_summary.dart`).
-({List<MoveEval> evals, double startWinChance, int totalMoves})?
-parseCachedEvals(String pgnText) {
+typedef CachedGameAnalysis = ({
+  List<MoveEval> evals,
+  double startWinChance,
+  int totalMoves,
+});
+
+CachedGameAnalysis? parseCachedEvals(String pgnText) {
   final parsed = PgnGame.parsePgn(pgnText);
   final mainline = parsed.moves.mainline().toList();
   if (mainline.isEmpty) return null;
@@ -353,6 +358,15 @@ String? injectBestLines(String pgnText, Map<int, List<String>> linesByPly) {
 }
 
 class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
+  GameAnalysisController({
+    Future<CachedGameAnalysis?> Function(String pgnText)? cachedAnalysisLoader,
+  }) : _cachedAnalysisLoader =
+           cachedAnalysisLoader ??
+           ((pgnText) => compute(parseCachedEvals, pgnText));
+
+  final Future<CachedGameAnalysis?> Function(String pgnText)
+  _cachedAnalysisLoader;
+
   List<MoveEval> _evals = [];
   List<MoveEval> get evals => _evals;
 
@@ -383,11 +397,15 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
   // ── Loading cached analysis from PGN ────────────────────────────────────
 
   Future<bool> tryLoadFromPgn(String pgnText) async {
-    _generation++;
+    final generation = ++_generation;
     _evals = [];
+    _totalMoves = 0;
+    _analyzedMoves = 0;
+    _startWinChance = 0;
 
     try {
-      final result = await compute(parseCachedEvals, pgnText);
+      final result = await _cachedAnalysisLoader(pgnText);
+      if (isDisposed || generation != _generation) return false;
       if (result == null) return false;
 
       _evals = result.evals;
@@ -476,10 +494,12 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
 
   void clearEvals() {
     _generation++;
+    _isAnalyzing = false;
     _evals = [];
     _totalMoves = 0;
     _analyzedMoves = 0;
     _startWinChance = 0.0;
+    _activeDepth = null;
     notifyListeners();
   }
 
@@ -495,9 +515,11 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
   }) async {
     if (_isAnalyzing) cancel();
 
-    _generation++;
+    final generation = ++_generation;
     _evals = [];
+    _totalMoves = 0;
     _analyzedMoves = 0;
+    _startWinChance = 0;
     _isAnalyzing = true;
     _isCancelled = false;
     notifyListeners();
@@ -505,6 +527,8 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
     final useDepth = analysisDepth ?? EngineSettings.instance.depth;
     _activeDepth = useDepth;
     final pool = StockfishPool.instance;
+    bool runIsCurrent() =>
+        !isDisposed && !_isCancelled && generation == _generation;
 
     try {
       final parsed = PgnGame.parsePgn(pgnText);
@@ -513,18 +537,14 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
       notifyListeners();
 
       if (mainline.isEmpty) {
-        _isAnalyzing = false;
-        notifyListeners();
         return;
       }
 
       await pool.ensureWorkers();
-      if (_isCancelled) return;
+      if (!runIsCurrent()) return;
 
       final workerCount = pool.workerCount;
       if (workerCount == 0) {
-        _isAnalyzing = false;
-        notifyListeners();
         return;
       }
 
@@ -588,7 +608,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
           ? fenHeader
           : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
       final startResult = await pool.evaluateFen(startFen, useDepth);
-      if (_isCancelled) return;
+      if (!runIsCurrent()) return;
       _shareEval(
         startFen,
         startResult,
@@ -615,6 +635,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
       if (maia != null) {
         try {
           await maia.initialize();
+          if (!runIsCurrent()) return;
           maiaReady = true;
         } catch (e) {
           if (kDebugMode) debugPrint('[GameAnalysis] MAIA init failed: $e');
@@ -637,7 +658,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
         batchStart < positions.length;
         batchStart += batchSize
       ) {
-        if (_isCancelled) break;
+        if (!runIsCurrent()) return;
 
         final batchEnd = (batchStart + batchSize).clamp(0, positions.length);
         final batch = positions.sublist(batchStart, batchEnd);
@@ -658,10 +679,10 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
         }
 
         final results = await Future.wait(futures);
-        if (_isCancelled) break;
+        if (!runIsCurrent()) return;
 
         for (int j = 0; j < results.length; j++) {
-          if (_isCancelled) break;
+          if (!runIsCurrent()) return;
           final p = batch[j];
           final result = results[j];
           final globalIdx = batchStart + j;
@@ -715,6 +736,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
             try {
               final elo = isWhiteMove ? whiteElo : blackElo;
               final maiaResult = await maia!.evaluate(p.fenBefore, elo);
+              if (!runIsCurrent()) return;
               maiaProb = maiaResult.policy[p.moveUci] ?? 0.0;
               _injectMaiaComment(p.moveData, maiaProb);
 
@@ -778,16 +800,21 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
         notifyListeners();
       }
 
-      if (!_isCancelled && onAnnotatedMovetext != null) {
+      if (runIsCurrent() && onAnnotatedMovetext != null) {
         final annotated = _rebuildMovetext(mainline, parsed.headers['Result']);
         onAnnotatedMovetext(annotated);
       }
-      if (!_isCancelled) onComplete?.call();
+      if (runIsCurrent()) onComplete?.call();
     } catch (e, st) {
-      debugPrint('[GameAnalysis] Error: $e\n$st');
+      if (generation == _generation && !isDisposed) {
+        debugPrint('[GameAnalysis] Error: $e\n$st');
+      }
     } finally {
-      _isAnalyzing = false;
-      notifyListeners();
+      // An older run must never mark its replacement complete.
+      if (generation == _generation && !isDisposed) {
+        _isAnalyzing = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -856,7 +883,9 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
   void cancel() {
     _generation++;
     _isCancelled = true;
+    _isAnalyzing = false;
     StockfishPool.instance.stopAll();
+    notifyListeners();
   }
 
   List<String> _uciPvToSan(String fen, List<String> uciMoves) =>

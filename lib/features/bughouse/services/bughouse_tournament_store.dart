@@ -19,6 +19,8 @@ import 'dart:io';
 import 'package:dartchess/dartchess.dart' hide File;
 import 'package:path/path.dart' as p;
 
+import '../../../services/storage/file_mutation_service.dart';
+import '../../../utils/atomic_file.dart';
 import '../../../models/game_outcome.dart';
 import '../models/bughouse_history.dart';
 import '../models/bughouse_state.dart';
@@ -49,6 +51,7 @@ class BughouseTournamentStore {
     final out = <StoredBughouseTournament>[];
     await for (final entity in root.list(followLinks: false)) {
       if (entity is! Directory) continue;
+      if (p.basename(entity.path).startsWith('.')) continue;
       final loaded = await load(p.basename(entity.path));
       if (loaded != null) out.add(loaded);
     }
@@ -95,16 +98,23 @@ class BughouseTournamentStore {
   Future<void> save(StoredBughouseTournament match) async {
     final file = File(metadataPathFor(match.id));
     await file.parent.create(recursive: true);
-    await _writeAtomically(
+    await writeTextFileAtomically(
       file,
       const JsonEncoder.withIndent('  ').convert(match.toJson()),
     );
-    await _writeAtomically(File(bpgnPathFor(match.id)), writeMatchBpgn(match));
+    await writeTextFileAtomically(
+      File(bpgnPathFor(match.id)),
+      writeMatchBpgn(match),
+    );
   }
 
   Future<void> delete(String id) async {
     final dir = Directory(directoryFor(id));
-    if (await dir.exists()) await dir.delete(recursive: true);
+    await FileMutationService.instance.quarantineDirectory(
+      dir,
+      allowedRoot: root,
+      quarantineRoot: Directory(p.join(root.path, '.trash')),
+    );
   }
 
   Future<void> rename(String id, String newName) async {
@@ -122,12 +132,6 @@ class BughouseTournamentStore {
       suffix++;
     }
     return candidate;
-  }
-
-  static Future<void> _writeAtomically(File file, String content) async {
-    final tmp = File('${file.path}.tmp');
-    await tmp.writeAsString(content, flush: true);
-    await tmp.rename(file.path);
   }
 }
 

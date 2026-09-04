@@ -8,6 +8,7 @@
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -126,7 +127,7 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
       mainAxisSize: MainAxisSize.min,
       children: [
         const Text(
-          'Quick Presets',
+          'Quick starts',
           style: TextStyle(
             fontWeight: FontWeight.w600,
             fontSize: 14,
@@ -165,61 +166,197 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Slice Dataset'),
-      content: SizedBox(
-        width: 560,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (widget.presets.isNotEmpty) ...[
-                _buildQuickPresets(),
-                const Divider(),
-              ],
-              PositionFilter(
-                controller: _filters,
-                currentFen: widget.currentFen,
+    final viewport = MediaQuery.sizeOf(context);
+    final width = math.min(1040.0, viewport.width - 48);
+    final height = math.min(680.0, viewport.height - 48);
+    return Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(
+        width: width,
+        height: height,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildHeader(context),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  if (constraints.maxWidth < 820) {
+                    return _buildCompactWorkspace();
+                  }
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(width: 390, child: _buildFilterColumn()),
+                      const VerticalDivider(width: 1),
+                      Expanded(child: _buildPreviewColumn()),
+                    ],
+                  );
+                },
               ),
-              const Divider(),
-              SequenceFilter(controller: _filters),
-              const Divider(),
-              HeaderFilters(controller: _filters, games: widget.allGames),
-              const SizedBox(height: 16),
-              SizedBox(
-                height: 200,
-                child: LinesPreviewPanel(
-                  allGames: widget.allGames,
-                  matchedIndices: _matchingIndices,
-                  computing: _computing,
-                  maxHeight: 200,
-                ),
-              ),
-            ],
-          ),
+            ),
+            _buildFooter(),
+          ],
         ),
       ),
-      actions: [
-        TextButton(onPressed: _reset, child: const Text('Reset')),
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _matchingIndices.isNotEmpty
-              ? () {
-                  widget.onApply(_matchingIndices, _filters.buildConfig());
-                  Navigator.pop(context);
-                }
-              : null,
-          child: Text(
-            _computing
-                ? 'Apply (${_matchingIndices.isEmpty ? '…' : _matchingIndices.length})'
-                : 'Apply (${_matchingIndices.length})',
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    return Container(
+      color: AppColors.surfaceElevated,
+      padding: const EdgeInsets.fromLTRB(22, 18, 14, 16),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: AppColors.infoTint,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.view_list_outlined, color: AppColors.info),
           ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Explore collection',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Shape ${widget.allGames.length} games into a readable set. '
+                  'Results update as you type.',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.onSurfaceMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.close),
+            tooltip: 'Close',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterColumn() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: _buildFilterContents(),
+    );
+  }
+
+  Widget _buildFilterContents() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (widget.presets.isNotEmpty) ...[
+          _buildQuickPresets(),
+          const SizedBox(height: 20),
+        ],
+        PositionFilter(controller: _filters, currentFen: widget.currentFen),
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 16),
+          child: Divider(height: 1),
         ),
+        SequenceFilter(controller: _filters),
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 16),
+          child: Divider(height: 1),
+        ),
+        HeaderFilters(controller: _filters, games: widget.allGames),
       ],
+    );
+  }
+
+  Widget _buildPreviewColumn() {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Live preview',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 3),
+          const Text(
+            'Scan players and openings, search within the matches, or hover '
+            'the moves. Saving as a study makes every game its own chapter.',
+            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: LinesPreviewPanel(
+              allGames: widget.allGames,
+              matchedIndices: _matchingIndices,
+              computing: _computing,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompactWorkspace() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildFilterContents(),
+          const SizedBox(height: 16),
+          SizedBox(height: 300, child: _buildPreviewColumn()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFooter() {
+    final countLabel = _computing
+        ? (_matchingIndices.isEmpty ? 'Finding games…' : 'Updating…')
+        : 'Show ${_matchingIndices.length} game${_matchingIndices.length == 1 ? '' : 's'}';
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 12, 18, 14),
+      decoration: const BoxDecoration(
+        color: AppColors.surfaceElevated,
+        border: Border(top: BorderSide(color: AppColors.divider)),
+      ),
+      child: Row(
+        children: [
+          TextButton.icon(
+            onPressed: _reset,
+            icon: const Icon(Icons.restart_alt, size: 18),
+            label: const Text('Start over'),
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.icon(
+            onPressed: !_computing && _matchingIndices.isNotEmpty
+                ? () {
+                    widget.onApply(_matchingIndices, _filters.buildConfig());
+                    Navigator.pop(context);
+                  }
+                : null,
+            icon: const Icon(Icons.arrow_forward, size: 18),
+            label: Text(countLabel),
+          ),
+        ],
+      ),
     );
   }
 }

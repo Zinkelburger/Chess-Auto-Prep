@@ -9,9 +9,9 @@
 /// happened. Here the chords *are* the label, so the two cannot disagree:
 ///
 /// ```dart
-/// // screen: binds P and ↑, both of them
+/// // screen: binds ↑
 /// ...KeyBinding.forShortcut(AppShortcut.previousItem, 'Previous game', prev),
-/// // widget: renders "Previous game (P or ↑)" — never hand-typed
+/// // widget: renders "Previous game (↑)" — never hand-typed
 /// ShortcutTooltip.of(AppShortcut.previousItem, description: 'Previous game', …)
 /// ```
 ///
@@ -25,8 +25,8 @@
 /// never reaches the shortcut. [KeyBinding.safeWhileTypingMoves] decides that.
 /// Entries meant to work on *every* screen — [previousItem], [nextItem] —
 /// therefore avoid the files a–h, the pieces K/Q/R/N/B, castling O, capture x,
-/// ranks 1–8 and `-`/`=`. That constraint is why previous/next are P and S:
-/// N would be the knight and could never fire while a move is being typed.
+/// ranks 1–8 and `-`/`=`. Arrow keys satisfy that constraint while keeping
+/// navigation consistent and mnemonic-free.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -114,7 +114,7 @@ class AppShortcut {
   /// quietly moving [nextItem] onto the knight.
   final ShortcutScope scope;
 
-  /// What every tooltip for this action shows: `P or ↑`, `Ctrl+F or F11`.
+  /// What every tooltip for this action shows: `↑`, `Ctrl+F or F11`.
   String get label => chords.map((c) => c.label).join(' or ');
 
   // ── Stepping the current queue ─────────────────────────────────────────
@@ -122,16 +122,14 @@ class AppShortcut {
   // The one pair that means "previous / next thing in whatever list is in
   // front of me": game, chapter, chess-position finding, trap-tour stop,
   // tactics puzzle, training line. ←/→ can never take this job — they step
-  // *moves* on every board screen — and both chords here are move-text safe,
-  // so they keep working even in the tactics panel's always-hot move box.
+  // *moves* on every board screen — and the vertical arrows are move-text
+  // safe, so they keep working even in the tactics panel's always-hot move box.
 
   static const previousItem = AppShortcut([
-    KeyChord(LogicalKeyboardKey.keyP),
     KeyChord(LogicalKeyboardKey.arrowUp),
   ], scope: ShortcutScope.everyScreen);
 
   static const nextItem = AppShortcut([
-    KeyChord(LogicalKeyboardKey.keyS),
     KeyChord(LogicalKeyboardKey.arrowDown),
   ], scope: ShortcutScope.everyScreen);
 

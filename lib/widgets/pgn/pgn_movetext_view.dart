@@ -89,12 +89,10 @@ class PgnMovetextView extends StatefulWidget {
   /// Whether comments can be edited (click a move to edit its comment).
   final bool canEditComments;
 
-  /// Opt-in book-PGN comment formatting (Chessable/Forward Chess exports):
-  /// `@@...@@` rich segments, double-space paragraph breaks, and bordered
-  /// comment blocks. Off by default because ordinary PGNs (e.g. Lichess study
-  /// exports) use stray double spaces inside prose, which this mode would
-  /// misread as paragraph breaks. When off, every comment renders as plain
-  /// flowing prose (moves written in the prose stay clickable when legal).
+  /// Force book-PGN comment formatting for ambiguous source material.
+  /// Recognizable Chessable/Forward Chess markup and long multi-paragraph
+  /// comments are detected automatically; this flag is only needed when a
+  /// short export uses double spaces as paragraph breaks without markers.
   final bool bookFormatting;
 
   /// Starting fullmove number from the FEN (defaults to 1).
@@ -276,10 +274,21 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       final spans = _bestLineSpans(view, note.pv, moveIndex);
       if (spans.isEmpty) return;
       emitFullWidthRow(
-        RichText(
-          text: TextSpan(style: PgnTextStyles.commentAt(0), children: spans),
+        Container(
+          padding: const EdgeInsets.only(left: 8),
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(
+                color: AppColors.stockfish.withValues(alpha: 0.55),
+                width: 2,
+              ),
+            ),
+          ),
+          child: RichText(
+            text: TextSpan(style: PgnTextStyles.commentAt(0), children: spans),
+          ),
         ),
-        vertical: 2,
+        vertical: 3,
       );
     }
 
@@ -289,6 +298,17 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
     /// entry points.
     void emitVariationsAtPly(int ply) {
       final reveal = view.reveal;
+      final inline = _buildInlineVariationAtPly(
+        view,
+        ply,
+        nodeVisible: reveal == null
+            ? null
+            : (node) => reveal.isNodeVisible(node, ply),
+      );
+      if (inline != null) {
+        spans.addAll(inline);
+        return;
+      }
       final rows = _buildVariationRowsAtPly(
         view,
         ply,

@@ -31,6 +31,7 @@ import '../engine_tail.dart';
 import '../fen_map.dart';
 import '../generation_config.dart';
 import '../line_extractor.dart';
+import '../line_pruner.dart';
 import '../pgn_freq_map.dart' show PgnFreqMap, PgnGameRecord;
 import 'chapter_titles.dart';
 import 'course_composer.dart';
@@ -104,6 +105,7 @@ class CourseBuilder {
     required BuildTree tree,
     required List<ExtractedLine> lines,
     required TreeBuildConfig config,
+    Map<String, List<FoldedLine>> folds = const {},
     required String repertoireFilePath,
     required String rootFen,
     required List<String> prefix,
@@ -132,6 +134,7 @@ class CourseBuilder {
           repertoireName: p.basenameWithoutExtension(repertoireFilePath),
         ).compose(
           lines: lines,
+          folds: folds,
           modelGames: models,
           refutations: refutations,
           alternatives: alternatives,

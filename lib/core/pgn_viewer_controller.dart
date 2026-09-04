@@ -155,6 +155,30 @@ class PgnViewerController extends ChangeNotifier
   int currentGameIndex = 0;
   Position currentPosition = Chess.initial;
 
+  /// Last mainline ply visited in each game of the open collection. Entries
+  /// are the game objects themselves, so sorting and filtering preserve the
+  /// bookmark without inventing an unstable header-based identifier.
+  final Map<PgnGameEntry, int> _resumePlyByGame = {};
+
+  @override
+  void _rememberCurrentPlace() {
+    if (currentGameIndex < 0 || currentGameIndex >= filteredGames.length) {
+      return;
+    }
+    _resumePlyByGame[filteredGames[currentGameIndex]] =
+        pgnWidgetController.mainLineIndex;
+  }
+
+  int resumePlyFor(PgnGameEntry game) => _resumePlyByGame[game] ?? 0;
+
+  /// Separate generations for whole-collection IO and the selected game's
+  /// cached analysis. A slice epoch cannot protect these: file reads and game
+  /// parses may overlap without any slice operation at all.
+  int _loadEpoch = 0;
+  int _gameLoadEpoch = 0;
+
+  bool _isCurrentLoad(int epoch) => isActive() && epoch == _loadEpoch;
+
   /// FEN the next [PgnViewerWidget] mount should park on (tree position after
   /// a games-at-position click, or the game cursor after leaving the tree).
   @override
@@ -369,6 +393,7 @@ class PgnViewerController extends ChangeNotifier
     _activeSliceIndices = null;
     sortMode = GameSortMode.fileOrder;
     currentGameIndex = 0;
+    _resumePlyByGame.clear();
     pgnInitialFen = null;
     _gameCursorFen = null;
     perspective = newPerspective;
@@ -397,13 +422,19 @@ class PgnViewerController extends ChangeNotifier
   /// single-game handoffs (Games page "Review"): a leftover slice there only
   /// hides the target game and confuses the count display.
   Future<void> loadFile(String path, {bool restoreSavedSlice = true}) async {
+    final loadEpoch = ++_loadEpoch;
+    // A collection request also makes any cached-analysis parse for the old
+    // selected game stale immediately, before the new file finishes reading.
+    _gameLoadEpoch++;
     errorMessage = null;
     pendingSliceRestore = null;
     _sliceEpoch++;
     final storage = StorageFactory.instance;
     final fileName = p.basename(path);
 
-    if (!await storage.fileExists(path)) {
+    final exists = await storage.fileExists(path);
+    if (!_isCurrentLoad(loadEpoch)) return;
+    if (!exists) {
       errorMessage = 'File not found: $fileName';
       // The epoch bump above told any in-flight slice op that this load owns
       // isLoading now, so release it even though this path never set it.
@@ -417,7 +448,7 @@ class PgnViewerController extends ChangeNotifier
     notifyListeners();
 
     final content = await storage.readFile(path);
-    if (!isActive()) return;
+    if (!_isCurrentLoad(loadEpoch)) return;
 
     if (content == null) {
       isLoading = false;
@@ -436,7 +467,7 @@ class PgnViewerController extends ChangeNotifier
     }
 
     final entries = await compute(parseMultiGamePgn, content);
-    if (!isActive()) return;
+    if (!_isCurrentLoad(loadEpoch)) return;
 
     if (entries.isEmpty) {
       isLoading = false;
@@ -446,6 +477,9 @@ class PgnViewerController extends ChangeNotifier
       return;
     }
 
+    final modified = await storage.fileStat(path);
+    if (!_isCurrentLoad(loadEpoch)) return;
+
     isLoading = false;
     _sliceEpoch++;
     _adoptCollection(
@@ -453,14 +487,18 @@ class PgnViewerController extends ChangeNotifier
       entries: entries,
       newPerspective: _perspectiveFor(entries),
     );
-    loadedFileModified = (await storage.fileStat(path))?.modified;
+    loadedFileModified = modified?.modified;
     notifyListeners();
 
     await addToRecentFiles(path);
+    if (!_isCurrentLoad(loadEpoch)) return;
     _fenIndex.reset();
     await _fenIndex.tryLoadPersisted(path, entries.length);
+    if (!_isCurrentLoad(loadEpoch)) return;
     if (restoreSavedSlice) await tryRestoreSavedSlice(path, entries);
+    if (!_isCurrentLoad(loadEpoch)) return;
     await loadCurrentGame();
+    if (!_isCurrentLoad(loadEpoch)) return;
     if (_fenIndex.value == null) {
       _buildFenIndex(); // classification runs via _onFenIndexReady
     } else {
@@ -477,6 +515,8 @@ class PgnViewerController extends ChangeNotifier
   /// reads it during the build this load triggers, which is the only moment
   /// the freshly parsed game and the cursor request meet.
   Future<void> loadPgnContent(String content, {String? initialFen}) async {
+    final loadEpoch = ++_loadEpoch;
+    _gameLoadEpoch++;
     errorMessage = null;
     pendingSliceRestore = null;
     _sliceEpoch++;
@@ -494,7 +534,7 @@ class PgnViewerController extends ChangeNotifier
     notifyListeners();
 
     final entries = await compute(parseMultiGamePgn, trimmed);
-    if (!isActive()) return;
+    if (!_isCurrentLoad(loadEpoch)) return;
 
     if (entries.isEmpty) {
       isLoading = false;
@@ -515,6 +555,7 @@ class PgnViewerController extends ChangeNotifier
     notifyListeners();
 
     await loadCurrentGame();
+    if (!_isCurrentLoad(loadEpoch)) return;
     _buildFenIndex();
   }
 
@@ -527,6 +568,8 @@ class PgnViewerController extends ChangeNotifier
   void closeFile() {
     // Bumped first: an in-flight load or slice recompute would otherwise land
     // its results — and its isLoading release — on the cleared state.
+    _loadEpoch++;
+    _gameLoadEpoch++;
     _sliceEpoch++;
     stopAutoPlay();
     if (isSolitaireMode) _solitaireSession.stop();
@@ -605,13 +648,14 @@ class PgnViewerController extends ChangeNotifier
   @override
   Future<void> loadCurrentGame() async {
     if (filteredGames.isEmpty) return;
+    final gameLoadEpoch = ++_gameLoadEpoch;
     stopAutoPlay();
     analysisController.cancel();
     currentPosition = _tryParseFen(pgnInitialFen) ?? Chess.initial;
     orientBoardForCurrentGame();
     final game = filteredGames[currentGameIndex];
     final restored = await analysisController.tryLoadFromPgn(game.pgnText);
-    if (!isActive()) return;
+    if (!isActive() || gameLoadEpoch != _gameLoadEpoch) return;
     notifyListeners();
     onReclaimFocus?.call();
     if (restored) unawaited(_fillMissingBestLines(game));
@@ -633,6 +677,7 @@ class PgnViewerController extends ChangeNotifier
 
   void nextGame() {
     if (filteredGames.isEmpty) return;
+    _rememberCurrentPlace();
     pgnInitialFen = null;
     currentGameIndex = (currentGameIndex + 1).clamp(
       0,
@@ -644,6 +689,7 @@ class PgnViewerController extends ChangeNotifier
 
   void prevGame() {
     if (filteredGames.isEmpty) return;
+    _rememberCurrentPlace();
     pgnInitialFen = null;
     currentGameIndex = (currentGameIndex - 1).clamp(
       0,
@@ -655,6 +701,7 @@ class PgnViewerController extends ChangeNotifier
 
   void goToGame(int index) {
     if (index < 0 || index >= filteredGames.length) return;
+    _rememberCurrentPlace();
     pgnInitialFen = null;
     currentGameIndex = index;
     notifyListeners();
@@ -708,6 +755,7 @@ class PgnViewerController extends ChangeNotifier
   }
 
   void setSortMode(GameSortMode mode) {
+    _rememberCurrentPlace();
     sortMode = mode;
     notifyListeners();
     applySortMode();
@@ -881,6 +929,7 @@ class PgnViewerController extends ChangeNotifier
   List<int> gamesAtTreePosition() => _viewerTree.gamesAtTreePosition();
 
   void loadGameFromTree(int filteredIndex) {
+    _rememberCurrentPlace();
     _viewerTree.snapshotCursor(leavingForGame: true);
     final landingFen = openingTree?.currentNode.fen;
     pgnInitialFen = landingFen;

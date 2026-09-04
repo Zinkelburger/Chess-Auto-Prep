@@ -23,7 +23,9 @@ ExtractedLine _line(List<String> san) => ExtractedLine(
   movesSan: san,
   movesUci: san,
   probability: 0.2,
-  moveAnnotations: [for (var i = 0; i < san.length; i++) MoveAnnotation()],
+  moveAnnotations: [
+    for (var i = 0; i < san.length; i++) const MoveAnnotation(),
+  ],
 );
 
 /// An engine build: no game database is involved, so "no database" is not
@@ -52,7 +54,7 @@ TreeBuildConfig _databaseBuild({int modelGames = 3}) => TreeBuildConfig(
 
 /// A game that shares no position with the fixture repertoire, so it is a
 /// candidate the selector will look at and reject.
-final _unrelatedGame = PgnGameRecord(
+const _unrelatedGame = PgnGameRecord(
   white: 'Petrosian',
   black: 'Spassky',
   whiteElo: 2650,
@@ -60,7 +62,7 @@ final _unrelatedGame = PgnGameRecord(
   event: 'Moscow',
   date: '1966.04.11',
   outcome: GameOutcome.draw,
-  movesSan: const ['b3', 'e5', 'Bb2', 'Nc6'],
+  movesSan: ['b3', 'e5', 'Bb2', 'Nc6'],
 );
 
 PgnFreqMap _databaseHolding(PgnGameRecord game) =>

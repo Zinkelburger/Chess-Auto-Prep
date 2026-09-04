@@ -47,7 +47,8 @@ class EvalSourcesSection extends StatelessWidget {
       dialogTitle: 'Select ChessDB SQLite file',
       type: FileType.custom,
       allowedExtensions: ['db'],
-      lockParentWindow: true,
+      windowsOptions: const WindowsOptions(lockParentWindow: true),
+      linuxOptions: const LinuxOptions(lockParentWindow: true),
     );
     final path = file?.path;
     if (path == null) return;
@@ -183,8 +184,7 @@ class EvalSourcesSection extends StatelessWidget {
           value: databases.enableCdbDirect,
           onChanged: (v) => unawaited(databases.setEnableCdbDirect(v)),
           enabled: databases.cdbDirectPath.isNotEmpty && !isGenerating,
-          tooltip:
-              'Machine-wide, shared with App settings → Evaluation database.',
+          tooltip: 'Machine-wide, shared with the Databases page.',
           disabledReason: databases.cdbDirectPath.isEmpty
               ? 'No dump on this machine yet.'
               : 'A build is running.',
@@ -199,15 +199,6 @@ class EvalSourcesSection extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-        const SizedBox(height: 4),
-        _check(
-          'Batch eval lookups',
-          controller.batchEvalLookups,
-          (v) => controller.batchEvalLookups = v,
-          tooltip:
-              'Ask the dump for a whole ply at once. Worth it on a spinning '
-              'disk,\nwhere the seeks dominate; neutral on an SSD.',
-        ),
       ],
     );
   }
@@ -306,9 +297,7 @@ class EvalSourcesSection extends StatelessWidget {
             value: databases.enableLichessEvals,
             onChanged: (v) => unawaited(databases.setEnableLichessEvals(v)),
             enabled: lichess.isReady && !isGenerating,
-            tooltip:
-                'Machine-wide, shared with App settings → Evaluation '
-                'database.',
+            tooltip: 'Machine-wide, shared with the Databases page.',
             disabledReason: lichess.isReady
                 ? 'A build is running.'
                 : 'No built store on this machine yet.',

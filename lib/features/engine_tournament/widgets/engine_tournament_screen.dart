@@ -231,7 +231,8 @@ class _EngineTournamentScreenState extends State<EngineTournamentScreen> {
       builder: (ctx) => AlertDialog(
         title: Text('Delete "${tournament.config.name}"?'),
         content: const Text(
-          'The games and the crosstable go with it. This cannot be undone.',
+          'The games and crosstable will be moved together to Chess Auto Prep '
+          'recovery trash.',
         ),
         actions: [
           TextButton(

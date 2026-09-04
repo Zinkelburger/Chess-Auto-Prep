@@ -54,7 +54,6 @@ void main() {
     final eca = ExpectimaxCalculator(config: config, fenMap: fenMap);
     eca.calculate(tree);
     eca.computeTrapScores(tree.root);
-    eca.calculateCplValues(tree.root);
     calculateMyEase(tree, playAsWhite: config.playAsWhite);
     RepertoireSelector(
       config: config,
@@ -117,15 +116,11 @@ void main() {
 
     // ── Coverage curve: lines needed for a share of the reach mass ──
     stdout.writeln('\ncoverage by the pruner:');
-    _curve(
-      lines,
-      mass,
-      (target) => LinePruner.prune(lines, targetCount: target),
-    );
+    _curve(lines, mass, (target) => LinePruner.rank(lines).take(target));
 
     // ── What the user is actually shown ──
     for (final target in const [300, 100000]) {
-      final kept = LinePruner.prune(lines, targetCount: target);
+      final kept = LinePruner.rank(lines).take(target);
       final ks = [for (final l in kept) decisionsOf(l)];
       var containedKept = 0;
       for (var i = 0; i < kept.length; i++) {

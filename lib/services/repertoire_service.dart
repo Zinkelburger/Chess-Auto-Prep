@@ -571,6 +571,7 @@ class RepertoireService {
     await writeTextFileAtomically(
       file,
       reassemblePgnDocument(document.preamble, games),
+      expectedContent: content,
     );
     return true;
   }
@@ -621,6 +622,34 @@ class RepertoireService {
     });
   }
 
+  /// Removes every game whose position in the file is in [gameIndexes], in
+  /// one read and one write. Returns how many games went.
+  ///
+  /// Index-addressed for the reason [readGameTextAt] gives: the move-based
+  /// line id truncates and collides for lines sharing a long prefix, so
+  /// deleting several by id can take out the wrong games. It also matters
+  /// that this is one write — trimming a generated course drops hundreds of
+  /// lines at once, and doing that a game at a time rewrites (and reloads)
+  /// the file hundreds of times.
+  Future<int> deleteLinesAt(String filePath, Set<int> gameIndexes) async {
+    if (gameIndexes.isEmpty) return 0;
+    final document = await readPgnDocument(filePath);
+    if (document == null) return 0;
+    final kept = <String>[];
+    for (var i = 0; i < document.games.length; i++) {
+      if (!gameIndexes.contains(i)) kept.add(document.games[i]);
+    }
+    final removed = document.games.length - kept.length;
+    if (removed == 0) return 0;
+    await writePgnDocument(
+      filePath,
+      preamble: document.preamble,
+      games: kept,
+      expectedContent: document.originalContent,
+    );
+    return removed;
+  }
+
   /// The full PGN text of the [gameIndex]-th game in the file, or null when
   /// the file or the game is missing.
   ///
@@ -640,12 +669,17 @@ class RepertoireService {
   ///
   /// Exists so a caller that needs *every* game (splitting a chapter, say)
   /// reads and cuts the file once instead of once per game.
-  Future<({String preamble, List<String> games})?> readPgnDocument(
-    String filePath,
-  ) async {
+  Future<({String preamble, List<String> games, String originalContent})?>
+  readPgnDocument(String filePath) async {
     final file = io.File(filePath);
     if (!await file.exists()) return null;
-    return _splitPgnDocumentPreservingPreamble(await readTextFile(file));
+    final content = await readTextFile(file);
+    final document = _splitPgnDocumentPreservingPreamble(content);
+    return (
+      preamble: document.preamble,
+      games: document.games,
+      originalContent: content,
+    );
   }
 
   /// Writes [games] under [preamble] as a complete PGN document, replacing
@@ -655,10 +689,14 @@ class RepertoireService {
     String filePath, {
     required String preamble,
     required List<String> games,
+    bool createOnly = false,
+    String? expectedContent,
   }) async {
     await writeTextFileAtomically(
       io.File(filePath),
       reassemblePgnDocument(preamble.trimRight(), games),
+      createOnly: createOnly,
+      expectedContent: expectedContent,
     );
   }
 
@@ -670,15 +708,15 @@ class RepertoireService {
   ) async {
     final file = io.File(filePath);
     if (!await file.exists()) return false;
-    final document = _splitPgnDocumentPreservingPreamble(
-      await readTextFile(file),
-    );
+    final content = await readTextFile(file);
+    final document = _splitPgnDocumentPreservingPreamble(content);
     if (gameIndex < 0 || gameIndex >= document.games.length) return false;
     final games = List<String>.from(document.games);
     mutate(games);
     await writeTextFileAtomically(
       file,
       reassemblePgnDocument(document.preamble, games),
+      expectedContent: content,
     );
     return true;
   }
@@ -699,7 +737,8 @@ class RepertoireService {
   Future<void> appendGameTexts(String filePath, List<String> gameTexts) async {
     if (gameTexts.isEmpty) return;
     final file = io.File(filePath);
-    final content = await file.exists() ? await readTextFile(file) : '';
+    final existed = await file.exists();
+    final content = existed ? await readTextFile(file) : '';
     final document = _splitPgnDocumentPreservingPreamble(content);
     final games = [
       ...document.games,
@@ -709,6 +748,8 @@ class RepertoireService {
     await writeTextFileAtomically(
       file,
       reassemblePgnDocument(document.preamble, games),
+      createOnly: !existed,
+      expectedContent: existed ? content : null,
     );
   }
 
@@ -803,6 +844,7 @@ class RepertoireService {
     await writeTextFileAtomically(
       file,
       reassemblePgnDocument(document.preamble, games),
+      expectedContent: content,
     );
     return true;
   }
@@ -893,7 +935,7 @@ class RepertoireService {
     }
 
     final updated = snapshots.last;
-    await writeTextFileAtomically(file, updated);
+    await writeTextFileAtomically(file, updated, expectedContent: content);
     return (success: true, updatedContent: updated, snapshots: snapshots);
   }
 }

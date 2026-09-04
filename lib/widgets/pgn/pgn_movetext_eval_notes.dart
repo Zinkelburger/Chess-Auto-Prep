@@ -167,6 +167,12 @@ List<InlineSpan> _bestLineSpans(
   }
   return [
     TextSpan(text: 'Best: ', style: PgnTextStyles.metricsAt(0)),
-    for (final move in run) _buildCommentMoveSpan(view, move, run),
+    for (final move in run)
+      _buildCommentMoveSpan(
+        view,
+        move,
+        run,
+        moveStyle: PgnTextStyles.moveAt(1),
+      ),
   ];
 }

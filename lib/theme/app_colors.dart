@@ -266,10 +266,15 @@ abstract final class AppColors {
   static const pgnEphemeralBg = Color(0xFF42607D);
 
   /// Move comments — a shade under mainline ink; own-row layout does the rest.
-  static const pgnComment = Color(0xDDFFFFFF);
+  /// Commentary ink. Comments sit on their own cool-tinted reading card, so
+  /// use the full app ink instead of another translucent grey rung.
+  static const pgnComment = ink;
 
   /// Near-black fill for bordered comment blocks on [surface].
-  static const pgnCommentBlockBg = Color(0xFF181818);
+  /// A quiet blue-teal reading surface for prose. This is deliberately not a
+  /// grey-on-grey card: long annotations should be instantly distinguishable
+  /// from notation without sacrificing contrast.
+  static const pgnCommentBlockBg = Color(0xFF142322);
 
   // ── Coherence / traps / scores ──────────────────────────────────────────
 

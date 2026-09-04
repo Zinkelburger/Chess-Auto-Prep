@@ -160,7 +160,9 @@ class _TableOfContents extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 190,
+      // Fits the longest section name beside its icon; at 190 the two
+      // longest ellipsised to 'Coverage & line ...' / 'Explanatory vari...'.
+      width: 215,
       child: ListView(
         padding: const EdgeInsets.symmetric(vertical: 12),
         children: [

@@ -129,8 +129,8 @@ class TwicRepertoireScanner {
     var scanned = 0;
 
     if (!hasWhite && !hasBlack) {
-      return TwicScanResult(
-        matches: const [],
+      return const TwicScanResult(
+        matches: [],
         scanned: 0,
         hasWhiteBook: false,
         hasBlackBook: false,

@@ -1,19 +1,18 @@
-/// Master-games database (The Week in Chess) settings: what is downloaded,
-/// how far back, and whether the generator uses it.
+/// The settings half of the master-games database: how far back to download,
+/// whether to keep it current, and whether the generator uses it.
 ///
-/// Mounted from [SettingsScreen]; the same [MasterGamesService] drives the
-/// first-run prompt on the repertoire screen and the Jobs-pane progress.
+/// Mounted by the Databases page inside a database card's disclosure. The card
+/// owns the *status* half — the count, the size, when it was last checked, and
+/// the download button — because those are the three things every store on
+/// that page answers in the same place, and a panel that answered them its own
+/// way was a panel a reader could not compare with the one below it.
 library;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
-import '../core/app_state.dart';
-import '../features/master_games/widgets/master_games_browser.dart';
 import '../services/master_games/master_games_service.dart';
 import '../services/master_games/twic_client.dart';
-import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import 'settings/settings_widgets.dart';
 
@@ -23,24 +22,11 @@ class MasterGamesSettingsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final service = context.watch<MasterGamesService>();
-    final stats = service.stats;
     final yearsBack = _yearsBack(service.startIssue);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: Text(
-            stats == null || stats.isEmpty
-                ? 'No master games downloaded yet.'
-                : '${_thousands(stats.games)} games from TWIC issues '
-                      '${stats.firstIssue}–${stats.lastIssue} '
-                      '(${stats.issues} issues, '
-                      '${(stats.fileBytes / 1e9).toStringAsFixed(1)} GB).',
-            style: const TextStyle(fontSize: 13),
-          ),
-        ),
         SettingsStepperTile(
           label: 'Years of games',
           description:
@@ -73,73 +59,8 @@ class MasterGamesSettingsPanel extends StatelessWidget {
           value: service.useInGeneration,
           onChanged: service.setUseInGeneration,
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-          child: Row(
-            children: [
-              FilledButton.tonalIcon(
-                onPressed: service.isSyncing ? null : () => service.sync(),
-                icon: const Icon(Icons.cloud_download_outlined, size: 16),
-                label: Text(
-                  stats == null || stats.isEmpty
-                      ? 'Download master games'
-                      : 'Check for new issues',
-                ),
-              ),
-              const SizedBox(width: 8),
-              if (service.isSyncing)
-                OutlinedButton(
-                  onPressed: service.cancel,
-                  child: const Text('Stop'),
-                ),
-              if (stats != null && !stats.isEmpty) ...[
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  onPressed: () => showMasterGamesBrowser(
-                    context,
-                    appState: context.read<AppState>(),
-                  ),
-                  icon: const Icon(Icons.travel_explore, size: 16),
-                  label: const Text('Browse games…'),
-                ),
-              ],
-              const Spacer(),
-              TextButton.icon(
-                onPressed: () => launchUrl(
-                  Uri.parse('https://theweekinchess.com/twic'),
-                  mode: LaunchMode.externalApplication,
-                ),
-                icon: const Icon(Icons.open_in_new, size: 14),
-                label: const Text('theweekinchess.com'),
-              ),
-            ],
-          ),
-        ),
-        if (service.isSyncing || service.status.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (service.isSyncing)
-                  LinearProgressIndicator(
-                    value: service.fraction > 0 ? service.fraction : null,
-                  ),
-                const SizedBox(height: 4),
-                Text(
-                  service.status,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: service.lastError != null
-                        ? AppColors.danger
-                        : AppColors.onSurfaceMuted,
-                  ),
-                ),
-              ],
-            ),
-          ),
         const Padding(
-          padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+          padding: EdgeInsets.only(top: 8),
           child: Text(
             'Games are © The Week in Chess (Mark Crowther) and free for '
             'personal use. Downloads run in the background — see the Jobs '
@@ -160,15 +81,5 @@ class MasterGamesSettingsPanel extends StatelessWidget {
   static int _maxYears() {
     final now = twicIssueEstimateFor(DateTime.now());
     return ((now - kTwicFirstPgnIssue) / 52).ceil();
-  }
-
-  static String _thousands(int n) {
-    final s = n.toString();
-    final b = StringBuffer();
-    for (var i = 0; i < s.length; i++) {
-      if (i > 0 && (s.length - i) % 3 == 0) b.write(',');
-      b.write(s[i]);
-    }
-    return b.toString();
   }
 }

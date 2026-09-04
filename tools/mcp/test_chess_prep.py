@@ -47,6 +47,7 @@ from chess_prep.swiss import (  # noqa: E402
     simulate,
 )
 from chess_prep.tools import Registry, ToolError  # noqa: E402
+from mcp_stdio import StdioServer  # noqa: E402
 
 # A real US Chess event page: FIDE ID before USCF ID (both 7-9 digits), FIDE
 # rating before USCF rating, `[EQ]`/`Unr`, and markers inside the name cell.
@@ -88,6 +89,7 @@ class TempRosterCase(unittest.TestCase):
         self.registry._directory = _fake_directory()
 
     def tearDown(self) -> None:
+        self.registry.close()
         os.environ.pop("CHESS_PREP_ROSTER", None)
         self._dir.cleanup()
 
@@ -757,6 +759,29 @@ class Protocol(TempRosterCase):
             t for t in out[0]["result"]["tools"] if t["name"] == "directory_search"
         )
         self.assertIn("→", search["description"])
+
+    def test_end_of_input_closes_the_registry(self):
+        class ClosingRegistry:
+            closed = False
+
+            def definitions(self):
+                return []
+
+            def call(self, name, args):
+                raise AssertionError("no calls expected")
+
+            def close(self):
+                self.closed = True
+
+        registry = ClosingRegistry()
+        StdioServer(
+            registry,
+            name="test",
+            stdin=io.StringIO(""),
+            stdout=io.StringIO(),
+        ).serve_forever()
+
+        self.assertTrue(registry.closed)
 
 
 class Subprocess(unittest.TestCase):

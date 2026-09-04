@@ -100,7 +100,7 @@ class TacticsPanelHooks {
   final VoidCallback? start;
 
   /// A navigation key pressed while the move-input field owns focus (Space,
-  /// S/P, the arrows, J) — routed to the panel's trainer shortcuts so those
+  /// the arrows, J) — routed to the panel's trainer shortcuts so those
   /// keys drive the puzzle instead of typing into the field. Returns true
   /// when the key was consumed. The move input and the panel are siblings in
   /// the focus tree, so key events cannot bubble between them.

@@ -45,6 +45,13 @@ ExtractedLine _lineAt(
 
 String _name(ExtractedLine l) => l.movesSan.single;
 
+/// The old `coverageTarget:` argument, expressed against the ranking: keep
+/// however many lines reach [share] of the reach mass.
+List<ExtractedLine> _atCoverage(List<ExtractedLine> lines, double share) {
+  final slice = LinePruner.rank(lines);
+  return slice.take(slice.countForCoverage(share));
+}
+
 void main() {
   group('LinePruner', () {
     test('a kept transposition stub pins the line it points at', () {
@@ -60,7 +67,7 @@ void main() {
         transposesInto: ['d4', 'Nf6', 'c4', 'e6'],
       );
 
-      final kept = LinePruner.prune([owner, stub], coverageTarget: 0.5);
+      final kept = _atCoverage([owner, stub], 0.5);
       final orders = kept.map((l) => l.movesSan.join(' ')).toList();
 
       expect(orders, contains('c4 e6 d4 Nf6'));
@@ -82,7 +89,7 @@ void main() {
 
       // A cap of 1 would keep the stub alone; a dangling pointer is the
       // worse book, so the owner is pinned back in over the cap.
-      final kept = LinePruner.prune([owner, stub], targetCount: 1);
+      final kept = LinePruner.rank([owner, stub]).take(1);
       expect(kept, hasLength(2));
     });
 
@@ -96,23 +103,23 @@ void main() {
       );
       final other = _lineAt(['e4', 'e5'], 0.10, [('unrelated', 1.0)]);
 
-      final kept = LinePruner.prune([owner, stub, other], coverageTarget: 1.0);
+      final kept = _atCoverage([owner, stub, other], 1.0);
       expect(kept, hasLength(3));
     });
 
-    test('targetCount <= 0 means no cap, not no pruning', () {
-      // The old contract returned the input untouched here, which handed
-      // callers back every exact duplicate. Pruning always runs now; 0 only
-      // says "do not cap the count".
+    test('take(0) still ranks rather than handing back the input', () {
+      // An older contract returned the input untouched here, which handed
+      // callers back every exact duplicate. Ranking always runs; a
+      // non-positive count is clamped to one line, never to none.
       final lines = [
         _line('a', 0.5, [('e2e4', 1.0)]),
         _line('b', 0.5, [('e2e4', 1.0)]),
       ];
-      expect(LinePruner.prune(lines, targetCount: 0).map(_name), ['a']);
-      expect(LinePruner.prune(lines, targetCount: -1).map(_name), ['a']);
+      expect(LinePruner.rank(lines).take(0).map(_name), ['a']);
+      expect(LinePruner.rank(lines).take(-1).map(_name), ['a']);
     });
 
-    test('coverageTarget stops early once the share is reached', () {
+    test('countForCoverage stops early once the share is reached', () {
       // Coverage is measured in reach mass even though the greedy *orders*
       // picks by unit value: 'likely' is 90% of the games reaching this set,
       // so it alone satisfies a 90% target.
@@ -120,22 +127,17 @@ void main() {
         _line('likely', 0.9, [('a', 9.0)]),
         _line('rare', 0.1, [('b', 1.0)]),
       ];
-      expect(LinePruner.prune(lines, coverageTarget: 0.9).map(_name), [
-        'likely',
-      ]);
-      expect(LinePruner.prune(lines, coverageTarget: 1.0).map(_name), [
-        'likely',
-        'rare',
-      ]);
+      expect(_atCoverage(lines, 0.9).map(_name), ['likely']);
+      expect(_atCoverage(lines, 1.0).map(_name), ['likely', 'rare']);
     });
 
-    test('a hard cap still wins over an unmet coverage target', () {
+    test('take(n) keeps exactly n when n lines each teach something', () {
       final lines = [
         _line('a', 0.5, [('a', 1.0)]),
         _line('b', 0.5, [('b', 1.0)]),
         _line('c', 0.5, [('c', 1.0)]),
       ];
-      final kept = LinePruner.prune(lines, targetCount: 2, coverageTarget: 1.0);
+      final kept = LinePruner.rank(lines).take(2);
       expect(kept.length, 2);
     });
 
@@ -144,7 +146,7 @@ void main() {
         _line('a', 0.5, [('a', 1.0)]),
         _line('b', 0.5, [('b', 1.0)]),
       ];
-      expect(LinePruner.prune(lines, coverageTarget: 0.0).length, 1);
+      expect(_atCoverage(lines, 0.0).length, 1);
     });
 
     test('lines teaching identical decisions collapse to one', () {
@@ -153,7 +155,7 @@ void main() {
         _line('likely', 0.5, [('e2e4', 1.0), ('e2e4 g1f3', 0.8)]),
         _line('rare', 0.2, [('e2e4', 1.0), ('e2e4 g1f3', 0.3)]),
       ];
-      final kept = LinePruner.prune(lines, targetCount: 10);
+      final kept = LinePruner.rank(lines).take(10);
       expect(kept.map(_name), ['likely']);
     });
 
@@ -163,7 +165,7 @@ void main() {
         _line('sharp', 0.3, [('b', 1.0), ('b c', 1.0)]),
         _line('medium', 0.5, [('d', 0.5)]),
       ];
-      final kept = LinePruner.prune(lines, targetCount: 2);
+      final kept = LinePruner.rank(lines).take(2);
       // 'sharp' has the largest total value, 'medium' the next marginal.
       expect(kept.map(_name), ['sharp', 'medium']);
     });
@@ -186,7 +188,7 @@ void main() {
           ('nf6 g6 re8', 0.2),
         ]),
       ];
-      final kept = LinePruner.prune(lines, targetCount: 10);
+      final kept = LinePruner.rank(lines).take(10);
       // 'deviation' teaches a new response (...Nh5); 'duplicate' repeats
       // 'main' move for move and is dropped despite the target allowing it.
       expect(kept.map(_name), ['main', 'deviation']);
@@ -198,7 +200,7 @@ void main() {
         _line('b', 0.4, [('x', 0.9)]),
         _line('c', 0.3, [('x', 0.8)]),
       ];
-      expect(LinePruner.prune(lines, targetCount: 3).length, 1);
+      expect(LinePruner.rank(lines).take(3).length, 1);
     });
 
     test('drops lines with no our-moves to teach', () {
@@ -206,7 +208,7 @@ void main() {
         _line('teaches', 0.5, [('e2e4', 1.0)]),
         _line('empty', 0.9, []),
       ];
-      final kept = LinePruner.prune(lines, targetCount: 5);
+      final kept = LinePruner.rank(lines).take(5);
       expect(kept.map(_name), ['teaches']);
     });
 
@@ -232,7 +234,7 @@ void main() {
       // duplicates and dropped the 1...c5 one — leaving a repertoire with no
       // answer to 1...c5 at all. They are two positions and two things to
       // know, so both survive.
-      final kept = LinePruner.prune(lines);
+      final kept = LinePruner.rank(lines).all;
       expect(kept.length, 2);
       expect(kept.map((l) => l.movesSan[1]), ['e5', 'c5']);
     });
@@ -244,7 +246,7 @@ void main() {
         _line('third', 0.5, [('c', 1.0)]),
       ];
       // Selection order is second, third, first — output keeps input order.
-      final kept = LinePruner.prune(lines, targetCount: 3);
+      final kept = LinePruner.rank(lines).take(3);
       expect(kept.map(_name), ['first', 'second', 'third']);
     });
   });

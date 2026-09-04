@@ -61,15 +61,15 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
 
   Future<void> _pickFiles() async {
     try {
-      final result = await FilePicker.pickFiles(
+      final files = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pgn', 'txt'],
       );
-      if (result == null || result.files.isEmpty) return;
+      if (files.isEmpty) return;
 
       final contents = <String>[];
       final names = <String>[];
-      for (final file in result.files) {
+      for (final file in files) {
         final path = file.path;
         if (path == null) continue;
         contents.add(stripBom(await readTextFile(File(path))));

@@ -176,7 +176,6 @@ class _TacticsImportPanelState extends _TacticsImportPanelStateBase
       windowLabel: games.window.label,
       onStart: () => _startReview(runner),
       onPause: runner.pause,
-      onRefresh: () => games.refresh(force: true),
       onSettings: () => _showSettingsDialog(games, runner),
     );
   }

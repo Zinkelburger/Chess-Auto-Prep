@@ -16,12 +16,14 @@ import '../widgets/chess_board_widget.dart';
 import '../widgets/app_mode_switcher.dart';
 import '../widgets/app_settings_button.dart';
 import '../features/tactics/widgets/tactics_control_panel.dart';
+import '../widgets/trainer_keyboard_scope.dart';
 import '../widgets/training/move_input_widget.dart';
 
 import '../features/games/controllers/recent_games_controller.dart';
 import '../features/games/services/home_review_runner.dart';
 import '../features/engine_tournament/services/tournament_open_watcher.dart';
 import '../features/bughouse/widgets/bughouse_screen.dart';
+import '../features/databases/widgets/databases_screen.dart';
 import '../features/engine_tournament/widgets/engine_tournament_screen.dart';
 import '../features/games/widgets/tactics_games_pane.dart';
 import '../services/engine/engine_lifecycle.dart';
@@ -51,6 +53,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     AppMode.study,
     AppMode.engineTournament,
     AppMode.bughouse,
+    AppMode.databases,
   ];
 
   final Map<AppMode, Widget> _modeViews = <AppMode, Widget>{};
@@ -280,6 +283,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         return const EngineTournamentScreen();
       case AppMode.bughouse:
         return const BughouseScreen();
+      case AppMode.databases:
+        return const DatabasesScreen();
     }
   }
 }
@@ -481,47 +486,60 @@ class _TacticsBoardPane extends StatelessWidget {
     final hasPuzzle = context.select<TacticsSessionController, bool>(
       (session) => session.hasActivePosition,
     );
-    return Container(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        children: [
-          Expanded(
-            child: Center(
-              child: AspectRatio(
-                aspectRatio: 1,
-                child: ChessBoardWidget(
-                  position: appState.currentPosition,
-                  flipped: appState.boardFlipped,
-                  enableUserMoves: hasPuzzle,
-                  onPieceSelected: (square) {},
-                  onMove: (move) => _attemptMove(context, move.uci),
+    return Listener(
+      // The board is not focusable, so clicking it leaves the keyboard
+      // orphaned on the route scope — out of reach of both the move box and
+      // the panel's shortcut handler. The move box keeps its own focus
+      // through a board click (MoveInputWidget.onTapOutside); this is the
+      // repair for a keyboard that was already orphaned before the click,
+      // and it is why the box goes hot again as soon as you touch the board.
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => scheduleMicrotask(() {
+        if (!keyboardFocusIsOrphaned()) return;
+        TacticsControlPanel.moveInputKey.currentState?.focus();
+      }),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            Expanded(
+              child: Center(
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: ChessBoardWidget(
+                    position: appState.currentPosition,
+                    flipped: appState.boardFlipped,
+                    enableUserMoves: hasPuzzle,
+                    onPieceSelected: (square) {},
+                    onMove: (move) => _attemptMove(context, move.uci),
+                  ),
                 ),
               ),
             ),
-          ),
-          if (hasPuzzle) ...[
-            const SizedBox(height: 8),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 320),
-              child: MoveInputWidget(
-                key: TacticsControlPanel.moveInputKey,
-                position: appState.currentPosition,
-                onMove: (move) => _attemptMove(context, move.uci),
-                // Route trainer navigation keys (Space, S/P, arrows, …) back
-                // to the control panel so they cycle puzzles / step the
-                // solution instead of typing into the field. Returns false for
-                // move characters, which then type normally.
-                onNavigationKey: (event) =>
-                    context
-                        .read<TacticsSessionController>()
-                        .panel
-                        ?.navigationKey
-                        ?.call(event.logicalKey) ??
-                    false,
+            if (hasPuzzle) ...[
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 320),
+                child: MoveInputWidget(
+                  key: TacticsControlPanel.moveInputKey,
+                  position: appState.currentPosition,
+                  onMove: (move) => _attemptMove(context, move.uci),
+                  // Route trainer navigation keys (Space, S/P, arrows, …) back
+                  // to the control panel so they cycle puzzles / step the
+                  // solution instead of typing into the field. Returns false for
+                  // move characters, which then type normally.
+                  onNavigationKey: (event) =>
+                      context
+                          .read<TacticsSessionController>()
+                          .panel
+                          ?.navigationKey
+                          ?.call(event.logicalKey) ??
+                      false,
+                ),
               ),
-            ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

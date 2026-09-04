@@ -12,11 +12,14 @@ void main() {
     // The tournament runs its own engines; the analysis pool would only
     // compete with them for cores.
     expect(AppMode.engineTournament.usesInteractiveEngine, isFalse);
+    // Databases has no board: it reads file sizes.
+    expect(AppMode.databases.usesInteractiveEngine, isFalse);
   });
 
   test('every mode has a label of its own', () {
     final labels = AppMode.values.map((m) => m.label).toList();
     expect(labels.toSet().length, labels.length);
     expect(AppMode.engineTournament.label, 'Engine tournament');
+    expect(AppMode.databases.label, 'Databases');
   });
 }

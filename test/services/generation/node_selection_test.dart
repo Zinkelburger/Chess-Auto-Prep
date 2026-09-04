@@ -143,8 +143,8 @@ void main() {
         evalCp: -70,
         parent: parent,
       );
-      a.cplValue = 10.0;
-      b.cplValue = 20.0;
+      a.localCpl = 10.0;
+      b.localCpl = 20.0;
 
       // eligible always false, and NOT applied to fallback → fallback scans
       // all children (the _pickByOpponentCpl historical shape).
@@ -154,7 +154,7 @@ void main() {
         maxEvalLossCp: 50,
         eligible: (c) => false,
         eligibleGuardsFallback: false,
-        value: (c) => c.cplValue,
+        value: (c) => c.localCpl,
       );
       expect(pick, same(b));
     });
@@ -174,7 +174,7 @@ void main() {
         evalCp: -80,
         parent: parent,
       );
-      a.cplValue = 10.0;
+      a.localCpl = 10.0;
 
       final pick = pickChildByValue(
         parent.children,
@@ -182,7 +182,7 @@ void main() {
         maxEvalLossCp: 50,
         eligible: (c) => false,
         // default eligibleGuardsFallback: true
-        value: (c) => c.cplValue,
+        value: (c) => c.localCpl,
       );
       expect(pick, isNull);
     });
@@ -202,13 +202,13 @@ void main() {
         evalCp: -80,
         parent: parent,
       );
-      a.cplValue = -1.0; // equals default minValue
+      a.localCpl = -1.0; // equals default minValue
 
       final pick = pickChildByValue(
         parent.children,
         playAsWhite: true,
         maxEvalLossCp: 50,
-        value: (c) => c.cplValue,
+        value: (c) => c.localCpl,
       );
       expect(pick, isNull);
     });
@@ -236,14 +236,14 @@ void main() {
         evalCp: -50,
         parent: parent,
       );
-      first.cplValue = 5.0;
-      second.cplValue = 5.0;
+      first.localCpl = 5.0;
+      second.localCpl = 5.0;
 
       final pick = pickChildByValue(
         parent.children,
         playAsWhite: true,
         maxEvalLossCp: 50,
-        value: (c) => c.cplValue,
+        value: (c) => c.localCpl,
       );
       expect(pick, same(first));
       expect(pick, isNot(same(second)));

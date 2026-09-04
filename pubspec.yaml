@@ -3,7 +3,7 @@ description: Chess tactics trainer and PGN analyzer
 
 publish_to: 'none'
 
-version: 1.15.3
+version: 1.15.4
 
 environment:
   sdk: '>=3.12.0 <4.0.0'
@@ -21,14 +21,14 @@ dependencies:
   provider: ^6.1.1
 
   # File handling and HTTP
-  file_picker: ^12.0.0-beta.7
+  file_picker: ^12.2.0
   http: ^1.1.2
   crypto: ^3.0.6  # SHA-256 for Lichess OAuth PKCE
   path_provider: ^2.1.6
-  path_provider_linux: ^2.2.1
+  path_provider_linux: ^2.2.2
   flutter_svg: ^2.0.9
   csv: ^8.0.0
-  share_plus: ^13.1.0  # For exporting/sharing tactics on mobile
+  share_plus: ^13.3.0
 
   shared_preferences: ^2.5.3
   stockfish: ^1.7.1
@@ -36,16 +36,16 @@ dependencies:
   ffi: ^2.1.0
 
   # Persistent eval cache (desktop: Linux / macOS / Windows).
-  sqflite_common_ffi: ^2.4.2
-  sqlite3: ^3.3.3
+  sqflite_common_ffi: ^2.4.2+1
+  sqlite3: ^3.5.2
   # TWIC master-games download (zip per weekly issue).
-  archive: ^4.0.9
+  archive: ^4.2.0
   cdbdirect_flutter_libs:
     path: packages/cdbdirect_flutter_libs
   path: ^1.9.0
   url_launcher: ^6.3.2
   fl_chart: ^1.2.0
-  window_manager: ^0.5.1
+  window_manager: ^0.5.2
 
 dev_dependencies:
   flutter_test:
@@ -69,6 +69,8 @@ flutter:
     - assets/data/all_moves_maia3_reversed.json
     - assets/executables/
     - assets/bughouse/
+    - assets/icons/
+    - assets/licenses/
     - tools/assets.lock.json
     - assets/pgn_collections/
     - assets/data/openings/

@@ -72,7 +72,7 @@ mixin _TacticsKeyboardActions
 
   /// All trainer shortcuts. While a move is being typed, only bindings whose
   /// key can never appear in move text fire ([KeyBinding.safeWhileTypingMoves]
-  /// filters in [_dispatchTrainerKey]) — that's what lets Space/S/P/J work
+  /// filters in [_dispatchTrainerKey]) — that's what lets Space/arrows/J work
   /// mid-type while N/A/E still type as move characters. ←/→ also navigate,
   /// but only reach here when the move field is empty: with text in it the
   /// field keeps ←/→ for caret editing (see [MoveInputWidget]) and never
@@ -84,10 +84,10 @@ mixin _TacticsKeyboardActions
       _session.toggleSolution,
     ),
     // The puzzle queue is stepped by the same pair as every other list in the
-    // app. This screen is *why* the pair is P/S: with an always-hot move box,
-    // any chord that could appear in SAN or UCI would be typed instead of
-    // firing. Mirror the button enablement — at the ends of the queue the
-    // shortcuts do nothing, same as the grayed-out Previous/Next.
+    // app. Vertical arrows remain available with an always-hot move box because
+    // they cannot appear in SAN or UCI. Mirror the button enablement: at the
+    // ends of the queue the shortcuts do nothing, same as the grayed-out
+    // Previous/Next buttons.
     ...KeyBinding.forShortcut(
       AppShortcut.previousItem,
       'Previous position',
@@ -112,7 +112,7 @@ mixin _TacticsKeyboardActions
     // solution is on the board they walk it move by move, and on the PGN tab
     // they step the game (the app-wide ←/→ = moves convention). They are a
     // contextual convenience, not the advertised way to change puzzle — that
-    // is P/S, which works in every state.
+    // is ↑/↓, which works in every state.
     ...KeyBinding.forShortcut(
       AppShortcut.forwardOneMove,
       'Skip / forward one move',

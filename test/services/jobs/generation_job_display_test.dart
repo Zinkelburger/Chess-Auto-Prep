@@ -1,5 +1,8 @@
 import 'package:chess_auto_prep/services/jobs/generation_job_display.dart';
+import 'package:chess_auto_prep/services/generation/generation_config.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+const _startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
 void main() {
   group('buildGenerationStatParts (buildingTree)', () {
@@ -94,6 +97,36 @@ void main() {
         priorityProgress: 0.5,
       );
       expect(f, isNull);
+    });
+  });
+
+  group('generationResourceLabel', () {
+    test('shows the real process split and aggregate hash', () {
+      const config = TreeBuildConfig(
+        startFen: _startFen,
+        playAsWhite: true,
+        engineThreads: 10,
+      );
+
+      expect(
+        generationResourceLabel(config, workers: 4),
+        '4 workers × 2 threads · 8/10 CPU · '
+        '512 MB hash + engine memory',
+      );
+    });
+
+    test('uses singular labels for a one-core build', () {
+      const config = TreeBuildConfig(
+        startFen: _startFen,
+        playAsWhite: true,
+        engineThreads: 1,
+      );
+
+      expect(
+        generationResourceLabel(config, workers: 8),
+        '1 worker × 1 thread · 1/1 CPU · '
+        '128 MB hash + engine memory',
+      );
     });
   });
 }

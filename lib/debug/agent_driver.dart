@@ -239,6 +239,22 @@ developer.ServiceExtensionResponse _err(String message) =>
       message,
     );
 
+/// What currently owns the keyboard, for `dump`. Typing that "goes nowhere"
+/// is nearly always this: the primary focus is a scope (nothing focusable
+/// holds it) so key events never reach the panel handler that would route
+/// them. Reported as the focused node's debug label, else the widget type of
+/// the element it is attached to.
+String _focusDescription() {
+  final node = FocusManager.instance.primaryFocus;
+  if (node == null) return 'none';
+  final label = node.debugLabel;
+  if (label != null && label.isNotEmpty) return label;
+  final ctx = node.context;
+  final widget = ctx?.widget;
+  final kind = node is FocusScopeNode ? 'scope' : 'node';
+  return '$kind ${widget?.runtimeType ?? node.runtimeType}';
+}
+
 Future<developer.ServiceExtensionResponse> _dump(
   String method,
   Map<String, String> params,
@@ -249,6 +265,7 @@ Future<developer.ServiceExtensionResponse> _dump(
   final kinds = params['kinds']?.split(',');
   return _ok({
     'size': [size.width.round(), size.height.round()],
+    'focus': _focusDescription(),
     'items': [
       for (final i in items)
         if (kinds == null || kinds.contains(i.kind)) i.toJson(),
@@ -438,8 +455,9 @@ Future<developer.ServiceExtensionResponse> _screenshot(
   await _settle(timeout: 2000);
   final view = RendererBinding.instance.renderViews.first;
   final layer = view.debugLayer;
-  if (layer is! OffsetLayer)
+  if (layer is! OffsetLayer) {
     return _err('no root layer yet (nothing painted?)');
+  }
   final dpr = view.flutterView.devicePixelRatio;
   // The root TransformLayer already scales by the device pixel ratio, so
   // ask for bounds in physical pixels at pixelRatio 1.

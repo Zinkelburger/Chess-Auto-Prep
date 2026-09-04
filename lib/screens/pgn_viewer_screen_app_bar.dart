@@ -8,6 +8,7 @@ part of 'pgn_viewer_screen.dart';
 mixin _AppBarBuildersMixin
     on State<PgnViewerScreen>, _RepertoireGenerationMixin {
   bool get _editMode;
+  bool get _onLineTab;
 
   /// True while the viewer is showing one game handed to it by name (from the
   /// recent-games list). See [_PgnViewerScreenState._openFromHandoff].
@@ -20,6 +21,7 @@ mixin _AppBarBuildersMixin
   void _openSliceDialog();
   void _showTrophyCabinet();
   Future<void> _exportSlice();
+  Future<void> _exportSliceAsScid();
   Future<void> _pickFile();
   Future<void> _pastePgn();
   Future<void> _loadFile(String path);
@@ -54,7 +56,10 @@ mixin _AppBarBuildersMixin
             if (_controller.allGames.isNotEmpty &&
                 !_controller.isSolitaireMode &&
                 !_singleGameFocus) ...[
-              const SizedBox(width: 8),
+              // The collection controls are a second idea, not part of the
+              // file button. Give the two enough air that a long filename
+              // cannot visually run into the first filter chip.
+              const SizedBox(width: 16),
               Expanded(
                 child: PgnSliceChips(
                   controller: _controller,
@@ -87,7 +92,10 @@ mixin _AppBarBuildersMixin
               ),
             ),
             IconButton(
-              onPressed: _toggleEditMode,
+              // Amend is an inline Game-pane mode. Enabling it from Book
+              // would activate an editor that is mounted offstage and give
+              // the user no visible way to use it.
+              onPressed: _onLineTab ? null : _toggleEditMode,
               icon: Icon(
                 _editMode ? Icons.edit : Icons.edit_outlined,
                 size: 20,
@@ -138,7 +146,14 @@ mixin _AppBarBuildersMixin
         // included, which is how the trophy cabinet and app settings stay
         // reachable there without icons of their own.
         const AppModeSwitcher(),
-        AppOverflowMenu(entries: _overflowEntries()),
+        const SizedBox(width: 10),
+        _buildToolsMenu(),
+        IconButton(
+          onPressed: () => openAppSettings(context),
+          icon: const Icon(Icons.settings_outlined, size: 20),
+          tooltip: 'Settings',
+        ),
+        const SizedBox(width: 4),
       ],
     );
   }
@@ -174,9 +189,22 @@ mixin _AppBarBuildersMixin
           onRun: _exportSlice,
         ),
         AppMenuEntry(
-          label: 'Save ${games.length} filtered game$plural as study…',
+          label: 'Export as a Scid database…',
+          icon: Icons.storage_outlined,
+          onRun: _exportSliceAsScid,
+          hint:
+              'Writes the .si5 / .sg5 / .sn5 trio that Scid 5 opens directly. '
+              'Roughly a third the size of the same games as PGN.\n'
+              'For Scid vs. PC — a separate fork that predates this format — '
+              'export PGN instead and run its own pgnscid on it.',
+        ),
+        AppMenuEntry(
+          label: 'Make a chaptered study from ${games.length} game$plural…',
           icon: Icons.edit_note,
           onRun: () => unawaited(_saveSliceAsStudy()),
+          hint:
+              'Creates one study and automatically turns every selected game '
+              'into a named chapter.',
         ),
         AppMenuEntry(
           label: 'Seed a repertoire from these games…',
@@ -203,13 +231,41 @@ mixin _AppBarBuildersMixin
             : 'Guesses that the engine rates above the move actually played, '
                   'found when you analyse a game after solitaire.',
       ),
-      AppMenuEntry(
-        label: 'App settings…',
-        icon: Icons.settings,
-        dividerAbove: true,
-        onRun: () => openAppSettings(context),
-      ),
     ];
+  }
+
+  /// Occasional collection actions stay discoverable behind a labelled
+  /// control. A bare ellipsis looked like an unexplained settings replacement
+  /// and gave no clue what kind of actions were inside it.
+  Widget _buildToolsMenu() {
+    final entries = _overflowEntries();
+    if (entries.isEmpty) return const SizedBox.shrink();
+    return PopupMenuButton<int>(
+      tooltip: 'Collection tools',
+      position: PopupMenuPosition.under,
+      onSelected: (i) => entries[i].onRun(),
+      itemBuilder: (_) => [
+        for (var i = 0; i < entries.length; i++) ...[
+          if (entries[i].dividerAbove && i > 0) const PopupMenuDivider(),
+          PopupMenuItem<int>(
+            value: i,
+            enabled: entries[i].enabled,
+            child: AppMenuEntryRow(entry: entries[i]),
+          ),
+        ],
+      ],
+      child: IgnorePointer(
+        child: TextButton.icon(
+          onPressed: () {},
+          icon: const Icon(Icons.build_outlined, size: 18),
+          label: const Text('Tools'),
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.ink,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+          ),
+        ),
+      ),
+    );
   }
 
   /// App-bar file button: shows the loaded file name and opens a menu with

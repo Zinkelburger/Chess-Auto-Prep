@@ -43,18 +43,32 @@ void main() {
     });
 
     test('course chapter — line uses an em dash', () {
-      expect(
-        PgnGameEntry(
+      final game = PgnGameEntry(
+        headers: {
+          'White': 'Quickstarter Guide',
+          'Black': 'Colle - 3...c6 #1',
+          'Result': '*',
+        },
+        pgnText: '',
+      );
+      expect(game.label, 'Quickstarter Guide — Colle - 3...c6 #1');
+      expect(game.isCourseStyle, isTrue);
+    });
+
+    test(
+      'ordinary unfinished player game does not opt into course reading',
+      () {
+        final game = PgnGameEntry(
           headers: {
-            'White': 'Quickstarter Guide',
-            'Black': 'Colle - 3...c6 #1',
+            'White': 'Carlsen, Magnus',
+            'Black': 'Nakamura, Hikaru',
             'Result': '*',
           },
           pgnText: '',
-        ).label,
-        'Quickstarter Guide — Colle - 3...c6 #1',
-      );
-    });
+        );
+        expect(game.isCourseStyle, isFalse);
+      },
+    );
 
     test('intro chapter with the same White/Black is just the title', () {
       expect(

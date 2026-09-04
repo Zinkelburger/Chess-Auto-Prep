@@ -15,6 +15,7 @@ import 'package:chess_auto_prep/models/trap_line_info.dart';
 import 'package:chess_auto_prep/models/trap_reply.dart';
 import '../../utils/ease_utils.dart' show winProbability;
 import '../../utils/eval_constants.dart';
+import '../../utils/atomic_file.dart';
 import 'trap_score.dart';
 
 class TrapExtractor {
@@ -224,9 +225,10 @@ class TrapExtractor {
       'traps': traps.map((t) => t.toJson()).toList(),
     };
 
-    await File(
-      trapPath,
-    ).writeAsString(const JsonEncoder.withIndent('  ').convert(data));
+    await writeTextFileAtomically(
+      File(trapPath),
+      const JsonEncoder.withIndent('  ').convert(data),
+    );
   }
 
   /// Load trap lines from the JSON file for a given repertoire.

@@ -53,7 +53,7 @@ mixin _GenerationConfigAdvanced
               : null,
         ),
         AdvancedSection(
-          'Coverage & line order',
+          'Line order & tails',
           Icons.playlist_add_check,
           _coverageSection,
         ),
@@ -63,7 +63,7 @@ mixin _GenerationConfigAdvanced
           _chaptersSection,
         ),
         AdvancedSection(
-          'Explanatory variations',
+          'Extra variations',
           Icons.alt_route_outlined,
           _variationsSection,
         ),
@@ -109,7 +109,7 @@ mixin _GenerationConfigAdvanced
           ),
           _numField(
             _maiaPriorGamesCtrl,
-            'Blend with Maia (virtual games)',
+            'Blend with Maia (games)',
             defaultText: '30',
             onEdited: refresh,
             enabled: _buildMode == BuildMode.dbExplorer,
@@ -138,7 +138,7 @@ mixin _GenerationConfigAdvanced
           ),
           _numField(
             _coverMinProbCtrl,
-            'Always answer replies above (0–1)',
+            'Always answer replies above',
             defaultText: '0.05',
             onEdited: refresh,
             tooltip:
@@ -201,24 +201,6 @@ mixin _GenerationConfigAdvanced
             ? 'The ChessDB book has one move per position, so the build '
                   'always takes the engine-best pick here.'
             : _selectionModeDescription(),
-      ),
-      const SizedBox(height: 12),
-      _numField(
-        _mistakeWeightCtrl,
-        'Opponent-mistake weight (0–100)',
-        defaultText: '0',
-        onEdited: refresh,
-        enabled: !isBook && _selectionMode == SelectionMode.expectimax,
-        disabledReason: isBook
-            ? 'The ChessDB book has one move per position'
-            : 'Only weighs into the best-expected-score pick',
-        tooltip:
-            'Favours moves whose lines opponents tend to go wrong in. A '
-            'candidate\'s score is boosted by up to this much of itself when '
-            'opponents are expected to lose a pawn in its subtree, weighted '
-            'by how often they reach each mistake. Only tilts between moves '
-            'inside the eval-loss guard; raise that guard to let it consider '
-            'speculative tries, and use Pure search so those get searched.',
       ),
     ];
   }
@@ -355,7 +337,7 @@ mixin _GenerationConfigAdvanced
   List<Widget> _moveChoiceRelativeEvalField(VoidCallback refresh) {
     return [
       _labeledCheckbox(
-        'Eval limits relative to starting position',
+        'Eval limits relative to start',
         _relativeEval,
         (v) {
           _relativeEval = v;
@@ -459,7 +441,7 @@ mixin _GenerationConfigAdvanced
       const SizedBox(height: 8),
       _numField(
         _verifyDepthCtrl,
-        'Verification depth (0 = auto)',
+        'Verification depth',
         defaultText: '0',
         onEdited: refresh,
         enabled: _verifyFinal,
@@ -471,41 +453,24 @@ mixin _GenerationConfigAdvanced
     ];
   }
 
-  /// How much of the tree reaches the PGN: the coverage target, engine
-  /// continuations for lines the ply cap cut off, and line order.
+  /// How much of the tree reaches the PGN: engine continuations for lines
+  /// the ply cap cut off, and line order.
+  ///
+  /// How *many* lines are kept is deliberately not here. A build exports
+  /// every line that teaches something new; the size is chosen afterwards
+  /// on the Generate tab, where the count and the coverage it buys are both
+  /// visible.
   List<Widget> _coverageSection(VoidCallback refresh) {
     return [
       _numField(
-        _lineCoverageCtrl,
-        'Coverage target %',
-        defaultText: '92',
-        onEdited: refresh,
-        tooltip:
-            'Share of what you will actually face that the export has to '
-            'cover. Lines are kept in order of how much new ground each '
-            'breaks, and lines that only repeat covered decisions are never '
-            'kept. 100% keeps everything that teaches something new.',
-      ),
-      const SizedBox(height: 8),
-      _numField(
         _engineTailCtrl,
-        'Engine continuation plies (0 = off)',
+        'Engine continuation plies',
         defaultText: '6',
         onEdited: refresh,
         tooltip:
             'Appends this many plies of engine best play, at the verification '
             'depth, to lines the ply cap cut off mid-position. The first '
             'appended move is marked in the PGN as where preparation stopped.',
-      ),
-      const SizedBox(height: 8),
-      _numField(
-        _targetLinesCtrl,
-        'Hard cap on lines (0 = no cap)',
-        defaultText: '0',
-        onEdited: refresh,
-        tooltip:
-            'Stops the export at this many lines even if the coverage target '
-            'is not met. Leave at 0 to let coverage decide.',
       ),
       const SizedBox(height: 4),
       _labeledCheckbox(
@@ -676,7 +641,7 @@ mixin _GenerationConfigAdvanced
           ),
           _numField(
             _masterDepthBonusCtrl,
-            'Extra depth in master lines (plies)',
+            'Extra master depth (plies)',
             defaultText: '10',
             onEdited: refresh,
             enabled: _useMasterGames,

@@ -53,9 +53,13 @@ Future<RepertoireCreationResult> createRepertoire({
       '// Created on $stamp\n\n';
 
   if (pgnContent != null) {
-    await store.writeFile(chapterPath, '$header$pgnContent\n');
+    await store.writeFile(
+      chapterPath,
+      '$header$pgnContent\n',
+      createOnly: true,
+    );
   } else {
-    await store.writeFile(chapterPath, header);
+    await store.writeFile(chapterPath, header, createOnly: true);
   }
 
   return RepertoireCreationResult(

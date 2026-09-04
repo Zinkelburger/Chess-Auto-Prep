@@ -62,15 +62,16 @@ class _OpponentListImportDialogState extends State<OpponentListImportDialog> {
 
   Future<void> _pickFile() async {
     try {
-      final result = await FilePicker.pickFiles(
+      final file = await FilePicker.pickFile(
         type: FileType.custom,
         allowedExtensions: ['json', 'txt'],
       );
-      final path = result?.files.single.path;
-      if (path == null || !mounted) return;
+      if (file == null || !mounted) return;
+      final path = file.path;
+      if (path == null) return;
       final text = await readTextFile(File(path));
       if (!mounted) return;
-      setState(() => _fileName = result!.files.single.name);
+      setState(() => _fileName = file.name);
       // Setting the text triggers _reparse through the listener.
       _textController.text = text;
     } catch (e) {

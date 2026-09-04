@@ -9,6 +9,7 @@ import '../services/generation/eca_calculator.dart';
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import '../services/generation/line_extractor.dart';
+import '../services/generation/line_pruner.dart';
 
 /// One exported line from a completed generation run.
 class GeneratedLineExport {
@@ -112,6 +113,11 @@ class ExtractedLines {
   /// How many lines existed before similarity pruning.
   final int rawCount;
 
+  /// Lines too close to a kept line to earn an entry, keyed by the kept
+  /// line they hang off.  The export writes them as sidelines rather than
+  /// losing the reply they carry — see [LineDiversity].
+  final Map<String, List<FoldedLine>> folds;
+
   /// Sentence fragment appended to the run summary when "only traps" ran.
   final String trapsOnlyNote;
 
@@ -123,9 +129,13 @@ class ExtractedLines {
     required this.rawCount,
     this.truncated = false,
     required this.trapsOnlyNote,
+    this.folds = const {},
   });
 
   bool get wasPruned => lines.length < rawCount;
+
+  /// How many lines the export carries as a sideline instead of an entry.
+  int get foldedCount => folds.values.fold(0, (sum, list) => sum + list.length);
 }
 
 /// Where an on-demand expectimax probe is rooted: the repertoire it belongs

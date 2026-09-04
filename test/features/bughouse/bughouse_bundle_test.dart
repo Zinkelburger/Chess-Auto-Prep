@@ -207,6 +207,25 @@ void main() {
       expect(File(p.join(engineDir.path, 'MSVCP140.dll')).lengthSync(), 16);
     });
 
+    test('re-copies a corrupt runtime with the right size', () async {
+      File(
+        p.join(appDir.path, 'MSVCP140.dll'),
+      ).writeAsBytesSync(List.filled(16, 1));
+      File(
+        p.join(engineDir.path, 'MSVCP140.dll'),
+      ).writeAsBytesSync(List.filled(16, 2));
+
+      await BughouseBundle.installWindowsRuntime(
+        source: appDir,
+        target: engineDir,
+      );
+
+      expect(
+        File(p.join(engineDir.path, 'MSVCP140.dll')).readAsBytesSync(),
+        List.filled(16, 1),
+      );
+    });
+
     test('a machine with the redistributable installed still launches', () {
       // Nothing to copy is not a failure: the system copy may well be there,
       // and if it is not, the engine's exit code says so in words.
@@ -216,6 +235,26 @@ void main() {
           target: engineDir,
         ),
         completion(isEmpty),
+      );
+    });
+
+    test('a central-runtime install removes an old loose fallback', () async {
+      write(engineDir, 'MSVCP140.dll');
+      write(engineDir, 'VCRUNTIME140_1.dll');
+
+      final copied = await BughouseBundle.installWindowsRuntime(
+        source: appDir,
+        target: engineDir,
+      );
+
+      expect(copied, isEmpty);
+      expect(
+        File(p.join(engineDir.path, 'MSVCP140.dll')).existsSync(),
+        isFalse,
+      );
+      expect(
+        File(p.join(engineDir.path, 'VCRUNTIME140_1.dll')).existsSync(),
+        isFalse,
       );
     });
   });

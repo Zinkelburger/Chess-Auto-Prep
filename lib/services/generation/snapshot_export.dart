@@ -97,7 +97,6 @@ SnapshotExportResult runSnapshotExport(SnapshotExportRequest request) {
   final ecaCalc = ExpectimaxCalculator(config: config, fenMap: fenMap);
   ecaCalc.calculate(tree);
   ecaCalc.computeTrapScores(tree.root);
-  ecaCalc.calculateCplValues(tree.root);
   calculateMyEase(tree, playAsWhite: config.playAsWhite);
   final selector = RepertoireSelector(
     config: config,
@@ -162,11 +161,14 @@ List<ExtractedLine> snapshotLines({
       (line) => line.movesSan,
     );
   }
-  extractedLines = LinePruner.prune(
+  // The same diversity bar the real export applies, so a snapshot's entries
+  // are the entries.  What a snapshot cannot show is the folded sidelines:
+  // this path writes flat movetext, not the composed course, so a line
+  // folded into another is simply absent here rather than written into it.
+  extractedLines = LinePruner.rank(
     extractedLines,
-    targetCount: config.targetLineCount,
-    coverageTarget: config.lineCoverageTarget,
-  );
+    diversity: LineDiversity.fromConfig(config),
+  ).all;
   // Last step before ranking: no line may point at a move order that did not
   // survive the filtering above.
   extractedLines = extractor.withdrawDanglingTranspositions(extractedLines);

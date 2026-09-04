@@ -31,8 +31,12 @@ mixin _GenerationConfigFields on _GenerationConfigFormStateBase {
         ? disabledReason
         : (defaultText != null ? 'default $defaultText' : null);
     final problem = isEnabled ? _numFieldProblem(controller) : null;
+    // Wide enough for the labels this form actually uses. At 210 the
+    // floating label ellipsised on a third of them ("Your candidate moves
+    // per ...", "Stop after (minutes, 0 = no ..."), which hides the part
+    // that carries the meaning.
     final field = SizedBox(
-      width: 210,
+      width: 268,
       child: TextField(
         controller: controller,
         enabled: isEnabled,

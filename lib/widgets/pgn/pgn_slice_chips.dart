@@ -152,7 +152,9 @@ class PgnSliceChips extends StatelessWidget {
 
   Widget _buildAddSliceChip() {
     return Tooltip(
-      message: controller.hasActiveFilters ? 'Edit filters' : 'Add filter',
+      message: controller.hasActiveFilters
+          ? 'Explore or edit this collection view'
+          : 'Explore and filter this collection',
       child: GestureDetector(
         onTap: onOpenSliceDialog,
         child: Container(
@@ -184,7 +186,7 @@ class PgnSliceChips extends StatelessWidget {
               ),
               const SizedBox(width: 3),
               Text(
-                controller.hasActiveFilters ? 'Edit' : 'Slice',
+                controller.hasActiveFilters ? 'Edit view' : 'Explore',
                 style: TextStyle(
                   fontSize: 12,
                   color: controller.hasActiveFilters

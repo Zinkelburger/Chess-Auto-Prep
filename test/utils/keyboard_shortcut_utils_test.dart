@@ -66,9 +66,9 @@ void main() {
       expect(fallbackRan, isTrue);
     });
 
-    test('the same key under different modifiers is a different chord', () {
-      // Bare S steps the queue while Ctrl+S and Shift+S toggle solitaire —
-      // three live bindings on one key, none of them dead.
+    test('arrow navigation and modified letter shortcuts coexist', () {
+      // Queue navigation uses an arrow while Ctrl+S and Shift+S toggle
+      // solitaire; all can be registered on the same screen.
       expect(
         () => runKeyBindings([
           ...KeyBinding.forShortcut(AppShortcut.nextItem, 'Next game', () {}),

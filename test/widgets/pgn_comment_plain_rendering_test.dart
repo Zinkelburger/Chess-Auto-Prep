@@ -1,7 +1,8 @@
 /// Comments render as plain flowing prose by default: double spaces inside
 /// prose (common in Lichess study exports) are collapsed instead of being
 /// treated as book-PGN paragraph breaks, and no bordered comment blocks are
-/// created. Book formatting stays available behind [PgnViewerWidget.bookFormatting].
+/// created. Clearly marked / long book comments are detected automatically;
+/// the flag remains for ambiguous short exports like this fixture.
 library;
 
 import 'package:flutter/material.dart';

@@ -30,6 +30,7 @@ pip-delete-this-directory.txt
 .cache
 nosetests.xml
 coverage.xml
+coverage/
 *.cover
 *.log
 .git
@@ -154,3 +155,9 @@ tools/experiments/benko_master/LATEST*
 # tracked file here, a release would build green and ship with no engine.
 assets/bughouse/*.gz
 assets/bughouse/manifest.json
+
+# Official Microsoft VC++ prerequisite. Release CI fetches and verifies the
+# pinned package; the 25 MB executable is embedded in the Windows installer,
+# never committed to the repository.
+packaging/windows/prerequisites/VC_redist.x64.exe
+!tools/vc_redist.lock.json

@@ -181,9 +181,14 @@ double? generationProgressFraction({
 }
 
 /// Resource chip text for engine-backed builds.
-String? generationResourceLabel(TreeBuildConfig? config) {
+String? generationResourceLabel(TreeBuildConfig? config, {int? workers}) {
   if (config == null || !config.needsStockfish) return null;
   final threads = config.resolvedEngineThreads;
-  return '$threads thread${threads == 1 ? '' : 's'} · '
-      '$kPoolHashPerWorkerMb MB hash';
+  final lanes = StockfishPool.laneCountFor(threads, workers: workers);
+  final threadsPerWorker = StockfishPool.threadsPerLane(threads, lanes);
+  final activeThreads = lanes * threadsPerWorker;
+  final hashMb = lanes * kPoolHashPerWorkerMb;
+  return '$lanes worker${lanes == 1 ? '' : 's'} × '
+      '$threadsPerWorker thread${threadsPerWorker == 1 ? '' : 's'} · '
+      '$activeThreads/$threads CPU · $hashMb MB hash + engine memory';
 }

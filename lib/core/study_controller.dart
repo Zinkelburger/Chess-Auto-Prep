@@ -21,6 +21,7 @@ import '../services/pgn_parsing_service.dart'
     show splitPgnIntoGames, extractHeaders, stripBom;
 import '../services/storage/storage_factory.dart';
 import '../services/storage/study_naming.dart';
+import '../utils/atomic_file.dart';
 import '../utils/chess_utils.dart' show tryParseFen;
 import 'package:chess_auto_prep/utils/log.dart';
 import 'package:chess_auto_prep/utils/safe_change_notifier.dart';
@@ -52,6 +53,12 @@ class StudyController extends ChangeNotifier
   /// token before its await and bails if a newer open/replace superseded it.
   int _docGeneration = 0;
 
+  /// Exact content last read from or written to the active study. Autosaves
+  /// compare against it so an external edit is never silently overwritten.
+  String? _persistedContent;
+
+  String? saveError;
+
   Timer? _autoSaveTimer;
   static const _autoSaveDelay = Duration(seconds: 2);
 
@@ -79,11 +86,15 @@ class StudyController extends ChangeNotifier
     }
     _docGeneration++; // supersede any in-flight openStudy
     await flushSave();
-    _doc = StudyDocument.fresh(name)..filePath = path;
+    final fresh = StudyDocument.fresh(name)..filePath = path;
+    final content = fresh.toPgn();
+    await storage.writeFile(path, content, createOnly: true);
+    _doc = fresh;
+    _persistedContent = content;
+    saveError = null;
     _chapterIndex = 0;
     _path = TreePath.empty;
-    _dirty = true; // persist the empty skeleton
-    await flushSave();
+    _dirty = false;
     await refreshStudyList();
   }
 
@@ -97,7 +108,11 @@ class StudyController extends ChangeNotifier
     _docGeneration++; // supersede any in-flight openStudy
     await flushSave();
     final reserved = await reserveStudyPath(name);
-    await StorageFactory.instance.writeFile(reserved.path, '${pgn.trim()}\n');
+    await StorageFactory.instance.writeFile(
+      reserved.path,
+      '${pgn.trim()}\n',
+      createOnly: true,
+    );
     await refreshStudyList();
     await openStudy(reserved.path);
     return reserved.path;
@@ -129,13 +144,17 @@ class StudyController extends ChangeNotifier
       await flushSave();
     } else {
       final storage = StorageFactory.instance;
-      final existing = await storage.fileExists(path)
-          ? (await storage.readFile(path) ?? '')
-          : '';
+      final existed = await storage.fileExists(path);
+      final existing = existed ? (await storage.readFile(path) ?? '') : '';
       final content = existing.trimRight().isEmpty
           ? chapter.toPgn()
           : '${existing.trimRight()}\n\n${chapter.toPgn()}';
-      await storage.writeFile(path, content);
+      await storage.writeFile(
+        path,
+        content,
+        createOnly: !existed,
+        expectedContent: existed ? existing : null,
+      );
     }
     await refreshStudyList();
   }
@@ -169,6 +188,8 @@ class StudyController extends ChangeNotifier
           ),
       ],
     );
+    _persistedContent = content;
+    saveError = null;
     _chapterIndex = 0;
     _path = TreePath.empty;
     _dirty = false;
@@ -201,6 +222,8 @@ class StudyController extends ChangeNotifier
     if (_doc.filePath == path) {
       _docGeneration++; // supersede any in-flight openStudy of this file
       _doc = StudyDocument.fresh('Untitled study');
+      _persistedContent = null;
+      saveError = null;
       _chapterIndex = 0;
       _path = TreePath.empty;
       _dirty = false;
@@ -213,10 +236,26 @@ class StudyController extends ChangeNotifier
     final path = _doc.filePath;
     if (path == null) return;
     try {
-      await StorageFactory.instance.writeFile(path, _doc.toPgn());
+      final content = _doc.toPgn();
+      await StorageFactory.instance.writeFile(
+        path,
+        content,
+        createOnly: _persistedContent == null,
+        expectedContent: _persistedContent,
+      );
+      _persistedContent = content;
       _dirty = false;
+      saveError = null;
+    } on AtomicWriteConflict {
+      saveError =
+          'Study not saved because its file changed on disk. The newer disk '
+          'copy was preserved.';
+      notifyListeners();
     } catch (e) {
+      saveError =
+          'Could not save the study. Your unsaved edits are still open.';
       log.e('Error saving study: $e');
+      notifyListeners();
     }
   }
 

@@ -117,10 +117,6 @@ abstract class _GenerationConfigFormStateBase
 
   late final TextEditingController _engineTailCtrl = _ctrl('6');
 
-  /// Coverage target as a percentage, which is how it is shown and typed.
-  /// [TreeBuildConfig.lineCoverageTarget] holds the 0..1 fraction.
-  late final TextEditingController _lineCoverageCtrl = _ctrl('92');
-  late final TextEditingController _targetLinesCtrl = _ctrl('0');
   bool _rankLinesByImportance = true;
   MoveAnnotationDetail _annotationDetail = MoveAnnotationDetail.full;
 
@@ -142,7 +138,6 @@ abstract class _GenerationConfigFormStateBase
   late final TextEditingController _bookTailMaxPlyCtrl = _ctrl('40');
   late final TextEditingController _bookTieBreakCtrl = _ctrl('0');
   late final TextEditingController _replyWindowCtrl = _ctrl('0');
-  late final TextEditingController _mistakeWeightCtrl = _ctrl('0');
 
   SelectionMode _selectionMode = SelectionMode.expectimax;
   BuildMode _buildMode = BuildMode.stockfishExpectimax;
@@ -335,18 +330,6 @@ abstract class _GenerationConfigFormStateBase
       min: 0,
       max: 40,
     ),
-    _lineCoverageCtrl: const _NumSpec(
-      'Coverage target %',
-      isInt: false,
-      min: 5,
-      max: 100,
-    ),
-    _targetLinesCtrl: const _NumSpec(
-      'Hard cap on lines',
-      isInt: true,
-      min: 0,
-      max: 100000,
-    ),
     _maxLinesPerChapterCtrl: const _NumSpec(
       'Max lines per chapter',
       isInt: true,
@@ -407,12 +390,6 @@ abstract class _GenerationConfigFormStateBase
       min: 0,
       max: 200,
     ),
-    _mistakeWeightCtrl: const _NumSpec(
-      'Opponent-mistake weight',
-      isInt: true,
-      min: 0,
-      max: 100,
-    ),
   };
 
   /// Why [controller]'s text cannot be used, or null when it can.  Short
@@ -428,8 +405,9 @@ abstract class _GenerationConfigFormStateBase
           ? 'Whole number, ${spec.rangeText}'
           : 'Number, ${spec.rangeText}';
     }
-    if (value < spec.min || value > spec.max)
+    if (value < spec.min || value > spec.max) {
       return 'Must be ${spec.rangeText}';
+    }
     return null;
   }
 

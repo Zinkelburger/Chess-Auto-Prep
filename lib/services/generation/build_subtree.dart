@@ -70,7 +70,6 @@ BuildTree extractRebasedSubtree(
       ..ease = old.ease
       ..localCpl = old.localCpl
       ..expectimaxValue = old.expectimaxValue
-      ..cplValue = old.cplValue
       ..hasExpectimax = old.hasExpectimax
       ..opponentEase = old.opponentEase
       ..trapScore = old.trapScore

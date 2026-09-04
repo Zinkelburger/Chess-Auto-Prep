@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
+import 'package:chess_auto_prep/widgets/trainer_keyboard_scope.dart';
 import 'package:chess_auto_prep/widgets/training/move_input_widget.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
@@ -35,6 +36,29 @@ void main() {
       await tester.pumpWidget(buildWidget());
       expect(find.byType(TextField), findsOneWidget);
       expect(find.text('Type a move…'), findsOneWidget);
+    });
+
+    testWidgets('captures typing without showing a blinking caret', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildWidget());
+
+      final textField = tester.widget<TextField>(find.byType(TextField));
+      expect(textField.autofocus, isTrue);
+      expect(textField.showCursor, isFalse);
+    });
+
+    testWidgets('keeps identical field geometry while typing', (tester) async {
+      await tester.pumpWidget(buildWidget());
+
+      final fieldBefore = tester.getRect(find.byType(TextField));
+      final editorBefore = tester.getRect(find.byType(EditableText));
+
+      await tester.enterText(find.byType(TextField), 'N');
+      await tester.pump();
+
+      expect(tester.getRect(find.byType(TextField)), fieldBefore);
+      expect(tester.getRect(find.byType(EditableText)), editorBefore);
     });
 
     testWidgets('disabled when enabled=false', (tester) async {
@@ -425,6 +449,40 @@ void main() {
       // Characters the field's own formatter would refuse are refused here
       // too — the route must not become a formatter bypass.
       expect(key.currentState!.typeCharacter('!'), isFalse);
+    });
+
+    testWidgets('a click on the board does not take focus off the box', (
+      tester,
+    ) async {
+      final key = GlobalKey<MoveInputWidgetState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                // Stands in for the board: on screen, not focusable.
+                const SizedBox(height: 200, width: 200, child: Placeholder()),
+                MoveInputWidget(
+                  key: key,
+                  position: startPosition,
+                  onMove: (_) {},
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(key.currentState!.hasFocus, isTrue, reason: 'autofocus');
+
+      await tester.tapAt(const Offset(100, 100));
+      await tester.pump();
+
+      // Flutter's default tap-outside behaviour would have unfocused the
+      // field here, leaving the keyboard on the route scope where neither
+      // this box nor the trainer panel can see a keystroke.
+      expect(key.currentState!.hasFocus, isTrue);
+      expect(keyboardFocusIsOrphaned(), isFalse);
     });
   });
 }

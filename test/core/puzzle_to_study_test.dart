@@ -122,4 +122,25 @@ void main() {
     expect(saved, contains('[FEN "$_blackToMateFen"]'));
     study.dispose();
   });
+
+  test(
+    'an external edit is preserved instead of being overwritten by autosave',
+    () async {
+      final study = StudyController();
+      await study.newStudy('Concurrent edit');
+      final path = study.doc.filePath!;
+      await File(path).writeAsString('external editor content');
+
+      await study.addChapterToStudyFile(
+        path,
+        'Local chapter',
+        encodePuzzlePgn(_puzzle(), _solutionSan, event: 'Local chapter'),
+      );
+
+      expect(await File(path).readAsString(), 'external editor content');
+      expect(study.saveError, contains('changed on disk'));
+      expect(study.dirty, isTrue, reason: 'the local edit remains recoverable');
+      study.dispose();
+    },
+  );
 }

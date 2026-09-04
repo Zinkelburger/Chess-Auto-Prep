@@ -5,6 +5,8 @@
 /// it a reload is indistinguishable from doing nothing, so nobody presses it.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
@@ -43,7 +45,7 @@ class _RepertoireReloadDialogState extends State<_RepertoireReloadDialog> {
   @override
   void initState() {
     super.initState();
-    _run();
+    unawaited(_run());
   }
 
   Future<void> _run() async {

@@ -135,7 +135,7 @@ mixin _TacticsPlayback on _TacticsControlPanelStateBase {
       pickerTitle: 'Add game to study',
       viewActionLabel: 'View game',
       buildPgn: (_) =>
-          sourceGamePgn(tactic, _session.engine.correctLineToSan(tactic)),
+          sourceGamePgn(tactic, _session.engine.solutionLineToSan(tactic)),
     );
   }
 
@@ -146,7 +146,7 @@ mixin _TacticsPlayback on _TacticsControlPanelStateBase {
     try {
       final pgn = await sourceGamePgn(
         tactic,
-        _session.engine.correctLineToSan(tactic),
+        _session.engine.solutionLineToSan(tactic),
       );
       await Clipboard.setData(ClipboardData(text: pgn));
       if (mounted) showAppSnackBar(context, 'Game PGN copied.');

@@ -113,6 +113,7 @@ class AppGamesToolsTest(unittest.TestCase):
         self.registry = Registry()
 
     def tearDown(self):
+        self.registry.close()
         os.environ.pop("CHESS_PREP_APP_GAMES_DB", None)
         self.tmp.cleanup()
 
@@ -123,6 +124,13 @@ class AppGamesToolsTest(unittest.TestCase):
         self.assertEqual(g["headers"]["White"], "me")
         by = self.registry.call("my_games_by_player", {"player": "ME"})
         self.assertEqual(by["count"], 1)
+
+    def test_closed_registry_refuses_new_calls(self):
+        self.registry.call("my_games_status", {})
+        self.registry.close()
+
+        with self.assertRaisesRegex(RuntimeError, "closed"):
+            self.registry.call("my_games_status", {})
 
     def test_games_at_position(self):
         try:
@@ -152,6 +160,7 @@ class ToolsTest(unittest.TestCase):
         self.registry = Registry()
 
     def tearDown(self):
+        self.registry.close()
         os.environ.pop("CHESS_PREP_MASTER_DB", None)
         self.tmp.cleanup()
 

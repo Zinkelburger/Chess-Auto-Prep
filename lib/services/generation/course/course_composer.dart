@@ -24,6 +24,7 @@ import '../export/pgn_game_writer.dart';
 import '../generation_config.dart';
 import '../engine_tail.dart';
 import '../line_extractor.dart';
+import '../line_pruner.dart';
 import 'chapter_planner.dart';
 import 'chapter_titles.dart';
 import 'model_game_selector.dart';
@@ -142,8 +143,13 @@ class CourseComposer {
   /// the improvement is played in.  Set for the duration of [compose].
   ImprovementMap _improvements = const {};
 
+  /// Lines too close to a kept line to earn an entry, keyed by the entry
+  /// they hang off.  Set for the duration of [compose].
+  Map<String, List<FoldedLine>> _folds = const {};
+
   ComposedCourse compose({
     required List<ExtractedLine> lines,
+    Map<String, List<FoldedLine>> folds = const {},
     List<ModelGame> modelGames = const [],
     RefutationMap refutations = const {},
     AlternativeMap alternatives = const {},
@@ -151,6 +157,7 @@ class CourseComposer {
     ImprovementMap improvements = const {},
   }) {
     _refutations = refutations;
+    _folds = folds;
     _alternatives = alternatives;
     _engineTails = engineTails;
     _improvements = improvements;
@@ -365,6 +372,10 @@ class CourseComposer {
       );
     }
 
+    for (final entry in _foldedSidelines(line, moves.length).entries) {
+      (out[entry.key] ??= []).addAll(entry.value);
+    }
+
     final refutation = _refutationFor(line);
     if (refutation.isNotEmpty) {
       (out[moves.length - 1] ??= []).add(
@@ -373,6 +384,68 @@ class CourseComposer {
     }
 
     return out;
+  }
+
+  /// The lines folded into [line], written as variations off the move where
+  /// each one parts from it.
+  ///
+  /// Two shapes, and the difference is not cosmetic — PGN reads a variation
+  /// as *instead of* the move it hangs off:
+  ///
+  /// - The usual case, the fold leaves mid-line: the variation starts with
+  ///   the folded line's own move at that ply, so it reads "instead …".
+  /// - The fold runs past the end of its host: there is no move to replace,
+  ///   so the variation repeats the host's last move and continues from it,
+  ///   the same trick [_sidelines] uses for a refutation.
+  ///
+  /// Only [prepared] plies are addressable. A fold cannot land on the engine
+  /// tail — it is indexed against the host's own moves — but the bound is
+  /// checked rather than assumed, because an out-of-range key would silently
+  /// attach the sideline to the wrong move.
+  Map<int, List<PgnSideline>> _foldedSidelines(
+    ExtractedLine line,
+    int moveCount,
+  ) {
+    final folded = _folds[LinePruner.lineKey(line.movesSan)];
+    if (folded == null || folded.isEmpty) return const {};
+
+    final out = <int, List<PgnSideline>>{};
+    for (final fold in folded) {
+      final ply = fold.divergePly;
+      final moves = fold.line.movesSan;
+      if (ply <= 0 || ply >= moves.length) continue;
+
+      final int index;
+      final List<String> sidelineMoves;
+      if (ply < line.movesSan.length) {
+        index = repertoirePrefix.length + ply;
+        sidelineMoves = moves.sublist(ply);
+      } else {
+        // The fold continues the host rather than diverging from it.
+        index = repertoirePrefix.length + line.movesSan.length - 1;
+        sidelineMoves = [line.movesSan.last, ...moves.sublist(ply)];
+      }
+      if (index < 0 || index >= moveCount) continue;
+      (out[index] ??= []).add(
+        PgnSideline(sidelineMoves, comment: _foldComment(fold)),
+      );
+    }
+    return out;
+  }
+
+  /// Why a folded line is a note rather than an entry.
+  ///
+  /// It says "not drilled" because that is the one thing the reader cannot
+  /// see from the movetext: everything here is real preparation, it is just
+  /// too close to the mainline above to be worth quizzing separately.
+  String? _foldComment(FoldedLine fold) {
+    if (!config.annotationDetail.emitsAnything) return null;
+    const base = 'Same idea as the mainline';
+    // A reach that rounds to 0.0% says nothing; "rare" is the honest reading
+    // of it, and a third decimal place would only look precise.
+    final percent = fold.line.probability * 100;
+    if (percent < 0.05) return '$base — rare, read not drilled';
+    return '$base — ${percent.toStringAsFixed(1)}% of games, read not drilled';
   }
 
   /// [annotations] grown to [length] with empty entries, so anything appended

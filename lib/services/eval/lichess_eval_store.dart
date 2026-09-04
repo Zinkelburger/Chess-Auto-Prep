@@ -27,6 +27,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import '../../utils/atomic_file.dart';
 import 'lichess_eval_line.dart';
 
 /// Bytes per record in `evals.bin`.
@@ -180,7 +181,8 @@ Future<void> writeManifest(
   LichessEvalManifest manifest,
 ) async {
   await Directory(paths.directory).create(recursive: true);
-  await File(paths.manifestFile).writeAsString(
+  await writeTextFileAtomically(
+    File(paths.manifestFile),
     const JsonEncoder.withIndent('  ').convert(manifest.toJson()),
   );
 }

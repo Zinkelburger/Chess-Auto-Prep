@@ -44,7 +44,6 @@ void main() {
       const seed = TreeBuildConfig(
         startFen: _seedFen,
         playAsWhite: true,
-        batchEvalLookups: true,
         enableLocalChessDb: true,
         localChessDbPath: '/tmp/chessdb.db',
         enableChessDbApi: false,
@@ -57,7 +56,6 @@ void main() {
       controller.applyConfig(seed);
       final back = _readBack(controller);
 
-      expect(back.batchEvalLookups, isTrue);
       expect(back.enableLocalChessDb, isTrue);
       expect(back.localChessDbPath, '/tmp/chessdb.db');
       expect(back.enableChessDbApi, isFalse);
@@ -136,18 +134,12 @@ void main() {
       await EvalDatabaseSettings.instance.setEnableCdbDirect(true);
       await EvalDatabaseSettings.instance.setCdbDirectPath('/opt/cdb');
       await EvalDatabaseSettings.instance.setCdbDirectReadAhead(true);
-      controller.batchEvalLookups = true;
 
       final back = _readBack(controller, cdbDirectAvailable: false);
 
       expect(back.enableCdbDirect, isFalse);
       expect(back.cdbDirectPath, isEmpty);
       expect(back.cdbDirectReadAhead, isFalse);
-      expect(
-        back.batchEvalLookups,
-        isFalse,
-        reason: 'batching is a cdbdirect feature; there is nothing to batch',
-      );
     });
 
     test('app settings win when it is', () async {

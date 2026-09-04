@@ -109,11 +109,6 @@ class BuildTreeNode implements MoveTreeNodeView {
   /// Practical win probability in [0, 1], computed via expectimax.
   double expectimaxValue = 0.0;
 
-  /// Total expected opponent CPL downstream from this node, probability
-  /// weighted.  Feeds the opponent-mistake boost in move selection
-  /// (`TreeBuildConfig.mistakeWeight`).
-  double cplValue = 0.0;
-
   /// Max ply count below this node (0 for leaves).
   int subtreePly = 0;
 

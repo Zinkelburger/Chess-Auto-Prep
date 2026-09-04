@@ -63,6 +63,7 @@ class ChapterStore {
           isWhite: isWhite,
           createdAt: now ?? DateTime.now(),
         ),
+        createOnly: true,
       );
     } catch (e) {
       return const ChapterCreationResult.failed('Could not create chapter.');

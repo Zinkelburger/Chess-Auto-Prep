@@ -11,9 +11,9 @@ void main() {
       // 1.e4 d5 2.exd5 — white captures a black pawn on board A.
       var state = BughouseState.initial();
       for (final move in [
-        NormalMove(from: Square.e2, to: Square.e4),
-        NormalMove(from: Square.d7, to: Square.d5),
-        NormalMove(from: Square.e4, to: Square.d5),
+        const NormalMove(from: Square.e2, to: Square.e4),
+        const NormalMove(from: Square.d7, to: Square.d5),
+        const NormalMove(from: Square.e4, to: Square.d5),
       ]) {
         state = state.playMove(BughouseBoard.a, move)!;
       }
@@ -37,9 +37,9 @@ void main() {
     test('a capture on board B feeds board A', () {
       var state = BughouseState.initial();
       for (final move in [
-        NormalMove(from: Square.d2, to: Square.d4),
-        NormalMove(from: Square.e7, to: Square.e5),
-        NormalMove(from: Square.d4, to: Square.e5),
+        const NormalMove(from: Square.d2, to: Square.d4),
+        const NormalMove(from: Square.e7, to: Square.e5),
+        const NormalMove(from: Square.d4, to: Square.e5),
       ]) {
         state = state.playMove(BughouseBoard.b, move)!;
       }
@@ -61,7 +61,7 @@ void main() {
 
       final after = state.playMove(
         BughouseBoard.a,
-        NormalMove(from: Square.a1, to: Square.a3),
+        const NormalMove(from: Square.a1, to: Square.a3),
       );
       expect(after, isNotNull, reason: 'Rxa3 is legal');
       expect(
@@ -79,11 +79,11 @@ void main() {
       )!;
       state = state.playMove(
         BughouseBoard.a,
-        NormalMove(from: Square.d7, to: Square.d5),
+        const NormalMove(from: Square.d7, to: Square.d5),
       )!;
       final after = state.playMove(
         BughouseBoard.a,
-        NormalMove(from: Square.e5, to: Square.d6),
+        const NormalMove(from: Square.e5, to: Square.d6),
       );
       expect(after, isNotNull, reason: 'exd6 e.p. is legal');
       expect(after!.boardB.pockets!.of(Side.black, Role.pawn), 1);
@@ -93,7 +93,7 @@ void main() {
     test('a quiet move feeds nobody', () {
       final state = BughouseState.initial().playMove(
         BughouseBoard.a,
-        NormalMove(from: Square.e2, to: Square.e4),
+        const NormalMove(from: Square.e2, to: Square.e4),
       )!;
       expect(state.boardA.pockets!.size, 0);
       expect(state.boardB.pockets!.size, 0);
@@ -104,7 +104,7 @@ void main() {
       expect(
         state.playMove(
           BughouseBoard.a,
-          NormalMove(from: Square.e2, to: Square.e5),
+          const NormalMove(from: Square.e2, to: Square.e5),
         ),
         isNull,
       );
@@ -115,9 +115,9 @@ void main() {
     test('a fed piece can be dropped on the board that received it', () {
       var state = BughouseState.initial();
       for (final move in [
-        NormalMove(from: Square.e2, to: Square.e4),
-        NormalMove(from: Square.d7, to: Square.d5),
-        NormalMove(from: Square.e4, to: Square.d5),
+        const NormalMove(from: Square.e2, to: Square.e4),
+        const NormalMove(from: Square.d7, to: Square.d5),
+        const NormalMove(from: Square.e4, to: Square.d5),
       ]) {
         state = state.playMove(BughouseBoard.a, move)!;
       }
@@ -138,9 +138,9 @@ void main() {
     test('a piece cannot be dropped on the board that captured it', () {
       var state = BughouseState.initial();
       for (final move in [
-        NormalMove(from: Square.e2, to: Square.e4),
-        NormalMove(from: Square.d7, to: Square.d5),
-        NormalMove(from: Square.e4, to: Square.d5),
+        const NormalMove(from: Square.e2, to: Square.e4),
+        const NormalMove(from: Square.d7, to: Square.d5),
+        const NormalMove(from: Square.e4, to: Square.d5),
       ]) {
         state = state.playMove(BughouseBoard.a, move)!;
       }
@@ -191,7 +191,7 @@ void main() {
     test('a dual FEN round-trips', () {
       final original = BughouseState.initial().playMove(
         BughouseBoard.a,
-        NormalMove(from: Square.e2, to: Square.e4),
+        const NormalMove(from: Square.e2, to: Square.e4),
       )!;
       final reparsed = BughouseState.tryParseDualFen(original.dualFen);
       expect(reparsed, isNotNull);

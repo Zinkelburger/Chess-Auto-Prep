@@ -62,14 +62,12 @@ const _treePath = String.fromEnvironment('TREE');
 const _outPath = String.fromEnvironment('OUT');
 const _name = String.fromEnvironment('NAME');
 
-/// -1 (the default) leaves the build's own setting alone. Any other value
-/// is written straight into `target_line_count`, so it means exactly what
-/// the form's "Max unique lines" field means — 0 included, which disables
-/// similarity pruning entirely rather than capping it.
-const _lineTarget = int.fromEnvironment('LINES', defaultValue: -1);
+/// How many of the ranked lines to keep. 0 (the default) keeps every line
+/// that teaches something new, which is what a build now exports.
+const _lineTarget = int.fromEnvironment('LINES');
 
-/// Coverage target as a percentage. 0 (the default) leaves the build's own
-/// setting alone; a tree built before coverage existed gets 92%.
+/// Keep however many lines cover this share of what you will face, as a
+/// percentage. 0 (the default) is off. [_lineTarget] wins when both are set.
 const _coverage = int.fromEnvironment('COVERAGE');
 
 /// Points path_provider at the real app support directory, which is where
@@ -119,15 +117,6 @@ void main() {
         .where((s) => s.isNotEmpty)
         .toList();
 
-    // Mirror the app's legacy migration before injecting anything: a tree
-    // predating the coverage target carries the old default line cap, and
-    // adding the coverage key here would make it look current and let that
-    // stale cap silently override whatever coverage is asked for.
-    if (!config.containsKey('line_coverage_target')) {
-      config.remove('target_line_count');
-    }
-    if (_lineTarget >= 0) config['target_line_count'] = _lineTarget;
-    if (_coverage > 0) config['line_coverage_target'] = _coverage / 100.0;
     final playAsWhite = config['play_as_white'] as bool? ?? true;
 
     stdout.writeln(
@@ -250,17 +239,19 @@ Future<Map<String, EngineTail>> _engineTails(
   final eca = ExpectimaxCalculator(config: config, fenMap: fenMap);
   eca.calculate(tree);
   eca.computeTrapScores(tree.root);
-  eca.calculateCplValues(tree.root);
   calculateMyEase(tree, playAsWhite: config.playAsWhite);
   RepertoireSelector(config: config, ecaCalc: eca, fenMap: fenMap).select(tree);
   tree.sortAllChildren();
   tree.computeMetadata();
 
-  final lines = LinePruner.prune(
+  final slice = LinePruner.rank(
     LineExtractor(config: config, fenMap: fenMap).extract(tree),
-    targetCount: config.targetLineCount,
-    coverageTarget: config.lineCoverageTarget,
   );
+  final lines = _lineTarget > 0
+      ? slice.take(_lineTarget)
+      : _coverage > 0
+      ? slice.take(slice.countForCoverage(_coverage / 100.0))
+      : slice.all;
 
   try {
     await StockfishPool.instance.prepareForTreeBuild(

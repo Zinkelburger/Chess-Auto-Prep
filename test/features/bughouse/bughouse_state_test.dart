@@ -60,7 +60,7 @@ void main() {
 
     test('boards advance independently', () {
       var state = BughouseState.initial();
-      final move = NormalMove(from: Square.e2, to: Square.e4);
+      const move = NormalMove(from: Square.e2, to: Square.e4);
       state = state.withBoard(
         BughouseBoard.a,
         state.boardA.playUnchecked(move) as Crazyhouse,

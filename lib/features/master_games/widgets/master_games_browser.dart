@@ -120,8 +120,9 @@ class _MasterGamesBrowserState extends State<MasterGamesBrowser> {
   }
 
   String _collectionLabel() {
-    if (_c.mode == MasterBrowseMode.myRepertoire)
+    if (_c.mode == MasterBrowseMode.myRepertoire) {
       return 'twic-in-my-repertoire';
+    }
     final parts = [
       if (_player.text.trim().isNotEmpty) _player.text.trim(),
       if (_opponent.text.trim().isNotEmpty) _opponent.text.trim(),

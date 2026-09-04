@@ -169,6 +169,7 @@ class ChapterSplitter {
           createdAt: DateTime.now(),
         ),
         games: [for (final i in indices) games[i]],
+        createOnly: true,
       );
       createdPaths.add(path);
       movedIdsByPath[path] = {
@@ -192,6 +193,7 @@ class ChapterSplitter {
         chapterPath,
         preamble: document.preamble,
         games: remaining,
+        expectedContent: document.originalContent,
       );
     }
 

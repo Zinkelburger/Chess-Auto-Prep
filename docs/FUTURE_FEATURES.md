@@ -112,7 +112,7 @@ Consolidated list of planned or incomplete capabilities (from `tree_builder/TODO
 | Item | Status | Notes |
 |------|--------|-------|
 | **TrapsBrowser in tools column** | **Done** | Lines tab → Traps segmented view; rich rows with mini board, per-reply stats, classification badges, sort by Eval Drop/Most Common/Trap%/Surplus; filter: All Explored vs In Repertoire |
-| **Opponent-mistake weight** | **Done** | `TreeBuildConfig.mistakeWeight` — boosts expectimax picks by opponents' expected CPL in the subtree; replaced the trappy mode, which also rewrote tolerances |
+| **Opponent-mistake weight** | **Removed** | Shipped as `TreeBuildConfig.mistakeWeight`, then deleted: expectimax already values a line by how opponents play it, so the weight double-counted the effect — and it read a value computed in a later pass, so it tilted selection without tilting the values selection compared against. See `docs/ALGORITHM.md` §5b. |
 | **Enriched trap tooltips in PGN** | **Done** | Multi-line tooltip: mistake description, popularity, reach probability, score |
 | **Traps empty state** | **Done** | Prompts "Generate Repertoire" with button when no traps detected |
 | Trap detail when **current position is a trap** (browse context) | **Partial** | Expanded trap list under candidates; not full card in context zone |

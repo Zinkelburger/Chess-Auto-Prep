@@ -26,12 +26,10 @@ import '../../models/training_settings.dart';
 
 class TrainingRun {
   TrainingRun({
-    required RepetitionMode Function() repetitionMode,
-    required TrainingSettings Function() settings,
-    required Map<String, RepertoireReviewEntry> Function() reviewMap,
-  }) : _repetitionMode = repetitionMode,
-       _settings = settings,
-       _reviewMap = reviewMap;
+    required this._repetitionMode,
+    required this._settings,
+    required this._reviewMap,
+  });
 
   final RepetitionMode Function() _repetitionMode;
   final TrainingSettings Function() _settings;

@@ -10,6 +10,75 @@ const _kRootVariationDepth = 1;
 /// wants to read in one pass; without a fold they bury the mainline.
 const _kAlwaysVisibleDepth = 2;
 
+/// A single, unannotated alternative this many plies long is faster to read in
+/// place than as a separate block. Anything longer, commented, or branching
+/// gets the full-width treatment below. Four plies is enough to answer the
+/// common "instead of this, play that" question without creating a paragraph
+/// inside the mainline.
+const _kMaxInlineVariationPlies = 4;
+
+/// Build a compact parenthesized alternative, or return null when the line
+/// deserves its own indented block.
+///
+/// Parentheses therefore carry one precise meaning in the viewer: a brief
+/// aside. Structural variations use whitespace + a gutter instead, which
+/// avoids the wall of nested brackets found in raw PGN dumps.
+List<InlineSpan>? _buildInlineVariationAtPly(
+  PgnMovetextView view,
+  int ply, {
+  bool Function(MoveNode node)? nodeVisible,
+}) {
+  var roots = view.variationsByPly[ply];
+  if (roots == null || roots.length != 1) return null;
+
+  var node = roots.single;
+  if (nodeVisible != null && !nodeVisible(node)) return null;
+
+  final line = <MoveNode>[];
+  while (true) {
+    if (node.comment?.trim().isNotEmpty ?? false) return null;
+    line.add(node);
+    if (line.length > _kMaxInlineVariationPlies) return null;
+
+    final visibleChildren = nodeVisible == null
+        ? node.children
+        : node.children.where(nodeVisible).toList();
+    if (visibleChildren.isEmpty) break;
+    if (visibleChildren.length != 1) return null;
+    node = visibleChildren.single;
+  }
+
+  final spans = <InlineSpan>[
+    TextSpan(text: '(', style: PgnTextStyles.parenthesisAt(1)),
+  ];
+  var coords = _coordsAtPly(view, ply);
+  for (var i = 0; i < line.length; i++) {
+    if (coords.isWhite) {
+      spans.add(
+        TextSpan(
+          text: '${coords.moveNumber}. ',
+          style: PgnTextStyles.moveNumberAt(1),
+        ),
+      );
+    } else if (i == 0) {
+      spans.add(
+        TextSpan(
+          text: '${coords.moveNumber}... ',
+          style: PgnTextStyles.moveNumberAt(1),
+        ),
+      );
+    }
+    spans.add(_variationMoveSpan(view, line[i], 1, ply));
+    if (i < line.length - 1) spans.add(const TextSpan(text: ' '));
+    coords = (
+      moveNumber: coords.isWhite ? coords.moveNumber : coords.moveNumber + 1,
+      isWhite: !coords.isWhite,
+    );
+  }
+  spans.add(TextSpan(text: ') ', style: PgnTextStyles.parenthesisAt(1)));
+  return spans;
+}
+
 /// A single rendered row of sideline movetext, or the disclosure stub standing
 /// in for a folded group.
 class _VarRow {

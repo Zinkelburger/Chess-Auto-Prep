@@ -13,6 +13,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import '../../../utils/atomic_file.dart';
 import '../models/engine_spec.dart';
 
 class EngineRegistry {
@@ -66,9 +67,7 @@ class EngineRegistry {
     final payload = const JsonEncoder.withIndent(
       '  ',
     ).convert(engines.map((e) => e.toJson()).toList());
-    final tmp = File('${file.path}.tmp');
-    await tmp.writeAsString(payload, flush: true);
-    await tmp.rename(file.path);
+    await writeTextFileAtomically(file, payload);
   }
 
   Future<List<EngineSpec>> add(EngineSpec spec) async {

@@ -10,7 +10,7 @@ A cross-platform chess app: opening repertoire builder/trainer, tactics, positio
 - **Position Analysis**: Analyze weak positions from your games
 - **PGN Viewer**: Load and navigate through chess games
 - **Engine Tournament**: Engine-vs-engine matches from any position, with a crosstable and PGN output — the one place you can point the app at your own UCI binary
-- **Cross-platform**: Runs on iOS, Android, and Desktop
+- **Cross-platform desktop**: Runs on Linux, Windows, and macOS
 
 ## Documentation
 
@@ -26,8 +26,8 @@ Grab the file for your system from the
 
 | System | File | Notes |
 |---|---|---|
-| Windows | `…-windows-setup.exe` | Installs for your user (no admin prompt), Start Menu entry, opens `.pgn` files. Unsigned, so SmartScreen warns once: **More info → Run anyway**. |
-| Windows (portable) | `…-windows.zip` | Unzip anywhere and run. The app offers to register itself for `.pgn` files on first run. |
+| Windows | `…-windows-setup.exe` | Recommended. Installs the app for your user, adds a Start Menu entry, and opens `.pgn` files. Unsigned, so SmartScreen warns once: **More info → Run anyway**. |
+| Windows (portable) | `…-windows.zip` | No installer or admin access. Unzip anywhere and run; required runtime DLLs stay beside the app. |
 | Debian / Ubuntu / Mint | `…-linux-amd64.deb` | Double-click, or `sudo apt install ./chess-auto-prep-*.deb`. |
 | Fedora / RHEL / openSUSE | `…-linux-x86_64.rpm` | Double-click, or `sudo dnf install ./chess-auto-prep-*.rpm`. |
 | Other Linux | `…-linux.flatpak` | Double-click, or `flatpak install chess-auto-prep-*.flatpak`. |
@@ -39,6 +39,15 @@ file opens it in the PGN viewer — in the window that is already open, if
 there is one. Windows and most Linux desktops still ask you to confirm the
 first time if another app already owns `.pgn`.
 
+On a Windows PC that does not already have a recent Microsoft Visual C++
+Runtime, Setup shows a **Required Microsoft component** page. Continue and
+accept the one Windows permission prompt whose verified publisher is
+**Microsoft Corporation**. The app itself still installs without elevation;
+only Microsoft's signed, offline prerequisite asks for it. Cancel if that
+prompt names any other publisher. Setup then verifies the runtime before it
+installs or launches Chess Auto Prep, so there is no separate download or DLL
+to find. The portable ZIP avoids this prompt by carrying its runtime locally.
+
 Packaging lives in `packaging/` (`windows/installer.iss`, `deb/build_deb.sh`,
 `rpm/build_rpm.sh`, `flatpak/`) and is driven by `.github/workflows/release.yml`
 on `v*` tags. All Linux artifacts are x86_64: there is no arm64 build because
@@ -48,8 +57,8 @@ Stockfish ships no Linux arm64 binary and `libcdbdirect` has no arm64 target.
 
 ### Prerequisites
 
-- Flutter SDK (3.10.0 or higher)
-- Dart SDK (3.0.0 or higher)
+- Flutter SDK 3.47.2 (the version pinned by CI)
+- Dart SDK bundled with that Flutter release
 
 ### Installation
 
@@ -154,10 +163,12 @@ checkpoints on Hugging Face (`UofTCSSLab/Maia3-{3M,5M,23M,79M}`, see
 artifact. There is nothing to download, which is why it stays in git while
 Stockfish does not.
 
-**The export procedure is not currently checked in.** Until it is, the committed
-file is the only source of truth — do not delete it, and do not strip it in a
-history rewrite. If you re-export, add the script under `tools/` and record which
-checkpoint and opset it used, so the model stops being an unreproducible binary.
+The original export did not record its checkpoint or opset, so byte-for-byte
+regeneration is not honestly possible from the repository. Its provenance,
+runtime tensor contract, sizes, and checksums are now recorded in
+`tools/maia_model.lock.json`; `python3 tools/verify_maia_model.py` verifies the
+model and both vocabulary files. Any future re-export must record the checkpoint
+and opset and update that lock file in the same change.
 
 ### Local ChessDB (1 TB TerarkDB dump, Linux)
 
@@ -178,9 +189,9 @@ See [tree_builder/CDBDIRECT_SETUP.md](tree_builder/CDBDIRECT_SETUP.md) for downl
 Fetch Stockfish for the target first (`python3 tools/fetch_assets.py`, or
 `--only` for a cross-build). Then:
 
-- **Android**: `flutter build apk`
-- **iOS**: `flutter build ios`
-- **Desktop**: `flutter build windows/macos/linux`
+- **Linux**: `flutter build linux`
+- **Windows**: `flutter build windows`
+- **macOS**: `flutter build macos`
 
 macOS release artifacts are split by architecture in CI (see
 [macOS downloads](#macos-downloads-apple-silicon-vs-intel)). A local

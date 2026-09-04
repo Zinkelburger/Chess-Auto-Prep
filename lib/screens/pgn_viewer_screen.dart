@@ -14,7 +14,7 @@ library;
 import '../widgets/common/name_entry_dialog.dart';
 import 'dart:async';
 import 'dart:convert';
-import 'package:dartchess/dartchess.dart' show Position;
+import 'package:dartchess/dartchess.dart' show PgnGame, PgnNodeData, Position;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -24,7 +24,11 @@ import 'package:window_manager/window_manager.dart';
 
 import '../constants/ui_breakpoints.dart';
 import '../core/app_state.dart';
+import '../services/scid/scid_writer.dart';
+import '../utils/open_in_file_manager.dart';
 import '../core/pgn_viewer_controller.dart';
+import '../core/pgn/pgn_viewer_handle.dart';
+import '../core/pgn/pgn_pane_router.dart';
 import '../core/pgn/solitaire_controller.dart';
 import '../features/games/services/game_deviation_service.dart';
 import '../features/games/services/game_moves.dart';
@@ -101,10 +105,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   @override
   late final PgnViewerWidgetController _pgnWidgetController;
 
-  /// Movetext cursor for the Line tab's book line, so arrow keys drive whichever
+  /// Movetext cursor for the Book tab's repertoire line, so controls drive whichever
   /// pane is on screen instead of always the game.
   @override
   late final PgnViewerWidgetController _lineWidgetController;
+  late final PgnPaneRouter _paneRouter;
   @override
   late final GameAnalysisController _analysisController;
   @override
@@ -119,7 +124,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   @override
   bool get _singleGameFocus => _singleGameFocusValue;
 
-  /// Line tab is only for reviewing one of your games from Games/tactics.
+  /// Book tab is only for reviewing one of your games from Games/tactics.
   @override
   bool get _lineTabVisible => _singleGameFocusValue;
 
@@ -160,10 +165,16 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
           WidgetsBinding.instance.addPostFrameCallback((_) => fn()),
       onReclaimFocus: _reclaimFocus,
     );
+    _paneRouter = PgnPaneRouter(
+      game: _pgnWidgetController,
+      book: _lineWidgetController,
+      isBookActive: () => _onLineTab,
+      onGameBoardMove: _controller.onBoardMove,
+    );
     _controller.addListener(_onControllerUpdate);
     MyRepertoireSettings.instance.addListener(_onRepertoireDesignationsChanged);
     windowManager.addListener(this);
-    // Leaving the Line tab hands the board back to the game: the tab you are
+    // Leaving the Book tab hands the board back to the game: the tab you are
     // reading owns the board, so flipping between them is a comparison of the
     // same position rather than two viewers fighting over one board.
     _tabController.addListener(_onSideTabChanged);
@@ -440,7 +451,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   void _onSideTabChanged() {
     if (!mounted || _tabController.indexIsChanging) return;
     if (_tabController.index == _lineTabIndex) {
-      if (!_lineTabVisited) setState(() => _lineTabVisited = true);
+      // Book has its own cursor. Never leave the hidden Game reader advancing
+      // or editing behind it after a tab switch.
+      _controller.stopAutoPlay();
+      final needsRebuild = !_lineTabVisited || _editMode;
+      _lineTabVisited = true;
+      _editMode = false;
+      if (needsRebuild) setState(() {});
       return;
     }
     final gamePosition = _gamePanePosition;
@@ -711,7 +728,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   @override
   void _onGamePosition(Position position) {
     _gamePanePosition = position;
-    _controller.onPositionChanged(position);
+    // TabBarView keeps the Game child alive while Book is visible. Engine or
+    // async widget updates from that hidden child must not steal the board.
+    if (!_onLineTab) _controller.onPositionChanged(position);
   }
 
   /// Whether the Line tab has been opened in this screen's lifetime.
@@ -916,7 +935,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (defaultName == null) return;
 
     final content = _controller.buildExportContent();
-    final outPath = await FilePicker.saveFile(
+    final outUri = await FilePicker.saveFile(
       dialogTitle: 'Export ${_controller.filteredGames.length} filtered games',
       fileName: defaultName,
       type: FileType.custom,
@@ -924,10 +943,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       initialDirectory: p.dirname(_controller.filePath!),
       bytes: utf8.encode(content),
     );
-    if (outPath == null) {
+    if (outUri == null) {
       _reclaimFocus();
       return;
     }
+    final outPath = outUri.toFilePath();
 
     if (!mounted) return;
     final fileName = p.basename(outPath);
@@ -939,6 +959,146 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       onAction: () => _loadFile(outPath),
     );
     _reclaimFocus();
+  }
+
+  /// Write the filtered games as a Scid v5 database.
+  ///
+  /// PGN stays the default export because everything reads it; this is for
+  /// people who live in Scid, where the three-file database is what opens
+  /// directly and indexes instantly. Scid vs. PC — a fork that split before
+  /// this format existed — cannot read it, which the menu hint says.
+  @override
+  Future<void> _exportSliceAsScid() async {
+    final games = _controller.filteredGames;
+    if (games.isEmpty || _controller.filePath == null) return;
+
+    final dir = await FilePicker.getDirectoryPath(
+      dialogTitle: 'Where should the Scid database go?',
+      initialDirectory: p.dirname(_controller.filePath!),
+    );
+    if (dir == null) {
+      _reclaimFocus();
+      return;
+    }
+    if (!mounted) return;
+
+    final suggested = (_controller.defaultExportFileName() ?? 'games')
+        .replaceAll(RegExp(r'\.pgn$'), '');
+    final name = await showNameEntryDialog(
+      context,
+      title: 'Name the database',
+      fieldLabel: 'Database name',
+      prompt:
+          'Scid stores a database as three files sharing one name: '
+          '.si5, .sg5 and .sn5.',
+      initialValue: suggested,
+      confirmLabel: 'Export',
+    );
+    if (name == null || !mounted) {
+      _reclaimFocus();
+      return;
+    }
+
+    final texts = [for (final g in games) g.pgnText];
+    final progress = ValueNotifier<String>('Preparing ${texts.length} games…');
+    var dialogOpen = true;
+    void closeProgress() {
+      if (!dialogOpen) return;
+      dialogOpen = false;
+      if (mounted) Navigator.of(context).pop();
+    }
+
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            content: ValueListenableBuilder<String>(
+              valueListenable: progress,
+              builder: (_, message, _) => Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(message, textAlign: TextAlign.center),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final result = await ScidWriter.write(
+        directory: dir,
+        name: name,
+        games: _parsedGameStream(texts),
+        description: 'Exported from Chess Auto Prep',
+        total: texts.length,
+        // Per game would be one notifier notification per game; the writer
+        // calls this from inside its own `await for`.
+        onProgress: (done, total) {
+          if (done % _scidProgressEvery != 0 && done != total) return;
+          progress.value = 'Wrote $done of ${total ?? texts.length} games…';
+        },
+      );
+      closeProgress();
+      if (!mounted) return;
+
+      final parts = <String>['${result.games} games'];
+      if (result.truncated.isNotEmpty) {
+        parts.add('${result.truncated.length} cut short at an illegal move');
+      }
+      if (result.skipped.isNotEmpty) {
+        parts.add('${result.skipped.length} skipped');
+      }
+      showAppSnackBar(
+        context,
+        'Wrote $name.si5 — ${parts.join(', ')}',
+        duration: const Duration(seconds: 6),
+        actionLabel: 'Show',
+        onAction: () => unawaited(openInFileManager(result.indexPath)),
+      );
+    } catch (e) {
+      closeProgress();
+      if (!mounted) return;
+      showAppSnackBar(context, 'Scid export failed: $e', isError: true);
+    } finally {
+      progress.dispose();
+    }
+    _reclaimFocus();
+  }
+
+  /// Games written between breaths, and progress updates between rebuilds.
+  static const int _scidYieldEvery = 25;
+  static const int _scidProgressEvery = 50;
+
+  /// One parsed game at a time, straight from each game's own PGN text.
+  ///
+  /// The export used to join every filtered game into a single string and
+  /// hand the whole thing to [PgnGame.parseMultiGamePgn], which replays every
+  /// move of every game before the writer had seen one — so a several-thousand
+  /// game database sat in memory three times over (the join, the parse tree,
+  /// and the list the stream held alive) and the UI was frozen for all of it.
+  /// [ScidWriter] consumes this with `await for`, so a lazy stream means one
+  /// parsed game alive at a time, and the join is gone: `buildExportContent`
+  /// only ever concatenated these same strings.
+  ///
+  /// The parse is still on this isolate — the pause every [_scidYieldEvery]
+  /// games is what lets the progress dialog paint rather than making the work
+  /// cheaper.
+  static Stream<PgnGame<PgnNodeData>> _parsedGameStream(
+    List<String> pgnTexts,
+  ) async* {
+    for (var i = 0; i < pgnTexts.length; i++) {
+      yield PgnGame.parsePgn(pgnTexts[i]);
+      if (i % _scidYieldEvery == _scidYieldEvery - 1) {
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
   }
 
   @override
@@ -1068,10 +1228,20 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     LogicalKeyboardKey.digit9,
   ];
 
-  /// Whether the Line tab is the one on screen (and so owns the board and the
+  /// Whether the Book tab is the one on screen (and so owns the board and the
   /// arrow keys).
+  @override
   bool get _onLineTab =>
       !_controller.isSolitaireMode && _tabController.index == _lineTabIndex;
+
+  /// The one movetext surface the user can currently see. Keep active-pane
+  /// dispatch centralized here so a new command cannot accidentally mutate
+  /// the reader behind the selected tab.
+  @override
+  PgnViewerHandle get _activeMovetextController => _paneRouter.active;
+
+  @override
+  void _handleBoardMove(String san) => _paneRouter.playBoardMove(san);
 
   /// The viewer's keyboard shortcuts, dispatched through [handleKeyBindings]
   /// (never while typing). Order matters: the solitaire block shadows keys
@@ -1119,76 +1289,75 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     ...KeyBinding.forShortcut(
       AppShortcut.backOneMove,
       'Back one move',
-      () => _onLineTab
-          ? _lineWidgetController.goBack()
-          : _controller.navigateBack(),
+      () => _paneRouter.goBack(_controller.navigateBack),
       repeats: true,
     ),
     ...KeyBinding.forShortcut(
       AppShortcut.forwardOneMove,
       'Forward one move',
-      () => _onLineTab
-          ? _lineWidgetController.goForward()
-          : _controller.navigateForward(),
+      () => _paneRouter.goForward(_controller.navigateForward),
       repeats: true,
     ),
-    ...KeyBinding.forShortcut(
-      AppShortcut.goToStart,
-      'Go to start',
-      _controller.navigateToStart,
+    KeyBinding.run(
+      LogicalKeyboardKey.pageUp,
+      'Go to start of line',
+      () => _paneRouter.goToStart(_controller.navigateToStart),
     ),
-    ...KeyBinding.forShortcut(
-      AppShortcut.goToEnd,
-      'Go to end',
-      _controller.navigateToEnd,
+    KeyBinding.run(
+      LogicalKeyboardKey.pageDown,
+      'Go to end of line',
+      () => _paneRouter.goToEnd(_controller.navigateToEnd),
     ),
-    // P/S (and ↓/↑) step the game list — the app-wide pair for "previous /
-    // next thing in the queue in front of me", while ←/→ stay on moves. Both
-    // chords are move-text safe, which is the whole reason the pair is P/S and
-    // not N/P: N is the knight.
-    ...KeyBinding.forShortcut(
-      AppShortcut.nextItem,
+    // In the PGN reader, the four arrow keys form one spatial model: left /
+    // right move within a line, up / down move between chapters. Letter
+    // aliases made the simple model harder to learn, so this screen does not
+    // inherit the app-wide P/S alternatives.
+    KeyBinding.run(
+      LogicalKeyboardKey.arrowDown,
       'Next game',
       _controller.nextGame,
       repeats: true,
     ),
-    ...KeyBinding.forShortcut(
-      AppShortcut.previousItem,
+    KeyBinding.run(
+      LogicalKeyboardKey.arrowUp,
       'Previous game',
       _controller.prevGame,
       repeats: true,
     ),
-    ...KeyBinding.forShortcut(
-      AppShortcut.fullScreen,
-      'Toggle fullscreen',
-      _controller.toggleFullScreen,
-    ),
+    if (!_onLineTab)
+      ...KeyBinding.forShortcut(
+        AppShortcut.fullScreen,
+        'Toggle fullscreen',
+        _controller.toggleFullScreen,
+      ),
     ...KeyBinding.forShortcut(
       AppShortcut.flipBoard,
       'Flip board',
       _controller.toggleBoardFlipped,
     ),
     ...KeyBinding.forShortcut(AppShortcut.pastePgn, 'Paste PGN', _pastePgn),
-    ...KeyBinding.forShortcut(
-      AppShortcut.toggleEngine,
-      'Toggle engine',
-      InlineEngineBar.toggleEngine,
-    ),
-    ...KeyBinding.forShortcut(
-      AppShortcut.autoPlay,
-      'Toggle auto-play',
-      _controller.toggleAutoPlay,
-    ),
-    ...KeyBinding.forShortcut(
-      AppShortcut.autoNextGame,
-      'Toggle auto next game',
-      () => _controller.setAutoNextGame(!_controller.autoNextGame),
-    ),
-    ...KeyBinding.forShortcut(
-      AppShortcut.amendGame,
-      'Edit in Study',
-      _editInStudy,
-    ),
+    if (!_onLineTab) ...[
+      ...KeyBinding.forShortcut(
+        AppShortcut.toggleEngine,
+        'Toggle engine',
+        InlineEngineBar.toggleEngine,
+      ),
+      ...KeyBinding.forShortcut(
+        AppShortcut.autoPlay,
+        'Toggle auto-play',
+        _controller.toggleAutoPlay,
+      ),
+      ...KeyBinding.forShortcut(
+        AppShortcut.autoNextGame,
+        'Toggle auto next game',
+        () => _controller.setAutoNextGame(!_controller.autoNextGame),
+      ),
+      ...KeyBinding.forShortcut(
+        AppShortcut.amendGame,
+        'Edit in Study',
+        _editInStudy,
+      ),
+    ],
     // Search moved off S when S became "next game": one key, one meaning,
     // app-wide. `/` is the search key everywhere it is free, and it is free
     // here because the viewer has no move box for it to focus. While the
@@ -1228,7 +1397,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         } else if (_controller.isFullScreen) {
           unawaited(_controller.exitFullScreen());
         } else {
-          _pgnWidgetController.clearEphemeralMoves();
+          _activeMovetextController.clearEphemeralMoves();
         }
       },
     ),
@@ -1243,8 +1412,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       AppShortcut.returnToMainline,
       'Return to mainline',
       () {
-        if (_pgnWidgetController.inVariation) {
-          _pgnWidgetController.returnToMainline();
+        if (_activeMovetextController.inVariation) {
+          _activeMovetextController.returnToMainline();
         }
       },
     ),

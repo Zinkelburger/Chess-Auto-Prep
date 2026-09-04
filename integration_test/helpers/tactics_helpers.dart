@@ -193,8 +193,6 @@ Future<void> playTacticMoves(WidgetTester tester, List<String> allMoves) async {
       reason: 'Cannot parse move "$moveStr" for FEN: $fenBefore',
     );
 
-    print('  Playing "$moveStr" as UCI "$uci"');
-
     await playMoveViaAppState(tester, uci!);
 
     final fenAfter = getAppState(tester).currentPosition.fen;

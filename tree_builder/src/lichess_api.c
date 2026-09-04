@@ -476,6 +476,12 @@ bool lichess_explorer_get_opening(LichessExplorer *explorer, const char *fen,
 }
 
 
+void lichess_explorer_get_request_counts(const LichessExplorer *explorer,
+                                        uint64_t *total, uint64_t *failed) {
+    if (total)  *total  = explorer ? explorer->total_requests  : 0;
+    if (failed) *failed = explorer ? explorer->failed_requests : 0;
+}
+
 void lichess_explorer_print_stats(const LichessExplorer *explorer) {
     if (!explorer) {
         printf("Explorer: (null)\n");

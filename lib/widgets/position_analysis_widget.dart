@@ -434,7 +434,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
 
   /// Shortcuts, dispatched through [handleKeyBindings] (never while typing).
   /// Left/right arrows navigate *moves* and follow the active right-pane
-  /// tab; P/S (and ↓/↑) step the left column's active list — two axes that
+  /// tab; ↑/↓ step the left column's active list — two axes that
   /// never collide.
   List<KeyBinding> get _keyBindings => [
     ...KeyBinding.forShortcut(
@@ -450,7 +450,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
       _tabController.animateTo(0);
       return true;
     }),
-    // P/S (and ↓/↑) step whichever left-column list is showing (positions,
+    // ↑/↓ step whichever left-column list is showing (positions,
     // holes or tricks) — the app-wide pair, same as games and chapters.
     ...KeyBinding.forShortcut(
       AppShortcut.nextItem,

@@ -419,9 +419,8 @@ Pure = exhaustive FIFO BFS at full width. Fast = best-first (max-heap on
 - The first `openingWidthPlies` of our moves are exempt: wide MultiPV
   floor, full window, no alt gate (a narrow early fan-out can never be
   recovered later).
-- A build that leans on `mistakeWeight` wants its worse-eval candidates
-  searched too: Pure search, or `fastAltGapCp` = 0, does that.  Nothing
-  widens on its own.
+- To have the worse-eval candidates searched too, choose Pure search or
+  set `fastAltGapCp` = 0.  Nothing widens on its own.
 
 Search priorities shape **which nodes exist**, never how they are valued.
 

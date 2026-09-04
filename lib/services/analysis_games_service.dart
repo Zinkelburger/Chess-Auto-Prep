@@ -13,6 +13,7 @@ import '../utils/file_text_reader.dart';
 import 'storage/app_paths.dart';
 import 'game_store/game_store.dart';
 import 'game_store/game_store_service.dart';
+import 'storage/storage_factory.dart';
 
 /// Service for downloading and managing games for position analysis.
 ///
@@ -499,9 +500,9 @@ class AnalysisGamesService {
       if (!await legacy.exists()) continue;
       final target = File(p.join(directory.path, '$key$suffix'));
       if (await target.exists()) {
-        await legacy.delete();
+        await StorageFactory.instance.deleteFile(legacy.path);
       } else {
-        await legacy.rename(target.path);
+        await StorageFactory.instance.renameFile(legacy.path, target.path);
       }
     }
   }
@@ -516,7 +517,9 @@ class AnalysisGamesService {
 
     for (final suffix in _playerFileSuffixes) {
       final file = File(p.join(directory.path, '$key$suffix'));
-      if (await file.exists()) await file.delete();
+      if (await file.exists()) {
+        await StorageFactory.instance.deleteFile(file.path);
+      }
     }
     try {
       final store = await GameStoreService.instance.open();
@@ -544,7 +547,9 @@ class AnalysisGamesService {
         await tricksReportPath(platform, username, isWhite),
       ]) {
         final file = File(path);
-        if (await file.exists()) await file.delete();
+        if (await file.exists()) {
+          await StorageFactory.instance.deleteFile(file.path);
+        }
       }
     }
   }

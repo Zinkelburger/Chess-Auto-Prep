@@ -4,6 +4,7 @@ import 'package:chess_auto_prep/app_version.dart';
 import 'package:chess_auto_prep/features/bughouse/services/bughouse_bundle.dart';
 import 'package:chess_auto_prep/features/bughouse/services/bughouse_engine.dart';
 import 'package:chess_auto_prep/features/bughouse/services/windows_loader_check.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -24,8 +25,10 @@ void main() {
       List<String> stdout = const [],
       List<String> stderr = const [],
       String? loaderPath,
+      ContentVerification? integrity,
     }) => BughouseEngine.formatReport(
       headline: headline,
+      integrity: integrity,
       executablePath: r'C:\support\bughouse\hivemind-windows.exe',
       argv: const ['--model', 'hivemind.onnx'],
       workingDirectory: r'C:\support\bughouse',
@@ -42,6 +45,73 @@ void main() {
       expect(report(), contains(kAppVersion));
     });
 
+    /// The section that exists because every other one can read clean while
+    /// the engine still will not start: a file of the right length holding the
+    /// wrong bytes keeps a parseable PE header, so it is listed at the right
+    /// size and the right architecture and is still what Windows refused.
+    group('the content check', () {
+      test('is absent when there was nothing to compare', () {
+        expect(
+          report(),
+          isNot(
+            contains('Whether those files are the ones this build carries'),
+          ),
+        );
+      });
+
+      test('says so plainly when every file is the one we shipped', () {
+        final text = report(
+          integrity: const ContentVerification(
+            lines: [
+              '  onnxruntime.dll             matches the copy inside '
+                  'this build',
+            ],
+            damaged: [],
+          ),
+        );
+        expect(
+          text,
+          contains('Whether those files are the ones this build carries'),
+        );
+        expect(text, contains('matches the copy inside this build'));
+        // Nothing was wrong, so nothing is claimed to have been repaired.
+        expect(text, isNot(contains('!!')));
+      });
+
+      test('names the damaged file and says it has been replaced', () {
+        final text = report(
+          integrity: const ContentVerification(
+            lines: [
+              '  onnxruntime.dll             DOES NOT MATCH the copy '
+                  'inside this build',
+            ],
+            damaged: ['onnxruntime.dll'],
+          ),
+        );
+        expect(text, contains('DOES NOT MATCH'));
+        expect(text, contains('!!'));
+        expect(text, contains('onnxruntime.dll was damaged'));
+        expect(text, contains('Open Bughouse Lab again'));
+      });
+    });
+
+    group('ContentVerification.repairedMessage', () {
+      test('is null when nothing is damaged', () {
+        expect(
+          const ContentVerification(lines: ['x'], damaged: []).repairedMessage,
+          isNull,
+        );
+      });
+
+      test('counts rather than lists when several files are wrong', () {
+        final message = const ContentVerification(
+          lines: [],
+          damaged: ['onnxruntime.dll', 'hivemind.onnx'],
+        ).repairedMessage;
+        expect(message, contains("2 of the engine's files were damaged"));
+      });
+    });
+
     test('carries the exact command and where it ran', () {
       final text = report();
       expect(text, contains('--model hivemind.onnx'));
@@ -52,7 +122,7 @@ void main() {
     test('decodes the exit code rather than only printing it', () {
       final text = report();
       expect(text, contains('-1073741701'));
-      expect(text, contains('invalid 64-bit image'));
+      expect(text, contains('refused one of its files as an invalid image'));
     });
 
     /// "It printed nothing" and "it printed something and then stopped" are
@@ -183,6 +253,18 @@ void main() {
         manifest,
       );
       expect(problems.single, contains('is missing'));
+    });
+
+    test('a corrupt file with the right size is rejected by SHA-256', () async {
+      final name = BughouseBundle.installedFileNames.first;
+      await write(name, 10);
+      final problems = await BughouseBundle.verifyExtraction(
+        dir.path,
+        {name: 10},
+        expectedHashes: {name: sha256.convert(List.filled(10, 1)).toString()},
+      );
+      expect(problems.single, contains('is corrupted'));
+      expect(problems.single, contains('SHA-256'));
     });
 
     test(

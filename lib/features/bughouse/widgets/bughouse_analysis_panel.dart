@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
@@ -65,6 +68,7 @@ class _BughouseAnalysisPanelState extends State<BughouseAnalysisPanel> {
             message: controller.error!,
             isError: true,
             details: controller.errorReport,
+            helpUrl: controller.errorLink,
           ),
         ],
         if (controller.notice != null) ...[
@@ -76,6 +80,16 @@ class _BughouseAnalysisPanelState extends State<BughouseAnalysisPanel> {
           child: ListView(
             padding: EdgeInsets.zero,
             children: [
+              _OnMoveCandidates(controller: controller),
+              const SizedBox(height: 16),
+              const Text('VARIATIONS', style: AppTextStyles.eyebrow),
+              const SizedBox(height: 3),
+              const Text(
+                'Hover a move to preview it on both boards. Click any move '
+                'in a line to play up to that point.',
+                style: AppTextStyles.muted,
+              ),
+              const SizedBox(height: 10),
               _TeamLines(controller: controller, analysis: controller.ours),
               const SizedBox(height: 16),
               _TeamLines(controller: controller, analysis: controller.theirs),
@@ -99,6 +113,236 @@ class _BughouseAnalysisPanelState extends State<BughouseAnalysisPanel> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The answer to the first question at a four-player table: who has the move,
+/// and what can that person play?
+///
+/// The engine searches a *team* and ranks joint actions, which is the right
+/// model for bughouse but the wrong first thing to make a person decode. This
+/// projects those same ranked actions onto each board's active seat. Nothing
+/// is re-ranked: two moves that only make sense together still hover and play
+/// as one joint action, and the complete continuation remains directly below.
+class _OnMoveCandidates extends StatelessWidget {
+  const _OnMoveCandidates({required this.controller});
+
+  final BughouseController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text('TO MOVE NOW', style: AppTextStyles.eyebrow),
+        const SizedBox(height: 6),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final which in BughouseBoard.values) ...[
+              if (which == BughouseBoard.b) const SizedBox(width: 8),
+              Expanded(
+                child: _PlayerCandidateCard(
+                  controller: controller,
+                  which: which,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+typedef _Candidate = ({String move, String eval, BughousePvStep step});
+
+/// One board's active person and the distinct first moves found for them.
+class _PlayerCandidateCard extends StatelessWidget {
+  const _PlayerCandidateCard({required this.controller, required this.which});
+
+  final BughouseController controller;
+  final BughouseBoard which;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = controller.state;
+    final mover = state.board(which).turn;
+    final team = which == BughouseBoard.a ? mover : mover.opposite;
+    final analysis = team == state.team ? controller.ours : controller.theirs;
+    final candidates = _candidates(analysis);
+    final letter = state.seatLetter(which, mover);
+    final role = state.seatRole(which, mover);
+    final ours = team == state.team;
+
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: ours ? AppColors.successTint : AppColors.dangerTint,
+        border: Border.all(
+          color: ours ? AppColors.successMuted : AppColors.dangerMuted,
+        ),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${which.label.toUpperCase()} · PLAYER $letter',
+            style: AppTextStyles.eyebrow,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '${_sentenceCase(role)} · ${mover.name}',
+            style: AppTextStyles.caption.copyWith(
+              fontWeight: ours ? FontWeight.w600 : FontWeight.w400,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 8),
+          if (candidates.isEmpty)
+            Text(
+              controller.analysisEnabled ? 'Finding moves…' : 'Analysis paused',
+              style: AppTextStyles.muted,
+            )
+          else
+            Wrap(
+              spacing: 5,
+              runSpacing: 5,
+              children: [
+                for (final candidate in candidates)
+                  _CandidateChip(
+                    key: ValueKey(
+                      'bughouse-candidate-${which.name}-${candidate.move}',
+                    ),
+                    controller: controller,
+                    candidate: candidate,
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  List<_Candidate> _candidates(BughouseTeamAnalysis analysis) {
+    final infos = analysis.lines.isNotEmpty
+        ? analysis.lines
+        : [?analysis.latest];
+    final result = <_Candidate>[];
+    final seen = <String>{};
+    for (final info in infos) {
+      final steps = controller.describePv(info, team: analysis.team);
+      if (steps.isEmpty) continue;
+      final move = steps.first.on(which);
+      if (move == null || !seen.add(move)) continue;
+      result.add((
+        move: move,
+        eval: controller.evalOf(info, team: analysis.team).label,
+        step: steps.first,
+      ));
+      if (result.length == 3) break;
+    }
+
+    // A bestmove can arrive before the engine's first complete info block.
+    if (result.isEmpty && analysis.best != null) {
+      final action = analysis.best!;
+      final info = BughouseInfo(
+        depth: 0,
+        scoreCp: 0,
+        nodes: 0,
+        nps: 0,
+        timeMs: 0,
+        pv: [action],
+      );
+      final steps = controller.describePv(info, team: analysis.team);
+      if (steps.isNotEmpty) {
+        final move = steps.first.on(which);
+        if (move != null) {
+          result.add((move: move, eval: '—', step: steps.first));
+        }
+      }
+    }
+    return result;
+  }
+
+  static String _sentenceCase(String value) =>
+      '${value[0].toUpperCase()}${value.substring(1)}';
+}
+
+/// A Lichess-like candidate token: move first, compact eval second. Hovering
+/// previews the whole joint action, not just this board's projection.
+class _CandidateChip extends StatefulWidget {
+  const _CandidateChip({
+    super.key,
+    required this.controller,
+    required this.candidate,
+  });
+
+  final BughouseController controller;
+  final _Candidate candidate;
+
+  @override
+  State<_CandidateChip> createState() => _CandidateChipState();
+}
+
+class _CandidateChipState extends State<_CandidateChip> {
+  void _enter() =>
+      widget.controller.hoverStep(widget.candidate.step, owner: this);
+
+  void _exit() => widget.controller.clearHover(this);
+
+  @override
+  void dispose() {
+    final controller = widget.controller;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!controller.isDisposed) controller.clearHover(this);
+    });
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Preview this joint action',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => _enter(),
+        onExit: (_) => _exit(),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(4),
+          onTap: () =>
+              widget.controller.playJoint(widget.candidate.step.action),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceElevated,
+              border: Border.all(color: AppColors.outline),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: widget.candidate.move,
+                    style: AppTextStyles.mono.copyWith(
+                      color: AppColors.ink,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  TextSpan(
+                    text: '  ${widget.candidate.eval}',
+                    style: AppTextStyles.monoDense.copyWith(
+                      color: AppColors.onSurfaceMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -260,7 +504,7 @@ class _TeamLines extends StatelessWidget {
         Row(
           children: [
             Text(
-              _isOurs ? 'WE PLAY' : 'THEY PLAY',
+              _isOurs ? 'YOUR TEAM' : 'OTHER TEAM',
               style: AppTextStyles.eyebrow,
             ),
             const SizedBox(width: 8),
@@ -268,7 +512,7 @@ class _TeamLines extends StatelessWidget {
               child: Tooltip(
                 message: _isOurs ? 'You and your partner' : 'The two of them',
                 child: Text(
-                  state.teamLetters(analysis.team),
+                  '${state.teamLetters(analysis.team)} · joint lines',
                   style: AppTextStyles.caption,
                 ),
               ),
@@ -666,7 +910,7 @@ class _EngineSection extends StatelessWidget {
     final detail = controller.backendDetail;
 
     return BughousePanelSection(
-      title: 'Engine',
+      title: 'Analysis engine',
       summary:
           '${settings.hashMb} MB · batch ${settings.batchSize} · '
           '${settings.lines} line${settings.lines == 1 ? '' : 's'} · '
@@ -705,7 +949,7 @@ class _EngineSection extends StatelessWidget {
         _Knob(
           label: 'Think',
           hint:
-              'The longest one pass runs for. Hivemind has no "go infinite", '
+              'The longest one pass runs for. The engine has no "go infinite", '
               'so thinking is built from passes that each run longer than the '
               'last; this is where that stops.',
           value: settings.thinkSeconds,
@@ -715,7 +959,7 @@ class _EngineSection extends StatelessWidget {
               controller.setEngineSettings(settings.copyWith(thinkSeconds: v)),
         ),
         const SizedBox(height: 8),
-        // There is no core count to set: Hivemind does not advertise a
+        // There is no core count to set: the engine does not advertise a
         // `Threads` option and ignores one if it is sent, fixing its worker
         // count at build time. So this reports what it chose rather than
         // pretending to control it — the batch above is the knob that actually
@@ -803,13 +1047,24 @@ class _Knob extends StatelessWidget {
 /// reading the banner wants them on screen; copying does not require opening
 /// them.
 class _Banner extends StatefulWidget {
-  const _Banner({required this.message, required this.isError, this.details});
+  const _Banner({
+    required this.message,
+    required this.isError,
+    this.details,
+    this.helpUrl,
+  });
 
   final String message;
   final bool isError;
 
   /// The full report, or null when the failure had nothing more to say.
   final String? details;
+
+  /// Something to install that would fix this, when the failure named one.
+  /// Offered as a button rather than left in the text, because the whole
+  /// difference between a user who fixes this and one who gives up is whether
+  /// the next step is a click or a URL to retype.
+  final String? helpUrl;
 
   @override
   State<_Banner> createState() => _BannerState();
@@ -842,6 +1097,30 @@ class _BannerState extends State<_Banner> {
             widget.message,
             style: AppTextStyles.caption.copyWith(color: foreground),
           ),
+          if (widget.helpUrl case final url?) ...[
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                key: const Key('bughouse-install-runtime'),
+                onPressed: () => unawaited(launchUrl(Uri.parse(url))),
+                style: TextButton.styleFrom(
+                  foregroundColor: foreground,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                icon: const Icon(Icons.download_outlined, size: 14),
+                label: Text(
+                  'Download the Microsoft runtime',
+                  style: AppTextStyles.caption.copyWith(color: foreground),
+                ),
+              ),
+            ),
+          ],
           if (details != null) ...[
             const SizedBox(height: 8),
             Row(

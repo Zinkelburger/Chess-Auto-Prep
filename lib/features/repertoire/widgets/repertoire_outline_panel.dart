@@ -400,7 +400,8 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
         if (await _confirm(
           'Delete folder "${folder.name}"?',
           '${folder.allChapters.length} chapter(s) and ${folder.lineCount} '
-              'line(s) inside it will be deleted. This cannot be undone.',
+              'line(s) inside it will be moved to Chess Auto Prep recovery '
+              'trash.',
         )) {
           _report(await _c.deleteFolder(folder.path));
         }
@@ -473,7 +474,8 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
       case 'delete':
         if (await _confirm(
           'Delete chapter "${chapter.name}"?',
-          '${chapter.lineCount} line(s) will be deleted. This cannot be undone.',
+          '${chapter.lineCount} line(s) will be moved to Chess Auto Prep '
+              'recovery trash.',
         )) {
           _report(await _c.deleteChapter(chapter.path));
         }

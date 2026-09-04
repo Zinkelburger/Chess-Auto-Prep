@@ -18,7 +18,12 @@ import 'package:chess_auto_prep/theme/app_colors.dart';
 import 'package:chess_auto_prep/theme/app_text_styles.dart';
 import 'package:chess_auto_prep/theme/pgn_text_styles.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
-    show commentProse, joinComments, mergeCommentProse;
+    show
+        commentProse,
+        filterDisplayComment,
+        joinComments,
+        mergeCommentProse,
+        stripEngineTokens;
 import 'package:chess_auto_prep/widgets/info_hint.dart';
 import 'package:chess_auto_prep/widgets/study/add_to_study_flow.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
@@ -106,6 +111,7 @@ class PgnViewerWidgetController implements PgnViewerHandle {
   bool get hasAnalysis => _state?._m.hasAnalysis ?? false;
 
   /// True when the user has added ephemeral analysis lines (not from PGN).
+  @override
   bool get hasEphemeralMoves => _state?._m.hasEphemeralMoves ?? false;
 
   @override
@@ -124,6 +130,7 @@ class PgnViewerWidgetController implements PgnViewerHandle {
   /// From/to squares of the half-move that produced the current position
   /// (mainline, variation, or inline preview) — for the subtle last-move
   /// highlight via [ChessBoardWidget.recentMoveSquares]. Empty at game start.
+  @override
   Set<String> get recentMoveSquares => _state?._recentMoveSquares() ?? const {};
 
   /// Number of moves deep into the current variation (0 if on mainline).
@@ -183,6 +190,7 @@ class PgnViewerWidgetController implements PgnViewerHandle {
   }
 
   /// Jump from the current variation back to the mainline branch point.
+  @override
   void returnToMainline() => _state?._returnToMainline();
 
   /// Number of continuation candidates at the current fork (< 2 when linear).
@@ -245,12 +253,21 @@ class PgnViewerWidget extends StatefulWidget {
   final ValueChanged<String>? onCommentsChanged;
   final bool editMode;
 
+  /// Open annotated course PGNs as a calm, one-note-at-a-time reader. The
+  /// complete movetext remains one click away.
+  final bool preferFocusedReading;
+
+  /// Mainline ply restored by a collection host when this game was visited
+  /// earlier in the session.
+  final int initialMainLineIndex;
+
   /// Fires once the game has been parsed and is on screen — the moment a
   /// host that drives this widget (solitaire) can rely on its moves.
   final VoidCallback? onGameLoaded;
 
-  /// Opt-in book-PGN comment formatting (Chessable rich blocks, double-space
-  /// paragraph breaks). Off by default — see [PgnMovetextView.bookFormatting].
+  /// Force book-PGN formatting for ambiguous short comments. Clear Chessable
+  /// markup and long book prose are detected automatically — see
+  /// [PgnMovetextView.bookFormatting].
   final bool bookFormatting;
 
   /// Leave the result out of the header line. Solitaire sets it: "1-0" above
@@ -270,6 +287,8 @@ class PgnViewerWidget extends StatefulWidget {
     this.showStartEndButtons = true,
     this.onCommentsChanged,
     this.editMode = false,
+    this.preferFocusedReading = false,
+    this.initialMainLineIndex = 0,
     this.onGameLoaded,
     this.bookFormatting = false,
     this.hideResult = false,
@@ -347,6 +366,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
   /// (entering solitaire) without re-parsing anything.
   String _gameInfo = '';
   String _gameInfoNoResult = '';
+  late bool _focusedReading = widget.preferFocusedReading;
 
   String get _headerText => widget.hideResult ? _gameInfoNoResult : _gameInfo;
   bool _isLoading = true;
@@ -425,6 +445,9 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
       // its scores and lines back) is adopted where the reader is; anything
       // else is a different game and starts over.
       if (gameIdChanged || !_adoptAnnotations(widget.pgnText)) {
+        if (widget.preferFocusedReading != oldWidget.preferFocusedReading) {
+          _focusedReading = widget.preferFocusedReading;
+        }
         unawaited(_loadGame());
       }
     } else if (widget.moveNumber != oldWidget.moveNumber ||
@@ -506,6 +529,8 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
           _jumpToMove(widget.moveNumber!, widget.isWhiteToPlay!);
         } else if (widget.initialFen != null) {
           _jumpToFen(widget.initialFen!);
+        } else if (widget.initialMainLineIndex > 0) {
+          _goToMainLineMove(widget.initialMainLineIndex);
         }
         widget.onGameLoaded?.call();
       });
@@ -531,6 +556,8 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
     final hasElo =
         (wElo != null && wElo.isNotEmpty && wElo != '?') ||
         (bElo != null && bElo.isNotEmpty && bElo != '?');
+    final result = (game.headers['Result'] ?? '').trim();
+    final gameId = (game.headers['GameId'] ?? '').trim();
 
     // Book-style PGN detection: no ratings, no real event, and White holds a
     // chapter/theme title rather than a "Lastname, Firstname" player name.
@@ -538,7 +565,15 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
     // game/exercise in Black, so present them as title + theme subtitle
     // instead of the confusing "Theme vs Player1 - Player2 #3/4".
     final whiteIsTitle = !_isBlankHeader(white) && !_looksLikePlayerName(white);
-    if (!hasElo && _isBlankHeader(event) && whiteIsTitle) {
+    final hasBookIdentity =
+        widget.bookFormatting ||
+        gameId.isNotEmpty ||
+        (!_isBlankHeader(white) && white == black);
+    if (!hasElo &&
+        _isBlankHeader(event) &&
+        whiteIsTitle &&
+        (result.isEmpty || result == '*') &&
+        hasBookIdentity) {
       final chapter = _cleanChapterTitle(white);
       final annotator = game.headers['Annotator'];
       final example = _isBlankHeader(black) ? '' : black;
@@ -566,13 +601,13 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
         ? '$black ($bElo)'
         : black;
     final date = formatPgnDate(game.headers['Date']);
-    final result = includeResult ? (game.headers['Result'] ?? '') : '';
+    final displayResult = includeResult ? result : '';
 
     // Build detail line, omitting blank/placeholder parts
     final details = [
       event,
       date,
-      result,
+      displayResult,
     ].where((s) => s.isNotEmpty && !_isBlankHeader(s)).join(' • ');
 
     if (_isBlankHeader(wStr) && _isBlankHeader(bStr)) {
@@ -610,14 +645,251 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
           textAlign: TextAlign.center,
         ),
         for (final line in lines.skip(1))
-          Text(
-            line,
-            // bodySmall is already muted (onSurfaceMuted) — dimming it further
-            // with alpha would drop below WCAG AA at this 12px size.
-            style: theme.textTheme.bodySmall,
-            textAlign: TextAlign.center,
+          Padding(
+            padding: const EdgeInsets.only(top: 5),
+            child: Text(
+              line,
+              // bodySmall is already muted (onSurfaceMuted) — dimming it
+              // further with alpha would drop below WCAG AA at this 12px size.
+              style: theme.textTheme.bodySmall,
+              textAlign: TextAlign.center,
+            ),
           ),
       ],
+    );
+  }
+
+  String _focusComment() {
+    if (_moveHistory.isEmpty) return '';
+    final chunks = <String>[];
+    if (_mainLineIndex == 0) {
+      chunks.addAll(_moveHistory.first.startingComments ?? const []);
+    } else {
+      final move = _moveHistory[_mainLineIndex - 1];
+      chunks
+        ..addAll(move.startingComments ?? const [])
+        ..addAll(move.comments ?? const []);
+    }
+    // Course exporters encode paragraph breaks as repeated spaces. Protect
+    // sentence-boundary breaks before the generic PGN cleaner collapses
+    // whitespace, then restore them as real paragraphs for the reading card.
+    const paragraphMarker = '\uE000';
+    final withParagraphs = chunks
+        .join(' ')
+        .replaceAllMapped(
+          RegExp(r'([.!?])\s{2,}(?=[A-Z“])'),
+          (m) => '${m[1]}$paragraphMarker',
+        );
+    return _normalizeCourseSpacing(
+      filterDisplayComment(stripEngineTokens(withParagraphs)),
+    ).replaceAll(paragraphMarker, '\n\n');
+  }
+
+  /// Chessable exports sometimes remove the spaces around numbered moves in
+  /// prose (`against1.e4and`, `5...Be7`). Repair that only for display; the
+  /// PGN bytes and comment editor remain untouched.
+  static String _normalizeCourseSpacing(String text) {
+    var result = text.replaceAllMapped(
+      RegExp(r'([A-Za-z,;:!?])(\d+\.{1,3})'),
+      (m) => '${m[1]} ${m[2]}',
+    );
+    final numberedSan = RegExp(
+      r'(\d+\.{1,3}(?:O-O-O|O-O|(?:[KQRBN][a-h1-8]?x?[a-h][1-8]|[a-h]x[a-h][1-8]|[a-h][1-8])(?:=[QRBN])?)[+#?!]*)(?=[A-Za-z])',
+    );
+    result = result.replaceAllMapped(numberedSan, (m) => '${m[1]} ');
+    result = result.replaceAllMapped(
+      RegExp(r'([+#])(?=[KQRBNOa-h])'),
+      (m) => '${m[1]} ',
+    );
+    return result.replaceAll(RegExp(r'[ \t]+'), ' ').trim();
+  }
+
+  Widget _buildReaderModeSwitch() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+      color: AppColors.surfaceElevated,
+      child: Row(
+        children: [
+          const Icon(Icons.menu_book_outlined, size: 17, color: AppColors.info),
+          const SizedBox(width: 7),
+          const Text(
+            'Reading view',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+          const Spacer(),
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(
+                value: true,
+                icon: Icon(Icons.chrome_reader_mode_outlined, size: 16),
+                label: Text('Focus'),
+              ),
+              ButtonSegment(
+                value: false,
+                icon: Icon(Icons.account_tree_outlined, size: 16),
+                label: Text('Full notation'),
+              ),
+            ],
+            selected: {_focusedReading},
+            onSelectionChanged: (selection) {
+              setState(() => _focusedReading = selection.first);
+            },
+            showSelectedIcon: false,
+            style: const ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 12)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFocusedReader() {
+    final atStart = _mainLineIndex == 0;
+    final atEnd = _mainLineIndex >= _moveHistory.length;
+    final current = atStart ? null : _moveHistory[_mainLineIndex - 1];
+    final previous = _mainLineIndex >= 2
+        ? _moveHistory[_mainLineIndex - 2]
+        : null;
+    final coords = current == null
+        ? null
+        : coordsAtPly(
+            ply: _mainLineIndex - 1,
+            startFullmoves: _startPosition.fullmoves,
+            startWhiteToMove: _startPosition.turn == Side.white,
+          );
+    final previousCoords = previous == null
+        ? null
+        : coordsAtPly(
+            ply: _mainLineIndex - 2,
+            startFullmoves: _startPosition.fullmoves,
+            startWhiteToMove: _startPosition.turn == Side.white,
+          );
+    final comment = _focusComment();
+
+    String moveLabel(PgnNodeData move, ({int moveNumber, bool isWhite}) c) =>
+        isNullMoveSan(move.san)
+        ? 'Introduction'
+        : '${c.moveNumber}${c.isWhite ? '.' : '...'} ${move.san}';
+
+    return ColoredBox(
+      color: AppColors.pgnSurface,
+      child: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              key: ValueKey('focused-reader-$_mainLineIndex'),
+              padding: const EdgeInsets.fromLTRB(24, 22, 24, 18),
+              child: Center(
+                child: ConstrainedBox(
+                  // A book-like measure: roughly 60–75 characters for the
+                  // bundled Inter face at 16px, instead of spanning the pane.
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          if (previous != null && previousCoords != null)
+                            Expanded(
+                              child: Text(
+                                'Previous  ${moveLabel(previous, previousCoords)}',
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontFamily: AppTextStyles.monoFamily,
+                                  fontSize: 12,
+                                  color: AppColors.onSurfaceMuted,
+                                ),
+                              ),
+                            )
+                          else
+                            const Spacer(),
+                          Text(
+                            '$_mainLineIndex / ${_moveHistory.length}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.onSurfaceMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      if (current != null && coords != null)
+                        Text(
+                          moveLabel(current, coords),
+                          style: const TextStyle(
+                            fontFamily: AppTextStyles.monoFamily,
+                            fontSize: 22,
+                            height: 1.25,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.pgnMoveCurrentFg,
+                          ),
+                        )
+                      else
+                        const Text(
+                          'Before the first move',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(18, 17, 18, 18),
+                        decoration: BoxDecoration(
+                          color: AppColors.pgnCommentBlockBg,
+                          borderRadius: BorderRadius.circular(10),
+                          border: const Border(
+                            left: BorderSide(color: AppColors.accent, width: 4),
+                          ),
+                        ),
+                        child: Text(
+                          comment.isEmpty
+                              ? (atStart
+                                    ? 'Press → to begin this line.'
+                                    : 'No note on this move. Keep stepping through the line.')
+                              : comment,
+                          style: TextStyle(
+                            fontSize: 16,
+                            height: 1.65,
+                            color: comment.isEmpty
+                                ? AppColors.onSurfaceMuted
+                                : AppColors.pgnComment,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+            decoration: const BoxDecoration(
+              color: AppColors.surfaceElevated,
+              border: Border(top: BorderSide(color: AppColors.divider)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: atStart ? null : _goBack,
+                  icon: const Icon(Icons.arrow_back, size: 18),
+                  label: const Text('Previous move'),
+                ),
+                const SizedBox(width: 12),
+                FilledButton.icon(
+                  onPressed: atEnd ? null : _goForward,
+                  icon: const Icon(Icons.arrow_forward, size: 18),
+                  label: const Text('Next move'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -659,7 +931,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
       return const Center(child: Text('No game loaded'));
     }
 
-    _scheduleScrollCurrentMoveIntoView();
+    if (!_focusedReading) _scheduleScrollCurrentMoveIntoView();
 
     return Column(
       children: [
@@ -668,46 +940,54 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
             padding: const EdgeInsets.all(8),
             child: _buildGameHeader(context),
           ),
+        if (widget.preferFocusedReading) _buildReaderModeSwitch(),
         Expanded(
-          // SelectionArea lets the user drag-select movetext / comments and
-          // copy with Ctrl+C; move taps still hit the inner GestureDetectors.
-          child: SelectionArea(
-            child: SingleChildScrollView(
-              controller: _movetextScrollController,
-              padding: const EdgeInsets.all(8),
-              child: PgnMovetextView(
-                game: _game,
-                moveHistory: _moveHistory,
-                variationsByPly: _variationsByPly,
-                mainLineIndex: _mainLineIndex,
-                currentMoveKey: _currentMoveKey,
-                analysisPath: _analysisPath,
-                editingCommentIndex: _editingCommentIndex,
-                canEditComments: widget.onCommentsChanged != null,
-                bookFormatting: widget.bookFormatting,
-                startingMoveNumber: _startPosition.fullmoves,
-                startingWhiteTurn: _startPosition.turn == Side.white,
-                startPosition: _startPosition,
-                onMainLineMoveClicked: _onMainLineMoveClicked,
-                onShowMoveContextMenu: _showMoveContextMenu,
-                onSaveComment: _saveComment,
-                onCancelEditingComment: _cancelEditingComment,
-                onGoToAnalysisNode: _goToAnalysisNode,
-                onShowVariationContextMenu: _showVariationContextMenu,
-                reveal: _m.reveal,
-                onPlayInlineLine: _playInlineLine,
-                activeInlineLine: _inlineActive
-                    ? (
-                        firstMoveNumber: _inlineFirstMoveNumber,
-                        firstIsWhite: _inlineFirstIsWhite,
-                        sans: _inlineSans,
-                        cursor: _inlineCursor,
-                        anchorFen: _inlineAnchorFen,
-                      )
-                    : null,
-              ),
-            ),
-          ),
+          child: _focusedReading
+              ? _buildFocusedReader()
+              : ColoredBox(
+                  // A dedicated ink surface makes the hierarchy in AppColors'
+                  // pgn tokens deterministic wherever this reusable viewer sits.
+                  color: AppColors.pgnSurface,
+                  // SelectionArea lets the user drag-select movetext / comments and
+                  // copy with Ctrl+C; move taps still hit the inner GestureDetectors.
+                  child: SelectionArea(
+                    child: SingleChildScrollView(
+                      controller: _movetextScrollController,
+                      padding: const EdgeInsets.fromLTRB(12, 10, 14, 18),
+                      child: PgnMovetextView(
+                        game: _game,
+                        moveHistory: _moveHistory,
+                        variationsByPly: _variationsByPly,
+                        mainLineIndex: _mainLineIndex,
+                        currentMoveKey: _currentMoveKey,
+                        analysisPath: _analysisPath,
+                        editingCommentIndex: _editingCommentIndex,
+                        canEditComments: widget.onCommentsChanged != null,
+                        bookFormatting: widget.bookFormatting,
+                        startingMoveNumber: _startPosition.fullmoves,
+                        startingWhiteTurn: _startPosition.turn == Side.white,
+                        startPosition: _startPosition,
+                        onMainLineMoveClicked: _onMainLineMoveClicked,
+                        onShowMoveContextMenu: _showMoveContextMenu,
+                        onSaveComment: _saveComment,
+                        onCancelEditingComment: _cancelEditingComment,
+                        onGoToAnalysisNode: _goToAnalysisNode,
+                        onShowVariationContextMenu: _showVariationContextMenu,
+                        reveal: _m.reveal,
+                        onPlayInlineLine: _playInlineLine,
+                        activeInlineLine: _inlineActive
+                            ? (
+                                firstMoveNumber: _inlineFirstMoveNumber,
+                                firstIsWhite: _inlineFirstIsWhite,
+                                sans: _inlineSans,
+                                cursor: _inlineCursor,
+                                anchorFen: _inlineAnchorFen,
+                              )
+                            : null,
+                      ),
+                    ),
+                  ),
+                ),
         ),
         ?_buildBranchChips(),
         if (_isInVariation)

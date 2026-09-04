@@ -15,8 +15,8 @@ import 'game_number_field.dart';
 import 'shortcut_tooltip.dart';
 
 const _visibleRows = 10;
-const _dialogWidth = 380.0;
-const _resultRowHeight = 58.0;
+const _dialogWidth = 600.0;
+const _resultRowHeight = 62.0;
 
 const _junkValues = {
   '',
@@ -61,6 +61,7 @@ class _GameEntry {
   final String summary;
   final int rating;
   final String searchText;
+  final bool isCourse;
 
   const _GameEntry({
     required this.white,
@@ -69,6 +70,7 @@ class _GameEntry {
     required this.summary,
     required this.rating,
     required this.searchText,
+    required this.isCourse,
   });
 
   factory _GameEntry.fromGame(GameNavItem game) => _GameEntry(
@@ -78,7 +80,17 @@ class _GameEntry {
     summary: _isJunk(game.studySummary) ? '' : game.studySummary,
     rating: game.studyRating,
     searchText: _buildSearchableText(game),
+    isCourse: _looksLikeCourse(game.headers),
   );
+}
+
+bool _looksLikeCourse(Map<String, String> headers) {
+  final result = _header(headers, 'Result');
+  final white = _header(headers, 'White');
+  final hasRating =
+      !_isJunk(_header(headers, 'WhiteElo')) ||
+      !_isJunk(_header(headers, 'BlackElo'));
+  return result == '*' && !hasRating && !_isJunk(white) && !white.contains(',');
 }
 
 bool _isJunk(String? value) {
@@ -257,6 +269,18 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
   // Results cached and only recomputed when the query text changes.
   late List<_SearchResult> _results = _computeResults(_entries, '');
   String _lastQuery = '';
+  late final ScrollController _scroll = ScrollController(
+    initialScrollOffset: math.max(
+      0,
+      (widget.currentIndex - 3) * _resultRowHeight,
+    ),
+  );
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
 
   void _onQueryChanged(String value) {
     if (value == _lastQuery) return;
@@ -294,6 +318,29 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.view_list_outlined,
+                      size: 22,
+                      color: AppColors.info,
+                    ),
+                    const SizedBox(width: 9),
+                    const Text(
+                      'Browse games and chapters',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${widget.games.length} total',
+                      style: AppTextStyles.caption,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
                 ListSearchField(
                   hintText: 'Search games or enter game #...',
                   autofocus: true,
@@ -322,6 +369,7 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                           ),
                         )
                       : ListView.builder(
+                          controller: _scroll,
                           padding: EdgeInsets.zero,
                           itemCount: results.length,
                           itemBuilder: (context, i) =>
@@ -343,6 +391,10 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
     final black = entry.black;
     final secondary = entry.secondary;
     final rating = entry.rating;
+    final courseHeadline = black == '?' || black == white ? white : black;
+    final courseSecondary = black == '?' || black == white
+        ? secondary
+        : [white, secondary].where((s) => s.isNotEmpty).join(' · ');
 
     final borderColor = isCurrent
         ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.6)
@@ -368,6 +420,8 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                 Text(
                   result.isGoToGame
                       ? (result.goToLabel ?? 'Go to game ${result.index + 1}')
+                      : entry.isCourse
+                      ? courseHeadline
                       : '$white vs $black',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -376,11 +430,12 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                if (!result.isGoToGame && secondary.isNotEmpty)
+                if (!result.isGoToGame &&
+                    (entry.isCourse ? courseSecondary : secondary).isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
-                      secondary,
+                      entry.isCourse ? courseSecondary : secondary,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppTextStyles.caption,

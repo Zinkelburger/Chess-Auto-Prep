@@ -31,6 +31,8 @@ Future<List<String>> _pump(
   required PgnViewerWidgetController controller,
   String pgn = _annotatedPgn,
   bool editMode = false,
+  bool preferFocusedReading = false,
+  int initialMainLineIndex = 0,
 }) async {
   final emissions = <String>[];
   await tester.pumpWidget(
@@ -44,6 +46,8 @@ Future<List<String>> _pump(
             controller: controller,
             onCommentsChanged: emissions.add,
             editMode: editMode,
+            preferFocusedReading: preferFocusedReading,
+            initialMainLineIndex: initialMainLineIndex,
           ),
         ),
       ),
@@ -62,6 +66,44 @@ Position _positionAfter(List<String> sans) {
 }
 
 void main() {
+  testWidgets('sparse comma-free player names are not treated as book titles', (
+    tester,
+  ) async {
+    final c = PgnViewerWidgetController();
+    await _pump(
+      tester,
+      controller: c,
+      pgn:
+          '[Event "?"]\n'
+          '[White "Magnus Carlsen"]\n'
+          '[Black "Hikaru Nakamura"]\n'
+          '[Result "*"]\n\n'
+          '1. e4 e5 *',
+    );
+
+    expect(find.text('Magnus Carlsen vs Hikaru Nakamura'), findsOneWidget);
+  });
+
+  testWidgets('course GameId keeps chapter and exercise presentation', (
+    tester,
+  ) async {
+    final c = PgnViewerWidgetController();
+    await _pump(
+      tester,
+      controller: c,
+      pgn:
+          '[Event "?"]\n'
+          '[White "Quickstarter Guide"]\n'
+          '[Black "Colle - 3...c6 #1"]\n'
+          '[GameId "2164010865594843"]\n'
+          '[Result "*"]\n\n'
+          '1. d4 d5 *',
+    );
+
+    expect(find.text('Colle - 3...c6 #1'), findsOneWidget);
+    expect(find.text('Quickstarter Guide'), findsOneWidget);
+  });
+
   testWidgets('loads the mainline and navigates by index', (tester) async {
     final c = PgnViewerWidgetController();
     await _pump(tester, controller: c);
@@ -81,6 +123,45 @@ void main() {
     c.goBack();
     await tester.pumpAndSettle();
     expect(c.mainLineIndex, 3);
+  });
+
+  testWidgets('focused course reader shows one note and repairs glued moves', (
+    tester,
+  ) async {
+    final c = PgnViewerWidgetController();
+    await _pump(
+      tester,
+      controller: c,
+      preferFocusedReading: true,
+      pgn:
+          '[Event "?"]\n'
+          '[White "Quickstarter Guide"]\n'
+          '[Black "5.O-O d6 #1"]\n'
+          '[Result "*"]\n\n'
+          '1. e4 {We are ready against1.e4and can play1...e5next.} e5 *',
+    );
+
+    expect(find.text('Focus'), findsOneWidget);
+    expect(find.text('Full notation'), findsOneWidget);
+    expect(find.text('Before the first move'), findsOneWidget);
+
+    c.goForward();
+    await tester.pumpAndSettle();
+    expect(find.text('1. e4'), findsOneWidget);
+    expect(
+      find.text('We are ready against 1.e4 and can play 1...e5 next.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('initial mainline index resumes an earlier reading place', (
+    tester,
+  ) async {
+    final c = PgnViewerWidgetController();
+    await _pump(tester, controller: c, initialMainLineIndex: 3);
+
+    expect(c.mainLineIndex, 3);
+    expect(c.currentFen, _positionAfter(['e4', 'e5', 'Nf3']).fen);
   });
 
   testWidgets('re-annotated movetext keeps the reader where they are', (

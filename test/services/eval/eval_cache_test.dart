@@ -112,6 +112,19 @@ void main() {
     expect((await maia.get(afterD4, 1500))?.winProb, 0.5);
   });
 
+  test('MaiaCache.clear forgets the policy in memory and on disk', () async {
+    final maia = MaiaCache.instance;
+    await maia.put(afterD4, 1500, {'d7d5': 0.7}, 0.5);
+    await EvalCache.instance.flush();
+    expect((await maia.get(afterD4, 1500))?.policy['d7d5'], 0.7);
+
+    await maia.clear();
+
+    // Both layers, not just the mirror: a hit here would mean the row
+    // survived and the next read would repopulate memory from it.
+    expect(await maia.get(afterD4, 1500), isNull);
+  });
+
   test('the Maia cache shares the canonical key', () async {
     final maia = MaiaCache.instance;
     await maia.put(afterE4, 1500, {'e7e5': 0.6, 'c7c5': 0.4}, 0.45);

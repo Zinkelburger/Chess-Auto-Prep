@@ -8,9 +8,10 @@
 /// reports each game's counts as it finishes (see [GameReviewStore]), so the
 /// engine evaluates each position once.
 ///
-/// Nothing starts on its own. The job exists from the moment the screen opens,
-/// sitting at [HomeReviewStage.idle] with a play button — press it to run,
-/// press pause to stop, press play again to carry on from where it got to.
+/// With auto-start enabled, opening the app checks for new games and starts the
+/// job. Otherwise it sits at [HomeReviewStage.idle] with a play button — press
+/// it to run, press pause to stop, press play again to carry on from where it
+/// got to.
 /// "Carry on" is free rather than clever: fetching is cached, the book check is
 /// instant, and the engine pass already skips games it has finished — all
 /// except the ones the list still shows without mistake counts, which are
@@ -146,13 +147,13 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
   ///   and both died: the new one found the coordinator still busy and refused,
   ///   which set [_paused] again and stopped the old one too. Press Resume too
   ///   soon and nothing happened. It is queued behind the run instead.
-  Future<void> start() async {
+  Future<void> start({bool checkForNewGames = false}) async {
     final inFlight = _run;
     if (inFlight != null) {
       if (_paused) _resumeQueued = true;
       return inFlight;
     }
-    final run = _drive();
+    final run = _drive(checkForNewGames: checkForNewGames);
     _run = run;
     try {
       await run;
@@ -165,7 +166,7 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
-  Future<void> _drive() async {
+  Future<void> _drive({required bool checkForNewGames}) async {
     final resuming = _stage == HomeReviewStage.paused;
     _paused = false;
     // The engine pass scores every position it looks at; collect the series so
@@ -191,7 +192,11 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
       // the cache it cannot answer: the run reviews the games it already
       // reviewed and reports that you are all caught up, an hour after you
       // played three more. So that run fetches.
-      final lookingForNewGames = !resuming && _unanalysedCount() == 0;
+      // Startup explicitly asks for a fresh check even when cached games are
+      // still waiting for the engine. Otherwise a backlog could postpone
+      // discovering newly played games until a later launch.
+      final lookingForNewGames =
+          checkForNewGames || (!resuming && _unanalysedCount() == 0);
       await _games.refresh(force: lookingForNewGames);
       if (_stopHere()) return;
 

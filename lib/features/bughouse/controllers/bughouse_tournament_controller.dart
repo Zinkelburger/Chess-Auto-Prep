@@ -31,8 +31,8 @@ class BughouseTournamentController extends ChangeNotifier
     required this.acquireEngine,
     required this.showLine,
     this.onIdle,
-    BughouseTournamentStore? store,
-  }) : _store = store {
+    this._store,
+  }) {
     unawaited(_load());
   }
 

@@ -368,20 +368,6 @@ void main() {
       ).select(noMaia);
       expect(_markedOurMoves(noMaia).map((n) => n.moveSan), ['e4']);
 
-      // With memorability off, the opponent-mistake boost alone lifts d4
-      // over e4: opponents are expected to shed a full pawn after d4.
-      final mistakeTree = makeTree(d4Cp: 20);
-      mistakeTree.root.children.last.cplValue = 100.0;
-      final mistakes = config.copyWith(
-        memorabilityToleranceCp: 0,
-        mistakeWeight: 100,
-      );
-      RepertoireSelector(
-        config: mistakes,
-        ecaCalc: ExpectimaxCalculator(config: mistakes),
-      ).select(mistakeTree);
-      expect(_markedOurMoves(mistakeTree).map((n) => n.moveSan), ['d4']);
-
       // An explicit preferred setup outranks memorability.
       final setupTree = makeTree(d4Cp: 20);
       final setup = config.copyWith(setupMoves: 'e4', setupToleranceCp: 30);

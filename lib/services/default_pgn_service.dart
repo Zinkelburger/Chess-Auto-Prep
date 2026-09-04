@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/file_text_reader.dart';
+import '../utils/atomic_file.dart';
 import 'storage/app_paths.dart';
 
 /// Extracts bundled PGN game collections from Flutter assets into the app's
@@ -52,7 +53,7 @@ class DefaultPgnService {
             byteData.lengthInBytes,
           ),
         );
-        await target.writeAsString(data, flush: true);
+        await writeTextFileAtomically(target, data, createOnly: true);
       } catch (e) {
         // Asset missing from bundle (e.g. stripped for size) — skip silently.
         debugPrint('Could not extract bundled PGN $name: $e');

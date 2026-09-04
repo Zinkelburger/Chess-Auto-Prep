@@ -17,10 +17,10 @@ void main() {
       );
     });
 
-    test('a multi-chord action advertises all of its keys', () {
+    test('a navigation action advertises its arrow key', () {
       expect(
         actionTooltip('Next game', shortcut: AppShortcut.nextItem),
-        'Next game (S or ↓)',
+        'Next game (↓)',
       );
     });
 
@@ -28,7 +28,7 @@ void main() {
       expect(actionTooltipIf('Settings'), 'Settings');
       expect(
         actionTooltipIf('Next', shortcut: AppShortcut.nextItem),
-        'Next (S or ↓)',
+        'Next (↓)',
       );
     });
   });
@@ -49,7 +49,7 @@ void main() {
       );
 
       final iconButton = tester.widget<IconButton>(find.byType(IconButton));
-      expect(iconButton.tooltip, 'Next game (S or ↓)');
+      expect(iconButton.tooltip, 'Next game (↓)');
     });
   });
 
@@ -102,7 +102,7 @@ void main() {
       );
 
       final tooltip = tester.widget<Tooltip>(find.byType(Tooltip));
-      expect(tooltip.message, 'Previous game (P or ↑)');
+      expect(tooltip.message, 'Previous game (↑)');
     });
   });
 }

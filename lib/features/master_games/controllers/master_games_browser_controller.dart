@@ -17,6 +17,7 @@ import '../../../services/master_games/master_games_db.dart';
 import '../../../services/master_games/master_games_query.dart';
 import '../../../services/master_games/master_games_service.dart';
 import '../../../services/storage/app_paths.dart';
+import '../../../utils/atomic_file.dart';
 import '../../../utils/safe_change_notifier.dart';
 import '../services/twic_repertoire_scan.dart';
 
@@ -221,7 +222,7 @@ class MasterGamesBrowserController extends ChangeNotifier
     for (final game in games) {
       buffer.write(game.toPgn());
     }
-    await file.writeAsString(buffer.toString());
+    await writeTextFileAtomically(file, buffer.toString());
     return file.path;
   }
 

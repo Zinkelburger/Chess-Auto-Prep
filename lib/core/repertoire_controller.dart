@@ -580,6 +580,15 @@ class RepertoireController
 
   /// If a root position is set, navigate to it so the tree starts there.
   void _navigateToRootPosition() {
+    // A newly loaded repertoire always starts with fresh navigation state.
+    // Without this reset, a repertoire that omits a Root comment inherits the
+    // move path from whichever repertoire was loaded previously.
+    //
+    // Undo goes through here too, and resets the cursor on purpose: a restored
+    // snapshot can hold entirely different lines from the ones on screen, so
+    // the path the user was on may no longer mean anything. Both cases are
+    // covered by tests in test/core/repertoire_controller_test.dart.
+    _path = TreePath.empty;
     if (_rootMoves.isEmpty) return;
     final sanMoves = _parsePgnMoveText(_rootMoves);
     if (sanMoves.isEmpty) return;
@@ -639,6 +648,32 @@ class RepertoireController
 
     await loadRepertoire();
     return true;
+  }
+
+  /// Deletes several lines in one pass and reloads once.
+  ///
+  /// Returns how many were removed. Lines with no recorded position in the
+  /// file are skipped rather than guessed at by id.
+  Future<int> deleteLines(Iterable<RepertoireLine> lines) async {
+    if (_currentRepertoire == null) return 0;
+    final filePath = _currentRepertoire!.filePath;
+    if (filePath.isEmpty) return 0;
+
+    final indexes = {
+      for (final line in lines)
+        if (line.gameIndex >= 0) line.gameIndex,
+    };
+    if (indexes.isEmpty) return 0;
+
+    final removed = await RepertoireService().deleteLinesAt(filePath, indexes);
+    if (removed == 0) return 0;
+
+    _selectedPgnLine = null;
+    _annotatedLineLabel = null;
+    _tree = MoveTree(startingFen: _tree.startingFen);
+    _path = TreePath.empty;
+    await loadRepertoire();
+    return removed;
   }
 
   /// Persist edits made to the currently selected line.

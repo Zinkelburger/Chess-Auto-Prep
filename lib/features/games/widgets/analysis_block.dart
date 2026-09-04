@@ -40,7 +40,6 @@ class AnalysisBlock extends StatelessWidget {
     required this.windowLabel,
     required this.onStart,
     required this.onPause,
-    required this.onRefresh,
     required this.onSettings,
   });
 
@@ -60,7 +59,6 @@ class AnalysisBlock extends StatelessWidget {
 
   final VoidCallback onStart;
   final VoidCallback onPause;
-  final VoidCallback onRefresh;
   final VoidCallback onSettings;
 
   @override
@@ -72,12 +70,6 @@ class AnalysisBlock extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton(
-            icon: const Icon(Icons.refresh, size: 18),
-            tooltip: 'Download my games again, without analysing them',
-            visualDensity: VisualDensity.compact,
-            onPressed: isLoadingGames || running ? null : onRefresh,
-          ),
           IconButton(
             icon: const Icon(Icons.settings, size: 18),
             tooltip: 'Analysis settings…',
@@ -132,6 +124,16 @@ class AnalysisBlock extends StatelessWidget {
     return gamesInWindow > 0 ? 'Check for new games' : 'Download and analyse';
   }
 
+  /// This is a background job, not an interactive review session. Match the
+  /// icon to the work it will do so the triangle remains reserved for places
+  /// where the user is about to play or step through something themselves.
+  IconData _transportIcon(bool running) {
+    if (running) return Icons.pause;
+    if (unreviewedCount > 0) return Icons.analytics_outlined;
+    if (gamesInWindow > 0) return Icons.refresh;
+    return Icons.download_outlined;
+  }
+
   Widget _buildTransportButton(bool running) {
     final enabled = running || runner.hasAnySource;
     return Tooltip(
@@ -151,7 +153,7 @@ class AnalysisBlock extends StatelessWidget {
         child: FilledButton.icon(
           key: const Key('review-transport-button'),
           onPressed: enabled ? (running ? onPause : onStart) : null,
-          icon: Icon(running ? Icons.pause : Icons.play_arrow, size: 20),
+          icon: Icon(_transportIcon(running), size: 20),
           label: Text(
             _transportLabel(running),
             maxLines: 1,

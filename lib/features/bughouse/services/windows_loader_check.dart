@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
@@ -25,6 +24,23 @@ import 'package:path/path.dart' as p;
 /// is testable on a Linux CI box against a directory of fixtures.
 class WindowsLoaderCheck {
   const WindowsLoaderCheck._();
+
+  /// Where a user gets the Visual C++ runtime themselves, on the machines
+  /// where the app's own copy of it did not reach them.
+  ///
+  /// Microsoft's evergreen link rather than a pinned build: the person
+  /// following it wants the one that works, not the one we happened to test
+  /// against, and it is the only URL in this area that has never moved.
+  static const String redistributableUrl =
+      'https://aka.ms/vs/17/release/vc_redist.x64.exe';
+
+  /// Whether anything in [resolutions] is something installing that
+  /// redistributable would fix, so a caller knows whether to put the link in
+  /// front of the user or leave it out.
+  static bool needsRedistributable(List<DllResolution> resolutions) =>
+      resolutions.any(
+        (r) => r.isMissing && appSuppliedDependencies.contains(r.name),
+      );
 
   /// `IMAGE_FILE_MACHINE_AMD64` — the only machine we ship or can load.
   static const int amd64 = 0x8664;
@@ -120,7 +136,7 @@ class WindowsLoaderCheck {
       engineDir,
       p.join(windows, 'System32'),
       windows,
-      if (workingDirectory != null) workingDirectory,
+      ?workingDirectory,
       for (final entry in path.split(';'))
         if (entry.trim().isNotEmpty) entry.trim(),
     ];
@@ -209,7 +225,8 @@ class WindowsLoaderCheck {
         '${missing.map((r) => r.name).join(', ')} could not be found anywhere. '
         'These come with the Microsoft Visual C++ Redistributable (x64); the '
         'app normally copies them beside the engine itself, so this also means '
-        'that copy did not happen.',
+        'that copy did not happen. Installing it by hand fixes this for good: '
+        '$redistributableUrl',
       );
     }
     return buffer.toString().trimRight();

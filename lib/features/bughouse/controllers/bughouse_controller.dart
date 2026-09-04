@@ -362,6 +362,11 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   String? _errorReport;
   String? get errorReport => _errorReport;
 
+  /// Something the user can install to fix the current error, when the failure
+  /// named one. Null for every failure installing it would not help.
+  String? _errorLink;
+  String? get errorLink => _errorLink;
+
   String? _notice;
   String? get notice => _notice;
 
@@ -1103,6 +1108,7 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
     _passMs = _firstPassMs;
     _error = null;
     _errorReport = null;
+    _errorLink = null;
     _notice = null;
     scenarios = const [];
     // Cuts the pass in flight short; its result is dropped by generation.
@@ -1113,6 +1119,7 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   void _fail(String message) {
     _error = message;
     _errorReport = null;
+    _errorLink = null;
     notifyListeners();
   }
 
@@ -1120,6 +1127,7 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   void _failWith(Object e, String fallback) {
     _error = _describe(e, fallback);
     _errorReport = e is BughouseEngineFailure ? e.report : null;
+    _errorLink = e is BughouseEngineFailure ? e.helpUrl : null;
   }
 
   /// Keeps thinking about the current position, alternating teams and giving
@@ -1320,6 +1328,7 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
     _comparing = true;
     _error = null;
     _errorReport = null;
+    _errorLink = null;
     _notice = null;
     scenarios = const [];
     notifyListeners();

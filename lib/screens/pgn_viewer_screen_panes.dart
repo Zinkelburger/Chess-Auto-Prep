@@ -11,6 +11,9 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
   PgnViewerWidgetController get _lineWidgetController;
   GameAnalysisController get _analysisController;
   TabController get _tabController;
+  bool get _onLineTab;
+  PgnViewerHandle get _activeMovetextController;
+  void _handleBoardMove(String san);
   bool get _editMode;
   void _toggleEditMode();
   Future<void> _pickFile();
@@ -85,7 +88,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
               ChessBoardWidget(
                 position: _controller.currentPosition,
                 flipped: _controller.boardFlipped,
-                recentMoveSquares: _pgnWidgetController.recentMoveSquares,
+                recentMoveSquares: _activeMovetextController.recentMoveSquares,
                 // A solitaire hint rings the piece that moves. A square tint
                 // would be the same mark the board puts under a piece you
                 // picked up yourself, so the hint has to be a different shape,
@@ -98,7 +101,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
                       brush: AnnotationBrush.yellow,
                     ),
                 ],
-                onMove: (move) => _controller.onBoardMove(move.san),
+                onMove: (move) => _handleBoardMove(move.san),
                 // In solitaire, moves are allowed while guessing and again
                 // once the game completes (free exploration of the annotated
                 // game); only opponent auto-play locks the board.
@@ -167,7 +170,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Text('Line'),
+                            const Text('Book'),
                             if (deviation != null && !deviation.inBook) ...[
                               const SizedBox(width: 5),
                               Icon(
@@ -244,7 +247,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
                 .filteredGames[_controller.currentGameIndex]
                 .studyRating,
             sortMode: _controller.sortMode,
-            isAutoPlaying: _controller.isAutoPlaying,
+            isAutoPlaying: !_onLineTab && _controller.isAutoPlaying,
             autoPlayDelaySec: _controller.autoPlayDelaySec,
             autoNextGame: _controller.autoNextGame,
             // Switching games throws a half-finished solitaire game away, so
@@ -261,19 +264,25 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
             },
             onSetRating: _controller.setRating,
             onSetSortMode: _controller.setSortMode,
-            onToggleAutoPlay: _controller.toggleAutoPlay,
-            onToggleFullScreen: _controller.toggleFullScreen,
-            onSetSpeed: _controller.setAutoPlaySpeed,
-            onSetAutoNext: _controller.setAutoNextGame,
+            // Playback/fullscreen unmount or drive the game reader. Keeping
+            // them enabled while Book owns the board would mutate an invisible
+            // cursor, so they are deliberately unavailable in that pane.
+            onToggleAutoPlay: _onLineTab ? null : _controller.toggleAutoPlay,
+            onToggleFullScreen: _onLineTab
+                ? null
+                : _controller.toggleFullScreen,
+            onSetSpeed: _onLineTab ? null : _controller.setAutoPlaySpeed,
+            onSetAutoNext: _onLineTab ? null : _controller.setAutoNextGame,
             onCopyPgn: _copyCurrentGamePgn,
-            hasEphemeralAnnotations: _pgnWidgetController.hasEphemeralMoves,
+            hasEphemeralAnnotations:
+                _activeMovetextController.hasEphemeralMoves,
             onClearAnnotations: () {
               _controller.stopAutoPlay();
-              _pgnWidgetController.clearEphemeralMoves();
+              _activeMovetextController.clearEphemeralMoves();
               setState(() {});
               _reclaimFocus();
             },
-            onToggleEditMode: _toggleEditMode,
+            onToggleEditMode: _onLineTab ? null : _toggleEditMode,
             isEditMode: _editMode,
             isSolitaireMode: _controller.isSolitaireMode,
           ),
@@ -498,6 +507,9 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
               writeToFile: !_controller.isSolitaireMode,
             ),
             editMode: _editMode,
+            bookFormatting: game.isCourseStyle,
+            preferFocusedReading: game.isCourseStyle,
+            initialMainLineIndex: _controller.resumePlyFor(game),
             // The result is the answer to "how did this go?" — the one header
             // field a guesser must not see before the last move. Only once
             // the session is running, though: the setup strip still has the

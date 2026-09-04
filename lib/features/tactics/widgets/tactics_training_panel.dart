@@ -38,6 +38,7 @@ class TacticsTrainingPanel extends StatefulWidget {
     this.onEdit,
     required this.onSetRating,
     this.solutionSanMoves = const [],
+    this.trainableSanMoves = const [],
     this.solutionStartPly = 0,
     this.activeSolutionMoveIndex,
     this.onSolutionMoveTapped,
@@ -74,7 +75,14 @@ class TacticsTrainingPanel extends StatefulWidget {
   /// or the unsolved head of a session where editing would reveal the answer).
   final VoidCallback? onEdit;
   final ValueChanged<int> onSetRating;
+
+  /// Full engine PV shown after the answer is revealed.
   final List<String> solutionSanMoves;
+
+  /// Short line the trainer validates. Before reveal, only completed moves
+  /// from this line are shown because a Maia-selected reply can differ from
+  /// the engine PV without changing what the user actually played.
+  final List<String> trainableSanMoves;
   final int solutionStartPly;
   final int? activeSolutionMoveIndex;
   final void Function(List<String> sanMoves, int clickedIndex)?
@@ -122,10 +130,12 @@ class _TacticsTrainingPanelState extends State<TacticsTrainingPanel> {
   /// The solution line to print: the whole thing once revealed, otherwise
   /// just the moves found so far — so a multi-move puzzle shows where you are.
   List<String> get _visibleSolution {
-    final san = widget.solutionSanMoves;
-    if (_isRevealed) return san;
-    final found = widget.currentMoveIndex.clamp(0, san.length);
-    return san.sublist(0, found);
+    if (_isRevealed) return widget.solutionSanMoves;
+    final trained = widget.trainableSanMoves.isNotEmpty
+        ? widget.trainableSanMoves
+        : widget.solutionSanMoves;
+    final found = widget.currentMoveIndex.clamp(0, trained.length);
+    return trained.sublist(0, found);
   }
 
   @override

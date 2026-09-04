@@ -30,9 +30,11 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import hashlib
 import json
 import os
 import platform
+import shutil
 import struct
 import subprocess
 import sys
@@ -372,20 +374,64 @@ def install_like_the_app(target: Path) -> tuple[Path, Path]:
         out = target / manifest_key(dest)
         payload = gzip.decompress(gz.read_bytes())
         out.write_bytes(payload)
-        expected = manifest.get(out.name)
-        if expected is None:
+        record = manifest.get(out.name)
+        if record is None:
             fail(f"manifest.json does not describe {out.name}")
+        expected = record["bytes"] if isinstance(record, dict) else record
         if expected != len(payload):
             fail(
                 f"{out.name} is {len(payload)} bytes, manifest.json says {expected}. "
                 "The app deletes and re-extracts on every launch when these differ."
             )
+        if isinstance(record, dict):
+            actual_hash = hashlib.sha256(payload).hexdigest()
+            if record.get("sha256") != actual_hash:
+                fail(
+                    f"{out.name} SHA-256 is {actual_hash}, "
+                    f"manifest.json says {record.get('sha256')}"
+                )
         paths[dest] = out
 
     engine = paths[spec["engine"][1]]
     if os.name != "nt":
         engine.chmod(0o755)
     return engine, target / NETWORK
+
+
+def install_windows_runtime(source: Path, target: Path) -> list[str]:
+    """Copy the final app bundle's VC++ runtime beside the extracted engine.
+
+    This is deliberately the same prefix contract as
+    BughouseBundle.installWindowsRuntime. The pre-build engine check used to
+    run against the hosted runner's centrally installed runtime, then merely
+    assert that the final app contained some DLLs. Running with these exact
+    files after the Flutter build is what proves the portable package users
+    receive rather than the unusually well-provisioned CI machine.
+    """
+    prefixes = WINDOWS_APP_DEPLOYED_PREFIXES
+    copied: list[str] = []
+    for candidate in source.iterdir():
+        lower = candidate.name.lower()
+        if not candidate.is_file() or not lower.endswith(".dll"):
+            continue
+        if not lower.startswith(prefixes):
+            continue
+        shutil.copy2(candidate, target / candidate.name)
+        copied.append(candidate.name)
+
+    required = {
+        "msvcp140.dll",
+        "msvcp140_1.dll",
+        "vcruntime140.dll",
+        "vcruntime140_1.dll",
+    }
+    missing = sorted(required - {name.lower() for name in copied})
+    if missing:
+        fail(
+            f"{source} does not contain the final VC++ runtime: "
+            + ", ".join(missing)
+        )
+    return sorted(copied, key=str.lower)
 
 
 def cmd_run(args) -> int:
@@ -397,10 +443,30 @@ def cmd_run(args) -> int:
         engine, network = install_like_the_app(work)
         print(f"[run]  {engine.name} + {network.name} in {work}")
 
+        if args.windows_runtime_from:
+            if os.name != "nt":
+                fail("--windows-runtime-from is only meaningful on Windows")
+            source = Path(args.windows_runtime_from).resolve()
+            if not source.is_dir():
+                fail(f"Windows runtime directory does not exist: {source}")
+            copied = install_windows_runtime(source, work)
+            print("       app-local VC++ runtime: " + ", ".join(copied))
+
         env = dict(os.environ)
         if sys.platform == "darwin":
             env["DYLD_LIBRARY_PATH"] = str(work)
-        elif os.name != "nt":
+        elif os.name == "nt":
+            root = env.get("SystemRoot", r"C:\Windows")
+            path_key = next((key for key in env if key.lower() == "path"), "PATH")
+            env[path_key] = ";".join(
+                [
+                    str(work),
+                    str(Path(root) / "System32"),
+                    root,
+                    str(Path(root) / "System32" / "Wbem"),
+                ]
+            )
+        else:
             env["LD_LIBRARY_PATH"] = str(work)
 
         started = time.time()
@@ -510,6 +576,11 @@ def main() -> int:
     run.add_argument("--nodes", type=int, default=400)
     run.add_argument("--install-to", metavar="DIR",
                      help="extract into DIR and keep it, instead of a temp dir")
+    run.add_argument(
+        "--windows-runtime-from",
+        metavar="DIR",
+        help="copy the final app bundle's VC++ DLLs beside the engine before launch",
+    )
     run.set_defaults(func=cmd_run)
 
     args = ap.parse_args()

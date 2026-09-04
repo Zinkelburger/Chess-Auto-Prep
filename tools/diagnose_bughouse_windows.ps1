@@ -37,11 +37,37 @@ param(
 $ErrorActionPreference = 'Continue'
 
 # What the app should have extracted, and how big each one is when it is whole.
-# From assets/bughouse/manifest.json as shipped in v1.15.1.
+# From assets/bughouse/manifest.json as shipped in v1.15.3.
 $Expected = @{
   'hivemind-windows.exe' = 5161647
   'onnxruntime.dll'      = 16149344
   'hivemind.onnx'        = 54415625
+}
+
+# The same files by content, plus the Visual C++ runtime the app copies in from
+# its own folder. Size is not enough and this is the machine that proves it: a
+# file that is the right length but the wrong bytes is exactly what the Windows
+# loader rejects with STATUS_INVALID_IMAGE_FORMAT, and it is invisible to every
+# other check here -- the PE header still parses, so the architecture still
+# reads back as x64. It is also permanent, because BughouseBundle re-extracts
+# only when the size differs, so no upgrade and no reinstall ever replaces it.
+#
+# Engine, runtime and network are the payload_sha256 values in
+# tools/bughouse.lock.json; the eight redistributable DLLs are the ones the
+# release workflow deployed into the v1.15.3 Windows bundle. Both sets were
+# verified against the published v1.15.3 artifact.
+$ExpectedHash = @{
+  'hivemind-windows.exe'     = '726cf9baad7d050b3d351e32d3ebd908eb249d9995b53263c62b5033ce759040'
+  'onnxruntime.dll'          = '69d8e6d3879a3b4001cdc74c8ed9ccc7e7f799a5b847059738323404519ec471'
+  'hivemind.onnx'            = '61f74ba7d9a79868b565d51ece450519a4dc6b38d697aabd117fc5b843281a2f'
+  'concrt140.dll'            = '54716f0738af891f283d213b5c8d11b25896bb8ee3097d301eae718560cf974e'
+  'msvcp140.dll'             = '7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca'
+  'msvcp140_1.dll'           = '206c931bf90fdad8816de3b5e2ef80b2bcaa9406c89ecc05fe6fddffe251e982'
+  'msvcp140_2.dll'           = 'd50d7883f20d1dc6191768d3746f52dd9cac89c346ffaed5be1f110c2f34a838'
+  'msvcp140_atomic_wait.dll' = '3d0cbfaa1bf3eecf5a3f4491d2960ee803cb994f30292c6adc4a07c498f60e2b'
+  'msvcp140_codecvt_ids.dll' = '8a65c7596ef2e6938731f5a1058e7e40145b6d97967cc649231a076b9a608d78'
+  'vcruntime140.dll'         = 'd1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7'
+  'vcruntime140_1.dll'       = 'a7146c08f89fe5b04541ab507cdb59ff7b44534d4ba3c668a426c6450a03434e'
 }
 
 # Every library the engine and its ONNX Runtime import that Windows does not
@@ -199,6 +225,72 @@ foreach ($name in $Expected.Keys) {
     Write-Host ("  {0,-26} MISSING" -f $name) -ForegroundColor Red
     [void]$problems.Add("$name was never extracted")
   }
+}
+
+# ------------------------------------------------------------- the bytes
+
+# The check the app cannot do for itself. Everything above this point can be
+# perfect -- every file present, every size right, every PE header reading back
+# as x64 -- while one of these files is still not the file we shipped, and that
+# is the only remaining way the loader says STATUS_INVALID_IMAGE_FORMAT with
+# nothing else out of place.
+Write-Head 'Whether those files are the bytes we shipped'
+$checked = 0
+$unknown = New-Object System.Collections.ArrayList
+foreach ($f in (Get-ChildItem $EngineDir -File | Sort-Object Name)) {
+  $want = $ExpectedHash[$f.Name.ToLowerInvariant()]
+  if (-not $want) { [void]$unknown.Add($f.Name); continue }
+  $checked++
+  try {
+    $got = (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+  } catch {
+    Write-Host ("  {0,-26} could not be read: {1}" -f $f.Name, $_.Exception.Message) -ForegroundColor Red
+    [void]$problems.Add("$($f.Name) could not be read to hash it -- something is holding or blocking it")
+    continue
+  }
+  if ($got -eq $want) {
+    Write-Host ("  {0,-26} ok" -f $f.Name)
+  } else {
+    Write-Host ("  {0,-26} DIFFERENT BYTES" -f $f.Name) -ForegroundColor Red
+    Write-Host ("  {0,-26}   on disk  {1}" -f '', $got)
+    Write-Host ("  {0,-26}   shipped  {1}" -f '', $want)
+    [void]$problems.Add("$($f.Name) is the right size but not the file we shipped -- it is corrupt on disk, and because the app only re-extracts on a size mismatch it will stay that way until the bughouse folder is deleted")
+  }
+}
+if ($checked -eq 0) {
+  Write-Host '  nothing here to compare against the shipped hashes' -ForegroundColor Yellow
+}
+if ($unknown.Count -gt 0) {
+  Write-Host ('  not checked (no shipped hash for these): ' + ($unknown -join ', '))
+}
+
+# If the bytes are right, the next suspect is not the files at all but what
+# this machine does to them on load. Windows' own Exploit Protection can be
+# set per image, and a mitigation that an image cannot satisfy is refused by
+# the loader before the process runs -- which looks identical from the app.
+Write-Head 'Per-image protection settings for the engine'
+try {
+  $mit = Get-ProcessMitigation -Name 'hivemind-windows.exe' -ErrorAction Stop
+  $on = New-Object System.Collections.ArrayList
+  # Walked rather than named, because which mitigation groups the cmdlet
+  # returns depends on the Windows build, and a group missing from a hand-typed
+  # list is a mitigation this script would not have reported.
+  foreach ($group in $mit.PSObject.Properties) {
+    if ($group.Name -in 'ProcessName', 'Source') { continue }
+    $value = $group.Value
+    if ($null -eq $value -or $value -is [string]) { continue }
+    foreach ($prop in $value.PSObject.Properties) {
+      if ("$($prop.Value)" -eq 'ON') { [void]$on.Add("$($group.Name).$($prop.Name)") }
+    }
+  }
+  if ($on.Count -eq 0) {
+    Write-Host '  none set for this image beyond the system defaults'
+  } else {
+    Write-Host ('  set for this image: ' + ($on -join ', ')) -ForegroundColor Yellow
+    [void]$problems.Add('Exploit Protection has per-image mitigations set for hivemind-windows.exe; clear them in Windows Security > App & browser control > Exploit protection > Program settings')
+  }
+} catch {
+  Write-Host '  could not be read on this Windows (Get-ProcessMitigation is unavailable here)'
 }
 
 # ---------------------------------------------------- the loader's search

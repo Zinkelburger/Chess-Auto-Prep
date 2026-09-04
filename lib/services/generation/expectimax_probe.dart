@@ -158,7 +158,6 @@ void _copyScalars(BuildTreeNode node, BuildTreeNode old) {
     ..ease = old.ease
     ..localCpl = old.localCpl
     ..expectimaxValue = old.expectimaxValue
-    ..cplValue = old.cplValue
     ..hasExpectimax = old.hasExpectimax
     ..opponentEase = old.opponentEase
     ..trapScore = old.trapScore
@@ -179,7 +178,6 @@ void rescoreTree(BuildTree tree, TreeBuildConfig config, FenMap fenMap) {
   final eca = ExpectimaxCalculator(config: config, fenMap: fenMap);
   eca.calculate(tree);
   eca.computeTrapScores(tree.root);
-  eca.calculateCplValues(tree.root);
   calculateMyEase(tree, playAsWhite: config.playAsWhite);
 }
 

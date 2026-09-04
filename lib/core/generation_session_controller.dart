@@ -10,7 +10,6 @@
 library;
 
 import 'dart:async';
-import 'dart:io';
 import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
@@ -725,7 +724,6 @@ class GenerationSessionController extends ChangeNotifier
     final ecaCalc = ExpectimaxCalculator(config: config, fenMap: fenMap);
     final ecaCount = ecaCalc.calculate(tree);
     ecaCalc.computeTrapScores(tree.root);
-    ecaCalc.calculateCplValues(tree.root);
     calculateMyEase(tree, playAsWhite: config.playAsWhite);
 
     progress.setStatus(
@@ -834,15 +832,23 @@ class GenerationSessionController extends ChangeNotifier
     }
 
     final rawCount = lines.length;
-    lines = LinePruner.prune(
+    // Export the whole ranking: every line that teaches a decision no kept
+    // line already teaches *and* is different enough from what is already in
+    // to be worth its own entry. What gets *kept* is chosen afterwards, on
+    // the Generate tab's slice card, against a live count — so this step no
+    // longer bakes a size guess into the file.
+    final slice = LinePruner.rank(
       lines,
-      targetCount: config.targetLineCount,
-      coverageTarget: config.lineCoverageTarget,
+      diversity: LineDiversity.fromConfig(config),
     );
+    final folds = slice.foldsFor(slice.length);
+    lines = slice.all;
     if (lines.length < rawCount) {
+      final folded = slice.foldedCount;
       progress.setStatus(
-        'Phase 3: kept ${lines.length} of $rawCount lines — '
-        '${(config.lineCoverageTarget * 100).round()}% coverage...',
+        'Phase 3: kept ${lines.length} of $rawCount lines'
+        '${folded > 0 ? ', $folded folded in as sidelines' : ''} — '
+        'the rest only repeated decisions these already teach...',
         GenerationPhase.extractingLines,
       );
     }
@@ -855,6 +861,7 @@ class GenerationSessionController extends ChangeNotifier
       lines: lines,
       rawCount: rawCount,
       trapsOnlyNote: trapsOnlyNote,
+      folds: folds,
     );
   }
 
@@ -871,6 +878,7 @@ class GenerationSessionController extends ChangeNotifier
     final built = await _courseBuilder.build(
       tree: tree,
       lines: extracted.lines,
+      folds: extracted.folds,
       config: request.config,
       repertoireFilePath: filePath,
       rootFen: prefix.isEmpty ? tree.root.fen : request.repertoireStartFen,
@@ -921,13 +929,12 @@ class GenerationSessionController extends ChangeNotifier
   ) async {
     lastModelGamesPath = null;
     final path = modelGamesPathFor(courseFilePath);
-    final file = File(path);
     try {
       if (course.modelGamePgns.isEmpty) {
-        if (await file.exists()) await file.delete();
+        await StorageFactory.instance.deleteFile(path);
         return;
       }
-      await file.writeAsString(course.modelGamesPgn());
+      await StorageFactory.instance.writeFile(path, course.modelGamesPgn());
       lastModelGamesPath = path;
       lastModelGameNote =
           '$lastModelGameNote Model games also saved to '
@@ -1328,12 +1335,24 @@ class GenerationSessionController extends ChangeNotifier
         tree.configSnapshot['play_as_white'] as bool? ??
         tree.root.isWhiteToMove;
     // Derive FenMap, eval-tree snapshot, and trap index once, here.
-    _current = GeneratedRepertoire.fromTree(
-      tree,
-      playAsWhite: playAsWhite,
-      config: config,
-      probes: _probes,
-    );
+    //
+    // A probe landing calls this with the build's own tree unchanged and one
+    // more probe. Only the transposition map spans the database, so that case
+    // reuses the snapshot, the metric cache and the trap index instead of
+    // recomputing three identical answers over the whole tree.
+    final previousBundle = _current;
+    if (previousBundle != null &&
+        identical(previousBundle.tree, tree) &&
+        previousBundle.playAsWhite == playAsWhite) {
+      _current = previousBundle.withProbes(_probes);
+    } else {
+      _current = GeneratedRepertoire.fromTree(
+        tree,
+        playAsWhite: playAsWhite,
+        config: config,
+        probes: _probes,
+      );
+    }
     notifyListeners();
   }
 

@@ -294,7 +294,7 @@ void main() {
     test('the pruner keeps both move orders and nothing is taught twice', () {
       final t = _TranspositionTree();
       final lines = t.extract();
-      final kept = LinePruner.prune(lines);
+      final kept = LinePruner.rank(lines).all;
       // 2.d4 after 1...d5 and 2.d4 after 1...Nf6 are different decisions, so
       // both move orders survive — but the continuation appears once.
       expect(kept.length, 3);

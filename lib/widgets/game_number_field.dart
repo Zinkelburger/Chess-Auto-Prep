@@ -175,6 +175,7 @@ class _GameNumberFieldState extends State<GameNumberField> {
             focusNode: _focusNode,
             enabled: enabled,
             textAlign: TextAlign.center,
+            textAlignVertical: TextAlignVertical.center,
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             textInputAction: TextInputAction.go,
@@ -182,6 +183,8 @@ class _GameNumberFieldState extends State<GameNumberField> {
             style: labelStyle,
             decoration: InputDecoration(
               isDense: true,
+              // Explicit vertical centering is more reliable than the default
+              // dense-field padding across Linux, Windows and macOS fonts.
               contentPadding: const EdgeInsets.symmetric(horizontal: 6),
               border: border(AppColors.outline),
               enabledBorder: border(AppColors.outline),

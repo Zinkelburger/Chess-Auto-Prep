@@ -24,6 +24,7 @@ mixin _SliceOps on ChangeNotifier {
   Future<void> loadCurrentGame();
   void applySortMode();
   String buildExportContent();
+  void _rememberCurrentPlace();
 
   List<int>? _activeSliceIndices;
 
@@ -92,6 +93,7 @@ mixin _SliceOps on ChangeNotifier {
         config.toJsonString() == activeSliceConfig.toJsonString()) {
       return;
     }
+    _rememberCurrentPlace();
     _sliceEpoch++;
     isLoading = false;
     _activeSliceIndices = List<int>.from(indices);
@@ -108,6 +110,7 @@ mixin _SliceOps on ChangeNotifier {
   }
 
   void resetFilters() {
+    _rememberCurrentPlace();
     // Invalidate any in-flight recompute/restore so it can't resurrect the
     // slice being cleared, and take over its loading state.
     _sliceEpoch++;

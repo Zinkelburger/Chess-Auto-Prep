@@ -541,8 +541,6 @@ void main() {
         expect(controller.currentMoveIndex, -1);
         expect(controller.currentMoveSequence, isEmpty);
       },
-      skip:
-          'BUG: restoreRepertoireFromPgn without // Root: leaves stale moveHistory/currentMoveIndex',
     );
 
     test(
