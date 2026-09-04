@@ -8,6 +8,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../theme/app_text_styles.dart';
 import '../chess_board_widget.dart';
 import '../../utils/chess_utils.dart'
     show toAlgebraic, isCastlingMove, castlingKingDestination;
@@ -353,7 +354,7 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
           LengthLimitingTextInputFormatter(7),
         ],
         style: TextStyle(
-          fontFamily: 'SourceCodePro',
+          fontFamily: AppTextStyles.monoFamily,
           fontSize: 15,
           fontWeight: FontWeight.w500,
           color: hasError

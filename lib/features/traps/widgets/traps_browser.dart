@@ -14,6 +14,7 @@ import 'package:chess_auto_prep/models/trap_line_info.dart';
 import 'package:chess_auto_prep/models/trap_reply.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
+import '../../../theme/app_text_styles.dart';
 import '../../../utils/chess_utils.dart';
 import '../../../utils/pgn_comment_utils.dart' show nagColor;
 import '../../../widgets/chess_board_widget.dart';
@@ -469,7 +470,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
               reply.san,
               style: TextStyle(
                 fontSize: 12,
-                fontFamily: 'SourceCodePro',
+                fontFamily: AppTextStyles.monoFamily,
                 fontWeight: FontWeight.bold,
                 // NAG palette: brighter on dark than danger/evalPositive.
                 color: isGood
@@ -538,7 +539,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
         fontSize: 12,
         fontWeight: FontWeight.w600,
         color: AppColors.onSurfaceSoft,
-        fontFamily: 'SourceCodePro',
+        fontFamily: AppTextStyles.monoFamily,
       ),
     );
     return tooltip != null ? Tooltip(message: tooltip, child: badge) : badge;
@@ -588,7 +589,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
               style: const TextStyle(
                 fontSize: 12,
                 color: AppColors.onSurfaceMuted,
-                fontFamily: 'SourceCodePro',
+                fontFamily: AppTextStyles.monoFamily,
               ),
             ),
           Container(
@@ -603,7 +604,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
               plies[i].$1,
               style: TextStyle(
                 fontSize: 12,
-                fontFamily: 'SourceCodePro',
+                fontFamily: AppTextStyles.monoFamily,
                 color: plies[i].$2,
                 fontWeight: plies[i].$3 ? FontWeight.bold : FontWeight.normal,
               ),

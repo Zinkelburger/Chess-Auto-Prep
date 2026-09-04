@@ -89,7 +89,7 @@ mixin _TrickHuntMixin on _AnalysisScreenStateBase {
       final pgnModifiedNow = await fileModifiedOrNull(pgnPath);
       final gamesUnchanged = sameMtime(pgnModifiedAtStart, pgnModifiedNow);
       if (gamesUnchanged) {
-        await TrickHuntPersistence.instance.save(
+        await trickHuntStore.save(
           await _gamesService.tricksReportPath(
             player.platform,
             player.username,
@@ -134,7 +134,7 @@ mixin _TrickHuntMixin on _AnalysisScreenStateBase {
     if (player == null) return;
     final isWhite = _playerIsWhite;
     setState(() => _tricksResults[isWhite] = result);
-    await TrickHuntPersistence.instance.saveResult(
+    await trickHuntStore.saveResult(
       await _gamesService.tricksReportPath(
         player.platform,
         player.username,
@@ -150,7 +150,7 @@ mixin _TrickHuntMixin on _AnalysisScreenStateBase {
     final player = _currentPlayer;
     if (player == null) return;
     for (final isWhite in [true, false]) {
-      final snapshot = await TrickHuntPersistence.instance.load(
+      final snapshot = await trickHuntStore.load(
         await _gamesService.tricksReportPath(
           player.platform,
           player.username,

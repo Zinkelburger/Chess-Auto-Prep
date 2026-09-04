@@ -9,6 +9,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
 import '../../../utils/pgn_comment_utils.dart' show nagColor;
 import '../../../widgets/shortcut_tooltip.dart';
 import 'package:chess_auto_prep/models/trap_line_info.dart';
@@ -223,10 +224,7 @@ class _TrapTourNarrative extends StatelessWidget {
         const SizedBox(height: 1),
         Text.rich(
           TextSpan(
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.onSurfaceSoft,
-            ),
+            style: AppTextStyles.caption,
             children: [
               TextSpan(text: '$prob% play '),
               TextSpan(

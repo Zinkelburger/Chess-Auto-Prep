@@ -1,3 +1,4 @@
+import '../utils/chess_utils.dart' show formatEvalDisplay;
 import '../utils/eval_constants.dart';
 
 class EngineEvaluation {
@@ -27,16 +28,9 @@ class EngineEvaluation {
   int get effectiveCp =>
       effectiveCpFromScores(scoreCp: scoreCp, scoreMate: scoreMate);
 
-  String get scoreString {
-    if (scoreMate != null) {
-      return 'M$scoreMate';
-    }
-    if (scoreCp != null) {
-      final double eval = scoreCp! / 100.0;
-      return eval > 0 ? '+${eval.toStringAsFixed(2)}' : eval.toStringAsFixed(2);
-    }
-    return '...';
-  }
+  /// Human-readable score, `+0.50` / `-1.23` / `#5`.
+  String get scoreString =>
+      formatEvalDisplay(scoreCp: scoreCp, scoreMate: scoreMate, decimals: 2);
 
   EngineEvaluation copyWith({
     int? depth,

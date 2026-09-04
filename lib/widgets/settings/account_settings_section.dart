@@ -14,6 +14,7 @@ import 'package:provider/provider.dart';
 import '../../core/app_state.dart';
 import '../../services/lichess_auth_service.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import '../accounts/accounts_dialog.dart';
 import 'settings_widgets.dart';
 
@@ -160,13 +161,7 @@ class _LichessLoginTileState extends State<_LichessLoginTile> {
                 'Lichess: logged in as ${auth.username ?? 'unknown'}',
                 style: const TextStyle(fontSize: 13),
               ),
-              Text(
-                detail,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceMuted,
-                ),
-              ),
+              Text(detail, style: AppTextStyles.caption),
             ],
           ),
         ),
@@ -203,10 +198,7 @@ class _LichessLoginTileState extends State<_LichessLoginTile> {
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
               const SizedBox(width: 8),
-              const Text(
-                'Waiting for browser…',
-                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
-              ),
+              const Text('Waiting for browser…', style: AppTextStyles.caption),
               const SizedBox(width: 8),
               TextButton(onPressed: _cancelOAuth, child: const Text('Cancel')),
             ] else

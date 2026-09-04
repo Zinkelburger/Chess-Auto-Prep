@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
 
 import '../../../theme/app_colors.dart';
+import '../../../widgets/common/stat_display.dart';
 
 class TrapSummaryHeader extends StatelessWidget {
   final TrapRepertoireMetrics metrics;
@@ -22,16 +23,19 @@ class TrapSummaryHeader extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _Stat(value: '${metrics.totalTraps}', label: 'Total traps'),
-                _Stat(
+                StackedStat(
+                  value: '${metrics.totalTraps}',
+                  label: 'Total traps',
+                ),
+                StackedStat(
                   value: '${metrics.highQualityCount}',
                   label: 'High quality',
                 ),
-                _Stat(
+                StackedStat(
                   value: '${(metrics.avgReach * 100).toStringAsFixed(2)}%',
                   label: 'Avg reach',
                 ),
-                _Stat(
+                StackedStat(
                   value: '+${metrics.avgEvalGain.round()}cp',
                   label: 'Avg gain',
                 ),
@@ -65,29 +69,6 @@ class TrapSummaryHeader extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _Stat extends StatelessWidget {
-  final String value;
-  final String label;
-
-  const _Stat({required this.value, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
-        ),
-      ],
     );
   }
 }

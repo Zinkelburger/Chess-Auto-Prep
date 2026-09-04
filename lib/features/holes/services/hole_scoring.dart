@@ -1,8 +1,11 @@
-/// Pure scoring/ranking helpers for the hole hunt. Kept free of engine and
+/// Pure walk helpers for the hole hunt: which leaves the trap pass probes,
+/// and how reach probability flows down the tree. Kept free of engine and
 /// widget dependencies so they are unit-testable.
+///
+/// Finding-level scoring and ranking is
+/// `features/audit/services/exploit_ranking.dart` — shared with the trick
+/// hunt, which has no other business with this file.
 library;
-
-import '../../audit/models/audit_finding.dart';
 
 /// A repertoire leaf collected during the walk, candidate for the
 /// expectimax trap pass.
@@ -16,29 +19,6 @@ class LeafEntry {
     required this.movePath,
     required this.cumProb,
   });
-}
-
-/// exploitScore = reach probability × gain (cp). A null/zero probability
-/// contributes nothing — unreachable holes don't rank.
-double exploitScoreOf({double? cumProb, required int gainCp}) {
-  final p = cumProb ?? 0.0;
-  return p * gainCp;
-}
-
-/// Sort findings by [AuditFinding.exploitScore] descending, falling back to
-/// cumulative probability, then to insertion order (stable).
-List<AuditFinding> rankByExploitScore(List<AuditFinding> findings) {
-  final indexed = findings.asMap().entries.toList();
-  indexed.sort((a, b) {
-    final sa = a.value.exploitScore ?? 0.0;
-    final sb = b.value.exploitScore ?? 0.0;
-    if (sa != sb) return sb.compareTo(sa);
-    final pa = a.value.cumulativeProbability ?? 0.0;
-    final pb = b.value.cumulativeProbability ?? 0.0;
-    if (pa != pb) return pb.compareTo(pa);
-    return a.key.compareTo(b.key);
-  });
-  return indexed.map((e) => e.value).toList();
 }
 
 /// Top-[k] leaves by cumulative reach probability (descending, stable).

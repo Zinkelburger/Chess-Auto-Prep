@@ -13,10 +13,14 @@ import '../../theme/app_colors.dart';
 /// a flat text button, so the safe choice (Cancel) is the one that looks
 /// pressable. Turn it off for an "are you sure?" that merely interrupts
 /// something, such as ending a training session.
+///
+/// [message] is optional: a title that already names the thing
+/// (`Delete chapter "Sicilian"?`) needs no body, and an empty paragraph under
+/// it only makes the dialog taller.
 Future<bool> confirmAction(
   BuildContext context, {
   required String title,
-  required String message,
+  String? message,
   required String confirmLabel,
   String cancelLabel = 'Cancel',
   bool destructive = true,
@@ -25,7 +29,7 @@ Future<bool> confirmAction(
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text(title),
-      content: Text(message),
+      content: message == null ? null : Text(message),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx, false),

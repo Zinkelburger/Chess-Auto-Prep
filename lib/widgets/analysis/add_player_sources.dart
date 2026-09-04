@@ -11,7 +11,7 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 
 /// Where a player's games come from.
 enum AddPlayerSource {
@@ -87,13 +87,7 @@ class AddPlayerButton extends StatelessWidget {
                   children: [
                     Text(source.menuLabel),
                     const SizedBox(height: 2),
-                    Text(
-                      source.detail,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.onSurfaceMuted,
-                      ),
-                    ),
+                    Text(source.detail, style: AppTextStyles.caption),
                   ],
                 ),
               ),

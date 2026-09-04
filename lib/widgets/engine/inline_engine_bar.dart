@@ -23,6 +23,7 @@ import '../../services/engine/eval_worker.dart';
 import '../../services/engine/stockfish_connection_factory.dart';
 import '../../services/engine/stockfish_pool.dart' show kPoolHashPerWorkerMb;
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import '../../utils/chess_utils.dart'
     show fenAfterMoves, formatEvalDisplay, formatNodes, uciPvToSanCached;
 import '../../utils/fen_utils.dart';
@@ -359,21 +360,12 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                               '${formatNodes(_discovery.nodes)} nodes'
                         : '${_discovery.lines.length} lines • '
                               'depth ${_discovery.depth}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceSoft,
-                    ),
+                    style: AppTextStyles.caption,
                     overflow: TextOverflow.ellipsis,
                   )
                 : const Tooltip(
                     message: 'Toggle engine (E)',
-                    child: Text(
-                      'Engine',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.onSurfaceMuted,
-                      ),
-                    ),
+                    child: Text('Engine', style: AppTextStyles.caption),
                   ),
           ),
           if (_engineEnabled)
@@ -482,7 +474,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                       san,
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontFamily: 'SourceCodePro',
+                        fontFamily: AppTextStyles.monoFamily,
                         fontSize: 14,
                       ),
                     ),
@@ -498,7 +490,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 13,
-                fontFamily: 'SourceCodePro',
+                fontFamily: AppTextStyles.monoFamily,
               ),
               textAlign: TextAlign.center,
             ),

@@ -413,10 +413,7 @@ class _TacticsStarRating extends StatelessWidget {
             padding: const EdgeInsets.only(left: 8),
             child: Text(
               rating == 1 ? '(hidden from training)' : '',
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurfaceMuted,
-              ),
+              style: AppTextStyles.caption,
             ),
           ),
       ],

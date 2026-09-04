@@ -17,6 +17,7 @@ import '../services/repertoire_service.dart';
 import '../services/study_import/study_import_controller.dart';
 import '../services/study_import/study_import_exception.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 import '../utils/app_shortcuts.dart';
 import '../utils/keyboard_shortcut_utils.dart';
@@ -25,6 +26,7 @@ import '../widgets/app_mode_switcher.dart';
 import '../widgets/app_overflow_menu.dart';
 import '../widgets/app_settings_button.dart';
 import '../widgets/board_editor/board_editor_dialog.dart';
+import '../widgets/common/confirm_dialog.dart';
 import '../widgets/common/searchable_picker_dialog.dart';
 import '../widgets/engine/inline_engine_bar.dart';
 import '../widgets/pgn/pgn_annotation_panel.dart';
@@ -341,7 +343,10 @@ class _StudyScreenState extends State<StudyScreen> {
             autofocus: true,
             minLines: 6,
             maxLines: 14,
-            style: const TextStyle(fontFamily: 'SourceCodePro', fontSize: 12),
+            style: const TextStyle(
+              fontFamily: AppTextStyles.monoFamily,
+              fontSize: 12,
+            ),
             decoration: const InputDecoration(
               hintText:
                   'Paste one or more games in PGN…\n\n'
@@ -386,27 +391,13 @@ class _StudyScreenState extends State<StudyScreen> {
   Future<void> _deleteCurrentStudy() async {
     final path = _study.doc.filePath;
     if (path == null) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Delete study "${_study.doc.name}"?'),
-        content: const Text('The PGN file will be permanently deleted.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.dangerSurface,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+    final confirmed = await confirmAction(
+      context,
+      title: 'Delete study "${_study.doc.name}"?',
+      message: 'The PGN file will be permanently deleted.',
+      confirmLabel: 'Delete',
     );
-    if (confirmed == true) await _study.deleteStudy(path);
+    if (confirmed) await _study.deleteStudy(path);
   }
 
   Future<void> _addChapter({bool fromPosition = false}) async {
@@ -430,27 +421,16 @@ class _StudyScreenState extends State<StudyScreen> {
   /// it clears them (after confirmation).
   Future<void> _editChapterPosition() async {
     if (_study.chapterHasMoves) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Replace starting position?'),
-          content: Text(
+      final confirmed = await confirmAction(
+        context,
+        title: 'Replace starting position?',
+        message:
             'Chapter "${_study.chapter.name}" already has moves; setting a '
             'new starting position will clear them.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Replace'),
-            ),
-          ],
-        ),
+        confirmLabel: 'Replace',
+        destructive: false,
       );
-      if (confirmed != true) return;
+      if (!confirmed) return;
     }
     if (!mounted) return;
     final position = await BoardEditorDialog.show(
@@ -569,26 +549,12 @@ class _StudyScreenState extends State<StudyScreen> {
       );
       return;
     }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Delete chapter "${_study.doc.chapters[index].name}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.dangerSurface,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+    final confirmed = await confirmAction(
+      context,
+      title: 'Delete chapter "${_study.doc.chapters[index].name}"?',
+      confirmLabel: 'Delete',
     );
-    if (confirmed == true) _study.deleteChapter(index);
+    if (confirmed) _study.deleteChapter(index);
   }
 
   // ── Build ────────────────────────────────────────────────────────────

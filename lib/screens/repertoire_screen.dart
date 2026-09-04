@@ -414,13 +414,8 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
     return panel != null && action(panel);
   }
 
-  void _reclaimFocus() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _focusNode.canRequestFocus && !isTextInputFocused()) {
-        _focusNode.requestFocus();
-      }
-    });
-  }
+  void _reclaimFocus() =>
+      reclaimFocusAfterFrame(_focusNode, mounted: () => mounted);
 
   // Outline column actions, implemented on the concrete state and called
   // from the layout mixin.

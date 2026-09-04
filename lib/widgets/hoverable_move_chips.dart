@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 
 import '../core/board_preview_controller.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import '../utils/chess_utils.dart' show fenAfterMoves;
 
 /// Compact inline move text with optional hover board preview.
@@ -132,7 +133,7 @@ class _HoverableMoveChipsState extends State<HoverableMoveChips> {
             style: TextStyle(
               fontSize: widget.fontSize,
               color: numColor,
-              fontFamily: 'SourceCodePro',
+              fontFamily: AppTextStyles.monoFamily,
               height: 1.5,
             ),
           ),
@@ -143,7 +144,7 @@ class _HoverableMoveChipsState extends State<HoverableMoveChips> {
           text: moves[i],
           style: TextStyle(
             fontSize: widget.fontSize,
-            fontFamily: 'SourceCodePro',
+            fontFamily: AppTextStyles.monoFamily,
             color: isHighlighted ? hlColor : defaultColor,
             fontWeight: isHighlighted ? FontWeight.bold : FontWeight.normal,
             backgroundColor: isHighlighted

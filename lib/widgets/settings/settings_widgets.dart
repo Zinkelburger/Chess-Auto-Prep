@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Section header with icon, title, optional subtitle
@@ -266,7 +267,7 @@ class SettingsSliderTile extends StatelessWidget {
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: AppColors.onSurfaceSoft,
-                  fontFamily: 'SourceCodePro',
+                  fontFamily: AppTextStyles.monoFamily,
                 ),
               ),
             ],
@@ -395,7 +396,7 @@ class _StepperControl extends StatelessWidget {
             style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              fontFamily: 'SourceCodePro',
+              fontFamily: AppTextStyles.monoFamily,
             ),
           ),
         ),

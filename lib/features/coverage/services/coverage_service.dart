@@ -1,13 +1,17 @@
-/// Coverage Calculator Service
-/// Analyzes repertoire coverage using the Lichess Explorer API
+/// Repertoire coverage: what share of the master games reaching your root
+/// your file still has an answer for.
+///
+/// Counts come from the local master-games (TWIC) book, not the Lichess
+/// Explorer — see [CoverageService.masterBook] for why.
 library;
 
 import 'dart:async';
 import 'package:dartchess/dartchess.dart';
 import '../../../models/opening_tree.dart';
+import '../../../services/master_games/master_games_db.dart'
+    show BookLookup, BookMove;
 import '../../../utils/fen_utils.dart';
 import '../../../utils/chess_utils.dart';
-import '../../../services/lichess_api_client.dart';
 import '../../../services/maia/maia_factory.dart';
 
 /// Database types for Lichess Explorer
@@ -47,7 +51,10 @@ class UnaccountedMove {
   final String move;
   final int gameCount;
   final double probability;
-  final String source; // "lichess" or "maia"
+
+  /// Which database named this move: `masters` (the local TWIC book) or
+  /// `maia` (the policy net, when the book has never seen the position).
+  final String source;
 
   UnaccountedMove({
     required this.parentMoves,
@@ -173,38 +180,68 @@ class CoverageService {
   /// are classified as "too deep".
   static const tooDeepThresholdPly = 4;
 
-  final LichessDatabase database;
-  final String ratings;
-  final String speeds;
-  final String? playerName;
-  final String? playerColor;
+  /// Fall back to the Maia policy net for opponent replies at positions the
+  /// book has never seen — the only source left once the book runs out.
   final bool useMaia;
   final int maiaElo;
 
-  // Cache for FEN positions
-  final Map<String, Map<String, dynamic>> _cache = {};
-  int _cacheHits = 0;
-  int _cacheMisses = 0;
-  int _apiCalls = 0;
+  /// Where the game counts come from.
+  ///
+  /// The local master-games (TWIC) book — `MasterGamesDb.bookMoves` — not the
+  /// Lichess Explorer. Coverage asks a question about every node of a tree, so
+  /// the Explorer version was thousands of API calls per run, which is why
+  /// that fetch path was mothballed; the local book answers the same question
+  /// from disk with no network, no rate limit and no politeness gap.
+  ///
+  /// The number therefore means "share of *master* games reaching your root
+  /// that your file still answers", not "share of Lichess games in a rating
+  /// band". That is the honest reading of the only complete position database
+  /// this app has offline, and it is the right one for opening prep.
+  ///
+  /// Null when no book is wired (no TWIC import yet) — then there is no
+  /// source at all, [hasPositionData] is false, and the run refuses rather
+  /// than reporting zeros.
+  final BookLookup? masterBook;
 
-  CoverageService({
-    this.database = LichessDatabase.lichess,
-    this.ratings = '2000,2200,2500',
-    this.speeds = 'blitz,rapid,classical',
-    this.playerName,
-    this.playerColor,
-    this.useMaia = false,
-    this.maiaElo = 2200,
-  });
+  CoverageService({this.useMaia = false, this.maiaElo = 2200, this.masterBook});
+
+  /// Whether this service has a position-statistics source at all.
+  ///
+  /// Coverage is defined entirely by game counts — what fraction of the games
+  /// reaching the root your file still answers — so with no source every
+  /// number it produces is zero: a full tree traversal that ends in
+  /// "0.0% covered, 0 shallow, 0 unaccounted" no matter how complete the
+  /// repertoire is. That reads as a verdict on the repertoire rather than on
+  /// the missing source, which is why the entry points are hidden and
+  /// [analyzeOpeningTree] refuses instead of returning zeros.
+  bool get hasPositionData => masterBook != null;
+
+  /// Master moves at [fen], most-played first; empty when no book is wired
+  /// or the position is not in it.
+  List<BookMove> bookMovesAt(String fen) => masterBook?.call(fen) ?? const [];
 
   /// MOTHBALLED: Lichess Explorer API calls are disabled. Returns null
-  /// immediately. Remove the early return to re-enable.
+  /// immediately.
+  ///
+  /// Still here because [CandidateService] calls it for *Explorer-shaped*
+  /// stats in the browse panels, where a master-book answer would be
+  /// mislabelled. Coverage no longer goes through it — it reads
+  /// [masterBook] directly.
   Future<Map<String, dynamic>?> getPositionData(String fen) async {
     // Mothballed: no Lichess Explorer API calls.
     return null;
   }
 
+  /// Master games that reached [fen], as the sum over the moves played from
+  /// it. A position no master ever left — the last position of every game
+  /// that ended there — contributes nothing, which is the same convention the
+  /// book itself is built on and is immaterial at opening depth.
   Future<int> getGameCount(String fen) async {
+    final moves = bookMovesAt(fen);
+    if (moves.isNotEmpty) {
+      return moves.fold<int>(0, (sum, m) => sum + m.games);
+    }
+    // Legacy Explorer shape, for a future in which that path comes back.
     final data = await getPositionData(fen);
     if (data == null) return 0;
     return (data['white'] as int? ?? 0) +
@@ -212,31 +249,72 @@ class CoverageService {
         (data['draws'] as int? ?? 0);
   }
 
+  /// Moves played from [fen] with their W/D/L counts, in the Explorer's shape
+  /// so the callers below stay source-agnostic.
+  ///
+  /// The book stores UCI; a move whose SAN cannot be derived (an unparsable
+  /// FEN, a move illegal in it — a corrupt row) is dropped rather than
+  /// reported under a raw `e2e4`, which would never match a repertoire SAN
+  /// and so would show up as a permanent phantom gap.
   Future<List<Map<String, dynamic>>> getMovesWithCounts(String fen) async {
+    final book = bookMovesAt(fen);
+    if (book.isNotEmpty) {
+      final out = <Map<String, dynamic>>[];
+      for (final m in book) {
+        final san = uciToSanOrNull(fen, m.uci);
+        if (san == null) continue;
+        out.add({
+          'san': san,
+          'uci': m.uci,
+          'white': m.whiteWins,
+          'draws': m.draws,
+          'black': m.blackWins,
+        });
+      }
+      return out;
+    }
     final data = await getPositionData(fen);
     if (data == null) return [];
     final moves = data['moves'] as List<dynamic>? ?? [];
     return moves.cast<Map<String, dynamic>>();
   }
 
-  (List<String>, String) findRepertoireRoot(OpeningTree tree) {
+  /// Where the measurement starts: the forced opening sequence the file
+  /// commits to, and the node it lands on.
+  ///
+  /// The root sets the denominator — "games that reach here" — so it may only
+  /// swallow moves that were *ours to choose*. A 1.e4 repertoire is measured
+  /// over games with 1.e4, which is what its author means by coverage.
+  ///
+  /// It must NOT swallow a lone opponent reply. Descending through one
+  /// because the file happens to answer only 1...e5 would redefine the
+  /// denominator as "games with 1.e4 e5" and delete the entire Sicilian from
+  /// the measurement — scoring the file 100% precisely for the gap it was run
+  /// to find. Our own single child is a choice; theirs is a hole.
+  ///
+  /// Returns the moves played, the node they land on, and its FEN.
+  ({List<String> moves, OpeningTreeNode node, String fen}) findRepertoireRoot(
+    OpeningTree tree, {
+    required bool isWhiteRepertoire,
+  }) {
     final moves = <String>[];
     Chess position = Chess.initial;
     OpeningTreeNode current = tree.root;
 
     while (current.children.length == 1) {
+      final ourTurn = (position.turn == Side.white) == isWhiteRepertoire;
+      if (!ourTurn) break;
+
       final childMove = current.children.keys.first;
-      moves.add(childMove);
-
       final move = position.parseSan(childMove);
-      if (move != null) {
-        position = position.play(move) as Chess;
-      }
+      if (move == null) break;
 
+      moves.add(childMove);
+      position = position.play(move) as Chess;
       current = current.children.values.first;
     }
 
-    return (moves, position.fen);
+    return (moves: moves, node: current, fen: position.fen);
   }
 
   Future<CoverageResult> analyzeOpeningTree(
@@ -245,9 +323,18 @@ class CoverageService {
     required bool isWhiteRepertoire,
     CoverageProgressCallback? onProgress,
   }) async {
+    if (!hasPositionData) {
+      throw StateError(
+        'Coverage needs the master-games database, and none is loaded — '
+        'every figure it produced would be zero. Import TWIC issues in '
+        'Settings, then run it again.',
+      );
+    }
     onProgress?.call('Detecting root position...', 0.0);
 
-    final (rootMoves, effectiveRootFen) = findRepertoireRoot(tree);
+    final root = findRepertoireRoot(tree, isWhiteRepertoire: isWhiteRepertoire);
+    final rootMoves = root.moves;
+    final effectiveRootFen = root.fen;
 
     onProgress?.call(
       'Root: ${rootMoves.isEmpty ? "Starting position" : rootMoves.join(" ")}',
@@ -266,8 +353,13 @@ class CoverageService {
     final leaves = <LeafNode>[];
     final allPositions = <String, List<String>>{};
 
+    // The walk starts at the ROOT NODE, not at `tree.root`: every position
+    // below is derived as `startingMoves + currentMoves`, so a walk that
+    // began at the true root would re-apply the prefix on top of a path that
+    // already contains it and compute a nonsense (usually illegal, therefore
+    // silently unchanged) FEN for every node in the tree.
     await _traverseTree(
-      tree.root,
+      root.node,
       [],
       leaves,
       allPositions,
@@ -334,6 +426,28 @@ class CoverageService {
     );
   }
 
+  /// The position after [prefix] then [rest], or null when the path does not
+  /// apply from the standard start.
+  ///
+  /// Total, but never *silently* total: skipping a move that will not play —
+  /// as both replays here used to — leaves a position that has drifted from
+  /// the path it claims to be, and every count taken at it is then a count
+  /// for some other position. Returning null lets the caller drop the node
+  /// instead of reporting a confident wrong number.
+  Chess? _positionAfter(List<String> prefix, List<String> rest) {
+    try {
+      Chess position = Chess.initial;
+      for (final move in [...prefix, ...rest]) {
+        final m = position.parseSan(move);
+        if (m == null) return null;
+        position = position.play(m) as Chess;
+      }
+      return position;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Traverse the opening tree and collect leaf nodes.
   ///
   /// [firstBelowThresholdPly] tracks the ply at which game count first
@@ -349,15 +463,8 @@ class CoverageService {
     CoverageProgressCallback? onProgress,
     int? firstBelowThresholdPly,
   ) async {
-    Chess position = Chess.initial;
-    for (final move in startingMoves) {
-      final m = position.parseSan(move);
-      if (m != null) position = position.play(m) as Chess;
-    }
-    for (final move in currentMoves) {
-      final m = position.parseSan(move);
-      if (m != null) position = position.play(m) as Chess;
-    }
+    final position = _positionAfter(startingMoves, currentMoves);
+    if (position == null) return;
 
     final fen = position.fen;
     allPositions[normalizeFen(fen)] = List.from(currentMoves);
@@ -459,15 +566,8 @@ class CoverageService {
         );
       }
 
-      Chess position = Chess.initial;
-      for (final move in startingMoves) {
-        final m = position.parseSan(move);
-        if (m != null) position = position.play(m) as Chess;
-      }
-      for (final move in entry.value) {
-        final m = position.parseSan(move);
-        if (m != null) position = position.play(m) as Chess;
-      }
+      final position = _positionAfter(startingMoves, entry.value);
+      if (position == null) continue;
 
       final isWhiteTurn = position.turn == Side.white;
       final isMyTurn =
@@ -508,7 +608,7 @@ class CoverageService {
                 move: moveSan,
                 gameCount: moveGames,
                 probability: prob,
-                source: 'lichess',
+                source: 'masters',
               ),
             );
           }
@@ -563,21 +663,4 @@ class CoverageService {
     }
     return number.toString();
   }
-
-  String get cacheStats {
-    final total = _cacheHits + _cacheMisses;
-    final hitRate = total > 0
-        ? (_cacheHits / total * 100).toStringAsFixed(1)
-        : '0.0';
-    return 'Cache: $_cacheHits hits, $_cacheMisses misses ($hitRate% hit rate), $_apiCalls API calls';
-  }
-
-  void clearCache() {
-    _cache.clear();
-    _cacheHits = 0;
-    _cacheMisses = 0;
-    _apiCalls = 0;
-  }
-
-  bool get isRateLimited => LichessApiClient.instance.isBackingOff;
 }

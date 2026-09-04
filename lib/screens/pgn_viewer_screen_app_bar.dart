@@ -107,7 +107,12 @@ mixin _AppBarBuildersMixin
                   ? Theme.of(context).colorScheme.primary
                   : null,
             ),
-            tooltip: _controller.isSolitaireMode
+            // A disabled control still owes an explanation: without this the
+            // opening tree greys the button out and the tooltip goes on
+            // advertising a mode that will not open.
+            tooltip: _controller.showOpeningTree
+                ? 'Solitaire needs one game — close the opening tree first'
+                : _controller.isSolitaireMode
                 ? 'Leave solitaire (Esc)'
                 : _controller.isSolitaireSetup
                 ? 'Cancel solitaire setup (Esc)'

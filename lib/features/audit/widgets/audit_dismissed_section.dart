@@ -5,6 +5,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
 
 class AuditDismissedSection extends StatelessWidget {
   const AuditDismissedSection({
@@ -33,13 +34,7 @@ class AuditDismissedSection extends StatelessWidget {
             color: AppColors.onSurfaceMuted,
           ),
           const SizedBox(width: 4),
-          Text(
-            '$dismissedCount dismissed',
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.onSurfaceMuted,
-            ),
-          ),
+          Text('$dismissedCount dismissed', style: AppTextStyles.caption),
           const Spacer(),
           TextButton(
             onPressed: onRestoreAll,

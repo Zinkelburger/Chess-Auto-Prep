@@ -11,7 +11,6 @@ import 'package:flutter/material.dart';
 import '../models/solitaire_trophy.dart';
 import '../models/engine_settings.dart';
 import '../services/game_analysis_controller.dart';
-import '../utils/chess_utils.dart' show formatEvalDisplay;
 import 'clickable_move_line.dart';
 import 'engine/engine_gate.dart';
 import 'game_analysis_chart.dart';
@@ -226,10 +225,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
           Expanded(
             child: Text(
               'Graph from the games review, at depth $stored.',
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurfaceSoft,
-              ),
+              style: AppTextStyles.caption,
             ),
           ),
           TextButton.icon(
@@ -326,11 +322,6 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
     });
   }
 
-  String _formatEval(MoveEval e) {
-    if (e.deliversCheckmate) return '#';
-    return formatEvalDisplay(scoreCp: e.scoreCp, scoreMate: e.scoreMate);
-  }
-
   /// Compute which best-line move to highlight based on variation depth.
   int? _computeBestLineMoveIdx() {
     final depth = widget.variationDepth;
@@ -412,6 +403,18 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
             onPressed: _startAnalysis,
             icon: const Icon(Icons.analytics, size: 20),
             label: const Text('Analyze Game'),
+          ),
+          const SizedBox(height: 10),
+          // A button on an empty pane with no idea what it costs. Stockfish
+          // runs over every move, which is minutes, so say so before it goes.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              'Runs the engine over every move — an eval graph, the mistakes '
+              'it found, and the line it wanted instead. Takes a few minutes.',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.caption,
+            ),
           ),
           const Spacer(),
         ] else
@@ -518,7 +521,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
       MoveClassification.normal => '',
     };
 
-    final evalStr = _formatEval(e);
+    final evalStr = e.evalDisplay;
 
     return Container(
       key: isNearest ? _nearestItemKey : null,
@@ -550,7 +553,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
                     e.san,
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontFamily: 'SourceCodePro',
+                      fontFamily: AppTextStyles.monoFamily,
                       fontSize: 14,
                     ),
                   ),
@@ -578,7 +581,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
                   Text(
                     evalStr,
                     style: const TextStyle(
-                      fontFamily: 'SourceCodePro',
+                      fontFamily: AppTextStyles.monoFamily,
                       fontSize: 12,
                       color: AppColors.pgnMove,
                     ),
@@ -618,10 +621,13 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
 
   Widget _buildInterestingMoveInfo(MoveEval e, Map<int, MoveEval> evalByPly) {
     final prevEval = evalByPly[e.ply - 1];
-    final playedEval = _formatEval(e);
-    final bestEval = prevEval != null ? _formatEval(prevEval) : null;
+    final playedEval = e.evalDisplay;
+    final bestEval = prevEval?.evalDisplay;
 
-    const monoStyle = TextStyle(fontSize: 12, fontFamily: 'SourceCodePro');
+    const monoStyle = TextStyle(
+      fontSize: 12,
+      fontFamily: AppTextStyles.monoFamily,
+    );
 
     final spans = <InlineSpan>[
       TextSpan(

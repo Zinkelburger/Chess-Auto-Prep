@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../models/engine_settings.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import '../../utils/chess_utils.dart';
 import '../../utils/fen_utils.dart';
 import '../clickable_move_line.dart';
@@ -95,7 +96,7 @@ class EngineMoveRow extends StatelessWidget {
                           move.san,
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
-                            fontFamily: 'SourceCodePro',
+                            fontFamily: AppTextStyles.monoFamily,
                             fontSize: 15,
                           ),
                           overflow: TextOverflow.ellipsis,
@@ -112,7 +113,7 @@ class EngineMoveRow extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
                       color: evalColor,
-                      fontFamily: 'SourceCodePro',
+                      fontFamily: AppTextStyles.monoFamily,
                     ),
                     textAlign: TextAlign.center,
                     overflow: TextOverflow.ellipsis,
@@ -139,7 +140,7 @@ class EngineMoveRow extends StatelessWidget {
                         color: move.maiaProb != null
                             ? AppColors.maiaColor(muted: maiaMuted)
                             : AppColors.onSurfaceDim,
-                        fontFamily: 'SourceCodePro',
+                        fontFamily: AppTextStyles.monoFamily,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -165,7 +166,7 @@ class EngineMoveRow extends StatelessWidget {
         style: TextStyle(
           fontSize: 13,
           color: lineColor,
-          fontFamily: 'SourceCodePro',
+          fontFamily: AppTextStyles.monoFamily,
         ),
         maxLines: rows,
         overflow: TextOverflow.ellipsis,

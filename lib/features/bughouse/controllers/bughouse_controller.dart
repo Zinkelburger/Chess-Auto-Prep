@@ -11,11 +11,19 @@ import '../models/bughouse_engine_settings.dart';
 import '../models/bughouse_eval.dart';
 import '../models/bughouse_history.dart';
 import '../models/bughouse_state.dart';
+import '../services/bughouse_book.dart';
 import '../services/bughouse_bundle.dart';
 import '../services/bughouse_engine.dart';
+import 'bughouse_tournament_controller.dart';
 
-/// Setting a position up versus playing a line through.
-enum BughouseMode { play, setup }
+/// What the side panel is showing, and therefore what the boards are for.
+///
+/// [play] is the pane's resting state — the engine thinks about the position
+/// on the boards. [setup] edits that position. [tournament] hands the engine
+/// to a match instead, and the boards become the game being played: the
+/// analysis pump has to let go for the duration, because one process answers
+/// one question at a time.
+enum BughouseMode { play, setup, tournament }
 
 /// What a click on a board does while in setup mode.
 sealed class SetupTool {
@@ -48,6 +56,7 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   BughouseController({this.engineOverride}) {
     _history = BughouseHistory(BughouseState.initial());
     unawaited(_loadEngineSettings());
+    unawaited(_openBook());
   }
 
   Future<void> _loadEngineSettings() async {
@@ -56,6 +65,76 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
     _engineSettings = loaded;
     // The process, if one is already up, is running on the defaults.
     _optionsDirty = true;
+    notifyListeners();
+  }
+
+  // ------------------------------------------------------------- the book
+
+  /// The FICS archive, if this machine has one built. Null is the ordinary
+  /// case — see [BughouseBook.open].
+  BughouseBook? _book;
+
+  /// Whether the archive is available at all, which is what decides between
+  /// showing the explorer and saying nothing about it.
+  bool get hasBook => _book != null;
+
+  BughouseBookStatus? get bookStatus => _book?.status;
+
+  Future<void> _openBook() async {
+    final book = await BughouseBook.open();
+    if (book == null) return;
+    if (isDisposed) {
+      book.close();
+      return;
+    }
+    _book = book;
+    notifyListeners();
+  }
+
+  String? _bookFen;
+  BughouseBookPosition? _bookPosition;
+
+  /// What the archive played from the position on screen.
+  ///
+  /// Memoised on the dual FEN rather than recomputed on every mutation: the
+  /// lookup is two indexed reads on a `WITHOUT ROWID` key, and hanging it off
+  /// the position means no move, undo, edit or jump can forget to refresh it.
+  BughouseBookPosition? get bookPosition {
+    final book = _book;
+    if (book == null) return null;
+    final fen = state.dualFen;
+    if (_bookFen == fen) return _bookPosition;
+    _bookFen = fen;
+    _bookPosition = book.explore(state.boardA.fen, state.boardB.fen);
+    return _bookPosition;
+  }
+
+  /// Draws a book continuation on the boards, the way hovering an engine line
+  /// does — same arrows, same drop markers, same owner discipline.
+  void hoverBookMove(BughouseBookMove move, {required Object owner}) {
+    final parsed = state.board(move.board).parseSan(move.san);
+    if (parsed == null) return;
+    final half = BughouseHalfMove.move(parsed.uci);
+    hoverAction(
+      BughouseJointMove(
+        move.board == BughouseBoard.a ? half : const BughouseHalfMove.pass(),
+        move.board == BughouseBoard.b ? half : const BughouseHalfMove.pass(),
+      ),
+      owner: owner,
+    );
+  }
+
+  /// Plays a continuation from the book, the way clicking an engine line plays
+  /// its first move.
+  ///
+  /// The SAN is re-parsed against the board on screen rather than trusted: the
+  /// book is keyed by position, so a row can outlive the position that fetched
+  /// it by one click.
+  void playBookMove(BughouseBookMove move) {
+    final parsed = state.board(move.board).parseSan(move.san);
+    if (parsed == null || !_play(move.board, parsed)) {
+      _fail('${move.san} is not legal here.');
+    }
     notifyListeners();
   }
 
@@ -380,9 +459,69 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
 
   void setMode(BughouseMode mode) {
     if (_mode == mode) return;
+    final left = _mode;
     _mode = mode;
     _pendingDrop = null;
+    if (left == BughouseMode.tournament) {
+      // A match sets `Hash` and `BatchSize` to its own snapshotted values, so
+      // the pane's are no longer what the process is running with.
+      _optionsDirty = true;
+    }
+    // `_wantsAnalysis` is false in every mode but `play`, so this both cuts
+    // the pass in flight short and leaves the pump stopped — which is how the
+    // tournament gets the process to itself.
     _clearAnalysis();
+    notifyListeners();
+  }
+
+  // -------------------------------------------------------------- tournament
+
+  BughouseTournamentController? _tournaments;
+
+  /// Match runner to use instead of making one. Tests only — the same seam as
+  /// [engineOverride], for the same reason: the real one reads and writes
+  /// `Documents/`.
+  @visibleForTesting
+  BughouseTournamentController? tournamentsOverride;
+
+  /// The match runner, created on first use.
+  ///
+  /// It borrows this controller's engine rather than starting a second
+  /// Hivemind: the network is 54 MB and the search already uses every core, so
+  /// two processes would halve the speed of both. Borrowing is safe because
+  /// [BughouseMode.tournament] stops the analysis pump — see [setMode] — and
+  /// every command through [BughouseEngine] is serialised anyway.
+  BughouseTournamentController get tournaments =>
+      tournamentsOverride ??
+      (_tournaments ??= BughouseTournamentController(
+        acquireEngine: _ensureEngine,
+        showLine: showLine,
+        onIdle: _engineIdle,
+      ));
+
+  /// The last game of a match has landed and nothing is searching.
+  ///
+  /// A match is allowed to keep the process while the user is elsewhere — see
+  /// [setOnScreen] — so this is where that exception is closed again: once the
+  /// match is over and the pane is still off screen, the engine has nobody
+  /// left to serve.
+  void _engineIdle() {
+    if (_onScreen || isDisposed) return;
+    unawaited(_shutDownEngine());
+  }
+
+  /// Puts a line on the boards — a game from a match, replayed.
+  ///
+  /// The cursor is left where the line left it, so a game being played shows
+  /// its latest position and a finished one opens where the replay left it —
+  /// at the start, ready to walk.
+  void showLine(BughouseHistory line) {
+    _history = line;
+    _pendingDrop = null;
+    hover.value = null;
+    _analyses = const {};
+    _error = null;
+    _notice = null;
     notifyListeners();
   }
 
@@ -896,6 +1035,12 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
       _analyses = const {};
       scenarios = const [];
       _passMs = _firstPassMs;
+      // A match outlives you looking at something else. It is not an idle
+      // engine holding a network for nothing — it is work in progress, and it
+      // takes minutes, so leaving the pane must not throw it away. The
+      // searches keep going and the games are on the panel when you come back;
+      // [_engineIdle] takes the process down once the last one lands.
+      if (_tournaments?.isRunning ?? false) return notifyListeners();
       _engine?.stop();
       unawaited(_shutDownEngine());
     }
@@ -1350,6 +1495,12 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
       unawaited(engine.dispose());
     }
     _engine = null;
+    // Only one this controller made: an injected runner outlives the pane,
+    // exactly as an injected engine does.
+    _tournaments?.dispose();
+    _tournaments = null;
+    _book?.close();
+    _book = null;
     hover.dispose();
     super.dispose();
   }

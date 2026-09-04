@@ -6,6 +6,7 @@ import '../../models/training_settings.dart';
 import '../../services/repertoire_review_service.dart';
 import '../../services/training/training_phase.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/time_format.dart';
 import 'training_progress_panel.dart';
 
 /// Line completion UI: self-rating, all-caught-up, and auto-rate placeholder.
@@ -26,7 +27,6 @@ class TrainingResultsPanel extends StatefulWidget {
   final int sessionIncorrect;
   final int sessionStreak;
   final RepertoireReviewService reviewService;
-  final String Function(DateTime date) formatRelativeDate;
   final void Function(ReviewRating rating) onRateLine;
   final VoidCallback onNextLine;
 
@@ -46,7 +46,6 @@ class TrainingResultsPanel extends StatefulWidget {
     required this.sessionIncorrect,
     required this.sessionStreak,
     required this.reviewService,
-    required this.formatRelativeDate,
     required this.onRateLine,
     required this.onNextLine,
   });
@@ -161,7 +160,6 @@ class _TrainingResultsPanelState extends State<TrainingResultsPanel> {
         sessionCorrect: widget.sessionCorrect,
         sessionIncorrect: widget.sessionIncorrect,
         sessionStreak: widget.sessionStreak,
-        formatRelativeDate: widget.formatRelativeDate,
       );
     }
 
@@ -200,7 +198,7 @@ class _TrainingResultsPanelState extends State<TrainingResultsPanel> {
           const SizedBox(height: 16),
           if (entry != null && entry.lastReviewedUtc != null) ...[
             Text(
-              'Last reviewed: ${widget.formatRelativeDate(entry.lastReviewedUtc!)}',
+              'Last reviewed: ${formatTimeAgo(entry.lastReviewedUtc!)}',
               style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 4),
@@ -340,7 +338,6 @@ class AllCaughtUpPanel extends StatelessWidget {
   final int sessionCorrect;
   final int sessionIncorrect;
   final int sessionStreak;
-  final String Function(DateTime date) formatRelativeDate;
 
   const AllCaughtUpPanel({
     super.key,
@@ -349,7 +346,6 @@ class AllCaughtUpPanel extends StatelessWidget {
     required this.sessionCorrect,
     required this.sessionIncorrect,
     required this.sessionStreak,
-    required this.formatRelativeDate,
   });
 
   @override
@@ -378,7 +374,7 @@ class AllCaughtUpPanel extends StatelessWidget {
           const SizedBox(height: 8),
           if (nextDue != null)
             Text(
-              'Next review: ${formatRelativeDate(nextDue)}',
+              'Next review: ${formatTimeUntil(nextDue)}',
               style: theme.textTheme.bodySmall,
             ),
           if (sessionCorrect + sessionIncorrect > 0) ...[

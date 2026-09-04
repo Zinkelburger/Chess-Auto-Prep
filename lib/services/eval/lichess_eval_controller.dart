@@ -22,6 +22,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/eval_database_settings.dart';
 import '../../utils/safe_change_notifier.dart';
+import '../../utils/time_format.dart';
 import '../jobs/repertoire_job.dart';
 import 'lichess_eval_import.dart';
 import 'lichess_eval_source.dart';
@@ -528,7 +529,7 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
           fraction: fraction,
           message:
               '${formatBytes(_archiveDone)} of ${formatBytes(_archiveTotal)}'
-              '${eta == null ? '' : ' — ${formatDuration(eta!)} left'}',
+              '${eta == null ? '' : ' — ${formatCoarseDuration(eta!)} left'}',
         ),
       );
       notifyListeners();

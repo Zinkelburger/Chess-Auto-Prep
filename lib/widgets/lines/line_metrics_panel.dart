@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import '../../utils/coverage_helpers.dart';
 import '../../utils/pgn_utils.dart' as pgn_utils;
 import '../../models/repertoire_line.dart';
@@ -139,10 +140,7 @@ class _CoverageSummaryBar extends StatelessWidget {
                 color: AppColors.coverageCovered,
               ),
               const SizedBox(width: 4),
-              const Text(
-                '|',
-                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
-              ),
+              const Text('|', style: AppTextStyles.caption),
               const SizedBox(width: 4),
               _CoverageStat(
                 label: 'Shallow',
@@ -150,10 +148,7 @@ class _CoverageSummaryBar extends StatelessWidget {
                 color: AppColors.coverageShallow,
               ),
               const SizedBox(width: 4),
-              const Text(
-                '|',
-                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
-              ),
+              const Text('|', style: AppTextStyles.caption),
               const SizedBox(width: 4),
               _CoverageStat(
                 label: 'Deep',
@@ -176,10 +171,7 @@ class _CoverageSummaryBar extends StatelessWidget {
                     const SizedBox(width: 4),
                     Text(
                       '$totalUnaccounted unaccounted',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.onSurfaceSoft,
-                      ),
+                      style: AppTextStyles.caption,
                     ),
                   ],
                 ),
@@ -273,7 +265,7 @@ class _CoverageStat extends StatelessWidget {
         const SizedBox(width: 4),
         Text(
           '$label: ${percent.toStringAsFixed(1)}%',
-          style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
+          style: AppTextStyles.caption,
         ),
       ],
     );
@@ -302,10 +294,7 @@ class _StatsBar extends StatelessWidget {
         children: [
           Text(
             '${filteredLines.length} line${filteredLines.length == 1 ? '' : 's'}',
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.onSurfaceSoft,
-            ),
+            style: AppTextStyles.caption,
           ),
           if (currentMoveSequence.isNotEmpty) ...[
             const Text(

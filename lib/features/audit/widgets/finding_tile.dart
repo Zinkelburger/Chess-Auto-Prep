@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
 import '../models/audit_finding.dart';
 
 /// One row in the audit findings list. Extracted from `audit_findings_panel`.
@@ -63,7 +64,7 @@ class FindingTile extends StatelessWidget {
                       finding.reachProbLabel!,
                       style: TextStyle(
                         fontSize: 12,
-                        fontFamily: 'SourceCodePro',
+                        fontFamily: AppTextStyles.monoFamily,
                         fontFeatures: const [FontFeature.tabularFigures()],
                         color: finding.dismissed
                             ? AppColors.onSurfaceDim
@@ -80,7 +81,7 @@ class FindingTile extends StatelessWidget {
                       gainLabel!,
                       style: TextStyle(
                         fontSize: 12,
-                        fontFamily: 'SourceCodePro',
+                        fontFamily: AppTextStyles.monoFamily,
                         fontFeatures: const [FontFeature.tabularFigures()],
                         color: finding.dismissed
                             ? AppColors.onSurfaceDim
@@ -108,10 +109,7 @@ class FindingTile extends StatelessWidget {
                       ),
                       Text(
                         finding.movePathString,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.onSurfaceMuted,
-                        ),
+                        style: AppTextStyles.caption,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),

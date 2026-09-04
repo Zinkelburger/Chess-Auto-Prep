@@ -19,6 +19,7 @@ import '../../../models/board_annotation.dart';
 import '../../../services/analysis_games_service.dart';
 import '../../../services/generation/generation_config.dart';
 import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
 import '../../../utils/chess_utils.dart';
 import '../../../utils/keyboard_shortcut_utils.dart';
 import '../../../widgets/chess_board_widget.dart';
@@ -530,10 +531,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                     '${_plan.answered} answered · ${_plan.openBranches} open',
                     textAlign: TextAlign.right,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceMuted,
-                    ),
+                    style: AppTextStyles.caption,
                   ),
                 ),
             ],
@@ -548,7 +546,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                   _movesLabel(_startMoves),
                   style: const TextStyle(
                     fontSize: 12,
-                    fontFamily: 'SourceCodePro',
+                    fontFamily: AppTextStyles.monoFamily,
                   ),
                 ),
               if (_plan.decisions.isNotEmpty)
@@ -570,13 +568,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                           padding: const EdgeInsets.only(bottom: 4),
                           child: Align(
                             alignment: Alignment.centerLeft,
-                            child: Text(
-                              '• $d',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.onSurfaceSoft,
-                              ),
-                            ),
+                            child: Text('• $d', style: AppTextStyles.caption),
                           ),
                         ),
                     ],
@@ -675,7 +667,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                       : _movesLabel(_boardMoves),
                   style: const TextStyle(
                     fontSize: 12,
-                    fontFamily: 'SourceCodePro',
+                    fontFamily: AppTextStyles.monoFamily,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -826,7 +818,10 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
         TextField(
           controller: _movesText,
           onChanged: _parseTypedMoves,
-          style: const TextStyle(fontSize: 13, fontFamily: 'SourceCodePro'),
+          style: const TextStyle(
+            fontSize: 13,
+            fontFamily: AppTextStyles.monoFamily,
+          ),
           decoration: const InputDecoration(
             labelText: 'Moves',
             isDense: true,
@@ -851,13 +846,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
           ),
           subtitle: _ownGamesNote == null
               ? null
-              : Text(
-                  _ownGamesNote!,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.onSurfaceMuted,
-                  ),
-                ),
+              : Text(_ownGamesNote!, style: AppTextStyles.caption),
         ),
         const SizedBox(height: 16),
         Row(
@@ -937,20 +926,14 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                 children: [
                   Text(
                     step.positionName ?? _movesLabel(step.moves),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceMuted,
-                    ),
+                    style: AppTextStyles.caption,
                   ),
                   const Spacer(),
                   Text(
                     ours
                         ? '${whiteToMove ? 'White' : 'Black'} (you) to move'
                         : 'Opponent to move',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceDim,
-                    ),
+                    style: AppTextStyles.caption,
                   ),
                 ],
               ),
@@ -984,10 +967,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                   SizedBox(height: 10),
                   Text(
                     'Asking the book, Maia and the engine…',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceMuted,
-                    ),
+                    style: AppTextStyles.caption,
                   ),
                 ],
               ),
@@ -1070,7 +1050,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
             style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              fontFamily: 'SourceCodePro',
+              fontFamily: AppTextStyles.monoFamily,
             ),
           ),
           const SizedBox(height: 4),
@@ -1116,10 +1096,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
         children: [
           Text(
             step.positionName ?? _movesLabel(step.moves),
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.onSurfaceMuted,
-            ),
+            style: AppTextStyles.caption,
           ),
           const SizedBox(height: 2),
           Text(
@@ -1127,7 +1104,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
             style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              fontFamily: 'SourceCodePro',
+              fontFamily: AppTextStyles.monoFamily,
             ),
           ),
           const SizedBox(height: 4),
@@ -1135,10 +1112,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
             'No more ECO codes from here. ${ours ? 'You' : 'Your opponent'} to '
             'move · ${(step.reachProb * 100).toStringAsFixed(step.reachProb >= 0.1 ? 0 : 1)}% '
             'of games reach this.',
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.onSurfaceMuted,
-            ),
+            style: AppTextStyles.caption,
           ),
           const SizedBox(height: 16),
           Wrap(
@@ -1191,7 +1165,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                 'A chapter is an opening system; the lines you set up inside '
                 'it are the engine\'s starting points. Rename or drop any '
                 'before anything runs.',
-                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+                style: AppTextStyles.caption,
               ),
               const SizedBox(height: 12),
               for (final group in _groupChapters(plan.chapters).entries)
@@ -1425,10 +1399,7 @@ class _ChapterEditRow extends StatelessWidget {
                   Text(
                     '⚙ ${pt.moves.isEmpty ? 'start position' : pt.moves.join(' ')}'
                     '${pt.excludeReplies.isEmpty ? '' : ' · everything played here except ${pt.excludeReplies.join(', ')} (those have their own lines)'}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceDim,
-                    ),
+                    style: AppTextStyles.caption,
                   ),
               ],
             ),

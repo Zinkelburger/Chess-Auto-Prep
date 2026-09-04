@@ -19,6 +19,7 @@ import '../../services/games_repertoire/games_draft.dart';
 import '../../services/games_repertoire/draft_repertoire_writer.dart';
 import '../../services/storage/storage_factory.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import 'draft_tree_view.dart';
 import 'merge_conflict_sheet.dart';
 
@@ -232,7 +233,7 @@ class _DraftReviewPaneState extends State<DraftReviewPane> {
             alignment: Alignment.centerLeft,
             child: Text(
               'Tap a line to expand · long-press to preview on the board · 🗑 discards it',
-              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceDim),
+              style: AppTextStyles.caption,
             ),
           ),
         ),
@@ -279,10 +280,7 @@ class _DraftReviewPaneState extends State<DraftReviewPane> {
                             'Discard lines you don\'t want, then merge the '
                                 'rest in. Merging only adds new lines — '
                                 'nothing is removed.',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.onSurfaceMuted,
-                  ),
+                  style: AppTextStyles.caption,
                 ),
               ),
               Wrap(

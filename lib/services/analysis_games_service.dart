@@ -352,7 +352,7 @@ class AnalysisGamesService {
   }
 
   /// Absolute path of the hole-hunt report for one colour's game tree,
-  /// written and read via [HoleHuntPersistence].
+  /// written and read via [holeHuntStore].
   Future<String> holesReportPath(
     String platform,
     String username,
@@ -367,7 +367,7 @@ class AnalysisGamesService {
   }
 
   /// Absolute path of the trick-hunt report for one colour's game tree,
-  /// written and read via [TrickHuntPersistence].
+  /// written and read via [trickHuntStore].
   Future<String> tricksReportPath(
     String platform,
     String username,

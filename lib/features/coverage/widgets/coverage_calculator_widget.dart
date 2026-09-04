@@ -4,9 +4,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:chess_auto_prep/features/coverage/models/coverage_config.dart';
-import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../../../services/maia/maia_factory.dart';
-import '../../../widgets/lichess_db_selector.dart';
 
 export 'package:chess_auto_prep/features/coverage/models/coverage_config.dart'
     show CoverageConfig;
@@ -29,9 +27,6 @@ class _CoverageConfigDialog extends StatefulWidget {
 class _CoverageConfigDialogState extends State<_CoverageConfigDialog> {
   double _targetPercent = 1.0;
   final _customTargetController = TextEditingController(text: '1');
-  LichessDatabase _database = LichessDatabase.lichess;
-  final Set<String> _selectedRatings = {'2000', '2200', '2500'};
-  final Set<String> _selectedSpeeds = {'blitz', 'rapid', 'classical'};
   bool _useMaia = MaiaFactory.isAvailable;
   int _maiaElo = 2200;
   final _maiaEloController = TextEditingController(text: '2200');
@@ -62,24 +57,15 @@ class _CoverageConfigDialogState extends State<_CoverageConfigDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildThresholdSection(theme),
-              const Divider(height: 24),
-              LichessDbSelector(
-                database: _database,
-                onDatabaseChanged: (db) => setState(() => _database = db),
-                selectedSpeeds: _selectedSpeeds,
-                onSpeedsChanged: (s) => setState(() {
-                  _selectedSpeeds
-                    ..clear()
-                    ..addAll(s);
-                }),
-                selectedRatings: _selectedRatings,
-                onRatingsChanged: (r) => setState(() {
-                  _selectedRatings
-                    ..clear()
-                    ..addAll(r);
-                }),
+              Text(
+                'Measured against your master-games database: the share of '
+                'games reaching this repertoire that it still answers.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
               ),
+              const SizedBox(height: 16),
+              _buildThresholdSection(theme),
               const Divider(height: 24),
               _buildMaiaSection(theme),
             ],
@@ -92,7 +78,7 @@ class _CoverageConfigDialogState extends State<_CoverageConfigDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton.icon(
-          onPressed: _canRun ? _submit : null,
+          onPressed: _submit,
           icon: const Icon(Icons.play_arrow, size: 18),
           label: const Text('Analyze Coverage'),
         ),
@@ -100,20 +86,10 @@ class _CoverageConfigDialogState extends State<_CoverageConfigDialog> {
     );
   }
 
-  bool get _canRun {
-    if (_database == LichessDatabase.lichess) {
-      return _selectedRatings.isNotEmpty && _selectedSpeeds.isNotEmpty;
-    }
-    return true;
-  }
-
   void _submit() {
     Navigator.of(context).pop(
       CoverageConfig(
         targetPercent: _targetPercent,
-        database: _database,
-        selectedRatings: Set.of(_selectedRatings),
-        selectedSpeeds: Set.of(_selectedSpeeds),
         useMaia: _useMaia,
         maiaElo: _maiaElo,
       ),

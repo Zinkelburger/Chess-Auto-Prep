@@ -28,6 +28,19 @@ mixin _MetadataOps on ChangeNotifier {
   /// isolate — was the cost of every comment edit.
   final Set<PgnGameEntry> _dirtyGames = Set.identity();
 
+  /// Movetext as it stood before something annotated a game *for the screen
+  /// only* — solitaire's guess notes. [doPersistMetadata] writes this in
+  /// place of the live text, so the drill's "(revealed)" notes can sit in the
+  /// movetext, ride along with Copy PGN and Add to study, and still never
+  /// reach the reader's file behind their back. A later deliberate write to
+  /// the same game (a comment edit, an engine review, a star) drops the
+  /// substitution: at that point the in-memory copy is the one that counts.
+  final Map<PgnGameEntry, String> _screenOnlyMovetext = Map.identity();
+
+  /// Forget every screen-only substitution — the collection they described
+  /// is going away.
+  void clearScreenOnlyMovetext() => _screenOnlyMovetext.clear();
+
   void setRating(int stars) {
     if (filteredGames.isEmpty) return;
     final game = filteredGames[currentGameIndex];
@@ -61,6 +74,11 @@ mixin _MetadataOps on ChangeNotifier {
     final games = allGames;
     final dirty = List.of(_dirtyGames);
     _dirtyGames.clear();
+    // A game the user has just rated is a game they touched: write what is
+    // in memory, notes and all, rather than a snapshot taken before them.
+    for (final g in dirty) {
+      _screenOnlyMovetext.remove(g);
+    }
 
     if (dirty.isNotEmpty) {
       final rewritten = buildMetadataOutput([
@@ -75,7 +93,7 @@ mixin _MetadataOps on ChangeNotifier {
     try {
       await StorageFactory.instance.writeFile(
         path,
-        '${games.map((g) => g.pgnText).join('\n\n')}\n',
+        '${games.map((g) => _screenOnlyMovetext[g] ?? g.pgnText).join('\n\n')}\n',
       );
       // Everything past this point writes back to *controller* state, which
       // is only ours while the collection we wrote is still the loaded one —
@@ -121,13 +139,27 @@ mixin _MetadataOps on ChangeNotifier {
   /// the game they were typed on.
   ///
   /// The in-memory game is always updated, so a pasted collection's "Copy
-  /// PGN" carries the edits too; only the write to disk needs a file.
-  void persistMoveCommentsFor(PgnGameEntry game, String updatedPgnMovetext) {
+  /// PGN" carries the edits too; only the write to disk needs a file — and
+  /// [writeToFile] can withhold even that. Solitaire's guess notes use it:
+  /// finishing a game used to rewrite the reader's PGN on disk with a
+  /// "(revealed)" on every move, which nobody asked for. Amend mode is the
+  /// mode that says "changes are saved to the file"; a drill is not.
+  void persistMoveCommentsFor(
+    PgnGameEntry game,
+    String updatedPgnMovetext, {
+    bool writeToFile = true,
+  }) {
+    if (writeToFile) {
+      _screenOnlyMovetext.remove(game);
+    } else {
+      _screenOnlyMovetext.putIfAbsent(game, () => game.pgnText);
+    }
+
     final headerEnd = _headerBlockEndRe.allMatches(game.pgnText).last;
     final headerPart = game.pgnText.substring(0, headerEnd.end);
     game.pgnText = '$headerPart\n$updatedPgnMovetext\n';
 
-    if (filePath == null) return;
+    if (!writeToFile || filePath == null) return;
     unawaited(persistMetadata());
   }
 }

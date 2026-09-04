@@ -67,7 +67,7 @@ void main() {
       config: const TrickHuntConfig(probeBudget: 6),
       isComplete: false,
     );
-    final restored = TrickHuntSnapshot.fromJson(snapshot.toJson());
+    final restored = trickHuntStore.decode(trickHuntStore.encode(snapshot));
     expect(restored.isComplete, isFalse);
     expect(restored.config.probeBudget, 6);
     expect(restored.result.findings, isEmpty);

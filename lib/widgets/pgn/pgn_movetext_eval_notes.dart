@@ -78,7 +78,7 @@ Map<int, _EvalNote> _buildEvalNotes(PgnMovetextView view) {
   final history = view.moveHistory;
   final notes = <int, _EvalNote>{};
 
-  var prevWinChance = cpToWinningChance(0, null);
+  var prevWinChance = initialWinChance();
   var prevText = formatEvalDisplay(scoreCp: 0);
 
   for (var i = 0; i < history.length; i++) {

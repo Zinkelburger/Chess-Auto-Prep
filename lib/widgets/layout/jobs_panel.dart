@@ -14,6 +14,7 @@ import '../../services/jobs/generation_job_display.dart';
 import '../../services/jobs/repertoire_job.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
+import '../../utils/time_format.dart';
 import '../generation/depth_progress_bars.dart';
 
 class JobsPanel extends StatelessWidget {
@@ -202,7 +203,7 @@ class JobsPanel extends StatelessWidget {
             accent: Theme.of(context).colorScheme.primary,
           )
         : null;
-    final elapsed = formatJobDuration(
+    final elapsed = formatCompactDuration(
       Duration(milliseconds: gc.progress.elapsedMs),
     );
     final resourceLabel = generationResourceLabel(config);
@@ -583,7 +584,7 @@ class _ActiveJobCard extends StatelessWidget {
                             elapsed!,
                             style: const TextStyle(
                               fontSize: 12,
-                              fontFamily: 'SourceCodePro',
+                              fontFamily: AppTextStyles.monoFamily,
                               color: AppColors.onSurfaceMuted,
                             ),
                           ),
@@ -593,10 +594,7 @@ class _ActiveJobCard extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         subtitle!,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.onSurfaceMuted,
-                        ),
+                        style: AppTextStyles.caption,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
@@ -654,7 +652,7 @@ class _ActiveJobCard extends StatelessWidget {
               ),
               if (resourceLabel != null) ...[
                 const SizedBox(width: 8),
-                _StatChip(label: resourceLabel!),
+                Text(resourceLabel!, style: AppTextStyles.caption),
               ],
             ],
           ),
@@ -709,20 +707,6 @@ class _ActiveJobCard extends StatelessWidget {
           ],
         ],
       ),
-    );
-  }
-}
-
-class _StatChip extends StatelessWidget {
-  const _StatChip({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
     );
   }
 }

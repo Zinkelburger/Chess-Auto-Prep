@@ -8,8 +8,9 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
 import '../../../widgets/labeled_toggle.dart';
+import '../../audit/widgets/hunt_controls.dart';
 import '../services/trick_hunt_config.dart';
 
 class TrickHuntConfigDialog extends StatefulWidget {
@@ -156,7 +157,7 @@ class _TrickHuntConfigDialogState extends State<TrickHuntConfigDialog> {
                 'Results are ranked by reach probability × net gain, so you '
                 'get a short list of killer tricks — not every playable '
                 'sideline.',
-                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+                style: AppTextStyles.caption,
               ),
               const SizedBox(height: 16),
 
@@ -197,26 +198,10 @@ class _TrickHuntConfigDialogState extends State<TrickHuntConfigDialog> {
               ),
               const SizedBox(height: 8),
 
-              // More thresholds (collapsed by default)
-              InkWell(
-                onTap: () => setState(() => _showAdvanced = !_showAdvanced),
-                child: Row(
-                  children: [
-                    Icon(
-                      _showAdvanced ? Icons.expand_less : Icons.expand_more,
-                      size: 16,
-                      color: AppColors.onSurfaceMuted,
-                    ),
-                    const SizedBox(width: 4),
-                    const Text(
-                      'More thresholds',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.onSurfaceMuted,
-                      ),
-                    ),
-                  ],
-                ),
+              DisclosureHeader(
+                label: 'More thresholds',
+                expanded: _showAdvanced,
+                onToggle: () => setState(() => _showAdvanced = !_showAdvanced),
               ),
               if (_showAdvanced) ...[
                 const SizedBox(height: 8),
@@ -296,7 +281,7 @@ class _TrickHuntConfigDialogState extends State<TrickHuntConfigDialog> {
                 'Needs the Maia human model. Probes run one at a time — '
                 'this can take a while, and it keeps working while you '
                 'browse.',
-                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+                style: AppTextStyles.caption,
               ),
             ],
           ),
@@ -320,20 +305,5 @@ class _TrickHuntConfigDialogState extends State<TrickHuntConfigDialog> {
     TextEditingController ctrl,
     String label, {
     String? tooltip,
-  }) {
-    final field = SizedBox(
-      width: 220,
-      child: TextField(
-        controller: ctrl,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-          isDense: true,
-        ),
-        keyboardType: TextInputType.number,
-      ),
-    );
-    if (tooltip == null) return field;
-    return Tooltip(message: tooltip, child: field);
-  }
+  }) => HuntNumberField(controller: ctrl, label: label, tooltip: tooltip);
 }

@@ -38,7 +38,8 @@ class PgnSliceDialog extends StatefulWidget {
   final Map<String, List<int>>? fenIndex;
 
   /// One-click player presets (e.g. "Kasparov as White") shown at the top.
-  final List<({String label, HeaderFilterConfig filter})> presets;
+  final List<({String label, String shortLabel, HeaderFilterConfig filter})>
+  presets;
 
   const PgnSliceDialog({
     super.key,

@@ -15,6 +15,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../theme/app_text_styles.dart';
 
 /// A single move in the movetext: the SAN, an optional bold NAG-quality glyph
 /// suffix (`Nf3` → `Nf3!?`), wrapped in a tappable rounded container.
@@ -157,7 +158,7 @@ class GlyphButton extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.bold,
-              fontFamily: 'SourceCodePro',
+              fontFamily: AppTextStyles.monoFamily,
               color: onTap == null
                   ? Colors.grey[700]
                   : (isActive ? color : Colors.grey[400]),

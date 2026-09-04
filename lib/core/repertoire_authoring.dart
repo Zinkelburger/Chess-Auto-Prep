@@ -13,6 +13,7 @@ import 'package:dartchess/dartchess.dart';
 import '../models/repertoire_line.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/repertoire_line_ids.dart';
+import '../services/repertoire_pgn_text.dart';
 import '../services/repertoire_service.dart';
 
 class RepertoireAuthoring {
@@ -124,7 +125,7 @@ class RepertoireAuthoring {
       moves: [...line.moves, newMove],
       color: line.color,
       startPosition: line.startPosition,
-      fullPgn: _service.appendSanToGamePgn(line.fullPgn, line.moves, newMove),
+      fullPgn: appendSanToGamePgn(line.fullPgn, line.moves, newMove),
       comments: line.comments,
       headers: line.headers,
       importance: line.importance,

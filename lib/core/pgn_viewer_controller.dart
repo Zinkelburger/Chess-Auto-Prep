@@ -373,6 +373,7 @@ class PgnViewerController extends ChangeNotifier
     _gameCursorFen = null;
     perspective = newPerspective;
     _viewerTree.resetForNewFile();
+    clearScreenOnlyMovetext();
   }
 
   /// The perspective a freshly loaded collection should open in.
@@ -470,7 +471,12 @@ class PgnViewerController extends ChangeNotifier
   /// Load PGN games directly from raw text (e.g. pasted from the clipboard).
   /// Held in memory only — there is no backing file, so rating/comment edits
   /// are not persisted to disk.
-  Future<void> loadPgnContent(String content) async {
+  ///
+  /// [initialFen] parks the first game on that position instead of its start.
+  /// It has to be handed in here rather than set afterwards: the viewer widget
+  /// reads it during the build this load triggers, which is the only moment
+  /// the freshly parsed game and the cursor request meet.
+  Future<void> loadPgnContent(String content, {String? initialFen}) async {
     errorMessage = null;
     pendingSliceRestore = null;
     _sliceEpoch++;
@@ -505,6 +511,7 @@ class PgnViewerController extends ChangeNotifier
       entries: entries,
       newPerspective: _perspectiveFor(entries),
     );
+    pgnInitialFen = initialFen;
     notifyListeners();
 
     await loadCurrentGame();
@@ -669,12 +676,19 @@ class PgnViewerController extends ChangeNotifier
   void setAutoNextGame(bool value) => _autoPlay.setAutoNextGame(value);
 
   /// One-click slice presets derived from [sliceProtagonist].
-  List<({String label, HeaderFilterConfig filter})> get slicePresets {
+  ///
+  /// [shortLabel] is for the app bar, where two chips repeating a long
+  /// username push each other off the edge of a bar that only scrolls if you
+  /// know it does; the full [label] stays in the slice dialog and in the
+  /// chip's tooltip.
+  List<({String label, String shortLabel, HeaderFilterConfig filter})>
+  get slicePresets {
     final p = sliceProtagonist;
     if (p == null) return const [];
     return [
       (
         label: '$p as White',
+        shortLabel: 'as White',
         filter: HeaderFilterConfig(
           field: 'White',
           mode: MatchMode.contains,
@@ -683,6 +697,7 @@ class PgnViewerController extends ChangeNotifier
       ),
       (
         label: '$p as Black',
+        shortLabel: 'as Black',
         filter: HeaderFilterConfig(
           field: 'Black',
           mode: MatchMode.contains,

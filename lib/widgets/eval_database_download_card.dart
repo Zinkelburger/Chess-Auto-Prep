@@ -19,6 +19,7 @@ import '../services/eval/storage_volumes.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/open_in_file_manager.dart';
+import '../utils/time_format.dart';
 import 'eval_database_download_dialog.dart';
 import 'storage_destination_picker.dart';
 
@@ -191,7 +192,7 @@ class _ChessDbDumpCardState extends State<ChessDbDumpCard> {
       ..write(' — ${_download.filesDone}/${_download.filesTotal} files');
     if (running && rate > 0) {
       detail.write(' — ${formatBytes(rate.round())}/s');
-      if (eta != null) detail.write(', ${formatDuration(eta)} left');
+      if (eta != null) detail.write(', ${formatCoarseDuration(eta)} left');
     }
 
     return Column(

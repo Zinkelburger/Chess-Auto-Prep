@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_text_styles.dart';
 import '../../../widgets/shortcut_tooltip.dart';
 
 import '../../../core/repertoire_controller.dart';
 import '../../../models/repertoire_line.dart';
-import '../../../theme/app_colors.dart';
 import 'package:chess_auto_prep/models/trap_line_info.dart';
 import '../../../utils/app_shortcuts.dart';
 import '../services/trap_index_service.dart';
@@ -178,13 +178,7 @@ class TrapNavigationButtons extends StatelessWidget {
             children: [
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 4),
-                child: Text(
-                  '0 traps in line',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.onSurfaceMuted,
-                  ),
-                ),
+                child: Text('0 traps in line', style: AppTextStyles.caption),
               ),
               _buildTourButton(),
             ],

@@ -18,9 +18,9 @@ import '../utils/training_markers.dart' show hasPuzzleStart;
 import 'pgn_parsing_service.dart' as pgn;
 import 'repertoire_color_inference.dart';
 import 'repertoire_line_ids.dart';
+import 'repertoire_pgn_text.dart';
 import 'storage/storage_factory.dart';
 import '../utils/chess_utils.dart';
-import '../utils/movetext_builder.dart';
 
 /// A game cut from a chapter file and parsed once: the parse tree, the raw
 /// text it came from, and its position in the file.
@@ -35,9 +35,6 @@ typedef ParsedRepertoireGame = ({
 
 // Hoisted: these ran once per game (or per edit) as fresh `RegExp`s.
 final RegExp _cumProbInTextRe = RegExp(r'CumProb\s+([\d.]+)%');
-final RegExp _eventTagRe = RegExp(r'\[Event\s+"[^"]*"\]');
-final RegExp _headerLineRe = RegExp(r'^\[(\w+)\s+"[^"]*"\]$');
-final RegExp _headerPairRe = RegExp(r'^\[(\w+)\s+"([^"]*)"\]');
 
 class RepertoireService {
   /// Parses a repertoire PGN file and extracts all trainable lines.
@@ -535,11 +532,6 @@ class RepertoireService {
   }
 
   /// Reassemble a PGN document from preamble + game list.
-  String _reassembleDocument(String preamble, List<String> games) {
-    final sections = <String>[if (preamble.isNotEmpty) preamble, ...games];
-    return '${sections.join('\n\n').trimRight()}\n';
-  }
-
   /// Loads the PGN document at [filePath], locates the game for [lineId],
   /// lets [mutate] modify the mutable games list (given the match index),
   /// then writes the result back atomically. Returns false if the file or
@@ -578,7 +570,7 @@ class RepertoireService {
 
     await writeTextFileAtomically(
       file,
-      _reassembleDocument(document.preamble, games),
+      reassemblePgnDocument(document.preamble, games),
     );
     return true;
   }
@@ -593,14 +585,9 @@ class RepertoireService {
       games,
       matchIndex,
     ) {
-      games[matchIndex] = _withEventTitle(games[matchIndex], newTitle);
+      games[matchIndex] = withEventTitle(games[matchIndex], newTitle);
     });
   }
-
-  static String _withEventTitle(String gameText, String newTitle) =>
-      _eventTagRe.hasMatch(gameText)
-      ? gameText.replaceFirst(_eventTagRe, '[Event "$newTitle"]')
-      : '[Event "$newTitle"]\n$gameText';
 
   /// Replaces the full PGN content of an existing line identified by [lineId].
   ///
@@ -617,61 +604,11 @@ class RepertoireService {
       games,
       matchIndex,
     ) {
-      games[matchIndex] = _mergeMissingHeaders(
+      games[matchIndex] = mergeMissingHeaders(
         games[matchIndex],
         newGamePgn.trimRight(),
       );
     });
-  }
-
-  /// The PGN editor serializes only the standard headers, so carry over any
-  /// header the old game had that the new text lacks (LineID, review
-  /// metadata, CumProb, …). Dropping LineID would orphan the line: every
-  /// later lookup by id — rename, autosave, delete — silently fails.
-  String _mergeMissingHeaders(String oldGame, String newGame) {
-    final keyPattern = _headerLineRe;
-
-    List<String> headerLines(String game) {
-      final result = <String>[];
-      for (final line in game.split('\n')) {
-        final trimmed = line.trim();
-        if (trimmed.isEmpty) {
-          if (result.isNotEmpty) break;
-          continue;
-        }
-        if (keyPattern.hasMatch(trimmed)) {
-          result.add(trimmed);
-        } else {
-          break;
-        }
-      }
-      return result;
-    }
-
-    final newKeys = headerLines(
-      newGame,
-    ).map((h) => keyPattern.firstMatch(h)!.group(1)!).toSet();
-    final missing = headerLines(oldGame)
-        .where((h) => !newKeys.contains(keyPattern.firstMatch(h)!.group(1)!))
-        .toList();
-    if (missing.isEmpty) return newGame;
-
-    final lines = newGame.split('\n');
-    var lastHeader = -1;
-    for (int i = 0; i < lines.length; i++) {
-      final trimmed = lines[i].trim();
-      if (keyPattern.hasMatch(trimmed)) {
-        lastHeader = i;
-      } else if (trimmed.isNotEmpty) {
-        break;
-      }
-    }
-    if (lastHeader == -1) {
-      lines.insertAll(0, [...missing, '']);
-    } else {
-      lines.insertAll(lastHeader + 1, missing);
-    }
-    return lines.join('\n');
   }
 
   /// Removes a game identified by [lineId] from the PGN file on disk.
@@ -721,7 +658,7 @@ class RepertoireService {
   }) async {
     await writeTextFileAtomically(
       io.File(filePath),
-      _reassembleDocument(preamble.trimRight(), games),
+      reassemblePgnDocument(preamble.trimRight(), games),
     );
   }
 
@@ -741,7 +678,7 @@ class RepertoireService {
     mutate(games);
     await writeTextFileAtomically(
       file,
-      _reassembleDocument(document.preamble, games),
+      reassemblePgnDocument(document.preamble, games),
     );
     return true;
   }
@@ -754,7 +691,7 @@ class RepertoireService {
     int gameIndex,
     String newTitle,
   ) => _editGameAt(filePath, gameIndex, (games) {
-    games[gameIndex] = _withEventTitle(games[gameIndex], newTitle);
+    games[gameIndex] = withEventTitle(games[gameIndex], newTitle);
   });
 
   /// Appends [gameTexts] to the chapter at [filePath], creating the file when
@@ -771,7 +708,7 @@ class RepertoireService {
     ];
     await writeTextFileAtomically(
       file,
-      _reassembleDocument(document.preamble, games),
+      reassemblePgnDocument(document.preamble, games),
     );
   }
 
@@ -806,7 +743,7 @@ class RepertoireService {
     required int failCount,
   }) {
     return _editLineInFile(filePath, lineId, (games, matchIndex) {
-      games[matchIndex] = _gameWithReviewHeaders(
+      games[matchIndex] = gameWithReviewHeaders(
         games[matchIndex],
         lastReview: lastReview,
         difficulty: difficulty,
@@ -850,7 +787,7 @@ class RepertoireService {
       final matchIndex = indexById[entry.key];
       if (matchIndex == null) continue;
       final e = entry.value;
-      games[matchIndex] = _gameWithReviewHeaders(
+      games[matchIndex] = gameWithReviewHeaders(
         games[matchIndex],
         lastReview: e.lastReviewedUtc,
         difficulty: e.difficulty,
@@ -865,85 +802,9 @@ class RepertoireService {
 
     await writeTextFileAtomically(
       file,
-      _reassembleDocument(document.preamble, games),
+      reassemblePgnDocument(document.preamble, games),
     );
     return true;
-  }
-
-  /// Returns [gameText] with its review headers replaced (other headers and
-  /// the movetext preserved, standard headers first).
-  String _gameWithReviewHeaders(
-    String gameText, {
-    required DateTime? lastReview,
-    required double difficulty,
-    required double intervalDays,
-    required DateTime? dueDate,
-    required int passCount,
-    required int failCount,
-  }) {
-    final headerPattern = _headerPairRe;
-    final headers = <String, String>{};
-    String moveText = '';
-
-    final lines = gameText.split('\n');
-    bool pastHeaders = false;
-    final moveLines = <String>[];
-
-    for (final line in lines) {
-      final trimmed = line.trim();
-      if (!pastHeaders && headerPattern.hasMatch(trimmed)) {
-        final match = headerPattern.firstMatch(trimmed)!;
-        headers[match.group(1)!] = match.group(2)!;
-      } else {
-        pastHeaders = true;
-        moveLines.add(line);
-      }
-    }
-    moveText = moveLines.join('\n').trim();
-
-    String fmtDate(DateTime? d) => d == null ? '' : d.toUtc().toIso8601String();
-    headers['LastReview'] = fmtDate(lastReview);
-    headers['Difficulty'] = difficulty.toStringAsFixed(2);
-    headers['Interval'] = intervalDays.toStringAsFixed(2);
-    headers['DueDate'] = fmtDate(dueDate);
-    headers['PassCount'] = passCount.toString();
-    headers['FailCount'] = failCount.toString();
-
-    final buffer = StringBuffer();
-    const standardOrder = [
-      'Event',
-      'Site',
-      'Date',
-      'Round',
-      'White',
-      'Black',
-      'Result',
-      'FEN',
-      'SetUp',
-      'ECO',
-      'Opening',
-      'LineID',
-      'LineId',
-      'Id',
-      'Line',
-      'Guid',
-    ];
-    final written = <String>{};
-    for (final key in standardOrder) {
-      if (headers.containsKey(key)) {
-        buffer.writeln('[$key "${headers[key]}"]');
-        written.add(key);
-      }
-    }
-    for (final entry in headers.entries) {
-      if (!written.contains(entry.key)) {
-        buffer.writeln('[${entry.key} "${entry.value}"]');
-      }
-    }
-    buffer.writeln();
-    buffer.write(moveText);
-
-    return buffer.toString().trimRight();
   }
 
   /// Appends [san] after [pathFromRoot] in the best-matching game, or adds a
@@ -1004,7 +865,7 @@ class RepertoireService {
     // The mainline is all that decides a match, and lexing it is a fraction
     // of building each game's move tree.
     final exactMatchIndex = games.indexWhere(
-      (game) => _listEquals(pgn.mainlineSansOf(game), pathFromRoot),
+      (game) => listEquals(pgn.mainlineSansOf(game), pathFromRoot),
     );
 
     final snapshots = <String>[];
@@ -1028,81 +889,13 @@ class RepertoireService {
         games[games.length - 1] = appendSanToGamePgn(games.last, prefix, san);
       }
       prefix = [...prefix, san];
-      snapshots.add(_reassembleDocument(document.preamble, games));
+      snapshots.add(reassemblePgnDocument(document.preamble, games));
     }
 
     final updated = snapshots.last;
     await writeTextFileAtomically(file, updated);
     return (success: true, updatedContent: updated, snapshots: snapshots);
   }
-
-  static bool _listEquals(List<String> a, List<String> b) {
-    if (a.length != b.length) return false;
-    for (int i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
-  }
-
-  static String _formatNextSan(List<String> existingMoves, String san) {
-    final nextIndex = existingMoves.length;
-    if (nextIndex.isEven) {
-      return '${(nextIndex ~/ 2) + 1}. $san';
-    }
-    return san;
-  }
-
-  String appendSanToGamePgn(
-    String gameText,
-    List<String> existingMoves,
-    String san,
-  ) {
-    final lines = gameText.split('\n');
-    final moveLines = <String>[];
-    final headerLines = <String>[];
-    final headerPattern = _headerPairRe;
-
-    for (final line in lines) {
-      final trimmed = line.trim();
-      if (trimmed.isEmpty) continue;
-      if (headerPattern.hasMatch(trimmed)) {
-        headerLines.add(line);
-      } else {
-        moveLines.add(trimmed);
-      }
-    }
-
-    final moveText = moveLines.join(' ').trim();
-    final suffix = _formatNextSan(existingMoves, san);
-    final updatedMoveText = moveText.isEmpty ? suffix : '$moveText $suffix';
-
-    return [...headerLines, '', updatedMoveText].join('\n');
-  }
-
-  String buildMinimalGamePgn(
-    List<String> moves, {
-    String? startingFen,
-    required bool isWhiteRepertoire,
-  }) {
-    final headers = <String>[
-      '[Event "Repertoire Line"]',
-      '[Date "${DateTime.now().toIso8601String().split('T')[0]}"]',
-      '[White "${isWhiteRepertoire ? 'Me' : 'Opponent'}"]',
-      '[Black "${isWhiteRepertoire ? 'Opponent' : 'Me'}"]',
-      '[Result "1-0"]',
-    ];
-
-    if (startingFen != null && startingFen.trim().isNotEmpty) {
-      headers.add('[FEN "$startingFen"]');
-      headers.add('[SetUp "1"]');
-    }
-
-    final moveText = _movesToPgnMoveText(moves);
-    return [...headers, '', moveText].join('\n');
-  }
-
-  static String _movesToPgnMoveText(List<String> moves) =>
-      buildNumberedMovetext(moves);
 }
 
 /// The ids of one file's games, valid while the file's stat is unchanged.

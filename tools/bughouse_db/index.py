@@ -95,6 +95,14 @@ def index_year(args) -> tuple[str, int, int, int, float]:
                 key = position_key(
                     dual_key_fen(board.board("A").fen(), board.board("B").fen())
                 )
+                # Play it first, count it second.  A game whose record starts
+                # mid-play -- an adjournment resumed, a truncated dump -- has
+                # an illegal first move, and counting before pushing banked
+                # that move against the *starting* position before the push
+                # rejected it.  It put 339 impossible continuations on the
+                # opening node (3,174 games, 0.09%): `1A. e6`, `1A. Nf6`,
+                # black replies filed as White's first move.
+                board.push(which, san)
                 row = edges[(key, f"{which}:{san}")]
                 row[0] += 1
                 if result == "1-0":
@@ -112,7 +120,6 @@ def index_year(args) -> tuple[str, int, int, int, float]:
                     row[7] = elo
                     row[9] = game_no
                 row[8] = max(row[8], year)
-                board.push(which, san)
             used += 1
         except Exception:  # noqa: BLE001 -- a corrupt game must not stop a year
             failed += 1

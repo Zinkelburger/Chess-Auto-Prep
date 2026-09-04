@@ -6,86 +6,10 @@
 /// hand the viewer a game number.
 library;
 
-enum GameResult { whiteWins, blackWins, draw, unfinished }
+import '../../../models/crosstable.dart';
+import '../../../models/game_outcome.dart';
 
-extension GameResultPgn on GameResult {
-  String get pgnToken => switch (this) {
-    GameResult.whiteWins => '1-0',
-    GameResult.blackWins => '0-1',
-    GameResult.draw => '1/2-1/2',
-    GameResult.unfinished => '*',
-  };
-
-  /// Points for White. Black's score is `1 - this` for a finished game.
-  double get whitePoints => switch (this) {
-    GameResult.whiteWins => 1,
-    GameResult.blackWins => 0,
-    GameResult.draw => 0.5,
-    GameResult.unfinished => 0.5,
-  };
-}
-
-/// Why the game stopped. Kept apart from [GameResult] so "0-1" can say
-/// whether White was mated, flagged, or crashed.
-enum TerminationReason {
-  checkmate,
-  stalemate,
-  insufficientMaterial,
-  fiftyMoveRule,
-  threefoldRepetition,
-  drawAdjudication,
-  resignAdjudication,
-  maxMoves,
-  timeForfeit,
-  illegalMove,
-  engineFailure,
-  aborted,
-}
-
-extension TerminationReasonLabel on TerminationReason {
-  String get label => switch (this) {
-    TerminationReason.checkmate => 'Checkmate',
-    TerminationReason.stalemate => 'Stalemate',
-    TerminationReason.insufficientMaterial => 'Insufficient material',
-    TerminationReason.fiftyMoveRule => 'Fifty-move rule',
-    TerminationReason.threefoldRepetition => 'Threefold repetition',
-    TerminationReason.drawAdjudication => 'Adjudicated draw',
-    TerminationReason.resignAdjudication => 'Adjudicated win',
-    TerminationReason.maxMoves => 'Move limit',
-    TerminationReason.timeForfeit => 'Time forfeit',
-    TerminationReason.illegalMove => 'Illegal move',
-    TerminationReason.engineFailure => 'Engine failure',
-    TerminationReason.aborted => 'Aborted',
-  };
-
-  /// Value for the PGN `Termination` tag (standard §9.8 vocabulary where one
-  /// fits, the reason's own name where none does).
-  String get pgnTag => switch (this) {
-    TerminationReason.checkmate ||
-    TerminationReason.stalemate ||
-    TerminationReason.insufficientMaterial ||
-    TerminationReason.fiftyMoveRule ||
-    TerminationReason.threefoldRepetition => 'normal',
-    TerminationReason.drawAdjudication ||
-    TerminationReason.resignAdjudication ||
-    TerminationReason.maxMoves => 'adjudication',
-    TerminationReason.timeForfeit => 'time forfeit',
-    TerminationReason.illegalMove => 'rules infraction',
-    TerminationReason.engineFailure => 'abandoned',
-    TerminationReason.aborted => 'unterminated',
-  };
-
-  bool get isNaturalEnd => switch (this) {
-    TerminationReason.checkmate ||
-    TerminationReason.stalemate ||
-    TerminationReason.insufficientMaterial ||
-    TerminationReason.fiftyMoveRule ||
-    TerminationReason.threefoldRepetition => true,
-    _ => false,
-  };
-}
-
-class TournamentGameRecord {
+class TournamentGameRecord implements CrosstableGame {
   const TournamentGameRecord({
     required this.gameIndex,
     required this.round,
@@ -108,12 +32,15 @@ class TournamentGameRecord {
 
   /// Indices into [TournamentConfig.engines] — the identity the crosstable
   /// scores by, since two participants can share a display name.
+  @override
   final int whiteIndex;
+  @override
   final int blackIndex;
 
   final String whiteName;
   final String blackName;
 
+  @override
   final GameResult result;
   final TerminationReason termination;
 

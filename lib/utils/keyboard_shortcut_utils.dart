@@ -330,3 +330,29 @@ KeyEventResult runKeyBindings(
   }
   return KeyEventResult.ignored;
 }
+
+/// Put keyboard focus back on [node] after the current frame, unless the user
+/// is typing.
+///
+/// The screens that own a keyboard shortcut scope have to take focus back
+/// whenever a menu, dialog or popup closes, or the next arrow key goes
+/// nowhere. Three checks make that safe, and all three matter:
+///
+///  * **post-frame**, because the route being dismissed still holds focus
+///    during the frame that dismisses it;
+///  * **[mounted]**, because the screen may have been popped in between;
+///  * **not while a text field has focus**, or reclaiming would yank the
+///    caret out of a rename box or a search field mid-word.
+///
+/// [mounted] is passed rather than read, so this stays a free function that
+/// any `State` can call without a mixin.
+void reclaimFocusAfterFrame(
+  FocusNode node, {
+  required bool Function() mounted,
+}) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (mounted() && node.canRequestFocus && !isTextInputFocused()) {
+      node.requestFocus();
+    }
+  });
+}

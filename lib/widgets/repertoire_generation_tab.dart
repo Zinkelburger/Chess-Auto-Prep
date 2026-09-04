@@ -19,6 +19,7 @@ import '../services/generation/generation_config.dart';
 import '../services/generation/tree_serialization.dart';
 import '../services/storage/storage_factory.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 import '../utils/movetext_builder.dart';
 import 'generation/generation_config_form.dart';
@@ -453,10 +454,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             '${tree.totalNodes} nodes, depth ${tree.maxPlyReached}'
             '${targetDepth is num ? '\nWas heading for depth ${targetDepth.toInt()}' : ''}'
             '${movetext != null ? '\nFrom: $movetext' : ''}',
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.onSurfaceSoft,
-            ),
+            style: AppTextStyles.caption,
           ),
           const SizedBox(height: 4),
           Text(
@@ -470,17 +468,14 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                       'what is already explored.'
                 : 'Resume continues to the Max line length above; Finish Now '
                       'builds lines from what is already explored.',
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.onSurfaceMuted,
-            ),
+            style: AppTextStyles.caption,
           ),
           if (resumesElsewhere) ...[
             const SizedBox(height: 4),
             const Text(
               'This build starts from the position listed above, not from '
               'the board — resuming it keeps the moves it recorded.',
-              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+              style: AppTextStyles.caption,
             ),
           ],
           if (!canResume) ...[

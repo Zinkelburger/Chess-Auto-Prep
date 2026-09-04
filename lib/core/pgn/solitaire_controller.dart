@@ -36,20 +36,25 @@ class SolitaireGuess {
 
   bool get firstTry => wrongAttempts.isEmpty && !wasRevealed && !wasHinted;
 
-  /// Human-readable annotation appended to the move's PGN comment when the
-  /// game completes: "1st try", "Hinted", "Revealed", or
-  /// "Tried: e5, d5 (3 tries)".
+  /// Annotation appended to the move's PGN comment when the game completes:
+  /// `(1st try)`, `(hinted)`, `(revealed)`, `(tried e5, d5 — 3 tries)`.
+  ///
+  /// Parenthesised because it lands at the end of the game's own prose, where
+  /// a bare "Revealed" reads as the last word of the annotator's sentence
+  /// ("Black is forced to give up a lot of material. Revealed").
   String get note {
     final tried = wrongAttempts.join(', ');
     if (wasRevealed) {
-      return wrongAttempts.isEmpty ? 'Revealed' : 'Tried: $tried then revealed';
+      return wrongAttempts.isEmpty
+          ? '(revealed)'
+          : '(tried $tried, then revealed)';
     }
     if (wasHinted) {
-      return wrongAttempts.isEmpty ? 'Hinted' : 'Tried: $tried then hinted';
+      return wrongAttempts.isEmpty ? '(hinted)' : '(tried $tried, then hinted)';
     }
-    if (firstTry) return '1st try';
+    if (firstTry) return '(1st try)';
     final tries = wrongAttempts.length + 1;
-    return 'Tried: $tried ($tries tries)';
+    return '(tried $tried — $tries tries)';
   }
 }
 
@@ -146,8 +151,14 @@ class SolitaireController extends ChangeNotifier with SafeChangeNotifier {
   /// Whether the current game is complete.
   bool get isComplete => _active && _cursor >= _steps.length;
 
-  /// Whether leaving now would throw something away.
-  bool get hasProgress => _active && !isComplete && _guessLog.isNotEmpty;
+  /// Whether leaving now would throw something away — a guessed move, or the
+  /// tries and the hint spent on the move in front of you.
+  bool get hasProgress =>
+      _active &&
+      !isComplete &&
+      (_guessLog.isNotEmpty ||
+          _pendingWrongAttempts.isNotEmpty ||
+          _hintSquare != null);
 
   /// Log of all user guesses (one entry per user-side move, recorded on
   /// correct guess or reveal).
@@ -157,19 +168,28 @@ class SolitaireController extends ChangeNotifier with SafeChangeNotifier {
   /// Wrong attempts accumulated for the move currently being guessed.
   final List<String> _pendingWrongAttempts = [];
 
-  /// Seconds before hint and reveal become available (0 = always available).
+  /// Seconds before Reveal becomes available (0 = always available).
   int revealDelaySec = 60;
+
+  /// Seconds before Hint becomes available — half the reveal delay, so help
+  /// escalates (a nudge first, giving up second) instead of arriving at once.
+  int get hintDelaySec => (revealDelaySec / 2).ceil();
 
   /// When the user started thinking about the current move.
   DateTime? _moveStartTime;
   DateTime? get moveStartTime => _moveStartTime;
 
-  /// Seconds remaining before hint and reveal activate. 0 when ready.
-  int get revealCountdownSec {
-    if (_moveStartTime == null || revealDelaySec <= 0) return 0;
+  int _countdownFrom(int delaySec) {
+    if (_moveStartTime == null || delaySec <= 0) return 0;
     final elapsed = DateTime.now().difference(_moveStartTime!).inSeconds;
-    return (revealDelaySec - elapsed).clamp(0, revealDelaySec);
+    return (delaySec - elapsed).clamp(0, delaySec);
   }
+
+  /// Seconds remaining before Reveal activates. 0 when ready.
+  int get revealCountdownSec => _countdownFrom(revealDelaySec);
+
+  /// Seconds remaining before Hint activates. 0 when ready.
+  int get hintCountdownSec => _countdownFrom(hintDelaySec);
 
   bool get canReveal => waitingForUser && revealCountdownSec == 0;
 
@@ -177,7 +197,8 @@ class SolitaireController extends ChangeNotifier with SafeChangeNotifier {
   String? _hintSquare;
   String? get hintSquare => _hintSquare;
 
-  bool get canHint => canReveal && _hintSquare == null;
+  bool get canHint =>
+      waitingForUser && hintCountdownSec == 0 && _hintSquare == null;
 
   Timer? _feedbackTimer;
   Timer? _opponentTimer;

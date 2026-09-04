@@ -10,6 +10,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
 import '../models/plan_models.dart';
 
 class PlanCandidateTable extends StatelessWidget {
@@ -179,7 +180,7 @@ class _CandidateRow extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  fontFamily: 'SourceCodePro',
+                  fontFamily: AppTextStyles.monoFamily,
                 ),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,

@@ -7,14 +7,15 @@ import 'package:flutter/material.dart';
 import '../../../constants/chess_constants.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
+import '../../../models/game_outcome.dart';
 import '../../../utils/app_messages.dart';
 import '../../../widgets/common/static_board_thumbnail.dart';
 import '../controllers/engine_tournament_controller.dart';
 import '../models/stored_tournament.dart';
 import '../models/tournament_config.dart';
 import '../models/tournament_game.dart';
-import 'crosstable_view.dart';
-import 'tournament_games_table.dart';
+import '../../../widgets/crosstable_view.dart';
+import '../../../widgets/match_games_table.dart';
 import 'tournament_list_pane.dart' show TournamentStatusChip;
 
 class TournamentDetailPane extends StatelessWidget {
@@ -65,7 +66,7 @@ class TournamentDetailPane extends StatelessWidget {
               ? const SizedBox.shrink()
               : CrosstableView(
                   crosstable: controller.crosstable!,
-                  config: config,
+                  names: [for (final e in config.engines) e.name],
                 ),
         ),
         const SizedBox(height: 14),
@@ -76,9 +77,22 @@ class TournamentDetailPane extends StatelessWidget {
             icon: const Icon(Icons.menu_book, size: 16),
             label: const Text('Open in PGN Viewer'),
           ),
-          child: TournamentGamesTable(
-            games: tournament.games,
-            onOpenGame: onOpenGame,
+          child: MatchGamesTable(
+            games: [
+              for (final game in tournament.games)
+                MatchGameRow(
+                  number: game.gameNumber,
+                  round: game.round,
+                  white: game.whiteName,
+                  black: game.blackName,
+                  result: game.result,
+                  outcomeLabel: game.outcomeLabel,
+                  naturalEnd: game.termination.isNaturalEnd,
+                  plies: game.plies,
+                  durationMs: game.durationMs,
+                ),
+            ],
+            onOpenGame: (row) => onOpenGame(tournament.games[row.number - 1]),
           ),
         ),
       ],
@@ -294,7 +308,7 @@ class _LivePanel extends StatelessWidget {
                         ? 'Waiting for the first move…'
                         : controller.liveMoveLabel,
                     style: AppTextStyles.body.copyWith(
-                      fontFamily: 'SourceCodePro',
+                      fontFamily: AppTextStyles.monoFamily,
                       color: AppColors.onSurfaceSoft,
                     ),
                   ),

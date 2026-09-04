@@ -14,6 +14,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import 'info_hint.dart';
 
 /// One row of an [AppOverflowMenu] (or of any other app menu that wants the
@@ -136,13 +137,7 @@ class AppMenuEntryRow extends StatelessWidget {
         ],
         if (entry.shortcut != null) ...[
           const SizedBox(width: 16),
-          Text(
-            entry.shortcut!,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.onSurfaceMuted,
-            ),
-          ),
+          Text(entry.shortcut!, style: AppTextStyles.caption),
         ],
         if (entry.checked == true) ...[
           const SizedBox(width: 12),

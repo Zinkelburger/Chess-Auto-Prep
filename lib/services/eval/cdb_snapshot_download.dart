@@ -22,6 +22,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/eval_database_settings.dart';
 import '../../utils/safe_change_notifier.dart';
+import '../../utils/time_format.dart';
 import '../jobs/repertoire_job.dart';
 import 'cdb_snapshot_catalog.dart';
 import 'storage_volumes.dart';
@@ -544,7 +545,7 @@ class CdbSnapshotDownloadController extends ChangeNotifier
           fraction: fraction,
           message:
               '${formatBytes(_bytesDone)} of ${formatBytes(_bytesTotal)}'
-              '${eta == null ? '' : ' — ${formatDuration(eta!)} left'}',
+              '${eta == null ? '' : ' — ${formatCoarseDuration(eta!)} left'}',
           nodesProcessed: _filesDone,
           totalNodes: filesTotal,
         ),

@@ -5,11 +5,17 @@ import 'package:flutter/material.dart';
 import '../models/solitaire_trophy.dart';
 import '../services/solitaire_trophy_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import '../utils/pgn_date_utils.dart';
 
 /// Dialog that shows the user's collection of solitaire trophies.
 class SolitaireTrophyCabinet extends StatefulWidget {
-  const SolitaireTrophyCabinet({super.key});
+  /// Open the trophy's game in the viewer, parked on the position it was
+  /// won in. Without it a trophy is a dead end — the game and the FEN are
+  /// stored with every one, and there was no way back to them.
+  final void Function(SolitaireTrophy trophy)? onOpenGame;
+
+  const SolitaireTrophyCabinet({super.key, this.onOpenGame});
 
   @override
   State<SolitaireTrophyCabinet> createState() => _SolitaireTrophyCabinetState();
@@ -60,18 +66,12 @@ class _SolitaireTrophyCabinetState extends State<SolitaireTrophyCabinet> {
                     size: 24,
                   ),
                   const SizedBox(width: 10),
-                  const Text(
-                    'Trophy Cabinet',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
+                  const Text('Trophy cabinet', style: AppTextStyles.title),
                   const Spacer(),
                   if (_trophies.isNotEmpty)
                     Text(
                       '${_trophies.length} ${_trophies.length == 1 ? 'trophy' : 'trophies'}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.onSurfaceMuted,
-                      ),
+                      style: AppTextStyles.caption,
                     ),
                   const SizedBox(width: 8),
                   IconButton(
@@ -108,15 +108,12 @@ class _SolitaireTrophyCabinetState extends State<SolitaireTrophyCabinet> {
                     ),
                     SizedBox(height: 8),
                     Text(
-                      'Play a game in solitaire mode, leave solitaire, then '
-                      'run the Analysis tab.\n'
-                      'Every move you guessed that the engine likes better '
-                      'than the one actually played earns a trophy.',
+                      'Finish a game in solitaire, then press "Analyse for '
+                      'trophies".\n'
+                      'Every move you tried that the engine rates above the '
+                      'move actually played earns one.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: AppColors.onSurfaceMuted,
-                        fontSize: 12,
-                      ),
+                      style: AppTextStyles.caption,
                     ),
                   ],
                 ),
@@ -143,35 +140,45 @@ class _SolitaireTrophyCabinetState extends State<SolitaireTrophyCabinet> {
     final date = formatPgnDate(trophy.headers['Date']);
     final gameInfo = '$white vs $black${date.isNotEmpty ? ' ($date)' : ''}';
     final advStr = (trophy.advantageCp / 100).toStringAsFixed(1);
+    final canOpen = widget.onOpenGame != null && trophy.pgn.trim().isNotEmpty;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.emoji_events, color: AppColors.starAccent, size: 20),
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Icon(
+              Icons.emoji_events,
+              color: AppColors.starAccent,
+              size: 20,
+            ),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // "GM played" was a lie for every collection that is not a
+                // master file — your own games included. The game played it.
                 RichText(
                   text: TextSpan(
-                    style: const TextStyle(fontSize: 13),
+                    style: AppTextStyles.body.copyWith(fontSize: 13),
                     children: [
                       const TextSpan(text: 'You played '),
                       TextSpan(
                         text: trophy.userMove,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontFamily: 'SourceCodePro',
+                          fontFamily: AppTextStyles.monoFamily,
                         ),
                       ),
-                      const TextSpan(text: ', GM played '),
+                      const TextSpan(text: '; the game went '),
                       TextSpan(
                         text: trophy.gmMove,
                         style: const TextStyle(
-                          fontFamily: 'SourceCodePro',
+                          fontFamily: AppTextStyles.monoFamily,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -180,43 +187,40 @@ class _SolitaireTrophyCabinetState extends State<SolitaireTrophyCabinet> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '+$advStr advantage  |  ${_formatCp(trophy.userEvalCp)} vs ${_formatCp(trophy.gmEvalCp)}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontFamily: 'SourceCodePro',
+                  '+$advStr better  ·  ${_formatCp(trophy.userEvalCp)} vs '
+                  '${_formatCp(trophy.gmEvalCp)}',
+                  style: AppTextStyles.monoDense.copyWith(
                     color: AppColors.onSurfaceSoft,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  gameInfo,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.onSurfaceMuted,
-                  ),
+                  '$gameInfo · found ${_formatDate(trophy.date)}',
+                  style: AppTextStyles.caption,
                   overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  _formatDate(trophy.date),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.onSurfaceMuted,
-                  ),
                 ),
               ],
             ),
           ),
+          if (canOpen)
+            IconButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                widget.onOpenGame!(trophy);
+              },
+              icon: const Icon(Icons.open_in_new, size: 18),
+              tooltip: 'Open this game at the trophy position',
+              visualDensity: VisualDensity.compact,
+            ),
           IconButton(
-            onPressed: () => _deleteTrophy(trophy.id),
+            onPressed: () => unawaited(_deleteTrophy(trophy.id)),
             icon: const Icon(
               Icons.close,
-              size: 14,
+              size: 18,
               color: AppColors.onSurfaceMuted,
             ),
             tooltip: 'Remove trophy',
             visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints(),
-            padding: const EdgeInsets.all(4),
           ),
         ],
       ),

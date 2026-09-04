@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../services/opponent_list.dart';
+import '../theme/app_text_styles.dart';
 import '../utils/file_text_reader.dart';
 
 /// What the user asked for: which list, how far back to fetch, and whether
@@ -178,7 +179,7 @@ class _OpponentListImportDialogState extends State<OpponentListImportDialog> {
                 maxLines: 6,
                 style: const TextStyle(
                   fontSize: 12,
-                  fontFamily: 'SourceCodePro',
+                  fontFamily: AppTextStyles.monoFamily,
                 ),
                 decoration: const InputDecoration(
                   labelText: 'Or paste the list',

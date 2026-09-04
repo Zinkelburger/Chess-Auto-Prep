@@ -1,16 +1,7 @@
-import 'package:chess_auto_prep/features/engine_tournament/models/engine_spec.dart';
-import 'package:chess_auto_prep/features/engine_tournament/models/tournament_config.dart';
 import 'package:chess_auto_prep/features/engine_tournament/models/tournament_game.dart';
-import 'package:chess_auto_prep/features/engine_tournament/services/crosstable_builder.dart';
+import 'package:chess_auto_prep/models/game_outcome.dart';
+import 'package:chess_auto_prep/services/crosstable_builder.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-TournamentConfig _config(List<String> names) => TournamentConfig(
-  name: 'T',
-  engines: [
-    for (var i = 0; i < names.length; i++)
-      EngineSpec(id: 'e$i', name: names[i], executablePath: '/bin/e$i'),
-  ],
-);
 
 TournamentGameRecord _game({
   required int index,
@@ -34,13 +25,15 @@ TournamentGameRecord _game({
 void main() {
   group('buildCrosstable', () {
     test('scores a two-engine match from both sides', () {
-      final config = _config(['A', 'B']);
-      final table = buildCrosstable(config, [
-        _game(index: 0, white: 0, black: 1, result: GameResult.whiteWins),
-        _game(index: 1, white: 1, black: 0, result: GameResult.draw),
-        _game(index: 2, white: 0, black: 1, result: GameResult.blackWins),
-        _game(index: 3, white: 1, black: 0, result: GameResult.draw),
-      ]);
+      final table = buildCrosstable(
+        ['A', 'B'],
+        [
+          _game(index: 0, white: 0, black: 1, result: GameResult.whiteWins),
+          _game(index: 1, white: 1, black: 0, result: GameResult.draw),
+          _game(index: 2, white: 0, black: 1, result: GameResult.blackWins),
+          _game(index: 3, white: 1, black: 0, result: GameResult.draw),
+        ],
+      );
 
       final a = table.standings.firstWhere((r) => r.name == 'A');
       final b = table.standings.firstWhere((r) => r.name == 'B');
@@ -59,12 +52,14 @@ void main() {
     });
 
     test('head-to-head cells record results in play order', () {
-      final config = _config(['A', 'B']);
-      final table = buildCrosstable(config, [
-        _game(index: 0, white: 0, black: 1, result: GameResult.whiteWins),
-        _game(index: 1, white: 1, black: 0, result: GameResult.draw),
-        _game(index: 2, white: 0, black: 1, result: GameResult.blackWins),
-      ]);
+      final table = buildCrosstable(
+        ['A', 'B'],
+        [
+          _game(index: 0, white: 0, black: 1, result: GameResult.whiteWins),
+          _game(index: 1, white: 1, black: 0, result: GameResult.draw),
+          _game(index: 2, white: 0, black: 1, result: GameResult.blackWins),
+        ],
+      );
 
       // A won game 1 as White, drew game 2, lost game 3 as White.
       expect(table.cell(0, 1)!.results, ['1', '=', '0']);
@@ -76,14 +71,16 @@ void main() {
     });
 
     test('ranks by points, then Sonneborn-Berger', () {
-      final config = _config(['A', 'B', 'C']);
       // A and B both score 1.5/2; A's came against the stronger opponent.
-      final table = buildCrosstable(config, [
-        _game(index: 0, white: 0, black: 1, result: GameResult.whiteWins),
-        _game(index: 1, white: 0, black: 2, result: GameResult.draw),
-        _game(index: 2, white: 1, black: 2, result: GameResult.whiteWins),
-        _game(index: 3, white: 2, black: 1, result: GameResult.draw),
-      ]);
+      final table = buildCrosstable(
+        ['A', 'B', 'C'],
+        [
+          _game(index: 0, white: 0, black: 1, result: GameResult.whiteWins),
+          _game(index: 1, white: 0, black: 2, result: GameResult.draw),
+          _game(index: 2, white: 1, black: 2, result: GameResult.whiteWins),
+          _game(index: 3, white: 2, black: 1, result: GameResult.draw),
+        ],
+      );
 
       expect(table.standings.first.name, 'A');
       expect(table.standings.map((r) => r.rank), [1, 2, 3]);
@@ -94,26 +91,28 @@ void main() {
     });
 
     test('a clean sweep implies no finite rating gap', () {
-      final config = _config(['A', 'B']);
-      final table = buildCrosstable(config, [
-        _game(index: 0, white: 0, black: 1, result: GameResult.whiteWins),
-        _game(index: 1, white: 1, black: 0, result: GameResult.blackWins),
-      ]);
+      final table = buildCrosstable(
+        ['A', 'B'],
+        [
+          _game(index: 0, white: 0, black: 1, result: GameResult.whiteWins),
+          _game(index: 1, white: 1, black: 0, result: GameResult.blackWins),
+        ],
+      );
       expect(table.standings.first.eloDiff, isNull);
       expect(table.standings.first.eloMargin, isNull);
     });
 
     test('an unfinished game counts as half a point each', () {
-      final config = _config(['A', 'B']);
-      final table = buildCrosstable(config, [
-        _game(index: 0, white: 0, black: 1, result: GameResult.unfinished),
-      ]);
+      final table = buildCrosstable(
+        ['A', 'B'],
+        [_game(index: 0, white: 0, black: 1, result: GameResult.unfinished)],
+      );
       expect(table.standings.every((r) => r.points == 0.5), isTrue);
       expect(table.standings.every((r) => r.draws == 1), isTrue);
     });
 
     test('an empty tournament produces an empty table', () {
-      expect(buildCrosstable(_config([]), const []).isEmpty, isTrue);
+      expect(buildCrosstable(const [], const []).isEmpty, isTrue);
     });
   });
 

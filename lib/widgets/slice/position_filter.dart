@@ -73,7 +73,7 @@ class PositionFilter extends StatelessWidget {
                 ),
                 style: const TextStyle(
                   fontSize: 12,
-                  fontFamily: 'SourceCodePro',
+                  fontFamily: AppTextStyles.monoFamily,
                 ),
               ),
             ),

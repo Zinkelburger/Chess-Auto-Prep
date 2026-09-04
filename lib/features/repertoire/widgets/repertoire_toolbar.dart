@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../constants/ui_breakpoints.dart';
 import '../../../models/repertoire_metadata.dart';
 import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
 import '../../../widgets/app_breadcrumb_trail.dart';
 import '../../../widgets/app_mode_switcher.dart';
 import '../../../widgets/app_overflow_menu.dart';
@@ -456,10 +457,7 @@ class RepertoireGenerationStatusChip extends StatelessWidget {
                   const SizedBox(width: 6),
                   Text(
                     isPaused ? 'Paused' : (label ?? 'Building...'),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceSoft,
-                    ),
+                    style: AppTextStyles.caption,
                   ),
                 ],
               ),

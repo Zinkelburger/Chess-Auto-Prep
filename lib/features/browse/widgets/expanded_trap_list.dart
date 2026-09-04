@@ -4,6 +4,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
 import 'package:chess_auto_prep/models/trap_line_info.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
 import 'package:chess_auto_prep/features/browse/services/candidate_service.dart';
@@ -47,10 +48,7 @@ class _ExpandedTrapListState extends State<ExpandedTrapList> {
     if (traps.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-        child: Text(
-          'No trap details available',
-          style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
-        ),
+        child: Text('No trap details available', style: AppTextStyles.caption),
       );
     }
 

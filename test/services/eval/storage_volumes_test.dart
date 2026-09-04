@@ -97,17 +97,4 @@ void main() {
       expect(formatBytes(997000000000), '997 GB');
     });
   });
-
-  group('formatDuration', () {
-    test('coarse by design', () {
-      expect(formatDuration(const Duration(seconds: 45)), '45 s');
-      expect(formatDuration(const Duration(minutes: 12)), '12 min');
-      expect(
-        formatDuration(const Duration(hours: 3, minutes: 40)),
-        '3 h 40 min',
-      );
-      expect(formatDuration(const Duration(hours: 5)), '5 h');
-      expect(formatDuration(const Duration(days: 3)), '3 days');
-    });
-  });
 }

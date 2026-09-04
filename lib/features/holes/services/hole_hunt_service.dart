@@ -29,11 +29,13 @@ import '../../../services/generation/fen_map.dart';
 import '../../../services/generation/generation_config.dart';
 import '../../../services/generation/tree_ease.dart';
 import '../../../services/maia/maia_factory.dart';
+import '../../../services/run_control.dart';
 import '../../../services/tree_build_service.dart';
 import '../../../services/eval/eval_move_helpers.dart';
 import '../../../utils/chess_utils.dart' as chess_utils;
 import '../../audit/models/audit_finding.dart';
 import '../../audit/models/audit_result.dart';
+import '../../audit/services/exploit_ranking.dart';
 import 'hole_hunt_config.dart';
 import 'hole_scoring.dart';
 import '../../../utils/fen_utils.dart';
@@ -91,17 +93,17 @@ class HoleHuntService {
   /// orphaned by a thrown timeout.
   static const Duration _trapBuildTimeout = Duration(seconds: 180);
 
-  bool _cancelled = false;
-  bool _paused = false;
+  /// Cooperative pause/cancel for the run in progress.
+  final RunControl _control = RunControl();
 
   /// True when the most recent hunt skipped the trap pass because Maia was
   /// unavailable. Surfaced as a note in the report panel.
   bool get trapPassSkipped => _trapPassSkipped;
   bool _trapPassSkipped = false;
 
-  void cancel() => _cancelled = true;
-  void pause() => _paused = true;
-  void resume() => _paused = false;
+  void cancel() => _control.cancel();
+  void pause() => _control.pause();
+  void resume() => _control.resume();
 
   /// Run a full hunt over [tree].
   ///
@@ -114,8 +116,7 @@ class HoleHuntService {
     HoleHuntProgressCallback? onProgress,
     void Function(AuditFinding)? onFinding,
   }) async {
-    _cancelled = false;
-    _paused = false;
+    _control.reset();
     _trapPassSkipped = false;
     final stopwatch = Stopwatch()..start();
     final findings = <AuditFinding>[];
@@ -150,11 +151,7 @@ class HoleHuntService {
     int checked = 0;
 
     while (queue.isNotEmpty) {
-      if (_cancelled) break;
-      while (_paused && !_cancelled) {
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
-      if (_cancelled) break;
+      if (!await _control.checkpoint()) break;
 
       final entry = queue.removeFirst();
       final node = entry.node;
@@ -234,7 +231,7 @@ class HoleHuntService {
     }
 
     // ── Pass 2: leaf expectimax (practical traps) ────────────────────────
-    if (!_cancelled) {
+    if (!_control.isCancelled) {
       await _trapPass(
         leaves: leaves,
         attackerIsWhite: attackerIsWhite,
@@ -408,9 +405,14 @@ class HoleHuntService {
         final childFen = repEntry.value.fen;
         final verify = await _pool.evaluateFen(childFen, config.verifyDepth);
         final childIsWhiteTurn = isWhiteToMove(childFen);
+        // `effectiveCp` folds a forced mate into the score the way the
+        // discovery lines above already do. Reading `scoreCp` raw scored a
+        // mate as 0.00, so a repertoire move that loses by force verified as
+        // "no loss at all" and the finding was thrown away — the hunt was
+        // blind to precisely its most severe holes.
         final verifiedWhiteCp = childIsWhiteTurn
-            ? (verify.scoreCp ?? 0)
-            : -(verify.scoreCp ?? 0);
+            ? verify.effectiveCp
+            : -verify.effectiveCp;
         _evalCache.putEvalCpWhiteSoon(
           childFen,
           verifiedWhiteCp,
@@ -480,11 +482,7 @@ class HoleHuntService {
     final buildService = TreeBuildService();
 
     for (var i = 0; i < selected.length; i++) {
-      if (_cancelled) return;
-      while (_paused && !_cancelled) {
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
-      if (_cancelled) return;
+      if (!await _control.checkpoint()) return;
 
       onProgress?.call(
         HoleHuntProgress(
@@ -526,10 +524,10 @@ class HoleHuntService {
         final tree = await buildService.build(
           config: buildConfig,
           isCancelled: () =>
-              _cancelled || buildClock.elapsed > _trapBuildTimeout,
+              _control.isCancelled || buildClock.elapsed > _trapBuildTimeout,
           onProgress: (_) {},
         );
-        if (_cancelled) return;
+        if (_control.isCancelled) return;
         if (tree.root.children.isEmpty) continue;
 
         final fenMap = FenMap()..populate(tree.root);

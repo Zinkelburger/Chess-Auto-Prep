@@ -2,6 +2,8 @@
 /// but their actual game results are relatively good.
 library;
 
+import '../utils/chess_utils.dart' show formatEvalDisplay;
+
 class EngineWeaknessResult {
   final String fen;
 
@@ -38,13 +40,9 @@ class EngineWeaknessResult {
     required this.playerIsWhite,
   });
 
-  /// Human-readable eval (e.g. "+0.50", "-1.23", "#5").
-  String get evalDisplay {
-    if (evalMate != null) return '#${evalMate!}';
-    final pawns = evalCp / 100.0;
-    final sign = pawns >= 0 ? '+' : '';
-    return '$sign${pawns.toStringAsFixed(2)}';
-  }
+  /// Human-readable eval (e.g. "+0.50", "-1.23", "#5", "-#5").
+  String get evalDisplay =>
+      formatEvalDisplay(scoreCp: evalCp, scoreMate: evalMate, decimals: 2);
 
   Map<String, dynamic> toJson() => {
     'fen': fen,

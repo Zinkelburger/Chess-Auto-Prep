@@ -19,6 +19,7 @@ import '../services/eval/storage_volumes.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/open_in_file_manager.dart';
+import '../utils/time_format.dart';
 import 'lichess_eval_download_dialog.dart';
 import 'storage_destination_picker.dart';
 
@@ -240,7 +241,7 @@ class _LichessEvalCardState extends State<LichessEvalCard> {
         final eta = _controller.eta;
         final tail = [
           if (rate > 0) '${formatBytes(rate.round())}/s',
-          if (eta != null) '${formatDuration(eta)} left',
+          if (eta != null) '${formatCoarseDuration(eta)} left',
         ].join(', ');
         return '$done of $total${tail.isEmpty ? '' : ' — $tail'}';
       case LichessEvalPhase.importing:

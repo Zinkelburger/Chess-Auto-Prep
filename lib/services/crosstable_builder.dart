@@ -1,23 +1,22 @@
 /// Turns a list of played games into standings and a head-to-head grid.
 ///
-/// Pure arithmetic over [TournamentGameRecord]s — no engines, no files — so
-/// it is the piece the unit tests can pin down exactly.
+/// Pure arithmetic over [CrosstableGame]s — no engines, no files, not even a
+/// board — so it is the piece the unit tests can pin down exactly, and the
+/// piece both the one-board and the two-board tournaments share.
 library;
 
 import 'dart:math' as math;
 
 import '../models/crosstable.dart';
-import '../models/tournament_config.dart';
-import '../models/tournament_game.dart';
+import '../models/game_outcome.dart';
 
 /// 95% two-sided normal quantile, the interval every engine tester quotes.
 const double _z95 = 1.959963985;
 
-Crosstable buildCrosstable(
-  TournamentConfig config,
-  List<TournamentGameRecord> games,
-) {
-  final count = config.engines.length;
+/// [names] are the participants in seeding order; a game's `whiteIndex` and
+/// `blackIndex` index into it.
+Crosstable buildCrosstable(List<String> names, List<CrosstableGame> games) {
+  final count = names.length;
   if (count == 0) {
     return const Crosstable(standings: [], grid: {}, totalGames: 0);
   }
@@ -82,7 +81,7 @@ Crosstable buildCrosstable(
       StandingsRow(
         rank: 0,
         engineIndex: i,
-        name: config.engines[i].name,
+        name: names[i],
         points: points[i],
         played: n,
         wins: wins[i],

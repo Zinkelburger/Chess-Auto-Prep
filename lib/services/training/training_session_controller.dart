@@ -34,6 +34,7 @@ import 'learn_phase.dart';
 import 'replay_phase.dart';
 import 'review_progress_store.dart';
 import 'training_phase.dart';
+import 'training_run.dart';
 
 /// Manages repertoire training session state: phases, line queue, move validation,
 /// progress persistence, and session statistics.
@@ -110,6 +111,14 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// Review walks due ones; auto-next stays inside the intent so a Learn
   /// session is never interrupted by a due line (and vice versa).
   TrainingIntent sessionIntent = TrainingIntent.learn;
+
+  /// What this sitting covers and what comes next — the run scope, the cap,
+  /// and the message when it ends.
+  late final TrainingRun run = TrainingRun(
+    repetitionMode: () => repetitionMode,
+    settings: () => settings,
+    reviewMap: () => reviewMap,
+  );
 
   /// True once a run has nothing left to show. The trainer displays the
   /// session summary instead of asking the user to rate the last line again.
@@ -616,98 +625,21 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// Start working through the lines that are due in the active chapter.
   void startReviewSession() => _startSession(TrainingIntent.review);
 
-  /// Line ids this sitting will work through, or null for an uncapped run.
-  ///
-  /// Fixed when the run starts, so finishing a line cannot pull a fresh one in
-  /// behind it and a session over a 900-line course actually ends. A line
-  /// failed mid-run stays in scope until it comes back clean.
-  Set<String>? _runScope;
-
-  /// Whether the sitting stopped because it hit its own cap rather than
-  /// because the chapter ran out — a different sentence, and a different
-  /// offer, at the end.
-  bool _runWasCapped = false;
-
   void _startSession(TrainingIntent intent) {
     dueQueue = _buildQueue();
-    _runScope = _scopeForRun(intent);
-    final line = _nextForIntent(intent);
+    run.begin(dueQueue, intent);
+    final line = run.next(dueQueue, intent);
     if (line == null) {
       // Nothing to do in this scope: say so instead of dropping the user into
       // an unrelated line (the old buttons fell back to dueQueue.first, which
       // threw on an empty queue).
-      _runScope = null;
-      feedback = _sessionCompleteMessage(intent);
+      final message = run.completeMessage(intent);
+      run.clear();
+      feedback = message;
       notifyListeners();
       return;
     }
     startLine(line, intent: intent, keepRunScope: true);
-  }
-
-  /// The first [TrainingSettings.newLinesPerSession] / [reviewsPerSession]
-  /// lines of the queue, or null when the cap is off or the mode has no cap.
-  ///
-  /// Linear mode is uncapped on purpose: "every line once, in order" is what
-  /// the mode *is*, and stopping it a tenth of the way through would make its
-  /// "Set complete!" a lie.
-  Set<String>? _scopeForRun(TrainingIntent intent) {
-    if (repetitionMode == RepetitionMode.linear) return null;
-    final cap = intent == TrainingIntent.learn
-        ? settings.newLinesPerSession
-        : settings.reviewsPerSession;
-    if (cap <= 0) return null;
-
-    final picked = <String>{};
-    for (final line in dueQueue) {
-      if (!_matchesIntent(line, intent)) continue;
-      picked.add(line.id);
-      if (picked.length >= cap) break;
-    }
-    _runWasCapped = picked.length >= cap;
-    return picked;
-  }
-
-  /// The next line matching [intent], starting after [afterLineId] in queue
-  /// order and wrapping around. Null when the scope holds no such line.
-  RepertoireLine? _nextForIntent(TrainingIntent intent, {String? afterLineId}) {
-    if (dueQueue.isEmpty) return null;
-
-    final startIndex = afterLineId == null
-        ? -1
-        : dueQueue.indexWhere((l) => l.id == afterLineId);
-    if (startIndex < 0) {
-      for (final line in dueQueue) {
-        if (_inRun(line, intent)) return line;
-      }
-      return null;
-    }
-    for (int step = 1; step <= dueQueue.length; step++) {
-      final line = dueQueue[(startIndex + step) % dueQueue.length];
-      if (_inRun(line, intent)) return line;
-    }
-    return null;
-  }
-
-  /// Whether [line] is still part of the run in progress.
-  bool _inRun(RepertoireLine line, TrainingIntent intent) {
-    // Linear mode runs every queued line once, in order — there is no
-    // untrained/due split to honour.
-    if (repetitionMode == RepetitionMode.linear) return true;
-    final scope = _runScope;
-    if (scope == null) return _matchesIntent(line, intent);
-    if (!scope.contains(line.id)) return false;
-    // Inside the sitting's own set, "not learned yet" is the test. Rating a
-    // new line Again moves it out of *untrained*, so the strict intent match
-    // would have dropped it from the run you are in the middle of — exactly
-    // the line you most need to see again.
-    return lineStatusOf(reviewMap[line.id]) != LineStatus.learned;
-  }
-
-  bool _matchesIntent(RepertoireLine line, TrainingIntent intent) {
-    final status = lineStatusOf(reviewMap[line.id]);
-    return intent == TrainingIntent.learn
-        ? status == LineStatus.untrained
-        : status == LineStatus.due;
   }
 
   /// Lines still ahead in this run — what the Train tab counts down.
@@ -715,9 +647,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// Counted once per notification: the screen reads it several times per
   /// build, and every read walked the queue with a status lookup per line.
   int get remainingInRun =>
-      _remainingInRun ??= repetitionMode == RepetitionMode.linear
-      ? dueQueue.length
-      : dueQueue.where((line) => _inRun(line, sessionIntent)).length;
+      _remainingInRun ??= run.remaining(dueQueue, sessionIntent);
 
   int? _remainingInRun;
 
@@ -725,18 +655,6 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   void notifyListeners() {
     _remainingInRun = null;
     super.notifyListeners();
-  }
-
-  String _sessionCompleteMessage(TrainingIntent intent) {
-    if (repetitionMode == RepetitionMode.linear) return 'Set complete!';
-    if (_runWasCapped) {
-      return intent == TrainingIntent.learn
-          ? 'That is this sitting\'s new lines — nicely done.'
-          : 'Review session done.';
-    }
-    return intent == TrainingIntent.learn
-        ? 'Nothing left to learn here.'
-        : 'All caught up!';
   }
 
   /// Start [line] now. [intent] is what the rest of the run should work
@@ -753,10 +671,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     bool keepRunScope = false,
   }) {
     if (line == null) return;
-    if (!keepRunScope) {
-      _runScope = null;
-      _runWasCapped = false;
-    }
+    if (!keepRunScope) run.clear();
     sessionIntent =
         intent ??
         (_isLineNew(line) ? TrainingIntent.learn : TrainingIntent.review);
@@ -917,8 +832,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     unawaited(progress.flushHeaders());
     _lineGeneration++;
     runComplete = false;
-    _runScope = null;
-    _runWasCapped = false;
+    run.clear();
     currentLine = null;
     phase = TrainingPhase.drilling;
     waitingForUser = false;
@@ -1167,12 +1081,16 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   void rebuildQueueAndAdvance() {
     dueQueue = _buildQueue();
 
-    final next = _nextForIntent(sessionIntent, afterLineId: currentLine?.id);
+    final next = run.next(
+      dueQueue,
+      sessionIntent,
+      afterLineId: currentLine?.id,
+    );
     if (next == null) {
       phase = TrainingPhase.finished;
       runComplete = true;
-      feedback = _sessionCompleteMessage(sessionIntent);
-      _runScope = null;
+      feedback = run.completeMessage(sessionIntent);
+      run.clear();
       unawaited(progress.flushHeaders());
       notifyListeners();
       return;

@@ -16,13 +16,13 @@ import 'dart:async';
 import 'package:dartchess/dartchess.dart';
 
 import '../../../constants/chess_constants.dart';
+import '../../../models/game_outcome.dart';
 import '../../../services/generation/export/pgn_game_writer.dart'
     show escapePgnHeaderValue;
 import '../../../utils/movetext_builder.dart';
 import '../models/adjudication_rules.dart';
 import '../models/engine_spec.dart';
 import '../models/time_control.dart';
-import '../models/tournament_game.dart';
 import 'uci_engine.dart';
 
 /// Slack allowed on a clock before the flag falls, covering pipe latency and

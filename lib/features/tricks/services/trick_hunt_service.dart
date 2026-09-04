@@ -26,12 +26,13 @@ import '../../../services/generation/fen_map.dart';
 import '../../../services/generation/generation_config.dart';
 import '../../../services/generation/tree_ease.dart';
 import '../../../services/maia/maia_factory.dart';
+import '../../../services/run_control.dart';
 import '../../../services/tree_build_service.dart';
 import '../../../utils/chess_utils.dart' as chess_utils;
 import '../../../utils/ease_utils.dart';
 import '../../audit/models/audit_finding.dart';
 import '../../audit/models/audit_result.dart';
-import '../../holes/services/hole_scoring.dart';
+import '../../audit/services/exploit_ranking.dart';
 import 'trick_hunt_config.dart';
 import 'trick_scoring.dart';
 import '../../../utils/fen_utils.dart';
@@ -94,17 +95,17 @@ class TrickHuntService {
   final StockfishPool _pool = StockfishPool.instance;
   final EvalCache _evalCache = EvalCache.instance;
 
-  bool _cancelled = false;
-  bool _paused = false;
+  /// Cooperative pause/cancel for the run in progress.
+  final RunControl _control = RunControl();
 
   /// True when the most recent hunt could not probe because Maia was
   /// unavailable. Surfaced as a note in the report panel.
   bool get probesSkipped => _probesSkipped;
   bool _probesSkipped = false;
 
-  void cancel() => _cancelled = true;
-  void pause() => _paused = true;
-  void resume() => _paused = false;
+  void cancel() => _control.cancel();
+  void pause() => _control.pause();
+  void resume() => _control.resume();
 
   /// Run a full hunt over [tree].
   ///
@@ -117,8 +118,7 @@ class TrickHuntService {
     TrickHuntProgressCallback? onProgress,
     void Function(AuditFinding)? onFinding,
   }) async {
-    _cancelled = false;
-    _paused = false;
+    _control.reset();
     _probesSkipped = false;
     final stopwatch = Stopwatch()..start();
     final findings = <AuditFinding>[];
@@ -174,11 +174,7 @@ class TrickHuntService {
     final candidates = <TrickCandidate>[];
 
     for (var i = 0; i < targets.length; i++) {
-      if (_cancelled) break;
-      while (_paused && !_cancelled) {
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
-      if (_cancelled) break;
+      if (!await _control.checkpoint()) break;
 
       onProgress?.call(
         TrickHuntProgress(
@@ -237,7 +233,7 @@ class TrickHuntService {
     }
 
     // ── Stage C: expectimax probes ───────────────────────────────────────
-    if (!_cancelled) {
+    if (!_control.isCancelled) {
       await _probePass(
         candidates: candidates,
         tree: tree,
@@ -286,11 +282,7 @@ class TrickHuntService {
     final probeTimeout = Duration(seconds: config.probeTimeoutSeconds);
 
     for (var i = 0; i < selected.length; i++) {
-      if (_cancelled) return;
-      while (_paused && !_cancelled) {
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
-      if (_cancelled) return;
+      if (!await _control.checkpoint()) return;
 
       onProgress?.call(
         TrickHuntProgress(
@@ -338,11 +330,12 @@ class TrickHuntService {
         final buildClock = Stopwatch()..start();
         final probeTree = await buildService.build(
           config: buildConfig,
-          isCancelled: () => _cancelled || buildClock.elapsed > probeTimeout,
+          isCancelled: () =>
+              _control.isCancelled || buildClock.elapsed > probeTimeout,
           onProgress: (_) {},
         );
         onProbeDone();
-        if (_cancelled) return;
+        if (_control.isCancelled) return;
         if (probeTree.root.children.isEmpty) continue;
 
         final fenMap = FenMap()..populate(probeTree.root);

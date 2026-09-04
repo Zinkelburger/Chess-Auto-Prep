@@ -14,6 +14,7 @@ import '../../../models/opening_tree.dart';
 import '../../../services/engine/engine_lifecycle.dart';
 import '../../../services/engine/stockfish_pool.dart';
 import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
 import '../../../widgets/engine/engine_gate.dart';
 import '../models/audit_finding.dart';
 import '../models/audit_result.dart';
@@ -21,6 +22,7 @@ import '../services/audit_config.dart';
 import '../services/repertoire_audit_service.dart';
 import '../../../widgets/labeled_toggle.dart';
 import '../../../utils/movetext_builder.dart';
+import 'hunt_controls.dart';
 
 class AuditConfigPanel extends StatefulWidget {
   final OpeningTree? openingTree;
@@ -235,13 +237,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
                 color: AppColors.onSurfaceMuted,
               ),
               const SizedBox(width: 6),
-              Text(
-                scopeLabel,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceMuted,
-                ),
-              ),
+              Text(scopeLabel, style: AppTextStyles.caption),
               const Spacer(),
               AppCheckbox(
                 label: 'Subtree only',
@@ -262,10 +258,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
                 color: AppColors.onSurfaceMuted,
               ),
               const SizedBox(width: 4),
-              const Text(
-                'Stockfish + Maia',
-                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
-              ),
+              const Text('Stockfish + Maia', style: AppTextStyles.caption),
               const Spacer(),
               AppCheckbox(
                 label: 'ChessDB replies',
@@ -309,26 +302,10 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
           ),
           const SizedBox(height: 8),
 
-          // More thresholds (collapsed by default)
-          InkWell(
-            onTap: () => setState(() => _showAdvanced = !_showAdvanced),
-            child: Row(
-              children: [
-                Icon(
-                  _showAdvanced ? Icons.expand_less : Icons.expand_more,
-                  size: 16,
-                  color: AppColors.onSurfaceMuted,
-                ),
-                const SizedBox(width: 4),
-                const Text(
-                  'More thresholds',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.onSurfaceMuted,
-                  ),
-                ),
-              ],
-            ),
+          DisclosureHeader(
+            label: 'More thresholds',
+            expanded: _showAdvanced,
+            onToggle: () => setState(() => _showAdvanced = !_showAdvanced),
           ),
           if (_showAdvanced) ...[
             const SizedBox(height: 6),
@@ -379,10 +356,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
                 color: AppColors.onSurfaceMuted,
               ),
               const SizedBox(width: 6),
-              const Text(
-                'Repertoire Clashes',
-                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
-              ),
+              const Text('Repertoire Clashes', style: AppTextStyles.caption),
               const Spacer(),
               SizedBox(
                 height: 26,
@@ -426,7 +400,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
               padding: EdgeInsets.only(left: 20),
               child: Text(
                 'Check against book & course lines',
-                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+                style: AppTextStyles.caption,
               ),
             ),
           const SizedBox(height: 10),
@@ -475,10 +449,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
                       Text(
                         '${_progress!.nodesChecked}/${_progress!.totalNodes} · '
                         '$_liveFindingCount findings',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.onSurfaceMuted,
-                        ),
+                        style: AppTextStyles.caption,
                       ),
                     ],
                   ),
@@ -495,23 +466,13 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
     TextEditingController ctrl,
     String label, {
     String? tooltip,
-  }) {
-    final field = SizedBox(
-      width: 220,
-      child: TextField(
-        controller: ctrl,
-        enabled: !_isAuditing,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-          isDense: true,
-        ),
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      ),
-    );
-    if (tooltip == null) return field;
-    return Tooltip(message: tooltip, child: field);
-  }
+  }) => HuntNumberField(
+    controller: ctrl,
+    label: label,
+    tooltip: tooltip,
+    enabled: !_isAuditing,
+    allowDecimal: true,
+  );
 
   String _moveSequenceLabel(List<String> moves) => moves.isEmpty
       ? 'Initial position'

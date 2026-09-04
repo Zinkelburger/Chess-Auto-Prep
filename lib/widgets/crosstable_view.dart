@@ -1,22 +1,31 @@
 /// The results summary — standings on the left, head-to-head on the right.
+///
+/// Takes [names] rather than a tournament config so the same table serves the
+/// engine tournament and the bughouse lab, whose participants are teams.
 library;
 
 import 'package:flutter/material.dart';
 
-import '../../../theme/app_colors.dart';
-import '../../../theme/app_text_styles.dart';
 import '../models/crosstable.dart';
-import '../models/tournament_config.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 
 class CrosstableView extends StatelessWidget {
   const CrosstableView({
     super.key,
     required this.crosstable,
-    required this.config,
+    required this.names,
+    this.participantHeading = 'Engine',
   });
 
   final Crosstable crosstable;
-  final TournamentConfig config;
+
+  /// Participants in seeding order, indexed by [StandingsRow.engineIndex].
+  final List<String> names;
+
+  /// What the name column is called. "Engine" everywhere one binary is one
+  /// player; "Team" in bughouse, where a participant is a pair of seats.
+  final String participantHeading;
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +60,7 @@ class CrosstableView extends StatelessWidget {
           dataTextStyle: AppTextStyles.body,
           columns: [
             const DataColumn(label: Text('#')),
-            const DataColumn(label: Text('Engine')),
+            DataColumn(label: Text(participantHeading)),
             const DataColumn(label: Text('Score'), numeric: true),
             const DataColumn(label: Text('W'), numeric: true),
             const DataColumn(label: Text('D'), numeric: true),
@@ -87,7 +96,7 @@ class CrosstableView extends StatelessWidget {
               numeric: true,
             ),
             for (final index in opponents)
-              DataColumn(label: Text('vs ${config.engines[index].name}')),
+              DataColumn(label: Text('vs ${names[index]}')),
           ],
           rows: [
             for (final row in standings)

@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import '../../models/explorer_response.dart';
 import '../../models/opening_tree.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import '../opening_tree/win_draw_loss_bar.dart';
 
 /// Column widths shared by the header, the move rows and the totals row so
@@ -179,10 +180,7 @@ class _ExplorerMoveRowState extends State<ExplorerMoveRow> {
                     child: Text(
                       formatExplorerCount(move.total),
                       textAlign: TextAlign.right,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.onSurfaceSoft,
-                      ),
+                      style: AppTextStyles.caption,
                     ),
                   ),
                   SizedBox(
@@ -190,10 +188,7 @@ class _ExplorerMoveRowState extends State<ExplorerMoveRow> {
                     child: Text(
                       '${move.playRate.round()}%',
                       textAlign: TextAlign.right,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.onSurfaceMuted,
-                      ),
+                      style: AppTextStyles.caption,
                     ),
                   ),
                   const SizedBox(width: ExplorerColumns.gap),
@@ -297,10 +292,7 @@ class ExplorerTotalsRow extends StatelessWidget {
             child: Text(
               formatExplorerCount(response.totalGames),
               textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurfaceSoft,
-              ),
+              style: AppTextStyles.caption,
             ),
           ),
           const SizedBox(
@@ -308,7 +300,7 @@ class ExplorerTotalsRow extends StatelessWidget {
             child: Text(
               '100%',
               textAlign: TextAlign.right,
-              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+              style: AppTextStyles.caption,
             ),
           ),
           const SizedBox(width: ExplorerColumns.gap),

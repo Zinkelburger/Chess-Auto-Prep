@@ -2,6 +2,7 @@
 /// Provides data structures for positions, games, and analysis results
 library;
 
+import '../utils/chess_utils.dart' show formatEvalDisplay;
 import '../utils/fen_utils.dart';
 
 class PositionStats {
@@ -44,14 +45,13 @@ class PositionStats {
   /// Win rate as percentage
   double get winRatePercent => winRate * 100;
 
-  /// Human-readable eval display (e.g. "+0.50", "-1.23", "#5").
-  String get evalDisplay {
-    if (evalMate != null) return '#${evalMate!}';
-    if (evalCp == null) return '?';
-    final pawns = evalCp! / 100.0;
-    final sign = pawns >= 0 ? '+' : '';
-    return '$sign${pawns.toStringAsFixed(2)}';
-  }
+  /// Human-readable eval display (e.g. "+0.50", "-1.23", "#5", "-#5").
+  String get evalDisplay => formatEvalDisplay(
+    scoreCp: evalCp,
+    scoreMate: evalMate,
+    decimals: 2,
+    empty: '?',
+  );
 
   PositionStats copyWith({
     String? fen,

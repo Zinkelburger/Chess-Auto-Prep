@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../services/coherence_service.dart';
 import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
 
 import 'package:chess_auto_prep/features/browse/services/candidate_service.dart';
 
@@ -86,10 +87,7 @@ class CandidateRow extends StatelessWidget {
         const SizedBox(width: 6),
       ],
       if (candidate.dbGames != null) ...[
-        Text(
-          _formatGames(candidate.dbGames!),
-          style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
-        ),
+        Text(_formatGames(candidate.dbGames!), style: AppTextStyles.caption),
         const SizedBox(width: 6),
       ],
       if (candidate.dbWhiteWin != null) ...[
@@ -142,7 +140,7 @@ class _EvalChip extends StatelessWidget {
       style: const TextStyle(
         fontSize: 12,
         fontWeight: FontWeight.w600,
-        fontFamily: 'SourceCodePro',
+        fontFamily: AppTextStyles.monoFamily,
       ),
     );
   }
@@ -196,10 +194,7 @@ class _TrapBadge extends StatelessWidget {
         children: [
           Text(
             '$count trap${count == 1 ? '' : 's'}',
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.onSurfaceSoft,
-            ),
+            style: AppTextStyles.caption,
           ),
           if (onExpandTraps != null)
             Icon(
@@ -236,7 +231,7 @@ class _CoherenceChip extends StatelessWidget {
       message: 'Coherence ${hint.score.toStringAsFixed(2)}',
       child: Text(
         label,
-        style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
+        style: AppTextStyles.caption,
         overflow: TextOverflow.ellipsis,
       ),
     );

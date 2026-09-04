@@ -16,6 +16,7 @@ import '../../services/coherence_service.dart';
 import '../../services/generation/fen_map.dart';
 import '../../services/generation/generation_config.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import 'expectimax_panel_host.dart';
 
 class InlineExpectimaxBar extends StatefulWidget {
@@ -129,10 +130,7 @@ class _InlineExpectimaxBarState extends State<InlineExpectimaxBar> {
           const Expanded(
             child: Tooltip(
               message: 'Toggle expectimax (X)',
-              child: Text(
-                'Expectimax',
-                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
-              ),
+              child: Text('Expectimax', style: AppTextStyles.caption),
             ),
           ),
         ],

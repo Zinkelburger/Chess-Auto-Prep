@@ -9,7 +9,8 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
+import '../../audit/widgets/hunt_controls.dart';
 import '../services/hole_hunt_config.dart';
 
 class HoleHuntConfigDialog extends StatefulWidget {
@@ -137,7 +138,7 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
               const Text(
                 'Results are ranked by reach probability × gain, so you '
                 'get a short list of killer holes — not every bad eval.',
-                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+                style: AppTextStyles.caption,
               ),
               const SizedBox(height: 12),
 
@@ -174,10 +175,7 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
                     ? 'You play $attackerColor against these $treeColor lines.'
                     : 'Finds what a prepared $attackerColor opponent could '
                           'exploit in these games.',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceMuted,
-                ),
+                style: AppTextStyles.caption,
               ),
               const SizedBox(height: 16),
 
@@ -219,26 +217,10 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
               ),
               const SizedBox(height: 8),
 
-              // More thresholds (collapsed by default)
-              InkWell(
-                onTap: () => setState(() => _showAdvanced = !_showAdvanced),
-                child: Row(
-                  children: [
-                    Icon(
-                      _showAdvanced ? Icons.expand_less : Icons.expand_more,
-                      size: 16,
-                      color: AppColors.onSurfaceMuted,
-                    ),
-                    const SizedBox(width: 4),
-                    const Text(
-                      'More thresholds',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.onSurfaceMuted,
-                      ),
-                    ),
-                  ],
-                ),
+              DisclosureHeader(
+                label: 'More thresholds',
+                expanded: _showAdvanced,
+                onToggle: () => setState(() => _showAdvanced = !_showAdvanced),
               ),
               if (_showAdvanced) ...[
                 const SizedBox(height: 8),
@@ -289,7 +271,7 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
                 'Pass 1 walks the tree with Stockfish; pass 2 runs Maia '
                 'expectimax on the top leaves for practical traps. Can take '
                 'a while — it keeps working while you browse.',
-                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+                style: AppTextStyles.caption,
               ),
             ],
           ),
@@ -313,20 +295,5 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
     TextEditingController ctrl,
     String label, {
     String? tooltip,
-  }) {
-    final field = SizedBox(
-      width: 220,
-      child: TextField(
-        controller: ctrl,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-          isDense: true,
-        ),
-        keyboardType: TextInputType.number,
-      ),
-    );
-    if (tooltip == null) return field;
-    return Tooltip(message: tooltip, child: field);
-  }
+  }) => HuntNumberField(controller: ctrl, label: label, tooltip: tooltip);
 }

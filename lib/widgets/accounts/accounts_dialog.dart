@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/app_state.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 
 /// The one place the two usernames are typed.
 ///
@@ -97,7 +98,7 @@ class _AccountsDialogState extends State<AccountsDialog> {
             const Text(
               'Leave a box empty for a site you do not play on. You can '
               'change these any time.',
-              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+              style: AppTextStyles.caption,
             ),
           ],
         ),
@@ -174,10 +175,7 @@ class _SiteFieldState extends State<_SiteField> {
               widget.lastFetch != null
                   ? 'Last downloaded ${formatAccountDate(widget.lastFetch!)}'
                   : 'Not downloaded yet',
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurfaceMuted,
-              ),
+              style: AppTextStyles.caption,
             ),
           ),
       ],

@@ -21,7 +21,13 @@ import 'package:flutter/foundation.dart';
 
 import '../models/engine_settings.dart';
 import '../utils/chess_utils.dart'
-    show uciPvToSan, uciToSan, toStandardUci, isNullMoveSan, playSanOrNullMove;
+    show
+        uciPvToSan,
+        uciToSan,
+        toStandardUci,
+        isNullMoveSan,
+        playSanOrNullMove,
+        formatEvalDisplay;
 import '../utils/ease_utils.dart' show winningChanceFromCp;
 import '../utils/eval_constants.dart';
 import '../utils/pgn_comment_utils.dart';
@@ -108,6 +114,16 @@ class MoveEval {
     return effectiveCpFromScores(scoreCp: scoreCp, scoreMate: scoreMate);
   }
 
+  /// Human-readable score for a tooltip or a move row: `+1.3`, `-0.5`, `#3`.
+  ///
+  /// A mating move gets a bare `#`. It carries no engine score — there is no
+  /// position left to search — so the plain formatter would render the move
+  /// that won the game as `--`, which is what the chart's tooltip used to do
+  /// while the move list beside it said `#`.
+  String get evalDisplay => deliversCheckmate
+      ? '#'
+      : formatEvalDisplay(scoreCp: scoreCp, scoreMate: scoreMate);
+
   /// Format as a Lichess-compatible `[%eval]` comment value, with optional
   /// depth suffix (e.g. `1.23,18` or `#3,20`).
   String toEvalComment() => formatEvalCommentValue(
@@ -131,6 +147,16 @@ enum MoveClassification { normal, interesting, inaccuracy, mistake, blunder }
 /// clamped to ±1000 cp here rather than saturated at mate scores.
 double cpToWinningChance(int? cp, int? mate) =>
     winningChanceFromCp(effectiveCpFromScores(scoreCp: cp, scoreMate: mate));
+
+/// Winning chance the first move's swing is measured against.
+///
+/// An even game. Nothing writes the engine's score for a game's *starting*
+/// position to disk — a review pass persists movetext, and `[%eval]` lives on
+/// moves — so no reader can recover one. Every path that classifies moves must
+/// therefore start its chain here, or the same game reads differently
+/// depending on who is looking: the live pass, [parseCachedEvals], and the
+/// movetext's own marker pass all begin from this value.
+double initialWinChance() => cpToWinningChance(0, null);
 
 /// Classify a move based on the change in winning chances.
 MoveClassification classifyMove(double delta) {
@@ -248,7 +274,7 @@ parseCachedEvals(String pgnText) {
 
   if (results.length < realPlies - kMaxUnevaluatedPlies) return null;
 
-  final startWinChance = cpToWinningChance(0, null);
+  final startWinChance = initialWinChance();
   double prevWinChance = startWinChance;
 
   final classified = <MoveEval>[];
@@ -569,10 +595,19 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
         sideToMoveIsWhite: isWhiteToMove(startFen),
         depth: useDepth,
       );
-      _startWinChance = cpToWinningChance(
-        startResult.scoreCp,
-        startResult.scoreMate,
-      );
+      // The anchor the FIRST move's swing is measured against — and it has to
+      // be the same one every reader will use. This pass persists movetext
+      // only (`onAnnotatedMovetext`), so nothing carries the engine's score
+      // for the starting position onto disk: `parseCachedEvals` and the
+      // movetext's own `_buildEvalNotes` both restart the chain at an even
+      // game. Anchoring the live pass on `startResult` instead made move 1
+      // classify one way while the run was on screen and another way the
+      // next time the game was opened — 1.g4 marked as a mistake, then
+      // unmarked on reload. A mark the stored game cannot reproduce is worse
+      // than a slightly conservative anchor, so the writer uses the reader's.
+      // `startResult` is still wanted below, for move 1's "what to play
+      // instead" line.
+      _startWinChance = initialWinChance();
 
       // Initialize MAIA
       final maia = MaiaFactory.instance;

@@ -8,6 +8,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
 import '../models/repertoire_reload_summary.dart';
 
 /// Runs [reload] behind a modal and shows what it found.
@@ -218,10 +219,7 @@ class _Result extends StatelessWidget {
             '${summary.edited} line${summary.edited == 1 ? '' : 's'} kept the '
             'same moves but changed elsewhere — a comment, a glyph, or a '
             'sub-variation.',
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.onSurfaceMuted,
-            ),
+            style: AppTextStyles.caption,
           ),
         ],
       ],
@@ -349,13 +347,7 @@ class _LineGroup extends StatelessWidget {
         if (hidden > 0)
           Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              'and $hidden more',
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurfaceMuted,
-              ),
-            ),
+            child: Text('and $hidden more', style: AppTextStyles.caption),
           ),
       ],
     );

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/opening_tree.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import 'coverage_annotation.dart';
 import 'win_draw_loss_bar.dart';
 
@@ -149,7 +150,7 @@ class _OpeningTreeMoveRowState extends State<OpeningTreeMoveRow> {
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 15,
-                            fontFamily: 'SourceCodePro',
+                            fontFamily: AppTextStyles.monoFamily,
                           ),
                         ),
                       ),
@@ -160,10 +161,7 @@ class _OpeningTreeMoveRowState extends State<OpeningTreeMoveRow> {
                               ? frequency
                               : '$frequency · ${reach.percentLabel}% reached',
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.onSurfaceSoft,
-                          ),
+                          style: AppTextStyles.caption,
                         ),
                       ),
                       if (entry.hasWdl)

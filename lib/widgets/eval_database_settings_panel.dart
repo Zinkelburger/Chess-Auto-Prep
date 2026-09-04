@@ -230,10 +230,7 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
                   helperText:
                       'The folder holding CURRENT and the .sst files — '
                       '…/chess-YYYYMMDD/data',
-                  helperStyle: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.onSurfaceMuted,
-                  ),
+                  helperStyle: AppTextStyles.caption,
                   border: const OutlineInputBorder(),
                   isDense: true,
                   suffixIcon: _buildPathStatusIcon(),
@@ -309,7 +306,7 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
                 'Same files, fetched outside the app — useful on a server, or '
                 'over a connection you would rather manage yourself. Point the '
                 'path field above at the resulting data/ folder when it ends.',
-                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
+                style: AppTextStyles.caption,
               ),
               const SizedBox(height: 8),
               _commandRow(chessDbRsyncCommand(snapshotId)),
@@ -343,7 +340,10 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
           Expanded(
             child: SelectableText(
               command,
-              style: const TextStyle(fontFamily: 'SourceCodePro', fontSize: 12),
+              style: const TextStyle(
+                fontFamily: AppTextStyles.monoFamily,
+                fontSize: 12,
+              ),
             ),
           ),
           IconButton(

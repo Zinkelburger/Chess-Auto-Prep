@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import '../models/opening_tree.dart';
 import '../models/position_analysis.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 import 'copy_button.dart';
 import '../utils/fen_utils.dart';
@@ -459,7 +460,10 @@ class _FenListWidgetState extends State<FenListWidget>
       ),
       subtitle: Text(
         subtitle,
-        style: const TextStyle(fontSize: 12, fontFamily: 'SourceCodePro'),
+        style: const TextStyle(
+          fontSize: 12,
+          fontFamily: AppTextStyles.monoFamily,
+        ),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),

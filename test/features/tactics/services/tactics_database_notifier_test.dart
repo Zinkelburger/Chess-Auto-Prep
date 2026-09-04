@@ -84,6 +84,61 @@ void main() {
       expect(notifications, greaterThan(0));
     });
 
+    /// Batch delete is irreversible — its own dialog says so — and used to
+    /// trust the caller to hand over descending, duplicate-free indices.
+    /// Any other order deleted puzzles the user never selected.
+    group('deletePositionsAt survives any index order', () {
+      Future<TacticsDatabase> seeded() async {
+        final db = TacticsDatabase();
+        for (final fen in const ['a', 'b', 'c', 'd', 'e']) {
+          await db.addPosition(_pos(fen));
+        }
+        return db;
+      }
+
+      test('descending indices remove exactly those entries', () async {
+        final db = await seeded();
+        await db.deletePositionsAt([3, 1]);
+        expect(db.positions.map((p) => p.fen), ['a', 'c', 'e']);
+      });
+
+      test('ascending indices remove the same entries', () async {
+        final db = await seeded();
+        await db.deletePositionsAt([1, 3]);
+        expect(db.positions.map((p) => p.fen), ['a', 'c', 'e']);
+      });
+
+      test('unsorted indices remove the same entries', () async {
+        final db = await seeded();
+        await db.deletePositionsAt([3, 0, 1]);
+        expect(db.positions.map((p) => p.fen), ['c', 'e']);
+      });
+
+      test('a repeated index deletes one entry, not two', () async {
+        final db = await seeded();
+        await db.deletePositionsAt([1, 1]);
+        expect(db.positions.map((p) => p.fen), ['a', 'c', 'd', 'e']);
+      });
+
+      test(
+        'out-of-range indices are skipped, valid ones still apply',
+        () async {
+          final db = await seeded();
+          await db.deletePositionsAt([-1, 99, 2]);
+          expect(db.positions.map((p) => p.fen), ['a', 'b', 'd', 'e']);
+        },
+      );
+
+      test('an all-invalid batch does not notify', () async {
+        final db = await seeded();
+        var notifications = 0;
+        db.addListener(() => notifications++);
+        await db.deletePositionsAt([-1, 99]);
+        expect(db.positions.length, 5);
+        expect(notifications, 0);
+      });
+    });
+
     test('clearPositions empties the list and notifies', () async {
       final db = TacticsDatabase();
       await db.addPosition(_pos('a'));

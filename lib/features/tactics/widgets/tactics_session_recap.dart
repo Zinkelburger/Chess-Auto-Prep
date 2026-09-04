@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
+import '../../../widgets/common/stat_display.dart';
 
 /// End-of-session recap card: outcome counts, accuracy, time, and a
 /// "retry mistakes" entry point.  Shown in the Tactic tab once the session
@@ -77,23 +78,26 @@ class TacticsSessionRecap extends StatelessWidget {
             const SizedBox(height: 20),
             Row(
               children: [
-                _StatTile(
+                StackedStat(
+                  expand: true,
                   icon: Icons.check_circle_outline,
-                  color: AppColors.onSurfaceSoft,
-                  count: solved,
+                  iconColor: AppColors.onSurfaceSoft,
+                  value: '$solved',
                   label: 'Solved',
                 ),
-                _StatTile(
+                StackedStat(
+                  expand: true,
                   icon: Icons.cancel_outlined,
-                  color: AppColors.onSurfaceSoft,
-                  count: failed,
+                  iconColor: AppColors.onSurfaceSoft,
+                  value: '$failed',
                   label: 'Failed',
                 ),
                 if (skipped > 0)
-                  _StatTile(
+                  StackedStat(
+                    expand: true,
                     icon: Icons.skip_next_outlined,
-                    color: AppColors.onSurfaceMuted,
-                    count: skipped,
+                    iconColor: AppColors.onSurfaceMuted,
+                    value: '$skipped',
                     label: 'Skipped',
                   ),
               ],
@@ -124,45 +128,6 @@ class TacticsSessionRecap extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _StatTile extends StatelessWidget {
-  const _StatTile({
-    required this.icon,
-    required this.color,
-    required this.count,
-    required this.label,
-  });
-
-  final IconData icon;
-  final Color color;
-  final int count;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Expanded(
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 22),
-          const SizedBox(height: 4),
-          Text(
-            '$count',
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Text(
-            label,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
       ),
     );
   }

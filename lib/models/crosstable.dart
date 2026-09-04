@@ -1,11 +1,30 @@
-/// The tournament results summary: standings plus the head-to-head grid.
+/// The results summary of a match between players: standings plus the
+/// head-to-head grid.
 ///
 /// Shaped after the crosstable every engine-testing tool prints — Scid vs
 /// PC's Crosstable window, cutechess-cli's final ranking — so the numbers
 /// mean what someone used to those tools expects.
+///
+/// Shared rather than owned by the engine tournament: `features/bughouse/`
+/// runs its own matches (Hivemind against Hivemind, over a fixed opening) and
+/// wants the same standings, the same Elo interval and the same LOS. The one
+/// thing the maths needs from a game is [CrosstableGame], which is small
+/// enough that a one-board game record and a two-board one both are one.
 library;
 
-import 'tournament_game.dart';
+import 'game_outcome.dart';
+
+/// The three facts the standings are built from.
+///
+/// Deliberately not "a game": the arithmetic never looks at a move, a clock or
+/// a board. In bughouse `whiteIndex` is the participant holding White on board
+/// A — the team a `1-0` belongs to — which is what makes one crosstable serve
+/// both games.
+abstract interface class CrosstableGame {
+  int get whiteIndex;
+  int get blackIndex;
+  GameResult get result;
+}
 
 /// One cell of the grid: how a player did against one opponent, in the order
 /// the games were played, so `=1=0` reads as draw, win, draw, loss.

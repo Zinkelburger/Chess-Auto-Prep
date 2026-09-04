@@ -29,6 +29,7 @@ import '../models/engine_settings.dart';
 import '../models/eval_database_settings.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/system_info.dart';
+import '../widgets/common/confirm_dialog.dart';
 import '../widgets/eval_database_settings_panel.dart';
 import '../widgets/lichess_eval_settings_panel.dart';
 import '../widgets/labeled_toggle.dart';
@@ -255,39 +256,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // ── Reset button ───────────────────────────────────────────────────────────
 
+  /// Put every engine, analysis and database setting back to its default.
+  ///
+  /// The reset runs after the dialog closes rather than inside its button, so
+  /// the await is not racing a widget that is being torn down.
+  Future<void> _confirmResetToDefaults() async {
+    final confirmed = await confirmAction(
+      context,
+      title: 'Reset Settings',
+      message:
+          'Reset all engine, analysis, and database settings to '
+          'factory defaults?',
+      confirmLabel: 'Reset',
+    );
+    if (!confirmed) return;
+    _engine.resetToDefaults();
+    await EvalDatabaseSettings.instance.resetToDefaults();
+  }
+
   Widget _buildResetButton() {
     return Center(
       child: OutlinedButton.icon(
         icon: const Icon(Icons.restore, size: 16),
         label: const Text('Reset All to Defaults'),
-        onPressed: () {
-          unawaited(
-            showDialog(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: const Text('Reset Settings'),
-                content: const Text(
-                  'Reset all engine, analysis, and database settings to '
-                  'factory defaults?',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('Cancel'),
-                  ),
-                  TextButton(
-                    onPressed: () async {
-                      _engine.resetToDefaults();
-                      await EvalDatabaseSettings.instance.resetToDefaults();
-                      if (ctx.mounted) Navigator.pop(ctx);
-                    },
-                    child: const Text('Reset'),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
+        onPressed: () => unawaited(_confirmResetToDefaults()),
       ),
     );
   }

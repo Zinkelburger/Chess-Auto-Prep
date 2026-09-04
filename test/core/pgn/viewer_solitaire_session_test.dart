@@ -184,15 +184,18 @@ void main() {
       expect(setup.hasSidelines, isFalse);
     });
 
-    test('"from here" is offered mid-game, labelled with the next move', () {
-      final f = _build(movetext: '1. e4 e5 2. Nf3 Nc6 *');
-      f.handle.goToMainLineIndex(3);
-      f.session.beginSetup();
-      final setup = f.session.setup!;
-      expect(setup.canStartHere, isTrue);
-      expect(setup.currentMainlinePly, 3);
-      expect(setup.startHereLabel, 'move 2…');
-    });
+    test(
+      '"from here" is offered mid-game, labelled with the move already played',
+      () {
+        final f = _build(movetext: '1. e4 e5 2. Nf3 Nc6 *');
+        f.handle.goToMainLineIndex(3);
+        f.session.beginSetup();
+        final setup = f.session.setup!;
+        expect(setup.canStartHere, isTrue);
+        expect(setup.currentMainlinePly, 3);
+        expect(setup.startHereLabel, 'after 2.Nf3');
+      },
+    );
 
     test('"from here" is not offered inside a sideline or at the end', () {
       final f = _build(movetext: '1. e4 e5 (1... c5) 2. Nf3 *');
@@ -368,7 +371,7 @@ void main() {
 
       final c = f.session.controller;
       expect(c.guessLog.single.wasHinted, isTrue);
-      expect(c.guessLog.single.note, 'Hinted');
+      expect(c.guessLog.single.note, '(hinted)');
       expect(c.correctFirstTry, 0);
       expect(c.hintedCount, 1);
       expect(c.hintSquare, isNull);
@@ -478,7 +481,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
 
       expect(f.session.controller.isComplete, isTrue);
-      expect(f.handle.guessAnnotations, {0: 'Tried: d4 (2 tries)'});
+      expect(f.handle.guessAnnotations, {0: '(tried d4 — 2 tries)'});
       expect(f.handle.guessVariations, {
         0: ['d4'],
       });
@@ -544,7 +547,7 @@ void main() {
       expect(f.handle.nodeVariations, {
         c5.id: ['d4'],
       });
-      expect(f.handle.nodeAnnotations?.values, ['Tried: d4 (2 tries)']);
+      expect(f.handle.nodeAnnotations?.values, ['(tried d4 — 2 tries)']);
       f.session.dispose();
     });
   });

@@ -268,12 +268,19 @@ String roleChar(Role role) => switch (role) {
 
 /// Format a centipawn / mate score for display (e.g. `+1.3`, `-0.5`, `#3`).
 ///
-/// Uses one decimal place for centipawns and `#N` for mate scores.
-/// Returns `'--'` when both values are null.
-String formatEvalDisplay({int? scoreCp, int? scoreMate}) {
+/// [decimals] is the centipawn precision; mates always render as `#N` / `-#N`.
+/// Panes that compare near-identical evals — the analysis dock, a weakness
+/// report, an engine line — pass 2. Returns [empty] when both values are null,
+/// which differs per pane: a table wants `--`, a stats line wants `?`.
+String formatEvalDisplay({
+  int? scoreCp,
+  int? scoreMate,
+  int decimals = 1,
+  String empty = '--',
+}) {
   if (scoreMate != null) return _formatMate(scoreMate);
-  if (scoreCp != null) return formatPackedEval(scoreCp);
-  return '--';
+  if (scoreCp != null) return formatPackedEval(scoreCp, decimals: decimals);
+  return empty;
 }
 
 /// Format a *packed* centipawn value — one where a forced mate has already
@@ -486,7 +493,17 @@ Set<String> recentMoveTrailSquares(
       pos = next;
       continue;
     }
-    final move = pos.parseSan(san);
+    // Total on purpose, for the same reason [playSanOrNullMove] is: parseSan
+    // *throws* on some malformed tokens rather than returning null, and this
+    // runs inside a board's build. An unparsable SAN in an imported PGN must
+    // cost the trail, not the frame — an exception here escapes as a layout
+    // error and takes every pointer event in the app with it.
+    final Move? move;
+    try {
+      move = pos.parseSan(san);
+    } catch (_) {
+      break;
+    }
     if (move == null) break;
     if (move is NormalMove) {
       trail.add(move.from.name);

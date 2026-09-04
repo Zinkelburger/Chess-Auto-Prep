@@ -249,7 +249,13 @@ mixin _RepertoireTabContent
       jobManager: _jobManager,
       onOpenGenerationDialog: () => unawaited(_openGenerationDialog()),
       onOpenAuditConfig: () => _openAuditDialog(forceConfig: true),
-      onOpenCoverageDialog: _showCoverageCalculator,
+      // Coverage is a fraction of master-game counts, so without the local
+      // master book the run traverses the whole tree and reports "0.0%
+      // covered" for a repertoire of any size. Null hides the button until
+      // there are games to measure against.
+      onOpenCoverageDialog: CoverageController.isAvailable
+          ? _showCoverageCalculator
+          : null,
     );
   }
 
@@ -297,7 +303,10 @@ mixin _RepertoireTabContent
       onLineSelected: _selectLine,
       onLineRenamed: _renameLine,
       onLineDeleted: _deleteLine,
-      onCoveragePressed: _showCoverageCalculator,
+      // Same switch as the jobs-panel button above.
+      onCoveragePressed: CoverageController.isAvailable
+          ? _showCoverageCalculator
+          : null,
       onNavigateToPosition: (moves) {
         _controller.loadMoveSequence(moves);
       },

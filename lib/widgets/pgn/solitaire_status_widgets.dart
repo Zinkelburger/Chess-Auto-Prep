@@ -1,7 +1,10 @@
 /// Solitaire-mode strips shown above the movetext in the PGN viewer's game
 /// tab: the setup strip (side, start point, sidelines, delay), the in-progress
-/// status bar (turn cue, progress, first-try tally) and the end-of-game
-/// completion banner.
+/// status bar (turn cue, progress, hint/reveal) and the completion banner.
+///
+/// One strip at a time — setup, then status, then completion — so the mode
+/// owns a single band of the pane instead of scattering its controls between
+/// the top of the movetext and the game nav bar at the bottom.
 library;
 
 import 'dart:async';
@@ -11,6 +14,8 @@ import 'package:flutter/material.dart';
 import '../../core/pgn_viewer_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
+import '../../utils/app_shortcuts.dart';
+import '../shortcut_tooltip.dart';
 
 /// The choices offered before a session starts. Replaces the status bar while
 /// open; Start begins the game, the close button (or Esc) leaves.
@@ -28,6 +33,8 @@ class SolitaireSetupStrip extends StatelessWidget {
     final theme = Theme.of(context);
     final primary = theme.colorScheme.primary;
     final delay = controller.solitaire.revealDelaySec;
+    final count = setup.userMovesToGuess;
+    final side = setup.userIsWhite ? 'White' : 'Black';
 
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 8, 8, 10),
@@ -126,10 +133,10 @@ class SolitaireSetupStrip extends StatelessWidget {
                   ),
                 ),
               _Field(
-                label: 'Hint and reveal after',
+                label: 'Reveal after',
                 tooltip:
-                    'How long each move must be thought about before Hint '
-                    'and Reveal become available.',
+                    'How long each move must be thought about before Reveal '
+                    'unlocks. Hint unlocks at half that.',
                 child: DropdownButton<int>(
                   value: _delays.contains(delay) ? delay : 60,
                   isDense: true,
@@ -153,13 +160,29 @@ class SolitaireSetupStrip extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Row(
-            mainAxisAlignment: MainAxisAlignment.end,
             children: [
+              // How big the drill is, before you commit to it — a variations
+              // pass over a repertoire chapter is a different afternoon from
+              // the mainline of one game.
+              Expanded(
+                child: Text(
+                  count == 0
+                      ? 'No $side moves to guess with these choices.'
+                      : '$count $side move${count == 1 ? '' : 's'} to guess.',
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.onSurfaceMuted,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
               Tooltip(
-                message: 'Start (Enter)',
+                message: count == 0
+                    ? 'Pick the other side, or start from the game start'
+                    : 'Start (Enter)',
                 waitDuration: const Duration(milliseconds: 500),
                 child: FilledButton.icon(
-                  onPressed: controller.beginSolitaire,
+                  onPressed: count == 0 ? null : controller.beginSolitaire,
                   icon: const Icon(Icons.play_arrow, size: 18),
                   label: const Text('Start'),
                   style: FilledButton.styleFrom(
@@ -254,19 +277,23 @@ class SolitaireCompleteBanner extends StatelessWidget {
   /// a wrong try that was actually better than the game move into a trophy.
   final VoidCallback onAnalyse;
 
+  /// Leaves solitaire, leaving the annotated game on screen.
+  final VoidCallback onExit;
+
   const SolitaireCompleteBanner({
     super.key,
     required this.controller,
     required this.onCopyPgn,
     required this.onAddToStudy,
     required this.onAnalyse,
+    required this.onExit,
   });
 
   @override
   Widget build(BuildContext context) {
     final s = controller.solitaire;
     final parts = <String>[
-      '${s.correctFirstTry}/${s.totalUserMoves} first-try',
+      '${s.correctFirstTry}/${s.totalUserMoves} first try',
       if (s.hintedCount > 0) '${s.hintedCount} hinted',
       if (s.revealedCount > 0) '${s.revealedCount} revealed',
     ];
@@ -311,6 +338,15 @@ class SolitaireCompleteBanner extends StatelessWidget {
             spacing: 8,
             runSpacing: 4,
             children: [
+              TextButton.icon(
+                onPressed: onExit,
+                icon: const Icon(Icons.close, size: 16),
+                label: const Text('Exit solitaire'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  textStyle: const TextStyle(fontSize: 12),
+                ),
+              ),
               TextButton.icon(
                 onPressed: onCopyPgn,
                 icon: const Icon(Icons.copy_outlined, size: 16),
@@ -358,66 +394,114 @@ class SolitaireCompleteBanner extends StatelessWidget {
 }
 
 /// Solitaire progress strip: side being guessed, whose turn it is, progress
-/// bar and first-try tally.
+/// through your own moves, and the two ways out of a move you are stuck on.
+///
+/// Hint and Reveal live here — beside the cue that says it is your move —
+/// rather than in the game nav bar at the far end of the pane.
 class SolitaireStatusBar extends StatelessWidget {
   final PgnViewerController controller;
 
-  const SolitaireStatusBar({super.key, required this.controller});
+  /// Leaves solitaire (asking first when guesses would be lost).
+  final VoidCallback onExit;
+
+  const SolitaireStatusBar({
+    super.key,
+    required this.controller,
+    required this.onExit,
+  });
 
   @override
   Widget build(BuildContext context) {
     final s = controller.solitaire;
-    final progress = s.totalSteps > 0 ? s.completedSteps / s.totalSteps : 0.0;
+    final done = s.totalUserMoves;
+    final total = s.userMovesInScript;
+    final progress = total > 0 ? (done / total).clamp(0.0, 1.0) : 0.0;
     final primary = Theme.of(context).colorScheme.primary;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(12, 6, 8, 8),
       color: Theme.of(
         context,
       ).colorScheme.primaryContainer.withValues(alpha: 0.3),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.psychology, size: 16, color: primary),
-          const SizedBox(width: 8),
-          Text(
-            'Solitaire · ${s.userIsWhite ? "White" : "Black"}',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
-              color: primary,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            _cue(s),
-            style: AppTextStyles.caption.copyWith(
-              color: s.waitingForUser
-                  ? AppColors.ink
-                  : AppColors.onSurfaceMuted,
-              fontWeight: s.waitingForUser ? FontWeight.w600 : FontWeight.w400,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(value: progress, minHeight: 6),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            '${s.completedSteps}/${s.totalSteps}',
-            style: const TextStyle(fontSize: 12),
-          ),
-          if (s.totalUserMoves > 0) ...[
-            const SizedBox(width: 8),
-            Text(
-              '${s.correctFirstTry}/${s.totalUserMoves} first-try',
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurfaceSoft,
+          Row(
+            children: [
+              Icon(Icons.psychology, size: 16, color: primary),
+              const SizedBox(width: 8),
+              Text(
+                'Solitaire · ${s.userIsWhite ? "White" : "Black"}',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: primary,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  _cue(s),
+                  style: AppTextStyles.caption.copyWith(
+                    color: s.waitingForUser
+                        ? AppColors.ink
+                        : AppColors.onSurfaceMuted,
+                    fontWeight: s.waitingForUser
+                        ? FontWeight.w600
+                        : FontWeight.w400,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              IconButton(
+                onPressed: onExit,
+                icon: const Icon(Icons.close, size: 18),
+                tooltip: 'Leave solitaire (Esc)',
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          // Progress on the left, the two forms of help on the right. Wraps
+          // rather than clips when the side panel is narrow.
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 6,
+            children: [
+              SizedBox(
+                width: 190,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          minHeight: 6,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      total > 0 ? '$done/$total' : '$done',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.ink,
+                      ),
+                    ),
+                    if (done > 0) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        '· ${s.correctFirstTry} first try',
+                        style: AppTextStyles.caption,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              _HelpControls(controller: controller),
+            ],
+          ),
         ],
       ),
     );
@@ -433,6 +517,11 @@ class SolitaireStatusBar extends StatelessWidget {
       final tries = s.currentAttempts;
       final where = sideline ? 'Sideline · ' : '';
       final count = tries == 0 ? '' : ' · $tries wrong';
+      // The first ask of a session says where the answer goes; nothing else
+      // on screen tells a first-time solver that the board is the input.
+      if (s.totalUserMoves == 0 && tries == 0) {
+        return '${where}Your move — play it on the board';
+      }
       return '${where}Your move$count';
     }
     if (step.isPremise) return 'Sideline: ${_moveText(step)}';
@@ -446,5 +535,94 @@ class SolitaireStatusBar extends StatelessWidget {
   static String _moveText(SolitaireStep step) {
     final n = step.before.fullmoves;
     return step.isWhiteMove ? '$n. ${step.san}' : '$n… ${step.san}';
+  }
+}
+
+/// Hint and Reveal, with the countdown that gates them.
+///
+/// Both are always on screen so they are discoverable, and disabled until
+/// their timer runs out — Hint at half the reveal delay, so help escalates
+/// (a nudge, then giving up) instead of arriving all at once.
+class _HelpControls extends StatelessWidget {
+  const _HelpControls({required this.controller});
+
+  final PgnViewerController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = controller.solitaire;
+    final canHint = s.canHint;
+    final canReveal = s.canReveal;
+    final hintWait = s.waitingForUser ? s.hintCountdownSec : 0;
+    final revealWait = s.waitingForUser ? s.revealCountdownSec : 0;
+    // One countdown slot, showing whichever unlock is next. Fixed width and
+    // tabular figures so the chips beside it never shift as it ticks.
+    final next = hintWait > 0 ? hintWait : revealWait;
+
+    String waitLabel(int seconds) => !s.waitingForUser
+        ? 'Available on your turn'
+        : seconds > 0
+        ? 'Available in ${seconds}s'
+        : 'Already used on this move';
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 30,
+          child: Text(
+            next > 0 ? '${next}s' : '',
+            textAlign: TextAlign.right,
+            style: AppTextStyles.caption.copyWith(
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        ShortcutTooltip(
+          description: canHint
+              ? 'Highlight the piece that moves (costs your first try)'
+              : waitLabel(hintWait),
+          shortcut: AppShortcut.hintMove,
+          child: ActionChip(
+            onPressed: canHint ? controller.hintCurrentMove : null,
+            avatar: Icon(
+              Icons.lightbulb_outline,
+              size: 16,
+              color: canHint ? AppColors.ink : AppColors.onSurfaceDisabled,
+            ),
+            label: Text(
+              'Hint',
+              style: AppTextStyles.caption.copyWith(
+                color: canHint ? AppColors.ink : AppColors.onSurfaceDisabled,
+              ),
+            ),
+            visualDensity: VisualDensity.compact,
+          ),
+        ),
+        const SizedBox(width: 6),
+        ShortcutTooltip(
+          description: canReveal
+              ? 'Give up and show the move played'
+              : waitLabel(revealWait),
+          shortcut: AppShortcut.revealMove,
+          child: ActionChip(
+            onPressed: canReveal ? controller.revealCurrentMove : null,
+            avatar: Icon(
+              Icons.visibility_outlined,
+              size: 16,
+              color: canReveal ? AppColors.ink : AppColors.onSurfaceDisabled,
+            ),
+            label: Text(
+              'Reveal',
+              style: AppTextStyles.caption.copyWith(
+                color: canReveal ? AppColors.ink : AppColors.onSurfaceDisabled,
+              ),
+            ),
+            visualDensity: VisualDensity.compact,
+          ),
+        ),
+      ],
+    );
   }
 }

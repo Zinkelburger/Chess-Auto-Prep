@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/engine/stockfish_pool.dart';
 import '../../services/generation/generation_config.dart';
-import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import '../../utils/system_info.dart';
 
 class EngineResourcesSection extends StatelessWidget {
@@ -65,10 +65,7 @@ class EngineResourcesSection extends StatelessWidget {
           Text(
             'Your system has $cores logical core${cores == 1 ? '' : 's'}. '
             'Tree build uses 1 Stockfish worker with UCI Threads set below.',
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.onSurfaceMuted,
-            ),
+            style: AppTextStyles.caption,
           ),
           const SizedBox(height: 10),
           Wrap(
@@ -106,13 +103,13 @@ class EngineResourcesSection extends StatelessWidget {
             const SizedBox(height: 6),
             const Text(
               'No engine in this build source.',
-              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+              style: AppTextStyles.caption,
             ),
           ] else if (isDbExplorer) ...[
             const SizedBox(height: 6),
             const Text(
               'Engine runs during eval enrichment after the PGN tree is built.',
-              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+              style: AppTextStyles.caption,
             ),
           ],
         ],
@@ -128,9 +125,6 @@ class _ConfigStatChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
-    );
+    return Text(label, style: AppTextStyles.caption);
   }
 }

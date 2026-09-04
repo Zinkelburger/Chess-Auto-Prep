@@ -15,7 +15,9 @@ import '../screens/repertoire_chapters_screen.dart';
 import '../services/repertoire_creation.dart';
 import '../services/storage/storage_factory.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
+import '../utils/time_format.dart';
 import 'common/list_search_field.dart';
 import 'layout/empty_state_placeholder.dart';
 import 'pgn_import_dialog.dart';
@@ -305,16 +307,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
     final chapterCount = repertoire.gameCount;
     final lastModified = repertoire.lastModified;
 
-    String timeAgo = 'Unknown';
-    final difference = DateTime.now().difference(lastModified);
-
-    if (difference.inDays > 0) {
-      timeAgo = '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      timeAgo = '${difference.inHours}h ago';
-    } else {
-      timeAgo = '${difference.inMinutes}m ago';
-    }
+    final timeAgo = formatTimeAgo(lastModified);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -358,13 +351,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      'Modified $timeAgo',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.onSurfaceMuted,
-                      ),
-                    ),
+                    Text('Modified $timeAgo', style: AppTextStyles.caption),
                   ],
                 ),
               ),

@@ -9,6 +9,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/study_controller.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
+import '../common/confirm_dialog.dart';
 import '../common/list_search_field.dart';
 
 Future<void> showChapterManagerDialog(
@@ -62,24 +64,12 @@ class _ChapterManagerDialogState extends State<_ChapterManagerDialog> {
   Future<void> _delete(int index) async {
     if (_study.doc.chapters.length <= 1) return;
     final chapter = _study.doc.chapters[index];
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Delete chapter "${chapter.name}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+    final confirmed = await confirmAction(
+      context,
+      title: 'Delete chapter "${chapter.name}"?',
+      confirmLabel: 'Delete',
     );
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
     setState(() => _study.deleteChapter(index));
   }
 
@@ -108,10 +98,7 @@ class _ChapterManagerDialogState extends State<_ChapterManagerDialog> {
                     _isFiltering
                         ? 'Reordering is off while searching'
                         : 'Drag to reorder',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceMuted,
-                    ),
+                    style: AppTextStyles.caption,
                   ),
                   const Spacer(),
                   IconButton(
@@ -184,13 +171,7 @@ class _ChapterManagerDialogState extends State<_ChapterManagerDialog> {
                       ),
                     ),
                     subtitle: isCurrent
-                        ? const Text(
-                            'Open now',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.onSurfaceMuted,
-                            ),
-                          )
+                        ? const Text('Open now', style: AppTextStyles.caption)
                         : null,
                     onTap: () {
                       setState(() => _study.selectChapter(index));

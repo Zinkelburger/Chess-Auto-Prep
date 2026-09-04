@@ -10,6 +10,7 @@ import '../../../theme/app_colors.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../../utils/chess_utils.dart';
 import '../../../widgets/clickable_move_line.dart';
+import '../../../widgets/common/stat_display.dart';
 
 class TrapDetailCard extends StatelessWidget {
   final TrapLineInfo trap;
@@ -229,12 +230,18 @@ class TrapDetailCard extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
       children: [
-        _StatChip(label: 'You gain', value: '+${trap.evalDiffCp}cp'),
-        _StatChip(
+        StackedStat(
+          valueSize: 16,
+          label: 'You gain',
+          value: '+${trap.evalDiffCp}cp',
+        ),
+        StackedStat(
+          valueSize: 16,
           label: 'Reach',
           value: '${(trap.cumulativeProb * 100).toStringAsFixed(2)}%',
         ),
-        _StatChip(
+        StackedStat(
+          valueSize: 16,
           label: 'Surplus',
           value: '${(trap.trickSurplus * 100).toStringAsFixed(1)}%',
         ),
@@ -463,29 +470,6 @@ class _ComparisonBox extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _StatChip extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _StatChip({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
-        ),
-      ],
     );
   }
 }

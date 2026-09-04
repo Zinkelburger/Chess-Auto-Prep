@@ -14,6 +14,7 @@ import '../../models/opening_tree.dart';
 import '../../services/games_repertoire/games_draft.dart';
 import '../../services/games_repertoire/repertoire_diff.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import '../opening_tree/win_draw_loss_bar.dart';
 
 Color statusColor(DraftMoveStatus status) {
@@ -249,10 +250,7 @@ class _DraftRow extends StatelessWidget {
               child: Text(
                 '${node.gamesPlayed}',
                 textAlign: TextAlign.right,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceDim,
-                ),
+                style: AppTextStyles.caption,
               ),
             ),
             const SizedBox(width: 8),
@@ -273,10 +271,7 @@ class _DraftRow extends StatelessWidget {
               child: Text(
                 '$winPct%',
                 textAlign: TextAlign.right,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceMuted,
-                ),
+                style: AppTextStyles.caption,
               ),
             ),
             // Discard subtree.
@@ -309,13 +304,7 @@ class DraftLegend extends StatelessWidget {
         children: [
           Container(width: 10, height: 10, color: statusColor(s)),
           const SizedBox(width: 4),
-          Text(
-            statusLabel(s),
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.onSurfaceMuted,
-            ),
-          ),
+          Text(statusLabel(s), style: AppTextStyles.caption),
         ],
       ),
     );

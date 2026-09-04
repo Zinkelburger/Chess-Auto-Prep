@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/games_repertoire/draft_merge_planner.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import '../../utils/movetext_builder.dart';
 
 class MergeConflictSheet extends StatefulWidget {
@@ -64,7 +65,7 @@ class _MergeConflictSheetState extends State<MergeConflictSheet> {
                 'Your games play a different move where your repertoire '
                 'already has an answer. Keep your prep, or also import your '
                 'move as extra lines — nothing is removed either way.',
-                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+                style: AppTextStyles.caption,
               ),
             ),
             const SizedBox(height: 8),
@@ -115,10 +116,7 @@ class _MergeConflictSheetState extends State<MergeConflictSheet> {
           children: [
             Text(
               lineLabel.isEmpty ? 'Starting position' : lineLabel,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurfaceMuted,
-              ),
+              style: AppTextStyles.caption,
             ),
             const SizedBox(height: 8),
             Wrap(
@@ -145,10 +143,7 @@ class _MergeConflictSheetState extends State<MergeConflictSheet> {
               importMine
                   ? 'Your ${conflict.draftSan} will be added as an extra line.'
                   : 'Keeping your prep — this branch of the draft is skipped.',
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurfaceDim,
-              ),
+              style: AppTextStyles.caption,
             ),
           ],
         ),
@@ -178,13 +173,7 @@ class _MergeConflictSheetState extends State<MergeConflictSheet> {
           Text(san, style: const TextStyle(fontWeight: FontWeight.w600)),
           Padding(
             padding: const EdgeInsets.only(left: 4),
-            child: Text(
-              '· $tag',
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurfaceDim,
-              ),
-            ),
+            child: Text('· $tag', style: AppTextStyles.caption),
           ),
         ],
       ),

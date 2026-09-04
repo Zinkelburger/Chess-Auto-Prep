@@ -8,7 +8,7 @@ library;
 
 import '../models/stored_tournament.dart';
 import '../models/tournament_config.dart';
-import 'crosstable_builder.dart';
+import '../../../services/crosstable_builder.dart';
 
 /// `5½`, `5`, `½` — the way a match score is always written.
 String formatMatchPoints(double points) {
@@ -58,7 +58,9 @@ class TournamentOutcome {
 TournamentOutcome? tournamentOutcome(StoredTournament tournament) {
   final config = tournament.config;
   if (tournament.games.isEmpty || config.engines.isEmpty) return null;
-  final table = buildCrosstable(config, tournament.games);
+  final table = buildCrosstable([
+    for (final e in config.engines) e.name,
+  ], tournament.games);
   if (table.isEmpty) return null;
 
   final names = engineDisplayNames(config);
@@ -133,15 +135,6 @@ String tournamentTimeLabel(DateTime when, {DateTime? now}) {
       '${when.minute.toString().padLeft(2, '0')}';
   if (daysAgo <= 1) return clock;
   return '${_monthNames[when.month - 1].substring(0, 3)} ${when.day}';
-}
-
-/// How long a finished run took, `1h 12m` / `4m 09s` / `38s`.
-String formatRunDuration(Duration d) {
-  if (d.inHours > 0) return '${d.inHours}h ${d.inMinutes % 60}m';
-  if (d.inMinutes > 0) {
-    return '${d.inMinutes}m ${(d.inSeconds % 60).toString().padLeft(2, '0')}s';
-  }
-  return '${d.inSeconds}s';
 }
 
 DateTime _midnight(DateTime when) => DateTime(when.year, when.month, when.day);

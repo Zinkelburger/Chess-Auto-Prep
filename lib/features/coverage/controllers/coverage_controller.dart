@@ -9,11 +9,21 @@ import 'package:flutter/foundation.dart';
 import '../../../models/opening_tree.dart';
 import '../../../services/jobs/notify_throttle.dart';
 import '../../../services/jobs/repertoire_job.dart';
+import '../../../services/master_games/master_games_service.dart';
 import 'package:chess_auto_prep/features/coverage/models/coverage_config.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../../../utils/safe_change_notifier.dart';
 
 class CoverageController extends ChangeNotifier with SafeChangeNotifier {
+  /// The master-games service, injectable for tests.
+  MasterGamesService Function() masterGames = () => MasterGamesService.instance;
+
+  /// Whether a coverage run can produce real numbers — i.e. whether the local
+  /// master book has any games. Without it every figure is zero, so the two
+  /// entry points hide rather than offering a run that answers "0.0%
+  /// covered" for a repertoire of any size.
+  static bool get isAvailable => MasterGamesService.instance.hasGames;
+
   /// Progress arrives per tree node; the screen hears about it a few times
   /// a second.  Terminal states flush so a finished run lands at once.
   late final NotifyThrottle _progressNotify = NotifyThrottle(notifyListeners);
@@ -99,11 +109,12 @@ class CoverageController extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
 
     final service = CoverageService(
-      database: config.database,
-      ratings: config.ratingsString,
-      speeds: config.speedsString,
       useMaia: config.useMaia,
       maiaElo: config.maiaElo,
+      // Game counts come from the local master book; see
+      // [CoverageService.masterBook]. Null when no TWIC issues are imported,
+      // which is what [isAvailable] reports and the entry points hide on.
+      masterBook: masterGames().db?.bookMoves,
     );
 
     try {

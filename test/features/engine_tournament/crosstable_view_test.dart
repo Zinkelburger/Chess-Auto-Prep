@@ -1,19 +1,12 @@
-import 'package:chess_auto_prep/features/engine_tournament/models/engine_spec.dart';
-import 'package:chess_auto_prep/features/engine_tournament/models/tournament_config.dart';
 import 'package:chess_auto_prep/features/engine_tournament/models/tournament_game.dart';
-import 'package:chess_auto_prep/features/engine_tournament/services/crosstable_builder.dart';
-import 'package:chess_auto_prep/features/engine_tournament/widgets/crosstable_view.dart';
-import 'package:chess_auto_prep/features/engine_tournament/widgets/tournament_games_table.dart';
+import 'package:chess_auto_prep/models/game_outcome.dart';
+import 'package:chess_auto_prep/services/crosstable_builder.dart';
+import 'package:chess_auto_prep/widgets/crosstable_view.dart';
+import 'package:chess_auto_prep/widgets/match_games_table.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const _config = TournamentConfig(
-  name: 'Match',
-  engines: [
-    EngineSpec(id: 'a', name: 'Alpha', executablePath: '/bin/a'),
-    EngineSpec(id: 'b', name: 'Beta', executablePath: '/bin/b'),
-  ],
-);
+const _names = ['Alpha', 'Beta'];
 
 TournamentGameRecord _game(int index, GameResult result) =>
     TournamentGameRecord(
@@ -34,6 +27,21 @@ final _games = [
   _game(0, GameResult.whiteWins),
   _game(1, GameResult.draw),
   _game(2, GameResult.draw),
+];
+
+final _rows = [
+  for (final game in _games)
+    MatchGameRow(
+      number: game.gameNumber,
+      round: game.round,
+      white: game.whiteName,
+      black: game.blackName,
+      result: game.result,
+      outcomeLabel: game.outcomeLabel,
+      naturalEnd: game.termination.isNaturalEnd,
+      plies: game.plies,
+      durationMs: game.durationMs,
+    ),
 ];
 
 Future<void> _pump(WidgetTester tester, Widget child) async {
@@ -58,8 +66,8 @@ void main() {
     await _pump(
       tester,
       CrosstableView(
-        crosstable: buildCrosstable(_config, _games),
-        config: _config,
+        crosstable: buildCrosstable(_names, _games),
+        names: _names,
       ),
     );
 
@@ -79,18 +87,18 @@ void main() {
     await _pump(
       tester,
       CrosstableView(
-        crosstable: buildCrosstable(_config, const []),
-        config: _config,
+        crosstable: buildCrosstable(_names, const []),
+        names: _names,
       ),
     );
     expect(find.textContaining('No games yet'), findsOneWidget);
   });
 
   testWidgets('every game is a row, and tapping one opens it', (tester) async {
-    TournamentGameRecord? opened;
+    MatchGameRow? opened;
     await _pump(
       tester,
-      TournamentGamesTable(games: _games, onOpenGame: (game) => opened = game),
+      MatchGamesTable(games: _rows, onOpenGame: (game) => opened = game),
     );
 
     expect(find.text('1-0'), findsOneWidget);
@@ -100,14 +108,11 @@ void main() {
 
     await tester.tap(find.text('1-0'));
     await tester.pump();
-    expect(opened?.gameIndex, 0);
+    expect(opened?.number, 1);
   });
 
   testWidgets('an empty games list says so', (tester) async {
-    await _pump(
-      tester,
-      TournamentGamesTable(games: const [], onOpenGame: (_) {}),
-    );
+    await _pump(tester, MatchGamesTable(games: const [], onOpenGame: (_) {}));
     expect(find.text('No games played yet.'), findsOneWidget);
   });
 }

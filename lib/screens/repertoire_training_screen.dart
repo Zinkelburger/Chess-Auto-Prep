@@ -238,14 +238,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     );
   }
 
-  String _formatRelativeDate(DateTime date) {
-    final diff = DateTime.now().toUtc().difference(date);
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    if (diff.inDays < 7) return '${diff.inDays}d ago';
-    return '${date.month}/${date.day}';
-  }
-
   @override
   Widget build(BuildContext context) {
     // Ancestor-only key handling (holdsFocus defaults to false): the scope must
@@ -711,7 +703,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
                     sessionIncorrect: _training.sessionIncorrect,
                     sessionStreak: _training.sessionStreak,
                     reviewService: _training.reviewService,
-                    formatRelativeDate: _formatRelativeDate,
                     onRateLine: _training.rateLine,
                     onNextLine: _training.nextLine,
                   )

@@ -76,6 +76,12 @@ class FakeBughouseEngine implements BughouseAnalysisEngine {
     infos: [],
   );
 
+  /// Answers handed out in order, one per [search], before [resultsByTeam] is
+  /// consulted. What a match test needs: a tournament asks the same engine
+  /// forty times in a row and every answer has to be a different move, which
+  /// a map keyed by team cannot express.
+  final List<BughouseSearchResult> script = [];
+
   /// When set, the next [search] throws this instead of answering.
   Object? failNextSearch;
 
@@ -124,6 +130,7 @@ class FakeBughouseEngine implements BughouseAnalysisEngine {
       failNextSearch = null;
       throw failure;
     }
+    if (script.isNotEmpty) return script.removeAt(0);
     final team = configurations.isEmpty ? Side.white : configurations.last.team;
     return resultsByTeam[team] ?? defaultResult;
   }

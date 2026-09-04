@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_text_styles.dart';
 import '../models/tactics_position.dart';
 import '../../../theme/app_colors.dart';
 import '../../../widgets/common/list_search_field.dart';

@@ -152,13 +152,13 @@ abstract final class PgnTextStyles {
   );
 
   static const commentFen = TextStyle(
-    fontFamily: 'SourceCodePro',
+    fontFamily: AppTextStyles.monoFamily,
     fontSize: 12,
     color: AppColors.pgnComment,
   );
 
   static const commentLink = TextStyle(
-    fontFamily: 'SourceCodePro',
+    fontFamily: AppTextStyles.monoFamily,
     fontSize: 14,
     height: 1.5,
     color: AppColors.info,

@@ -16,6 +16,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import 'info_hint.dart';
 
 /// Compact checkbox + tappable label, with an optional trailing [InfoHint].
@@ -100,13 +101,7 @@ class AppCheckbox extends StatelessWidget {
         row,
         Padding(
           padding: const EdgeInsets.only(left: 30),
-          child: Text(
-            subtitle!,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.onSurfaceSoft,
-            ),
-          ),
+          child: Text(subtitle!, style: AppTextStyles.caption),
         ),
       ],
     );

@@ -274,10 +274,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
           const Icon(Icons.insights, size: 16, color: AppColors.onSurfaceSoft),
           Text(
             '${snapshot.nodeCount} nodes • max ply $maxPly',
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.onSurfaceSoft,
-            ),
+            style: AppTextStyles.caption,
           ),
           SizedBox(
             height: 28,
@@ -288,10 +285,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
                 size: 14,
                 color: AppColors.onSurfaceSoft,
               ),
-              label: const Text(
-                'Reload',
-                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
-              ),
+              label: const Text('Reload', style: AppTextStyles.caption),
             ),
           ),
           SizedBox(
@@ -308,10 +302,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
                 size: 14,
                 color: AppColors.onSurfaceSoft,
               ),
-              label: const Text(
-                'Close',
-                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
-              ),
+              label: const Text('Close', style: AppTextStyles.caption),
             ),
           ),
         ],

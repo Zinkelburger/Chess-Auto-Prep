@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import '../../utils/pgn_comment_utils.dart' show kMoveNags;
 import 'movetext_primitives.dart' show GlyphButton;
 
@@ -238,10 +239,7 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
               hintText: enabled
                   ? 'Comment on ${widget.moveLabel}…  (C to type, Esc to leave)'
                   : 'Click or play a move to annotate it',
-              hintStyle: const TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurfaceMuted,
-              ),
+              hintStyle: AppTextStyles.caption,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 10,
                 vertical: 8,

@@ -1,6 +1,8 @@
 /// Typed model for analysis player download metadata.
 library;
 
+import '../utils/time_format.dart';
+
 /// Replaces the loose [Map<String, dynamic>] previously passed between screens.
 ///
 /// Two download modes:
@@ -108,13 +110,8 @@ class AnalysisPlayerInfo {
   }
 
   /// Human-readable time since the games were downloaded.
-  String get downloadTimeAgo {
-    if (downloadedAt == null) return 'Unknown';
-    final diff = DateTime.now().difference(downloadedAt!);
-    if (diff.inDays > 0) return '${diff.inDays}d ago';
-    if (diff.inHours > 0) return '${diff.inHours}h ago';
-    return '${diff.inMinutes}m ago';
-  }
+  String get downloadTimeAgo =>
+      downloadedAt == null ? 'Unknown' : formatTimeAgo(downloadedAt!);
 
   // ── Serialisation ──────────────────────────────────────────────────
 

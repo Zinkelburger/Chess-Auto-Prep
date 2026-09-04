@@ -18,7 +18,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/analysis_player_info.dart';
-import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 
 /// How the amount to download is specified.
@@ -274,10 +274,7 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
                           'month${_months == 1 ? '' : 's'}. Bullet is skipped.'
                     : 'Their last $_maxGames game'
                           '${_maxGames == 1 ? '' : 's'}. Bullet is skipped.',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceMuted,
-                ),
+                style: AppTextStyles.caption,
               ),
             ],
           ),

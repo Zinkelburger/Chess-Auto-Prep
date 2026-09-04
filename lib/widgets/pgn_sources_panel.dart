@@ -17,6 +17,7 @@ import '../models/pgn_source.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/storage/storage_factory.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import 'pgn_inline_slice_editor.dart';
 import 'pgn_sources_controller.dart';
 
@@ -599,7 +600,10 @@ class _CompactPasteDialogState extends State<_CompactPasteDialog> {
               controller: _controller,
               maxLines: 6,
               minLines: 3,
-              style: const TextStyle(fontFamily: 'SourceCodePro', fontSize: 12),
+              style: const TextStyle(
+                fontFamily: AppTextStyles.monoFamily,
+                fontSize: 12,
+              ),
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
                 contentPadding: const EdgeInsets.all(10),

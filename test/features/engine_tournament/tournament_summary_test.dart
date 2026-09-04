@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/models/game_outcome.dart';
 import 'package:chess_auto_prep/features/engine_tournament/models/engine_spec.dart';
 import 'package:chess_auto_prep/features/engine_tournament/models/stored_tournament.dart';
 import 'package:chess_auto_prep/features/engine_tournament/models/tournament_config.dart';
@@ -167,18 +168,6 @@ void main() {
       expect(
         tournamentTimeLabel(DateTime(2026, 8, 19, 9, 0), now: now),
         'Aug 19',
-      );
-    });
-
-    test('run durations stay short', () {
-      expect(formatRunDuration(const Duration(seconds: 38)), '38s');
-      expect(
-        formatRunDuration(const Duration(minutes: 4, seconds: 9)),
-        '4m 09s',
-      );
-      expect(
-        formatRunDuration(const Duration(hours: 1, minutes: 12)),
-        '1h 12m',
       );
     });
   });

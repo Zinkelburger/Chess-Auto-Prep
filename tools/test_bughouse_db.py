@@ -230,6 +230,65 @@ class TestIndexAndBook(unittest.TestCase):
         self.assertEqual(data["moves"], [])
 
 
+class TestUnreplayableGamesLeaveNoTrace(unittest.TestCase):
+    """A game the replay rejects must not reach the book at all.
+
+    Real archive records sometimes start mid-play — an adjournment resumed, a
+    truncated dump — so their first move is illegal from the opening position.
+    Counting an edge before pushing it filed those replies against the
+    *starting* position, which is how the opening node came to list 339
+    impossible continuations (`1A. e6`, `1A. Nf6`) alongside the twenty real
+    first moves on each board.
+    """
+
+    FIXTURE = (
+        '[Event "FICS rated bughouse game"]\r\n'
+        '[Date "2016.01.02"]\r\n'
+        '[BughouseDBGameNo "200"]\r\n'
+        '[WhiteA "alice"][WhiteAElo "2100"]\r\n'
+        '[Result "1-0"]\r\n'
+        "\r\n"
+        "1A. e4{299.000} 1B. d4{295.000}\r\n"
+        "{bob resigns} 1-0\r\n"
+        "\r\n"
+        # Starts on a black reply, filed as White's first move: illegal, and
+        # illegal on the very first half-move, which is the case that used to
+        # slip through.
+        '[Event "FICS rated bughouse game"]\r\n'
+        '[Date "2016.03.04"]\r\n'
+        '[BughouseDBGameNo "201"]\r\n'
+        '[WhiteA "eve"][WhiteAElo "2400"]\r\n'
+        '[Result "0-1"]\r\n'
+        "\r\n"
+        "1A. e6{299.000} 1B. d4{295.000}\r\n"
+        "{eve forfeits on time} 0-1\r\n"
+    )
+
+    def test_an_illegal_first_move_is_not_banked(self):
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            os.environ["BUGHOUSE_DB_HOME"] = tmp.name
+            corpus = Path(tmp.name) / "corpus"
+            corpus.mkdir(parents=True)
+            (corpus / "export2016.bpgn.bz2").write_bytes(
+                bz2.compress(self.FIXTURE.encode("latin-1"))
+            )
+            from bughouse_db.book import explore, open_book
+            from bughouse_db.index import build
+
+            build(None, max_ply=16, min_games=1, min_elo=0, jobs=1)
+            con = open_book()
+            data = explore(con, START, START)
+            self.assertEqual(
+                [(m["board"], m["san"]) for m in data["moves"]], [("A", "e4")]
+            )
+            self.assertEqual(data["games"], 1)
+            con.close()
+        finally:
+            os.environ.pop("BUGHOUSE_DB_HOME", None)
+            tmp.cleanup()
+
+
 class TestPruningKeepsTotals(unittest.TestCase):
     """The two-table design's load-bearing invariant.
 

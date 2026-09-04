@@ -45,9 +45,18 @@ class SolitaireSetup {
   /// Whether the game has saved sidelines to drill.
   final bool hasSidelines;
 
-  /// The first move a "from here" session would play — "move 13" or
-  /// "move 13…" — for the setup strip's label. Empty when unknown.
+  /// Where a "from here" session would pick the game up — "after 13.Nf3" —
+  /// for the setup strip's label. Empty when unknown.
+  ///
+  /// Naming the move already on the board beats naming the move number:
+  /// "move 13…" reads as a truncated string in a button, and the trailing
+  /// ellipsis that means "Black to play" is notation, not prose.
   final String startHereLabel;
+
+  /// How many moves the current choices would ask you to guess. Recomputed
+  /// on every change, so the strip can say how big the drill is before you
+  /// commit to it — and refuse to start one with nothing in it.
+  int userMovesToGuess = 0;
 
   SolitaireSetup({
     required this.userIsWhite,
@@ -59,14 +68,17 @@ class SolitaireSetup {
     this.startHereLabel = '',
   });
 
-  /// "move N" / "move N…" from a FEN's side-to-move and fullmove fields.
-  static String labelForFen(String? fen) {
-    if (fen == null) return '';
-    final fields = fen.split(' ');
-    if (fields.length < 6) return '';
-    final number = int.tryParse(fields[5]);
-    if (number == null) return '';
-    return fields[1] == 'w' ? 'move $number' : 'move $number…';
+  /// The mainline ply a session with these choices would start from.
+  int get startPly => fromCurrentMove && canStartHere ? currentMainlinePly : 0;
+
+  /// "after 13.Nf3" / "after 13…Nf6" — the last mainline move played before
+  /// [ply], given the game's mainline SANs. Empty at the start of the game.
+  static String labelForPly(List<String> mainlineSans, int ply) {
+    if (ply <= 0 || ply > mainlineSans.length) return '';
+    final san = mainlineSans[ply - 1];
+    final number = (ply - 1) ~/ 2 + 1;
+    final whitePlayed = (ply - 1).isEven;
+    return whitePlayed ? 'after $number.$san' : 'after $number…$san';
   }
 }
 
@@ -173,9 +185,25 @@ class ViewerSolitaireSession {
       canStartHere:
           !handle.inVariation && ply > 0 && ply < handle.mainLineLength,
       hasSidelines: handle.hasSavedSidelines,
-      startHereLabel: SolitaireSetup.labelForFen(handle.currentFen),
+      startHereLabel: SolitaireSetup.labelForPly(handle.mainLineMoves, ply),
     );
+    _recountSetup();
     onChanged();
+  }
+
+  /// Re-ask the script builder how many moves the pending choices would put
+  /// in front of the user. Cheap enough to run on every toggle, and it is the
+  /// only honest way to show the size of a variations drill up front.
+  void _recountSetup() {
+    final s = setup;
+    if (s == null) return;
+    final script = handle.buildSolitaireScript(
+      fromMainlinePly: s.startPly,
+      includeVariations: s.includeVariations,
+    );
+    s.userMovesToGuess = script == null
+        ? 0
+        : script.userMoveCount(s.userIsWhite);
   }
 
   void updateSetup({
@@ -188,6 +216,7 @@ class ViewerSolitaireSession {
     if (userIsWhite != null) s.userIsWhite = userIsWhite;
     if (fromCurrentMove != null) s.fromCurrentMove = fromCurrentMove;
     if (includeVariations != null) s.includeVariations = includeVariations;
+    _recountSetup();
     onChanged();
   }
 
@@ -196,10 +225,11 @@ class ViewerSolitaireSession {
     onChanged();
   }
 
-  /// Start the session the setup strip describes.
+  /// Start the session the setup strip describes. Refused — with the strip
+  /// left open — when the choices add up to no moves to guess.
   void begin() {
     final s = setup;
-    if (s == null) return;
+    if (s == null || s.userMovesToGuess == 0) return;
     setup = null;
     _includeVariations = s.includeVariations;
     unawaited(
@@ -209,9 +239,7 @@ class ViewerSolitaireSession {
     );
     _start(
       userIsWhite: s.userIsWhite,
-      fromMainlinePly: s.fromCurrentMove && s.canStartHere
-          ? s.currentMainlinePly
-          : 0,
+      fromMainlinePly: s.startPly,
       includeVariations: s.includeVariations,
     );
   }
@@ -226,7 +254,13 @@ class ViewerSolitaireSession {
       fromMainlinePly: fromMainlinePly,
       includeVariations: includeVariations,
     );
-    if (script == null || script.isEmpty) {
+    // Nothing to guess (an empty game, or a side with no moves left from
+    // here) would otherwise auto-play the whole script at 400 ms a move and
+    // land on "Complete" without ever asking a question. Leave instead.
+    if (script == null ||
+        script.isEmpty ||
+        script.userMoveCount(userIsWhite) == 0) {
+      if (isActive) controller.stop();
       onChanged();
       return;
     }

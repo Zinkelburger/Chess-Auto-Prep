@@ -9,6 +9,8 @@ import '../controllers/bughouse_controller.dart';
 import '../models/bughouse_engine_settings.dart';
 import '../models/bughouse_eval.dart';
 import '../models/bughouse_state.dart';
+import 'bughouse_book_panel.dart';
+import 'bughouse_panel_section.dart';
 
 /// What the engine thinks, kept running.
 ///
@@ -77,6 +79,13 @@ class _BughouseAnalysisPanelState extends State<BughouseAnalysisPanel> {
               _TeamLines(controller: controller, analysis: controller.ours),
               const SizedBox(height: 16),
               _TeamLines(controller: controller, analysis: controller.theirs),
+              // The engine's two blocks say what is good; the archive says
+              // what is played. In that order, because this is an engine pane
+              // — and absent without comment on a machine with no book.
+              if (controller.hasBook) ...[
+                const SizedBox(height: 16),
+                BughouseBookPanel(controller: controller),
+              ],
               if (controller.scenarios.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 _ScenarioTable(controller: controller),
@@ -545,80 +554,6 @@ class _MoveToken extends StatelessWidget {
   }
 }
 
-/// A collapsed group of inputs, with the values it holds printed on its lid so
-/// you never have to open it just to see where things stand.
-class _Section extends StatefulWidget {
-  const _Section({
-    required this.title,
-    required this.summary,
-    required this.children,
-  });
-
-  final String title;
-  final String summary;
-  final List<Widget> children;
-
-  @override
-  State<_Section> createState() => _SectionState();
-}
-
-class _SectionState extends State<_Section> {
-  bool _open = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.divider),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          InkWell(
-            onTap: () => setState(() => _open = !_open),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(widget.title, style: AppTextStyles.eyebrow),
-                        const SizedBox(height: 2),
-                        Text(
-                          widget.summary,
-                          style: AppTextStyles.caption,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    _open ? Icons.expand_less : Icons.expand_more,
-                    size: 18,
-                    color: AppColors.onSurfaceMuted,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (_open)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: widget.children,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The inputs that are rules of the table rather than preferences.
 class _TableRules extends StatelessWidget {
   const _TableRules({required this.controller});
 
@@ -629,14 +564,14 @@ class _TableRules extends StatelessWidget {
     final state = controller.state;
     final derived = controller.deriveTimeAdvantageFromClocks;
 
-    return _Section(
+    return BughousePanelSection(
       title: 'Table',
       summary:
           '${state.team == Side.white ? 'White' : 'Black'} on board 1 · '
           '${state.timeStance.shortLabel}'
           '${controller.requireMoveOn == RequireMoveOn.none ? '' : ' · ${controller.requireMoveOn.label}'}',
       children: [
-        const _Label('Our team plays'),
+        const BughousePanelLabel('Our team plays'),
         SegmentedButton<Side>(
           style: const ButtonStyle(visualDensity: VisualDensity.compact),
           segments: const [
@@ -654,7 +589,7 @@ class _TableRules extends StatelessWidget {
         // offered because that is how players think, but the engine takes one
         // bit — "Level" and "Behind" run the same search. The genuinely
         // distinct third case is the must-move constraint below.
-        const _Label('Clock stance'),
+        const BughousePanelLabel('Clock stance'),
         SegmentedButton<BughouseTimeStance>(
           style: const ButtonStyle(visualDensity: VisualDensity.compact),
           segments: [
@@ -683,7 +618,7 @@ class _TableRules extends StatelessWidget {
         ),
         const SizedBox(height: 4),
 
-        const _Label('Must the team move?'),
+        const BughousePanelLabel('Must the team move?'),
         SegmentedButton<RequireMoveOn>(
           style: const ButtonStyle(visualDensity: VisualDensity.compact),
           segments: const [
@@ -730,7 +665,7 @@ class _EngineSection extends StatelessWidget {
     final settings = controller.engineSettings;
     final detail = controller.backendDetail;
 
-    return _Section(
+    return BughousePanelSection(
       title: 'Engine',
       summary:
           '${settings.hashMb} MB · batch ${settings.batchSize} · '
@@ -856,17 +791,6 @@ class _Knob extends StatelessWidget {
       ),
     );
   }
-}
-
-class _Label extends StatelessWidget {
-  const _Label(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 4),
-    child: Text(text, style: AppTextStyles.caption),
-  );
 }
 
 /// A message, and — when the failure came with a diagnostic — one button that

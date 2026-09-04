@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/board_editor_controller.dart';
+import '../../theme/app_text_styles.dart';
 import '../../utils/app_messages.dart';
 import '../copy_button.dart';
 import '../labeled_toggle.dart';
@@ -186,7 +187,10 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
           TextField(
             controller: _fenCtrl,
             focusNode: _fenFocus,
-            style: const TextStyle(fontSize: 12, fontFamily: 'SourceCodePro'),
+            style: const TextStyle(
+              fontSize: 12,
+              fontFamily: AppTextStyles.monoFamily,
+            ),
             decoration: InputDecoration(
               labelText: 'FEN',
               border: const OutlineInputBorder(),

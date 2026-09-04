@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import '../utils/app_shortcuts.dart';
 import 'common/list_search_field.dart';
 import 'game_nav_item.dart';
@@ -357,13 +358,7 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
         children: [
           SizedBox(
             width: 32,
-            child: Text(
-              '${result.index + 1}',
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurfaceMuted,
-              ),
-            ),
+            child: Text('${result.index + 1}', style: AppTextStyles.caption),
           ),
           Expanded(
             child: Column(
@@ -388,10 +383,7 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                       secondary,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.onSurfaceMuted,
-                      ),
+                      style: AppTextStyles.caption,
                     ),
                   ),
                 if (!result.isGoToGame && entry.summary.isNotEmpty)

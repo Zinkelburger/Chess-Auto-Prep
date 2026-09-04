@@ -8,6 +8,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 
 /// Per-move annotation rendered inline after or before the move SAN.
 class MoveAnnotation {
@@ -115,7 +116,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
           style: TextStyle(
             fontSize: fontSize,
             color: AppColors.pgnMove,
-            fontFamily: 'SourceCodePro',
+            fontFamily: AppTextStyles.monoFamily,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -138,7 +139,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
             style: TextStyle(
               fontSize: fontSize,
               color: AppColors.pgnMoveNumber,
-              fontFamily: 'SourceCodePro',
+              fontFamily: AppTextStyles.monoFamily,
             ),
           ),
         );
@@ -149,7 +150,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
             style: TextStyle(
               fontSize: fontSize,
               color: AppColors.pgnMoveNumber,
-              fontFamily: 'SourceCodePro',
+              fontFamily: AppTextStyles.monoFamily,
             ),
           ),
         );
@@ -230,7 +231,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
                           color: isActive
                               ? AppColors.pgnMoveCurrentFg
                               : AppColors.pgnMove,
-                          fontFamily: 'SourceCodePro',
+                          fontFamily: AppTextStyles.monoFamily,
                           fontWeight: isActive
                               ? FontWeight.bold
                               : FontWeight.normal,
@@ -257,7 +258,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
                 fontSize: fontSize - 1,
                 color: annotation.suffixColor ?? AppColors.pgnMove,
                 fontWeight: annotation.suffixFontWeight,
-                fontFamily: 'SourceCodePro',
+                fontFamily: AppTextStyles.monoFamily,
               ),
             ),
           );
@@ -266,7 +267,10 @@ class ClickableMoveLineWidget extends StatelessWidget {
         spans.add(
           TextSpan(
             text: ' ',
-            style: TextStyle(fontSize: fontSize, fontFamily: 'SourceCodePro'),
+            style: TextStyle(
+              fontSize: fontSize,
+              fontFamily: AppTextStyles.monoFamily,
+            ),
           ),
         );
       } else {
@@ -276,7 +280,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
             style: TextStyle(
               fontSize: fontSize,
               color: AppColors.pgnMove,
-              fontFamily: 'SourceCodePro',
+              fontFamily: AppTextStyles.monoFamily,
             ),
           ),
         );

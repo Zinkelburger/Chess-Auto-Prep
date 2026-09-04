@@ -7,6 +7,7 @@ import '../../models/repertoire_line.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import '../../utils/coverage_helpers.dart';
 import 'package:chess_auto_prep/services/line_metrics_helpers.dart';
 import '../../utils/lines_filter_helpers.dart';
@@ -177,7 +178,7 @@ class LineItemRow extends StatelessWidget {
                   '${line.moves.length}',
                   style: const TextStyle(
                     fontSize: 12,
-                    fontFamily: 'SourceCodePro',
+                    fontFamily: AppTextStyles.monoFamily,
                     color: AppColors.onSurfaceSoft,
                   ),
                 ),
@@ -338,17 +339,18 @@ class _ScoreText extends StatelessWidget {
   Widget build(BuildContext context) {
     final v = value;
     if (v == null) {
-      return const Text(
-        '—',
-        style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
-      );
+      return const Text('—', style: AppTextStyles.caption);
     }
     final color = v >= goodAbove
         ? AppColors.success
         : (v < dangerBelow ? AppColors.danger : AppColors.warning);
     return Text(
       v.toStringAsFixed(2),
-      style: TextStyle(fontSize: 12, fontFamily: 'SourceCodePro', color: color),
+      style: TextStyle(
+        fontSize: 12,
+        fontFamily: AppTextStyles.monoFamily,
+        color: color,
+      ),
     );
   }
 }
@@ -362,17 +364,14 @@ class _TrapsCellText extends StatelessWidget {
   Widget build(BuildContext context) {
     final count = metrics?.trapCount ?? 0;
     if (count == 0) {
-      return const Text(
-        '—',
-        style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
-      );
+      return const Text('—', style: AppTextStyles.caption);
     }
     final evalDiff = metrics?.bestTrapEvalDiff;
     final text = Text(
       '$count',
       style: const TextStyle(
         fontSize: 12,
-        fontFamily: 'SourceCodePro',
+        fontFamily: AppTextStyles.monoFamily,
         color: AppColors.warning,
       ),
     );
@@ -390,7 +389,7 @@ class _TrapBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       '${metrics.trapCount} trap${metrics.trapCount == 1 ? '' : 's'}',
-      style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
+      style: AppTextStyles.caption,
     );
   }
 }
@@ -418,7 +417,7 @@ class _ImportanceBadge extends StatelessWidget {
           fontSize: 12,
           fontWeight: FontWeight.bold,
           color: AppColors.engineLine,
-          fontFamily: 'SourceCodePro',
+          fontFamily: AppTextStyles.monoFamily,
         ),
       ),
     );
@@ -435,10 +434,7 @@ class _CoverageStatus extends StatelessWidget {
   Widget build(BuildContext context) {
     final leaf = info?.leaf;
     if (leaf == null) {
-      return const Text(
-        '—',
-        style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
-      );
+      return const Text('—', style: AppTextStyles.caption);
     }
 
     late final Color color;
@@ -532,7 +528,7 @@ class _UnaccountedAnnotation extends StatelessWidget {
                             label,
                             style: TextStyle(
                               fontSize: 12,
-                              fontFamily: 'SourceCodePro',
+                              fontFamily: AppTextStyles.monoFamily,
                               color: AppColors.coverageUnaccounted,
                               decoration: TextDecoration.underline,
                               decorationColor: AppColors.coverageUnaccounted
@@ -547,7 +543,7 @@ class _UnaccountedAnnotation extends StatelessWidget {
                         // tappable/plain hierarchy survives tokenization.
                         style: const TextStyle(
                           fontSize: 12,
-                          fontFamily: 'SourceCodePro',
+                          fontFamily: AppTextStyles.monoFamily,
                           color: AppColors.dangerMuted,
                         ),
                       );

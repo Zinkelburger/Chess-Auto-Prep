@@ -53,7 +53,7 @@ Future<void> showMyRepertoiresDialog(BuildContext context) {
               Text(
                 'The repertoires you actually play. Every game is compared '
                 'against them to show where you left book.',
-                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
+                style: AppTextStyles.caption,
               ),
               SizedBox(height: 12),
               MyRepertoiresPanel(),

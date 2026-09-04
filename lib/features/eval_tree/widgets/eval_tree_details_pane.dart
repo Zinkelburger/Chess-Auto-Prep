@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
 import '../../../utils/ease_utils.dart' show winProbability;
 import '../../../utils/chess_utils.dart' show formatPackedEval;
+import '../../../widgets/common/stat_display.dart';
 import '../tree_colors.dart';
 import '../controllers/eval_tree_controller.dart';
 import '../models/eval_tree_snapshot.dart';
@@ -260,13 +262,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 6),
-          Text(
-            '($count)',
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.onSurfaceMuted,
-            ),
-          ),
+          Text('($count)', style: AppTextStyles.caption),
         ],
       ),
     );
@@ -318,7 +314,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
-                      fontFamily: 'SourceCodePro',
+                      fontFamily: AppTextStyles.monoFamily,
                     ),
                   ),
                 ),
@@ -331,10 +327,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
                 Expanded(
                   child: Text(
                     '${(child.moveProbability * 100).toStringAsFixed(1)}%',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceSoft,
-                    ),
+                    style: AppTextStyles.caption,
                   ),
                 ),
                 if (child.expectimaxValue != null)
@@ -397,7 +390,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
       style: const TextStyle(
         fontSize: 12,
         fontWeight: FontWeight.bold,
-        fontFamily: 'SourceCodePro',
+        fontFamily: AppTextStyles.monoFamily,
       ),
     );
   }
@@ -408,7 +401,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
       style: const TextStyle(
         fontSize: 12,
         fontWeight: FontWeight.bold,
-        fontFamily: 'SourceCodePro',
+        fontFamily: AppTextStyles.monoFamily,
       ),
     );
   }
@@ -447,21 +440,8 @@ class EvalTreeDetailsPane extends StatelessWidget {
   }
 
   /// "Label: value" as plain text — the label is muted, the value is ink.
-  Widget _statBadge(String label, String value) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          '$label: ',
-          style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
-        ),
-        Text(
-          value,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-        ),
-      ],
-    );
-  }
+  Widget _statBadge(String label, String value) =>
+      InlineStat(label: label, value: value, separator: ': ');
 
   Widget _pruneBadge() {
     final isHigh = currentNode.pruneKind == EvalTreePruneKind.evalTooHigh;
@@ -478,19 +458,10 @@ class EvalTreeDetailsPane extends StatelessWidget {
     );
   }
 
-  Widget _miniStat(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 10),
-      child: Text(
-        '$label:$value',
-        style: const TextStyle(
-          fontSize: 12,
-          color: AppColors.onSurfaceMuted,
-          fontFamily: 'SourceCodePro',
-        ),
-      ),
-    );
-  }
+  Widget _miniStat(String label, String value) => Padding(
+    padding: const EdgeInsets.only(right: 10),
+    child: InlineStat(label: label, value: value, separator: ':', mono: true),
+  );
 
   Widget _buildProbabilityBar(double fraction) {
     return SizedBox(

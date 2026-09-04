@@ -14,7 +14,7 @@ import '../theme/pgn_text_styles.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
-    show qualityNagSuffix, toggleQualityNag;
+    show commentProse, mergeCommentProse, qualityNagSuffix, toggleQualityNag;
 import 'package:chess_auto_prep/utils/chess_utils.dart' show isNullMoveSan;
 import 'package:chess_auto_prep/utils/training_markers.dart';
 import 'package:chess_auto_prep/widgets/pgn/movetext_primitives.dart'
@@ -806,8 +806,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   /// being edited (right-click a move → Add/Edit Comment).
   Widget _buildInlineCommentEditor(MoveNode node, TreePath path) {
     return PgnCommentEditor(
-      initialText: node.comment ?? '',
-      onSave: (text) => _saveInlineComment(path, text),
+      initialText: commentProse(node.comment ?? ''),
+      onSave: (text) =>
+          _saveInlineComment(path, mergeCommentProse(node.comment ?? '', text)),
       onCancel: () => setState(() => _editingCommentPath = null),
     );
   }

@@ -37,16 +37,6 @@ extension GenerationPhaseLabels on GenerationPhase {
   };
 }
 
-String formatJobDuration(Duration d) {
-  if (d.inHours > 0) {
-    return '${d.inHours}h ${d.inMinutes.remainder(60)}m';
-  }
-  if (d.inMinutes > 0) {
-    return '${d.inMinutes}m ${d.inSeconds.remainder(60)}s';
-  }
-  return '${d.inSeconds}s';
-}
-
 String formatEtaSeconds(int? sec) {
   if (sec == null || sec <= 0) return '';
   if (sec < 60) return '~${sec}s';

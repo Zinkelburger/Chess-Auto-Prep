@@ -81,7 +81,7 @@ mixin _HoleHuntMixin on _AnalysisScreenStateBase {
       final pgnModifiedNow = await fileModifiedOrNull(pgnPath);
       final gamesUnchanged = sameMtime(pgnModifiedAtStart, pgnModifiedNow);
       if (gamesUnchanged) {
-        await HoleHuntPersistence.instance.save(
+        await holeHuntStore.save(
           await _gamesService.holesReportPath(
             player.platform,
             player.username,
@@ -126,7 +126,7 @@ mixin _HoleHuntMixin on _AnalysisScreenStateBase {
     if (player == null) return;
     final isWhite = _playerIsWhite;
     setState(() => _holesResults[isWhite] = result);
-    await HoleHuntPersistence.instance.saveResult(
+    await holeHuntStore.saveResult(
       await _gamesService.holesReportPath(
         player.platform,
         player.username,
@@ -142,7 +142,7 @@ mixin _HoleHuntMixin on _AnalysisScreenStateBase {
     final player = _currentPlayer;
     if (player == null) return;
     for (final isWhite in [true, false]) {
-      final snapshot = await HoleHuntPersistence.instance.load(
+      final snapshot = await holeHuntStore.load(
         await _gamesService.holesReportPath(
           player.platform,
           player.username,

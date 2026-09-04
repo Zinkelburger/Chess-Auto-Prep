@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
+import '../../../utils/time_format.dart';
 import '../models/stored_tournament.dart';
 import '../services/tournament_summary.dart';
 
@@ -308,7 +309,9 @@ class _TournamentTile extends StatelessWidget {
     ];
     final finished = tournament.finishedAt;
     if (finished != null && !running) {
-      parts.add(formatRunDuration(finished.difference(tournament.createdAt)));
+      parts.add(
+        formatCompactDuration(finished.difference(tournament.createdAt)),
+      );
     }
     return parts.join(' · ');
   }

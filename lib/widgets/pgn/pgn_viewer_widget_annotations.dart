@@ -74,17 +74,24 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
         node.san,
       );
       nags = node.nags ?? const [];
-      comment = node.comment ?? '';
+      // The field carries prose only; the move's `[%eval]` / `[%pv]` / `[%clk]`
+      // tokens are re-attached on save, so typing a comment cannot delete the
+      // analysis the viewer draws from.
+      final raw = node.comment ?? '';
+      comment = commentProse(raw);
       onToggleNag = (nagId) => _togglePanelNodeNag(node, nagId);
-      onCommentChanged = (text) => _setPanelNodeComment(node, text);
+      onCommentChanged = (text) =>
+          _setPanelNodeComment(node, mergeCommentProse(raw, text));
     } else if (mainIndex >= 0 && mainIndex < _moveHistory.length) {
       targetKey = 'm$mainIndex';
       final moveData = _moveHistory[mainIndex];
       label = _moveLabelAt(mainIndex, moveData.san);
       nags = moveData.nags ?? const [];
-      comment = joinComments(moveData.comments);
+      final raw = joinComments(moveData.comments);
+      comment = commentProse(raw);
       onToggleNag = (nagId) => _toggleNag(mainIndex, nagId);
-      onCommentChanged = (text) => _setPanelMainlineComment(moveData, text);
+      onCommentChanged = (text) =>
+          _setPanelMainlineComment(moveData, mergeCommentProse(raw, text));
     }
 
     return PgnAnnotationPanel(
@@ -99,8 +106,13 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
 
   void _saveComment(int moveIndex, String newComment) {
     if (moveIndex < 0 || moveIndex >= _moveHistory.length) return;
+    final moveData = _moveHistory[moveIndex];
+    final merged = mergeCommentProse(
+      joinComments(moveData.comments),
+      newComment,
+    );
     setState(() {
-      ViewerGameModel.writeWholeComment(_moveHistory[moveIndex], newComment);
+      ViewerGameModel.writeWholeComment(moveData, merged);
       _editingCommentIndex = null;
     });
     _notifyCommentsChanged();

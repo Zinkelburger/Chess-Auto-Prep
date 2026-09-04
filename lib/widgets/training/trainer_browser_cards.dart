@@ -631,7 +631,7 @@ class _LineCard extends StatelessWidget {
               '${formatLineMovesText(line, start: introFrom, end: introLength)}'
         : '';
     const moveStyle = TextStyle(
-      fontFamily: 'SourceCodePro',
+      fontFamily: AppTextStyles.monoFamily,
       fontSize: 12,
       height: 1.3,
       color: AppColors.onSurfaceMuted,

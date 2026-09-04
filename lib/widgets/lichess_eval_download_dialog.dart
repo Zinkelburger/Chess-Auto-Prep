@@ -211,7 +211,7 @@ class _LichessDownloadDialogState extends State<_LichessDownloadDialog> {
           'Lichess analysis board, published under CC0. Far fewer positions '
           'than the ChessDB dump, but each one carries a deep search and a '
           'best move, and the whole thing fits in a few gigabytes.',
-          style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
+          style: AppTextStyles.caption,
         ),
         const SizedBox(height: 10),
         _costTable(info),
@@ -249,13 +249,7 @@ class _LichessDownloadDialogState extends State<_LichessDownloadDialog> {
               children: [
                 SizedBox(
                   width: 160,
-                  child: Text(
-                    label,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceMuted,
-                    ),
-                  ),
+                  child: Text(label, style: AppTextStyles.caption),
                 ),
                 Text(value, style: const TextStyle(fontSize: 12)),
               ],
@@ -279,12 +273,12 @@ class _LichessDownloadDialogState extends State<_LichessDownloadDialog> {
     if (dir == null) {
       return const Text(
         'Choose a drive or folder.',
-        style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+        style: AppTextStyles.caption,
       );
     }
     return Text(
       '$dir${Platform.pathSeparator}${LichessEvalController.folderName}',
-      style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+      style: AppTextStyles.caption,
       overflow: TextOverflow.ellipsis,
     );
   }

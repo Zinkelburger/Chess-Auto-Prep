@@ -14,6 +14,7 @@ import '../features/master_games/widgets/master_games_browser.dart';
 import '../services/master_games/master_games_service.dart';
 import '../services/master_games/twic_client.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import 'settings/settings_widgets.dart';
 
 class MasterGamesSettingsPanel extends StatelessWidget {
@@ -143,7 +144,7 @@ class MasterGamesSettingsPanel extends StatelessWidget {
             'Games are © The Week in Chess (Mark Crowther) and free for '
             'personal use. Downloads run in the background — see the Jobs '
             'pane — and stopping keeps every issue already imported.',
-            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+            style: AppTextStyles.caption,
           ),
         ),
       ],

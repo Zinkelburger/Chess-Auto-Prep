@@ -70,7 +70,10 @@ class SequenceFilter extends StatelessWidget {
               minHeight: 28,
             ),
           ),
-          style: const TextStyle(fontSize: 12, fontFamily: 'SourceCodePro'),
+          style: const TextStyle(
+            fontSize: 12,
+            fontFamily: AppTextStyles.monoFamily,
+          ),
           onChanged: (_) => controller.validateSequence(),
           onSubmitted: (_) => controller.validateSequence(),
         ),
@@ -88,10 +91,7 @@ class SequenceFilter extends StatelessWidget {
               )
             else
               const Spacer(),
-            const Text(
-              'Max gap: ',
-              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
-            ),
+            const Text('Max gap: ', style: AppTextStyles.caption),
             SizedBox(
               width: 40,
               child: TextField(
@@ -106,17 +106,14 @@ class SequenceFilter extends StatelessWidget {
                 ),
                 style: const TextStyle(
                   fontSize: 12,
-                  fontFamily: 'SourceCodePro',
+                  fontFamily: AppTextStyles.monoFamily,
                 ),
                 keyboardType: TextInputType.number,
                 onChanged: (_) => controller.sequenceGapChanged(),
               ),
             ),
             const SizedBox(width: 4),
-            const Text(
-              'ply',
-              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
-            ),
+            const Text('ply', style: AppTextStyles.caption),
           ],
         ),
       ],

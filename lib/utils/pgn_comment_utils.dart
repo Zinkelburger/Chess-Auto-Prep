@@ -578,6 +578,31 @@ final _classificationRe = RegExp(
 final _wasBestRe = RegExp(r'[A-Za-z0-9+#-]+\s+was best\.?');
 final _whitespaceRe = RegExp(r'\s+');
 
+/// The `[%tag …]` tokens in [comment], in the order they appear.
+///
+/// These are machine annotations the app writes and reads back: `[%eval]` and
+/// `[%pv]` are what the analysis viewer draws, `[%clk]` is the clock a
+/// downloaded game came with. A comment editor must not make the user
+/// responsible for keeping them alive — it shows [commentProse] and hands the
+/// edit to [mergeCommentProse], which puts them back.
+List<String> pgnAnnotationTokens(String comment) =>
+    _anyPgnTokenRe.allMatches(comment).map((m) => m[0]!).toList();
+
+/// [comment] with its `[%tag …]` tokens removed: what a person actually
+/// typed. Internal spacing is left alone, because book PGNs carry structure
+/// in their double spaces.
+String commentProse(String comment) =>
+    comment.replaceAll(_anyPgnTokenRe, '').trim();
+
+/// Edited [prose] with [original]'s `[%tag …]` tokens put back in front.
+String mergeCommentProse(String original, String prose) {
+  final tokens = pgnAnnotationTokens(original);
+  final text = prose.trim();
+  if (tokens.isEmpty) return text;
+  final joined = tokens.join(' ');
+  return text.isEmpty ? joined : '$joined $text';
+}
+
 /// [comment] with every `[%tag …]` token removed and nothing else touched.
 ///
 /// The cheap half of [filterDisplayComment], for callers that only need to

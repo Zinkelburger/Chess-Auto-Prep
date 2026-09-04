@@ -11,7 +11,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import '../../utils/app_shortcuts.dart';
 import '../shortcut_tooltip.dart';
 
@@ -91,10 +91,7 @@ class ListNavRow extends StatelessWidget {
                 counterText!,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceMuted,
-                ),
+                style: AppTextStyles.caption,
               ),
             ),
         ],

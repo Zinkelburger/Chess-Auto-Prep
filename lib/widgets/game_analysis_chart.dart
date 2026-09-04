@@ -12,8 +12,8 @@ import 'package:flutter/material.dart';
 
 import '../services/game_analysis_controller.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import '../utils/movetext_builder.dart';
-import '../utils/chess_utils.dart' show formatEvalDisplay;
 
 // Chart-local aliases for the AppColors.chart* tokens (the app is dark-only).
 // These are chart marks — the white/black area fills represent the two sides,
@@ -200,7 +200,7 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
                         final idx = ply - 1;
                         if (idx < 0 || idx >= evals.length) return null;
                         final e = evals[idx];
-                        final evalStr = _formatEval(e);
+                        final evalStr = e.evalDisplay;
                         final classStr = _classSymbol(e.classification);
                         return LineTooltipItem(
                           '${formatMoveAtPly(ply - 1, e.san)}'
@@ -345,9 +345,6 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
     return (e.scoreCp ?? 0).toDouble().clamp(-800, 800);
   }
 
-  static String _formatEval(MoveEval e) =>
-      formatEvalDisplay(scoreCp: e.scoreCp, scoreMate: e.scoreMate);
-
   static String _classSymbol(MoveClassification cls) => switch (cls) {
     MoveClassification.blunder => '??',
     MoveClassification.mistake => '?',
@@ -451,13 +448,7 @@ class GameAnalysisSummary extends StatelessWidget {
               ),
               const Spacer(),
               if (acpl != null)
-                Text(
-                  'ACPL: $acpl',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.onSurfaceMuted,
-                  ),
-                ),
+                Text('ACPL: $acpl', style: AppTextStyles.caption),
             ],
           ),
           const SizedBox(height: 6),

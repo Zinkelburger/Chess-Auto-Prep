@@ -86,5 +86,47 @@ void main() {
         {'e7', 'e5'},
       );
     });
+
+    /// This runs inside a board's build, and `parseSan` throws — rather than
+    /// returning null — on some malformed tokens. An imported PGN with a
+    /// mangled move must cost the trail and nothing else: an exception here
+    /// escapes as a layout error, which kills pointer input app-wide.
+    group('malformed SAN never throws', () {
+      test('an empty token stops the trail', () {
+        expect(recentMoveTrailSquares(Chess.initial, const ['']), isEmpty);
+      });
+
+      test('a mangled token keeps the moves before it', () {
+        expect(recentMoveTrailSquares(Chess.initial, const ['e4', '']), {
+          'e2',
+          'e4',
+        });
+      });
+
+      test('assorted junk tokens are all survivable', () {
+        for (final junk in const [
+          '',
+          ' ',
+          'x',
+          '=',
+          'O-',
+          'e',
+          '9',
+          'Zz9',
+          '...',
+          '\$3',
+        ]) {
+          expect(
+            () => recentMoveTrailSquares(Chess.initial, ['e4', junk]),
+            returnsNormally,
+            reason: 'token "$junk" must not throw',
+          );
+          expect(recentMoveTrailSquares(Chess.initial, ['e4', junk]), {
+            'e2',
+            'e4',
+          }, reason: 'token "$junk" must leave the e4 trail intact');
+        }
+      });
+    });
   });
 }

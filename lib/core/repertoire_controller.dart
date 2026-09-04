@@ -17,6 +17,7 @@ import '../services/pgn_parsing_service.dart' as pgn;
 import '../models/repertoire_line.dart';
 import '../models/repertoire_metadata.dart';
 import '../services/games_repertoire/draft_repertoire_writer.dart';
+import '../services/repertoire_pgn_text.dart';
 import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';
 import '../utils/fen_utils.dart';
@@ -785,7 +786,7 @@ class RepertoireController
     final fullPath = [...prefix, newMove];
     final pgnForLine = updatedPgnContent != null
         ? _authoring.extractLastGamePgn(updatedPgnContent)
-        : RepertoireService().buildMinimalGamePgn(
+        : buildMinimalGamePgn(
             fullPath,
             startingFen: startingFen,
             isWhiteRepertoire: _isRepertoireWhite,

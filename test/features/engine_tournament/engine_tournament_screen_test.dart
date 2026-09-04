@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/models/game_outcome.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/core/app_state.dart';

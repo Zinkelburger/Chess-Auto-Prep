@@ -24,6 +24,7 @@ import 'audit_filter_bar.dart';
 import 'audit_findings_list.dart';
 import 'audit_resume_banner.dart';
 import 'audit_status_row.dart';
+import 'hunt_controls.dart';
 
 class AuditFindingsPanel extends StatefulWidget {
   final AuditResult? result;
@@ -458,34 +459,13 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
       context: context,
       position: position,
       items: [
-        PopupMenuItem(
-          value: 'dismiss',
-          child: Text(
-            finding.dismissed ? 'Restore' : 'Dismiss',
-            style: const TextStyle(fontSize: 12),
-          ),
+        compactMenuItem('dismiss', finding.dismissed ? 'Restore' : 'Dismiss'),
+        compactMenuItem('similar', 'Dismiss similar at this position'),
+        compactMenuItem(
+          'depth',
+          'Dismiss all ${finding.type.name} at $plyLabel or earlier',
         ),
-        const PopupMenuItem(
-          value: 'similar',
-          child: Text(
-            'Dismiss similar at this position',
-            style: TextStyle(fontSize: 12),
-          ),
-        ),
-        PopupMenuItem(
-          value: 'depth',
-          child: Text(
-            'Dismiss all ${finding.type.name} at $plyLabel or earlier',
-            style: const TextStyle(fontSize: 12),
-          ),
-        ),
-        PopupMenuItem(
-          value: 'type',
-          child: Text(
-            'Dismiss all ${_typeLabel(finding.type)}',
-            style: const TextStyle(fontSize: 12),
-          ),
-        ),
+        compactMenuItem('type', 'Dismiss all ${_typeLabel(finding.type)}'),
       ],
     );
     if (!mounted || value == null) return;

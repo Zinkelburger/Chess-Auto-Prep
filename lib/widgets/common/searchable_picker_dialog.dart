@@ -15,6 +15,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import 'list_search_field.dart';
 
 /// One row of a [SearchablePickerDialog].
@@ -176,10 +177,7 @@ class _SearchablePickerDialogState<T> extends State<SearchablePickerDialog<T>> {
                                   item.subtitle!,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.onSurfaceMuted,
-                                  ),
+                                  style: AppTextStyles.caption,
                                 ),
                           trailing: isSelected
                               ? const Icon(Icons.check, size: 18)
@@ -196,10 +194,7 @@ class _SearchablePickerDialogState<T> extends State<SearchablePickerDialog<T>> {
                 children: [
                   Text(
                     '${visible.length} of ${widget.items.length}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceMuted,
-                    ),
+                    style: AppTextStyles.caption,
                   ),
                   const Spacer(),
                   TextButton(

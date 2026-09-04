@@ -11,6 +11,7 @@ library;
 
 import 'dart:async';
 
+import '../../../models/game_outcome.dart';
 import '../models/engine_spec.dart';
 import '../models/stored_tournament.dart';
 import '../models/tournament_config.dart';

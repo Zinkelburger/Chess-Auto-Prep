@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 
 import '../services/game_store/game_store.dart';
 import '../services/game_store/game_store_service.dart';
-import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 
 class GamesDatabaseSettingsPanel extends StatelessWidget {
   const GamesDatabaseSettingsPanel({super.key});
@@ -62,10 +62,7 @@ class GamesDatabaseSettingsPanel extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 snap.hasData ? snap.data!.path : '',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceMuted,
-                ),
+                style: AppTextStyles.caption,
               ),
             ],
           ),

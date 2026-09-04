@@ -16,7 +16,7 @@ import '../../core/pgn/mainline_positions.dart';
 import '../../core/pgn/solitaire_reveal.dart';
 import '../../models/move_tree.dart';
 import '../../services/game_analysis_controller.dart'
-    show MoveClassification, classifyMove, cpToWinningChance;
+    show MoveClassification, classifyMove, cpToWinningChance, initialWinChance;
 import '../../theme/app_colors.dart';
 import '../../theme/pgn_text_styles.dart';
 import 'comment_editor.dart';
@@ -26,6 +26,7 @@ import '../../utils/chess_utils.dart'
     show coordsAtPly, formatEvalDisplay, isNullMoveSan;
 import '../../utils/pgn_comment_utils.dart'
     show
+        commentProse,
         filterDisplayComment,
         hasChessableFormatting,
         parseRichComment,
@@ -433,7 +434,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
         forceBlackEllipsis = true;
         children.add(
           PgnCommentEditor(
-            initialText: _rawComment(moveData),
+            initialText: commentProse(_rawComment(moveData)),
             onSave: (text) => view.onSaveComment(i, text),
             onCancel: view.onCancelEditingComment,
           ),

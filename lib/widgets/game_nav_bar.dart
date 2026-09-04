@@ -10,7 +10,6 @@ import '../utils/app_shortcuts.dart';
 
 import '../models/pgn_filter_models.dart';
 import '../theme/app_colors.dart';
-import '../theme/app_text_styles.dart';
 import 'labeled_toggle.dart';
 import 'shortcut_tooltip.dart';
 import 'game_nav_item.dart';
@@ -47,15 +46,11 @@ class GameNavBar extends StatelessWidget {
   final VoidCallback? onToggleEditMode;
   final bool isEditMode;
 
-  // Solitaire mode props
+  /// Solitaire strips the bar back to moving between games: the stars, the
+  /// sort, auto-play and amend all belong to reading a collection, and Hint /
+  /// Reveal live in the status strip beside the "your move" cue rather than
+  /// at the far end of the pane.
   final bool isSolitaireMode;
-  final bool solitaireWaitingForUser;
-  final bool solitaireCanReveal;
-  final bool solitaireCanHint;
-  final int solitaireRevealCountdown;
-  final VoidCallback? onReveal;
-  final VoidCallback? onHint;
-  final VoidCallback? onExitSolitaire;
 
   const GameNavBar({
     super.key,
@@ -81,13 +76,6 @@ class GameNavBar extends StatelessWidget {
     this.onToggleEditMode,
     this.isEditMode = false,
     this.isSolitaireMode = false,
-    this.solitaireWaitingForUser = false,
-    this.solitaireCanReveal = false,
-    this.solitaireCanHint = false,
-    this.solitaireRevealCountdown = 0,
-    this.onReveal,
-    this.onHint,
-    this.onExitSolitaire,
   });
 
   @override
@@ -115,148 +103,47 @@ class GameNavBar extends StatelessWidget {
           runSpacing: 4,
           children: [
             _buildGameCounter(context),
-            _buildSolitaireControls(context),
+            ShortcutIconButton(
+              description: 'Fullscreen',
+              shortcut: AppShortcut.fullScreen,
+              onPressed: games.isNotEmpty ? onToggleFullScreen : null,
+              icon: const Icon(
+                Icons.fullscreen,
+                size: 24,
+                color: AppColors.onSurfaceSoft,
+              ),
+              visualDensity: VisualDensity.compact,
+            ),
           ],
         ),
         const SizedBox(height: 4),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            ShortcutTooltip(
-              description: 'Previous game',
-              shortcut: AppShortcut.previousItem,
-              child: TextButton.icon(
-                onPressed: currentIndex > 0 ? onPrev : null,
-                icon: const Icon(Icons.skip_previous, size: 20),
-                label: const Text('Prev'),
-              ),
-            ),
-            const SizedBox(width: 16),
-            ShortcutTooltip(
-              description: 'Next game',
-              shortcut: AppShortcut.nextItem,
-              child: TextButton.icon(
-                onPressed: currentIndex < games.length - 1 ? onNext : null,
-                icon: const Icon(Icons.skip_next, size: 20),
-                label: const Text('Next'),
-              ),
-            ),
-          ],
-        ),
+        _buildPrevNextRow(),
       ],
     );
   }
 
-  Widget _buildSolitaireControls(BuildContext context) {
-    final canReveal = solitaireCanReveal;
-    final countdown = solitaireRevealCountdown;
-    final waitingText = countdown > 0
-        ? 'Available in ${countdown}s'
-        : 'Available on your turn';
+  Widget _buildPrevNextRow({Widget? middle}) {
     return Row(
-      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // Both always visible so the controls are discoverable; grayed out
-        // until they can be used (countdown running or opponent to move).
-        // The countdown sits in its own fixed-width slot so the chips do not
-        // change width every second.
-        if (countdown > 0)
-          Padding(
-            padding: const EdgeInsets.only(right: 6),
-            child: SizedBox(
-              width: 34,
-              child: Text(
-                '${countdown}s',
-                textAlign: TextAlign.right,
-                style: AppTextStyles.caption.copyWith(
-                  color: AppColors.onSurfaceMuted,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-            ),
-          ),
-        Padding(
-          padding: const EdgeInsets.only(right: 6),
-          child: ShortcutTooltip(
-            description: solitaireCanHint
-                ? 'Show which piece moves (counts against first-try)'
-                : waitingText,
-            shortcut: AppShortcut.hintMove,
-            child: ActionChip(
-              onPressed: solitaireCanHint ? onHint : null,
-              avatar: Icon(
-                Icons.lightbulb_outline,
-                size: 16,
-                color: solitaireCanHint
-                    ? AppColors.ink
-                    : AppColors.onSurfaceDisabled,
-              ),
-              label: Text(
-                'Hint',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: solitaireCanHint
-                      ? AppColors.ink
-                      : AppColors.onSurfaceDisabled,
-                ),
-              ),
-              visualDensity: VisualDensity.compact,
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: ShortcutTooltip(
-            description: canReveal
-                ? 'Give up and show the correct move'
-                : waitingText,
-            shortcut: AppShortcut.revealMove,
-            child: ActionChip(
-              onPressed: canReveal ? onReveal : null,
-              avatar: Icon(
-                Icons.visibility,
-                size: 16,
-                color: canReveal
-                    ? AppColors.onWarning
-                    : AppColors.onSurfaceDisabled,
-              ),
-              label: Text(
-                'Reveal',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: canReveal
-                      ? AppColors.onWarning
-                      : AppColors.onSurfaceDisabled,
-                ),
-              ),
-              backgroundColor: canReveal
-                  ? AppColors.warningSurface.withValues(alpha: 0.9)
-                  : AppColors.onSurfaceMuted.withValues(alpha: 0.4),
-              side: BorderSide.none,
-              visualDensity: VisualDensity.compact,
-            ),
-          ),
-        ),
-        ShortcutIconButton(
-          description: 'Fullscreen',
-          shortcut: AppShortcut.fullScreen,
-          onPressed: games.isNotEmpty ? onToggleFullScreen : null,
-          icon: const Icon(
-            Icons.fullscreen,
-            size: 24,
-            color: AppColors.onSurfaceSoft,
-          ),
-          visualDensity: VisualDensity.compact,
-        ),
-        const SizedBox(width: 4),
         ShortcutTooltip(
-          description: 'Exit solitaire',
-          shortcut: AppShortcut.leave,
-          child: ActionChip(
-            onPressed: onExitSolitaire,
-            avatar: const Icon(Icons.close, size: 16),
-            label: const Text('Exit', style: TextStyle(fontSize: 12)),
-            visualDensity: VisualDensity.compact,
+          description: 'Previous game',
+          shortcut: AppShortcut.previousItem,
+          child: TextButton.icon(
+            onPressed: currentIndex > 0 ? onPrev : null,
+            icon: const Icon(Icons.skip_previous, size: 20),
+            label: const Text('Prev'),
+          ),
+        ),
+        if (middle != null) ...[const SizedBox(width: 16), middle],
+        const SizedBox(width: 16),
+        ShortcutTooltip(
+          description: 'Next game',
+          shortcut: AppShortcut.nextItem,
+          child: TextButton.icon(
+            onPressed: currentIndex < games.length - 1 ? onNext : null,
+            icon: const Icon(Icons.skip_next, size: 20),
+            label: const Text('Next'),
           ),
         ),
       ],
@@ -286,50 +173,27 @@ class GameNavBar extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 4),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            ShortcutTooltip(
-              description: 'Previous game',
-              shortcut: AppShortcut.previousItem,
-              child: TextButton.icon(
-                onPressed: currentIndex > 0 ? onPrev : null,
-                icon: const Icon(Icons.skip_previous, size: 20),
-                label: const Text('Prev'),
+        _buildPrevNextRow(
+          middle: ShortcutTooltip(
+            description: 'Amend game',
+            shortcut: AppShortcut.amendGame,
+            child: IconButton(
+              onPressed: onToggleEditMode,
+              icon: Icon(
+                Icons.edit_note,
+                size: 22,
+                color: isEditMode ? AppColors.starAccent : null,
               ),
+              style: isEditMode
+                  ? IconButton.styleFrom(
+                      backgroundColor: AppColors.starAccent.withValues(
+                        alpha: 0.12,
+                      ),
+                    )
+                  : null,
+              visualDensity: VisualDensity.compact,
             ),
-            const SizedBox(width: 16),
-            ShortcutTooltip(
-              description: 'Amend game',
-              shortcut: AppShortcut.amendGame,
-              child: IconButton(
-                onPressed: onToggleEditMode,
-                icon: Icon(
-                  Icons.edit_note,
-                  size: 22,
-                  color: isEditMode ? AppColors.starAccent : null,
-                ),
-                style: isEditMode
-                    ? IconButton.styleFrom(
-                        backgroundColor: AppColors.starAccent.withValues(
-                          alpha: 0.12,
-                        ),
-                      )
-                    : null,
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-            const SizedBox(width: 16),
-            ShortcutTooltip(
-              description: 'Next game',
-              shortcut: AppShortcut.nextItem,
-              child: TextButton.icon(
-                onPressed: currentIndex < games.length - 1 ? onNext : null,
-                icon: const Icon(Icons.skip_next, size: 20),
-                label: const Text('Next'),
-              ),
-            ),
-          ],
+          ),
         ),
       ],
     );

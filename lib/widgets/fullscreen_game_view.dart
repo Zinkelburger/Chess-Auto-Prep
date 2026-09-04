@@ -10,6 +10,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import 'chess_board_widget.dart';
 import 'game_nav_bar.dart' show kAutoPlaySpeeds;
 
@@ -119,7 +120,7 @@ class FullscreenGameView extends StatelessWidget {
                           style: const TextStyle(
                             color: AppColors.overlayInkMuted,
                             fontSize: 12,
-                            fontFamily: 'SourceCodePro',
+                            fontFamily: AppTextStyles.monoFamily,
                           ),
                         ),
                       ),

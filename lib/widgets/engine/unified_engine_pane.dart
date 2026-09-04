@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/engine_settings.dart';
 import '../../models/merged_move.dart';
+import '../../theme/app_text_styles.dart';
 import 'engine_move_row.dart';
 import '../../services/analysis_service.dart';
 import '../../services/engine/engine_lifecycle.dart';
@@ -214,10 +215,7 @@ class _UnifiedEnginePaneState extends _UnifiedEnginePaneStateBase
                           'Depth ${ps.discoveryDepth} • '
                           '${formatNodes(ps.discoveryNodes)} nodes • '
                           '${formatNps(ps.discoveryNps)} n/s',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.onSurfaceSoft,
-                          ),
+                          style: AppTextStyles.caption,
                           overflow: TextOverflow.ellipsis,
                         );
                       }
@@ -230,10 +228,7 @@ class _UnifiedEnginePaneState extends _UnifiedEnginePaneStateBase
                           'Evaluating ${ps.completedMoves}/${ps.totalMoves}: '
                           '$sans  |  '
                           'Workers: ${ps.activeWorkers}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.onSurfaceSoft,
-                          ),
+                          style: AppTextStyles.caption,
                           overflow: TextOverflow.ellipsis,
                         );
                       }
@@ -241,19 +236,13 @@ class _UnifiedEnginePaneState extends _UnifiedEnginePaneStateBase
                       if (ps.isComplete) {
                         return Text(
                           '${ps.totalMoves} moves analyzed',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.onSurfaceSoft,
-                          ),
+                          style: AppTextStyles.caption,
                         );
                       }
 
                       return const Text(
                         'Initializing...',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.onSurfaceSoft,
-                        ),
+                        style: AppTextStyles.caption,
                         overflow: TextOverflow.ellipsis,
                       );
                     },

@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/generation/skeleton_plan.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import 'skeleton_plan_controller.dart';
 
 class SkeletonPlanCard extends StatelessWidget {
@@ -51,14 +52,17 @@ class SkeletonPlanCard extends StatelessWidget {
                     'odd plies). One line per row — move numbers optional.'
               : 'Paste the lines you already know you want, from Black’s '
                     'side. One line per row — move numbers optional.',
-          style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
+          style: AppTextStyles.caption,
         ),
         const SizedBox(height: 8),
         TextField(
           controller: controller.lines,
           minLines: 3,
           maxLines: 8,
-          style: const TextStyle(fontFamily: 'SourceCodePro', fontSize: 13),
+          style: const TextStyle(
+            fontFamily: AppTextStyles.monoFamily,
+            fontSize: 13,
+          ),
           decoration: const InputDecoration(
             isDense: true,
             border: OutlineInputBorder(),
@@ -75,7 +79,7 @@ class SkeletonPlanCard extends StatelessWidget {
         const Text(
           'A veto drops lines that reach the structure when a sound '
           'alternative exists — it steers, it never leaves you unprepared.',
-          style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
+          style: AppTextStyles.caption,
         ),
         const SizedBox(height: 8),
         Wrap(
@@ -101,7 +105,7 @@ class SkeletonPlanCard extends StatelessWidget {
     if (lineCount == 0) {
       return const Text(
         'No lines yet — the build runs normally, with no steering.',
-        style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+        style: AppTextStyles.caption,
       );
     }
     final pins = plan.nodes.length;

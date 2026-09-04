@@ -17,7 +17,8 @@ import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/theme/app_colors.dart';
 import 'package:chess_auto_prep/theme/app_text_styles.dart';
 import 'package:chess_auto_prep/theme/pgn_text_styles.dart';
-import 'package:chess_auto_prep/utils/pgn_comment_utils.dart' show joinComments;
+import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
+    show commentProse, joinComments, mergeCommentProse;
 import 'package:chess_auto_prep/widgets/info_hint.dart';
 import 'package:chess_auto_prep/widgets/study/add_to_study_flow.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
@@ -252,6 +253,11 @@ class PgnViewerWidget extends StatefulWidget {
   /// paragraph breaks). Off by default — see [PgnMovetextView.bookFormatting].
   final bool bookFormatting;
 
+  /// Leave the result out of the header line. Solitaire sets it: "1-0" above
+  /// a game you are guessing your way through answers the question before the
+  /// first move.
+  final bool hideResult;
+
   const PgnViewerWidget({
     super.key,
     this.gameId,
@@ -266,6 +272,7 @@ class PgnViewerWidget extends StatefulWidget {
     this.editMode = false,
     this.onGameLoaded,
     this.bookFormatting = false,
+    this.hideResult = false,
   });
 
   @override
@@ -335,7 +342,13 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
         _PgnViewerMoveEdits,
         _PgnViewerAnnotations,
         _PgnViewerLineActions {
+  /// Header text with the result in it, and the same text without — both
+  /// built once per game so [PgnViewerWidget.hideResult] can be flipped
+  /// (entering solitaire) without re-parsing anything.
   String _gameInfo = '';
+  String _gameInfoNoResult = '';
+
+  String get _headerText => widget.hideResult ? _gameInfoNoResult : _gameInfo;
   bool _isLoading = true;
   String? _error;
 
@@ -480,6 +493,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
       setState(() {
         _m.load(game);
         _gameInfo = _buildGameInfo(game);
+        _gameInfoNoResult = _buildGameInfo(game, includeResult: false);
         _isLoading = false;
       });
 
@@ -508,7 +522,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
 
   Future<String> _findGamePgn(String gameId) => findStoredGamePgn(gameId);
 
-  String _buildGameInfo(PgnGame game) {
+  String _buildGameInfo(PgnGame game, {bool includeResult = true}) {
     final white = (game.headers['White'] ?? '?').trim();
     final black = (game.headers['Black'] ?? '?').trim();
     final event = game.headers['Event'] ?? '';
@@ -552,7 +566,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
         ? '$black ($bElo)'
         : black;
     final date = formatPgnDate(game.headers['Date']);
-    final result = game.headers['Result'] ?? '';
+    final result = includeResult ? (game.headers['Result'] ?? '') : '';
 
     // Build detail line, omitting blank/placeholder parts
     final details = [
@@ -583,7 +597,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
   /// Render `_gameInfo` with the first line as a prominent title and any
   /// subsequent lines (theme, annotator, event/date) as dimmer subtitles.
   Widget _buildGameHeader(BuildContext context) {
-    final lines = _gameInfo.split('\n');
+    final lines = _headerText.split('\n');
     final theme = Theme.of(context);
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -649,7 +663,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
 
     return Column(
       children: [
-        if (_gameInfo.isNotEmpty)
+        if (_headerText.isNotEmpty)
           Container(
             padding: const EdgeInsets.all(8),
             child: _buildGameHeader(context),

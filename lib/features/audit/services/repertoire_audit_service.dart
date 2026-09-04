@@ -18,6 +18,7 @@ import '../../../services/maia/maia_factory.dart';
 import '../../../services/opening_tree_builder.dart';
 import '../../../services/pgn_parsing_service.dart' as pgn;
 import '../../../services/probability_service.dart';
+import '../../../services/run_control.dart';
 import '../../../utils/chess_utils.dart' as chess_utils;
 import '../../../utils/fen_utils.dart';
 import '../models/audit_finding.dart';
@@ -61,17 +62,17 @@ class RepertoireAuditService {
   /// The ChessDB source for the run in progress, or null when it is off.
   ExternalMoveProvider? _chessDb;
 
-  bool _cancelled = false;
-  bool _paused = false;
+  /// Cooperative pause/cancel for the run in progress.
+  final RunControl _control = RunControl();
 
   /// FENs checked in the current (or most recent) audit run.
   /// Useful for saving progress on cancellation.
   Set<String> get checkedFens => Set.unmodifiable(_checkedFens);
   final Set<String> _checkedFens = {};
 
-  void cancel() => _cancelled = true;
-  void pause() => _paused = true;
-  void resume() => _paused = false;
+  void cancel() => _control.cancel();
+  void pause() => _control.pause();
+  void resume() => _control.resume();
 
   /// Run a full audit of [tree] starting from [startFen].
   ///
@@ -91,8 +92,7 @@ class RepertoireAuditService {
     Set<String> skipFens = const {},
     List<AuditFinding> priorFindings = const [],
   }) async {
-    _cancelled = false;
-    _paused = false;
+    _control.reset();
     _checkedFens.clear();
     _checkedFens.addAll(skipFens);
     final stopwatch = Stopwatch()..start();
@@ -156,11 +156,7 @@ class RepertoireAuditService {
     int checked = 0;
 
     while (queue.isNotEmpty) {
-      if (_cancelled) break;
-      while (_paused && !_cancelled) {
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
-      if (_cancelled) break;
+      if (!await _control.checkpoint()) break;
 
       final entry = queue.removeFirst();
       final node = entry.node;

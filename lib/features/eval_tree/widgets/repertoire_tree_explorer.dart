@@ -4,6 +4,7 @@ import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/ease_utils.dart' show winProbability;
 import '../../../utils/chess_utils.dart' show formatPackedEval;
+import '../../../widgets/common/stat_display.dart';
 import '../tree_colors.dart';
 import '../controllers/eval_tree_controller.dart';
 import '../models/eval_tree_snapshot.dart';
@@ -140,7 +141,7 @@ class _PositionHeader extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.bodySmall?.copyWith(
-              fontFamily: 'SourceCodePro',
+              fontFamily: AppTextStyles.monoFamily,
               color: theme.colorScheme.onSurfaceVariant,
               fontSize: 12,
             ),
@@ -180,18 +181,18 @@ class _PositionStatsBar extends StatelessWidget {
 
     final evalCp = currentNode.evalForUsCp;
     if (evalCp != null) {
-      chips.add(_StatChip(label: 'Eval', value: _formatEval(evalCp)));
+      chips.add(InlineStat(label: 'Eval', value: _formatEval(evalCp)));
     }
 
     if (currentNode.ease != null) {
       chips.add(
-        _StatChip(label: 'Ease', value: currentNode.ease!.toStringAsFixed(2)),
+        InlineStat(label: 'Ease', value: currentNode.ease!.toStringAsFixed(2)),
       );
     }
 
     if (currentNode.expectimaxValue != null) {
       chips.add(
-        _StatChip(
+        InlineStat(
           label: 'V',
           value: '${(currentNode.expectimaxValue! * 100).toStringAsFixed(1)}%',
         ),
@@ -199,7 +200,7 @@ class _PositionStatsBar extends StatelessWidget {
     }
 
     chips.add(
-      _StatChip(
+      InlineStat(
         label: 'Reach',
         value:
             '${(currentNode.cumulativeProbability * 100).toStringAsFixed(1)}%',
@@ -366,7 +367,7 @@ class _CandidateRow extends StatelessWidget {
                         node.moveSan,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontFamily: 'SourceCodePro',
+                          fontFamily: AppTextStyles.monoFamily,
                           fontSize: 15,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -425,7 +426,7 @@ class _CandidateRow extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.onSurfaceMuted,
-                    fontFamily: 'SourceCodePro',
+                    fontFamily: AppTextStyles.monoFamily,
                   ),
                 ),
               ),
@@ -450,7 +451,7 @@ class _EvalBadge extends StatelessWidget {
       style: const TextStyle(
         fontSize: 12,
         fontWeight: FontWeight.bold,
-        fontFamily: 'SourceCodePro',
+        fontFamily: AppTextStyles.monoFamily,
       ),
     );
   }
@@ -476,7 +477,7 @@ class _MetricText extends StatelessWidget {
       textAlign: align,
       style: TextStyle(
         fontSize: 12,
-        fontFamily: 'SourceCodePro',
+        fontFamily: AppTextStyles.monoFamily,
         color: color ?? AppColors.onSurfaceSoft,
         fontWeight: value != null ? FontWeight.w600 : FontWeight.normal,
       ),
@@ -498,7 +499,7 @@ class _TrapCountBadge extends StatelessWidget {
       return const Text(
         '—',
         textAlign: TextAlign.right,
-        style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+        style: AppTextStyles.caption,
       );
     }
 
@@ -511,7 +512,7 @@ class _TrapCountBadge extends StatelessWidget {
           fontSize: 12,
           color: AppColors.onSurfaceSoft,
           fontWeight: FontWeight.w600,
-          fontFamily: 'SourceCodePro',
+          fontFamily: AppTextStyles.monoFamily,
         ),
       ),
     );
@@ -557,29 +558,6 @@ class _LeafPlaceholder extends StatelessWidget {
 }
 
 /// "Label value" as plain text — the label is muted, the value is ink.
-class _StatChip extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _StatChip({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          '$label ',
-          style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
-        ),
-        Text(
-          value,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-        ),
-      ],
-    );
-  }
-}
 
 String _formatMovePath(EvalTreeSnapshot snapshot, int nodeId) {
   final prefix = snapshot.startMovesSan;

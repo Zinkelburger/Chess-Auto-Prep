@@ -27,6 +27,7 @@ import '../../services/generation/eca_calculator.dart';
 import '../../services/generation/fen_map.dart';
 import '../../services/generation/generation_config.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import '../../utils/chess_utils.dart' show fenAfterMoves, formatPackedEval;
 import '../../utils/app_messages.dart';
 import '../../utils/ease_utils.dart' show expectedCpFromWinProb;
@@ -205,7 +206,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
         value: _probePlies,
         isDense: true,
         underline: const SizedBox.shrink(),
-        style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
+        style: AppTextStyles.caption,
         items: [
           for (final plies in kExpectimaxProbePlyChoices)
             DropdownMenuItem(value: plies, child: Text('$plies half-moves')),
@@ -219,7 +220,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
     if (!hooks.isProbeRunning) {
       return const Text(
         'A build is running — probes can start once it finishes.',
-        style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+        style: AppTextStyles.caption,
       );
     }
     return Row(
@@ -234,10 +235,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
         Flexible(
           child: Text(
             hooks.status.isEmpty ? 'Computing…' : hooks.status,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.onSurfaceMuted,
-            ),
+            style: AppTextStyles.caption,
             overflow: TextOverflow.ellipsis,
           ),
         ),
@@ -266,10 +264,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
             child: CircularProgressIndicator(strokeWidth: 2),
           ),
           const SizedBox(width: 6),
-          const Text(
-            'Computing…',
-            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
-          ),
+          const Text('Computing…', style: AppTextStyles.caption),
           IconButton(
             tooltip: 'Cancel the probe',
             icon: const Icon(Icons.close, size: 14),
@@ -479,7 +474,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      fontFamily: 'SourceCodePro',
+                      fontFamily: AppTextStyles.monoFamily,
                       color: AppColors.cpEval(
                         expectedCpFromWinProb(node.expectimaxValue),
                       ),
@@ -490,7 +485,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
                       '  engine $engine',
                       style: const TextStyle(
                         fontSize: 12,
-                        fontFamily: 'SourceCodePro',
+                        fontFamily: AppTextStyles.monoFamily,
                         color: AppColors.onSurfaceMuted,
                       ),
                     ),
@@ -607,7 +602,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
-                  fontFamily: 'SourceCodePro',
+                  fontFamily: AppTextStyles.monoFamily,
                   color: AppColors.cpEval(line.expectedEvalCp),
                 ),
               ),
@@ -619,7 +614,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
               engine,
               style: const TextStyle(
                 fontSize: 12,
-                fontFamily: 'SourceCodePro',
+                fontFamily: AppTextStyles.monoFamily,
                 color: AppColors.onSurfaceMuted,
               ),
             ),
@@ -637,7 +632,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
                   style: TextStyle(
                     fontSize: 12,
                     color: AppColors.coherence(coherence),
-                    fontFamily: 'SourceCodePro',
+                    fontFamily: AppTextStyles.monoFamily,
                   ),
                 ),
               ),
@@ -675,10 +670,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
       child: Row(
         children: [
           if (widget.hooks != null) ...[
-            const Text(
-              'Probe depth ',
-              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
-            ),
+            const Text('Probe depth ', style: AppTextStyles.caption),
             _probeDepthPicker(),
           ],
           const Spacer(),

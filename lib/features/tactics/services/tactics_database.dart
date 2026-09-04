@@ -449,11 +449,17 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
 
   /// Delete several positions in one mutation: one notify, one file write —
   /// batch delete from the browse list must not re-encode the whole set once
-  /// per selected row.  [sortedDescIndices] must be sorted descending so
-  /// removals don't shift the remaining indices.
-  Future<void> deletePositionsAt(List<int> sortedDescIndices) async {
+  /// per selected row.
+  ///
+  /// [indices] may arrive in any order and may repeat; they are deduplicated
+  /// and applied highest-first here, so earlier removals cannot shift the
+  /// ones still to come. That used to be the caller's contract, kept only by
+  /// a doc comment on an operation whose own dialog says "cannot be undone" —
+  /// an ascending or duplicated list silently deleted the wrong puzzles.
+  Future<void> deletePositionsAt(List<int> indices) async {
+    final ordered = indices.toSet().toList()..sort((a, b) => b.compareTo(a));
     var removed = 0;
-    for (final index in sortedDescIndices) {
+    for (final index in ordered) {
       if (index < 0 || index >= positions.length) continue;
       positions.removeAt(index);
       removed++;

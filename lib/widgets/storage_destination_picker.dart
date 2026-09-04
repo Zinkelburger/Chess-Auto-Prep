@@ -17,6 +17,7 @@ import 'package:path/path.dart' as p;
 
 import '../services/eval/storage_volumes.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 
 /// What the picker currently points at.
 class StorageDestination {
@@ -217,7 +218,7 @@ class _StorageDestinationPickerState extends State<StorageDestinationPicker> {
         children: [
           const Text(
             'Could not list drives on this system — choose a folder instead.',
-            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
+            style: AppTextStyles.caption,
           ),
           const SizedBox(height: 8),
           _browseButton(),
@@ -293,23 +294,14 @@ class _StorageDestinationPickerState extends State<StorageDestinationPicker> {
             ),
             Expanded(
               flex: 2,
-              child: Text(
-                v.mediaLabel,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceMuted,
-                ),
-              ),
+              child: Text(v.mediaLabel, style: AppTextStyles.caption),
             ),
             Expanded(
               flex: 3,
               child: Text(
                 '${formatBytes(v.freeBytes)} free of '
                 '${formatBytes(v.totalBytes)}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceSoft,
-                ),
+                style: AppTextStyles.caption,
               ),
             ),
             SizedBox(

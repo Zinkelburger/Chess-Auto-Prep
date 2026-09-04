@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/study_controller.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 
 class StudyChapterSidebar extends StatefulWidget {
   final StudyController study;
@@ -129,10 +130,7 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
             decoration: InputDecoration(
               isDense: true,
               hintText: 'Filter chapters',
-              hintStyle: const TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurfaceMuted,
-              ),
+              hintStyle: AppTextStyles.caption,
               prefixIcon: const Icon(Icons.search, size: 15),
               prefixIconConstraints: const BoxConstraints(
                 minWidth: 28,
@@ -164,10 +162,7 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
               ? const Center(
                   child: Text(
                     'No matching chapters',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceMuted,
-                    ),
+                    style: AppTextStyles.caption,
                   ),
                 )
               // Reordering needs row == chapter index, so the filtered list
@@ -238,7 +233,7 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
     final ordinal = Text(
       '${index + 1}',
       textAlign: TextAlign.right,
-      style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceDim),
+      style: AppTextStyles.caption,
     );
 
     return InkWell(
@@ -277,13 +272,7 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
             if (showResult)
               Padding(
                 padding: const EdgeInsets.only(left: 6),
-                child: Text(
-                  result,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.onSurfaceDim,
-                  ),
-                ),
+                child: Text(result, style: AppTextStyles.caption),
               ),
             PopupMenuButton<String>(
               icon: Icon(

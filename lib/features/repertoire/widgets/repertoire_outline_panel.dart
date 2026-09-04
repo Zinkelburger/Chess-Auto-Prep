@@ -20,6 +20,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
 import '../controllers/repertoire_outline_controller.dart';
 import '../models/outline_rows.dart';
 import '../models/repertoire_outline.dart';
@@ -801,10 +802,7 @@ class _Header extends StatelessWidget {
                       ? 'Reading…'
                       : '$chapterCount chapter${chapterCount == 1 ? '' : 's'} · '
                             '$lineCount line${lineCount == 1 ? '' : 's'}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.onSurfaceMuted,
-                  ),
+                  style: AppTextStyles.caption,
                 ),
               ],
             ),
@@ -1243,7 +1241,7 @@ class _LineRow extends StatelessWidget {
                     line.previewLabel,
                     style: const TextStyle(
                       fontSize: 12,
-                      fontFamily: 'SourceCodePro',
+                      fontFamily: AppTextStyles.monoFamily,
                       color: AppColors.onSurfaceMuted,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -1252,10 +1250,7 @@ class _LineRow extends StatelessWidget {
               ],
             ),
           ),
-          Text(
-            '${line.moves.length}',
-            style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceDim),
-          ),
+          Text('${line.moves.length}', style: AppTextStyles.caption),
         ],
       ),
     );
@@ -1266,10 +1261,8 @@ class _Count extends StatelessWidget {
   final int n;
   const _Count(this.n);
   @override
-  Widget build(BuildContext context) => Text(
-    '$n',
-    style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
-  );
+  Widget build(BuildContext context) =>
+      Text('$n', style: AppTextStyles.caption);
 }
 
 class _Hint extends StatelessWidget {
@@ -1322,10 +1315,7 @@ class _Empty extends StatelessWidget {
             Text(
               detail,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurfaceMuted,
-              ),
+              style: AppTextStyles.caption,
             ),
             if (action != null) ...[const SizedBox(height: 12), action!],
           ],

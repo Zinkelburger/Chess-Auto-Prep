@@ -35,9 +35,13 @@ Future<(int?, int, int)> evalAfterMoveCached(
 
     final result = await pool.evaluateFen(newFen, depth);
     final isWhiteAfter = newPos.turn == Side.white;
-    final whiteCp = isWhiteAfter
-        ? (result.scoreCp ?? 0)
-        : -(result.scoreCp ?? 0);
+    // `effectiveCp`, not `scoreCp`: a forced mate reports `scoreMate` with
+    // `scoreCp` null, and reading the raw field scored every mate as 0.00 —
+    // so the audit and the hole hunt dropped exactly the refutations that
+    // mate, and cached that 0 for the next reader. Everything else in the
+    // pipeline (discovery lines, the generation expanders) already packs
+    // mate through `effectiveCp`; this is the one place that did not.
+    final whiteCp = isWhiteAfter ? result.effectiveCp : -result.effectiveCp;
 
     cache.putEvalCpWhiteSoon(newFen, whiteCp, depth);
 

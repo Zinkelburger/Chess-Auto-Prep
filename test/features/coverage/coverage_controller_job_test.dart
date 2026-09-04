@@ -30,9 +30,6 @@ class _ScriptedCoverageController extends CoverageController {
 
 const _config = CoverageConfig(
   targetPercent: 80,
-  database: LichessDatabase.lichess,
-  selectedRatings: {'2000'},
-  selectedSpeeds: {'blitz'},
   useMaia: false,
   maiaElo: 1900,
 );

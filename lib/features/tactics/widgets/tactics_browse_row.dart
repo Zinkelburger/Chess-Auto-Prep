@@ -209,7 +209,7 @@ class TacticsBrowseRow extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 13,
-                    fontFamily: 'SourceCodePro',
+                    fontFamily: AppTextStyles.monoFamily,
                   ),
                 ),
               ),

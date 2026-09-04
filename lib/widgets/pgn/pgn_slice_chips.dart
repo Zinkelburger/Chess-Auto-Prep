@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import '../../core/pgn_viewer_controller.dart';
 import '../../models/pgn_filter_models.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 
 class PgnSliceChips extends StatelessWidget {
   final PgnViewerController controller;
@@ -41,7 +42,7 @@ class PgnSliceChips extends StatelessWidget {
           for (final preset in controller.slicePresets)
             if (!controller.isPresetActive(preset.filter)) ...[
               const SizedBox(width: 4),
-              _buildPresetChip(preset.label, preset.filter),
+              _buildPresetChip(preset.shortLabel, preset.label, preset.filter),
             ],
           if (controller.hasActiveFilters) ...[
             const SizedBox(width: 6),
@@ -63,7 +64,7 @@ class PgnSliceChips extends StatelessWidget {
                   // info, not chipActiveFg: on the pale infoTint wash the
                   // near-white fg would erase the "filters active" signal.
                   color: AppColors.info,
-                  fontFamily: 'SourceCodePro',
+                  fontFamily: AppTextStyles.monoFamily,
                 ),
               ),
             ),
@@ -114,11 +115,15 @@ class PgnSliceChips extends StatelessWidget {
     );
   }
 
-  Widget _buildPresetChip(String label, HeaderFilterConfig filter) {
+  Widget _buildPresetChip(
+    String label,
+    String fullLabel,
+    HeaderFilterConfig filter,
+  ) {
     // Styled like the idle add-filter chip: a preset is just a shortcut to a
     // filter, not a highlighted state of its own.
     return Tooltip(
-      message: 'Slice: $label',
+      message: 'Show only $fullLabel',
       child: GestureDetector(
         onTap: () => controller.applySlicePreset(filter),
         child: Container(
@@ -137,13 +142,7 @@ class PgnSliceChips extends StatelessWidget {
                 color: AppColors.onSurfaceSoft,
               ),
               const SizedBox(width: 3),
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceSoft,
-                ),
-              ),
+              Text(label, style: AppTextStyles.caption),
             ],
           ),
         ),

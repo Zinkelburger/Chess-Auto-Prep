@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
 import '../controllers/eval_tree_controller.dart';
 import '../models/eval_tree_snapshot.dart';
 
@@ -66,10 +67,7 @@ class EvalTreeToolbar extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                'Metric',
-                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
-              ),
+              const Text('Metric', style: AppTextStyles.caption),
               const SizedBox(width: 6),
               SegmentedButton<EvalTreeMetricDisplayMode>(
                 segments: const [
@@ -140,10 +138,7 @@ class EvalTreeToolbar extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                'Ahead',
-                style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
-              ),
+              const Text('Ahead', style: AppTextStyles.caption),
               SizedBox(
                 width: 132,
                 child: SliderTheme(
@@ -171,7 +166,7 @@ class EvalTreeToolbar extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 12,
                   color: AppColors.onSurfaceSoft,
-                  fontFamily: 'SourceCodePro',
+                  fontFamily: AppTextStyles.monoFamily,
                 ),
               ),
             ],
@@ -199,10 +194,7 @@ class EvalTreeToolbar extends StatelessWidget {
               ),
               Text(
                 '  |  ${currentNode.subtreeSize} subtree',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceMuted,
-                ),
+                style: AppTextStyles.caption,
               ),
             ],
           ),

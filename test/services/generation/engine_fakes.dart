@@ -37,14 +37,28 @@ class FakeStockfishPool extends StockfishPool {
   @override
   int get workerCount => workers;
 
+  /// STM-relative mate distance returned by [evaluateFen], keyed by FEN.
+  /// A FEN scripted here reports `scoreMate` with `scoreCp` null, the way
+  /// Stockfish announces a forced mate — the case that separates code
+  /// reading `effectiveCp` from code reading `scoreCp` raw.
+  final Map<String, int> stmMateByFen = {};
+
+  /// PV returned by [evaluateFen], keyed by FEN. Empty when unscripted.
+  final Map<String, List<String>> pvByFen = {};
+
   @override
   Future<EvalResult> evaluateFen(String fen, int depth) async {
     evalCalls.add(fen);
+    final pv = pvByFen[fen] ?? const <String>[];
+    final mate = stmMateByFen[fen];
+    if (mate != null) {
+      return EvalResult(scoreMate: mate, pv: pv, depth: depth);
+    }
     final cp = stmCpByFen[fen];
     if (cp == null) {
       throw StateError('FakeStockfishPool: no scripted eval for $fen');
     }
-    return EvalResult(scoreCp: cp, depth: depth);
+    return EvalResult(scoreCp: cp, pv: pv, depth: depth);
   }
 
   @override

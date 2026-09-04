@@ -244,7 +244,7 @@ class _ExpiryFieldState extends State<_ExpiryField> {
         const Text(
           'How long a mined mistake stays in the queue, counted from the day '
           'the game was played. Separate from which games get fetched.',
-          style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+          style: AppTextStyles.caption,
         ),
       ],
     );

@@ -314,7 +314,7 @@ class _SummaryChip extends StatelessWidget {
           style: const TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.bold,
-            fontFamily: 'SourceCodePro',
+            fontFamily: AppTextStyles.monoFamily,
           ),
         ),
       ],

@@ -6,6 +6,7 @@
 library;
 
 import 'trap_reply.dart';
+import '../utils/chess_utils.dart' show formatPackedEval;
 import '../utils/movetext_builder.dart';
 
 class TrapLineInfo {
@@ -132,11 +133,8 @@ class TrapLineInfo {
     refutationEvalCp: json['refutation_eval_cp'] as int?,
   );
 
-  /// Format eval in pawn units (e.g. +1.25, -0.50).
-  String formatEval(int cp) {
-    final pawns = cp / 100.0;
-    return '${pawns >= 0 ? "+" : ""}${pawns.toStringAsFixed(2)}';
-  }
+  /// Format eval in pawn units (e.g. +1.25, -0.50, #3).
+  String formatEval(int cp) => formatPackedEval(cp, decimals: 2);
 
   /// Human-readable summary matching the C output format.
   String get summary {

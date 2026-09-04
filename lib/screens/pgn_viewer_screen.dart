@@ -35,6 +35,7 @@ import '../services/storage/app_paths.dart';
 import '../services/lichess_auth_service.dart';
 import '../services/storage/storage_factory.dart';
 import '../services/game_analysis_controller.dart';
+import '../models/board_annotation.dart';
 import '../models/solitaire_trophy.dart';
 import '../services/solitaire_trophy_detector.dart';
 import '../services/solitaire_trophy_service.dart';
@@ -486,13 +487,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   void onWindowEnterFullScreen() => _controller.onWindowEnterFullScreen();
 
   @override
-  void _reclaimFocus() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _focusNode.canRequestFocus && !isTextInputFocused()) {
-        _focusNode.requestFocus();
-      }
-    });
-  }
+  void _reclaimFocus() =>
+      reclaimFocusAfterFrame(_focusNode, mounted: () => mounted);
 
   @override
   Future<void> _pickFile() async {
@@ -793,12 +789,26 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     unawaited(
       showDialog(
         context: context,
-        builder: (_) => const SolitaireTrophyCabinet(),
+        builder: (_) => SolitaireTrophyCabinet(onOpenGame: _openTrophyPosition),
       ).then((_) {
         unawaited(_controller.loadSolitaireSettings());
         _reclaimFocus();
       }),
     );
+  }
+
+  /// Put a trophy's game back on the board, parked on the position it was won
+  /// in. Every trophy stores the game it came from, so revisiting one is the
+  /// same operation as pasting that PGN — it replaces the open collection,
+  /// which the recent-files menu is the way back from.
+  Future<void> _openTrophyPosition(SolitaireTrophy trophy) async {
+    _singleGameFocus = false;
+    await _controller.loadPgnContent(trophy.pgn, initialFen: trophy.fen);
+    if (!mounted) return;
+    final error = _controller.errorMessage;
+    if (error != null) {
+      showAppSnackBar(context, error, duration: const Duration(seconds: 4));
+    }
   }
 
   /// Leave a running solitaire session — asking first when guesses made so

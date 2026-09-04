@@ -23,30 +23,22 @@ import '../services/engine/engine_lifecycle.dart';
 import '../services/engine/engine_interrupt.dart';
 import '../services/engine/stockfish_pool.dart';
 import '../services/generation/course/chapter_titles.dart';
+import '../services/generation/course/course_builder.dart';
 import '../services/generation/course/course_composer.dart';
 import '../services/generation/course/enrichment_runner.dart';
-import '../services/generation/course/master_improvements.dart';
-import '../services/generation/course/model_game_selector.dart';
-import '../services/generation/course/opening_namer.dart';
-import '../services/generation/course/refutation_prober.dart';
-import '../services/generation/pgn_freq_map.dart' show PgnGameRecord;
 import '../services/master_games/master_games_db.dart';
 import '../services/master_games/master_games_service.dart';
-import '../services/master_games/master_model_games.dart';
 import '../models/eval_database_settings.dart';
 import '../services/generation/eca_calculator.dart';
 import '../services/generation/expectimax_probe.dart';
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import '../services/generation/line_extractor.dart';
-import '../services/generation/engine_tail.dart';
 import '../services/generation/line_pruner.dart';
 import '../services/generation/pgn_export.dart';
-import '../services/opening_book_service.dart';
 import '../services/generation/repertoire_selector.dart';
 import '../services/generation/repertoire_verifier.dart';
 import '../services/generation/run_debug_dump.dart';
-import '../services/generation/skeleton_plan.dart';
 import '../services/generation/trap_extractor.dart';
 import '../services/generation/tree_build_progress.dart';
 import '../services/generation/tree_ease.dart';
@@ -60,6 +52,7 @@ import '../utils/chess_utils.dart' show fenAfterMoves;
 import '../utils/fen_utils.dart';
 import '../utils/findability.dart';
 import '../utils/movetext_builder.dart';
+import '../utils/time_format.dart';
 import 'generated_repertoire.dart';
 import '../utils/safe_change_notifier.dart';
 import 'generation_progress.dart';
@@ -215,6 +208,15 @@ class GenerationSessionController extends ChangeNotifier
     onStatus: (message) =>
         progress.setStatus(message, GenerationPhase.extractingLines),
     ensureEngine: _ensureEnginePool,
+  );
+
+  /// Turns the extracted lines into the course document — the enrichment
+  /// passes, the model games, the naming and the composition.
+  late final CourseBuilder _courseBuilder = CourseBuilder(
+    enrichment: _enrichment,
+    gameDatabase: () => buildService.lastGameDatabase,
+    masterDbFor: _masterDbFor,
+    fenMap: () => _current?.fenMap,
   );
 
   /// Bring the shared engine pool up if nothing has started it yet.
@@ -866,21 +868,17 @@ class GenerationSessionController extends ChangeNotifier
     List<String> prefix,
   ) async {
     final filePath = request.repertoireFilePath;
-    final refutations = await _refutationPhase(extracted, request.config);
-    final alternatives = await _alternativePhase(extracted, request.config);
-    final tails = await _engineTailPhase(extracted, request.config);
-    final improvements = await _improvementPhase(extracted, request.config);
-    final course = await _composeCourse(
-      tree,
-      extracted,
-      request,
-      prefix,
-      refutations,
-      alternatives,
-      tails,
-      improvements,
+    final built = await _courseBuilder.build(
+      tree: tree,
+      lines: extracted.lines,
+      config: request.config,
+      repertoireFilePath: filePath,
+      rootFen: prefix.isEmpty ? tree.root.fen : request.repertoireStartFen,
+      prefix: prefix,
     );
+    final course = built.course;
     lastCourseOutline = course.outline;
+    lastModelGameNote = built.modelGameNote;
 
     final saved = <GeneratedLineExport>[];
     _duplicatesSkipped = 0;
@@ -911,12 +909,12 @@ class GenerationSessionController extends ChangeNotifier
     }
   }
 
-  /// `<repertoire>_model_games.pgn` beside the course: the model games as
-  /// real games (real headers, real results, same annotations) so the PGN
-  /// viewer opens them as a game collection rather than as study chapters.
-  /// The chapter inside the course stays — it is what the study/trainer
-  /// flow reads.  A course with no model games removes a stale companion
-  /// from an earlier run so the two never disagree.
+  /// Write the model games again as a companion `<repertoire>_model_games.pgn`
+  /// beside the course: real headers, real results, the same annotations, so
+  /// the PGN viewer opens them as a game collection rather than as study
+  /// chapters. The chapter inside the course stays — it is what the
+  /// study/trainer flow reads. A course with no model games removes a stale
+  /// companion from an earlier run so the two never disagree.
   Future<void> _writeModelGamesFile(
     ComposedCourse course,
     String courseFilePath,
@@ -940,221 +938,8 @@ class GenerationSessionController extends ChangeNotifier
   }
 
   /// Companion file path for a course at [courseFilePath].
-  static String modelGamesPathFor(String courseFilePath) => p.join(
-    p.dirname(courseFilePath),
-    '${p.basenameWithoutExtension(courseFilePath)}_model_games.pgn',
-  );
-
-  /// Build the course document.  Everything optional here degrades rather
-  /// than fails: a missing opening book means move-based chapter names, and
-  /// a build with no game database simply has no model games.
-  /// Ask the engine how the replies that end a line in a won position are
-  /// actually punished, so those lines stop dead on the opponent's mistake.
-  Future<RefutationMap> _refutationPhase(
-    ExtractedLines extracted,
-    TreeBuildConfig config,
-  ) => _enrichment.run<List<String>>(
-    EnrichmentPass.refutations,
-    enabled: config.refutationLines,
-    status: (done, total) =>
-        'Phase 3.5: Showing how losing replies are punished '
-        '($done of $total)...',
-    prepare: () {
-      final prober = RefutationProber(config: config);
-      if (prober.targets(extracted.lines).isEmpty) return null;
-      return ({required isCancelled, required onProgress}) => prober.probe(
-        extracted.lines,
-        isCancelled: isCancelled,
-        onProgress: onProgress,
-      );
-    },
-  );
-
-  /// Extend lines that stop at the build's ply cap with a few plies of raw
-  /// engine play, so a truncated line ends somewhere a reader can see.
-  ///
-  /// Emitted as a sideline off the final move rather than appended to it, for
-  /// the same reason refutations are: the mainline is what training quizzes,
-  /// and these moves carry none of the vetting the prepared moves do. They
-  /// are a look over the edge, not repertoire.
-  Future<Map<String, EngineTail>> _engineTailPhase(
-    ExtractedLines extracted,
-    TreeBuildConfig config,
-  ) => _enrichment.run<EngineTail>(
-    EnrichmentPass.engineTails,
-    enabled: config.engineTailPlies > 0,
-    status: (done, total) =>
-        'Phase 3.7: Extending cut-off lines with engine play '
-        '($done of $total) at depth ${config.resolvedEngineTailDepth}...',
-    prepare: () =>
-        ({required isCancelled, required onProgress}) => computeEngineTails(
-          lines: extracted.lines,
-          config: config,
-          pool: StockfishPool.instance,
-          isCancelled: isCancelled,
-          onProgress: onProgress,
-        ),
-  );
-
-  /// Ask what a human would play at each position the export passes through
-  /// that the book leaves out, and why it is left out.
-  Future<AlternativeMap> _alternativePhase(
-    ExtractedLines extracted,
-    TreeBuildConfig config,
-  ) => _enrichment.run<RefutedAlternative>(
-    EnrichmentPass.alternatives,
-    enabled: config.alternativeLines,
-    status: (done, total) =>
-        'Phase 3.6: Checking the moves the book leaves out '
-        '($done of $total positions)...',
-    prepare: () {
-      final prober = RefutationProber(
-        config: config,
-        freqMap: buildService.lastGameDatabase,
-        masterBook: _masterDbFor(config)?.bookMoves,
-      );
-      if (prober.alternativeSites(extracted.lines).isEmpty) return null;
-      return ({required isCancelled, required onProgress}) =>
-          prober.probeAlternatives(
-            extracted.lines,
-            isCancelled: isCancelled,
-            onProgress: onProgress,
-          );
-    },
-  );
-
-  /// Where the repertoire departs from what masters play and the engine backs
-  /// the departure, cite the game it improves on.  Skipped without the
-  /// master-games database.
-  Future<ImprovementMap> _improvementPhase(
-    ExtractedLines extracted,
-    TreeBuildConfig config,
-  ) => _enrichment.run<MasterImprovement>(
-    EnrichmentPass.improvements,
-    enabled: true,
-    status: (done, total) =>
-        'Phase 3.8: Comparing with master practice '
-        '($done of $total positions)...',
-    prepare: () {
-      final db = _masterDbFor(config);
-      if (db == null) return null;
-      final prober = MasterImprovementProber(
-        config: config,
-        book: db.bookMoves,
-        gameById: db.game,
-      );
-      if (prober.sites(extracted.lines).isEmpty) return null;
-      return ({required isCancelled, required onProgress}) => prober.probe(
-        extracted.lines,
-        isCancelled: isCancelled,
-        onProgress: onProgress,
-      );
-    },
-  );
-
-  Future<ComposedCourse> _composeCourse(
-    BuildTree tree,
-    ExtractedLines extracted,
-    GenerationRequest request,
-    List<String> prefix,
-    RefutationMap refutations,
-    AlternativeMap alternatives,
-    Map<String, EngineTail> tails,
-    ImprovementMap improvements,
-  ) async {
-    final config = request.config;
-    final rootFen = prefix.isEmpty ? tree.root.fen : request.repertoireStartFen;
-
-    final namer = CourseNamer(
-      namer: await _loadOpeningNamer(rootFen),
-      rootWhiteToMove: isWhiteToMove(rootFen),
-      startMoveNumber: fullMoveNumber(rootFen),
-      repertoirePrefix: prefix,
-      playAsWhite: config.playAsWhite,
-    );
-
-    return CourseComposer(
-      config: config,
-      namer: namer,
-      repertoireStartFen: rootFen,
-      repertoirePrefix: prefix,
-      repertoireName: p.basenameWithoutExtension(request.repertoireFilePath),
-    ).compose(
-      lines: extracted.lines,
-      modelGames: _selectModelGames(tree, config, improvements),
-      refutations: refutations,
-      alternatives: alternatives,
-      engineTails: tails,
-      improvements: improvements,
-    );
-  }
-
-  Future<OpeningNamer> _loadOpeningNamer(String rootFen) async {
-    try {
-      return OpeningNamer(
-        book: await OpeningBookService.instance.load(),
-        startFen: rootFen,
-      );
-    } catch (e) {
-      debugPrint('[GenerationController] Opening book unavailable: $e');
-      return OpeningNamer.unavailable(startFen: rootFen);
-    }
-  }
-
-  /// Model games, with [lastModelGameNote] set to why there are none — an
-  /// empty trailing section is otherwise indistinguishable from the feature
-  /// being off, and "nothing in your database follows this repertoire" is
-  /// something the user can act on.
-  List<ModelGame> _selectModelGames(
-    BuildTree tree,
-    TreeBuildConfig config,
-    ImprovementMap improvements,
-  ) {
-    lastModelGameNote = '';
-    if (config.modelGameCount <= 0) return const [];
-
-    final database = buildService.lastGameDatabase;
-    final Iterable<PgnGameRecord> candidates;
-    final String sourceLabel;
-    if (database != null && !database.games.isEmpty) {
-      candidates = database.games.entries;
-      sourceLabel =
-          'the ${database.games.length} strongest games in the database';
-    } else {
-      final masterDb = _masterDbFor(config);
-      if (masterDb == null) {
-        // Only worth saying when a database was part of the build; an
-        // engine build never has one, and "no game database" would just be
-        // noise.
-        if (config.buildMode == BuildMode.dbExplorer) {
-          lastModelGameNote =
-              ' No model games: this build had no game database to draw '
-              'them from.';
-        }
-        return const [];
-      }
-      candidates = masterGameCandidates(
-        masterDb,
-        tree,
-        playAsWhite: config.playAsWhite,
-        minElo: config.modelGameMinElo,
-      );
-      sourceLabel = 'the master games database';
-    }
-
-    final games = ModelGameSelector(playAsWhite: config.playAsWhite).select(
-      candidates,
-      tree,
-      limit: config.modelGameCount,
-      fenMap: _current?.fenMap,
-      improvedFens: improvements.keys.toSet(),
-    );
-    if (games.isEmpty) {
-      lastModelGameNote =
-          ' No model games: nothing in $sourceLabel follows this repertoire.';
-    }
-    return games;
-  }
+  static String modelGamesPathFor(String courseFilePath) =>
+      CourseBuilder.modelGamesPathFor(courseFilePath);
 
   /// Write the side artifacts: serialized tree, run debug dump, trap index,
   /// and the partial-tree file that makes an unfinished build resumable.
@@ -1242,7 +1027,7 @@ class GenerationSessionController extends ChangeNotifier
     final pruneNote = extracted.wasPruned
         ? ' (pruned from ${extracted.rawCount})'
         : '';
-    final elapsedLabel = formatJobDuration(
+    final elapsedLabel = formatCompactDuration(
       Duration(milliseconds: _pipelineSw.elapsedMilliseconds),
     );
     final duplicateNote = _duplicatesSkipped > 0
@@ -1758,7 +1543,7 @@ class GenerationSessionController extends ChangeNotifier
       mainTreeChanged: bundle != null && identical(landed, bundle.tree),
     );
 
-    final elapsed = formatJobDuration(
+    final elapsed = formatCompactDuration(
       Duration(milliseconds: _pipelineSw.elapsedMilliseconds),
     );
     final where = prefix.isEmpty

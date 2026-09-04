@@ -15,6 +15,7 @@ import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/repertoire_color_inference.dart';
 import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';
+import '../theme/app_text_styles.dart';
 
 /// Result returned when the user confirms an import.
 class PgnImportResult {
@@ -307,7 +308,10 @@ class _PgnImportDialogState extends State<_PgnImportDialog> {
               autofocus: true,
               maxLines: 8,
               minLines: 5,
-              style: const TextStyle(fontFamily: 'SourceCodePro', fontSize: 12),
+              style: const TextStyle(
+                fontFamily: AppTextStyles.monoFamily,
+                fontSize: 12,
+              ),
               decoration: InputDecoration(
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),

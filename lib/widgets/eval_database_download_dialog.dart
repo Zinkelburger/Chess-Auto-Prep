@@ -17,6 +17,7 @@ import '../services/eval/cdb_snapshot_catalog.dart';
 import '../services/eval/cdb_snapshot_download.dart';
 import '../services/eval/storage_volumes.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import 'storage_destination_picker.dart';
 
 /// What the user chose: which snapshot, and the folder to put it in.
@@ -215,7 +216,7 @@ class _CdbDownloadDialogState extends State<_CdbDownloadDialog> {
           'no per-query limits, no network, and the generator stops waiting on '
           'the API. The transfer takes hours — it pauses and resumes, and '
           'finished files are never fetched twice.',
-          style: TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
+          style: AppTextStyles.caption,
         ),
       ],
     );
@@ -227,12 +228,12 @@ class _CdbDownloadDialogState extends State<_CdbDownloadDialog> {
     if (dir == null) {
       return const Text(
         'Choose a drive or folder.',
-        style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+        style: AppTextStyles.caption,
       );
     }
     return Text(
       snap == null ? dir : p.join(dir, snap.id),
-      style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+      style: AppTextStyles.caption,
       overflow: TextOverflow.ellipsis,
     );
   }

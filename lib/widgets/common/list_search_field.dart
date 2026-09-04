@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 
 /// One-line filter box for any list of named things (repertoires, chapters,
 /// studies, games). Always mounted, never behind a magnifier icon that has to
@@ -71,7 +72,7 @@ class _ListSearchFieldState extends State<ListSearchField> {
       },
       decoration: InputDecoration(
         hintText: widget.hintText,
-        hintStyle: const TextStyle(fontSize: 12, color: AppColors.onSurfaceDim),
+        hintStyle: AppTextStyles.caption,
         prefixIcon: const Icon(
           Icons.search,
           size: 16,

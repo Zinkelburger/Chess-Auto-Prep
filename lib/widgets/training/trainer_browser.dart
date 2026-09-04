@@ -17,6 +17,7 @@ import '../../models/line_status.dart';
 import '../../models/repertoire_line.dart';
 import '../../models/repertoire_review_entry.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import '../common/list_search_field.dart';
 
 part 'trainer_browser_cards.dart';

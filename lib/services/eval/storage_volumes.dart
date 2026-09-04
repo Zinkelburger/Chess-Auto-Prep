@@ -317,16 +317,3 @@ String formatBytes(int bytes, {int decimals = 1}) {
   final places = value >= 100 ? 0 : decimals;
   return '${value.toStringAsFixed(places)} ${units[unit]}';
 }
-
-/// `3 h 40 min`, `12 min`, `45 s` — coarse on purpose; a multi-hour transfer
-/// does not need seconds.
-String formatDuration(Duration d) {
-  if (d.inSeconds < 60) return '${d.inSeconds} s';
-  if (d.inMinutes < 60) return '${d.inMinutes} min';
-  final hours = d.inHours;
-  final minutes = d.inMinutes.remainder(60);
-  if (hours < 48) {
-    return minutes == 0 ? '$hours h' : '$hours h $minutes min';
-  }
-  return '${d.inDays} days';
-}

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import '../../utils/coverage_helpers.dart';
 import '../../utils/lines_filter_helpers.dart';
 
@@ -193,10 +194,7 @@ class _CoverageFilterRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const Text(
-          'Coverage:',
-          style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
-        ),
+        const Text('Coverage:', style: AppTextStyles.caption),
         const SizedBox(width: 8),
         Expanded(
           child: SingleChildScrollView(

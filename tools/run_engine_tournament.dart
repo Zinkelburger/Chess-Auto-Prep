@@ -25,7 +25,7 @@ import 'package:chess_auto_prep/features/engine_tournament/models/stored_tournam
 import 'package:chess_auto_prep/features/engine_tournament/models/tournament_game.dart';
 import 'package:chess_auto_prep/features/engine_tournament/models/time_control.dart';
 import 'package:chess_auto_prep/features/engine_tournament/models/tournament_config.dart';
-import 'package:chess_auto_prep/features/engine_tournament/services/crosstable_builder.dart';
+import 'package:chess_auto_prep/services/crosstable_builder.dart';
 import 'package:chess_auto_prep/features/engine_tournament/services/engine_registry.dart';
 import 'package:chess_auto_prep/features/engine_tournament/services/engine_tournament_runner.dart';
 import 'package:chess_auto_prep/features/engine_tournament/services/engine_verification.dart';
@@ -196,7 +196,9 @@ Future<int> main(List<String> argv) async {
 /// Everything `--show` reports about one tournament.
 Map<String, dynamic> _showPayload(StoredTournament tournament) {
   final config = tournament.config;
-  final table = buildCrosstable(config, tournament.games);
+  final table = buildCrosstable([
+    for (final e in config.engines) e.name,
+  ], tournament.games);
   return {
     'ok': true,
     'id': tournament.id,
@@ -266,7 +268,9 @@ Map<String, dynamic> _showPayload(StoredTournament tournament) {
 }
 
 String _renderCrosstable(TournamentConfig config, List games) {
-  final table = buildCrosstable(config, games.cast());
+  final table = buildCrosstable([
+    for (final e in config.engines) e.name,
+  ], games.cast());
   final buffer = StringBuffer()
     ..writeln('Crosstable')
     ..writeln('=' * 78);

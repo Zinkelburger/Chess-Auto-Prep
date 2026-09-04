@@ -7,6 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
+import '../../../utils/time_format.dart';
+import 'hunt_controls.dart';
 
 class AuditStatusRow extends StatelessWidget {
   const AuditStatusRow({
@@ -40,16 +43,6 @@ class AuditStatusRow extends StatelessWidget {
   final VoidCallback onApplyCap;
   final VoidCallback onToggleHideDismissed;
 
-  static String _formatTimestamp(DateTime ts) {
-    final now = DateTime.now();
-    final diff = now.difference(ts);
-    if (diff.inMinutes < 1) return 'just now';
-    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
-    if (diff.inDays < 1) return '${diff.inHours}h ago';
-    if (diff.inDays < 7) return '${diff.inDays}d ago';
-    return '${ts.month}/${ts.day}';
-  }
-
   @override
   Widget build(BuildContext context) {
     final progressFraction = totalNodes > 0 ? nodesChecked / totalNodes : 0.0;
@@ -81,76 +74,22 @@ class AuditStatusRow extends StatelessWidget {
                   totalNodes > 0
                       ? '$nodesChecked / $totalNodes positions · $visibleCount findings'
                       : 'Starting audit...',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.onSurfaceMuted,
-                  ),
+                  style: AppTextStyles.caption,
                 ),
               ] else ...[
                 if (totalMatching > visibleCount) ...[
-                  const Text(
-                    'Top',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceMuted,
-                    ),
-                  ),
+                  const Text('Top', style: AppTextStyles.caption),
                   const SizedBox(width: 3),
                   SizedBox(
                     width: 34,
                     height: 20,
-                    child: TextField(
+                    child: VisibleCapField(
                       controller: capController,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.onSurfaceSoft,
-                      ),
-                      textAlign: TextAlign.center,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      decoration: InputDecoration(
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 2,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide: const BorderSide(
-                            color: AppColors.outline,
-                            width: 0.5,
-                          ),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide: const BorderSide(
-                            color: AppColors.outline,
-                            width: 0.5,
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide: const BorderSide(
-                            color: AppColors.onSurfaceMuted,
-                            width: 1,
-                          ),
-                        ),
-                      ),
-                      onSubmitted: (_) => onApplyCap(),
-                      onTapOutside: (_) {
-                        onApplyCap();
-                        FocusScope.of(context).unfocus();
-                      },
+                      onApply: onApplyCap,
                     ),
                   ),
                   const SizedBox(width: 3),
-                  Text(
-                    'of $totalMatching',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceMuted,
-                    ),
-                  ),
+                  Text('of $totalMatching', style: AppTextStyles.caption),
                   if (reachThreshold != null) ...[
                     const SizedBox(width: 4),
                     Text(
@@ -162,21 +101,12 @@ class AuditStatusRow extends StatelessWidget {
                     ),
                   ],
                 ] else ...[
-                  Text(
-                    '$visibleCount findings',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceMuted,
-                    ),
-                  ),
+                  Text('$visibleCount findings', style: AppTextStyles.caption),
                   if (resultTimestamp != null) ...[
                     const SizedBox(width: 6),
                     Text(
-                      '· ${_formatTimestamp(resultTimestamp!)}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.onSurfaceMuted,
-                      ),
+                      '· ${formatTimeAgo(resultTimestamp!)}',
+                      style: AppTextStyles.caption,
                     ),
                   ],
                 ],
@@ -185,10 +115,7 @@ class AuditStatusRow extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   '${selectedIndex + 1} of $visibleCount',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.onSurfaceMuted,
-                  ),
+                  style: AppTextStyles.caption,
                 ),
               ],
               const Spacer(),

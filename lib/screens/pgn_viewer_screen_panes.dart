@@ -69,8 +69,11 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
 
   Widget _buildBoardPane() {
     final solitaire = _controller.solitaire;
-    final showFeedback =
-        _controller.isSolitaireMode && solitaire.feedback != null;
+    // Only a wrong guess gets an overlay; a correct one just plays out on the
+    // board, which says it better than a popup could.
+    final showWrongGuess =
+        _controller.isSolitaireMode &&
+        solitaire.feedback == SolitaireFeedback.incorrect;
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -83,12 +86,18 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
                 position: _controller.currentPosition,
                 flipped: _controller.boardFlipped,
                 recentMoveSquares: _pgnWidgetController.recentMoveSquares,
-                // A solitaire hint: the square of the piece that moves.
-                highlightedSquares: {
+                // A solitaire hint rings the piece that moves. A square tint
+                // would be the same mark the board puts under a piece you
+                // picked up yourself, so the hint has to be a different shape,
+                // not a different shade.
+                annotations: [
                   if (_controller.isSolitaireMode &&
                       solitaire.hintSquare != null)
-                    solitaire.hintSquare!,
-                },
+                    BoardAnnotation(
+                      orig: solitaire.hintSquare!,
+                      brush: AnnotationBrush.yellow,
+                    ),
+                ],
                 onMove: (move) => _controller.onBoardMove(move.san),
                 // In solitaire, moves are allowed while guessing and again
                 // once the game completes (free exploration of the annotated
@@ -98,10 +107,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
                     solitaire.waitingForUser ||
                     solitaire.isComplete,
               ),
-              // Only wrong guesses get an overlay; a correct guess just plays
-              // out on the board (the green popup was noise).
-              if (showFeedback &&
-                  solitaire.feedback == SolitaireFeedback.incorrect)
+              if (showWrongGuess)
                 Positioned(
                   top: 8,
                   left: 0,
@@ -270,19 +276,6 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
             onToggleEditMode: _toggleEditMode,
             isEditMode: _editMode,
             isSolitaireMode: _controller.isSolitaireMode,
-            solitaireWaitingForUser:
-                _controller.isSolitaireMode &&
-                _controller.solitaire.waitingForUser,
-            solitaireCanReveal:
-                _controller.isSolitaireMode && _controller.solitaire.canReveal,
-            solitaireCanHint:
-                _controller.isSolitaireMode && _controller.solitaire.canHint,
-            solitaireRevealCountdown: _controller.isSolitaireMode
-                ? _controller.solitaire.revealCountdownSec
-                : 0,
-            onReveal: _controller.revealCurrentMove,
-            onHint: _controller.hintCurrentMove,
-            onExitSolitaire: () => unawaited(_leaveSolitaire()),
           ),
       ],
     );
@@ -390,51 +383,65 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
               ),
               if (_controller.recentFiles.isNotEmpty) ...[
                 const SizedBox(height: 24),
-                Text(
-                  'Recent',
-                  style: AppTextStyles.caption.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                for (final path in _controller.recentFiles)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: InkWell(
-                      onTap: () => _loadFile(path),
-                      borderRadius: BorderRadius.circular(6),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppColors.divider),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.description,
-                              size: 16,
-                              color: AppColors.onSurfaceMuted,
-                            ),
-                            const SizedBox(width: 8),
-                            Flexible(
-                              child: Text(
-                                p.basename(path),
-                                style: AppTextStyles.muted.copyWith(
-                                  color: AppColors.info,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
+                // One column, one width: file names differ wildly in length,
+                // and centring each row on its own made the list read as a
+                // ragged pile rather than a list.
+                SizedBox(
+                  width: 380,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Recent',
+                        style: AppTextStyles.caption.copyWith(
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 8),
+                      for (final path in _controller.recentFiles)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Tooltip(
+                            message: path,
+                            waitDuration: const Duration(milliseconds: 600),
+                            child: InkWell(
+                              onTap: () => _loadFile(path),
+                              borderRadius: BorderRadius.circular(6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: AppColors.divider),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.description,
+                                      size: 16,
+                                      color: AppColors.onSurfaceMuted,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        p.basename(path),
+                                        style: AppTextStyles.muted.copyWith(
+                                          color: AppColors.info,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
+                ),
               ],
             ],
           ),
@@ -449,16 +456,22 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
             fen: _controller.currentPosition.fen,
             onLineMoveTapped: _controller.onEngineLineMoveTapped,
           ),
+        // One solitaire strip at a time: the choices, then the session, then
+        // what to do with the finished game.
         if (_controller.isSolitaireSetup)
           SolitaireSetupStrip(controller: _controller),
-        if (_controller.isSolitaireMode)
-          SolitaireStatusBar(controller: _controller),
+        if (_controller.isSolitaireMode && !_controller.solitaire.isComplete)
+          SolitaireStatusBar(
+            controller: _controller,
+            onExit: () => unawaited(_leaveSolitaire()),
+          ),
         if (_controller.isSolitaireMode && _controller.solitaire.isComplete)
           SolitaireCompleteBanner(
             controller: _controller,
             onCopyPgn: _copyCurrentGamePgn,
             onAddToStudy: _addCurrentGameToStudy,
             onAnalyse: _analyseSolitaireGame,
+            onExit: () => unawaited(_leaveSolitaire()),
           ),
         const Divider(height: 1),
         if (_editMode) _buildEditModeBar(),
@@ -474,9 +487,23 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
             onPositionChanged: _onGamePosition,
             // Bound to this game object: the annotation panel debounces its
             // saves, which may flush after the user switches games.
-            onCommentsChanged: (movetext) =>
-                _controller.persistMoveCommentsFor(game, movetext),
+            onCommentsChanged: (movetext) => _controller.persistMoveCommentsFor(
+              game,
+              movetext,
+              // A finished solitaire game annotates itself — every guess
+              // gets a note and every wrong try a sideline. That belongs
+              // to the session: it shows in the movetext and rides along
+              // with Copy PGN and Add to study, but it does not go back
+              // into the file the reader opened.
+              writeToFile: !_controller.isSolitaireMode,
+            ),
             editMode: _editMode,
+            // The result is the answer to "how did this go?" — the one header
+            // field a guesser must not see before the last move. Only once
+            // the session is running, though: the setup strip still has the
+            // whole game on screen behind it, so hiding the result there
+            // would guard a door that is standing open.
+            hideResult: _controller.isSolitaireMode,
             // Solitaire restarts on the new game once its moves are in.
             onGameLoaded: _controller.onViewerGameLoaded,
           ),

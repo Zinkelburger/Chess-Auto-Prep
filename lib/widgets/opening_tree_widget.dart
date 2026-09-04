@@ -13,6 +13,7 @@ import '../models/opening_tree.dart';
 import '../models/position_analysis.dart';
 import '../models/repertoire_line.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
+import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 import '../utils/pgn_utils.dart' as pgn_utils;
 import 'opening_tree/coverage_annotation.dart';
@@ -486,10 +487,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                   const SizedBox(height: 8),
                   Text(
                     '${_filteredLines.length} matching line${_filteredLines.length == 1 ? '' : 's'}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceMuted,
-                    ),
+                    style: AppTextStyles.caption,
                   ),
                   const SizedBox(height: 4),
                   ConstrainedBox(
@@ -701,18 +699,12 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
           Text(
             games.first.title,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.onSurfaceMuted,
-            ),
+            style: AppTextStyles.caption,
           ),
         ] else ...[
           Text(
             '${games.length} games reach this position',
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.onSurfaceMuted,
-            ),
+            style: AppTextStyles.caption,
           ),
           const SizedBox(height: 8),
           ...games
@@ -745,10 +737,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                                 game.date,
                                 game.eloDisplay,
                               ].where((s) => s.isNotEmpty).join(' · '),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.onSurfaceMuted,
-                              ),
+                              style: AppTextStyles.caption,
                             ),
                         ],
                       ),
@@ -797,7 +786,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                     style: const TextStyle(
                       color: AppColors.onSurfaceSoft,
                       fontSize: 12,
-                      fontFamily: 'SourceCodePro',
+                      fontFamily: AppTextStyles.monoFamily,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

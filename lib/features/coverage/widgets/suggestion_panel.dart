@@ -8,6 +8,7 @@ import 'package:chess_auto_prep/features/coverage/services/coverage_suggestion_s
 import '../../../theme/app_colors.dart';
 import '../../../utils/chess_utils.dart';
 import '../../../widgets/clickable_move_line.dart';
+import '../../../widgets/common/stat_display.dart';
 
 class SuggestionPanel extends StatefulWidget {
   final CoverageSuggestionService service;
@@ -373,21 +374,24 @@ class _SuggestionRow extends StatelessWidget {
               Row(
                 children: [
                   if (suggestion.leafEvalCp != null) ...[
-                    _MetricChip(
+                    InlineStat(
+                      separator: ': ',
                       label: 'Eval',
                       value: _formatEval(suggestion.leafEvalCp!),
                     ),
                     const SizedBox(width: 6),
                   ],
                   if (suggestion.linePlayability != null) ...[
-                    _MetricChip(
+                    InlineStat(
+                      separator: ': ',
                       label: 'Ease',
                       value: '${(suggestion.linePlayability! * 100).round()}%',
                     ),
                     const SizedBox(width: 6),
                   ],
                   if (suggestion.trapCount > 0)
-                    _MetricChip(
+                    InlineStat(
+                      separator: ': ',
                       label: 'Traps',
                       value: '${suggestion.trapCount}',
                     ),
@@ -417,19 +421,4 @@ class _SuggestionRow extends StatelessWidget {
   }
 
   String _formatEval(int cp) => formatPackedEval(cp, decimals: 2);
-}
-
-class _MetricChip extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _MetricChip({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      '$label: $value',
-      style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceSoft),
-    );
-  }
 }

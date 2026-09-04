@@ -35,6 +35,7 @@ import 'bughouse_analysis_panel.dart';
 import 'bughouse_board_card.dart';
 import 'bughouse_move_list.dart';
 import 'bughouse_setup_panel.dart';
+import 'bughouse_tournament_panel.dart';
 
 class BughouseScreen extends StatefulWidget {
   const BughouseScreen({super.key, this.controller});
@@ -131,9 +132,16 @@ class _BughouseScreenState extends State<BughouseScreen> {
               focusNode: _keys,
               child: LayoutBuilder(
                 builder: (context, constraints) {
+                  // A match panel carries a games table and a crosstable, so
+                  // it is given more room than an engine pane needs. The
+                  // boards are capped at 400 each anyway, so on a wide window
+                  // this costs them nothing.
+                  final panelWidth = controller.mode == BughouseMode.tournament
+                      ? 540.0
+                      : 400.0;
                   // Below this the two boards plus a panel stop fitting side by
                   // side, and stacking beats shrinking all three.
-                  final stacked = constraints.maxWidth < 1120;
+                  final stacked = constraints.maxWidth < 720 + panelWidth;
                   final side = _SidePanel(controller: controller);
 
                   if (stacked) {
@@ -164,14 +172,15 @@ class _BughouseScreenState extends State<BughouseScreen> {
                             child: _Boards(
                               controller: controller,
                               boardWidth: _Boards.fit(
-                                width: constraints.maxWidth - 24 - 16 - 400,
+                                width:
+                                    constraints.maxWidth - 24 - 16 - panelWidth,
                                 height: constraints.maxHeight - 24,
                               ),
                             ),
                           ),
                         ),
                         const SizedBox(width: 16),
-                        SizedBox(width: 400, child: side),
+                        SizedBox(width: panelWidth, child: side),
                       ],
                     ),
                   );
@@ -278,7 +287,7 @@ class _SidePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final setup = controller.mode == BughouseMode.setup;
+    final mode = controller.mode;
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -286,43 +295,83 @@ class _SidePanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Setting a position up is a thing you do once; reading the engine
-            // is what the pane is for. So the switch between them is a text
-            // button in the corner rather than the first control on the panel,
-            // and the score gets the top of the column.
+            // Reading the engine is what the pane is for; setting a position
+            // up is a thing you do once, and running a match is a thing you
+            // set going and leave. So the three are a switch in the corner
+            // rather than the first control on the panel, and the score keeps
+            // the top of the column.
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    setup ? 'EDITING THE POSITION' : 'HIVEMIND',
-                    style: AppTextStyles.eyebrow,
-                  ),
+                  child: Text(switch (mode) {
+                    BughouseMode.setup => 'EDITING THE POSITION',
+                    BughouseMode.tournament => 'MATCHES',
+                    BughouseMode.play => 'HIVEMIND',
+                  }, style: AppTextStyles.eyebrow),
                 ),
-                TextButton.icon(
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    textStyle: AppTextStyles.caption,
-                    foregroundColor: AppColors.onSurfaceMuted,
-                  ),
-                  icon: Icon(setup ? Icons.check : Icons.edit, size: 14),
-                  label: Text(setup ? 'Done' : 'Edit position'),
-                  onPressed: () => controller.setMode(
-                    setup ? BughouseMode.play : BughouseMode.setup,
-                  ),
+                _ModeButton(
+                  controller: controller,
+                  mode: BughouseMode.tournament,
+                  icon: Icons.emoji_events_outlined,
+                  label: 'Matches',
+                ),
+                _ModeButton(
+                  controller: controller,
+                  mode: BughouseMode.setup,
+                  icon: Icons.edit,
+                  label: 'Edit position',
                 ),
               ],
             ),
             const SizedBox(height: 8),
             Expanded(
-              child: setup
-                  ? SingleChildScrollView(
-                      child: BughouseSetupPanel(controller: controller),
-                    )
-                  : BughouseAnalysisPanel(controller: controller),
+              child: switch (mode) {
+                BughouseMode.setup => SingleChildScrollView(
+                  child: BughouseSetupPanel(controller: controller),
+                ),
+                BughouseMode.tournament => BughouseTournamentPanel(
+                  controller: controller,
+                ),
+                BughouseMode.play => BughouseAnalysisPanel(
+                  controller: controller,
+                ),
+              },
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// One of the two corner switches. Pressed while already there, it goes back
+/// to the engine — so each button is its own way out and there is never a
+/// mode you have to guess your way off.
+class _ModeButton extends StatelessWidget {
+  const _ModeButton({
+    required this.controller,
+    required this.mode,
+    required this.icon,
+    required this.label,
+  });
+
+  final BughouseController controller;
+  final BughouseMode mode;
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = controller.mode == mode;
+    return TextButton.icon(
+      style: TextButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        textStyle: AppTextStyles.caption,
+        foregroundColor: active ? AppColors.ink : AppColors.onSurfaceMuted,
+      ),
+      icon: Icon(active ? Icons.check : icon, size: 14),
+      label: Text(active ? 'Done' : label),
+      onPressed: () => controller.setMode(active ? BughouseMode.play : mode),
     );
   }
 }
