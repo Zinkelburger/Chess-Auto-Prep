@@ -151,7 +151,30 @@ double? _eloFromScore(double fraction) {
 }
 
 /// Half-width of the 95% interval on the Elo estimate, from the spread of the
-/// win/draw/loss outcomes — the standard engine-testing error bar.
+/// win/draw/loss outcomes — the standard engine-testing error bar, and
+/// byte-for-byte the cutechess-cli convention.
+///
+/// `variance / n` is the plug-in variance of one game's result about the mean,
+/// so its root over another `sqrt(n)` is the **standard error of the mean**,
+/// not a standard deviation. The band is taken symmetrically in score space
+/// and mapped through [_eloFromScore] at each end.
+///
+/// Three edges are worth knowing before trusting the number, all inherited
+/// from the plug-in estimator rather than introduced here:
+///
+///  * **An all-draw record reports ±0.** Every game equals the mean, so the
+///    plug-in variance is exactly zero and ten straight draws render as
+///    "0 ±0" — certainty from ten games. A Wilson or Agresti–Coull interval
+///    would not do this. Deliberately not pinned by a test, so that fixing it
+///    does not have to fight one.
+///  * **The ± is not symmetric about the estimate.** The interval is symmetric
+///    in score space and the Elo transform is convex, so at 70% over 100 games
+///    the true band is [86.2, 218.3] around 147.2 — 61.0 below, 71.1 above —
+///    reported as a single ±66.0. A crosstable that wants an honest bar needs
+///    `low`/`high`, not a half-width.
+///  * **The clamp turns "no information" into ±3600.** One win and one loss
+///    pushes both ends outside (0, 1); they clamp, and the margin comes back
+///    at that ceiling. Anything sitting at it means unbounded.
 double? _eloMargin(int wins, int draws, int losses) {
   final n = wins + draws + losses;
   if (n == 0) return null;
@@ -161,9 +184,13 @@ double? _eloMargin(int wins, int draws, int losses) {
       wins * math.pow(1 - fraction, 2) +
       losses * math.pow(0 - fraction, 2) +
       draws * math.pow(0.5 - fraction, 2);
-  final stdev = math.sqrt(variance / n) / math.sqrt(n);
-  final low = _eloFromScore((fraction - _z95 * stdev).clamp(1e-9, 1 - 1e-9));
-  final high = _eloFromScore((fraction + _z95 * stdev).clamp(1e-9, 1 - 1e-9));
+  final standardError = math.sqrt(variance / n) / math.sqrt(n);
+  final low = _eloFromScore(
+    (fraction - _z95 * standardError).clamp(1e-9, 1 - 1e-9),
+  );
+  final high = _eloFromScore(
+    (fraction + _z95 * standardError).clamp(1e-9, 1 - 1e-9),
+  );
   if (low == null || high == null) return null;
   return (high - low) / 2;
 }
