@@ -1,0 +1,21 @@
+# Mutation-testing targets: one `lib file|test file` pair per line.
+#
+# These are deliberately the files that ALREADY look well tested — high line
+# coverage and a dedicated test file. A survivor here is the interesting kind:
+# the line runs in the suite, and nothing would notice if it were wrong.
+# Add a pair when you add a non-trivial pure-logic module.
+lib/services/generation/tree_prune.dart|test/services/generation/tree_prune_test.dart
+lib/features/tricks/services/trick_scoring.dart|test/features/tricks/trick_scoring_test.dart
+lib/services/fp_growth.dart|test/services/fp_growth_test.dart
+lib/services/crosstable_builder.dart|test/features/engine_tournament/crosstable_builder_test.dart
+lib/services/repertoire_pgn_text.dart|test/services/repertoire_pgn_text_test.dart
+lib/services/generation/line_extractor.dart|test/services/generation/line_extractor_test.dart
+lib/services/generation/export/move_annotation.dart|test/services/generation/export/move_annotation_test.dart
+lib/services/unified_analysis_builder.dart|test/services/unified_analysis_builder_test.dart
+lib/services/games_library/game_filter.dart|test/services/games_library/game_filter_test.dart
+lib/services/generation/course/course_composer.dart|test/services/generation/course/course_composer_test.dart
+lib/services/training/review_progress_store.dart|test/services/training/review_progress_store_test.dart
+lib/services/game_store/game_store.dart|test/services/game_store/game_store_test.dart
+lib/services/generation/skeleton_plan.dart|test/services/generation/skeleton_plan_test.dart
+lib/features/eval_tree/services/eval_tree_layout_engine.dart|test/features/eval_tree/eval_tree_layout_engine_test.dart
+lib/services/generation/frontier_queue.dart|test/services/generation/frontier_queue_test.dart
