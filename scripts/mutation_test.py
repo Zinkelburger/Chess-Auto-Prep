@@ -149,14 +149,43 @@ def line_col(text: str, pos: int) -> tuple[int, int]:
     return line, pos - bol + 1
 
 
+# `<` and `>` are relational operators AND generic-type brackets, and Dart is
+# full of the latter: `Map<String, String>`, `<GameRecord>[]`, `Set<Speed>`.
+# Mutating one of those to `<=` cannot compile, so it is not evidence about the
+# tests — it just burns a test run and shrinks the denominator, which silently
+# inflates the score. Mask the type-argument spans and mutate only real
+# comparisons.
+_GENERIC_SPANS = [
+    # `Foo<...>` / `Foo <...>` — an identifier followed by type arguments.
+    re.compile(r"[A-Za-z_$][\w$]*\s*<[\w\s,?.$<>\[\]]*?>"),
+    # A bare `<String>[]` literal, after `=`, `(`, `[`, `,` or `return`.
+    re.compile(r"(?<=[=(\[,\s])<[\w\s,?.$<>]*?>"),
+]
+
+
+def generic_mask(text: str) -> list[bool]:
+    """True where the character sits inside a generic type-argument list."""
+    mask = [False] * len(text)
+    for pattern in _GENERIC_SPANS:
+        for m in pattern.finditer(text):
+            for k in range(m.start(), m.end()):
+                mask[k] = True
+    return mask
+
+
 def enumerate_mutants(text: str) -> list[Mutant]:
     mask = code_mask(text)
+    generics = generic_mask(text)
     lines = text.splitlines()
     out: list[Mutant] = []
     for name, pattern, repl in OPERATORS:
         for m in re.finditer(pattern, text):
             s, e = m.start(), m.end()
             if not all(mask[s:e]):
+                continue
+            # Only the relational operators collide with generics; `==`, `&&`
+            # and the literals never appear inside a type argument list.
+            if name.startswith("relational") and any(generics[s:e]):
                 continue
             ln, col = line_col(text, s)
             src_line = lines[ln - 1] if ln - 1 < len(lines) else ""

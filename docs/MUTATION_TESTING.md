@@ -44,9 +44,15 @@ callback's index) and some are worth a lot (`loss >= kBlunderCp ? 'Blunder' :
 ## Caveats worth knowing
 
 - Mutations are textual, with string and comment regions masked out, so a `>`
-  inside a PGN literal or a doc comment is never touched. It is not an AST
-  rewrite: a surviving mutant is always real, but the operator list is not
-  exhaustive.
+  inside a PGN literal or a doc comment is never touched. Generic type
+  arguments are masked too, because `<` and `>` are brackets as often as they
+  are comparisons in Dart — mutating the `>` in `List<GameRecord>` only ever
+  produces something that will not compile, and those cost a test run each.
+  It is not an AST rewrite: a surviving mutant is always real, but the operator
+  list is not exhaustive.
+- An INVALID mutant is not always a false one. Flipping `||` to `&&` in
+  `x == null || x.foo` genuinely breaks Dart's null promotion, so the mutant
+  cannot compile and is correctly excluded — the tests never got a say.
 - A mutant that hangs is counted as killed (the behaviour changed observably).
 - `--seed` makes the mutant selection reproducible. Quote it when you report a
   score, because a different seed samples different mutants.
@@ -58,3 +64,45 @@ callback's index) and some are worth a lot (`loss >= kBlunderCp ? 'Blunder' :
 Append a `lib file|test file` pair to `scripts/mutation_targets.txt`. Prefer
 modules that already look well tested — that is where a survivor tells you
 something you did not already know.
+
+## A mutant can exhaust memory, not just time
+
+The obvious runaway is a mutant that loops forever, and the timeout catches it.
+The one that actually took this machine down on 2026-09-04 was different, and
+it is worth knowing before you write another harness.
+
+`swiss.py` has a tuning constant:
+
+```python
+_COLOR_SEARCH_WINDOW = 4      # how far _find_partner looks past a colour clash
+```
+
+`test_swiss.py` imports it and sizes its fixtures with it, so the tests stay
+correct if the window is ever retuned:
+
+```python
+bottom = [_state(f"b{i}", balance=-1) for i in range(_COLOR_SEARCH_WINDOW)]
+```
+
+That is good test design. It is also a loaded gun: a "widen the boundary"
+mutant set the constant to `10**9`, and the *test process* — not the code under
+test — tried to build a billion objects. At a measured 624 bytes each that is
+582 GB. It reached 30 GB in 162 s before the kernel killed it, and systemd's
+default `OOMPolicy=stop` then tore down the whole editor scope with it.
+
+So, when writing or extending a mutation harness:
+
+- **Never mutate a constant into an astronomical value.** `mutation_test.py`'s
+  own `int literal n -> n+1` operator is deliberately conservative for this
+  reason: `4 -> 5` tests the boundary without arming anything. A hand-written
+  mutant list is where `10**9` creeps in.
+- **Assume the child can exhaust memory** and cap it. Run the campaign through
+  `scripts/ci.sh with --`, which puts it in a memory-capped cgroup; children
+  inherit that cap. A bare `python3 my_harness.py` from an agent shell gets
+  only the looser desktop-scope cap from `scripts/oom_containment.sh`.
+- **Bound anything you capture.** `subprocess.run(capture_output=True)` has no
+  ceiling, and a mutant that makes a test log per iteration will fill it.
+  `run_tests()` here spools to a file and kills past 64 MB.
+- **Grep the test file for names it imports from the target** before mutating
+  those names. If a test uses a constant to size an allocation, that constant
+  is not safe to widen.
