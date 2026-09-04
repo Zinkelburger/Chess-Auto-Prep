@@ -20,6 +20,7 @@ export '../models/pgn_game_entry.dart';
 import '../services/default_pgn_service.dart';
 import '../services/game_analysis_controller.dart';
 import '../services/opening_book_service.dart';
+import '../services/pgn_parsing_service.dart' show movetextStart;
 import '../services/storage/storage_factory.dart';
 import 'pgn/pgn_viewer_handle.dart';
 import 'pgn/solitaire_controller.dart';

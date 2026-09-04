@@ -336,6 +336,73 @@ OpeningTreeNode? _anchorNode(OpeningTree tree, Position position) {
   return (nodes == null || nodes.isEmpty) ? null : nodes.first;
 }
 
+/// Whether [tree] already stands on [position] — the anchor test
+/// [walkMainlineIntoTree] makes for a game that starts mid-board.
+///
+/// Public because folding a *batch* has to ask it before it walks: see
+/// [foldGamesIntoTree].
+bool treeReachesPosition(OpeningTree tree, Position position) =>
+    _anchorNode(tree, position) != null;
+
+/// Fold a batch of games into one tree in an order that does not depend on
+/// the order they arrived in.
+///
+/// [walkMainlineIntoTree] anchors a `[FEN]` chapter on the node standing at
+/// its start position and grafts it at the root when nothing does — and
+/// nothing re-anchors a graft once a later game reaches that position. Folded
+/// in file order, then, the same collection sorted differently built a
+/// different tree, and a chapter could end up as a "first move" that is not
+/// even legal at the start. The viewer rebuilds from the *filtered, sorted*
+/// game list, so that was one re-sort away at any time.
+///
+/// So the batch is folded in three passes:
+///  1. every game that starts where the tree does, in arrival order;
+///  2. then chapters whose start position the tree has since reached,
+///     repeatedly, so a chapter anchored inside another chapter also lands;
+///  3. finally the chapters nothing reaches, which graft at the root — still
+///     visible, which is the point of the graft, and now the only games that
+///     get one.
+///
+/// [startPositionOf] returns null for a game that starts at the tree's own
+/// start position (typically: no `[FEN]` header); [isReached] answers
+/// [treeReachesPosition] for the tree being grown; [fold] does the caller's
+/// own per-game work, walking the game in.
+void foldGamesIntoTree<T>({
+  required Iterable<T> games,
+  required Position? Function(T game) startPositionOf,
+  required bool Function(Position startPosition) isReached,
+  required void Function(T game) fold,
+}) {
+  final chapters = <(T, Position)>[];
+  for (final game in games) {
+    final start = startPositionOf(game);
+    if (start == null) {
+      fold(game);
+    } else {
+      chapters.add((game, start));
+    }
+  }
+
+  var anchoredSomething = true;
+  while (chapters.isNotEmpty && anchoredSomething) {
+    anchoredSomething = false;
+    for (var i = 0; i < chapters.length; ) {
+      final (game, start) = chapters[i];
+      if (isReached(start)) {
+        chapters.removeAt(i);
+        fold(game);
+        anchoredSomething = true;
+      } else {
+        i++;
+      }
+    }
+  }
+
+  for (final (game, _) in chapters) {
+    fold(game);
+  }
+}
+
 void _walkVariationsIntoTree({
   required OpeningTree tree,
   required PgnNode<PgnNodeData> pgnNode,

@@ -942,12 +942,52 @@ List<CommentToken> parseCommentTokens(String text) {
 // Movetext serialization
 // ---------------------------------------------------------------------------
 
+/// A whole parsed game as PGN movetext: the mainline **and** every variation,
+/// with NAGs, comments, and the game's own opening comment, headers stripped
+/// so the caller can splice it back under the game's existing header block.
+///
+/// This is the lossless serializer, and the one anything that rewrites a game
+/// the reader owns must use. [buildMovetext] flattens a game to its mainline,
+/// which is only safe when the caller *has* only a mainline: handing it a
+/// parsed game and storing the result deletes every sideline and the game's
+/// opening comment — machine tokens included — from the reader's file.
+///
+/// Serialization is dartchess's own `makePgn`, which is why this takes the
+/// tree rather than a list: variations, `{}` escaping and the numbering that
+/// [fen] implies all come from there rather than from a second writer here.
+/// [result] is written as the game terminator (`*` when absent).
+String buildGameMovetext({
+  required PgnNode<PgnNodeData> moves,
+  List<String> comments = const [],
+  String? fen,
+  String? result,
+}) {
+  final game = PgnGame<PgnNodeData>(
+    headers: {
+      if (fen != null && fen.isNotEmpty) 'FEN': fen,
+      // Never empty, so `makePgn` always writes a header block and the
+      // blank line below is always the movetext boundary.
+      'Result': (result == null || result.isEmpty) ? '*' : result,
+    },
+    moves: moves,
+    comments: comments,
+  );
+  final text = game.makePgn();
+  final blankLine = text.indexOf('\n\n');
+  return (blankLine < 0 ? text : text.substring(blankLine + 2)).trim();
+}
+
 /// Serialize a flat list of [PgnNodeData] moves into PGN movetext with
 /// move numbers, NAGs, and inline `{comment}` braces.
 ///
 /// Assumes the game starts with White's move 1 (full games from the standard
 /// start). Appends [result] (e.g. `1-0`) unless it is null or `*`.
 /// Delegates numbering to the shared [buildNumberedMovetext].
+///
+/// Mainline only, by construction — a `List<PgnNodeData>` cannot carry a
+/// variation or a game comment. Correct for a caller that built the list
+/// itself (a puzzle solution, a downloaded game's plies); wrong for one
+/// re-serializing a game it parsed, which wants [buildGameMovetext].
 String buildMovetext(List<PgnNodeData> moves, {String? result}) {
   final text = buildNumberedMovetext(
     [for (final m in moves) m.san],

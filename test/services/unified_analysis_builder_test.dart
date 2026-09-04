@@ -108,6 +108,28 @@ void main() {
       expect(bundle.blackTree.totalGames, 2);
     });
 
+    test('maxDepth caps how deep the tree records a game', () {
+      // The cap is a parameter, not a constant: a caller that asks for four
+      // plies must get four, whatever the default happens to be.
+      int depthOf(OpeningTreeNode node) => node.children.isEmpty
+          ? 0
+          : 1 + node.children.values.map(depthOf).reduce((a, b) => a > b ? a : b);
+
+      final shallow = UnifiedAnalysisBuilder.buildBoth(
+        pgnList: _pgnList,
+        username: 'TestUser',
+        maxDepth: 2,
+      );
+      final deeper = UnifiedAnalysisBuilder.buildBoth(
+        pgnList: _pgnList,
+        username: 'TestUser',
+        maxDepth: 6,
+      );
+
+      expect(depthOf(shallow.whiteTree.root), 2);
+      expect(depthOf(deeper.whiteTree.root), greaterThan(2));
+    });
+
     test('fenToGameIndices holds no duplicate game indices', () {
       final bundle = UnifiedAnalysisBuilder.buildBoth(
         pgnList: _pgnList,
@@ -123,6 +145,64 @@ void main() {
           );
         }
       }
+    });
+  });
+
+  // Progress is what a caller wires a progress bar to, so what matters is
+  // the number it reports: games *completed*, 1-based, from a 0 that resets
+  // the bar to a final call that lands exactly on the total. A build of
+  // fewer than 100 games ticks once per game (the interval is
+  // ceil(total / 100), floored at 1), so the whole sequence is pinned here.
+  group('progress reporting', () {
+    List<List<int>> progressOf(void Function(void Function(int, int)) run) {
+      final seen = <List<int>>[];
+      run((current, total) => seen.add([current, total]));
+      return seen;
+    }
+
+    test('build counts completed games, ending on the total', () {
+      final seen = progressOf(
+        (onProgress) => UnifiedAnalysisBuilder.build(
+          pgnList: _pgnList,
+          username: 'TestUser',
+          isWhite: true,
+          onProgress: onProgress,
+        ),
+      );
+
+      expect(seen.map((e) => e[0]), [0, 1, 2, 3, 4]);
+      expect(seen.map((e) => e[1]), everyElement(_pgnList.length));
+      expect(seen.last, [_pgnList.length, _pgnList.length]);
+    });
+
+    test('buildBoth counts completed games, ending on the total', () {
+      final seen = progressOf(
+        (onProgress) => UnifiedAnalysisBuilder.buildBoth(
+          pgnList: _pgnList,
+          username: 'TestUser',
+          onProgress: onProgress,
+        ),
+      );
+
+      expect(seen.map((e) => e[0]), [0, 1, 2, 3, 4]);
+      expect(seen.map((e) => e[1]), everyElement(_pgnList.length));
+      expect(seen.last, [_pgnList.length, _pgnList.length]);
+    });
+
+    test('a build reports progress for every game, never past the total', () {
+      // Whether or not a game counts for the colour being built, it is still
+      // one of the games the caller is waiting on.
+      final seen = progressOf(
+        (onProgress) => UnifiedAnalysisBuilder.build(
+          pgnList: const [_asWhitePgn, _asBlackPgn],
+          username: 'TestUser',
+          isWhite: true,
+          onProgress: onProgress,
+        ),
+      );
+
+      expect(seen.map((e) => e[0]), [0, 1, 2]);
+      expect(seen.every((e) => e[0] >= 0 && e[0] <= e[1]), isTrue);
     });
   });
 
@@ -211,12 +291,22 @@ void main() {
       final pgnPath = '${tempDir.path}/empty.pgn';
       await File(pgnPath).writeAsString('');
 
+      // The isolate hands back [error, stackTrace]; what surfaces to the
+      // caller must be the error, not the stack — a UI that shows
+      // "#0 UnifiedAnalysisBuilder._bothColorsEntry (package:...)" tells
+      // nobody that the file held no games.
       await expectLater(
         UnifiedAnalysisBuilder.buildBothInIsolate(
           pgnFilePath: pgnPath,
           username: 'TestUser',
         ),
-        throwsA(isA<Exception>()),
+        throwsA(
+          isA<Exception>().having(
+            (e) => e.toString(),
+            'message',
+            allOf(contains('No games found'), isNot(contains('#0 '))),
+          ),
+        ),
       );
     });
   });

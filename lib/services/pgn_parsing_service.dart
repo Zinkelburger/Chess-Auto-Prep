@@ -253,7 +253,7 @@ List<String> mainlineSansOf(String gameText) {
   final sans = <String>[];
   var depth = 0;
 
-  var lineStart = _movetextStart(text);
+  var lineStart = movetextStart(text);
   // Set when a brace comment ran past the end of its line: the scan resumes
   // mid-line at the `}` instead of at the next line start.
   var resumeInsideLine = false;
@@ -346,10 +346,16 @@ Map<String, String> extractHeaderBlock(String gameText) {
   return headers;
 }
 
-/// Offset of the first movetext line: past any leading blank / `%` lines and
-/// the run of header lines.  A line that carries text after its last header
-/// tag starts the movetext itself, as in dartchess.
-int _movetextStart(String text) {
+/// Offset of the first movetext character: past any leading blank / `%`
+/// lines and the run of header lines.  A line that carries text after its
+/// last header tag starts the movetext itself, as in dartchess.
+///
+/// `0` for header-less move text (which [splitPgnIntoGames] supports), and
+/// past the end of [text] when the game has no movetext at all.  This is the
+/// boundary anything that rewrites a game's moves in place has to cut on:
+/// searching for the last `]`-terminated line instead finds a `]` inside a
+/// comment and splices in the middle of the movetext.
+int movetextStart(String text) {
   var lineStart = 0;
   var inHeaders = false;
   while (lineStart < text.length) {

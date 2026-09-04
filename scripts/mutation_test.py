@@ -30,6 +30,7 @@ import os
 import random
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -202,15 +203,51 @@ COMPILE_ERROR = re.compile(r"(Failed to load|Compilation failed)", re.M)
 TESTS_RAN = re.compile(r"^\d{2}:\d{2} \s*[+~-]\d+", re.M)
 
 
+# A mutant is deliberately broken code, so a test run under one can misbehave in
+# ways a normal run never does: a mutated loop bound that never terminates while
+# logging every iteration, an exception printed per frame. `capture_output=True`
+# buffers all of that in *this* process with no ceiling. On 2026-09-04 that
+# reached 30 GB and the kernel OOM-killed the editor scope the campaign happened
+# to be running in, losing several agent sessions at once. So: spool the child's
+# output to a file rather than to memory, and kill it the moment it exceeds what
+# any real run could produce. A real `flutter test` log here is well under 1 MB.
+OUTPUT_CAP = 64 * 1024 * 1024
+
+
 def run_tests(tests: list[str], timeout: int) -> tuple[str, str]:
     """Return (verdict, output). verdict in pass|fail|compile_error|timeout."""
     cmd = [FLUTTER, "test", "--reporter", "compact", *tests]
-    try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        return "timeout", ""
-    out = (p.stdout or "") + (p.stderr or "")
-    if p.returncode == 0:
+    deadline = time.monotonic() + timeout
+    aborted = ""
+    with tempfile.TemporaryFile() as sink:
+        # Own process group: `flutter test` spawns a dart VM and a frontend
+        # server, and killing only the direct child leaves those running — the
+        # other way a long campaign quietly eats the machine.
+        proc = subprocess.Popen(
+            cmd, stdout=sink, stderr=subprocess.STDOUT, start_new_session=True
+        )
+        try:
+            while proc.poll() is None:
+                if os.fstat(sink.fileno()).st_size > OUTPUT_CAP:
+                    aborted = "flood"
+                    break
+                if time.monotonic() > deadline:
+                    aborted = "timeout"
+                    break
+                time.sleep(0.25)
+        finally:
+            if proc.poll() is None:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                proc.wait()
+        if aborted:
+            # Both mean the mutant changed observable behaviour: it is killed.
+            return "timeout", ""
+        sink.seek(0)
+        out = sink.read().decode("utf-8", "replace")
+    if proc.returncode == 0:
         return "pass", out
     if COMPILE_ERROR.search(out) and not TESTS_RAN.search(out):
         return "compile_error", out

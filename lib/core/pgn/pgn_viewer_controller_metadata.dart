@@ -155,13 +155,20 @@ mixin _MetadataOps on ChangeNotifier {
       _screenOnlyMovetext.putIfAbsent(game, () => game.pgnText);
     }
 
-    final headerEnd = _headerBlockEndRe.allMatches(game.pgnText).last;
-    final headerPart = game.pgnText.substring(0, headerEnd.end);
-    game.pgnText = '$headerPart\n$updatedPgnMovetext\n';
+    // Cut where the parser says the movetext starts, not at the last
+    // `]`-terminated line: a comment that wraps onto a line ending in `]`
+    // (`{ [%eval 0.17]` / `[%clk 0:03:00] }`) put that boundary in the middle
+    // of the movetext, and a header-less game — which `splitPgnIntoGames`
+    // supports — has no such line at all, so `.last` threw.
+    final text = game.pgnText;
+    final headerPart = text
+        .substring(0, movetextStart(text).clamp(0, text.length))
+        .trimRight();
+    game.pgnText = headerPart.isEmpty
+        ? '$updatedPgnMovetext\n'
+        : '$headerPart\n\n$updatedPgnMovetext\n';
 
     if (!writeToFile || filePath == null) return;
     unawaited(persistMetadata());
   }
 }
-
-final RegExp _headerBlockEndRe = RegExp(r'\]\s*\n');

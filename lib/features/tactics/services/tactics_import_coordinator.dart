@@ -51,6 +51,15 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
 
   final TacticsDatabase database;
 
+  /// Builds the import service a run drives. A hook rather than a `new`:
+  /// everything a run reports — progress, streamed finds, per-game review
+  /// counts, the annotated movetext, cancellation — reaches this coordinator
+  /// only through that service, and the real one needs Stockfish. Tests
+  /// substitute a service on a scripted pool and drive all of it offline.
+  @visibleForTesting
+  TacticsImportService Function(TacticsDatabase database) importFactory =
+      (database) => TacticsImportService(database: database);
+
   /// The app-wide "which of my games are we talking about" window — the same
   /// one the recent-games list and the review strip run on. Read directly
   /// rather than pushed in by the panel, so pruning cannot drift from the
@@ -143,6 +152,11 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
   /// Leading-edge throttle with a trailing call, so the first update paints
   /// immediately and the last one is never dropped.
   void _notifyThrottled() {
+    // An import outlives the coordinator that started it and keeps reporting
+    // progress; the notification itself is swallowed after dispose, but
+    // re-arming the throttle here would chain a timer every 200 ms for the
+    // rest of the run.
+    if (isDisposed) return;
     if (_notifyThrottle != null) {
       _notifyQueued = true;
       return;
@@ -202,7 +216,7 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
     if (isImporting) return;
     try {
       await _windowSettings.ensureLoaded();
-      final service = TacticsImportService(database: database);
+      final service = importFactory(database);
       await service.initialize();
       await service.pruneStoredPgns(
         since: _windowSettings.window.cutoffFrom(DateTime.now()),
@@ -255,9 +269,14 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
   }) async {
     if (isImporting) return;
 
-    final importService = activeImport = TacticsImportService(
-      database: database,
-    );
+    final importService = activeImport = importFactory(database);
+
+    // Open the run before the first `await`. From the next line the job is
+    // published and the Pause button is live, and this method then awaits
+    // `initialize()` before the service reaches its own entry point — a
+    // cancel raised in that gap has to be the run's cancel, not one the
+    // entry point clears. See [TacticsImportService.beginRun].
+    importService.beginRun();
 
     importStatus = 'Resuming analysis…';
     isImporting = true;
@@ -325,11 +344,12 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
       throw const TacticsImportUsernameRequired();
     }
 
-    final importService = activeImport = TacticsImportService(
-      database: database,
-    );
+    final importService = activeImport = importFactory(database);
     final depth = params.depth.clamp(1, 25);
     final cores = params.cores.clamp(1, TacticsImportService.availableCores);
+
+    // Open the run before the first `await` — see [resumeAnalysis].
+    importService.beginRun();
 
     importStatus = 'Initializing...';
     isImporting = true;

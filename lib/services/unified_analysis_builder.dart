@@ -64,39 +64,49 @@ class UnifiedAnalysisBuilder {
 
     onProgress?.call(0, total);
 
-    for (var i = 0; i < pgnGames.length; i++) {
-      final game = pgnGames[i];
+    // Games that start mid-board (a `[FEN]` header) go in after the games
+    // that reach their start position, so the analysis tree does not depend
+    // on the order the collection arrived in; see [foldGamesIntoTree].
+    var processed = 0;
+    foldGamesIntoTree<int>(
+      games: Iterable<int>.generate(pgnGames.length),
+      startPositionOf: (i) => _customStartOf(pgnGames[i]),
+      isReached: (position) => treeReachesPosition(acc.tree, position),
+      fold: (i) {
+        final game = pgnGames[i];
 
-      bool isUserWhiteInGame;
-      if (!strictPlayerMatching) {
-        isUserWhiteInGame = isWhite;
-      } else {
-        final detected = _detectUser(game, usernameLower);
-        if (detected.white && !detected.black) {
-          isUserWhiteInGame = true;
-        } else if (detected.black && !detected.white) {
-          isUserWhiteInGame = false;
-        } else {
+        bool isUserWhiteInGame;
+        if (!strictPlayerMatching) {
           isUserWhiteInGame = isWhite;
+        } else {
+          final detected = _detectUser(game, usernameLower);
+          if (detected.white && !detected.black) {
+            isUserWhiteInGame = true;
+          } else if (detected.black && !detected.white) {
+            isUserWhiteInGame = false;
+          } else {
+            isUserWhiteInGame = isWhite;
+          }
         }
-      }
 
-      if (isUserWhiteInGame == isWhite) {
-        _walkMainline(
-          game: game,
-          gameIndex: i,
-          acc: acc,
-          isUserWhite: isUserWhiteInGame,
-          userResult: _userResult(game, isUserWhiteInGame),
-          maxDepth: maxDepth,
-        );
-      }
+        if (isUserWhiteInGame == isWhite) {
+          _walkMainline(
+            game: game,
+            gameIndex: i,
+            acc: acc,
+            isUserWhite: isUserWhiteInGame,
+            userResult: _userResult(game, isUserWhiteInGame),
+            maxDepth: maxDepth,
+          );
+        }
 
-      if (onProgress != null &&
-          ((i + 1) % progressInterval == 0 || i == total - 1)) {
-        onProgress(i + 1, total);
-      }
-    }
+        processed++;
+        if (onProgress != null &&
+            (processed % progressInterval == 0 || processed == total)) {
+          onProgress(processed, total);
+        }
+      },
+    );
 
     final games = pgnList.map(GameInfo.fromPgn).toList();
     return (acc.toAnalysis(games), acc.tree);
@@ -122,29 +132,41 @@ class UnifiedAnalysisBuilder {
 
     onProgress?.call(0, total);
 
-    for (var i = 0; i < pgnGames.length; i++) {
-      final game = pgnGames[i];
-      final detected = _detectUser(game, usernameLower);
-      final colours = detected.white == detected.black
-          ? const [true, false]
-          : [detected.white];
+    var processed = 0;
+    foldGamesIntoTree<int>(
+      games: Iterable<int>.generate(pgnGames.length),
+      startPositionOf: (i) => _customStartOf(pgnGames[i]),
+      // Either colour's tree standing on the position is enough: a chapter
+      // anchors in the tree it is walked into, and a game is walked into at
+      // least one of them.
+      isReached: (position) =>
+          treeReachesPosition(white.tree, position) ||
+          treeReachesPosition(black.tree, position),
+      fold: (i) {
+        final game = pgnGames[i];
+        final detected = _detectUser(game, usernameLower);
+        final colours = detected.white == detected.black
+            ? const [true, false]
+            : [detected.white];
 
-      for (final asWhite in colours) {
-        _walkMainline(
-          game: game,
-          gameIndex: i,
-          acc: asWhite ? white : black,
-          isUserWhite: asWhite,
-          userResult: _userResult(game, asWhite),
-          maxDepth: maxDepth,
-        );
-      }
+        for (final asWhite in colours) {
+          _walkMainline(
+            game: game,
+            gameIndex: i,
+            acc: asWhite ? white : black,
+            isUserWhite: asWhite,
+            userResult: _userResult(game, asWhite),
+            maxDepth: maxDepth,
+          );
+        }
 
-      if (onProgress != null &&
-          ((i + 1) % progressInterval == 0 || i == total - 1)) {
-        onProgress(i + 1, total);
-      }
-    }
+        processed++;
+        if (onProgress != null &&
+            (processed % progressInterval == 0 || processed == total)) {
+          onProgress(processed, total);
+        }
+      },
+    );
 
     // One shared GameInfo list: indices are positions in [pgnList], the same
     // for both colours.
@@ -429,6 +451,21 @@ class UnifiedAnalysisBuilder {
   /// Game result from the user's perspective (1 win / 0.5 draw / 0 loss).
   static double _userResult(PgnGame<PgnNodeData> game, bool isUserWhite) =>
       resultForUser(game.headers['Result'] ?? '*', isUserWhite);
+
+  /// The position a game starts from when it is not the standard start —
+  /// what [foldGamesIntoTree] orders the batch by. Null for a game that
+  /// starts where the tree does, and for a `[FEN]` header too malformed to
+  /// read (which [_walkMainline] then rejects exactly as it did before).
+  static Position? _customStartOf(PgnGame<PgnNodeData> game) {
+    final fen = game.headers['FEN']?.trim();
+    if (fen == null || fen.isEmpty) return null;
+    if (normalizeFen(fen) == normalizeFen(kStandardStartFen)) return null;
+    try {
+      return Chess.fromSetup(Setup.parseFen(expandFen(fen)));
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// Walk the game's mainline once, updating [acc]'s tree and FEN map.
   ///

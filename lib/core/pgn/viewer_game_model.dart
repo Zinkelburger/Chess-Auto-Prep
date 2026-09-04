@@ -16,7 +16,8 @@ import 'package:dartchess/dartchess.dart';
 import '../../models/move_tree.dart';
 import '../../services/pgn_parsing_service.dart' show startPositionFromGame;
 import '../../utils/fen_utils.dart';
-import '../../utils/pgn_comment_utils.dart' show joinComments;
+import '../../utils/pgn_comment_utils.dart'
+    show buildGameMovetext, joinComments;
 import 'mainline_positions.dart';
 import 'pgn_dummy_mainline.dart';
 import 'pgn_variation_extractor.dart';
@@ -583,25 +584,19 @@ class ViewerGameModel {
 
   // ── Serialization ────────────────────────────────────────────────────
 
-  static final _headerLineRe = RegExp(r'^\s*\[.*\]\s*$', multiLine: true);
-
   /// Serialize the mainline *and* every saved sideline (with comments and
   /// NAGs) back to PGN movetext, headers stripped so the caller can splice
   /// it under the game's existing headers. Ephemeral nodes are excluded.
-  String buildAnnotatedMovetext() {
-    final headers = <String, String>{};
-    final fen = game?.headers['FEN'];
-    if (fen != null && fen.isNotEmpty) headers['FEN'] = fen;
-    final result = game?.headers['Result'];
-    if (result != null && result.isNotEmpty) headers['Result'] = result;
-
-    final serializable = PgnGame<PgnNodeData>(
-      headers: headers,
-      moves: _buildPgnTree(),
-      comments: game?.comments ?? const [],
-    );
-    return serializable.makePgn().replaceAll(_headerLineRe, '').trim();
-  }
+  ///
+  /// Shares [buildGameMovetext] with the engine-review save path: both write
+  /// into the same slot of the same file, so a difference between them is a
+  /// difference in what the reader's file keeps.
+  String buildAnnotatedMovetext() => buildGameMovetext(
+    moves: _buildPgnTree(),
+    comments: game?.comments ?? const [],
+    fen: game?.headers['FEN'],
+    result: game?.headers['Result'],
+  );
 
   /// Rebuild a dartchess move tree from the flat mainline plus the per-ply
   /// sidelines. Inverts [extractPgnVariations]: sidelines keyed at ply `p`
