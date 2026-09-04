@@ -149,7 +149,7 @@ jobs:
           flatpak build-bundle flatpak-repo \
             chess-auto-prep-${{ github.ref_name }}-linux.flatpak com.example.chess_auto_prep
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux-build
           path: |
@@ -341,7 +341,7 @@ jobs:
           }
           Move-Item "dist\chess-auto-prep-$version-windows-setup.exe" "chess-auto-prep-${{ github.ref_name }}-windows-setup.exe"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows-build
           path: |
@@ -456,7 +456,7 @@ jobs:
           zip -ry ../../../../../chess-auto-prep-${{ github.ref_name }}-macos-${{ matrix.arch }}.zip *.app
           ls -lh ../../../../../chess-auto-prep-${{ github.ref_name }}-macos-${{ matrix.arch }}.zip
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos-${{ matrix.arch }}-build
           path: chess-auto-prep-${{ github.ref_name }}-macos-${{ matrix.arch }}.zip
