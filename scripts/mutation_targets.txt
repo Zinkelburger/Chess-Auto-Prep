@@ -16,7 +16,7 @@ lib/features/tricks/services/trick_scoring.dart|test/features/tricks/trick_scori
 lib/services/fp_growth.dart|test/services/fp_growth_test.dart|test/services/coherence_service_test.dart test/features/coverage
 lib/services/crosstable_builder.dart|test/features/engine_tournament/crosstable_builder_test.dart|test/features/engine_tournament
 lib/services/repertoire_pgn_text.dart|test/services/repertoire_pgn_text_test.dart|
-lib/services/generation/line_extractor.dart|test/services/generation/line_extractor_test.dart|test/services/generation
+lib/services/generation/line_extractor.dart|test/services/generation/line_extractor_test.dart test/services/generation/line_extractor_transposition_test.dart|test/services/generation
 lib/services/generation/export/move_annotation.dart|test/services/generation/export/move_annotation_test.dart|test/services/generation/export test/utils/move_metrics_test.dart
 lib/services/unified_analysis_builder.dart|test/services/unified_analysis_builder_test.dart|test/services/pgn_tree_core_test.dart
 lib/services/games_library/game_filter.dart|test/services/games_library/game_filter_test.dart|test/services/games_library test/features/games

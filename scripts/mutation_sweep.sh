@@ -27,9 +27,11 @@ while IFS='|' read -r lib test confirm; do
   [[ -z "$lib" || "$lib" == \#* ]] && continue
   name=$(basename "$lib" .dart)
   echo "======== $lib"
-  # shellcheck disable=SC2086  # $confirm is a deliberate word list
+  # shellcheck disable=SC2086  # $test and $confirm are deliberate word lists:
+  # a target may name several test files, and quoting would pass them as one
+  # path. The list is ours, from a tracked file, so the splitting is safe.
   scripts/ci.sh with -- python3 scripts/mutation_test.py \
-      --target "$lib" --tests "$test" --max "$MAX" --seed "$SEED" \
+      --target "$lib" --tests $test --max "$MAX" --seed "$SEED" \
       ${confirm:+--confirm-tests $confirm} \
       --json "$OUT/$name.json" || fail=1
 done < "$TARGETS"

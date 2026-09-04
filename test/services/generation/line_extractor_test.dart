@@ -473,6 +473,100 @@ void main() {
       });
     });
 
+    test('a truncated extraction points only at lines it wrote', () {
+      // Two move orders reach the same position P: a rare one (a6) that the
+      // walk meets first, and the likely one (d5) that owns P's continuation.
+      // The line cap cuts the walk off after the first line, so the owner's
+      // move order is never emitted — and the stub the rare order left behind
+      // would send the reader to "Nf3 d5", which is nowhere in the export.
+      // `extract` is supposed to notice, hand ownership back to the arrival
+      // that deferred, and walk again.
+      String pos(String name, {required bool whiteToMove}) =>
+          '$name ${whiteToMove ? 'w' : 'b'} KQkq - 0 1';
+
+      resetNodeIds();
+      final root = makeNode(
+        fen: _startFen,
+        san: '',
+        ply: 0,
+        isWhiteToMove: true,
+        evalCp: 30,
+      );
+      final nf3 = makeNode(
+        fen: pos('nf3', whiteToMove: false),
+        san: 'Nf3',
+        uci: 'g1f3',
+        ply: 1,
+        isWhiteToMove: false,
+        evalCp: -20,
+        parent: root,
+      )..isRepertoireMove = true;
+
+      // The rare arrival comes first in child order, so the walk meets it
+      // before the one that owns the continuation.
+      final rare = makeNode(
+        fen: pos('P', whiteToMove: true),
+        san: 'a6',
+        uci: 'a7a6',
+        ply: 2,
+        isWhiteToMove: true,
+        evalCp: 20,
+        moveProbability: 0.1,
+        cumulativeProbability: 0.1,
+        parent: nf3,
+      );
+      final likely = makeNode(
+        fen: pos('P', whiteToMove: true),
+        san: 'd5',
+        uci: 'd7d5',
+        ply: 2,
+        isWhiteToMove: true,
+        evalCp: 20,
+        moveProbability: 0.9,
+        cumulativeProbability: 0.9,
+        parent: nf3,
+      );
+      makeNode(
+        fen: pos('Pc4', whiteToMove: false),
+        san: 'c4',
+        uci: 'c2c4',
+        ply: 3,
+        isWhiteToMove: false,
+        evalCp: -25,
+        cumulativeProbability: 0.9,
+        parent: likely,
+      ).isRepertoireMove = true;
+
+      final fenMap = FenMap()..populate(root);
+      // The expanded arrival is canonical; the childless one resolves to it.
+      expect(fenMap.getCanonical(rare.fen), same(likely));
+
+      final extractor = LineExtractor(config: _config(), fenMap: fenMap);
+      final lines = extractor.extract(BuildTree(root: root), maxLines: 1);
+
+      expect(extractor.wasTruncated, isTrue);
+      final played = {
+        for (final line in lines)
+          for (var i = 1; i <= line.movesSan.length; i++)
+            line.movesSan.take(i).join(' '),
+      };
+      for (final line in lines) {
+        final target = line.transposesInto;
+        if (target == null || target.isEmpty) continue;
+        expect(
+          played,
+          contains(target.join(' ')),
+          reason:
+              '"${line.movesSan.join(' ')}" points at "${target.join(' ')}", '
+              'which no emitted line plays',
+        );
+      }
+      // And what survived the cap is a real line, not a stub handing over to
+      // a continuation nothing carries.
+      expect(lines.single.movesSan, ['Nf3', 'a6', 'c4']);
+      expect(lines.single.transposesInto, isNull);
+    });
+
     group('choice points', () {
       // The alternatives pass asks "what else would a human play here?", so
       // what it needs is the *position* and what the tree already knows about
@@ -520,6 +614,32 @@ void main() {
         // Their move: e5 leaves us +35, c5 leaves us +45, so their best try
         // is e5 — the bar an alternative has to fall below.
         expect(line.choices[1].bestEvalCpForUs, 35);
+      });
+
+      test('a sibling with no eval is skipped, not read as a dead level', () {
+        // `evalForUs` answers 0 for a node with no eval, so an unevaluated
+        // sibling that reached the comparison would read as a dead-equal
+        // position.  That is not a harmless default: at an opponent node 0 is
+        // *better for us* than anything losing, so it would quietly raise the
+        // bar an alternative has to fall below before the alternatives pass
+        // calls it a mistake — and at our node it would hide how bad the
+        // position already is.
+        final t = StandardTree();
+        t.e4.isRepertoireMove = true;
+        t.e4e5nf3.isRepertoireMove = true;
+        t.e4c5nf3.isRepertoireMove = true;
+        // Both root candidates are bad for us and one has no eval at all, so
+        // the only honest answer is the other one's -50, not 0.
+        t.e4.engineEvalCp = null;
+        t.d4.engineEvalCp = 50; // black to move there, so -50 for us
+        // Same on their turn: e5 is unevaluated, so c5 is the whole bar.
+        t.e4e5.engineEvalCp = null;
+
+        final lines = LineExtractor(config: _config()).extract(t.toTree());
+        final line = lines.firstWhere((l) => l.movesSan[1] == 'e5');
+
+        expect(line.choices[0].bestEvalCpForUs, -50);
+        expect(line.choices[1].bestEvalCpForUs, 45);
       });
 
       test('an unevaluated position offers nothing to compare against', () {
