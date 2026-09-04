@@ -26,3 +26,12 @@ lib/services/game_store/game_store.dart|test/services/game_store/game_store_test
 lib/services/generation/skeleton_plan.dart|test/services/generation/skeleton_plan_test.dart|test/services/generation
 lib/features/eval_tree/services/eval_tree_layout_engine.dart|test/features/eval_tree/eval_tree_layout_engine_test.dart|test/features/eval_tree
 lib/services/generation/frontier_queue.dart|test/services/generation/frontier_queue_test.dart|test/services/generation
+# The PGN/tree core. Added after the first sweep: these carry the app's central
+# domain logic, all sit above 90% line coverage, and none had been measured.
+lib/services/pgn_parsing_service.dart|test/services/pgn_parsing_service_test.dart|test/properties/pgn_property_test.dart test/services/pgn_tree_core_test.dart
+lib/models/opening_tree.dart|test/models/opening_tree_test.dart|test/properties/opening_tree_property_test.dart
+lib/models/move_tree.dart|test/models/move_tree_test.dart|test/core
+lib/utils/pgn_comment_utils.dart|test/utils/pgn_comment_utils_test.dart|test/properties/pgn_property_test.dart test/utils
+lib/services/generation/node_expander.dart|test/services/generation/node_expander_test.dart|test/services/generation
+lib/features/tactics/services/tactics_pgn_codec.dart|test/features/tactics/services/tactics_pgn_codec_test.dart|test/features/tactics
+lib/services/generation/tree_serialization.dart|test/services/generation/tree_serialization_test.dart|test/services/generation
