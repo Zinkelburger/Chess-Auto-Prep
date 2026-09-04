@@ -22,24 +22,34 @@ void main() {
       // deliberately absent — a lone crumb would just repeat this title.
       expect(find.text('Tactics'), findsWidgets);
 
-      // Left pane: the recent-games home. A fresh environment has no
-      // usernames configured, so its empty-state card shows.
-      expect(find.text('No accounts configured'), findsOneWidget);
       // Idle Tactics shows the games home instead of a decorative board;
       // the board returns only when a puzzle session starts.
       expect(find.byType(ChessBoardWidget), findsNothing);
 
-      // With nothing set up, both panes offer the same one thing to do — the
-      // accounts button — and neither shows a username box: those live in the
-      // dialog it opens.
-      expect(find.text('Set up my accounts'), findsNWidgets(2));
-      expect(find.byKey(const Key('accounts-setup-button')), findsOneWidget);
+      // Whether the accounts card offers Set up or Change depends on the
+      // machine, not on the code: CI runs against an empty profile, a
+      // developer's does not. Assert the state this environment is actually
+      // in — the alternative is a test that can only pass in CI, which is
+      // the same as a test nobody runs before pushing.
+      if (accountsConfigured(tester)) {
+        expect(find.byKey(const Key('accounts-change-button')), findsWidgets);
+      } else {
+        expect(find.text('No accounts configured'), findsOneWidget);
+        // With nothing set up, both panes offer the same one thing to do.
+        expect(find.text('Set up my accounts'), findsNWidgets(2));
+        expect(find.byKey(const Key('accounts-setup-button')), findsOneWidget);
+      }
+
+      // Either way the username boxes live in the dialog, not on the pane.
       expect(find.byKey(const Key('lichess-username-field')), findsNothing);
       expect(find.byKey(const Key('chesscom-username-field')), findsNothing);
       // The games window is not on this pane either — it is a section of the
       // review strip's analysis-settings dialog.
       expect(find.text('Games to download'), findsNothing);
-      expect(find.text('Play tactics'), findsOneWidget);
+      // `textContaining`, because the button carries the ready count once
+      // there are puzzles — "Play tactics (134)" on a machine that has been
+      // used, a bare "Play tactics" on a fresh one.
+      expect(find.textContaining('Play tactics'), findsOneWidget);
       // The engine-settings gear is gone: cores and depth are steppers on the
       // review strip, and downloading is the review's play button, so this card
       // has neither a gear nor a per-site Import button.
@@ -53,11 +63,23 @@ void main() {
     testWidgets('the accounts button opens the username form', (tester) async {
       await pumpApp(tester);
 
-      await tester.tap(find.byKey(const Key('accounts-setup-button')));
+      // Same button, two labels: Set up when the profile is empty, Change
+      // once accounts exist.
+      await tester.tap(
+        find
+            .byKey(
+              accountsConfigured(tester)
+                  ? const Key('accounts-change-button')
+                  : const Key('accounts-setup-button'),
+            )
+            .first,
+      );
       await tester.pumpAndSettle();
 
-      // One form, both sites, and no login anywhere in it.
-      expect(find.text('My accounts'), findsOneWidget);
+      // One form, both sites, and no login anywhere in it. `findsWidgets`
+      // because a configured machine also shows "My accounts" as the card's
+      // own heading behind the dialog.
+      expect(find.text('My accounts'), findsWidgets);
       expect(find.byKey(const Key('lichess-username-field')), findsOneWidget);
       expect(find.byKey(const Key('chesscom-username-field')), findsOneWidget);
 

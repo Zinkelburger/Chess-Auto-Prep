@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:chess_auto_prep/widgets/clickable_move_line.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/main.dart';
@@ -8,6 +9,21 @@ import 'package:chess_auto_prep/widgets/app_mode_switcher.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
 
 import 'board_helpers.dart';
+
+/// Whether this machine's profile already has a chess account configured.
+///
+/// The integration tests run against the *real* profile — `pumpApp` boots the
+/// real app with no storage redirection — so the boot screen looks different
+/// on CI (empty) and on a developer's machine (accounts, games, repertoires).
+/// Tests branch on this rather than assuming the empty case, which is what
+/// made `scripts/ci.sh integration` fail for every local run.
+bool accountsConfigured(WidgetTester tester) {
+  final appState = tester
+      .element(find.byType(AppModeSwitcher).first)
+      .read<AppState>();
+  return (appState.lichessUsername ?? '').isNotEmpty ||
+      (appState.chesscomUsername ?? '').isNotEmpty;
+}
 
 /// Switch modes through the app-bar title (from a freshly booted app, where
 /// only one screen — and thus one switcher — has been built).
