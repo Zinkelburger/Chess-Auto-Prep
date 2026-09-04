@@ -1,4 +1,4 @@
-/// [IconFilterChip] — the view-picker chip the three layout zones share.
+/// [IconFilterChip] — the view-picker chip in the builder's context column.
 library;
 
 import 'package:flutter/material.dart';

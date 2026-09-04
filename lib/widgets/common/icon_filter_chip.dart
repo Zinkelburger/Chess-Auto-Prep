@@ -1,10 +1,16 @@
-/// The chip the layout zones use to pick which view a column shows.
-///
-/// Three of them existed — the analyze main zone, the analyze context zone
-/// and the edit context zone — spelling out the same twenty lines: a 14px
+/// The chip a layout zone uses to pick which view its column shows: a 14px
 /// icon that turns accent when selected, a 12px label, compact density, no
-/// checkmark. They are one control, and a fourth zone would have been a
-/// fourth copy.
+/// checkmark.
+///
+/// Three copies of those twenty lines existed when this was extracted — the
+/// analyze main zone, the analyze context zone and the edit context zone.
+/// The first two turned out to be dead code from before the builder's layout
+/// rethink and were deleted in the same pass, so today the edit context zone
+/// is the only caller.
+///
+/// It stays a widget of its own rather than going back inline, because the
+/// tests beside it are the only coverage this control has ever had, and a
+/// tab row is the sort of thing the next zone will want.
 library;
 
 import 'package:flutter/material.dart';

@@ -1,0 +1,7 @@
+[mcp_servers.bughouse]
+command = "python3"
+args = ["tools/mcp/bughouse/__main__.py"]
+
+[mcp_servers.chess-prep]
+command = "python3"
+args = ["tools/mcp/chess_prep/__main__.py"]
