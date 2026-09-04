@@ -40,6 +40,9 @@ class _TempStorage implements StorageService {
       p.join(repertoireDirPath, '$chapterName.pgn');
 
   @override
+  Future<bool> fileExists(String path) async => File(path).existsSync();
+
+  @override
   Future<void> writeFile(String path, String content) async {
     File(path).parent.createSync(recursive: true);
     File(path).writeAsStringSync(content);

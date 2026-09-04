@@ -271,6 +271,8 @@ class _MyRepertoiresPanelState extends State<MyRepertoiresPanel> {
       );
       await _settings.addPath(white: white, path: created.directoryPath);
       _say(done);
+    } on RepertoireExistsException {
+      _say(AppMessages.repertoireExists(name), isError: true);
     } catch (e) {
       debugPrint('Create repertoire failed: $e');
       _say(AppMessages.createRepertoireFailed, isError: true);

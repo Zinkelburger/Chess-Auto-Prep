@@ -30,11 +30,28 @@ class RepertoireCreationResult {
   final int gameCount;
 }
 
+/// A repertoire could not be created because its first chapter is already on
+/// disk. Thrown rather than silently overwriting it.
+class RepertoireExistsException implements Exception {
+  const RepertoireExistsException(this.name);
+
+  final String name;
+
+  @override
+  String toString() => 'A repertoire named "$name" already exists.';
+}
+
 /// Create the folder for [name] with a "Main" chapter marked for [color]
 /// ('White' or 'Black'), optionally seeded with [pgnContent].
 ///
 /// The caller checks for a name clash first — it has the list on screen and
-/// can say so in the form, which is better than a thrown error.
+/// can say so in the form, which is better than a thrown error. This function
+/// checks the *path* as well and throws [RepertoireExistsException] rather
+/// than writing, because the two checks are not the same one: a name is
+/// sanitised on its way to a folder (`Sicilian: Najdorf` and `Sicilian_
+/// Najdorf` land in the same place), so a name the caller found free can
+/// still name a chapter that already exists — and this write would replace
+/// it with a three-line header, deleting the lines in it.
 Future<RepertoireCreationResult> createRepertoire({
   required String name,
   required String color,
@@ -51,6 +68,10 @@ Future<RepertoireCreationResult> createRepertoire({
       '// Main\n'
       '// Color: $color\n'
       '// Created on $stamp\n\n';
+
+  if (await store.fileExists(chapterPath)) {
+    throw RepertoireExistsException(name);
+  }
 
   if (pgnContent != null) {
     await store.writeFile(chapterPath, '$header$pgnContent\n');

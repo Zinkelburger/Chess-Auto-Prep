@@ -565,6 +565,13 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
           ),
         );
       }
+    } on RepertoireExistsException {
+      // The name check above passed and this one did not, so two different
+      // names share one folder. Say which name is in the way rather than
+      // "could not create".
+      if (mounted) {
+        showAppSnackBar(context, AppMessages.repertoireExists(name));
+      }
     } catch (e) {
       debugPrint('Create repertoire failed: $e');
       if (mounted) {

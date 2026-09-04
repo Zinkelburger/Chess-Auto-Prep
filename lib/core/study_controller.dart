@@ -118,11 +118,7 @@ class StudyController extends ChangeNotifier
     // chapter written by the puzzle creator or "Add line to study" keeps
     // them across the in-memory round-trip (Event/FEN/SetUp are regenerated
     // by StudyChapter.toPgn).
-    final chapter = StudyChapter(
-      name: chapterName,
-      headers: extractHeaders(pgn),
-      tree: MoveTree.fromPgn(pgn),
-    );
+    final chapter = StudyChapter.fromGameText(pgn, name: chapterName);
     if (_doc.filePath == path) {
       _doc.chapters.add(chapter);
       _markDirty();
@@ -166,6 +162,9 @@ class StudyController extends ChangeNotifier
             name: c.name,
             headers: c.headers,
             tree: c.tree.copyWithFreshIds(),
+            // Carried, not re-derived: this copy is what the next autosave
+            // writes back, so anything left off here is deleted from the file.
+            intro: c.intro,
           ),
       ],
     );
@@ -275,7 +274,7 @@ class StudyController extends ChangeNotifier
     final games = await compute(_parseChapterTreesEntry, pgn);
     final firstNewIndex = _doc.chapters.length;
     int added = 0;
-    for (final (headers, tree) in games) {
+    for (final (headers, tree, intro) in games) {
       // Skip fragments that are neither a game nor a headered stub.
       if (tree.isEmpty && headers.isEmpty) continue;
       final name = headers['Event']?.trim().isNotEmpty == true
@@ -286,6 +285,7 @@ class StudyController extends ChangeNotifier
           name: name,
           headers: headers,
           tree: tree.copyWithFreshIds(),
+          intro: intro,
         ),
       );
       added++;
@@ -313,6 +313,9 @@ class StudyController extends ChangeNotifier
       name: old.name,
       headers: Map<String, String>.from(old.headers),
       startingFen: fen,
+      // The moves belonged to the old position; the chapter's own note did
+      // not, so it stays.
+      intro: old.intro,
     );
     _path = TreePath.empty;
     _markDirty();
@@ -450,10 +453,19 @@ class StudyController extends ChangeNotifier
 // Trees crossing the isolate boundary carry foreign node ids — adopt them
 // only via [MoveTree.copyWithFreshIds].
 
-List<(Map<String, String>, MoveTree)> _parseChapterTreesEntry(String pgn) {
+/// One record per game: its headers, its tree, and the note it opens with.
+/// The intro travels with the rest because a chapter that arrives without it
+/// is a chapter whose note the next autosave deletes.
+List<(Map<String, String>, MoveTree, String)> _parseChapterTreesEntry(
+  String pgn,
+) {
   final games = splitPgnIntoGames(stripBom(pgn));
   return [
     for (final gameText in games)
-      (extractHeaders(gameText), MoveTree.fromPgn(gameText)),
+      (
+        extractHeaders(gameText),
+        MoveTree.fromPgn(gameText),
+        StudyChapter.fromGameText(gameText).intro,
+      ),
   ];
 }
