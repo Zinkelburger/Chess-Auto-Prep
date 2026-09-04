@@ -430,9 +430,9 @@ Toggled via pencil icon in `GameNavBar` or keyboard shortcut `A`. When active:
 - **Context menu**: Right-click in edit mode shows Comment, Annotate, Promote (variation), Delete — with promote/delete gated by `protectOriginal`.
 - **Protect original PGN**: Checkbox in the edit mode bar (always resets to checked on activation). When checked, destructive operations on the original game moves are disabled.
 - **Keyboard**: `Escape` exits edit mode.
-- **Persistence**: NAGs saved via `buildMovetext()` → `persistMoveComments()` → file write. NAGs serialize as `$N` tokens after the SAN in standard PGN format.
+- **Persistence**: NAGs saved via `buildGameMovetext()` (the whole tree, so sidelines and the game comment survive) → `persistMoveComments()` → file write. NAGs serialize as `$N` tokens after the SAN in standard PGN format.
 
-Key files: `pgn_comment_utils.dart` (NAG constants, `kMoveNags`, `nagColor`, `buildMovetext` with NAG serialization), `pgn_viewer_widget.dart` (`editMode`/`protectOriginal` props, `_AnnotationToolbar`, `_NagButton`), `pgn_viewer_screen.dart` (`_editMode`, `_protectOriginal`, `_buildEditModeBar`), `game_nav_bar.dart` (`onToggleEditMode`, `isEditMode`).
+Key files: `pgn_comment_utils.dart` (`buildGameMovetext`, the one serializer for a parsed game), `pgn_viewer_widget.dart` (`editMode`/`protectOriginal` props, `_AnnotationToolbar`, `_NagButton`), `pgn_viewer_screen.dart` (`_editMode`, `_protectOriginal`, `_buildEditModeBar`), `game_nav_bar.dart` (`onToggleEditMode`, `isEditMode`).
 
 #### Solitaire Mode (Guess-the-Move)
 
@@ -994,7 +994,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `fen_list_widget.dart` | FEN list display helper |
 | `pgn_with_analysis_pane.dart` | PGN + analysis dock split |
 | `pgn_with_engine.dart` | PGN pane with inline engine bar |
-| `pgn_viewer_widget.dart` | Game list + board for viewer; `_variationsByPly` holds mainline + **multiple ephemeral RAVs** per branch point (`addEphemeralMove` / `clearEphemeralMoves`); movetext via `PgnMovetextView` (near-white `PgnTextStyles`, comments/variations on own rows); larger branch chips + Return-to-mainline + nav icons; **Edit mode** (`editMode` prop): NAG inline display, annotation panel, right-click context menu with promote/delete gated by `protectOriginal`; `_toggleNag` modifies `PgnNodeData.nags` and persists via `buildMovetext` |
+| `pgn_viewer_widget.dart` | Game list + board for viewer; `_variationsByPly` holds mainline + **multiple ephemeral RAVs** per branch point (`addEphemeralMove` / `clearEphemeralMoves`); movetext via `PgnMovetextView` (near-white `PgnTextStyles`, comments/variations on own rows); larger branch chips + Return-to-mainline + nav icons; **Edit mode** (`editMode` prop): NAG inline display, annotation panel, right-click context menu with promote/delete gated by `protectOriginal`; `_toggleNag` modifies `PgnNodeData.nags` and persists via `buildGameMovetext` |
 | `pgn/pgn_movetext_view.dart` | Mainline + sideline + comment rendering; uses `PgnTextStyles` (comments upright, not italic). ChessBase/Chessable **null moves** (`--` / `Z0`) are hidden in the SAN but still pass the turn. Chessable intro dummies are promoted to the mainline before render, so `1. Z0 (1. d4 Z0 2. Nf3 …)` shows the lesson text on the spine |
 | `pgn/pgn_opening_tree_panel.dart` | Opening-tree side panel (replaces Game/Analysis + nav bar). Resizable split between `OpeningTreeWidget` and `PgnTreeGamesList`. While the tree is open, `/` searches the games-at-position list (not the full file) and picking a row/`G` number calls `loadGameFromTree` |
 | `pgn/pgn_tree_games_list.dart` | Games at the tree cursor: `GameNumberField` + `GameSearchButton` + **Expand all** checkbox. Default expanded rows show title + truncated comment-free mainline PV from this FEN (`mainlineSansAfterFen`). With expand-all off, the blue play arrow previews one line and the title opens the game |

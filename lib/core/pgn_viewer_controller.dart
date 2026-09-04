@@ -156,6 +156,12 @@ class PgnViewerController extends ChangeNotifier
   int currentGameIndex = 0;
   Position currentPosition = Chess.initial;
 
+  /// Text above the first game in the loaded file — a `;`/`%` banner, which
+  /// is not a game and so is not in [allGames]. Held here because a write
+  /// rewrites the file from [allGames] alone and would otherwise delete it.
+  @override
+  String collectionPreamble = '';
+
   /// FEN the next [PgnViewerWidget] mount should park on (tree position after
   /// a games-at-position click, or the game cursor after leaving the tree).
   @override
@@ -352,6 +358,7 @@ class PgnViewerController extends ChangeNotifier
     required String? path,
     required List<PgnGameEntry> entries,
     required Perspective newPerspective,
+    String preamble = '',
   }) {
     // Settle the outgoing collection's debts (a pending metadata write, a
     // stale FEN-index stamp) before its path and games are replaced; the
@@ -363,6 +370,7 @@ class PgnViewerController extends ChangeNotifier
     // the file it described.
     loadedFileModified = null;
     allGames = entries;
+    collectionPreamble = preamble;
     _detectProtagonist(entries);
     filteredGames = List.of(entries);
     hasActiveFilters = false;
@@ -453,6 +461,7 @@ class PgnViewerController extends ChangeNotifier
       path: path,
       entries: entries,
       newPerspective: _perspectiveFor(entries),
+      preamble: pgnCollectionPreamble(content),
     );
     loadedFileModified = (await storage.fileStat(path))?.modified;
     notifyListeners();

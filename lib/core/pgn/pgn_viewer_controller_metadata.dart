@@ -15,6 +15,7 @@ mixin _MetadataOps on ChangeNotifier {
   DateTime? get loadedFileModified;
   set loadedFileModified(DateTime? value);
   List<PgnGameEntry> get allGames;
+  String get collectionPreamble;
   List<PgnGameEntry> get filteredGames;
   int get currentGameIndex;
   PgnFenIndex get _fenIndex;
@@ -90,10 +91,17 @@ mixin _MetadataOps on ChangeNotifier {
       }
     }
 
+    // The banner above the first game goes back on the front. It is not a
+    // game, so it is not in [games], and this write is the whole file: without
+    // it, starring a game deleted the reader's own header text.
+    final preamble = collectionPreamble;
+    final body = games
+        .map((g) => _screenOnlyMovetext[g] ?? g.pgnText)
+        .join('\n\n');
     try {
       await StorageFactory.instance.writeFile(
         path,
-        '${games.map((g) => _screenOnlyMovetext[g] ?? g.pgnText).join('\n\n')}\n',
+        preamble.isEmpty ? '$body\n' : '$preamble\n\n$body\n',
       );
       // Everything past this point writes back to *controller* state, which
       // is only ours while the collection we wrote is still the loaded one —

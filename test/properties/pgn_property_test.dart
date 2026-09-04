@@ -60,17 +60,6 @@ List<List<String>> _tokensOf(List<PgnNodeData> nodes) => [
   for (final n in nodes) pgnAnnotationTokens(joinComments(n.comments)),
 ];
 
-/// Re-serialize a game's mainline through [buildMovetext] — what a caller
-/// that legitimately holds only a flat move list does (a puzzle solution, a
-/// downloaded game's plies).
-String _rebuildMainline(
-  PgnGame<PgnNodeData> game,
-  List<PgnNodeData> mainline,
-) => _pgn(
-  Map<String, String>.from(game.headers),
-  buildMovetext(mainline, result: game.headers['Result']),
-);
-
 /// Re-serialize a whole parsed game the way every path that rewrites a stored
 /// game does: `GameAnalysisController._rebuildMovetext` and the comment
 /// editor's `ViewerGameModel.buildAnnotatedMovetext` both come through
@@ -284,7 +273,7 @@ void main() {
   // -------------------------------------------------------------------------
   group('movetext round-trip', () {
     forAll(
-      'parse → buildMovetext → parse keeps every move, NAG and comment',
+      'parse → serialize → parse keeps every move, NAG and comment',
       annotatedGames(
         maxPlies: 14,
         withVariations: false,
@@ -295,7 +284,7 @@ void main() {
         final first = PgnGame.parsePgn(spec.render());
         final firstMainline = first.moves.mainline().toList();
 
-        final rebuilt = _rebuildMainline(first, firstMainline);
+        final rebuilt = _resave(first);
         final second = _mainline(rebuilt);
 
         expect(_sansOf(second), _sansOf(firstMainline), reason: 'moves');
@@ -314,12 +303,8 @@ void main() {
       ),
       (spec) {
         final first = PgnGame.parsePgn(spec.render());
-        final once = _rebuildMainline(first, first.moves.mainline().toList());
-        final reparsed = PgnGame.parsePgn(once);
-        final twice = _rebuildMainline(
-          reparsed,
-          reparsed.moves.mainline().toList(),
-        );
+        final once = _resave(first);
+        final twice = _resave(PgnGame.parsePgn(once));
         expect(twice, once);
       },
     );
@@ -632,7 +617,7 @@ void main() {
         final game = PgnGame.parsePgn(spec.render());
         final mainline = game.moves.mainline().toList();
         final glyphs = [for (final n in mainline) allNagSuffix(n.nags)];
-        final back = _mainline(_rebuildMainline(game, mainline));
+        final back = _mainline(_resave(game));
         expect([for (final n in back) allNagSuffix(n.nags)], glyphs);
       },
     );

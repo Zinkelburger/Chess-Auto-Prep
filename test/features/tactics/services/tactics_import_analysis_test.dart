@@ -278,7 +278,7 @@ $moves''';
       // ply's best line — without a second search for either.
       expect(
         annotated[key('skip')],
-        '1. e4 {[%eval -5.00,$kDepth] [%pv e4,e5,Nf3]} e5',
+        '1. e4 { [%eval -5.00,$kDepth] [%pv e4,e5,Nf3] } e5 *',
       );
     });
 
@@ -315,7 +315,7 @@ $moves''';
       // with it, so the next ply keeps none either.
       expect(
         annotated[key('cachehit')],
-        '1. e4 {[%eval -0.54,$kDepth] [%pv d4]} e5',
+        '1. e4 { [%eval -0.54,$kDepth] [%pv d4] } e5 *',
       );
     });
 
@@ -395,9 +395,9 @@ $moves''';
       // -0.20, and my mate in one reads #-1.
       expect(
         annotated[key('foolsmate')],
-        '1. f3 {[%eval -0.20,$kDepth]} '
-        'e5 {[%eval -0.30,$kDepth] [%pv Nc6]} '
-        '2. g4 {[%eval #-1,$kDepth] [%pv g4]} Qh4# 0-1',
+        '1. f3 { [%eval -0.20,$kDepth] } '
+        'e5 { [%eval -0.30,$kDepth] [%pv Nc6] } '
+        '2. g4 { [%eval #-1,$kDepth] [%pv g4] } Qh4# 0-1',
       );
     });
   });
@@ -415,7 +415,7 @@ $moves''';
       expect(result.positions.single.mistakeType, '??');
       expect(
         annotated[key('oneply')],
-        '1. e4 {[%eval -1.69,$kDepth] [%pv d4]}',
+        '1. e4 { [%eval -1.69,$kDepth] [%pv d4] } *',
       );
     });
 
@@ -562,9 +562,12 @@ $moves''';
 
       expect(
         annotated[key('series')],
-        '1. e4 {[%eval -0.30,$kDepth] [%pv d4]} '
-        'e5 {[%eval 0.40,$kDepth] [%pv e5]} '
-        '2. Nf3 {[%eval 0.50,$kDepth] [%pv Nc3]} Nc6',
+        // The spacing and the terminator are dartchess's `makePgn`, which the
+        // pass serializes through so a game's sidelines and opening comment
+        // survive being written back. Both are valid PGN.
+        '1. e4 { [%eval -0.30,$kDepth] [%pv d4] } '
+        'e5 { [%eval 0.40,$kDepth] [%pv e5] } '
+        '2. Nf3 { [%eval 0.50,$kDepth] [%pv Nc3] } Nc6 *',
       );
     });
 

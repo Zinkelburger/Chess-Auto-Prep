@@ -578,12 +578,14 @@ Future<_GameMineOutcome?> _analyzeGameParallel({
     inaccuracies: inaccuracies,
     mistakes: mistakes,
     blunders: blunders,
+    // The parsed game, not `moveNodes`: the scores are written onto the
+    // tree's own nodes (`moveNodes` holds those same objects), and the text
+    // that comes back replaces this game in the games cache.
     annotatedMovetext: annotateMovetextWithEvals(
-      moveNodes: moveNodes,
+      game: game,
       plyEvals: plyEvals,
       plyPvs: plyPvs,
       lastPlyIsCheckmate: lastPlyIsCheckmate,
-      result: gameResult,
     ),
   );
 }

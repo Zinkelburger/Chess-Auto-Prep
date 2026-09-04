@@ -1,9 +1,14 @@
 /// Single numbered-movetext serializer shared by all PGN emitters.
 ///
-/// Callers: `pgn_comment_utils.buildMovetext` (annotated full games),
-/// `tactics_pgn_codec.buildSolutionMovetext` (puzzle solutions from a FEN),
-/// `pgn_export.movesToPgnMoveText` (generated repertoire lines), and
-/// `RepertoireController` (root-position move text).
+/// Callers: `tactics_pgn_codec.buildSolutionMovetext` (puzzle solutions from a
+/// FEN), `pgn_export.movesToPgnMoveText` (generated repertoire lines), and
+/// `RepertoireController` (root-position move text) — each of which holds a
+/// flat list of SAN it built itself.
+///
+/// A game that was *parsed* from PGN is not one of those: a flat list cannot
+/// carry its variations or its opening comment, so re-serializing one here and
+/// storing the result deletes them. That has happened; use
+/// `pgn_comment_utils.buildGameMovetext`, which takes the tree.
 library;
 
 import 'chess_utils.dart' show isNullMoveSan;

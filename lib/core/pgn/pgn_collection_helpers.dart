@@ -64,6 +64,26 @@ void _addChunk(List<PgnGameEntry> entries, String chunk) {
   );
 }
 
+/// The text above the first game that [parseMultiGamePgn] does not hand back
+/// as a game: a `;` or `%` banner, the shape chessgames.com collection
+/// downloads arrive in.
+///
+/// It has to be kept somewhere, because the only copy of a collection the app
+/// holds is its list of games, and `doPersistMetadata` rewrites the whole file
+/// from that list. A star, a comment edit or an engine review therefore wrote
+/// the file back *without* the banner — text the reader wrote, deleted by an
+/// edit that had nothing to do with it. Returned trimmed, empty when there is
+/// none.
+String pgnCollectionPreamble(String content) {
+  final head = content.substring(
+    0,
+    _nextChunkBoundary(content, 0) ?? content.length,
+  );
+  final trimmed = head.trim();
+  if (trimmed.isEmpty || !_isCommentOnly(trimmed)) return '';
+  return trimmed;
+}
+
 /// Whether every line of [text] is blank or a top-level comment line.  Stops
 /// at the first line that is neither, so a real game is settled by its
 /// first header rather than a scan of all its lines.
