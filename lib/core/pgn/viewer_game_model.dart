@@ -10,12 +10,13 @@
 /// they acted so the caller knows whether to notify.
 library;
 
+import '../../utils/pgn_nags.dart';
 import 'package:dartchess/dartchess.dart';
 
 import '../../models/move_tree.dart';
 import '../../services/pgn_parsing_service.dart' show startPositionFromGame;
 import '../../utils/fen_utils.dart';
-import '../../utils/pgn_comment_utils.dart' show joinComments, toggleQualityNag;
+import '../../utils/pgn_comment_utils.dart' show joinComments;
 import 'mainline_positions.dart';
 import 'pgn_dummy_mainline.dart';
 import 'pgn_variation_extractor.dart';

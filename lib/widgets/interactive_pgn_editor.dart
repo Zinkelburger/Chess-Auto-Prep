@@ -6,6 +6,7 @@ library;
 
 import 'dart:async';
 
+import 'package:chess_auto_prep/utils/pgn_nags.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
@@ -14,7 +15,7 @@ import '../theme/pgn_text_styles.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
-    show commentProse, mergeCommentProse, qualityNagSuffix, toggleQualityNag;
+    show commentProse, mergeCommentProse;
 import 'package:chess_auto_prep/utils/chess_utils.dart' show isNullMoveSan;
 import 'package:chess_auto_prep/utils/training_markers.dart';
 import 'package:chess_auto_prep/widgets/pgn/movetext_primitives.dart'

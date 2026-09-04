@@ -137,7 +137,7 @@ class HoleHuntService {
     }
 
     // ── Pass 1: BFS walk ─────────────────────────────────────────────────
-    final totalNodes = _countNodes(tree.root, config.maxPly);
+    final totalNodes = tree.root.countDescendants(maxPly: config.maxPly);
     final queue = Queue<_HuntQueueEntry>();
     queue.add(
       _HuntQueueEntry(
@@ -600,21 +600,6 @@ class HoleHuntService {
       if (child.moveUci == top.movesUci.first) return child.ease;
     }
     return null;
-  }
-
-  int _countNodes(OpeningTreeNode root, int maxPly) {
-    int count = 0;
-    final queue = Queue<(OpeningTreeNode, int)>();
-    queue.add((root, 0));
-    while (queue.isNotEmpty) {
-      final (node, ply) = queue.removeFirst();
-      if (ply > maxPly) continue;
-      count++;
-      for (final child in node.children.values) {
-        queue.add((child, ply + 1));
-      }
-    }
-    return count;
   }
 }
 

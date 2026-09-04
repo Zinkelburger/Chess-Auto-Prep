@@ -202,6 +202,26 @@ class OpeningTreeNode {
     return path.reversed.toList();
   }
 
+  /// How many nodes this subtree holds down to [maxPly] plies below here.
+  ///
+  /// The denominator of a long walk's progress bar, so it counts exactly what
+  /// the walk will visit: a node at [maxPly] is counted, its children are not.
+  /// Breadth-first and iterative because a deep repertoire will blow the
+  /// stack on recursion.
+  int countDescendants({required int maxPly}) {
+    var count = 0;
+    final queue = Queue<(OpeningTreeNode, int)>()..add((this, 0));
+    while (queue.isNotEmpty) {
+      final (node, ply) = queue.removeFirst();
+      if (ply > maxPly) continue;
+      count++;
+      for (final child in node.children.values) {
+        queue.add((child, ply + 1));
+      }
+    }
+    return count;
+  }
+
   /// Get the full move path as a string (e.g. "1.e4 e5 2.Nf3 Nc6")
   String getMovePathString() {
     final moves = getMovePath();

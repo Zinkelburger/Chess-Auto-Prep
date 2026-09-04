@@ -9,6 +9,7 @@
 /// lines browser.
 library;
 
+import '../../../utils/pgn_nags.dart';
 import 'package:flutter/material.dart';
 import 'package:chess_auto_prep/models/trap_line_info.dart';
 import 'package:chess_auto_prep/models/trap_reply.dart';
@@ -16,7 +17,6 @@ import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart'
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/chess_utils.dart';
-import '../../../utils/pgn_comment_utils.dart' show nagColor;
 import '../../../widgets/chess_board_widget.dart';
 import '../../../theme/app_colors.dart';
 import 'trap_detail_card.dart';

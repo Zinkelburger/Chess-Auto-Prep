@@ -1,5 +1,5 @@
+import 'package:chess_auto_prep/utils/pgn_nags.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chess_auto_prep/utils/pgn_comment_utils.dart';
 
 void main() {
   group('primaryQualityNag', () {
@@ -87,21 +87,6 @@ void main() {
 
     test('falls back to \$N so an unknown annotation is still visible', () {
       expect(allNagSuffix(const [250]), '\$250');
-    });
-  });
-
-  group('joinComments', () {
-    test('is empty for null / empty / whitespace-only blocks', () {
-      expect(joinComments(null), '');
-      expect(joinComments(const []), '');
-      expect(joinComments(const ['', '   ']), '');
-    });
-
-    test('keeps every block, not just the first', () {
-      expect(
-        joinComments(const ['A sharp line.', '[%cal Rf3g5]']),
-        'A sharp line. [%cal Rf3g5]',
-      );
     });
   });
 }

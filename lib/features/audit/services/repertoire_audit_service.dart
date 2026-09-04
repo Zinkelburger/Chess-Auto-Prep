@@ -139,7 +139,7 @@ class RepertoireAuditService {
     }
 
     // Count total nodes for progress reporting.
-    final totalNodes = _countNodes(startNode, config.maxPly);
+    final totalNodes = startNode.countDescendants(maxPly: config.maxPly);
 
     // BFS traversal.
     final queue = Queue<_AuditQueueEntry>();
@@ -821,21 +821,6 @@ class RepertoireAuditService {
     if (nodes != null && nodes.isNotEmpty) return nodes.first;
     if (normalizeFen(tree.root.fen) == key) return tree.root;
     return null;
-  }
-
-  int _countNodes(OpeningTreeNode root, int maxPly) {
-    int count = 0;
-    final queue = Queue<(OpeningTreeNode, int)>();
-    queue.add((root, 0));
-    while (queue.isNotEmpty) {
-      final (node, ply) = queue.removeFirst();
-      if (ply > maxPly) continue;
-      count++;
-      for (final child in node.children.values) {
-        queue.add((child, ply + 1));
-      }
-    }
-    return count;
   }
 
   bool _isWhiteTurnAtNode(OpeningTreeNode node) {

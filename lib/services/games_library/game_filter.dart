@@ -244,10 +244,6 @@ List<GameRecord> applySelectionUnion(
   return out;
 }
 
-/// Serialize records back into a multi-game PGN string.
-String recordsToPgn(List<GameRecord> records) =>
-    records.map((r) => r.pgn.trim()).join('\n\n');
-
 void _sortNewestFirst(List<GameRecord> records) {
   records.sort((a, b) {
     final da = a.date, db = b.date;

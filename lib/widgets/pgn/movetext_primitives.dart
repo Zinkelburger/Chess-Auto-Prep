@@ -14,6 +14,7 @@
 /// live in `pgn_comment_utils.dart` so the model layer can share them too.
 library;
 
+import '../../utils/pgn_nags.dart';
 import 'package:flutter/material.dart';
 import '../../theme/app_text_styles.dart';
 

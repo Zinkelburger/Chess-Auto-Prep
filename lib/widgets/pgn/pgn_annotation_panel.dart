@@ -4,6 +4,7 @@
 /// move, type in the comment field, toggle glyphs; no extra "edit" click.
 library;
 
+import '../../utils/pgn_nags.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -11,7 +12,6 @@ import 'package:flutter/services.dart';
 
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
-import '../../utils/pgn_comment_utils.dart' show kMoveNags;
 import 'movetext_primitives.dart' show GlyphButton;
 
 class PgnAnnotationPanel extends StatefulWidget {

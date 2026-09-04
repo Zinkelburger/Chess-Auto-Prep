@@ -152,11 +152,6 @@ Position? tryParseFen(String fen) {
   }
 }
 
-/// SAN for [uci] in [position], or null when illegal.  The position-first
-/// counterpart of [uciToSanOrNull].
-String? uciToSanFrom(Position position, String uci) =>
-    playUciFrom(position, uci)?.san;
-
 /// Standard UCI (`e1g1`, `e7e8q`) for a move produced by dartchess in
 /// [position] — castling normalised from the king→rook encoding via
 /// [toStandardUci], promotion suffixed in lowercase.  Drops are returned
@@ -366,10 +361,6 @@ String _formatWithSuffix(
   if (value >= 1000) return '${(value / 1000).toStringAsFixed(kDecimals)}k';
   return value.toString();
 }
-
-/// Format a large integer with k/M suffixes.
-String formatCount(int count) =>
-    _formatWithSuffix(count, mDecimals: 1, kDecimals: 0);
 
 /// Format a node count with k/M suffixes (one decimal for M and k).
 String formatNodes(int nodes) =>

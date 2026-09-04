@@ -6,11 +6,11 @@
 /// the movetext.
 library;
 
+import '../../../utils/pgn_nags.dart';
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
-import '../../../utils/pgn_comment_utils.dart' show nagColor;
 import '../../../widgets/shortcut_tooltip.dart';
 import 'package:chess_auto_prep/models/trap_line_info.dart';
 import '../../../utils/app_shortcuts.dart';

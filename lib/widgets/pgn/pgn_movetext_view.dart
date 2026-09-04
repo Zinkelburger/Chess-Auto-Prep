@@ -8,6 +8,7 @@
 /// own (the inline editor keeps its own [TextEditingController]).
 library;
 
+import '../../utils/pgn_nags.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
@@ -35,7 +36,6 @@ import '../../utils/pgn_comment_utils.dart'
         parsePvComment,
         stripEngineTokens,
         stripPgnTokens,
-        allNagSuffix,
         joinComments,
         kMaxUnevaluatedPlies,
         CommentToken,

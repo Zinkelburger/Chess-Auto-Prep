@@ -6,11 +6,11 @@
 /// post-move FEN so position derivation is O(1).
 library;
 
+import '../utils/pgn_nags.dart';
 import 'package:dartchess/dartchess.dart';
 
 import '../constants/chess_constants.dart';
 import '../utils/chess_utils.dart' show playSanOrNullMove, tryParseFen;
-import '../utils/pgn_comment_utils.dart' show toggleQualityNag;
 import 'move_tree_node_view.dart';
 import '../utils/fen_utils.dart';
 
