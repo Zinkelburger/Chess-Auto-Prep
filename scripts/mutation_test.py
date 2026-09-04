@@ -141,6 +141,9 @@ class Mutant:
     snippet: str
     status: str = "pending"   # KILLED | SURVIVED | INVALID | TIMEOUT
     seconds: float = 0.0
+    # Set when the cheap pass called it a survivor but the wider suite killed
+    # it — i.e. the code IS defended, just not by its same-named test file.
+    killed_by_wider: bool = False
 
 
 def line_col(text: str, pos: int) -> tuple[int, int]:
@@ -290,6 +293,14 @@ def main() -> int:
     ap.add_argument("--max", type=int, default=30, help="max mutants (default 30)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--timeout", type=int, default=0, help="per-run seconds (0 = 6x baseline)")
+    ap.add_argument(
+        "--confirm-tests",
+        nargs="+",
+        help="extra test files/dirs to re-check SURVIVORS against. The cheap "
+        "pass runs only --tests; a mutant that survives it is then re-run "
+        "against these, because most lib files are exercised by more than "
+        "their same-named test file. Without this the score is a lower bound.",
+    )
     ap.add_argument("--json", help="write a machine-readable report here")
     args = ap.parse_args()
 
@@ -348,13 +359,41 @@ def main() -> int:
         target.write_text(text)
         os.unlink(backup.name)
 
+    # ---- confirmation pass -------------------------------------------------
+    # A survivor of the cheap pass is only a candidate. Nearly every lib file
+    # here is imported by several test files, so a mutant its own test file
+    # misses may still be caught next door; reporting those as holes sends
+    # someone to write a test that already exists. Only survivors pay this
+    # cost, and survivors are few.
+    survivors = [m for m in mutants if m.status == "SURVIVED"]
+    if args.confirm_tests and survivors:
+        print(f"\n── confirming {len(survivors)} survivor(s) against "
+              f"{' '.join(args.confirm_tests)}")
+        try:
+            for m in survivors:
+                target.write_text(apply_mutant(text, m))
+                verdict, _ = run_tests(args.confirm_tests, timeout)
+                if verdict in ("fail", "timeout"):
+                    m.status = "KILLED"
+                    m.killed_by_wider = True
+                    print(f"   killed by the wider suite: {target.name}:"
+                          f"{m.line} {m.operator}")
+                elif verdict == "compile_error":
+                    m.status = "INVALID"
+        finally:
+            target.write_text(text)
+
     valid = [m for m in mutants if m.status != "INVALID"]
     killed = [m for m in valid if m.status == "KILLED"]
     survived = [m for m in valid if m.status == "SURVIVED"]
     score = (100.0 * len(killed) / len(valid)) if valid else 0.0
 
+    wider = [m for m in killed if m.killed_by_wider]
     print(f"\n── {target}")
     print(f"   mutation score: {len(killed)}/{len(valid)} killed ({score:.0f}%)")
+    if wider:
+        print(f"   of those, {len(wider)} were caught only by the wider suite, "
+              f"not by {args.tests[0]}")
     print(f"   invalid (did not compile): {len(mutants) - len(valid)}")
     if survived:
         print(f"\n   SURVIVORS — executed but not defended:")

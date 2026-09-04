@@ -59,11 +59,40 @@ callback's index) and some are worth a lot (`loss >= kBlunderCp ? 'Blunder' :
 - The target file is restored in a `finally`. If a run is killed with SIGKILL
   mid-campaign, check `git diff` on the target before trusting the tree.
 
+## Survivors are candidates until confirmed
+
+Running only the target's own test file is what keeps a campaign to seconds a
+mutant, and it is also the method's biggest trap: almost nothing here is
+covered by its same-named test alone. When this was first run,
+`line_extractor.dart` was imported by fifteen other test files, and
+`game_filter.dart` by sixteen — so a mutant the paired file misses may be
+caught next door, and reporting it as a hole sends someone to write a test
+that already exists.
+
+So the cheap pass produces *candidates*, and `--confirm-tests` re-runs only
+those against the wider suite. Survivors are few, so the second pass is cheap:
+
+```
+scripts/ci.sh with -- python3 scripts/mutation_test.py \
+    --target lib/services/game_store/game_store.dart \
+    --tests   test/services/game_store/game_store_test.dart \
+    --confirm-tests test/services/game_store test/services/storage
+```
+
+Anything the wider suite kills is reported as killed and counted that way, with
+a line saying the paired file missed it. Without this the score is a lower
+bound — treat any number produced without a confirm set as one.
+
 ## Adding a target
 
-Append a `lib file|test file` pair to `scripts/mutation_targets.txt`. Prefer
-modules that already look well tested — that is where a survivor tells you
-something you did not already know.
+Append `lib file|test file|confirm tests` to `scripts/mutation_targets.txt`
+(the third field may be empty). Prefer modules that already look well tested —
+that is where a survivor tells you something you did not already know. Work out
+the third field with something like
+
+```
+grep -rln "$(basename lib/path/to/file.dart)" test/
+```
 
 ## A mutant can exhaust memory, not just time
 
