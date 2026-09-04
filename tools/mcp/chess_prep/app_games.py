@@ -57,7 +57,9 @@ class AppGamesDb:
         rows = self._conn.execute(
             "SELECT g.collection, COUNT(*) AS n, c.updated_at FROM games g"
             " LEFT JOIN collections c ON c.collection = g.collection"
-            " GROUP BY g.collection ORDER BY n DESC"
+            # The collection name breaks count ties, so two collections of
+            # equal size do not swap places between calls.
+            " GROUP BY g.collection ORDER BY n DESC, g.collection"
         ).fetchall()
         return [
             {"collection": r["collection"], "games": r["n"], "updated_at": r["updated_at"]}
@@ -78,10 +80,10 @@ class AppGamesDb:
         return [_game(r) for r in self._conn.execute(sql, args).fetchall()]
 
     def by_player(self, name: str, collection: str | None = None, limit: int = 50) -> list[dict]:
-        q = f"{name.strip()}%"
+        q = _like_prefix(name)
         sql = (
-            "SELECT * FROM games WHERE (white LIKE ? COLLATE NOCASE"
-            " OR black LIKE ? COLLATE NOCASE)"
+            "SELECT * FROM games WHERE (white LIKE ? ESCAPE '\\' COLLATE NOCASE"
+            " OR black LIKE ? ESCAPE '\\' COLLATE NOCASE)"
         )
         args: list[Any] = [q, q]
         if collection:
@@ -94,6 +96,21 @@ class AppGamesDb:
     def game(self, game_id: int) -> dict | None:
         r = self._conn.execute("SELECT * FROM games WHERE id = ?", (game_id,)).fetchone()
         return _game(r) if r else None
+
+
+def _like_prefix(name: str) -> str:
+    """A prefix pattern that matches `name` literally.
+
+    LIKE reads `%` and `_` as wildcards, and chess.com usernames are full of
+    underscores: unescaped, a search for `a_b` also returns `axb`'s games, so
+    "what did this opponent play?" quietly answers with a different account's
+    games mixed in. The backslash has to be escaped first, or it would escape
+    the escapes added after it.
+    """
+    pattern = name.strip()
+    for char in ("\\", "%", "_"):
+        pattern = pattern.replace(char, "\\" + char)
+    return f"{pattern}%"
 
 
 def _game(r: sqlite3.Row) -> dict:

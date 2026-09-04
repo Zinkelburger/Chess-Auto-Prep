@@ -430,7 +430,11 @@ class Registry:
             return {
                 "found": bool(matches),
                 "unique": len(matches) == 1,
-                "entries": [m.to_dict() for m in matches],
+                # Not `by_name` rows: `name_matches` adds, per row, the parts
+                # of the query the name key had to throw away to land on it.
+                # Without that a partial hit reads as `unique: true` over a
+                # row named for somebody else.
+                "entries": directory.name_matches(name),
             }
         if query:
             results = directory.search(query, int(args.get("limit") or 25))
@@ -534,6 +538,11 @@ class Registry:
 
         directory = self.directory
         resolved = ambiguous = unresolved = 0
+        #: Entrants matched on a name the key had to shorten to fit a
+        #: directory row. Counted as resolved (an account was found) but
+        #: reported separately, because a dropped surname particle means a
+        #: different person, not a spelling variant.
+        partial_name_matches: list[dict] = []
 
         for entry in roster.entries:
             identity = entry.identity or {}
@@ -554,6 +563,16 @@ class Registry:
                     found["title"] = title
 
             entry.identity = found
+            if found.get("dropped_name_parts"):
+                partial_name_matches.append(
+                    {
+                        "id": entry.id,
+                        "name": entry.name,
+                        "chesscom_username": found.get("chesscom_username"),
+                        "dropped_name_parts": found["dropped_name_parts"],
+                        "evidence": found.get("evidence", ""),
+                    }
+                )
             if found.get("chesscom_username") or found.get("lichess_username"):
                 resolved += 1
             else:
@@ -569,6 +588,20 @@ class Registry:
             "unresolved_entries": self._roster_get({"unresolved_only": True})[
                 "unresolved"
             ],
+            **(
+                {
+                    "partial_name_matches": partial_name_matches,
+                    "partial_name_match_note": (
+                        "These entrants matched a directory row only after "
+                        "the name key dropped part of their name. A middle "
+                        'name is usually harmless; a surname particle ("de '
+                        'la Cruz" → "Cruz") means the row belongs to someone '
+                        "else. None of them is actionable until confirmed."
+                    ),
+                }
+                if partial_name_matches
+                else {}
+            ),
             "next_step": (
                 "Call uscf_coverage_report to see which of the unresolved "
                 "entrants are mappable in principle before web searching."

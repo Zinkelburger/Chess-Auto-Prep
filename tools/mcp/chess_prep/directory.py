@@ -81,6 +81,32 @@ def player_name_key(raw: str) -> str:
     return f"{first}|{last}"
 
 
+def dropped_name_parts(query: str, matched: str) -> list[str]:
+    """The parts of `query` that the key threw away to reach `matched`.
+
+    The key keeps one given name and a surname, so a query with more parts
+    than the row it landed on has had something discarded. Usually that is a
+    middle name and the hit is right. Sometimes it is a surname particle,
+    and then the hit is a *different person*: outside the `Last, First` form
+    nothing can tell a particle from a middle name, so `Maria de la Cruz`
+    keys the same as `Maria Cruz` and `Jan Van Der Berg` the same as
+    `Jan Berg`. Handing back what was dropped lets a caller tell the two
+    cases apart instead of reading a partial match as a full one.
+    """
+    kept = set(_raw_tokens(matched))
+    seen: set[str] = set()
+    return [
+        token
+        for token in _raw_tokens(query)
+        # A generational suffix is dropped on purpose and says nothing about
+        # whether this is the right person, so reporting it would be noise
+        # that trains a reader to ignore the label.
+        if token not in kept
+        and token not in _SUFFIXES
+        and not (token in seen or seen.add(token))
+    ]
+
+
 # ── Directory ───────────────────────────────────────────────────────────────
 
 
@@ -238,6 +264,28 @@ class PlayerDirectory:
             return []
         return list(self._by_name.get(key, []))
 
+    def name_matches(self, name: str) -> list[dict]:
+        """`by_name`, but every row says what the key dropped to reach it.
+
+        This is what a tool should hand a model. `by_name` alone reports
+        "Maria de la Cruz → delta, unique" with nothing to suggest that the
+        row it found is named "Maria Cruz".
+        """
+        rows: list[dict] = []
+        for hit in self.by_name(name):
+            row = hit.to_dict()
+            dropped = dropped_name_parts(name, hit.uscf_name)
+            if dropped:
+                row["dropped_name_parts"] = dropped
+                row["name_match_note"] = (
+                    f'Partial name match: {", ".join(dropped)} is not in '
+                    f'"{hit.uscf_name}". A dropped surname particle '
+                    '("de la Cruz" → "Cruz") is a different person, not a '
+                    "spelling variant — confirm before acting on this."
+                )
+            rows.append(row)
+        return rows
+
     def resolve(
         self, uscf_id: str | None = None, name: str | None = None
     ) -> dict | None:
@@ -263,11 +311,21 @@ class PlayerDirectory:
             matches = self.by_name(name)
             if len(matches) == 1:
                 hit = matches[0]
+                evidence = f"{hit.evidence} (matched on name, not USCF ID)"
+                dropped = dropped_name_parts(name, hit.uscf_name)
+                if dropped:
+                    # Say out loud that only part of the name matched, so a
+                    # reader cannot mistake a partial hit for a full one.
+                    evidence += (
+                        f" — only part of the name matched: "
+                        f'{", ".join(dropped)} is not in "{hit.uscf_name}"'
+                    )
                 return {
                     "chesscom_username": hit.chesscom_username,
                     "confidence": "medium",
                     "source": "uscf_online_event",
-                    "evidence": f"{hit.evidence} (matched on name, not USCF ID)",
+                    "evidence": evidence,
+                    **({"dropped_name_parts": dropped} if dropped else {}),
                     **({"title": hit.title} if hit.title else {}),
                 }
             if len(matches) > 1:

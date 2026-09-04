@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .directory import player_name_key
 from .paths import roster_path
 
 # ── Header recognition ──────────────────────────────────────────────────────
@@ -62,6 +63,10 @@ _TITLE_TOKENS = {"GM", "IM", "FM", "CM", "NM", "WGM", "WIM", "WFM", "WCM", "LM"}
 _USCF_ID = re.compile(r"^\d{7,9}$")
 _RATING = re.compile(r"^(\d{3,4})\s*(?:[Pp]\d+|/\d+|\*)?$")
 _BRACKET_SUFFIX = re.compile(r"\s*\[[^\]]*\]\s*")
+_PAREN_GROUP = re.compile(r"\([^)]*\)")
+#: Grouping separators inside an otherwise bare ID (`16-009-740`).
+_ID_SEPARATORS = re.compile(r"[-\s]")
+_ASCII_DIGITS = re.compile(r"^[0-9]+$")
 _WITHDRAWN = re.compile(r"\(\s*withdrawn\s*\)", re.IGNORECASE)
 _TITLE_PAREN = re.compile(
     r"\(\s*(GM|IM|FM|CM|NM|WGM|WIM|WFM|WCM|LM)\s*\)", re.IGNORECASE
@@ -99,8 +104,29 @@ def parse_rating(raw: str) -> int | None:
 
 
 def clean_uscf_id(raw: str) -> str | None:
-    digits = re.sub(r"[^0-9]", "", _BRACKET_SUFFIX.sub(" ", raw))
-    return digits if _USCF_ID.match(digits) else None
+    """The one USCF member ID in a cell, or None when the cell does not hold
+    exactly one.
+
+    Real entry lists write the ID as `30997160 [USA]`, as `16-009-740`, or
+    with a trailing note — `1234567 (2)` — and all of those have to survive.
+    What must not survive is a cell holding *two* numbers. Sweeping up every
+    digit in the cell turned `1234567 8` into `12345678`: a valid-looking ID
+    belonging to a different member, which `PlayerDirectory.resolve` then
+    answers at `exact` confidence from a trusted source, making it actionable
+    — i.e. one sloppy cell is enough to download a stranger's games as an
+    entrant's. So: drop parenthesised and bracketed notes first, and if more
+    than one of the remaining whitespace-separated tokens still contains a
+    digit, refuse rather than guess. `16 009 740` is refused for the same
+    reason, which is the safe answer to an ambiguous cell.
+    """
+    cleaned = _BRACKET_SUFFIX.sub(" ", _PAREN_GROUP.sub(" ", raw))
+    numeric = [t for t in cleaned.split() if any(c.isdigit() for c in t)]
+    if len(numeric) != 1:
+        return None
+    # Only grouping separators come out; anything else left in the token
+    # (a slash, a letter) means this was never a bare ID.
+    digits = _ID_SEPARATORS.sub("", numeric[0])
+    return digits if _ASCII_DIGITS.match(digits) and _USCF_ID.match(digits) else None
 
 
 def parse_name_cell(raw: str) -> tuple[str, str | None, bool]:
@@ -160,6 +186,10 @@ class RosterEntry:
 
     @classmethod
     def from_dict(cls, data: dict) -> "RosterEntry":
+        if not isinstance(data, dict):
+            raise TypeError(
+                f"a roster entry must be a JSON object, not {type(data).__name__}"
+            )
         return cls(
             id=str(data.get("id") or data.get("uscf_id") or data.get("name") or ""),
             name=str(data.get("name", "")),
@@ -213,6 +243,14 @@ class Roster:
 
     @classmethod
     def from_dict(cls, data: dict) -> "Roster":
+        # A file holding valid JSON that is not an object ("[]", "null", "3")
+        # is as corrupt as one holding no JSON at all. Checking the type where
+        # it is assumed keeps `load_roster` honest about its promise not to
+        # wedge the server, instead of letting an AttributeError out.
+        if not isinstance(data, dict):
+            raise TypeError(
+                f"a roster must be a JSON object, not {type(data).__name__}"
+            )
         return cls(
             event_name=str(data.get("event_name", "")),
             rounds=int(data.get("rounds", 5)),
@@ -517,6 +555,18 @@ def _mark_self(
         if by_id or by_name:
             entry.is_me = True
             return entries
+
+    # Nothing matched as written. Users type "Andrew Bernal"; entry lists
+    # print "Bernal, Andrew". Fall back to the same normalized key the
+    # directory joins on, so the two orderings meet — this is the first thing
+    # anyone does, and a miss here leaves the whole roster without the
+    # reference point every pairing probability is measured from.
+    want_key = player_name_key(my_name or "")
+    if want_key != "|":
+        for entry in entries:
+            if player_name_key(entry.name) == want_key:
+                entry.is_me = True
+                return entries
 
     looked_for = f"USCF {want_id}" if want_id else f'"{my_name}"'
     warnings.append(
