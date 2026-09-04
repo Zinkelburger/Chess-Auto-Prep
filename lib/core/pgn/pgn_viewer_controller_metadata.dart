@@ -38,6 +38,16 @@ mixin _MetadataOps on ChangeNotifier {
   /// substitution: at that point the in-memory copy is the one that counts.
   final Map<PgnGameEntry, String> _screenOnlyMovetext = Map.identity();
 
+  /// Games this session has actually changed. Not cleared after a write: it
+  /// is what a *later* write needs in order to tell our edits apart from
+  /// whatever else has reached the file since, and re-substituting text that
+  /// is already on disk costs nothing.
+  final Set<PgnGameEntry> _editedGames = Set.identity();
+
+  /// Forget which games were edited — the collection they belong to is going
+  /// away. Paired with [clearScreenOnlyMovetext].
+  void clearEditedGames() => _editedGames.clear();
+
   /// Forget every screen-only substitution — the collection they described
   /// is going away.
   void clearScreenOnlyMovetext() => _screenOnlyMovetext.clear();
@@ -47,6 +57,7 @@ mixin _MetadataOps on ChangeNotifier {
     final game = filteredGames[currentGameIndex];
     game.studyRating = stars;
     _dirtyGames.add(game);
+    _editedGames.add(game);
     notifyListeners();
     unawaited(persistMetadata());
     onReclaimFocus?.call();
@@ -95,14 +106,23 @@ mixin _MetadataOps on ChangeNotifier {
     // game, so it is not in [games], and this write is the whole file: without
     // it, starring a game deleted the reader's own header text.
     final preamble = collectionPreamble;
-    final body = games
-        .map((g) => _screenOnlyMovetext[g] ?? g.pgnText)
-        .join('\n\n');
+    final gameTexts = [
+      for (final g in games) _screenOnlyMovetext[g] ?? g.pgnText,
+    ];
+    final body = gameTexts.join('\n\n');
+    final edited = {
+      for (var i = 0; i < games.length; i++)
+        if (_editedGames.contains(games[i])) i,
+    };
     try {
-      await StorageFactory.instance.writeFile(
-        path,
-        preamble.isEmpty ? '$body\n' : '$preamble\n\n$body\n',
+      final content = await _contentToWrite(
+        path: path,
+        gameTexts: gameTexts,
+        edited: edited,
+        wholeFile: preamble.isEmpty ? '$body\n' : '$preamble\n\n$body\n',
       );
+      if (content == null) return;
+      await StorageFactory.instance.writeFile(path, content);
       // Everything past this point writes back to *controller* state, which
       // is only ours while the collection we wrote is still the loaded one —
       // and it may not be, because `_adoptCollection` fires this flush and
@@ -121,6 +141,59 @@ mixin _MetadataOps on ChangeNotifier {
     } catch (e) {
       debugPrint('Failed to persist metadata: $e');
     }
+  }
+
+  /// What this save should put in the file: the whole collection as we hold
+  /// it, or — when the file has moved since we loaded it — that file with only
+  /// our own edits substituted into it.
+  ///
+  /// A viewer save is a whole-file rewrite, which is only correct while our
+  /// copy is the newest one. The app itself breaks that: the home review
+  /// runner patches this very file in place while the viewer holds it open
+  /// (`GamesLibraryService.patchGameMovetexts`), and a reader can edit it
+  /// elsewhere. Blind-writing then reverted every one of those changes.
+  ///
+  /// Null means "write nothing": the file changed into something this merge
+  /// does not recognise, and keeping it as it is beats overwriting it with a
+  /// copy that predates whatever happened.
+  Future<String?> _contentToWrite({
+    required String path,
+    required List<String> gameTexts,
+    required Set<int> edited,
+    required String wholeFile,
+  }) async {
+    final loadedAt = loadedFileModified;
+    if (loadedAt == null) return wholeFile;
+    final stat = await StorageFactory.instance.fileStat(path);
+    // No stat is not evidence of a change (the file may simply be new), and
+    // an unchanged mtime means our copy is still the newest one.
+    if (stat == null || stat.modified == loadedAt) return wholeFile;
+
+    final disk = await StorageFactory.instance.readFile(path);
+    if (disk == null || disk.trim().isEmpty) return wholeFile;
+
+    final unplaced = <int>[];
+    final merged = mergeEditedGamesIntoDiskCopy(
+      diskContent: disk,
+      gameTexts: gameTexts,
+      edited: edited,
+      unplaced: unplaced,
+    );
+    if (merged == null) {
+      debugPrint(
+        'Not saving: $path changed on disk into a shape this merge does not '
+        'recognise. The file was left as it is.',
+      );
+      return null;
+    }
+    if (unplaced.isNotEmpty) {
+      debugPrint(
+        'Saved ${path.split('/').last} around ${unplaced.length} game(s) that '
+        'moved on disk; their edits were left out rather than written over '
+        'the wrong game.',
+      );
+    }
+    return merged;
   }
 
   /// Run a debounced persist now (for the collection currently loaded), and
@@ -159,6 +232,7 @@ mixin _MetadataOps on ChangeNotifier {
   }) {
     if (writeToFile) {
       _screenOnlyMovetext.remove(game);
+      _editedGames.add(game);
     } else {
       _screenOnlyMovetext.putIfAbsent(game, () => game.pgnText);
     }

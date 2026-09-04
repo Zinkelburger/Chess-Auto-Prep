@@ -383,6 +383,7 @@ class PgnViewerController extends ChangeNotifier
     perspective = newPerspective;
     _viewerTree.resetForNewFile();
     clearScreenOnlyMovetext();
+    clearEditedGames();
   }
 
   /// The perspective a freshly loaded collection should open in.

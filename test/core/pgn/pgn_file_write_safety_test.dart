@@ -32,9 +32,21 @@ import 'package:chess_auto_prep/services/storage/storage_service.dart';
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
 
 /// In-memory storage. `writeFile` replaces the whole file, exactly as the
-/// atomic writer behind the real one does.
+/// atomic writer behind the real one does, and every write moves the file's
+/// mtime — which is what tells the viewer its copy is no longer the newest.
 class _MemoryStorage implements StorageService {
   final Map<String, String> files = {};
+  final Map<String, DateTime> modified = {};
+
+  var _clock = DateTime(2026, 9, 4, 12);
+
+  /// Write as something *else* would: the app's review runner patching this
+  /// file in place, or the reader editing it in another program.
+  void writeBehindOurBack(String path, String content) {
+    files[path] = content;
+    _clock = _clock.add(const Duration(seconds: 1));
+    modified[path] = _clock;
+  }
 
   @override
   Future<bool> fileExists(String path) async => files.containsKey(path);
@@ -44,14 +56,14 @@ class _MemoryStorage implements StorageService {
 
   @override
   Future<void> writeFile(String path, String content) async {
-    files[path] = content;
+    writeBehindOurBack(path, content);
   }
 
   @override
   Future<({int size, DateTime modified})?> fileStat(String path) async {
     final content = files[path];
     if (content == null) return null;
-    return (size: content.length, modified: DateTime(2026, 9, 4));
+    return (size: content.length, modified: modified[path] ?? _clock);
   }
 
   @override
@@ -137,7 +149,7 @@ List<String> _allComments(PgnGame<PgnNodeData> game) {
 }
 
 Future<PgnViewerController> _openTheFile(_MemoryStorage storage) async {
-  storage.files[_path] = _fileText();
+  storage.writeBehindOurBack(_path, _fileText());
   final controller = PgnViewerController(
     pgnWidgetController: PgnViewerWidgetController(),
     analysisController: _FakeAnalysisController(),
@@ -285,5 +297,90 @@ void main() {
       _nodeCount(PgnGame.parsePgn(reopened.allGames.first.pgnText).moves),
       _nodeCount(PgnGame.parsePgn(_gameOne).moves),
     );
+  });
+
+  // ── The file moving under an open viewer ──────────────────────────────
+  //
+  // A save rewrites the whole file from memory, which is right only while
+  // that memory is the newest copy. The app itself breaks that: the home
+  // review runner patches this file in place while the viewer holds it open.
+
+  test('a save keeps what something else wrote to another game', () async {
+    final c = await _openTheFile(storage);
+    addTearDown(c.dispose);
+
+    // Something else annotates game two — the review runner's own write.
+    final patched = _fileText().replaceFirst(
+      '1. d4 { theirs, untouched } d5',
+      '1. d4 { theirs, untouched } { [%eval 0.21,18] } d5',
+    );
+    storage.writeBehindOurBack(_path, patched);
+
+    // Now the reader stars game one, which rewrites the whole file.
+    c.setRating(4);
+    await c.flushPendingMetadata();
+
+    final written = storage.files[_path]!;
+    expect(
+      written,
+      contains('[%eval 0.21,18]'),
+      reason: "the other writer's work was reverted by our save",
+    );
+    expect(written, contains('[StudyRating "4"]'), reason: 'our star landed');
+    expect(splitPgnIntoGames(written).length, 3);
+  });
+
+  test('a game added to the file by something else is not deleted', () async {
+    final c = await _openTheFile(storage);
+    addTearDown(c.dispose);
+
+    const extra =
+        '[Event "Added elsewhere"]\n'
+        '[White "me"]\n'
+        '[Black "someone new"]\n'
+        '[Result "*"]\n'
+        '\n'
+        '1. Nf3 d5 *\n';
+    storage.writeBehindOurBack(_path, '${_fileText().trimRight()}\n\n$extra');
+
+    c.setRating(2);
+    await c.flushPendingMetadata();
+
+    final written = storage.files[_path]!;
+    expect(
+      splitPgnIntoGames(written).length,
+      4,
+      reason: 'the new game is gone',
+    );
+    expect(written, contains('someone new'));
+    expect(written, contains('[StudyRating "2"]'));
+    expect(written.trimLeft(), startsWith(_bannerLine));
+  });
+
+  test('a file replaced by something unrecognisable is left alone', () async {
+    final c = await _openTheFile(storage);
+    addTearDown(c.dispose);
+
+    // No games at all: whatever this is, it is not the collection we loaded,
+    // and writing our copy over it would destroy it.
+    storage.writeBehindOurBack(_path, '; someone emptied this file\n');
+
+    c.setRating(5);
+    await c.flushPendingMetadata();
+
+    expect(storage.files[_path], '; someone emptied this file\n');
+  });
+
+  test('an unchanged file still gets the plain whole-file write', () async {
+    final c = await _openTheFile(storage);
+    addTearDown(c.dispose);
+
+    c.setRating(1);
+    await c.flushPendingMetadata();
+
+    final written = storage.files[_path]!;
+    expect(splitPgnIntoGames(written).length, 3);
+    expect(written, contains('[StudyRating "1"]'));
+    expect(written.trimLeft(), startsWith(_bannerLine));
   });
 }
