@@ -39,7 +39,7 @@ jobs:
             libboost-fiber-dev libboost-context-dev libtbb-dev libjemalloc-dev zlib1g-dev
 
       - name: Cache TerarkDB + cdbdirect build
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         id: cdbdirect-cache
         with:
           path: packages/cdbdirect_flutter_libs/.build/deps
@@ -53,7 +53,7 @@ jobs:
           test -f packages/cdbdirect_flutter_libs/native/linux-x64/libcdbdirect.so
 
       - name: Cache Stockfish
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: assets/executables
           key: stockfish-${{ hashFiles('tools/assets.lock.json') }}-linux
@@ -64,7 +64,7 @@ jobs:
           python3 tools/fetch_assets.py --check --only stockfish-linux
 
       - name: Cache bughouse engine
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: assets/bughouse
           key: bughouse-${{ hashFiles('tools/bughouse.lock.json') }}-linux
@@ -193,7 +193,7 @@ jobs:
           $signature.SignerCertificate | Select-Object Subject, Thumbprint
 
       - name: Cache Stockfish
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: assets/executables
           key: stockfish-${{ hashFiles('tools/assets.lock.json') }}-windows
@@ -204,7 +204,7 @@ jobs:
           python tools/fetch_assets.py --check --only stockfish-windows
 
       - name: Cache bughouse engine
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: assets/bughouse
           key: bughouse-${{ hashFiles('tools/bughouse.lock.json') }}-windows
@@ -371,7 +371,7 @@ jobs:
           cache: true
 
       - name: Cache Stockfish
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: assets/executables
           key: stockfish-${{ hashFiles('tools/assets.lock.json') }}-${{ matrix.stockfish }}
@@ -382,7 +382,7 @@ jobs:
           python3 tools/fetch_assets.py --check --only ${{ matrix.stockfish }}
 
       - name: Cache bughouse engine
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: assets/bughouse
           key: bughouse-${{ hashFiles('tools/bughouse.lock.json') }}-${{ matrix.arch }}
