@@ -1,3 +1,4 @@
+import '../common/name_entry_dialog.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';

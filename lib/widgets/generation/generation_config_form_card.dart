@@ -347,37 +347,13 @@ mixin _GenerationConfigCard
   }
 
   Future<void> _saveCurrentAsPreset() async {
-    final nameCtrl = TextEditingController();
-    final name = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Save settings as preset'),
-        content: SizedBox(
-          width: 320,
-          child: TextField(
-            controller: nameCtrl,
-            autofocus: true,
-            decoration: const InputDecoration(
-              labelText: 'Preset name',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(nameCtrl.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+    final name = await showNameEntryDialog(
+      context,
+      title: 'Save settings as preset',
+      fieldLabel: 'Preset name',
+      confirmLabel: 'Save',
+      allowUnchanged: true,
     );
-    nameCtrl.dispose();
     if (name == null || name.isEmpty) return;
     await _presetStore.save(
       name,

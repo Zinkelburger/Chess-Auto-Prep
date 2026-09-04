@@ -11,6 +11,7 @@
 /// flow in `pgn_viewer_screen_repertoire.dart`.
 library;
 
+import '../widgets/common/name_entry_dialog.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:dartchess/dartchess.dart' show Position;
@@ -1003,34 +1004,14 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     final suggested = _controller.filePath == null
         ? 'New study'
         : p.basenameWithoutExtension(_controller.filePath!);
-    final nameController = TextEditingController(text: suggested);
-    final name = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Save ${games.length} games as study'),
-        content: TextField(
-          controller: nameController,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Study name',
-            border: OutlineInputBorder(),
-            isDense: true,
-          ),
-          onSubmitted: (value) => Navigator.pop(ctx, value),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, nameController.text),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+    final name = await showNameEntryDialog(
+      context,
+      title: 'Save ${games.length} games as study',
+      fieldLabel: 'Study name',
+      confirmLabel: 'Save',
+      initialValue: suggested,
+      allowUnchanged: true,
     );
-    nameController.dispose();
     final trimmed = name?.trim();
     if (trimmed == null || trimmed.isEmpty || !mounted) {
       _reclaimFocus();

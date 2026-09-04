@@ -4,6 +4,7 @@
 /// in screens that need a repertoire before they can function (Builder, Trainer).
 library;
 
+import 'common/name_entry_dialog.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -618,67 +619,22 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
   }
 
   Future<void> _renameRepertoire(RepertoireMetadata repertoire) async {
-    final nameController = TextEditingController(text: repertoire.name);
-    String? nameError;
-
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Rename Repertoire'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Enter new name for the repertoire:'),
-              const SizedBox(height: 16),
-              TextField(
-                controller: nameController,
-                decoration: InputDecoration(
-                  labelText: 'Repertoire Name',
-                  errorText: nameError,
-                ),
-                autofocus: true,
-                onChanged: (_) {
-                  if (nameError != null) setState(() => nameError = null);
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                final newName = nameController.text.trim();
-                if (newName.isEmpty) {
-                  setState(() => nameError = 'Please enter a name');
-                  return;
-                }
-                if (newName == repertoire.name) return;
-                final exists = _repertoires.any(
-                  (r) =>
-                      r.name.toLowerCase() == newName.toLowerCase() &&
-                      r.filePath != repertoire.filePath,
-                );
-                if (exists) {
-                  setState(
-                    () => nameError =
-                        'A repertoire named "$newName" already exists',
-                  );
-                  return;
-                }
-                Navigator.of(context).pop(newName);
-              },
-              child: const Text('Rename'),
-            ),
-          ],
-        ),
-      ),
+    final result = await showNameEntryDialog(
+      context,
+      title: 'Rename Repertoire',
+      prompt: 'Enter new name for the repertoire:',
+      fieldLabel: 'Repertoire Name',
+      confirmLabel: 'Rename',
+      initialValue: repertoire.name,
+      validate: (name) =>
+          _repertoires.any(
+            (r) =>
+                r.name.toLowerCase() == name.toLowerCase() &&
+                r.filePath != repertoire.filePath,
+          )
+          ? 'A repertoire named "$name" already exists'
+          : null,
     );
-
-    nameController.dispose();
 
     if (result != null && result.isNotEmpty) {
       try {

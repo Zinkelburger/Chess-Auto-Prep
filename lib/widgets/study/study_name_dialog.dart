@@ -1,53 +1,43 @@
-/// Shared name prompt for new studies and chapter rename.
+/// Name prompt for new studies and study chapters, with the filename rules
+/// a study's on-disk file has to satisfy.
 library;
 
 import 'package:flutter/material.dart';
 
-import '../../utils/app_messages.dart';
+import '../common/name_entry_dialog.dart';
 
+/// Characters a filename cannot carry on Windows (and that no study should
+/// carry anywhere, since a study *is* a file).
+final RegExp _unsafeForFilename = RegExp(r'[<>:"/\\|?*]');
+
+/// [name] with the characters a filename cannot hold collapsed to `_`.
+String sanitizeStudyName(String name) => name
+    .replaceAll(_unsafeForFilename, '_')
+    .replaceAll(RegExp(r'_+'), '_')
+    .trim();
+
+/// Ask for a study or chapter name, returning it sanitised, or null when the
+/// user cancelled.
+///
+/// The name-is-unusable check runs on the field rather than as a snackbar
+/// after the dialog has closed, which is what it used to do: typing `///` got
+/// you a dismissed dialog and an "Invalid name." message with nothing to
+/// correct.
 Future<String?> promptStudyName(
   BuildContext context, {
   required String title,
   String? initial,
 }) async {
-  final controller = TextEditingController(text: initial ?? '');
-  final result = await showDialog<String>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text(title),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        decoration: const InputDecoration(
-          labelText: 'Name',
-          border: OutlineInputBorder(),
-          isDense: true,
-        ),
-        onSubmitted: (value) => Navigator.pop(ctx, value),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: () => Navigator.pop(ctx, controller.text),
-          child: const Text('OK'),
-        ),
-      ],
-    ),
+  final name = await showNameEntryDialog(
+    context,
+    title: title,
+    fieldLabel: 'Name',
+    confirmLabel: 'OK',
+    initialValue: initial ?? '',
+    allowUnchanged: true,
+    validate: (value) => sanitizeStudyName(value).isEmpty
+        ? 'That name has no characters a file can use.'
+        : null,
   );
-  controller.dispose();
-  final safe = result
-      ?.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
-      .replaceAll(RegExp(r'_+'), '_')
-      .trim();
-  if (safe == null) return null;
-  if (safe.isEmpty) {
-    if (context.mounted) {
-      showAppSnackBar(context, 'Invalid name.', isError: true);
-    }
-    return null;
-  }
-  return safe;
+  return name == null ? null : sanitizeStudyName(name);
 }

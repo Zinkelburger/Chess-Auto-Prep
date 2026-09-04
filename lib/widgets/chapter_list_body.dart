@@ -7,6 +7,7 @@
 /// plain file path with no further changes.
 library;
 
+import 'common/name_entry_dialog.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -252,58 +253,16 @@ class _ChapterListBodyState extends State<ChapterListBody> {
   );
 
   Future<void> _showCreateDialog() async {
-    final controller = TextEditingController();
-    String? nameError;
-
-    final name = await showDialog<String>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Add Chapter'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Name this chapter (e.g. a variation or system):'),
-              const SizedBox(height: 16),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                decoration: InputDecoration(
-                  labelText: 'Chapter Name',
-                  errorText: nameError,
-                ),
-                onChanged: (_) {
-                  if (nameError != null) setState(() => nameError = null);
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final value = controller.text.trim();
-                if (value.isEmpty) {
-                  setState(() => nameError = 'Please enter a name');
-                  return;
-                }
-                if (_nameTaken(value)) {
-                  setState(() => nameError = 'A chapter named "$value" exists');
-                  return;
-                }
-                Navigator.of(context).pop(value);
-              },
-              child: const Text('Create'),
-            ),
-          ],
-        ),
-      ),
+    final name = await showNameEntryDialog(
+      context,
+      title: 'Add Chapter',
+      prompt: 'Name this chapter (e.g. a variation or system):',
+      fieldLabel: 'Chapter Name',
+      confirmLabel: 'Create',
+      allowUnchanged: true,
+      validate: (value) =>
+          _nameTaken(value) ? 'A chapter named "$value" exists' : null,
     );
-
-    controller.dispose();
     if (name == null) return;
 
     try {
@@ -336,55 +295,16 @@ class _ChapterListBodyState extends State<ChapterListBody> {
   }
 
   Future<void> _renameChapter(RepertoireMetadata chapter) async {
-    final controller = TextEditingController(text: chapter.name);
-    String? nameError;
-
-    final newName = await showDialog<String>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Rename Chapter'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: InputDecoration(
-              labelText: 'Chapter Name',
-              errorText: nameError,
-            ),
-            onChanged: (_) {
-              if (nameError != null) setState(() => nameError = null);
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                final value = controller.text.trim();
-                if (value.isEmpty) {
-                  setState(() => nameError = 'Please enter a name');
-                  return;
-                }
-                if (value == chapter.name) {
-                  Navigator.of(context).pop();
-                  return;
-                }
-                if (_nameTaken(value, except: chapter.name)) {
-                  setState(() => nameError = 'A chapter named "$value" exists');
-                  return;
-                }
-                Navigator.of(context).pop(value);
-              },
-              child: const Text('Rename'),
-            ),
-          ],
-        ),
-      ),
+    final newName = await showNameEntryDialog(
+      context,
+      title: 'Rename Chapter',
+      fieldLabel: 'Chapter Name',
+      confirmLabel: 'Rename',
+      initialValue: chapter.name,
+      validate: (value) => _nameTaken(value, except: chapter.name)
+          ? 'A chapter named "$value" exists'
+          : null,
     );
-
-    controller.dispose();
     if (newName == null || newName.isEmpty) return;
 
     try {

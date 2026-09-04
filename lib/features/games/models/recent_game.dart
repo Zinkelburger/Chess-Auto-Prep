@@ -1,5 +1,6 @@
 import '../../../services/games_library/game_filter.dart';
 import '../../../services/games_library/games_library_service.dart';
+import '../../../utils/movetext_builder.dart';
 import '../services/game_deviation_service.dart';
 import '../services/game_moments.dart';
 import '../services/game_review_summary.dart';
@@ -143,14 +144,7 @@ class RecentGame {
   String movesPreview({int plies = 8}) {
     final shown = sans.take(plies).toList();
     if (shown.isEmpty) return '';
-    final buf = StringBuffer();
-    for (var i = 0; i < shown.length; i++) {
-      if (i.isEven) buf.write('${i ~/ 2 + 1}. ');
-      buf
-        ..write(shown[i])
-        ..write(' ');
-    }
-    final text = buf.toString().trimRight();
+    final text = buildNumberedMovetext(shown);
     return sans.length > shown.length ? '$text …' : text;
   }
 
