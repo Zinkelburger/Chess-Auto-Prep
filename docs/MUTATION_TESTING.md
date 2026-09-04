@@ -54,6 +54,13 @@ callback's index) and some are worth a lot (`loss >= kBlunderCp ? 'Blunder' :
   `x == null || x.foo` genuinely breaks Dart's null promotion, so the mutant
   cannot compile and is correctly excluded — the tests never got a say.
 - A mutant that hangs is counted as killed (the behaviour changed observably).
+- **A score is a sample, not a measurement.** `move_annotation.dart` has 103
+  possible mutants; a `--max 24` run tests 24 of them. The same file scored
+  100% at `--max 18` and 62% at `--max 24` — both true, and only the second
+  told anyone anything. So quote the file, the seed AND the max together, never
+  a bare percentage, and do not compare two numbers taken at different `--max`.
+  The survivor list is the durable output; the percentage is a rough estimate
+  with wide error bars.
 - `--seed` makes the mutant selection reproducible. Quote it when you report a
   score, because a different seed samples different mutants.
 - The target file is restored in a `finally`. If a run is killed with SIGKILL

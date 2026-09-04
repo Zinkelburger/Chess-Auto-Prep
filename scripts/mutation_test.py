@@ -323,13 +323,20 @@ def main() -> int:
 
     timeout = args.timeout or max(60, int(baseline * 6))
 
-    mutants = enumerate_mutants(text)
+    all_mutants = enumerate_mutants(text)
     rng = random.Random(args.seed)
-    rng.shuffle(mutants)
-    mutants = mutants[: args.max]
+    rng.shuffle(all_mutants)
+    mutants = all_mutants[: args.max]
     for i, m in enumerate(mutants):
         m.index = i
-    print(f"── {len(mutants)} mutants (seed {args.seed}, timeout {timeout}s each)\n")
+    # Say the sample out loud. A score is a property of (file, seed, max), not
+    # of the file: raising --max finds holes the smaller sample never showed,
+    # so "100%" at --max 18 and "62%" at --max 24 are both true and only the
+    # second is informative. Quote all three whenever you report a number.
+    print(
+        f"── {len(mutants)} of {len(all_mutants)} possible mutants "
+        f"(seed {args.seed}, timeout {timeout}s each)\n"
+    )
 
     backup = tempfile.NamedTemporaryFile("w", suffix=".dart", delete=False)
     backup.write(text)
@@ -390,7 +397,10 @@ def main() -> int:
 
     wider = [m for m in killed if m.killed_by_wider]
     print(f"\n── {target}")
-    print(f"   mutation score: {len(killed)}/{len(valid)} killed ({score:.0f}%)")
+    print(
+        f"   mutation score: {len(killed)}/{len(valid)} killed ({score:.0f}%)"
+        f"  [sample: {len(mutants)} of {len(all_mutants)}, seed {args.seed}]"
+    )
     if wider:
         print(f"   of those, {len(wider)} were caught only by the wider suite, "
               f"not by {args.tests[0]}")
@@ -408,6 +418,8 @@ def main() -> int:
                     "target": str(target),
                     "tests": args.tests,
                     "seed": args.seed,
+                    "sampled": len(mutants),
+                    "possible": len(all_mutants),
                     "score": score,
                     "killed": len(killed),
                     "valid": len(valid),
