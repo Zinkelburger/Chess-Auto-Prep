@@ -4,9 +4,9 @@
 /// column in Analyze mode. Composition only — no [RepertoireController].
 library;
 
+import '../common/icon_filter_chip.dart';
 import 'package:flutter/material.dart';
 
-import '../../theme/app_colors.dart';
 import 'empty_state_placeholder.dart';
 import '../../models/repertoire_mode.dart';
 
@@ -137,25 +137,11 @@ class _AnalyzeContextZoneState extends State<AnalyzeContextZone> {
       AnalyzeContextView.evalTree => ('Eval Tree', Icons.insights),
       AnalyzeContextView.metrics => ('Metrics', Icons.bar_chart),
     };
-    final isSelected = _view == view;
-    return FilterChip(
-      label: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: 14,
-            color: isSelected ? AppColors.accent : AppColors.onSurfaceMuted,
-          ),
-          const SizedBox(width: 4),
-          Text(label, style: const TextStyle(fontSize: 12)),
-        ],
-      ),
-      selected: isSelected,
+    return IconFilterChip(
+      label: label,
+      icon: icon,
+      selected: _view == view,
       onSelected: (_) => _selectView(view),
-      visualDensity: VisualDensity.compact,
-      showCheckmark: false,
-      padding: const EdgeInsets.symmetric(horizontal: 4),
     );
   }
 

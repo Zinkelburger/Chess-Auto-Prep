@@ -185,6 +185,45 @@ rather than cached references, so the two cannot desync. But pass a value
 explicitly when the caller deliberately snapshotted it across an `await` —
 `ChapterScope.resolveLayout` takes `isStudy` for that reason.
 
+The same pattern has since been applied to the other three big controllers:
+`services/generation/course/course_builder.dart` (the enrichment passes and
+course composition, out of `GenerationSessionController`),
+`services/training/training_run.dart` (what one sitting covers and what comes
+next, out of `TrainingSessionController`), and
+`services/repertoire_pgn_text.dart` (editing a repertoire's PGN as text, out
+of `RepertoireService`). Each has its own tests; none needs a notifier, a
+board or a file.
+
+## Reach for these before writing a fifth copy
+
+Duplication in this repo has a pattern: the same idea gets re-typed per screen
+and the copies drift until two of them disagree and one is wrong. Before
+hand-rolling any of the following, check the shared one:
+
+| Need | Use |
+|---|---|
+| "3h ago" / "in 5d" / an elapsed or ETA duration | `utils/time_format.dart` |
+| A centipawn or mate score as text | `formatEvalDisplay` / `formatPackedEval` (`utils/chess_utils.dart`) |
+| Numbered movetext | `buildNumberedMovetext` (`utils/movetext_builder.dart`) |
+| A NAG's symbol or colour | `utils/pgn_nags.dart` |
+| A labelled number, inline or stacked | `InlineStat` / `StackedStat` (`widgets/common/stat_display.dart`) |
+| "Are you sure?" | `confirmAction` (`widgets/common/confirm_dialog.dart`) |
+| "Name this thing", with validation | `showNameEntryDialog` (`widgets/common/name_entry_dialog.dart`) |
+| A findings report with filters, a cap and dismissal | `HuntReportPanel` (`features/audit/widgets/hunt_report_panel.dart`) |
+| A threshold field, a "more" disclosure, a visible-cap editor | `features/audit/widgets/hunt_controls.dart` |
+| Cooperative pause/cancel in a long service loop | `RunControl` (`services/run_control.dart`) |
+| Saving a hunt report beside a player's games | `HuntReportStore` (`features/audit/services/hunt_report_store.dart`) |
+
+Type is the same rule: `AppTextStyles.caption` and `AppTextStyles.monoFamily`
+exist so `TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted)` and
+`fontFamily: 'SourceCodePro'` never have to be typed again. They were, 166 and
+87 times respectively, before a pass put them back.
+
+A dialog that owns a `TextEditingController` must be a `StatefulWidget` that
+disposes it, not a function that disposes after `await showDialog(...)`: that
+returns while the route is still animating out and the field is still mounted,
+and the framework asserts.
+
 ## Type and colour
 
 Fonts are bundled (`assets/fonts`, declared in `pubspec.yaml`): **Inter** for UI

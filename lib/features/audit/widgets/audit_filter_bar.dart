@@ -54,21 +54,21 @@ class AuditFilterBar extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            _chip(
+            _typeChip(
               label: 'Blunders',
               count: countOf(AuditFindingType.mistake),
               type: AuditFindingType.mistake,
               color: AppColors.evalNegative,
             ),
             const SizedBox(width: 4),
-            _chip(
+            _typeChip(
               label: 'Inaccuracies',
               count: countOf(AuditFindingType.inaccuracy),
               type: AuditFindingType.inaccuracy,
               color: AppColors.findingInaccuracy,
             ),
             const SizedBox(width: 4),
-            _chip(
+            _typeChip(
               label: 'Missing',
               count: countOf(AuditFindingType.missingResponse),
               type: AuditFindingType.missingResponse,
@@ -76,23 +76,23 @@ class AuditFilterBar extends StatelessWidget {
             ),
             if (clashCount > 0) ...[
               const SizedBox(width: 4),
-              _sourceChip(
+              _chip(
                 label: 'Clashes',
                 count: clashCount,
-                isActive: clashOnly,
                 color: AppColors.findingClash,
+                isActive: clashOnly,
                 onSelected: onToggleClashOnly,
               ),
             ],
             const SizedBox(width: 4),
-            _chip(
+            _typeChip(
               label: 'Weak',
               count: countOf(AuditFindingType.weakPosition),
               type: AuditFindingType.weakPosition,
               color: AppColors.findingWeakPosition,
             ),
             const SizedBox(width: 4),
-            _chip(
+            _typeChip(
               label: 'Dead Ends',
               count: countOf(AuditFindingType.deadEnd),
               type: AuditFindingType.deadEnd,
@@ -104,40 +104,21 @@ class AuditFilterBar extends StatelessWidget {
     );
   }
 
+  /// One colour-coded filter toggle.
+  ///
+  /// Both the finding-type chips and the source chips are this shape; they
+  /// were two methods that differed only in how the tap arrived.
   Widget _chip({
     required String label,
     required int count,
-    required AuditFindingType type,
     required Color color,
-  }) {
-    final isActive = activeFilters.contains(type);
-    return FilterChip(
-      label: Text(
-        count > 0 ? '$label ($count)' : label,
-        style: TextStyle(fontSize: 12, color: isActive ? AppColors.ink : color),
-      ),
-      selected: isActive,
-      selectedColor: color.withAlpha(80),
-      backgroundColor: Colors.transparent,
-      side: BorderSide(color: isActive ? color : color.withAlpha(60), width: 1),
-      visualDensity: VisualDensity.compact,
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      showCheckmark: false,
-      onSelected: count > 0 ? (_) => onToggle(type) : null,
-    );
-  }
-
-  Widget _sourceChip({
-    required String label,
-    required int count,
     required bool isActive,
-    required Color color,
     required VoidCallback? onSelected,
+    bool showZeroCount = true,
   }) {
     return FilterChip(
       label: Text(
-        '$label ($count)',
+        count > 0 || showZeroCount ? '$label ($count)' : label,
         style: TextStyle(fontSize: 12, color: isActive ? AppColors.ink : color),
       ),
       selected: isActive,
@@ -151,4 +132,20 @@ class AuditFilterBar extends StatelessWidget {
       onSelected: onSelected != null ? (_) => onSelected() : null,
     );
   }
+
+  /// A finding-type chip: active from [activeFilters], disabled at zero, and
+  /// labelled without the count when there is none.
+  Widget _typeChip({
+    required String label,
+    required int count,
+    required AuditFindingType type,
+    required Color color,
+  }) => _chip(
+    label: label,
+    count: count,
+    color: color,
+    isActive: activeFilters.contains(type),
+    showZeroCount: false,
+    onSelected: count > 0 ? () => onToggle(type) : null,
+  );
 }

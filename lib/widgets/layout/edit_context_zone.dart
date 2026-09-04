@@ -5,6 +5,7 @@
 /// [EditContextLayoutPrefs].
 library;
 
+import '../common/icon_filter_chip.dart';
 import 'dart:async';
 
 import 'package:dartchess/dartchess.dart';
@@ -252,27 +253,14 @@ class _EditContextZoneState extends State<EditContextZone> {
         onLongPress: widget.tabsLocked
             ? null
             : () => _showPlaceMenu(context, spec),
-        child: FilterChip(
+        child: IconFilterChip(
           key: ValueKey('edit_context_chip_${spec.view.name}'),
-          label: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                spec.icon,
-                size: 14,
-                color: isSelected ? AppColors.accent : AppColors.onSurfaceMuted,
-              ),
-              const SizedBox(width: 4),
-              Text(spec.label, style: const TextStyle(fontSize: 12)),
-            ],
-          ),
+          label: spec.label,
+          icon: spec.icon,
           selected: isSelected,
           onSelected: widget.tabsLocked
               ? null
               : (v) => _toggleView(spec.view, v),
-          visualDensity: VisualDensity.compact,
-          showCheckmark: false,
-          padding: const EdgeInsets.symmetric(horizontal: 4),
         ),
       ),
     );

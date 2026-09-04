@@ -4,6 +4,7 @@
 /// builders, or [AnalyzeMainZone.withLinesBrowser] for the default lines list.
 library;
 
+import '../common/icon_filter_chip.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/build_tree_node.dart';
@@ -13,7 +14,6 @@ import '../../services/coherence_service.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../../services/generation/fen_map.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
-import '../../theme/app_colors.dart';
 import '../repertoire_lines_browser.dart';
 import 'empty_state_placeholder.dart';
 import '../../models/repertoire_mode.dart';
@@ -143,28 +143,13 @@ class _AnalyzeMainZoneState extends State<AnalyzeMainZone> {
     );
   }
 
-  Widget _chip(String label, AnalyzeMainView view, IconData icon) {
-    final isSelected = _view == view;
-    return FilterChip(
-      label: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: 14,
-            color: isSelected ? AppColors.accent : AppColors.onSurfaceMuted,
-          ),
-          const SizedBox(width: 4),
-          Text(label, style: const TextStyle(fontSize: 12)),
-        ],
-      ),
-      selected: isSelected,
-      onSelected: (_) => _selectView(view),
-      visualDensity: VisualDensity.compact,
-      showCheckmark: false,
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-    );
-  }
+  Widget _chip(String label, AnalyzeMainView view, IconData icon) =>
+      IconFilterChip(
+        label: label,
+        icon: icon,
+        selected: _view == view,
+        onSelected: (_) => _selectView(view),
+      );
 
   Widget _buildContent() {
     return switch (_view) {
