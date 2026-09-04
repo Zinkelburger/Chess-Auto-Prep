@@ -28,10 +28,12 @@ class MaiaTensor {
         'assets/data/all_moves_maia3_reversed.json',
       );
 
-      final Map<String, dynamic> movesMap = json.decode(movesJson);
+      final Map<String, dynamic> movesMap =
+          json.decode(movesJson) as Map<String, dynamic>;
       _allMoves = movesMap.map((key, value) => MapEntry(key, value as int));
 
-      final Map<String, dynamic> movesRevMap = json.decode(movesRevJson);
+      final Map<String, dynamic> movesRevMap =
+          json.decode(movesRevJson) as Map<String, dynamic>;
       _allMovesReversed = movesRevMap.map(
         (key, value) => MapEntry(int.parse(key), value as String),
       );

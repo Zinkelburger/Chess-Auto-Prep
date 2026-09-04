@@ -34,6 +34,7 @@ import '../core/study_controller.dart';
 import '../services/games_library/game_filter.dart' show dedupKeyForHeaders;
 import '../services/storage/app_paths.dart';
 import '../services/lichess_auth_service.dart';
+import '../services/storage/storage_service.dart';
 import '../services/storage/storage_factory.dart';
 import '../services/game_analysis_controller.dart';
 import '../models/board_annotation.dart';
