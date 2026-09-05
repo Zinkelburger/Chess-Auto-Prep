@@ -102,7 +102,7 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('offers every way of adding lines, labels only', (
+    testWidgets('groups manual and games workflows under planning', (
       tester,
     ) async {
       await _pump(
@@ -116,11 +116,11 @@ void main() {
       await openMenu(tester);
 
       expect(find.text('Plan the lines…'), findsOneWidget);
-      expect(find.text('Generate from here…'), findsOneWidget);
-      expect(find.text('Play the moves myself…'), findsOneWidget);
-      expect(find.text('From my games…'), findsOneWidget);
+      expect(find.text('Generate'), findsOneWidget);
+      expect(find.text('Play the moves myself…'), findsNothing);
+      expect(find.text('From my games…'), findsNothing);
       // File and paste are one entry: the dialog it opens offers both.
-      expect(find.text('From a PGN…'), findsOneWidget);
+      expect(find.text('From a PGN…'), findsNothing);
       expect(find.text('Paste PGN…'), findsNothing);
 
       // No explaining sentence under any of them — the labels stand alone.
@@ -142,13 +142,9 @@ void main() {
 
     testWidgets('picking an entry runs that entry', (tester) async {
       var played = false;
-      await _pump(
-        tester,
-        onPlanBuild: () {},
-        onBuildByPlaying: () => played = true,
-      );
+      await _pump(tester, onPlanBuild: () => played = true);
       await openMenu(tester);
-      await tester.tap(find.text('Play the moves myself…'));
+      await tester.tap(find.text('Plan the lines…'));
       await tester.pumpAndSettle();
 
       expect(played, isTrue);

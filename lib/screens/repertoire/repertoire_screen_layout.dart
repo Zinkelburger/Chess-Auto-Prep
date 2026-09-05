@@ -122,6 +122,10 @@ mixin _RepertoireLayout
           child: Text('Database', style: TextStyle(fontSize: 12)),
         ),
         Tab(height: 30, child: Text('Tree', style: TextStyle(fontSize: 12))),
+        Tab(
+          height: 30,
+          child: Text('Generate', style: TextStyle(fontSize: 12)),
+        ),
       ],
       stripLabel: 'Analysis',
       hideTooltip: 'Hide analysis panel',
@@ -131,6 +135,7 @@ mixin _RepertoireLayout
         _cursorScoped((_) => _buildEngineTabContent()),
         _cursorScoped((_) => _buildDatabaseTabContent()),
         _cursorScoped((_) => _buildTreeTabContent()),
+        _cursorScoped((_) => _buildGenerateTabContent()),
       ],
     );
   }
@@ -269,6 +274,8 @@ mixin _RepertoireLayout
               _cursorScoped((_) => _buildPgnTabWithEngines()),
               _cursorScoped((_) => _buildSecondTabContent()),
               _cursorScoped((_) => _buildTreeTabContent()),
+              _cursorScoped((_) => _buildDatabaseTabContent()),
+              _cursorScoped((_) => _buildGenerateTabContent()),
             ],
           ),
         ),
@@ -297,7 +304,14 @@ mixin _RepertoireLayout
   Widget _buildToolsTabBar() {
     return TabBar(
       controller: _toolsTabController,
-      tabs: [_buildPgnTabLabel(), _buildLinesTabLabel(), _buildTreeTabLabel()],
+      isScrollable: true,
+      tabs: [
+        _buildPgnTabLabel(),
+        _buildLinesTabLabel(),
+        _buildTreeTabLabel(),
+        const Tab(text: 'Database'),
+        const Tab(text: 'Generate'),
+      ],
       labelPadding: const EdgeInsets.symmetric(horizontal: 12),
       indicatorSize: TabBarIndicatorSize.label,
       dividerHeight: 1,
@@ -321,7 +335,7 @@ mixin _RepertoireLayout
       onGoToStart: () => _controller.loadMoveSequence([]),
       onGoBack: _sessionAwareGoBack,
       onGoForward: _sessionAwareGoForward,
-      onGenerateFromHere: _openGenerationDialog,
+      onGenerateFromHere: _openGenerateTab,
       onFlipBoard: () => setState(() => _boardFlipped = !_boardFlipped),
       // Compact stacks the board above the tools, so there is no width to
       // trade and the control would do nothing.

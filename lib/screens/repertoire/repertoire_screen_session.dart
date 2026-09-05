@@ -128,6 +128,9 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
   void _onGenerationChanged() {
     if (!mounted) return;
     final ctrl = _generationController;
+    if (ctrl.isGenerating) {
+      _lastRunWasPositionGeneration = ctrl.isExpectimaxProbe;
+    }
 
     if (ctrl.isGenerating && ctrl.currentJob == null) {
       final probe = ctrl.isExpectimaxProbe;
@@ -169,7 +172,9 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
           fallbackFilePath: _controller.currentRepertoire?.filePath,
         ),
       );
-      if (actions.justFinished) _showLinesSurface();
+      if (actions.justFinished && !_lastRunWasPositionGeneration) {
+        _showLinesSurface();
+      }
     }
 
     if (actions.shouldCoalesceRebuild) {

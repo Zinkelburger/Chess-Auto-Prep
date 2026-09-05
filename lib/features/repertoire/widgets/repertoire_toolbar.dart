@@ -469,26 +469,9 @@ class RepertoireGenerationStatusChip extends StatelessWidget {
   }
 }
 
-/// The one place every way of *adding lines* to a repertoire lives: plan a
-/// build, generate from the board, play the moves yourself, mine your own
-/// games, or load a PGN off disk. One tap opens the menu, one tap runs the
-/// item — every entry opens its own configuration step or picker first, so
-/// nothing heavy can fire by accident.
-///
-/// Rows are labels only — no explaining sentence, and no leading icon. The
-/// icons were decoration: a sparkle, a gamepad and a download arrow that no
-/// reader can tell apart faster than they can read five short labels, and
-/// that each suggested the wrong thing (the gamepad read as "play a game",
-/// not "author lines by playing them"). The label is the discriminator, so
-/// it is the only thing here.
-///
-/// The rows are ordered in two families — three verbs for making moves at
-/// the board, then two sources the moves come out of — and the labels carry
-/// that on their own. There is no rule between them: a five-row menu does
-/// not need furniture to be read. ("Plan a build" and "Import PGN" were the
-/// two labels that broke the pattern — "a build" is the pipeline's word for
-/// itself, and "Import" named the transport rather than where the lines
-/// come from.)
+/// Plan lines or open position generation. The planner includes manual
+/// choices and the user's games; PGN import stays in the PGN pane. Hosts
+/// without a planner can still expose the older workflows directly.
 class RepertoireAddLinesMenu extends StatelessWidget {
   const RepertoireAddLinesMenu({
     super.key,
@@ -508,18 +491,17 @@ class RepertoireAddLinesMenu extends StatelessWidget {
   List<AppMenuEntry> get _entries => [
     if (onPlanBuild != null)
       AppMenuEntry(label: 'Plan the lines…', onRun: onPlanBuild!),
-    if (onGenerate != null)
-      AppMenuEntry(label: 'Generate from here…', onRun: onGenerate!),
+    if (onGenerate != null) AppMenuEntry(label: 'Generate', onRun: onGenerate!),
     // Named for what the user does, not for the mode's internal name: the
     // one thing that separates it from Generate is who chooses our moves.
-    if (onBuildByPlaying != null)
+    if (onPlanBuild == null && onBuildByPlaying != null)
       AppMenuEntry(label: 'Play the moves myself…', onRun: onBuildByPlaying!),
-    if (onBuildFromGames != null)
+    if (onPlanBuild == null && onBuildFromGames != null)
       AppMenuEntry(label: 'From my games…', onRun: onBuildFromGames!),
     // One entry, not the old "Load from disk…" / "Paste PGN…" pair: the
     // dialog it opens offers both, so the menu no longer asks the user to
     // pick a transport before it will show them the import.
-    if (onImportPgn != null)
+    if (onPlanBuild == null && onImportPgn != null)
       AppMenuEntry(label: 'From a PGN…', onRun: onImportPgn!),
   ];
 

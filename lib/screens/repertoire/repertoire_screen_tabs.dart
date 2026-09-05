@@ -130,8 +130,36 @@ mixin _RepertoireTabContent
     );
   }
 
+  Widget _buildGenerateTabContent() {
+    return GeneratePositionPane(
+      fen: _controller.fen,
+      databaseName:
+          '${p.basename(p.dirname(_controller.currentRepertoire!.filePath))} / ${_controller.currentRepertoire!.name}',
+      generation: _generationController,
+      onGenerate: ({String? moveSan, required int plies, required int cores}) =>
+          _generationController.computeExpectimax(
+            ExpectimaxProbeTarget(
+              repertoireFilePath: _controller.currentRepertoire!.filePath,
+              repertoireStartFen: _controller.startingFen ?? kStandardStartFen,
+              movesFromStart: List.of(_controller.currentMoveSequence),
+              playAsWhite: _controller.isRepertoireWhite,
+              moveSan: moveSan,
+              plies: plies,
+              engineThreads: cores,
+            ),
+          ),
+      onPlayMove: _controller.playMove,
+      onHoverMove: (uci) => _boardPreview.setHoverArrow(
+        uci == null ? null : BoardAnnotation.arrowFromUci(uci),
+      ),
+      onPlanLines: () => unawaited(_openPlanner()),
+      onCutLines: () => unawaited(_openLineBuildDialog(cutOnly: true)),
+    );
+  }
+
   Widget _buildTreeTabContent() {
     return RepertoireTreePane(
+      sourceName: _controller.currentRepertoire?.name,
       tree: _controller.openingTree,
       repertoireLines: _controller.repertoireLines,
       currentMoveSequence: _controller.currentMoveSequence,
@@ -247,7 +275,7 @@ mixin _RepertoireTabContent
       generationController: _generationController,
       auditController: _auditController,
       jobManager: _jobManager,
-      onOpenGenerationDialog: () => unawaited(_openGenerationDialog()),
+      onOpenGenerationDialog: () => unawaited(_openGenerateTab()),
       onOpenAuditConfig: () => _openAuditDialog(forceConfig: true),
       // Coverage is a fraction of master-game counts, so without the local
       // master book the run traverses the whole tree and reports "0.0%
@@ -442,7 +470,7 @@ mixin _RepertoireTabContent
       onStartTour: ({TrapLineInfo? startTrap}) =>
           _trapSession.openTour(startTrap: startTrap),
       onDiscoverTraps: _discoverTrapsFromRepertoire,
-      onOpenGeneration: _openGenerationDialog,
+      onOpenGeneration: _openGenerateTab,
     );
   }
 

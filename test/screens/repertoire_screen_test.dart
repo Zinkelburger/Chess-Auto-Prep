@@ -14,6 +14,7 @@ library;
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -38,6 +39,17 @@ String _writeRepertoire(WidgetTester tester) {
   addTearDown(() {
     if (dir.existsSync()) dir.deleteSync(recursive: true);
   });
+  const paths = MethodChannel('plugins.flutter.io/path_provider');
+  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+    paths,
+    (_) async => dir.path,
+  );
+  addTearDown(
+    () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      paths,
+      null,
+    ),
+  );
   final repDir = Directory('${dir.path}/MyRep')..createSync();
   File('${repDir.path}/Main.pgn').writeAsStringSync(_chapterPgn);
   return '${repDir.path}/Main.pgn';
@@ -184,14 +196,38 @@ void main() {
     });
   });
 
+  for (final width in [900.0, 1600.0]) {
+    testWidgets('Generate opens beside the board at width $width', (
+      tester,
+    ) async {
+      await _pumpScreen(
+        tester,
+        repertoirePath: _writeRepertoire(tester),
+        size: Size(width, 1000),
+      );
+      await tester.tap(find.byTooltip('Generate from here…'));
+      await _settle(tester);
+      expect(find.widgetWithText(TextFormField, 'Depth'), findsOneWidget);
+      expect(find.widgetWithText(TextFormField, 'Cores'), findsOneWidget);
+      expect(find.text('??'), findsWidgets);
+      expect(find.text('Generate Repertoire'), findsNothing);
+      await tester.tap(find.text('Tree'));
+      await _settle(tester);
+      await tester.ensureVisible(find.widgetWithText(Tab, 'Generate'));
+      await tester.tap(find.widgetWithText(Tab, 'Generate'));
+      await _settle(tester);
+      expect(find.text('Plan lines from here'), findsOneWidget);
+    });
+  }
+
   group('tree tab', () {
     testWidgets('the book toggle reveals the opening explorer', (tester) async {
       await _pumpScreen(tester, repertoirePath: _writeRepertoire(tester));
 
       await tester.tap(find.text('Tree'));
-      await tester.pumpAndSettle();
+      await _settle(tester);
 
-      expect(find.text('Repertoire tree'), findsOneWidget);
+      expect(find.text('Saved lines: Main'), findsOneWidget);
       final book = find.byTooltip('Show Lichess opening explorer');
       expect(book, findsOneWidget);
 

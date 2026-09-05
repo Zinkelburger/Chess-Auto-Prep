@@ -29,6 +29,7 @@ import 'starting_position_card.dart';
 
 class RepertoireGenerationTab extends StatefulWidget {
   final String fen;
+  final bool cutOnly;
   final bool isWhiteRepertoire;
   final RepertoireMetadata? currentRepertoire;
   final List<String> currentMoveSequence;
@@ -51,6 +52,7 @@ class RepertoireGenerationTab extends StatefulWidget {
 
   const RepertoireGenerationTab({
     super.key,
+    this.cutOnly = false,
     required this.fen,
     required this.isWhiteRepertoire,
     required this.currentRepertoire,
@@ -330,6 +332,28 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       listenable: widget.generationController,
       builder: (context, _) {
         final ctrl = widget.generationController;
+        if (widget.cutOnly) {
+          final cards = _buildSliceCard(ctrl);
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Choose how many generated lines to keep. Saved analysis stays available.',
+                ),
+                ...cards,
+                if (_slicer == null && !_ranking)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 16),
+                    child: Text(
+                      'No generated lines to cut in this chapter. Plan and save lines first.',
+                    ),
+                  ),
+              ],
+            ),
+          );
+        }
         final statusText = ctrl.isGenerating
             ? ctrl.progress.status
             : ctrl.lastRunSummary;

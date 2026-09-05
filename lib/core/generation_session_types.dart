@@ -149,6 +149,7 @@ class ExpectimaxProbeTarget {
     required this.plies,
     required this.playAsWhite,
     this.moveSan,
+    this.engineThreads,
   });
 
   final String repertoireFilePath;
@@ -161,4 +162,5 @@ class ExpectimaxProbeTarget {
   /// Half-moves to explore below the root.
   final int plies;
   final bool playAsWhite;
+  final int? engineThreads;
 }

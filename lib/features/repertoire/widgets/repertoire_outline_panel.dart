@@ -414,7 +414,7 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
       if (widget.onGenerateInto != null)
         const _MenuEntry(
           'generate',
-          'Generate lines into this chapter…',
+          'Open Generate for this chapter…',
           Icons.auto_awesome,
         ),
       if (widget.onAuditChapter != null)

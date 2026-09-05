@@ -69,6 +69,14 @@ BuildTree _tree(String rootFen, {String childFen = _afterE4}) {
   return BuildTree(root: root, totalNodes: 2)..computeMetadata();
 }
 
+class _CapturingGeneration extends GenerationSessionController {
+  GenerationRequest? request;
+  @override
+  Future<void> startBuild(GenerationRequest request) async {
+    this.request = request;
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -138,6 +146,61 @@ void main() {
   });
 
   group('computeExpectimax', () {
+    test(
+      'loads existing analysis before the first position generation',
+      () async {
+        storage.files['/r/x_expectimax.json'] = ExpectimaxProbeStore.encode([
+          _tree(_afterE4C5, childFen: 'probe-child'),
+        ]);
+        final controller = _CapturingGeneration();
+        await controller.computeExpectimax(
+          const ExpectimaxProbeTarget(
+            repertoireFilePath: '/r/x.pgn',
+            repertoireStartFen: kStandardStartFen,
+            movesFromStart: [],
+            plies: 1,
+            engineThreads: 1,
+            playAsWhite: true,
+          ),
+        );
+        expect(
+          controller.generatedTreeFenMap!.getCanonical(_afterE4C5),
+          isNotNull,
+        );
+        expect(controller.request!.expectimaxOnly, isTrue);
+        controller.dispose();
+      },
+    );
+    test(
+      'explicit depth and cores create a database-only request at the chosen move',
+      () async {
+        final controller = _CapturingGeneration();
+        final error = await controller.computeExpectimax(
+          const ExpectimaxProbeTarget(
+            repertoireFilePath: '/r/x.pgn',
+            repertoireStartFen: kStandardStartFen,
+            movesFromStart: ['e4'],
+            moveSan: 'c5',
+            plies: 3,
+            engineThreads: 1,
+            playAsWhite: true,
+          ),
+        );
+        expect(error, isNull);
+        final request = controller.request!;
+        expect(request.expectimaxOnly, isTrue);
+        expect(request.config.maxPly, 3);
+        expect(request.config.coverMinProb, 0);
+        expect(request.config.masterDepthBonusPlies, 0);
+        expect(request.config.resolvedEngineThreads, 1);
+        expect(request.lineMovePrefix, ['e4', 'c5']);
+        expect(request.buildRootFen, _afterE4C5.replaceFirst(' c6 ', ' - '));
+        expect(request.config.verifyFinal, isFalse);
+        expect(request.config.downloadMasterGamesIfMissing, isFalse);
+        expect(storage.files, isEmpty);
+        controller.dispose();
+      },
+    );
     test('refuses moves it cannot play from the start', () async {
       final controller = GenerationSessionController();
 
