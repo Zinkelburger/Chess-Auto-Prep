@@ -16,14 +16,9 @@ Widget _wrap(Widget child) => MaterialApp(
 );
 
 class _Host extends StatefulWidget {
-  const _Host({
-    required this.collapsed,
-    required this.surface,
-    this.lineCount = 3,
-  });
+  const _Host({required this.collapsed, this.lineCount = 3});
 
   final bool collapsed;
-  final RepertoireLinesSurface surface;
   final int lineCount;
 
   @override
@@ -45,7 +40,6 @@ class _HostState extends State<_Host> with SingleTickerProviderStateMixin {
     return RepertoireLinesSidePanel(
       collapsed: _collapsed,
       width: 300,
-      surface: widget.surface,
       lineCount: widget.lineCount,
       tabController: _tabs,
       tabs: const [
@@ -61,11 +55,7 @@ class _HostState extends State<_Host> with SingleTickerProviderStateMixin {
 void main() {
   group('expanded', () {
     testWidgets('shows both tabs and the first body', (tester) async {
-      await tester.pumpWidget(
-        _wrap(
-          const _Host(collapsed: false, surface: RepertoireLinesSurface.lines),
-        ),
-      );
+      await tester.pumpWidget(_wrap(const _Host(collapsed: false)));
 
       expect(find.text('Lines'), findsOneWidget);
       expect(find.text('Tree'), findsOneWidget);
@@ -74,11 +64,7 @@ void main() {
     });
 
     testWidgets('the hide button collapses it', (tester) async {
-      await tester.pumpWidget(
-        _wrap(
-          const _Host(collapsed: false, surface: RepertoireLinesSurface.lines),
-        ),
-      );
+      await tester.pumpWidget(_wrap(const _Host(collapsed: false)));
 
       await tester.tap(find.byTooltip('Hide lines (L)'));
       await tester.pumpAndSettle();
@@ -89,28 +75,16 @@ void main() {
   });
 
   group('collapsed strip', () {
-    testWidgets('names the surface so a running session stays visible', (
-      tester,
-    ) async {
-      for (final (surface, label) in [
-        (RepertoireLinesSurface.lines, 'Lines (3)'),
-        (RepertoireLinesSurface.draft, 'Draft'),
-        (RepertoireLinesSurface.session, 'Session'),
-      ]) {
-        await tester.pumpWidget(
-          _wrap(_Host(collapsed: true, surface: surface, lineCount: 3)),
-        );
-        await tester.pumpAndSettle();
-        expect(find.text(label), findsOneWidget, reason: 'for $surface');
-      }
+    testWidgets('names the lines and their count', (tester) async {
+      await tester.pumpWidget(
+        _wrap(const _Host(collapsed: true, lineCount: 3)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Lines (3)'), findsOneWidget);
     });
 
     testWidgets('tapping the strip expands it again', (tester) async {
-      await tester.pumpWidget(
-        _wrap(
-          const _Host(collapsed: true, surface: RepertoireLinesSurface.lines),
-        ),
-      );
+      await tester.pumpWidget(_wrap(const _Host(collapsed: true)));
 
       await tester.tap(find.byType(InkWell));
       await tester.pumpAndSettle();

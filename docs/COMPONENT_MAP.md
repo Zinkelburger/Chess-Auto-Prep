@@ -146,7 +146,6 @@ RepertoireScreen (composition root — wires controllers to widgets)
   │       Outline column content = RepertoireOutlinePanel (default)
   │          | line-metrics view (old RepertoireLinesBrowser: coverage/ease/coherence/traps, via
   │            the header's metrics button, "Back to chapters" returns)
-  │          | BuildSessionPane / DraftReviewPane while a session or draft is adding lines
   │       BottomPane (collapsed by default, full width): Findings | Jobs
   │
   ├─ Compact (<960px):
@@ -162,7 +161,7 @@ RepertoireScreen (composition root — wires controllers to widgets)
 
 **Planner (`lib/features/planner/`, "Plan a build…")**: full-width planning mode (`PlanBuildScreen`, pushed as a route) that turns a few answers into chapters and then generates them all. `services/eco_trie.dart` lays the ECO book over itself as a SAN trie; `tabiyaScore = entriesBelow × distinctChildren` says whether a position is a fork worth asking about. `controllers/plan_controller.dart` walks from a start position: at *our-move* forks it asks (candidates from `services/plan_data_source.dart`: ECO names, **Maia** probability at the user's Elo (the probability of record — the Lichess explorer is never queried for probabilities, it is too slow and rate-limited), ChessDB eval; overlaid with `services/plan_knowledge.dart`: what the user's chapters already play — taken silently when unique — and what they play in their own Player Analysis games — pre-ticked, on by default); at *their-move* tabiyas it splits replies ≥ `chapterShare` into sibling chapters and cuts a "sidelines" chapter at the same root that excludes them (`TreeBuildConfig.rootReplyExclude`, honored in `node_expander.addOpponentChildren` at ply 0) so no two chapters build the same lines; out of book / `maxPly` it cuts a chapter. Flat chapters only (no sub-folders); duplicate names get the distinguishing move appended ("Queen's Gambit Declined · 4.Bg5"). Screen columns: plan so far | board (interactive in Start; clicking a candidate previews it) with Engine/Database tabs under it | question / coverage / review card. Review embeds `GenerationConfigForm` for engine settings; commit returns `PlanBuildResult` to the repertoire screen, whose `PlanRunner` (`controllers/plan_runner.dart`) creates the chapter files (via `RepertoireOutlineService`) then runs one `GenerationRequest` per chapter through `GenerationSessionController`, badging the outline ("queued", "building…").
 
-**Toolbar**: title/breadcrumb (repertoire ▸ chapter switcher) · `Add lines ▾` (Generate with engine…, Build by playing, From my games…, Import PGN file…, Paste PGN…) · `Audit` · Train · ⋮.
+**Toolbar**: title/breadcrumb (repertoire ▸ chapter switcher) · `Actions ▾` — one sectioned menu (`AppMenuEntry.heading`): GENERATE (Plan the lines…, Generate from here…) · IMPORT (From a PGN…) · TRAIN (Train this chapter) · CHECK (Audit for gaps…) · mode switcher · ⋮ (Repertoire settings…, App settings…). "Play the moves myself" and "From my games" were removed in Sept 2026: both are the planner's job (moves played on the board at a question; the "My games" walk).
 
 **Key files:**
 - `lib/core/generation_session_controller.dart` — owns the run and the generated-tree bundle; pause/resume/cancel survive dialog disposal; `dispose()` stops build. Progress UI state lives on `GenerationProgress`; mid-run line export lives on `SnapshotExporter`.
@@ -1135,7 +1134,6 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `test/services/trap_extractor_test.dart` | Trap extraction |
 | `test/services/tactics/tactics_session_controller_test.dart` | Tactics session |
 | `test/services/training/training_session_controller_test.dart` | Repertoire trainer: `loadRepertoire` happy/error paths, due-queue ordering, `setIdle`, `isCorrectUserMove` SAN/UCI edge cases, drill/learn/replay phase transitions, session statistics, move-progress streaks, dispose safety (in-memory service fakes) |
-| `test/services/games_repertoire/games_draft_controller_test.dart` | `GamesDraftController`: build happy path + classification, building flag/notify lifecycle, no-games and fetch-failure errors, start-position restriction, re-entrancy no-op, `close`, dispose safety |
 | `test/services/tactics_engine_test.dart` | `checkMoveAtIndex`, SAN normalization, mate-in-1 from mid-game FEN; `buildTrainableLine` fallback + Maia agree/disagree/low-confidence paths with mock evaluator |
 | `test/services/eval/test_*.dart` | Eval provider chain (helpers) |
 | `test/widgets/layout/edit_context_zone_test.dart` | Context zone multi-panel chips |

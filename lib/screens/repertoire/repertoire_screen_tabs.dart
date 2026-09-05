@@ -18,45 +18,8 @@ mixin _RepertoireTabContent
   }
 
   /// The chapters-and-lines surface (compact: second tools tab; wide: the
-  /// outline column): normally the outline, the metrics browser when asked
-  /// for, and the Draft / Session surface while one of those runs.
+  /// outline column): the outline, or the metrics browser when asked for.
   Widget _buildSecondTabContent() {
-    if (_isBuildSessionActive) {
-      return BuildSessionPane(
-        session: _buildSession,
-        boardPreview: _boardPreview,
-        onOpenSettings: () => _buildLauncher.openSessionSettings(context),
-      );
-    }
-    if (_draftController.isBuilding) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Text(
-                _draftController.progress,
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-    final draft = _draftController.draft;
-    if (draft != null) {
-      return DraftReviewPane(
-        draft: draft,
-        isWhite: _draftController.isWhite,
-        controller: _controller,
-        sourceLabel: _draftController.sourceLabel,
-        onClose: _draftController.close,
-        onSelectLine: (sans) => _controller.loadMoveSequence(sans),
-      );
-    }
     return _showLineMetrics ? _buildLineMetricsView() : _buildOutlinePanel();
   }
 
@@ -155,13 +118,7 @@ mixin _RepertoireTabContent
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          InlineEngineBar(
-            // Follow the scratchpad while a session explores.
-            fen: _isBuildSessionActive
-                ? _buildSession.boardFen
-                : _controller.fen,
-            isActive: true,
-          ),
+          InlineEngineBar(fen: _controller.fen, isActive: true),
           const Divider(height: 1),
           InlineExpectimaxBar(
             controller: _controller,
@@ -171,7 +128,6 @@ mixin _RepertoireTabContent
             boardPreview: _boardPreview,
             coherenceResult: _generationController.coherenceService.result,
             generation: _generationController,
-            fenOverride: _isBuildSessionActive ? _buildSession.boardFen : null,
           ),
         ],
       ),
@@ -198,13 +154,7 @@ mixin _RepertoireTabContent
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
-                child: InlineEngineBar(
-                  // Follow the scratchpad while a session explores.
-                  fen: _isBuildSessionActive
-                      ? _buildSession.boardFen
-                      : _controller.fen,
-                  isActive: true,
-                ),
+                child: InlineEngineBar(fen: _controller.fen, isActive: true),
               ),
               VerticalDivider(
                 width: 1,
@@ -221,10 +171,6 @@ mixin _RepertoireTabContent
                   coherenceResult:
                       _generationController.coherenceService.result,
                   generation: _generationController,
-                  // Follow the scratchpad while a session explores.
-                  fenOverride: _isBuildSessionActive
-                      ? _buildSession.boardFen
-                      : null,
                 ),
               ),
             ],

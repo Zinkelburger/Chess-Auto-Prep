@@ -139,9 +139,8 @@ allowlist entry there rather than in prose:
 scripts/ci.sh lint     # layering + the 12px type floor; cheap, never queues
 ```
 
-The allowlist is deliberately one line long
-(`features/repertoire/controllers/build_launcher.dart`, which imports two form
-widgets). Shrink it; do not grow it.
+The allowlist is empty (its one entry, the build launcher that imported two
+form widgets, went with the build-by-playing mode). Keep it empty.
 
 ## Tooling beyond `lib/`
 

@@ -3,6 +3,8 @@ import 'package:chess_auto_prep/features/planner/models/plan_models.dart';
 import 'package:chess_auto_prep/features/planner/services/eco_trie.dart';
 import 'package:chess_auto_prep/features/planner/services/plan_data_source.dart';
 import 'package:chess_auto_prep/features/planner/services/plan_knowledge.dart';
+import 'package:chess_auto_prep/utils/chess_utils.dart';
+import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A tiny book: enough lines through 1.d4 d5 2.c4 to make it a Black fork,
@@ -389,5 +391,167 @@ void main() {
     await c.confirmLeaf();
     final plan = await c.finish();
     expect(plan.chapters.map((ch) => ch.family), ["Queen's Gambit Declined"]);
+  });
+
+  group('PlanController · my games', () {
+    /// A small corpus of the user's games as Black ("me"), by line count:
+    /// 6× QGD, 3× Slav, 1× QGA, 1× 2…Nc6 (a move no source lists), 2× London.
+    String game(List<String> sans) {
+      // Games are split on their [Event] tag, so every game needs one.
+      final b = StringBuffer(
+        '[Event "?"]\n[White "opp"]\n[Black "me"]\n[Result "*"]\n\n',
+      );
+      for (var i = 0; i < sans.length; i++) {
+        if (i.isEven) b.write('${i ~/ 2 + 1}. ');
+        b.write('${sans[i]} ');
+      }
+      return '$b*\n\n';
+    }
+
+    final corpus = StringBuffer();
+    for (var i = 0; i < 6; i++) {
+      corpus.write(game(['d4', 'd5', 'c4', 'e6', 'Nc3', 'Nf6']));
+    }
+    for (var i = 0; i < 3; i++) {
+      corpus.write(game(['d4', 'd5', 'c4', 'c6', 'Nf3', 'Nf6']));
+    }
+    corpus.write(game(['d4', 'd5', 'c4', 'dxc4', 'Nf3']));
+    corpus.write(game(['d4', 'd5', 'c4', 'Nc6']));
+    for (var i = 0; i < 2; i++) {
+      corpus.write(game(['d4', 'd5', 'Bf4', 'Nf6']));
+    }
+    // A game as White must not count towards a Black repertoire.
+    corpus.write(
+      '[Event "?"]\n[White "me"]\n[Black "opp"]\n[Result "*"]\n\n'
+      '1. e4 e5 2. Nf3 *\n\n',
+    );
+
+    final counted = PlanKnowledge.countOwnGamesSync(
+      corpus.toString(),
+      heroNames: 'me',
+      isWhite: false,
+    );
+    final knowledge = PlanKnowledge(
+      ownMoves: counted.moves,
+      ownReplies: counted.replies,
+    );
+
+    PlanController make() => PlanController(
+      source: _FakeSource(trie, shares),
+      isWhite: false,
+      knowledge: knowledge,
+      basis: PlanBasis.ownGames,
+      tabiyaThreshold: 6,
+      chapterShare: 0.08,
+      minShare: 0.05,
+    );
+
+    test('counts only the games played as the repertoire colour', () {
+      expect(counted.games, 13);
+      final afterD4d5 = playSanOrNullMove(
+        playSanOrNullMove(Chess.initial, 'd4')!,
+        'd5',
+      )!.fen;
+      expect(knowledge.ownCountsAt(afterD4d5), {'c4': 11, 'Bf4': 2});
+      expect(knowledge.ownGamesAt(afterD4d5), 13);
+    });
+
+    test(
+      'asks at every position your games reached, thin ones excepted',
+      () async {
+        final c = make();
+        await c.start(['d4', 'd5']);
+        // 13 games at the root → a question needs max(3, 8% of 13) = 3.
+        expect(c.ownFloor, 3);
+
+        // 1.d4 d5: opponents played c4 (11) and Bf4 (2). Only c4 clears the
+        // floor, so only it comes ticked — the book's tabiya score is not
+        // consulted at all when walking your games.
+        expect(c.step!.kind, PlanStepKind.theirMove);
+        expect(c.step!.ownGames, 13);
+        expect(c.step!.preselected, {'c4'});
+        expect(c.step!.candidates.first.san, 'c4');
+        expect(c.step!.candidates.first.ownGames, 13);
+
+        await c.acceptCoverage(['c4']);
+        // Reach follows your games, not Maia: 11 of 13 met 2.c4.
+        expect(c.reachOf(['d4', 'd5', 'c4']), closeTo(11 / 13, 1e-9));
+
+        // 1.d4 d5 2.c4: your move; what you played comes first, most often
+        // on top, and the one you played most is the default answer. 2…Nc6,
+        // which no source lists, still gets a row because you played it.
+        final ours = c.step!;
+        expect(ours.kind, PlanStepKind.ourMove);
+        expect(ours.ownGames, 11);
+        expect(ours.candidates.take(4).map((x) => x.san), [
+          'e6',
+          'c6',
+          'dxc4',
+          'Nc6',
+        ]);
+        expect(ours.candidates.map((x) => x.san), contains('Nf6'));
+        expect(ours.preselected, {'e6'});
+
+        // Take the Slav: 3 games, right on the floor → still a question at
+        // White's move (3.Nf3 ticked), and again at yours (…Nf6).
+        await c.choose(['c6']);
+        expect(c.step!.moves, ['d4', 'd5', 'c4', 'c6']);
+        expect(c.step!.kind, PlanStepKind.theirMove);
+        expect(c.step!.preselected, {'Nf3'});
+        await c.acceptCoverage(['Nf3']);
+        expect(c.step!.kind, PlanStepKind.ourMove);
+        expect(c.step!.preselected, {'Nf6'});
+        await c.choose(['Nf6']);
+
+        // Your games end here: the walk stops, but asks first.
+        final leaf = c.step!;
+        expect(leaf.kind, PlanStepKind.confirmLeaf);
+        expect(leaf.moves, ['d4', 'd5', 'c4', 'c6', 'Nf3', 'Nf6']);
+        expect(leaf.ownGames, 0);
+        await c.confirmLeaf();
+
+        final plan = await c.finish();
+        final builds = plan.chapters
+            .expand((ch) => ch.buildPaths)
+            .map((p) => p.join(' '))
+            .toSet();
+        expect(builds, contains('d4 d5 c4 c6 Nf3 Nf6'));
+        // Nothing was ticked for 2.Bf4, so nothing is built for it.
+        expect(builds.where((b) => b.contains('Bf4')), isEmpty);
+      },
+    );
+
+    test(
+      'a chapter that already answers a position still decides it',
+      () async {
+        final c = make()
+          ..knowledge = knowledge.copyWith(
+            chapterMoves: PlanKnowledge.countOurMovesInLines([
+              ['d4', 'd5', 'c4', 'e6', 'Nc3', 'Nf6'],
+            ], isWhite: false),
+          );
+        await c.start(['d4', 'd5', 'c4']);
+        // …e6 is settled by the chapter; the next question is White's reply.
+        expect(c.step!.moves, ['d4', 'd5', 'c4', 'e6']);
+        expect(c.step!.kind, PlanStepKind.theirMove);
+        expect(c.decisions.first, contains('already in your chapters'));
+      },
+    );
+
+    test('the book walk is unchanged by the games being present', () async {
+      final c = PlanController(
+        source: _FakeSource(trie, shares),
+        isWhite: false,
+        knowledge: knowledge,
+        tabiyaThreshold: 6,
+        chapterShare: 0.08,
+        minShare: 0.05,
+      );
+      await c.start(['d4', 'd5']);
+      // Book basis: Maia's shares decide the ticks (c4 and Bf4 ≥ 8%), and
+      // your games only fill the "You" column.
+      expect(c.step!.preselected, containsAll(['c4', 'Bf4']));
+      expect(c.step!.candidates.firstWhere((x) => x.san == 'Bf4').ownGames, 13);
+    });
   });
 }

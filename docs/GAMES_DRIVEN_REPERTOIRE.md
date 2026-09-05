@@ -1,5 +1,13 @@
 # Games-Driven Repertoire — Design Note
 
+> **Superseded (2026-09-05).** The "From my games…" draft flow this note
+> describes (`services/games_repertoire/`, `widgets/games_repertoire/`) was
+> removed, together with build-by-playing. Turning your games into a
+> repertoire is now the planner's "My games" walk (`lib/features/planner/`,
+> `PlanBasis.ownGames`): the same questions, asked at every position you
+> reached often enough, with what you played pre-ticked. Kept for the design
+> reasoning only.
+
 **Status:** first implementation landed 2026-06-19 (overnight build). Core
 engine + shared library + a working UI flow are committed, tested headlessly,
 and compile. **Not yet GUI-smoke-tested** (no display on the build host) and

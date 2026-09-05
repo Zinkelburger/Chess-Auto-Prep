@@ -4,8 +4,6 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../../theme/app_colors.dart';
-
 /// "PGN" tab label.
 class RepertoirePgnTabLabel extends StatelessWidget {
   const RepertoirePgnTabLabel({super.key});
@@ -26,53 +24,24 @@ class RepertoirePgnTabLabel extends StatelessWidget {
   }
 }
 
-/// "Chapters"/"Draft"/"Session" tab label; highlighted while a build-by-playing
-/// session or a build-from-games draft is active.
+/// "Chapters" tab label (with "& Traps" once the chapter has traps).
 class RepertoireLinesTabLabel extends StatelessWidget {
-  const RepertoireLinesTabLabel({
-    super.key,
-    required this.isBuildSessionActive,
-    required this.isDraftActive,
-    required this.hasTraps,
-  });
+  const RepertoireLinesTabLabel({super.key, required this.hasTraps});
 
-  final bool isBuildSessionActive;
-  final bool isDraftActive;
   final bool hasTraps;
 
   @override
   Widget build(BuildContext context) {
-    final highlight = isBuildSessionActive
-        ? Theme.of(context).colorScheme.primary
-        : isDraftActive
-        ? AppColors.warning
-        : null;
     return Tab(
       height: 30,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            isBuildSessionActive
-                ? Icons.sports_esports
-                : isDraftActive
-                ? Icons.download_done
-                : Icons.menu_book_outlined,
-            size: 14,
-            color: highlight,
-          ),
+          const Icon(Icons.menu_book_outlined, size: 14),
           const SizedBox(width: 4),
           Text(
-            isBuildSessionActive
-                ? 'Session'
-                : isDraftActive
-                ? 'Draft'
-                : 'Chapters${hasTraps ? ' & Traps' : ''}',
-            style: TextStyle(
-              fontSize: 12,
-              color: highlight,
-              fontWeight: highlight != null ? FontWeight.w600 : null,
-            ),
+            'Chapters${hasTraps ? ' & Traps' : ''}',
+            style: const TextStyle(fontSize: 12),
           ),
         ],
       ),

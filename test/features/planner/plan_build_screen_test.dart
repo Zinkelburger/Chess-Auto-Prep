@@ -3,6 +3,7 @@ import 'package:chess_auto_prep/features/planner/models/plan_models.dart';
 import 'package:chess_auto_prep/features/planner/services/eco_trie.dart';
 import 'package:chess_auto_prep/features/planner/services/plan_data_source.dart';
 import 'package:chess_auto_prep/features/planner/widgets/plan_build_screen.dart';
+import 'package:chess_auto_prep/services/analysis_games_service.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -74,6 +75,45 @@ class _FakeSource implements PlanDataSource {
       null;
 }
 
+/// Serves one fixed PGN for any account instead of reading the corpus store.
+class _FakeGames extends AnalysisGamesService {
+  _FakeGames(this.pgn);
+  final String pgn;
+  @override
+  Future<String?> loadAnalysisGames(String platform, String username) async =>
+      pgn;
+}
+
+const _blackGames = '''
+[Event "?"]
+[White "opp"]
+[Black "me"]
+[Result "*"]
+
+1. d4 d5 2. c4 e6 3. Nc3 Nf6 *
+
+[Event "?"]
+[White "opp"]
+[Black "me"]
+[Result "*"]
+
+1. d4 d5 2. c4 e6 3. Nf3 Nf6 *
+
+[Event "?"]
+[White "opp"]
+[Black "me"]
+[Result "*"]
+
+1. d4 d5 2. c4 c6 3. Nf3 Nf6 *
+
+[Event "?"]
+[White "opp"]
+[Black "me"]
+[Result "*"]
+
+1. d4 d5 2. c4 c6 3. Nc3 Nf6 *
+''';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -126,9 +166,12 @@ void main() {
     await pumpPlanner(tester, holder);
 
     // Start screen: root position only, moves the board was on, and the
-    // prefill on by default with a plain way to turn the games part off.
+    // choice of what to walk — the book by default, or your games.
     expect(find.text('Where should this start?'), findsOneWidget);
     expect(find.text('1.d4 d5 2.c4'), findsWidgets);
+    expect(find.text('Opening book'), findsOneWidget);
+    expect(find.text('My games'), findsOneWidget);
+    expect(find.text('Prefer lines I play in my games'), findsNothing);
     // Nothing else competes for attention on this screen.
     expect(find.textContaining('replies'), findsNothing);
     expect(find.textContaining('rating'), findsNothing);
@@ -243,8 +286,91 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+    // The start card scrolls in a window this short; Next is below the fold.
+    await tester.dragUntilVisible(
+      find.text('Next'),
+      find.byType(ListView),
+      const Offset(0, -80),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+  });
+
+  group('My games', () {
+    Future<void> pump(
+      WidgetTester tester, {
+      String? lichessUsername,
+      AnalysisGamesService? games,
+    }) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlanBuildScreen(
+            isWhite: false,
+            repertoireName: 'French',
+            outline: null,
+            initialMoves: const ['d4', 'd5'],
+            baseConfig: const TreeBuildConfig(
+              startFen: kStandardStartFen,
+              playAsWhite: false,
+            ),
+            dataSource: _FakeSource(EcoTrie.build([_tsv])),
+            lichessUsername: lichessUsername,
+            gamesService: games,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // The games are counted on another isolate — real time, outside the
+      // test's fake clock — so give that work a moment to land.
+      for (var i = 0; i < 40; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pump();
+        if (find.textContaining('of your games').evaluate().isNotEmpty ||
+            find.textContaining('No accounts').evaluate().isNotEmpty) {
+          break;
+        }
+      }
+    }
+
+    testWidgets('without an account the games walk says why it cannot run', (
+      tester,
+    ) async {
+      await pump(tester);
+      await tester.tap(find.text('My games'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('No accounts in Settings'), findsOneWidget);
+      final next = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Next'),
+      );
+      expect(next.onPressed, isNull);
+    });
+
+    testWidgets('walks the positions your games reached', (tester) async {
+      await pump(tester, lichessUsername: 'me', games: _FakeGames(_blackGames));
+      await tester.tap(find.text('My games'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('4 of your games as Black'), findsOneWidget);
+      await tester.tap(find.text('Next'));
+      await tester.pumpAndSettle();
+
+      // 1.d4 d5: all four games saw 2.c4 — one reply, ticked, and the card
+      // says how many games this is.
+      expect(find.text('Which replies do you want to set up?'), findsOneWidget);
+      expect(find.textContaining('4 of your games'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      // 2.c4: your move; …e6 (2 games) leads, …c6 (2 games) beside it.
+      expect(find.text('How do you play here?'), findsOneWidget);
+      expect(find.textContaining('50% · 4'), findsNWidgets(2));
+      expect(tester.takeException(), isNull);
+    });
   });
 }
