@@ -22,7 +22,7 @@ jobs:
     needs: quality-gate
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: subosito/flutter-action@v2
         with:
@@ -39,7 +39,7 @@ jobs:
             libboost-fiber-dev libboost-context-dev libtbb-dev libjemalloc-dev zlib1g-dev
 
       - name: Cache TerarkDB + cdbdirect build
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         id: cdbdirect-cache
         with:
           path: packages/cdbdirect_flutter_libs/.build/deps
@@ -53,7 +53,7 @@ jobs:
           test -f packages/cdbdirect_flutter_libs/native/linux-x64/libcdbdirect.so
 
       - name: Cache Stockfish
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: assets/executables
           key: stockfish-${{ hashFiles('tools/assets.lock.json') }}-linux
@@ -64,7 +64,7 @@ jobs:
           python3 tools/fetch_assets.py --check --only stockfish-linux
 
       - name: Cache bughouse engine
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: assets/bughouse
           key: bughouse-${{ hashFiles('tools/bughouse.lock.json') }}-linux
@@ -149,7 +149,7 @@ jobs:
           flatpak build-bundle flatpak-repo \
             chess-auto-prep-${{ github.ref_name }}-linux.flatpak com.example.chess_auto_prep
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux-build
           path: |
@@ -165,7 +165,7 @@ jobs:
     # then shipped runtime files that had never been exercised as a bundle.
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: subosito/flutter-action@v2
         with:
@@ -173,7 +173,7 @@ jobs:
           channel: stable
           cache: true
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -193,7 +193,7 @@ jobs:
           $signature.SignerCertificate | Select-Object Subject, Thumbprint
 
       - name: Cache Stockfish
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: assets/executables
           key: stockfish-${{ hashFiles('tools/assets.lock.json') }}-windows
@@ -204,7 +204,7 @@ jobs:
           python tools/fetch_assets.py --check --only stockfish-windows
 
       - name: Cache bughouse engine
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: assets/bughouse
           key: bughouse-${{ hashFiles('tools/bughouse.lock.json') }}-windows
@@ -349,7 +349,7 @@ jobs:
           }
           Move-Item "dist\chess-auto-prep-$version-windows-setup.exe" "chess-auto-prep-${{ github.ref_name }}-windows-setup.exe"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows-build
           path: |
@@ -370,7 +370,7 @@ jobs:
             stockfish: stockfish-macos-x86_64
             excluded: arm64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: subosito/flutter-action@v2
         with:
@@ -379,7 +379,7 @@ jobs:
           cache: true
 
       - name: Cache Stockfish
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: assets/executables
           key: stockfish-${{ hashFiles('tools/assets.lock.json') }}-${{ matrix.stockfish }}
@@ -390,7 +390,7 @@ jobs:
           python3 tools/fetch_assets.py --check --only ${{ matrix.stockfish }}
 
       - name: Cache bughouse engine
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: assets/bughouse
           key: bughouse-${{ hashFiles('tools/bughouse.lock.json') }}-${{ matrix.arch }}
@@ -464,7 +464,7 @@ jobs:
           zip -ry ../../../../../chess-auto-prep-${{ github.ref_name }}-macos-${{ matrix.arch }}.zip *.app
           ls -lh ../../../../../chess-auto-prep-${{ github.ref_name }}-macos-${{ matrix.arch }}.zip
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos-${{ matrix.arch }}-build
           path: chess-auto-prep-${{ github.ref_name }}-macos-${{ matrix.arch }}.zip
@@ -473,13 +473,13 @@ jobs:
     needs: [build-linux, build-windows, build-macos]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: artifacts/*
           generate_release_notes: true

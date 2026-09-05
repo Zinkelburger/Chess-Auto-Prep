@@ -65,9 +65,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-2022]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -79,7 +79,7 @@ jobs:
           cache: true
 
       - name: Cache bughouse engine
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: assets/bughouse
           key: bughouse-${{ hashFiles('tools/bughouse.lock.json') }}-${{ matrix.os }}
@@ -126,14 +126,14 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
       - name: Cache bughouse engine
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: assets/bughouse
           key: bughouse-${{ hashFiles('tools/bughouse.lock.json') }}-macos
