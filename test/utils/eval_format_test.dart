@@ -62,6 +62,14 @@ void main() {
       expect(formatPackedEval(-50), '-0.5');
     });
 
+    test('a negative score that rounds to zero reads as level, never -0.0', () {
+      expect(formatPackedEval(-4), '+0.0');
+      expect(formatPackedEval(-1), '+0.0');
+      expect(formatPackedEval(-4, decimals: 2), '-0.04');
+      expect(formatPackedEval(-49, decimals: 0), '+0');
+      expect(formatPackedEval(-6), '-0.1');
+    });
+
     test('honours the decimals argument for high-precision panes', () {
       expect(formatPackedEval(135, decimals: 2), '+1.35');
       expect(formatPackedEval(-135, decimals: 2), '-1.35');
