@@ -84,6 +84,20 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
 
   BughouseBookStatus? get bookStatus => _book?.status;
 
+  /// Whether the archive's table is open under the boards.
+  ///
+  /// Shut by default: the engine is what the lab is for, and the archive is
+  /// a reference you open the way Lichess opens its explorer — a book icon
+  /// beside the boards, and the table appears under them.
+  bool _bookOpen = false;
+  bool get bookOpen => _bookOpen && hasBook;
+
+  void toggleBook() {
+    if (!hasBook) return;
+    _bookOpen = !_bookOpen;
+    notifyListeners();
+  }
+
   Future<void> _openBook() async {
     final book = await BughouseBook.open();
     if (book == null) return;

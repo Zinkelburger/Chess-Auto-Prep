@@ -1,18 +1,16 @@
-/// The match panel: run a line out, and read what came back.
+/// The engine tournament panel: play a position out N times, read the score,
+/// and find the earlier runs.
 ///
-/// The order on the panel is the order of the questions. First **the score of
-/// the opening** — how the pair holding White on board 1 did across every
-/// game, which is the number you came for and is not the crosstable's number.
-/// Then the games, one row each, because in bughouse the interesting output is
-/// usually not the score but *what happened*: which board collapsed, what got
-/// dropped, whether anyone sat. Clicking a row puts that game on the two
-/// boards to the left, which is the reason this lives in the lab and not on a
-/// screen of its own.
+/// The engine tournament screen's shape, cut down to what fits beside two
+/// boards: a run button, the history of runs, and the selected run's score
+/// and games. It lives in the lab rather than on that screen because a
+/// bughouse game is two boards, and the lab already has the viewer for one —
+/// clicking a game in the table puts it on the boards to the left.
 ///
-/// The crosstable comes last and stays shut by default. It measures the
-/// engines against each other, and in the ordinary case both engines are the
-/// same Hivemind — so it is the right table for "does thinking longer help
-/// here" and the wrong one for "is this line any good".
+/// The number that leads is **the score of the opening** — how the pair
+/// holding White on board 1 did across every game, which is the question a
+/// tournament from a set position is asked. The crosstable, which measures
+/// the engines against each other, is at the bottom and shut.
 library;
 
 import 'package:flutter/material.dart';
@@ -61,7 +59,13 @@ class BughouseTournamentPanel extends StatelessWidget {
               const SizedBox(height: 8),
               _ErrorBanner(message: matches.error!),
             ],
-            const SizedBox(height: 12),
+            if (matches.matches.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              _History(matches: matches),
+              const SizedBox(height: 10),
+              const Divider(height: 1, color: AppColors.divider),
+            ],
+            const SizedBox(height: 10),
             Expanded(
               child: selected == null
                   ? const _EmptyState()
@@ -78,7 +82,7 @@ class BughouseTournamentPanel extends StatelessWidget {
   }
 }
 
-/// New / stop, and which match is on screen.
+/// Start one, or stop the one running.
 class _RunBar extends StatelessWidget {
   const _RunBar({required this.controller, required this.matches});
 
@@ -90,18 +94,16 @@ class _RunBar extends StatelessWidget {
     final running = matches.isRunning;
     return Row(
       children: [
-        Expanded(
-          child: running
-              ? Text(
-                  'Playing game ${matches.liveGameNumber}'
-                  ' of ${matches.selected?.config.games ?? 0}',
-                  style: AppTextStyles.bodyStrong,
-                  overflow: TextOverflow.ellipsis,
-                )
-              : _MatchPicker(matches: matches),
-        ),
-        const SizedBox(width: 8),
-        if (running)
+        if (running) ...[
+          Expanded(
+            child: Text(
+              'Playing game ${matches.liveGameNumber}'
+              ' of ${matches.selected?.config.games ?? 0}',
+              style: AppTextStyles.bodyStrong,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
           TextButton.icon(
             style: TextButton.styleFrom(
               visualDensity: VisualDensity.compact,
@@ -110,15 +112,15 @@ class _RunBar extends StatelessWidget {
             icon: const Icon(Icons.stop, size: 15),
             label: const Text('Stop'),
             onPressed: matches.stop,
-          )
-        else
-          TextButton.icon(
-            style: TextButton.styleFrom(
+          ),
+        ] else
+          FilledButton.tonalIcon(
+            style: FilledButton.styleFrom(
               visualDensity: VisualDensity.compact,
               textStyle: AppTextStyles.caption,
             ),
             icon: const Icon(Icons.play_arrow, size: 16),
-            label: const Text('New match'),
+            label: const Text('New tournament'),
             onPressed: () => showNewBughouseMatchDialog(context, controller),
           ),
       ],
@@ -126,49 +128,126 @@ class _RunBar extends StatelessWidget {
   }
 }
 
-/// The saved matches, newest first.
-///
-/// A dropdown rather than the engine tournament's left rail, because the rail
-/// there is a whole column and here the boards have it. The label carries the
-/// score, so choosing between two runs of the same line does not need either
-/// to be opened.
-class _MatchPicker extends StatelessWidget {
-  const _MatchPicker({required this.matches});
+/// Every run, newest first — the engine tournament's history rail, laid
+/// flat. A row carries the score so a run you can read the result of is one
+/// you do not have to open.
+class _History extends StatelessWidget {
+  const _History({required this.matches});
 
   final BughouseTournamentController matches;
+
+  /// Four rows before the list scrolls: the history is a way in, not the
+  /// thing you look at.
+  static const double _rowHeight = 44;
+  static const int _visibleRows = 4;
 
   @override
   Widget build(BuildContext context) {
     final selected = matches.selected;
-    if (selected == null) {
-      return const Text('No matches yet', style: AppTextStyles.muted);
-    }
-    if (matches.matches.length == 1) {
-      return Text(
-        selected.config.name,
-        style: AppTextStyles.bodyStrong,
-        overflow: TextOverflow.ellipsis,
-      );
-    }
-    return DropdownButtonHideUnderline(
-      child: DropdownButton<String>(
-        isDense: true,
-        isExpanded: true,
-        value: selected.id,
-        style: AppTextStyles.body,
-        onChanged: (id) {
-          if (id != null) matches.select(id);
-        },
-        items: [
-          for (final match in matches.matches)
-            DropdownMenuItem(
-              value: match.id,
-              child: Text(
-                '${match.config.name} · ${match.openingScoreLabel}',
-                overflow: TextOverflow.ellipsis,
-              ),
+    final rows = matches.matches;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            const Text('HISTORY', style: AppTextStyles.eyebrow),
+            const SizedBox(width: 8),
+            Text('${rows.length}', style: AppTextStyles.caption),
+          ],
+        ),
+        const SizedBox(height: 4),
+        SizedBox(
+          height: _rowHeight * rows.length.clamp(1, _visibleRows),
+          child: ListView.builder(
+            padding: EdgeInsets.zero,
+            itemExtent: _rowHeight,
+            itemCount: rows.length,
+            itemBuilder: (context, i) => _HistoryRow(
+              key: ValueKey('bughouse-history-${rows[i].id}'),
+              match: rows[i],
+              selected: rows[i].id == selected?.id,
+              running: matches.isRunning && rows[i].id == selected?.id,
+              onTap: () => matches.select(rows[i].id),
             ),
-        ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HistoryRow extends StatelessWidget {
+  const _HistoryRow({
+    super.key,
+    required this.match,
+    required this.selected,
+    required this.running,
+    required this.onTap,
+  });
+
+  final StoredBughouseTournament match;
+  final bool selected;
+  final bool running;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final config = match.config;
+    final status = running
+        ? 'Running'
+        : match.status == BughouseTournamentStatus.completed
+        ? ''
+        : match.status.label;
+    return Material(
+      color: selected ? AppColors.surfaceContainer : Colors.transparent,
+      borderRadius: BorderRadius.circular(4),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        hoverColor: AppColors.hoverOverlay,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      config.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.bodyStrong,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    match.openingScore.played == 0
+                        ? '—'
+                        : match.openingScoreLabel,
+                    style: AppTextStyles.mono.copyWith(
+                      color: match.status == BughouseTournamentStatus.failed
+                          ? AppColors.danger
+                          : AppColors.ink,
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                [
+                  '${match.gamesPlayed}/${config.games} games',
+                  config.participants.first.budget.label,
+                  formatTimeAgo(match.createdAt),
+                  if (status.isNotEmpty) status,
+                ].join(' · '),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.caption,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -183,20 +262,12 @@ class _EmptyState extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Play a line out', style: AppTextStyles.emptyStateTitle),
+        Text('No tournaments yet', style: AppTextStyles.emptyStateTitle),
         SizedBox(height: 8),
         Text(
-          'Set the position up on the boards — or just play the first few '
-          'moves — then run a match from it. The engine plays both teams, '
-          'a dozen times over, and every game lands here to click through.',
+          'Set a position up on the boards, then play it out. Every game '
+          'lands here to click through.',
           style: AppTextStyles.emptyStateBody,
-        ),
-        SizedBox(height: 12),
-        Text(
-          'What comes back is the score of the pair holding White on board 1. '
-          'That is the answer to "is this line any good", in the only currency '
-          'bughouse has: games.',
-          style: AppTextStyles.muted,
         ),
       ],
     ),
@@ -307,13 +378,6 @@ class _MatchView extends StatelessWidget {
           title: 'Crosstable',
           summary: _crosstableSummary(match),
           children: [
-            const Text(
-              'Engine against engine, with the seats swapped every other game '
-              'so the opening cancels out. When both teams are the same '
-              'Hivemind this measures nothing — read the score above instead.',
-              style: AppTextStyles.hint,
-            ),
-            const SizedBox(height: 8),
             Scrollbar(
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -345,7 +409,7 @@ class _MatchView extends StatelessWidget {
               foregroundColor: AppColors.onSurfaceMuted,
             ),
             icon: const Icon(Icons.delete_outline, size: 15),
-            label: const Text('Delete this match'),
+            label: const Text('Delete this tournament'),
             onPressed: matches.isRunning
                 ? null
                 : () => matches.delete(match.id),
@@ -365,10 +429,9 @@ class _MatchView extends StatelessWidget {
 
 /// The headline: how the side of the *line* scored.
 ///
-/// Deliberately the biggest thing on the panel, and deliberately not the Elo
-/// number the crosstable would print. The margin sits beside it because a
-/// score of 6/10 invites a conclusion that ten games cannot support, and the
-/// only honest way to say so is to print how wide the interval is.
+/// The biggest thing on the panel, and not the Elo number the crosstable
+/// would print. The sampling range sits beside it because 6/10 invites a
+/// conclusion ten games cannot support.
 class _OpeningScore extends StatelessWidget {
   const _OpeningScore({required this.match});
 
@@ -405,7 +468,6 @@ class _OpeningScore extends StatelessWidget {
               Expanded(
                 child: Text(
                   '${(fraction * 100).toStringAsFixed(0)}%'
-                  ''
                   '  ·  ${score.wins}W ${score.draws}D ${score.losses}L',
                   style: AppTextStyles.muted,
                   overflow: TextOverflow.ellipsis,
@@ -416,9 +478,8 @@ class _OpeningScore extends StatelessWidget {
         if (margin != null)
           Tooltip(
             message:
-                'Conservative 95% sampling bound for independent games. '
-                'Repeated self-play may be correlated; this is not a confidence '
-                'interval for the objective strength of the opening.',
+                'A 95% sampling bound for independent games. Self-play games '
+                'are correlated, so treat it as a floor on the uncertainty.',
             child: Text(
               'Sampling range: ${((fraction - margin).clamp(0, 1) * 100).round()}–'
               '${((fraction + margin).clamp(0, 1) * 100).round()}%',
@@ -440,8 +501,8 @@ class _OpeningScore extends StatelessWidget {
   }
 }
 
-/// What the match was run with — closed, because it is a record rather than a
-/// control: everything here was fixed when the match started.
+/// What the run was made with — shut, because it is a record rather than a
+/// control: everything here was fixed when the run started.
 class _MatchSettings extends StatelessWidget {
   const _MatchSettings({required this.match});
 
@@ -452,7 +513,7 @@ class _MatchSettings extends StatelessWidget {
     final config = match.config;
     final variety = config.variety;
     return BughousePanelSection(
-      title: 'How it was run',
+      title: 'Settings',
       summary:
           '${config.games} games · ${config.participants.first.budget.label}'
           '${config.alternateSeats ? ' · seats swap' : ' · seats fixed'}',
@@ -463,22 +524,19 @@ class _MatchSettings extends StatelessWidget {
         _Fact('Clock stance', config.timeStance.label),
         _Fact(
           'Seats',
-          config.alternateSeats
-              ? 'Swapped every other game'
-              : 'Fixed — every game is the same side of the line',
+          config.alternateSeats ? 'Swapped every other game' : 'Fixed',
         ),
         _Fact(
           'Variety',
           variety.isOn
-              ? 'First ${variety.plies} plies drawn from the engine\'s top '
-                    '${variety.lines}, within ${variety.window} of the best'
-              : 'Off — every game is the engine\'s single best line',
+              ? 'First ${variety.plies} plies from the top ${variety.lines}, '
+                    'within ${variety.window} of the best'
+              : 'Off',
         ),
         _Fact('Ply limit', '${config.maxPlies}, filed as a draw'),
         _Fact('Engine', '${config.hashMb} MB hash · batch ${config.batchSize}'),
         _Fact('Seed', '${config.seed}'),
-        // Where `games.bpgn` is — the file `tools/bughouse_db` can index, and
-        // the only thing here another program can read.
+        // Where `games.bpgn` is — the file `tools/bughouse_db` can index.
         _Fact('Saved in', match.directoryPath),
         if (match.finishedAt != null)
           _Fact(

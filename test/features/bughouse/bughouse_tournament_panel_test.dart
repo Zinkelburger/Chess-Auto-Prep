@@ -131,7 +131,7 @@ void main() {
 
     await pump(tester, controller);
 
-    expect(find.text('New match'), findsOneWidget);
+    expect(find.text('New tournament'), findsOneWidget);
     expect(find.text('WHITE ON BOARD 1 SCORED'), findsOneWidget);
     expect(find.text('No games yet'), findsOneWidget);
   });
@@ -154,8 +154,9 @@ void main() {
 
     expect(find.text('WHITE ON BOARD 1 SCORED'), findsOneWidget);
     // A win and a draw, read from the same side of the line both times — even
-    // though the seats swapped for game 2.
-    expect(find.text('1½/2'), findsOneWidget);
+    // though the seats swapped for game 2. Once as the headline, once on the
+    // run's row in the history.
+    expect(find.text('1½/2'), findsNWidgets(2));
     expect(find.text('Board 1: d4 d5 Bf4'), findsOneWidget);
     // Both games are rows, headed by the seats rather than by "White".
     expect(find.text('A + C (White on 1)'), findsOneWidget);
@@ -185,6 +186,63 @@ void main() {
     expect(controller.history.cursor, 0);
     controller.toEnd();
     expect(controller.state.boardA.isCheckmate, isTrue);
+  });
+
+  testWidgets('every run is a row in the history, newest first', (
+    tester,
+  ) async {
+    final matches = (await tester.runAsync(() async {
+      final store = BughouseTournamentStore(root);
+      final first = await store.create(_config());
+      await store.save(
+        first.copyWith(
+          games: [_game(1, GameResult.whiteWins), _game(2, GameResult.draw)],
+          status: BughouseTournamentStatus.completed,
+        ),
+      );
+      final second = await store.create(
+        BughouseTournamentConfig(
+          name: 'e4 Nf6 e5',
+          startDualFen: BughouseState.initial().dualFen,
+          games: 4,
+          seed: 4,
+        ),
+      );
+      await store.save(
+        second.copyWith(
+          games: [_game(1, GameResult.blackWins)],
+          status: BughouseTournamentStatus.cancelled,
+        ),
+      );
+      final controller = BughouseTournamentController(
+        acquireEngine: () async => FakeBughouseEngine(),
+        showLine: (_) {},
+        store: store,
+      );
+      for (var i = 0; i < 200 && controller.isLoading; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      return controller;
+    }))!;
+    addTearDown(matches.dispose);
+    final controller = BughouseController(engineOverride: FakeBughouseEngine())
+      ..tournamentsOverride = matches;
+    addTearDown(controller.dispose);
+
+    await pump(tester, controller);
+
+    expect(find.text('HISTORY'), findsOneWidget);
+    expect(find.text('d4 d5 Bf4'), findsOneWidget);
+    expect(find.text('e4 Nf6 e5'), findsOneWidget);
+    // The row carries the score and the status, so neither needs opening.
+    expect(find.textContaining('1/4 games'), findsOneWidget);
+    expect(find.textContaining('Stopped'), findsOneWidget);
+
+    // Clicking a row opens that run below.
+    await tester.tap(find.text('d4 d5 Bf4'));
+    await _settle(tester);
+    expect(matches.selected?.config.name, 'd4 d5 Bf4');
+    expect(find.text('1½/2'), findsWidgets);
   });
 
   test('entering the match mode stops the analysis pump', () async {

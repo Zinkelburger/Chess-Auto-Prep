@@ -1,18 +1,19 @@
-/// Setting a bughouse match up: which position, how many games, how hard the
-/// two teams think.
+/// Setting a bughouse tournament up: which position, how many games, how
+/// hard the two teams think.
 ///
-/// Shaped after `new_tournament_dialog.dart` next door — same three-part form,
-/// same "everything reproducible is snapshotted at start" contract — with the
-/// knobs that mean nothing here left out rather than shown greyed. There is no
-/// clock control, because Hivemind has no clock; no depth, because an MCTS
-/// search has no depth to fix; and no engine picker, because there is one
-/// bughouse engine.
+/// Shaped after `new_tournament_dialog.dart` next door — name, position,
+/// games, strength, and everything else behind one **Advanced** disclosure
+/// with defaults you would pick anyway. The knobs that mean nothing here are
+/// left out rather than shown greyed: no clock, because Hivemind has no
+/// clock; no depth, because an MCTS search has no depth to fix; no engine
+/// picker, because there is one bughouse engine. Every quantity is a number
+/// you type inside a range, not a menu of presets.
 ///
 /// The one input with no counterpart on the chess side is the **opening**. A
-/// bughouse position is two boards, so "the position" cannot be a FEN in a box
-/// — it is either what the lab already has on screen, a line typed out, or a
-/// dual FEN. All three end up as the same thing: a [BughouseState] the match
-/// starts every game from.
+/// bughouse position is two boards, so "the position" cannot be a FEN in a
+/// box — it is either what the lab already has on screen, a line typed out,
+/// or a dual FEN. All three end up as the same thing: a [BughouseState] the
+/// tournament starts every game from.
 library;
 
 import 'dart:async';
@@ -22,8 +23,10 @@ import 'package:flutter/material.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../controllers/bughouse_controller.dart';
+import '../models/bughouse_engine_settings.dart';
 import '../models/bughouse_state.dart';
 import '../models/bughouse_tournament.dart';
+import 'bughouse_number_field.dart';
 import 'bughouse_panel_section.dart';
 
 Future<void> showNewBughouseMatchDialog(
@@ -57,14 +60,22 @@ class _NewBughouseMatchDialogState extends State<_NewBughouseMatchDialog> {
   _Source _source = _Source.boards;
 
   int _games = 10;
-  BughouseBudget _budgetA = const BughouseBudget.nodes(800);
-  BughouseBudget _budgetB = const BughouseBudget.nodes(800);
+  int _nodesA = 800;
+  int _nodesB = 800;
   bool _alternateSeats = true;
   BughouseTimeStance _stance = BughouseTimeStance.level;
   BughouseVariety _variety = const BughouseVariety();
   int _maxPlies = 240;
-  int _hashMb = 256;
-  int _batchSize = 8;
+  late int _hashMb = widget.controller.engineSettings.hashMb;
+  late int _batchSize = widget.controller.engineSettings.batchSize;
+
+  static const int minGames = 1;
+  static const int maxGames = 1000;
+  static const int minNodes = 50;
+  static const int maxNodes = 1000000;
+  static const int maxVarietyPlies = 60;
+  static const int minPlyLimit = 20;
+  static const int maxPlyLimit = 2000;
 
   @override
   void initState() {
@@ -82,14 +93,14 @@ class _NewBughouseMatchDialogState extends State<_NewBughouseMatchDialog> {
   }
 
   /// The lab's own line, named after the opening it plays — `d4 d5 Bf4` — so
-  /// the match is findable later without typing anything.
+  /// the run is findable later without typing anything.
   String _defaultName() {
     final line = widget.controller.history
         .movetextOn(BughouseBoard.a)
         .map((e) => e.ply.san)
         .take(6)
         .join(' ');
-    return line.isEmpty ? 'Bughouse match' : line;
+    return line.isEmpty ? 'Bughouse tournament' : line;
   }
 
   String _movetextOfBoards() {
@@ -131,7 +142,7 @@ class _NewBughouseMatchDialogState extends State<_NewBughouseMatchDialog> {
   Widget build(BuildContext context) {
     final start = _start;
     return AlertDialog(
-      title: const Text('New bughouse match', style: AppTextStyles.title),
+      title: const Text('New bughouse tournament', style: AppTextStyles.title),
       content: SizedBox(
         width: 560,
         child: SingleChildScrollView(
@@ -183,11 +194,10 @@ class _NewBughouseMatchDialogState extends State<_NewBughouseMatchDialog> {
                   decoration: const InputDecoration(
                     isDense: true,
                     hintText: '1. d4 d5 2. Bf4',
-                    helperMaxLines: 3,
+                    helperMaxLines: 2,
                     helperText:
-                        'Board 1 unless a line is prefixed "2:". Board 1 is '
-                        'played out first, then board 2 — which matters only '
-                        'if the opening contains a capture.',
+                        'Board 1 unless a line starts with "2:". Board 1 is '
+                        'played out before board 2.',
                   ),
                 ),
               ],
@@ -209,101 +219,87 @@ class _NewBughouseMatchDialogState extends State<_NewBughouseMatchDialog> {
               _StartSummary(start: start),
 
               const SizedBox(height: 18),
-              Row(
-                children: [
-                  Expanded(
-                    child: _Dropdown<int>(
-                      label: 'Games',
-                      value: _games,
-                      items: BughouseTournamentConfig.gameChoices,
-                      labelOf: (v) => '$v',
-                      onChanged: (v) => setState(() => _games = v),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _Dropdown<int>(
-                      label: 'A + C thinks',
-                      value: _budgetA.nodes ?? 800,
-                      items: BughouseBudget.nodeChoices,
-                      labelOf: (v) => '$v nodes',
-                      onChanged: (v) =>
-                          setState(() => _budgetA = BughouseBudget.nodes(v)),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _Dropdown<int>(
-                      label: 'B + D thinks',
-                      value: _budgetB.nodes ?? 800,
-                      items: BughouseBudget.nodeChoices,
-                      labelOf: (v) => '$v nodes',
-                      onChanged: (v) =>
-                          setState(() => _budgetB = BughouseBudget.nodes(v)),
-                    ),
-                  ),
-                ],
+              BughouseNumberField(
+                key: const Key('bughouse-tournament-games'),
+                label: 'Games',
+                value: _games,
+                min: minGames,
+                max: maxGames,
+                labelWidth: 120,
+                onChanged: (v) => setState(() => _games = v),
               ),
-              const SizedBox(height: 6),
-              const Text(
-                'Nodes rather than seconds, so a match run twice usually '
-                'replays. Give one team more to ask whether the line holds '
-                'against someone thinking harder.',
-                style: AppTextStyles.hint,
+              BughouseNumberField(
+                key: const Key('bughouse-tournament-nodes-a'),
+                label: 'A + C thinks',
+                unit: 'nodes a move',
+                hint:
+                    'Nodes rather than seconds, so the same run replays. Give '
+                    'one team more to ask whether the line holds against '
+                    'someone thinking harder.',
+                value: _nodesA,
+                min: minNodes,
+                max: maxNodes,
+                labelWidth: 120,
+                onChanged: (v) => setState(() => _nodesA = v),
+              ),
+              BughouseNumberField(
+                key: const Key('bughouse-tournament-nodes-b'),
+                label: 'B + D thinks',
+                unit: 'nodes a move',
+                value: _nodesB,
+                min: minNodes,
+                max: maxNodes,
+                labelWidth: 120,
+                onChanged: (v) => setState(() => _nodesB = v),
               ),
 
-              const SizedBox(height: 18),
+              const SizedBox(height: 12),
               BughousePanelSection(
-                title: 'Variety',
-                summary: _variety.isOn
-                    ? 'First ${_variety.plies} plies from the top '
-                          '${_variety.lines}'
-                    : 'Off — every game identical',
+                title: 'Advanced',
+                summary:
+                    '${_variety.isOn ? 'Variety on' : 'Variety off'} · '
+                    '${_alternateSeats ? 'seats swap' : 'seats fixed'} · '
+                    '${_stance.shortLabel} · $_maxPlies ply limit',
                 children: [
-                  const Text(
-                    'The engine answers the same way every time, so without '
-                    'this a ten-game match is one game played ten times. '
-                    'Sampled moves come '
-                    'from the engine\'s own shortlist, never from the legal '
-                    'moves, so every game stays one it would defend.',
-                    style: AppTextStyles.hint,
-                  ),
-                  const SizedBox(height: 10),
-                  _Dropdown<int>(
+                  const BughousePanelLabel('Variety'),
+                  BughouseNumberField(
                     label: 'Sampled plies',
+                    hint:
+                        'How many opening plies are drawn from the engine\'s '
+                        'shortlist rather than its top line. 0 plays the '
+                        'same game every time.',
                     value: _variety.plies,
-                    items: BughouseVariety.plyChoices,
-                    labelOf: (v) => v == 0 ? 'Off' : '$v',
+                    min: 0,
+                    max: maxVarietyPlies,
+                    labelWidth: 120,
                     onChanged: (v) =>
                         setState(() => _variety = _variety.copyWith(plies: v)),
                   ),
-                  const SizedBox(height: 10),
-                  _Dropdown<int>(
-                    label: 'Candidates per ply',
+                  BughouseNumberField(
+                    label: 'Candidates',
+                    hint: 'How many ranked lines each sampled ply picks from.',
                     value: _variety.lines,
-                    items: BughouseVariety.lineChoices,
-                    labelOf: (v) => '$v',
+                    min: 1,
+                    max: 10,
+                    labelWidth: 120,
                     onChanged: (v) =>
                         setState(() => _variety = _variety.copyWith(lines: v)),
                   ),
-                  const SizedBox(height: 10),
-                  _Dropdown<double>(
-                    label: 'How far below the best a move may be',
-                    value: _variety.window,
-                    items: BughouseVariety.windowChoices,
-                    labelOf: (v) => '$v of the engine\'s value',
-                    onChanged: (v) =>
-                        setState(() => _variety = _variety.copyWith(window: v)),
+                  BughouseNumberField(
+                    label: 'Window',
+                    unit: '% of value',
+                    hint:
+                        'How far below the best line a sampled move may be, '
+                        'in hundredths of the engine\'s value.',
+                    value: (_variety.window * 100).round(),
+                    min: 1,
+                    max: 50,
+                    labelWidth: 120,
+                    onChanged: (v) => setState(
+                      () => _variety = _variety.copyWith(window: v / 100),
+                    ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              BughousePanelSection(
-                title: 'Table and engine',
-                summary:
-                    '${_alternateSeats ? 'Seats swap' : 'Seats fixed'} · '
-                    '${_stance.shortLabel} · $_maxPlies ply limit',
-                children: [
+                  const SizedBox(height: 8),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     dense: true,
@@ -314,15 +310,12 @@ class _NewBughouseMatchDialogState extends State<_NewBughouseMatchDialog> {
                       style: AppTextStyles.body,
                     ),
                     subtitle: const Text(
-                      'On, the crosstable measures the two engines and the '
-                      'opening cancels out. Off, every game is the same side '
-                      'of the line — which is what you want when both teams '
-                      'are the same engine.',
+                      'Off, every game is the same side of the line.',
                       style: AppTextStyles.hint,
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  const BughousePanelLabel('Clock stance, for the whole match'),
+                  const SizedBox(height: 6),
+                  const BughousePanelLabel('Clock stance, for the whole run'),
                   SegmentedButton<BughouseTimeStance>(
                     style: const ButtonStyle(
                       visualDensity: VisualDensity.compact,
@@ -348,45 +341,32 @@ class _NewBughouseMatchDialogState extends State<_NewBughouseMatchDialog> {
                     onSelectionChanged: (s) =>
                         setState(() => _stance = s.first),
                   ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Fixed, not simulated: teams take turns here, so a '
-                    'simulated diagonal would never move. It is the one bit '
-                    'the engine reads, and it decides whether sitting is '
-                    'legal at all.',
-                    style: AppTextStyles.hint,
-                  ),
-                  const SizedBox(height: 12),
-                  _Dropdown<int>(
-                    label: 'Ply limit, filed as a draw',
+                  const SizedBox(height: 10),
+                  BughouseNumberField(
+                    label: 'Ply limit',
+                    hint: 'A game that reaches it is filed as a draw.',
                     value: _maxPlies,
-                    items: BughouseTournamentConfig.maxPlyChoices,
-                    labelOf: (v) => '$v',
+                    min: minPlyLimit,
+                    max: maxPlyLimit,
+                    labelWidth: 120,
                     onChanged: (v) => setState(() => _maxPlies = v),
                   ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _Dropdown<int>(
-                          label: 'Hash',
-                          value: _hashMb,
-                          items: const [16, 64, 256, 512, 1024, 2048],
-                          labelOf: (v) => '$v MB',
-                          onChanged: (v) => setState(() => _hashMb = v),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _Dropdown<int>(
-                          label: 'Batch',
-                          value: _batchSize,
-                          items: const [1, 4, 8, 16, 32, 64],
-                          labelOf: (v) => '$v',
-                          onChanged: (v) => setState(() => _batchSize = v),
-                        ),
-                      ),
-                    ],
+                  BughouseNumberField(
+                    label: 'Memory',
+                    unit: 'MB',
+                    value: _hashMb,
+                    min: BughouseEngineSettings.hashMin,
+                    max: BughouseEngineSettings.hashMax,
+                    labelWidth: 120,
+                    onChanged: (v) => setState(() => _hashMb = v),
+                  ),
+                  BughouseNumberField(
+                    label: 'Batch',
+                    value: _batchSize,
+                    min: BughouseEngineSettings.batchMin,
+                    max: BughouseEngineSettings.batchMax,
+                    labelWidth: 120,
+                    onChanged: (v) => setState(() => _batchSize = v),
                   ),
                 ],
               ),
@@ -401,7 +381,7 @@ class _NewBughouseMatchDialogState extends State<_NewBughouseMatchDialog> {
         ),
         FilledButton(
           onPressed: start == null ? null : () => _start_(start),
-          child: Text('Play $_games games'),
+          child: Text('Play $_games game${_games == 1 ? '' : 's'}'),
         ),
       ],
     );
@@ -409,16 +389,19 @@ class _NewBughouseMatchDialogState extends State<_NewBughouseMatchDialog> {
 
   void _start_(({BughouseState state, String label}) start) {
     final name = _name.text.trim();
-    // The stance the lab holds is relative to *its* team; the match's is
-    // always relative to White on board 1, so a lab set up from Black's seat
-    // has to be read the other way round.
     final config = BughouseTournamentConfig(
-      name: name.isEmpty ? 'Bughouse match' : name,
+      name: name.isEmpty ? 'Bughouse tournament' : name,
       startDualFen: start.state.dualFen,
       openingLabel: start.label,
       participants: [
-        BughouseParticipant(name: 'A + C', budget: _budgetA),
-        BughouseParticipant(name: 'B + D', budget: _budgetB),
+        BughouseParticipant(
+          name: 'A + C',
+          budget: BughouseBudget.nodes(_nodesA),
+        ),
+        BughouseParticipant(
+          name: 'B + D',
+          budget: BughouseBudget.nodes(_nodesB),
+        ),
       ],
       games: _games,
       alternateSeats: _alternateSeats,
@@ -455,43 +438,6 @@ class _StartSummary extends StatelessWidget {
       overflow: TextOverflow.ellipsis,
     );
   }
-}
-
-class _Dropdown<T> extends StatelessWidget {
-  const _Dropdown({
-    required this.label,
-    required this.value,
-    required this.items,
-    required this.labelOf,
-    required this.onChanged,
-  });
-
-  final String label;
-  final T value;
-  final List<T> items;
-  final String Function(T) labelOf;
-  final void Function(T) onChanged;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      BughousePanelLabel(label),
-      DropdownButtonFormField<T>(
-        initialValue: value,
-        isDense: true,
-        style: AppTextStyles.body,
-        decoration: const InputDecoration(isDense: true),
-        items: [
-          for (final item in items)
-            DropdownMenuItem(value: item, child: Text(labelOf(item))),
-        ],
-        onChanged: (v) {
-          if (v != null) onChanged(v);
-        },
-      ),
-    ],
-  );
 }
 
 // ------------------------------------------------------------------ parsing

@@ -1,13 +1,16 @@
-/// The FICS archive block is the app's opening-explorer table with the book
-/// behind it: shut by default with a one-line summary, twelve rows at most,
-/// a seat letter before each move, a Σ row, a one-line tooltip, and hover
-/// that draws on the boards without moving a single row.
+/// The FICS bughouse database block is the app's opening-explorer table with
+/// the book behind it: a one-line summary in its header, twelve rows at most,
+/// a seat letter before each move, a Σ row, a one-line tooltip, hover that
+/// draws on the boards without moving a single row — and one height whatever
+/// the position holds, because it sits under the boards and they must not
+/// move when the archive thins out.
 library;
 
 import 'package:chess_auto_prep/features/bughouse/controllers/bughouse_controller.dart';
 import 'package:chess_auto_prep/features/bughouse/models/bughouse_state.dart';
 import 'package:chess_auto_prep/features/bughouse/services/bughouse_book.dart';
 import 'package:chess_auto_prep/features/bughouse/widgets/bughouse_book_panel.dart';
+import 'package:chess_auto_prep/features/bughouse/widgets/bughouse_move_list.dart';
 import 'package:chess_auto_prep/widgets/opening_explorer/explorer_move_row.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/gestures.dart';
@@ -128,10 +131,9 @@ void main() {
     return gesture;
   }
 
-  Future<void> open(WidgetTester tester) async {
-    await tester.tap(find.text('FICS ARCHIVE'));
-    await tester.pumpAndSettle();
-  }
+  /// The block is open whenever it is on screen: opening and shutting it is
+  /// the book button on the boards' strip, which is tested separately.
+  Future<void> open(WidgetTester tester) async {}
 
   testWidgets('known positions retain counts when continuations are filtered', (
     tester,
@@ -154,33 +156,99 @@ void main() {
     );
     controller.setAnalysisEnabled(false);
     await pump(tester);
-    expect(find.text('4 games here · 2005–2025'), findsOneWidget);
+    expect(find.text('4 games from here · 2005–2025'), findsOneWidget);
     expect(find.text('No archived game reached this position.'), findsNothing);
-    await open(tester);
     expect(
-      find.textContaining(
-        'No continuations meet the archive minimum of 3 games',
-      ),
+      find.textContaining('No continuation reaches the archive minimum of 3'),
       findsOneWidget,
     );
   });
 
-  testWidgets('starts shut, with the position summed up in one line', (
+  testWidgets('is named, summed up in one line, and one height throughout', (
     tester,
   ) async {
     await pump(tester);
 
-    expect(find.text('FICS ARCHIVE'), findsOneWidget);
-    expect(find.text('2.0k games here · 2005–2025'), findsOneWidget);
-    expect(find.byType(ExplorerMoveRow), findsNothing);
-    expect(find.text('Move'), findsNothing);
-
-    await open(tester);
+    expect(find.text('FICS BUGHOUSE DATABASE'), findsOneWidget);
+    expect(find.text('2.0k games from here · 2005–2025'), findsOneWidget);
     expect(find.byType(ExplorerMoveRow), findsWidgets);
 
-    await tester.tap(find.text('FICS ARCHIVE'));
+    final panel = find.byType(BughouseBookPanel);
+    final full = tester.getSize(panel);
+    expect(full.height, BughouseBookPanel.height);
+
+    // One continuation, then none: the table under the boards keeps its
+    // height, so the boards above it never move.
+    controller.playMove(BughouseBoard.a, Move.parse('e2e4')!);
+    await tester.pumpAndSettle();
+    expect(find.byType(ExplorerMoveRow), findsOneWidget);
+    expect(tester.getSize(panel), full);
+
+    controller.playMove(BughouseBoard.b, Move.parse('d2d4')!);
     await tester.pumpAndSettle();
     expect(find.byType(ExplorerMoveRow), findsNothing);
+    expect(tester.getSize(panel), full);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the book button on the strip opens and shuts it', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ListenableBuilder(
+            listenable: controller,
+            builder: (_, _) => Column(
+              children: [
+                BughouseLineControls(controller: controller),
+                if (controller.bookOpen)
+                  BughouseBookPanel(controller: controller),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    final button = find.byKey(const Key('bughouse-book-toggle'));
+    expect(button, findsOneWidget);
+    expect(controller.bookOpen, isFalse);
+    expect(find.byType(BughouseBookPanel), findsNothing);
+
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    expect(controller.bookOpen, isTrue);
+    expect(find.text('FICS BUGHOUSE DATABASE'), findsOneWidget);
+
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    expect(find.byType(BughouseBookPanel), findsNothing);
+  });
+
+  testWidgets('without a database the button stays, disabled', (tester) async {
+    final bare = BughouseController(engineOverride: FakeBughouseEngine());
+    addTearDown(bare.dispose);
+    bare.setAnalysisEnabled(false);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: BughouseLineControls(controller: bare)),
+      ),
+    );
+    final button = find.byKey(const Key('bughouse-book-toggle'));
+    expect(button, findsOneWidget);
+    expect(
+      tester
+          .widget<IconButton>(
+            find.descendant(of: button, matching: find.byType(IconButton)),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(
+      find.byTooltip('No FICS bughouse database on this machine'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('is the explorer table: captions, seats, a cap and a Σ row', (
@@ -279,7 +347,7 @@ void main() {
     final drawn = controller.hover.value!.on(BughouseBoard.a);
     expect(drawn.map((a) => a.dest), contains('e5'));
     expect(drawn.map((a) => a.dest), isNot(contains('e4')));
-    expect(find.text('900 games here · 2005–2025'), findsOneWidget);
+    expect(find.text('900 games from here · 2005–2025'), findsOneWidget);
     expect(find.text('e5'), findsOneWidget);
     expect(find.text('d4'), findsNothing);
     expect(find.byType(ExplorerMoveRow), findsOneWidget);
@@ -297,11 +365,7 @@ void main() {
     controller.playMove(BughouseBoard.b, Move.parse('d2d4')!);
     await tester.pumpAndSettle();
 
-    expect(
-      find.text('No archived game reached this position.'),
-      findsOneWidget,
-    );
-    await open(tester);
+    // Once in the header, once where the table would be.
     expect(
       find.text('No archived game reached this position.'),
       findsNWidgets(2),

@@ -1,16 +1,19 @@
 /// What four thousand people actually played from here.
 ///
-/// The engine's two blocks above this one say what is *good*; this one says
-/// what is *played*, out of 3.6 million FICS games. In bughouse that gap is
-/// wider than it is in chess — the archive is blitz played by four people at
-/// once, so a line the engine dislikes can still be the one you have to be
-/// ready for, and a line it loves can be one nobody has ever tried on you.
+/// The engine's panel says what is *good*; this one says what is *played*,
+/// out of 3.6 million FICS games. In bughouse that gap is wider than it is in
+/// chess — the archive is blitz played by four people at once, so a line the
+/// engine dislikes can still be the one you have to be ready for, and a line
+/// it loves can be one nobody has ever tried on you.
 ///
 /// It is the same table as the Lichess opening explorer elsewhere in the app
 /// ([ExplorerMoveRow] and friends), with the FICS book as its data source and
-/// a seat letter before each move, because four people play. Like the lab's
-/// other reference blocks it starts shut, with its one-line summary showing;
-/// the engine pane above is what you look at while thinking.
+/// a seat letter before each move, because four people play. It opens under
+/// the two boards from the book icon on their strip, the way the repertoire
+/// builder's explorer opens from the book icon on its tree, and it is a fixed
+/// height whatever the position holds: twelve rows' worth, blank where the
+/// archive has fewer, so the boards above never move when a move changes how
+/// many continuations there are.
 ///
 /// The panel is silent on a machine with no book, which is the normal case:
 /// see [BughouseBook.open].
@@ -19,11 +22,11 @@ library;
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../widgets/opening_explorer/explorer_move_row.dart';
 import '../controllers/bughouse_controller.dart';
 import '../services/bughouse_book.dart';
-import 'bughouse_panel_section.dart';
 
 class BughouseBookPanel extends StatefulWidget {
   const BughouseBookPanel({super.key, required this.controller});
@@ -36,6 +39,18 @@ class BughouseBookPanel extends StatefulWidget {
   /// forty recorded continuations and thirty of them round to 0%. The Σ row
   /// still counts every game, listed or not.
   static const maxRows = 12;
+
+  /// The whole block, header to totals row, whatever the position holds.
+  static const double height =
+      _border * 2 +
+      _headerHeight +
+      ExplorerColumns.headerHeight +
+      ExplorerColumns.rowHeight * (maxRows + 1) +
+      _tablePadding * 2;
+
+  static const double _border = 1;
+  static const double _headerHeight = 34;
+  static const double _tablePadding = 4;
 
   @override
   State<BughouseBookPanel> createState() => _BughouseBookPanelState();
@@ -73,36 +88,75 @@ class _BughouseBookPanelState extends State<BughouseBookPanel> {
     final book = _controller.bookPosition;
     if (status == null || book == null) return const SizedBox.shrink();
 
-    return BughousePanelSection(
-      title: 'FICS ARCHIVE',
-      summary: book.games == 0
-          ? _nothing(status)
-          : '${formatExplorerCount(book.games)} games here · '
-                '${status.yearRange}',
-      padding: EdgeInsets.zero,
-      children: [
-        if (book.isEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 4, 10, 12),
-            child: Text(
-              book.games > 0
-                  ? 'No continuations meet the archive minimum of ${status.minGames} games, or this is the end of the indexed line.'
-                  : _nothing(status),
-              style: AppTextStyles.muted,
+    return Container(
+      height: BughouseBookPanel.height,
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: AppColors.divider,
+          width: BughouseBookPanel._border,
+        ),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: BughouseBookPanel._headerHeight,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Row(
+                children: [
+                  const Text(
+                    'FICS BUGHOUSE DATABASE',
+                    style: AppTextStyles.eyebrow,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      book.games == 0
+                          ? _nothing(status)
+                          : '${formatExplorerCount(book.games)} games from '
+                                'here · ${status.yearRange}',
+                      style: AppTextStyles.caption,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          )
-        else
-          _table(book),
-      ],
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                vertical: BughouseBookPanel._tablePadding,
+              ),
+              child: book.isEmpty ? _empty(book, status) : _table(book),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
+  Widget _empty(BughouseBookPosition book, BughouseBookStatus status) =>
+      Padding(
+        padding: const EdgeInsets.fromLTRB(10, 4, 10, 0),
+        child: Text(
+          book.games > 0
+              ? 'No continuation reaches the archive minimum of '
+                    '${status.minGames} games.'
+              : _nothing(status),
+          style: AppTextStyles.muted,
+        ),
+      );
+
   Widget _table(BughouseBookPosition book) {
     final state = _controller.state;
-    // Everything on this panel is read from our seat, the way the eval above
-    // it is. The book counts for the pair holding White on board A, which is
-    // us exactly when our team plays White there.
+    // Everything on this panel is read from our seat, the way the eval is.
+    // The book counts for the pair holding White on board A, which is us
+    // exactly when our team plays White there.
     final oursIsTeamA = state.team == Side.white;
+    final rows = book.moves.take(BughouseBookPanel.maxRows).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -112,7 +166,7 @@ class _BughouseBookPanelState extends State<BughouseBookPanel> {
               'Games in which the move was played, and its share of every '
               'archived game from this position',
         ),
-        for (final move in book.moves.take(BughouseBookPanel.maxRows))
+        for (final move in rows)
           ExplorerMoveRow(
             // Keyed by the move and the position it belongs to, so a row that
             // changes under the pointer is a new row rather than the old one
@@ -131,6 +185,9 @@ class _BughouseBookPanelState extends State<BughouseBookPanel> {
             onPlay: () => _controller.playBookMove(move),
             onHover: (over) => _onHover(move, over),
           ),
+        // The totals row sits directly under the last move rather than at
+        // the bottom of the reserved space; the space is what keeps the
+        // boards still, not where the Σ goes.
         ExplorerTotalsRow(
           games: book.games,
           wins: oursIsTeamA ? book.teamA : book.teamB,
