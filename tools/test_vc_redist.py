@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import tempfile
 from pathlib import Path
@@ -17,6 +18,32 @@ def expect_failure(action, text: str) -> None:
         assert text in str(exc), exc
     else:
         raise AssertionError(f"expected VerificationError containing {text!r}")
+
+
+def check_staging_dir(root: Path) -> None:
+    """download() stages the file beside its destination, never in %TEMP%."""
+    payload = b"staged bytes"
+    destination = root / "prerequisites" / "VC_redist.x64.exe"
+    staged: list[Path] = []
+
+    def record(path: Path, _lock: dict) -> None:
+        staged.append(Path(path))
+
+    original_urlopen = redist.urllib.request.urlopen
+    original_verify = redist.verify
+    redist.urllib.request.urlopen = lambda *_a, **_k: io.BytesIO(payload)
+    redist.verify = record
+    try:
+        redist.download({"url": "https://example.invalid"}, destination)
+    finally:
+        redist.urllib.request.urlopen = original_urlopen
+        redist.verify = original_verify
+
+    assert len(staged) == 1, staged
+    assert staged[0].parent.parent == destination.parent, (
+        f"staged in {staged[0].parent}, which is not inside {destination.parent}"
+    )
+    assert destination.read_bytes() == payload
 
 
 def main() -> int:
@@ -75,6 +102,11 @@ def main() -> int:
         incomplete = root / "lock.json"
         incomplete.write_text(json.dumps({"url": "https://example.invalid"}))
         expect_failure(lambda: redist.load_lock(incomplete), "is missing")
+
+        # The download must be staged in the destination's own directory. On a
+        # Windows runner %TEMP% is on C: and the workspace on D:, and the
+        # os.replace that puts the file in place cannot cross a drive.
+        check_staging_dir(root)
 
     print("vc_redist prerequisite tests passed")
     return 0

@@ -75,7 +75,13 @@ def download(lock: dict[str, object], destination: Path = DESTINATION) -> None:
         str(lock["url"]), headers={"User-Agent": "chess-auto-prep-release"}
     )
     try:
-        with tempfile.TemporaryDirectory() as temp_dir:
+        # Stage beside the destination, not in %TEMP%. On a Windows runner the
+        # two are different drives -- the workspace is D:, the temp directory
+        # C: -- and os.replace cannot move a file across one: WinError 17,
+        # "cannot move the file to a different disk drive". Staging in the
+        # destination's own directory keeps the swap atomic as well, and is
+        # what fetch_assets.py and fetch_bughouse.py already do.
+        with tempfile.TemporaryDirectory(dir=destination.parent) as temp_dir:
             temporary = Path(temp_dir) / destination.name
             with urllib.request.urlopen(request) as response, temporary.open("wb") as out:
                 shutil.copyfileobj(response, out)
