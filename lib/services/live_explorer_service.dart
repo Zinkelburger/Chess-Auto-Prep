@@ -351,9 +351,9 @@ class LiveExplorerService {
       fen: fen,
       moves: moves,
       totalGames: total,
-      white: rows.fold(0, (n, r) => n + r.whiteWins),
-      draws: rows.fold(0, (n, r) => n + r.draws),
-      black: rows.fold(0, (n, r) => n + r.blackWins),
+      white: rows.fold<int>(0, (n, r) => n + r.whiteWins),
+      draws: rows.fold<int>(0, (n, r) => n + r.draws),
+      black: rows.fold<int>(0, (n, r) => n + r.blackWins),
       topGames: games,
     );
   }
