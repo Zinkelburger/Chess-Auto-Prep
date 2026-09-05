@@ -228,6 +228,20 @@ class MoveTree {
   /// Root-level siblings (typically one first move, but PGN allows multiple).
   final List<MoveNode> roots;
 
+  /// Comment on the starting position — the `{…}` block a PGN carries before
+  /// its first move.  Lichess writes a chapter's introduction (and any shapes
+  /// drawn on the start position) here, so dropping it loses the one comment
+  /// a study chapter is most likely to have.  Empty is stored as null.
+  String? get rootComment => _rootComment;
+  set rootComment(String? value) {
+    final normalized = (value == null || value.trim().isEmpty) ? null : value;
+    if (normalized == _rootComment) return;
+    _rootComment = normalized;
+    _bumpVersion();
+  }
+
+  String? _rootComment;
+
   /// Incremented on every structural or annotation change made through this
   /// class.  Views that cache work derived from the tree (the editor's
   /// rendered movetext, a flattened outline) key that cache on the version
@@ -241,9 +255,12 @@ class MoveTree {
   /// Record an out-of-band mutation (see [version]).
   void markMutated() => _bumpVersion();
 
-  MoveTree({String? startingFen, List<MoveNode>? roots})
+  MoveTree({String? startingFen, List<MoveNode>? roots, String? rootComment})
     : _startingFen = startingFen ?? kStandardStartFen,
-      roots = roots ?? [];
+      roots = roots ?? [],
+      _rootComment = (rootComment == null || rootComment.trim().isEmpty)
+          ? null
+          : rootComment;
 
   /// Deep copy whose nodes carry freshly minted ids.
   ///
@@ -253,6 +270,7 @@ class MoveTree {
   MoveTree copyWithFreshIds() => MoveTree(
     startingFen: startingFen,
     roots: roots.map(_copyNodeWithFreshId).toList(),
+    rootComment: rootComment,
   );
 
   static MoveNode _copyNodeWithFreshId(MoveNode node) => MoveNode(
@@ -428,13 +446,49 @@ class MoveTree {
     _bumpVersion();
   }
 
-  /// Set comment on the node at [path].
+  /// Set comment on the node at [path]; the empty path is [rootComment].
   void setComment(TreePath path, String? comment) {
+    if (path.isEmpty) {
+      rootComment = comment;
+      return;
+    }
     final node = nodeAt(path);
     if (node != null && node.comment != comment) {
       node.comment = comment;
       _bumpVersion();
     }
+  }
+
+  /// Comment at [path]: [rootComment] for the empty path, else the node's.
+  String? commentAt(TreePath path) =>
+      path.isEmpty ? rootComment : nodeAt(path)?.comment;
+
+  /// Drop every comment (shapes and markers live in comments, so they go
+  /// too) and every glyph, keeping the moves — Lichess's "Clear all comments,
+  /// glyphs and drawn shapes".
+  void clearAnnotations() {
+    void walk(List<MoveNode> nodes) {
+      for (final node in nodes) {
+        node.comment = null;
+        node.nags = null;
+        walk(node.children);
+      }
+    }
+
+    walk(roots);
+    _rootComment = null;
+    _bumpVersion();
+  }
+
+  /// Delete every sideline, keeping only the mainline and its annotations —
+  /// Lichess's "Clear variations".
+  void clearVariations() {
+    var siblings = roots;
+    while (siblings.isNotEmpty) {
+      if (siblings.length > 1) siblings.removeRange(1, siblings.length);
+      siblings = siblings.first.children;
+    }
+    _bumpVersion();
   }
 
   /// Toggle a move-quality NAG on the node at [path].
@@ -467,7 +521,11 @@ class MoveTree {
       final rootPos = tryParseFen(effectiveFen) ?? Chess.initial;
       final roots = _convertDartchessNodes(game.moves.children, rootPos);
 
-      return MoveTree(startingFen: effectiveFen, roots: roots);
+      return MoveTree(
+        startingFen: effectiveFen,
+        roots: roots,
+        rootComment: _joinComments(game.comments),
+      );
     } catch (_) {
       return MoveTree(startingFen: startingFen);
     }
@@ -493,8 +551,11 @@ class MoveTree {
 
   /// Serialize this tree to PGN move text (no headers).
   String toPgnMoveText() {
-    if (roots.isEmpty) return '';
     final buffer = StringBuffer();
+    if (_rootComment != null) {
+      buffer.write('{${_sanitizeComment(_rootComment!)}} ');
+    }
+    if (roots.isEmpty) return buffer.toString().trim();
     final (startMoveNumber, startIsWhite) = moveNumberFromFen(startingFen);
     _writeNodes(
       buffer,
@@ -536,16 +597,20 @@ class MoveTree {
       final san = node.data.san;
       final afterPos = playSanOrNullMove(parentPosition, san);
       if (afterPos == null) continue;
-      final comment = node.data.comments?.join(' ');
+      // A comment written *before* a move (`( {why} 3... Nf6 )`, ChessBase
+      // style) has no slot of its own in this model; it joins the move's
+      // comment rather than vanishing.
+      final comment = _joinComments([
+        ...?node.data.startingComments,
+        ...?node.data.comments,
+      ]);
       final nags = node.data.nags?.toList();
       result.add(
         MoveNode(
           san: san,
           fen: afterPos.fen,
           position: afterPos,
-          comment: (comment != null && comment.trim().isNotEmpty)
-              ? comment.trim()
-              : null,
+          comment: comment,
           nags: nags,
           children: _convertDartchessNodes(node.children, afterPos),
         ),
@@ -625,4 +690,15 @@ class MoveTree {
 
   static String _sanitizeComment(String comment) =>
       comment.replaceAll('{', '').replaceAll('}', '');
+
+  /// The `{}` blocks of one move as a single trimmed string, or null when
+  /// there is nothing in them.
+  static String? _joinComments(List<String>? comments) {
+    if (comments == null) return null;
+    final joined = comments
+        .map((c) => c.trim())
+        .where((c) => c.isNotEmpty)
+        .join(' ');
+    return joined.isEmpty ? null : joined;
+  }
 }

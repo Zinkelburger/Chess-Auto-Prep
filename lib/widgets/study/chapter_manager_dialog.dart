@@ -16,19 +16,20 @@ import '../common/list_search_field.dart';
 Future<void> showChapterManagerDialog(
   BuildContext context, {
   required StudyController study,
-  required Future<String?> Function(String title, {String? initial}) promptName,
+  required Future<void> Function(int index) editChapter,
 }) {
   return showDialog<void>(
     context: context,
-    builder: (_) => _ChapterManagerDialog(study: study, promptName: promptName),
+    builder: (_) =>
+        _ChapterManagerDialog(study: study, editChapter: editChapter),
   );
 }
 
 class _ChapterManagerDialog extends StatefulWidget {
-  const _ChapterManagerDialog({required this.study, required this.promptName});
+  const _ChapterManagerDialog({required this.study, required this.editChapter});
 
   final StudyController study;
-  final Future<String?> Function(String title, {String? initial}) promptName;
+  final Future<void> Function(int index) editChapter;
 
   @override
   State<_ChapterManagerDialog> createState() => _ChapterManagerDialogState();
@@ -52,13 +53,9 @@ class _ChapterManagerDialogState extends State<_ChapterManagerDialog> {
 
   bool get _isFiltering => _search.trim().isNotEmpty;
 
-  Future<void> _rename(int index) async {
-    final name = await widget.promptName(
-      'Rename chapter',
-      initial: _study.doc.chapters[index].name,
-    );
-    if (name == null || !mounted) return;
-    setState(() => _study.renameChapter(index, name));
+  Future<void> _edit(int index) async {
+    await widget.editChapter(index);
+    if (mounted) setState(() {});
   }
 
   Future<void> _delete(int index) async {
@@ -181,8 +178,8 @@ class _ChapterManagerDialogState extends State<_ChapterManagerDialog> {
                       children: [
                         IconButton(
                           icon: const Icon(Icons.edit_outlined, size: 18),
-                          tooltip: 'Rename chapter',
-                          onPressed: () => _rename(index),
+                          tooltip: 'Edit chapter',
+                          onPressed: () => _edit(index),
                         ),
                         IconButton(
                           icon: const Icon(Icons.delete_outline, size: 18),

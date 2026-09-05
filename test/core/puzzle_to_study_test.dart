@@ -77,7 +77,9 @@ void main() {
     await study.addChapterToStudyFile(path, 'Back-rank mate', chapterPgn);
 
     final saved = await File(path).readAsString();
-    expect(saved, contains('[Event "Back-rank mate"]'));
+    // Chapters are tagged the way Lichess exports them.
+    expect(saved, contains('[Event "Puzzles: Back-rank mate"]'));
+    expect(saved, contains('[ChapterName "Back-rank mate"]'));
     expect(saved, contains('[FEN "$_blackToMateFen"]'));
     expect(saved, contains('[StarRating "4"]'), reason: 'headers preserved');
     expect(saved, contains('Back rank.'), reason: 'note rides as a comment');

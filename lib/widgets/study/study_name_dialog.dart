@@ -1,5 +1,6 @@
-/// Name prompt for new studies and study chapters, with the filename rules
-/// a study's on-disk file has to satisfy.
+/// Name prompt for new studies, with the filename rules a study's on-disk
+/// file has to satisfy.  (Chapter names are free text; they live in a PGN
+/// tag, not a filename — see the new/edit chapter dialogs.)
 library;
 
 import 'package:flutter/material.dart';
@@ -16,8 +17,8 @@ String sanitizeStudyName(String name) => name
     .replaceAll(RegExp(r'_+'), '_')
     .trim();
 
-/// Ask for a study or chapter name, returning it sanitised, or null when the
-/// user cancelled.
+/// Ask for a study name, returning it sanitised, or null when the user
+/// cancelled.
 ///
 /// The name-is-unusable check runs on the field rather than as a snackbar
 /// after the dialog has closed, which is what it used to do: typing `///` got

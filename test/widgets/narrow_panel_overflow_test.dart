@@ -169,7 +169,7 @@ void main() {
     tester,
   ) async {
     // The Lines panel can go narrower than kNarrowPanelWidth in the editor
-    // layout; 190px is where the six glyphs plus both markers used to overflow.
+    // layout; 190px is where the six glyphs used to overflow.
     for (final width in <double>[190, kNarrowPanelWidth, 600]) {
       await tester.pumpWidget(
         _host(
@@ -183,8 +183,6 @@ void main() {
                 comment: 'A comment',
                 onToggleNag: (_) {},
                 onCommentChanged: (_) {},
-                onTogglePuzzleStart: () {},
-                onTogglePuzzleEnd: () {},
               ),
             ],
           ),

@@ -441,8 +441,14 @@ class RepertoireService {
   String _generateLineName(PgnGame game, List<String> mainline, int index) {
     final event = game.headers['Event'] ?? '';
     final opening = game.headers['Opening'] ?? '';
+    // A study chapter (Lichess export or a study written here) says its own
+    // name; its Event is "Study: Chapter", which would repeat the study on
+    // every line.
+    final chapterName = game.headers['ChapterName']?.trim() ?? '';
 
-    if (opening.isNotEmpty && opening != '?') {
+    if (chapterName.isNotEmpty) {
+      return chapterName;
+    } else if (opening.isNotEmpty && opening != '?') {
       return opening;
     } else if (event.isNotEmpty &&
         event != '?' &&
