@@ -17,6 +17,7 @@ import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_motion.dart';
 import '../theme/app_text_styles.dart';
 import 'app_overflow_menu.dart';
 
@@ -41,6 +42,7 @@ class AppModeSwitcher extends StatelessWidget {
       onSelected: context.read<AppState>().setMode,
       position: PopupMenuPosition.under,
       padding: EdgeInsets.zero,
+      popUpAnimationStyle: AppMotion.menuAnimation,
       itemBuilder: (context) => [
         for (final group in availableAppModeGroups()) ...[
           PopupMenuItem<AppMode>(

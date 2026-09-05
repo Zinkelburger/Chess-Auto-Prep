@@ -13,6 +13,7 @@ import 'models/engine_settings.dart';
 import 'models/eval_database_settings.dart';
 import 'screens/main_screen.dart';
 import 'theme/app_colors.dart';
+import 'theme/app_motion.dart';
 import 'theme/app_text_styles.dart';
 
 import 'services/default_pgn_service.dart';
@@ -253,6 +254,7 @@ class ChessAutoPrepApp extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
             ),
           ),
+          pageTransitionsTheme: AppMotion.pageTransitions,
           useMaterial3: true,
         ),
         // Keep the semantics tree empty unless explicitly enabled —
