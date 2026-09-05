@@ -337,14 +337,30 @@ jobs:
           if (-not (Test-Path (Join-Path $installDir 'msvcp140.dll'))) {
             throw 'Upgrade fixture did not contain the old runtime'
           }
-          & $setup /VERYSILENT /SUPPRESSMSGBOXES /NORESTART "/DIR=$installDir"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # Start-Process -Wait, not `& $setup`: setup.exe is a GUI-subsystem
+          # binary, so PowerShell's call operator returns the moment it is
+          # launched and leaves $LASTEXITCODE stale. The check below then ran
+          # against a directory the installer had not touched yet — which read
+          # as a pass for as long as that directory started out empty.
+          $log = Join-Path $env:RUNNER_TEMP "installer.log"
+          # $installDir has spaces in it, and -ArgumentList joins the array
+          # without quoting anything, so the quotes have to be in the strings.
+          $proc = Start-Process -FilePath (Resolve-Path $setup) -Wait -PassThru -ArgumentList @(
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART',
+            ('/DIR="{0}"' -f $installDir), ('/LOG="{0}"' -f $log)
+          )
+          if ($proc.ExitCode -ne 0) {
+            Write-Host "Installer exited with $($proc.ExitCode):"
+            if (Test-Path $log) { Get-Content $log -Tail 80 }
+            exit $proc.ExitCode
+          }
           $looseRuntime = Get-ChildItem $installDir -File | Where-Object {
             $_.Name -match '^(concrt140|msvcp140|vcruntime140).*\.dll$'
           }
           if ($looseRuntime) {
             Write-Host "Installer unexpectedly deployed loose VC++ DLLs:"
             $looseRuntime | Select-Object -ExpandProperty Name
+            if (Test-Path $log) { Write-Host "--- installer log ---"; Get-Content $log -Tail 80 }
             exit 1
           }
           Move-Item "dist\chess-auto-prep-$version-windows-setup.exe" "chess-auto-prep-${{ github.ref_name }}-windows-setup.exe"
