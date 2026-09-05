@@ -4,6 +4,8 @@ import 'package:chess_auto_prep/features/repertoire/controllers/repertoire_outli
 import 'package:chess_auto_prep/features/repertoire/models/repertoire_outline.dart';
 import 'package:chess_auto_prep/features/repertoire/services/chapter_splitter.dart';
 import 'package:chess_auto_prep/features/repertoire/services/repertoire_outline_service.dart';
+import 'package:chess_auto_prep/features/repertoire/services/review_progress_repointer.dart';
+import 'package:chess_auto_prep/models/repertoire_review_entry.dart';
 import 'package:chess_auto_prep/services/repertoire_review_service.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_service.dart';
@@ -45,6 +47,7 @@ void main() {
   late Directory tmp;
   late String root;
   late RepertoireOutlineService service;
+  late _CsvStorage csv;
 
   setUp(() {
     tmp = Directory.systemTemp.createTempSync('outline_test');
@@ -64,12 +67,14 @@ void main() {
       supportRoot: tmp,
       repertoiresRoot: Directory(root),
     );
+    csv = _CsvStorage();
+    final repointer = ReviewProgressRepointer(
+      review: RepertoireReviewService(storage: csv),
+    );
     service = RepertoireOutlineService(
       storage: storage,
-      splitter: ChapterSplitter(
-        storage: storage,
-        review: RepertoireReviewService(storage: _CsvStorage()),
-      ),
+      repointer: repointer,
+      splitter: ChapterSplitter(storage: storage, repointer: repointer),
     );
   });
 
@@ -198,6 +203,90 @@ void main() {
         'Qb6 line',
       ]);
     });
+
+    test('a moved line keeps its id and its review schedule', () async {
+      final advance = p.join(root, 'Advance.pgn');
+      final exchange = p.join(root, 'Sidelines', 'Exchange.pgn');
+      final before = await service.build(root, trainingColor: 'black');
+      final line = before.findChapter(advance)!.lines!.last;
+      final review = RepertoireReviewService(storage: csv);
+      await review.saveAll([
+        RepertoireReviewEntry(
+          repertoireId: advance,
+          lineId: line.id,
+          lineName: line.name,
+          intervalDays: 6,
+        ),
+      ]);
+
+      final landed = await service.moveLines(
+        fromChapterPath: advance,
+        gameIndexes: {line.gameIndex},
+        toChapterPath: exchange,
+        toIndex: 0,
+      );
+      expect(landed, [0]);
+
+      final after = await service.build(root, trainingColor: 'black');
+      final moved = after.findChapter(exchange)!.lines!.first;
+      expect(moved.name, 'Qb6 line');
+      // The position-based id would have changed with the move; pinning it
+      // into the game as a header is what keeps it.
+      expect(moved.id, line.id);
+      expect(
+        File(exchange).readAsStringSync(),
+        contains('[LineID "${line.id}"]'),
+      );
+      final entries = await review.loadAll();
+      expect(entries.single.repertoireId, exchange);
+      expect(entries.single.intervalDays, 6);
+    });
+
+    test('lines are reordered in place and put back exactly', () async {
+      final advance = p.join(root, 'Advance.pgn');
+      final landed = await service.moveLines(
+        fromChapterPath: advance,
+        gameIndexes: {0},
+        toChapterPath: advance,
+        toIndex: 2,
+      );
+      expect(landed, [1]);
+      var names = (await service.build(
+        root,
+      )).findChapter(advance)!.lines!.map((l) => l.name);
+      expect(names, ['Qb6 line', 'Main line']);
+
+      await service.moveLines(
+        fromChapterPath: advance,
+        gameIndexes: {1},
+        toChapterPath: advance,
+        toIndexes: [0],
+      );
+      names = (await service.build(
+        root,
+      )).findChapter(advance)!.lines!.map((l) => l.name);
+      expect(names, ['Main line', 'Qb6 line']);
+    });
+
+    test('deleted lines come back where they were', () async {
+      final advance = p.join(root, 'Advance.pgn');
+      final removed = await service.deleteLines(advance, {0});
+      expect(removed.single.index, 0);
+      expect(removed.single.text, contains('Main line'));
+      expect(
+        (await service.build(
+          root,
+        )).findChapter(advance)!.lines!.map((l) => l.name),
+        ['Qb6 line'],
+      );
+      await service.restoreLines(advance, removed);
+      expect(
+        (await service.build(
+          root,
+        )).findChapter(advance)!.lines!.map((l) => l.name),
+        ['Main line', 'Qb6 line'],
+      );
+    });
   });
 
   group('controller', () {
@@ -271,6 +360,111 @@ void main() {
       final out = await c.splitChapter(p.join(root, 'Advance.pgn'));
       expect(out.ok, isFalse);
       expect(out.error, contains('no course chapters'));
+    });
+
+    test('moving lines is reported and undone', () async {
+      final advance = p.join(root, 'Advance.pgn');
+      final exchange = p.join(root, 'Sidelines', 'Exchange.pgn');
+      var reloads = 0;
+      final c = RepertoireOutlineController(
+        service: service,
+        onActiveChapterMoved: (_) => reloads++,
+      );
+      await c.open(rootPath: root, activeChapterPath: advance, isWhite: false);
+
+      final out = await c.moveLines(
+        fromChapterPath: advance,
+        gameIndexes: {0, 1},
+        toChapterPath: exchange,
+        toIndex: 0,
+      );
+      expect(out.ok, isTrue);
+      expect(out.message, 'Moved 2 lines to "Exchange".');
+      expect(out.undo, isNotNull);
+      expect(reloads, 1, reason: 'the active chapter lost lines');
+      expect(c.isChapterOpen(exchange), isTrue);
+      expect(c.outline!.findChapter(advance)!.lineCount, 0);
+      expect(c.outline!.findChapter(exchange)!.lines!.map((l) => l.name), [
+        'Main line',
+        'Qb6 line',
+        'Exchange',
+      ]);
+
+      final back = await out.undo!();
+      expect(back.ok, isTrue);
+      expect(back.message, 'Moved 2 lines back.');
+      expect(c.outline!.findChapter(advance)!.lines!.map((l) => l.name), [
+        'Main line',
+        'Qb6 line',
+      ]);
+      expect(c.outline!.findChapter(exchange)!.lineCount, 1);
+    });
+
+    test('dropping a line back where it was says nothing', () async {
+      final advance = p.join(root, 'Advance.pgn');
+      final c = RepertoireOutlineController(service: service);
+      await c.open(rootPath: root, activeChapterPath: null, isWhite: false);
+      final out = await c.moveLines(
+        fromChapterPath: advance,
+        gameIndexes: {1},
+        toChapterPath: advance,
+        toIndex: 2,
+      );
+      expect(out.ok, isTrue);
+      expect(out.message, isNull);
+      expect(out.undo, isNull);
+    });
+
+    test('deleting lines is undoable', () async {
+      final advance = p.join(root, 'Advance.pgn');
+      final c = RepertoireOutlineController(service: service);
+      await c.open(rootPath: root, activeChapterPath: null, isWhite: false);
+      final out = await c.deleteLines(advance, {0});
+      expect(out.message, 'Deleted "Main line".');
+      expect(c.outline!.findChapter(advance)!.lineCount, 1);
+      final back = await out.undo!();
+      expect(back.ok, isTrue);
+      expect(c.outline!.findChapter(advance)!.lines!.map((l) => l.name), [
+        'Main line',
+        'Qb6 line',
+      ]);
+    });
+
+    test('a chapter made from lines is undone back to nothing', () async {
+      final advance = p.join(root, 'Advance.pgn');
+      final c = RepertoireOutlineController(service: service);
+      await c.open(rootPath: root, activeChapterPath: advance, isWhite: false);
+      final out = await c.createChapterWithLines(
+        folderPath: p.join(root, 'Sidelines'),
+        name: 'Qb6',
+        fromChapterPath: advance,
+        gameIndexes: {1},
+      );
+      expect(out.ok, isTrue);
+      expect(out.message, 'Made "Qb6" from 1 line.');
+      final made = p.join(root, 'Sidelines', 'Qb6.pgn');
+      expect(c.outline!.findChapter(made)!.lines!.single.name, 'Qb6 line');
+      expect(c.outline!.findChapter(advance)!.lineCount, 1);
+
+      final back = await out.undo!();
+      expect(back.ok, isTrue);
+      expect(File(made).existsSync(), isFalse);
+      expect(c.outline!.findChapter(advance)!.lineCount, 2);
+    });
+
+    test('moving a chapter is undoable', () async {
+      final advance = p.join(root, 'Advance.pgn');
+      final c = RepertoireOutlineController(service: service);
+      await c.open(rootPath: root, activeChapterPath: null, isWhite: false);
+      final out = await c.moveChapter(advance, p.join(root, 'Sidelines'));
+      expect(out.message, 'Moved "Advance" to "Sidelines".');
+      expect(
+        File(p.join(root, 'Sidelines', 'Advance.pgn')).existsSync(),
+        isTrue,
+      );
+      final back = await out.undo!();
+      expect(back.ok, isTrue);
+      expect(File(advance).existsSync(), isTrue);
     });
 
     test('deleting the active chapter clears it', () async {

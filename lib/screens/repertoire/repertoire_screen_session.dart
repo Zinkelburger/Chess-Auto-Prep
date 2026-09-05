@@ -530,9 +530,19 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     final current = _controller.currentRepertoire;
     if (current == null) return;
 
-    final name = await showAddChapterDialog(
+    final taken = {for (final c in _chapters) c.name.toLowerCase()};
+    final name = await showNameEntryDialog(
       context,
-      existingNames: _chapters.map((c) => c.name),
+      title: 'New chapter',
+      fieldLabel: 'Chapter name',
+      confirmLabel: 'Create',
+      prompt: 'Name this chapter (e.g. a variation or system):',
+      allowUnchanged: true,
+      validate: (name) =>
+          RepertoireOutlineService.validateName(name) ??
+          (taken.contains(name.toLowerCase())
+              ? 'A chapter named "$name" already exists.'
+              : null),
     );
     if (name == null || !mounted) return;
 
