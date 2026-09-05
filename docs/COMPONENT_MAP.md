@@ -166,8 +166,8 @@ RepertoireScreen (composition root — wires controllers to widgets)
 
 **Key files:**
 - `lib/core/generation_session_controller.dart` — owns the run and the generated-tree bundle; pause/resume/cancel survive dialog disposal; `dispose()` stops build. Progress UI state lives on `GenerationProgress`; mid-run line export lives on `SnapshotExporter`.
-- `lib/core/audit_session_controller.dart` — owns `RepertoireAuditService` + audit state + persistence; pause/resume/cancel from any widget
-- `lib/core/coverage_controller.dart` — owns coverage result + progress state
+- `lib/features/audit/controllers/audit_session_controller.dart` — owns `RepertoireAuditService` + audit state + persistence; pause/resume/cancel from any widget
+- `lib/features/coverage/controllers/coverage_controller.dart` — owns coverage result + progress state
 - `lib/widgets/layout/bottom_pane.dart` — resizable, collapsible, tabbed bottom pane (Findings/Jobs — the Lines list lives only in the side panel)
 - `lib/widgets/engine/inline_expectimax_bar.dart` — compact toggleable expectimax PV display
 - `lib/widgets/generation_config_dialog.dart` — legacy modal dialog (still importable but generation config now shows inline in Jobs tab)
