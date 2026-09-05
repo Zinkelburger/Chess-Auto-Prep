@@ -61,6 +61,7 @@ import 'generation/tree_build_progress.dart';
 import 'jobs/generation_phase.dart';
 import 'generation/tree_eval_resolver.dart';
 import 'generation/tree_prune.dart';
+import 'generation/pure_tree_builder.dart';
 import 'master_games/master_games_db.dart' show BookLookup;
 
 import 'tree_build_types.dart';
@@ -278,14 +279,18 @@ class TreeBuildService {
           _pool.prepareForTreeBuild(config.resolvedEngineThreads)
         else
           Future.value(),
-        _evalResolver.evalCache.init(),
+        if (config.buildMode != BuildMode.stockfishExpectimax)
+          _evalResolver.evalCache.init(),
       ]);
-      await _evalResolver.initProviders(config);
+      if (config.buildMode != BuildMode.stockfishExpectimax) {
+        await _evalResolver.initProviders(config);
+      }
       if (config.usesStockfish && _pool.workerCount == 0) {
         throw StateError('No engine workers available');
       }
 
-      if (config.relativeEval) {
+      if (config.relativeEval &&
+          config.buildMode != BuildMode.stockfishExpectimax) {
         final rootFenMap = FenMap();
         final gotEval = await _evalResolver.ensureEval(
           tree.root,
@@ -309,6 +314,16 @@ class TreeBuildService {
         minProbability: run.config.minProbability,
       );
 
+      if (config.buildMode == BuildMode.stockfishExpectimax) {
+        try {
+          await PureTreeBuilder(run).build();
+          tree.computeMetadata();
+          lastPrunedTooLow = [];
+          return tree;
+        } finally {
+          await _evalResolver.teardownProviders();
+        }
+      }
       final expander = NodeExpander.forRun(run);
 
       try {

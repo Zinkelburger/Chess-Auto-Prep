@@ -368,6 +368,16 @@ class BuildRun {
     return child;
   }
 
+  /// Attach a fully evaluated Pure candidate only after its atomic expansion
+  /// has finished. Detached candidates never enter progress or saved trees.
+  void attachPureChild(BuildTreeNode parent, BuildTreeNode child) {
+    parent.children.add(child);
+    tree.registerNode(child);
+    tree.totalNodes++;
+    if (child.ply > tree.maxPlyReached) tree.maxPlyReached = child.ply;
+    _countNode(child.ply, 1);
+  }
+
   /// Mark [node] fully processed.  Every `explored = true` in the build goes
   /// through here so the per-ply histogram stays exact without a tree walk.
   void markExplored(BuildTreeNode node) {

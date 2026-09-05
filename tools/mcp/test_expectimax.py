@@ -174,9 +174,10 @@ class ArgvTest(unittest.TestCase):
         self.assertIn("-c", argv)
         self.assertEqual(argv[argv.index("-c") + 1], "b")
         self.assertEqual(argv[argv.index("-f") + 1], LONDON_FEN)
-        self.assertEqual(argv[argv.index("-d") + 1], "8")
+        self.assertEqual(argv[argv.index("-d") + 1], "4")
         self.assertEqual(argv[argv.index("-t") + 1], "1")
-        self.assertEqual(argv[argv.index("--our-multipv") + 1], "5")
+        self.assertNotIn("--our-multipv", argv)
+        self.assertNotIn("--maia-only", argv)
         self.assertEqual(argv[-1], "/runs/x/tree")
 
     def test_overrides_reach_the_command_line(self):
@@ -189,7 +190,7 @@ class ArgvTest(unittest.TestCase):
         self.assertEqual(argv[argv.index("-d") + 1], "10")
         self.assertEqual(argv[argv.index("-e") + 1], "20")
         self.assertEqual(argv[argv.index("-t") + 1], "4")
-        self.assertEqual(argv[argv.index("--our-multipv") + 1], "8")
+        self.assertNotIn("--our-multipv", argv)
         self.assertEqual(argv[argv.index("--maia-elo") + 1], "1800")
 
     def test_name_is_optional(self):

@@ -6,8 +6,8 @@ mixin _GenerationConfigDescriptions on _GenerationConfigFormStateBase {
   String _buildModeDescription() {
     switch (_buildMode) {
       case BuildMode.stockfishExpectimax:
-        return 'Stockfish evaluates every position; Maia predicts opponent '
-            'moves. Thorough but slower.';
+        return 'Pure searches every legal candidate within the engine-loss limit, '
+            'using the opponent model above. Cost grows exponentially with depth.';
       case BuildMode.maiaDbExplore:
         return 'Maia moves and database win rates only — fast, no engine '
             'needed. Requires an evaluation database, enabled below.';
@@ -21,12 +21,6 @@ mixin _GenerationConfigDescriptions on _GenerationConfigFormStateBase {
             'dump or API, enabled below.';
     }
   }
-
-  String _selectionModeLabel(SelectionMode mode) => switch (mode) {
-    SelectionMode.expectimax => 'Best expected score (recommended)',
-    SelectionMode.engineOnly => 'Engine best move',
-    SelectionMode.dbWinRateOnly => 'Database win rate',
-  };
 
   String _selectionModeDescription() {
     switch (_selectionMode) {

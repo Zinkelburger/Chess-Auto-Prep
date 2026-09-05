@@ -47,28 +47,14 @@ enum BuildMode {
 
 // ── Search algorithm (frontier discipline + pruning preset) ─────────────
 
-/// How the Phase 1 frontier is ordered and how aggressively rare lines are
-/// pruned.  Expectimax valuation (Phase 2) is identical in both — the
-/// algorithm only shapes which nodes exist in the tree.
+/// Legacy serialized search setting. The standard expectimax build always
+/// dispatches to the new exhaustive Pure builder; Fast remains readable only
+/// for old files and the separate legacy expansion helpers.
 enum SearchAlgorithm {
-  /// "Full": level-order BFS, every candidate at full MultiPV and the full
-  /// eval window.  NOT literally exhaustive — the configured floors
-  /// ([TreeBuildConfig.minProbability], [TreeBuildConfig.maxPly], the eval
-  /// window, opponent fan-out caps) still apply; what it drops is the
-  /// *extra* narrowing Fast applies to rarely-reached positions.
+  /// Exhaustive finite-horizon construction with an explicit safety constraint.
   pure,
 
-  /// "Fast": best-first (highest reach-priority node expands next) plus
-  /// pruning that spends less effort on rarely-reached positions: our-move
-  /// alternatives below the priority floor are skipped, MultiPV and the
-  /// eval-loss window shrink in cold subtrees, and opponent fan-out is
-  /// capped harder.  The coverage floor ([TreeBuildConfig.coverMinProb])
-  /// is always honored, so Fast never creates silent holes.
-  ///
-  /// The pruning is what makes it faster; the best-first *order* only pays
-  /// off when the run stops early — which is what
-  /// [TreeBuildConfig.timeBudgetMinutes] is for.  With no budget and no
-  /// manual Stop, Fast and Pure expand the same node set minus the pruning.
+  /// Retired for stockfishExpectimax. Does not activate approximate search.
   fast,
 }
 
@@ -515,10 +501,10 @@ class TreeBuildConfig {
     required this.startFen,
     required this.playAsWhite,
     this.minProbability = 0.0001,
-    this.maxPly = 20,
+    this.maxPly = 4,
     this.maxNodes = 0,
     this.timeBudgetMinutes = 0,
-    this.searchAlgorithm = SearchAlgorithm.fast,
+    this.searchAlgorithm = SearchAlgorithm.pure,
     this.ourAltDiscount = 0.25,
     this.fastAltGapCp = 30,
     this.openingWidthPlies = 3,
@@ -601,7 +587,7 @@ class TreeBuildConfig {
       startFen: startFen,
       playAsWhite: json['play_as_white'] as bool? ?? true,
       minProbability: (json['min_probability'] as num?)?.toDouble() ?? 0.0001,
-      maxPly: (json['max_depth'] as num?)?.toInt() ?? 20,
+      maxPly: (json['max_depth'] as num?)?.toInt() ?? 4,
       maxNodes: (json['max_nodes'] as num?)?.toInt() ?? 0,
       timeBudgetMinutes: (json['time_budget_minutes'] as num?)?.toInt() ?? 0,
       searchAlgorithm: _parseSearchAlgorithm(
@@ -735,7 +721,11 @@ class TreeBuildConfig {
   /// re-ranking them by a local search at verification depth would quietly
   /// substitute Stockfish's opinion for ChessDB's — which is the one thing
   /// this mode exists not to do.
-  bool get runsVerification => verifyFinal && needsStockfish && !isChessDbBook;
+  bool get runsVerification =>
+      verifyFinal &&
+      needsStockfish &&
+      !isChessDbBook &&
+      buildMode != BuildMode.stockfishExpectimax;
 
   /// Ply cap for the off-book mainline tail, never below [maxPly].
   int get resolvedBookTailMaxPly =>
@@ -758,7 +748,10 @@ class TreeBuildConfig {
   String get summaryLabel {
     final parts = <String>[
       buildModeLabel,
-      searchAlgorithm == SearchAlgorithm.pure ? 'Pure' : 'Fast',
+      buildMode == BuildMode.stockfishExpectimax ||
+              searchAlgorithm == SearchAlgorithm.pure
+          ? 'Pure'
+          : 'Legacy Fast',
       '${maxPly}ply',
     ];
     if (usesStockfish) {
@@ -887,7 +880,7 @@ class TreeBuildConfig {
   /// Short label for the frontier/pruning algorithm.
   String get searchAlgorithmLabel => switch (searchAlgorithm) {
     SearchAlgorithm.pure => 'Pure search',
-    SearchAlgorithm.fast => 'Fast search',
+    SearchAlgorithm.fast => 'Pure search (legacy Fast setting)',
   };
 
   /// Convert a white-perspective centipawn score to "our" perspective.

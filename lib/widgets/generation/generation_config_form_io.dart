@@ -27,7 +27,6 @@ mixin _GenerationConfigIo
     _setupMovesCtrl.text = config.setupMoves;
     _setupToleranceCtrl.text = config.setupToleranceCp.toString();
     _memorabilityToleranceCtrl.text = config.memorabilityToleranceCp.toString();
-    _searchAlgorithm = config.searchAlgorithm;
     _timeBudgetCtrl.text = config.timeBudgetMinutes.toString();
     _wideOpening = config.openingWidthPlies > 0;
     _verifyFinal = config.verifyFinal;
@@ -175,7 +174,7 @@ mixin _GenerationConfigIo
         _cutoffCtrl.text,
         fallbackPercent: 0.01,
       ),
-      maxPly: int.tryParse(_maxPlyCtrl.text.trim()) ?? 20,
+      maxPly: int.tryParse(_maxPlyCtrl.text.trim()) ?? 4,
       buildMode: _buildMode,
       // The sources panel keeps its files across a trip through another
       // build source; only db-explorer builds may consume them.
@@ -246,7 +245,7 @@ mixin _GenerationConfigIo
       ourMultipv: int.tryParse(_multipvCtrl.text.trim()) ?? 4,
       oppMaxChildren: int.tryParse(_oppMaxChildrenCtrl.text.trim()) ?? 4,
       oppMassTarget: double.tryParse(_oppMassTargetCtrl.text.trim()) ?? 0.80,
-      searchAlgorithm: _searchAlgorithm,
+      searchAlgorithm: SearchAlgorithm.pure,
       timeBudgetMinutes: (int.tryParse(_timeBudgetCtrl.text.trim()) ?? 0).clamp(
         0,
         24 * 60,
@@ -302,7 +301,21 @@ mixin _GenerationConfigIo
     );
 
     return _evalSources.applyTo(
-      config,
+      _buildMode != BuildMode.stockfishExpectimax
+          ? config
+          : config.copyWith(
+              noveltyWeight: 0,
+              leafConfidence: 1,
+              memorabilityToleranceCp: 0,
+              setupMoves: '',
+              skeletonPlan: const SkeletonPlan(),
+              replyWindowCp: 0,
+              oppPolicyTemperature: 1,
+              masterPriorityWeight: 0,
+              masterDepthBonusPlies: 0,
+              selectionMode: SelectionMode.expectimax,
+              engineTailPlies: 0,
+            ),
       databases: EvalDatabaseSettings.instance,
       cdbDirectAvailable: _cdbDirectAvailable,
       engineEvalDepth: evalDepth,

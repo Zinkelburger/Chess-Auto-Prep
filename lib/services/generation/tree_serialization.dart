@@ -83,6 +83,10 @@ Map<String, dynamic> _nodeToJson(BuildTreeNode node) {
   if (node.moveSan.isNotEmpty) obj['move_san'] = node.moveSan;
   if (node.moveUci.isNotEmpty) obj['move_uci'] = node.moveUci;
 
+  if (node.historyAware) obj['history_aware'] = true;
+  if (node.terminalValue != null) obj['terminal_value'] = node.terminalValue;
+  obj['value_lower'] = node.valueLower;
+  obj['value_upper'] = node.valueUpper;
   obj['move_probability'] = node.moveProbability;
   obj['cumulative_probability'] = node.cumulativeProbability;
   if (node.searchPriority >= 0.0) {
@@ -247,6 +251,10 @@ BuildTreeNode _nodeFromJson(
     node.searchPriority = (obj['search_priority'] as num).toDouble();
   }
 
+  node.historyAware = obj['history_aware'] == true;
+  node.terminalValue = (obj['terminal_value'] as num?)?.toDouble();
+  node.valueLower = (obj['value_lower'] as num?)?.toDouble() ?? 0;
+  node.valueUpper = (obj['value_upper'] as num?)?.toDouble() ?? 1;
   if (obj.containsKey('engine_eval_cp')) {
     node.engineEvalCp = (obj['engine_eval_cp'] as num).toInt();
   }

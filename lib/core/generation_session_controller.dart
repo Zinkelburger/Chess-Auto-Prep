@@ -1043,11 +1043,15 @@ class GenerationSessionController extends ChangeNotifier
               'not written again.'
         : '';
     lastRunSummary =
-        'Complete in $elapsedLabel: ${tree.totalNodes} nodes, '
+        '${tree.buildComplete ? 'Complete' : 'Incomplete search'} in $elapsedLabel: ${tree.totalNodes} nodes, '
         '${analysis.selectedCount} repertoire moves, '
         '${extracted.lines.length} lines$pruneNote'
         '${_courseNote()}.$duplicateNote${extracted.trapsOnlyNote}'
         '$lastModelGameNote';
+    if (tree.root.historyAware) {
+      lastRunSummary +=
+          ' Expected-score estimate: ${tree.root.expectimaxValue.toStringAsFixed(4)}; bounds [${tree.root.valueLower.toStringAsFixed(4)}, ${tree.root.valueUpper.toStringAsFixed(4)}].';
+    }
     if (config.isChessDbBook) {
       lastRunSummary = '$lastRunSummary ${_bookSourceNote()}';
     }

@@ -101,13 +101,14 @@ double calculate_trap_score(const TreeNode *node, RepertoireDB *db) {
  * tree (their local move probability clears cover_min_prob). */
 static bool node_selectable(const TreeNode *node,
                             const RepertoireConfig *config) {
+    if (node->history_aware) return true;
     if (node->cumulative_probability >= config->min_probability) return true;
     return config->cover_min_prob > 0.0 &&
            node->move_probability >= config->cover_min_prob;
 }
 
 static TreeNode* resolve_transposition(TreeNode *node) {
-    if (!node || node->children_count > 0 || !node->next_equivalent)
+    if (!node || node->history_aware || node->children_count > 0 || !node->next_equivalent)
         return node;
     TreeNode *equiv = node->next_equivalent;
     while (equiv != node) {
@@ -136,9 +137,9 @@ static void build_repertoire_recursive(TreeNode *node, Tree *tree,
     if (!node_selectable(node, config)) return;
 
     node = resolve_transposition(node);
-    if (node->children_count == 0) return;
+    if (node->children_count == 0 || node->terminal_known) return;
 
-    if (node->depth > 0) {
+    if (!node->history_aware && node->depth > 0) {
         int eval_us = node_eval_for_us(node, config->play_as_white);
         if (eval_us < config->min_eval_cp || eval_us > config->max_eval_cp)
             return;
@@ -154,6 +155,8 @@ static void build_repertoire_recursive(TreeNode *node, Tree *tree,
 
         if (winner.child && *num_moves < max_moves) {
             TreeNode *best_child = winner.child;
+            best_child->is_repertoire_move=true;
+            best_child->repertoire_score=winner.expectimax_value;
             RepertoireMove *rm = &out_moves[*num_moves];
             snprintf(rm->fen, sizeof(rm->fen), "%s", node->fen);
             snprintf(rm->move_san, sizeof(rm->move_san), "%s",
@@ -175,6 +178,7 @@ static void build_repertoire_recursive(TreeNode *node, Tree *tree,
              * via opponent branches (not only the winner's path). */
             for (size_t i = 0; i < node->children_count; i++) {
                 TreeNode *child = node->children[i];
+                if (node->history_aware && child!=best_child) continue;
                 if (!node_selectable(child, config)) continue;
                 build_repertoire_recursive(child, tree, db, engine_pool,
                                             config, out_moves, num_moves,
@@ -200,6 +204,10 @@ static void build_repertoire_recursive(TreeNode *node, Tree *tree,
 static TreeNode* find_repertoire_child(TreeNode *node,
                                         const RepertoireMove *moves, int num_moves) {
     TreeNode *resolved = resolve_transposition(node);
+    if(node->history_aware) {
+        for(size_t i=0;i<node->children_count;i++) if(node->children[i]->is_repertoire_move) return node->children[i];
+        return NULL;
+    }
     for (int m = 0; m < num_moves; m++) {
         if (strcmp(moves[m].fen, node->fen) != 0 &&
             (resolved == node || strcmp(moves[m].fen, resolved->fen) != 0))
@@ -258,6 +266,7 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
                          ? node->is_white_to_move
                          : !node->is_white_to_move;
 
+        if(node->terminal_known) {if(current.depth>0) goto record_line;continue;}
         bool pushed_any = false;
 
         if (is_our_move) {
@@ -381,11 +390,13 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
 
 static void load_evals_callback(TreeNode *node, void *user_data) {
     RepertoireDB *d = (RepertoireDB *)user_data;
-    if (node->has_engine_eval) return;
+    if (node->history_aware || node->has_engine_eval) return;
     int eval_cp, depth;
     if (rdb_get_eval(d, node->fen, &eval_cp, &depth))
         node_set_eval(node, eval_cp);
 }
+
+static void clear_policy_flag(TreeNode *node,void *unused) { (void)unused;node->is_repertoire_move=false;node->repertoire_score=0; }
 
 RepertoireResult* generate_repertoire(Tree *tree, RepertoireDB *db,
                                        EnginePool *engine_pool,
@@ -395,13 +406,17 @@ RepertoireResult* generate_repertoire(Tree *tree, RepertoireDB *db,
     if (!tree || !tree->root || !db || !config_in) return NULL;
 
     RepertoireConfig cfg_local = *config_in;
+    if(tree->root->history_aware && (cfg_local.play_as_white!=tree->config.play_as_white ||
+        cfg_local.max_depth!=tree->config.max_depth || cfg_local.max_eval_loss_cp!=tree->config.max_eval_loss_cp)) {
+        fprintf(stderr,"Pure export requires the saved search model. Rebuild to change it.\n");return NULL;
+    }
     const RepertoireConfig *config = &cfg_local;
 
     RepertoireResult *result = (RepertoireResult *)calloc(1, sizeof(RepertoireResult));
     if (!result) return NULL;
 
     int max_moves = (int)tree->total_nodes;
-    int max_lines = max_moves < 10000 ? max_moves : 10000;
+    int max_lines = tree->root->history_aware ? max_moves : (max_moves < 10000 ? max_moves : 10000);
     result->moves = (RepertoireMove *)calloc(max_moves, sizeof(RepertoireMove));
     result->lines = (RepertoireLine *)calloc(max_lines, sizeof(RepertoireLine));
     if (!result->moves || !result->lines) {
@@ -425,17 +440,22 @@ RepertoireResult* generate_repertoire(Tree *tree, RepertoireDB *db,
     }
 
     /* Fix transposition cumP before expectimax so values propagate correctly */
-    size_t cumP_passes = tree_fix_transposition_probabilities(tree);
+    size_t cumP_passes = tree->root->history_aware ? 0 : tree_fix_transposition_probabilities(tree);
     if (cumP_passes > 0)
         printf("  Fixed transposition cumP (%zu passes)\n", cumP_passes);
 
     /* Expectimax value propagation */
     if (progress) progress("Expectimax calculation", 0, (int)tree->total_nodes);
     size_t emx_count = tree_calculate_expectimax(tree, config);
+    if (!emx_count) { free(result->moves); free(result->lines); free(result); return NULL; }
     printf("  Computed expectimax for %zu nodes\n", emx_count);
+    if (tree->root->history_aware) printf("  Pure: %s; expected-score bounds [%.6f, %.6f]\n",
+        tree->build_complete ? "complete" : "INCOMPLETE", tree->root->value_lower, tree->root->value_upper);
     if (tree->root && tree->root->has_expectimax)
         printf("  Root expectimax value: %.4f\n",
                tree->root->expectimax_value);
+
+    tree_traverse_bfs(tree, clear_policy_flag, NULL);
 
     /* Select repertoire moves */
     if (progress) progress("Move selection", 0, (int)tree->total_nodes);
@@ -1098,61 +1118,6 @@ bool repertoire_export_json(const RepertoireResult *result, const char *filename
 
 /* ========== Final Verification Pass ========== */
 
-typedef struct {
-    TreeNode *parent;
-    TreeNode *chosen;
-} VerifyPair;
-
-/* Walk the current selection (same traversal and guards as
- * build_repertoire_recursive) collecting (our-node, selected-child)
- * pairs.  score_our_move_children is deterministic given the node evals,
- * so re-scoring reproduces exactly what generate_repertoire selected. */
-static void verify_collect(TreeNode *node, const RepertoireConfig *config,
-                           VerifyPair **pairs, int *count, int *cap) {
-    if (!node) return;
-    if (node->depth >= config->max_depth && node->children_count == 0) return;
-    if (!node_selectable(node, config)) return;
-
-    node = resolve_transposition(node);
-    if (node->children_count == 0) return;
-
-    if (node->depth > 0) {
-        int eval_us = node_eval_for_us(node, config->play_as_white);
-        if (eval_us < config->min_eval_cp || eval_us > config->max_eval_cp)
-            return;
-    }
-
-    bool is_our_move = config->play_as_white
-                     ? node->is_white_to_move
-                     : !node->is_white_to_move;
-
-    if (is_our_move) {
-        ScoredChild winner;
-        score_our_move_children(node, config, &winner);
-        if (!winner.child) return;
-
-        if (*count == *cap) {
-            int new_cap = *cap ? *cap * 2 : 256;
-            VerifyPair *grown =
-                (VerifyPair *)realloc(*pairs, new_cap * sizeof(VerifyPair));
-            if (!grown) return;
-            *pairs = grown;
-            *cap = new_cap;
-        }
-        (*pairs)[*count].parent = node;
-        (*pairs)[*count].chosen = winner.child;
-        (*count)++;
-
-        verify_collect(winner.child, config, pairs, count, cap);
-    } else {
-        for (size_t i = 0; i < node->children_count; i++) {
-            TreeNode *child = node->children[i];
-            if (!node_selectable(child, config)) continue;
-            verify_collect(child, config, pairs, count, cap);
-        }
-    }
-}
-
 static int verify_job_cp(const EvalJob *job) {
     if (job->is_mate) return job->mate_in > 0 ? 10000 : -10000;
     return job->eval_cp;
@@ -1161,88 +1126,37 @@ static int verify_job_cp(const EvalJob *job) {
 int repertoire_verify(Tree *tree, EnginePool *engine_pool,
                       const RepertoireConfig *config,
                       int verify_depth, int *evals_run) {
-    if (evals_run) *evals_run = 0;
-    if (!tree || !tree->root || !engine_pool || !config || verify_depth <= 0)
-        return -1;
-
-    VerifyPair *pairs = NULL;
-    int n_pairs = 0, cap = 0;
-    verify_collect(tree->root, config, &pairs, &n_pairs, &cap);
-    if (n_pairs == 0) {
-        free(pairs);
-        return 0;
+    if(evals_run) *evals_run=0;
+    if(!tree || !tree->root || tree->root->history_aware || !engine_pool || verify_depth<=0) return -1;
+    size_t cap=tree->total_nodes+1,count=1;
+    TreeNode **nodes=calloc(cap,sizeof(*nodes));
+    EvalJob *jobs=calloc(cap,sizeof(*jobs));
+    if(!nodes || !jobs) {free(nodes);free(jobs);return -1;}
+    nodes[0]=tree->root;
+    for(size_t i=0;i<count;i++) for(size_t j=0;j<nodes[i]->children_count;j++) {
+        if(count==cap) {free(nodes);free(jobs);return -1;}
+        nodes[count++]=nodes[i]->children[j];
     }
-
-    engine_pool_set_depth(engine_pool, verify_depth);
-
-    /* Phase 1: batch-eval every selected move's resulting position. */
-    EvalJob *jobs = (EvalJob *)calloc((size_t)n_pairs, sizeof(EvalJob));
-    if (!jobs) {
-        free(pairs);
-        engine_pool_set_depth(engine_pool, config->eval_depth);
-        return -1;
-    }
-    for (int i = 0; i < n_pairs; i++)
-        snprintf(jobs[i].fen, sizeof(jobs[i].fen), "%s",
-                 pairs[i].chosen->fen);
-    int ok = engine_pool_evaluate_batch(engine_pool, jobs, n_pairs,
-                                        NULL, NULL);
-    if (evals_run) *evals_run += ok;
-
-    /* Phase 2: apply deep evals; escalate to siblings when suspect. */
-    int demotions = 0;
-    for (int i = 0; i < n_pairs; i++) {
-        TreeNode *parent = pairs[i].parent;
-        TreeNode *chosen = pairs[i].chosen;
-        if (!jobs[i].success) continue;
-
-        node_set_eval(chosen, verify_job_cp(&jobs[i]));
-        int chosen_us = node_eval_for_us(chosen, config->play_as_white);
-
-        /* Cheap accept: even trusting every sibling's (optimistic)
-         * shallow eval, none beats the deep-checked choice by more than
-         * the threshold. */
-        int best_alt_us = -1000000;
-        for (size_t c = 0; c < parent->children_count; c++) {
-            TreeNode *sib = parent->children[c];
-            if (sib == chosen || !sib->has_engine_eval) continue;
-            int us = node_eval_for_us(sib, config->play_as_white);
-            if (us > best_alt_us) best_alt_us = us;
-        }
-        if (best_alt_us - chosen_us <= config->max_eval_loss_cp) continue;
-
-        /* Suspect: deep-check the siblings before judging. */
-        int best_deep_us = -1000000;
-        const TreeNode *best_sib = NULL;
-        for (size_t c = 0; c < parent->children_count; c++) {
-            TreeNode *sib = parent->children[c];
-            if (sib == chosen) continue;
-            int cp;
-            if (!engine_pool_evaluate(engine_pool, sib->fen, &cp)) continue;
-            if (evals_run) (*evals_run)++;
-            node_set_eval(sib, cp);
-            int us = node_eval_for_us(sib, config->play_as_white);
-            if (us > best_deep_us) {
-                best_deep_us = us;
-                best_sib = sib;
-            }
-        }
-
-        if (best_sib && best_deep_us - chosen_us > config->max_eval_loss_cp) {
-            demotions++;
-            printf("  Verify: demoting %s (%+dcp deep) for %s (%+dcp deep) "
-                   "at ply %d\n",
-                   chosen->move_san, chosen_us, best_sib->move_san,
-                   best_deep_us, parent->depth);
+    for(size_t i=0;i<count;i++) snprintf(jobs[i].fen,sizeof(jobs[i].fen),"%s",nodes[i]->fen);
+    engine_pool_set_depth(engine_pool,verify_depth);
+    int success=engine_pool_evaluate_batch(engine_pool,jobs,(int)count,NULL,NULL);
+    engine_pool_set_depth(engine_pool,config->eval_depth);
+    if(evals_run) *evals_run=success;
+    bool complete=success==(int)count;
+    for(size_t i=0;i<count;i++) if(!jobs[i].success || (!jobs[i].is_mate && jobs[i].depth_reached<verify_depth)) complete=false;
+    if(!complete) {free(nodes);free(jobs);return -1;}
+    int changes=0;
+    for(size_t i=0;i<count;i++) node_set_eval(nodes[i],verify_job_cp(&jobs[i]));
+    if(!tree_calculate_expectimax(tree,config)) {free(nodes);free(jobs);return -1;}
+    for(size_t i=0;i<count;i++) if(nodes[i]->is_white_to_move==config->play_as_white) {
+        ScoredChild chosen;score_our_move_children(nodes[i],config,&chosen);
+        for(size_t j=0;j<nodes[i]->children_count;j++) {
+            TreeNode *child=nodes[i]->children[j];
+            if(child->is_repertoire_move && child!=chosen.child) changes++;
         }
     }
-
-    free(jobs);
-    free(pairs);
-    engine_pool_set_depth(engine_pool, config->eval_depth);
-    return demotions;
+    free(nodes);free(jobs);return changes;
 }
-
 
 void repertoire_print_summary(const RepertoireResult *result) {
     if (!result) return;

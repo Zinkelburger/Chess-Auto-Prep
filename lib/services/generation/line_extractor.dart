@@ -389,6 +389,7 @@ class LineExtractor {
   /// Opponent replies below the reach floor are not exported unless the
   /// coverage floor forced an answer for them.
   bool _exportable(BuildTreeNode child) {
+    if (child.historyAware) return child.moveProbability > 0;
     final covered =
         config.coverMinProb > 0.0 &&
         child.moveProbability >= config.coverMinProb;
@@ -399,6 +400,7 @@ class LineExtractor {
   /// the continuation.  [node] is the arrival itself — a transposition leaf
   /// or the canonical node — so identity, not position, decides.
   bool _ownsContinuation(BuildTreeNode node, BuildTreeNode resolved) {
+    if (node.historyAware) return true;
     final owner = _owners[canonicalizeFen(resolved.fen)];
     return owner == null || identical(owner.node, node);
   }
@@ -514,8 +516,9 @@ class LineExtractor {
           final gapCp = _annotator.leadOverAlternatives(resolved, selected);
           // Keyed by the position faced rather than the path taken to it, so
           // a transposition is recognised as the same decision.
-          final decisionKey =
-              '${canonicalizeFen(resolved.fen)}|${selected.moveUci}';
+          final decisionKey = resolved.historyAware
+              ? 'history:${resolved.nodeId}|${selected.moveUci}'
+              : '${canonicalizeFen(resolved.fen)}|${selected.moveUci}';
           path.push(
             san: selected.moveSan,
             uci: selected.moveUci,
@@ -641,7 +644,14 @@ class LineExtractor {
         leafEvalCp: leaf.engineEvalCp,
         leafFen: leaf.fen,
         moveAnnotations: annotations,
-        coverageUnits: List.unmodifiable(path.coverageUnits),
+        coverageUnits: List.unmodifiable([
+          ...path.coverageUnits,
+          if (leaf.historyAware)
+            LineCoverageUnit(
+              key: 'leaf:${leaf.nodeId}',
+              value: leaf.cumulativeProbability,
+            ),
+        ]),
         choices: List.unmodifiable(path.choices),
         transposesInto: transposesInto,
       ),

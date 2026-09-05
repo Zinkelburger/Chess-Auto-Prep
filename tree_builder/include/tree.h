@@ -1,19 +1,6 @@
-/**
- * tree.h - Opening Tree Builder
- *
- * Builds and manages the complete opening tree structure in a single
- * interleaved frontier build.  Best-first (default): a priority queue on
- * search priority (reach probability × our-alternative discount) expands
- * the likeliest lines first and deepest — an anytime algorithm under any
- * node budget.  FIFO BFS (best_first = false): classic level order.
- * Branches are pruned immediately by eval window at each node either way.
- *
- * At OUR-move nodes:     Stockfish MultiPV → eval-loss filter → enqueue children
- *                        (incumbent keeps parent priority; alternatives ×
- *                        our_alt_discount)
- * At OPPONENT nodes:     single source — pure Maia (default) or Lichess
- *                        (`maia_only = false`, optionally λ-smoothed with
- *                        a Maia Dirichlet prior) → enqueue children
+/** Standard expectimax uses the exhaustive Pure implementation in pure_search.c.
+ * See ../docs/ALGORITHM.md for the shared Dart/C contract. The older frontier,
+ * pruning and MultiPV fields below remain for separate database build modes.
  */
 
 #ifndef TREE_H
@@ -249,6 +236,7 @@ typedef struct TreeConfig {
      * for novelty scoring during selection.  If you know you won't use
      * novelty (`novelty_weight == 0`), setting this to false saves one
      * Maia inference per our-move node. */
+    char pure_book_source[32];      /* Snapshot source for safe resume. */
     struct MaiaContext *maia;       /* NULL = disabled */
     int    maia_elo;                /* Elo for Maia predictions (600-2400) */
     double maia_min_prob;           /* Skip Maia moves below this probability */
@@ -365,23 +353,10 @@ size_t tree_get_nodes_at_depth(const Tree *tree, int depth,
 /**
  * Compute expectimax values for the entire tree.
  *
- * Two-pass post-order DFS assigning each node a practical win
- * probability V in [0, 1]:
- *   - Leaves:     V = leaf_conf · wp(eval_for_us) + (1 − leaf_conf) · 0.5
- *                 (blend of the engine's win-probability estimate with a
- *                 neutral 0.5 prior; leaf_conf = 1.0 ⇒ V = wp(eval))
- *   - Opp nodes:  V = Σ pᵢ · V(childᵢ) + (1 − Σ pᵢ) · leaf_value(this)
- *                 (raw — not renormalized — covered probabilities, with
- *                 a tail term for uncovered mass)
- *   - Our nodes:  V = max over candidates passing the eval-loss filter
- *                 (novelty-weighted when novelty_weight > 0); fallback to
- *                 all children if none pass.
- *
- * Two passes are used so transposition leaves can reliably borrow V from
- * their canonical equivalent even when DFS order would otherwise visit
- * the leaf first (e.g. after a load-from-JSON that reordered subtrees).
- *
- * Also computes local_cpl at opponent nodes (display only).
+ * Dependency-ordered Bellman backup with bounded expected-score estimates.
+ * Pure trees retain full histories; legacy transposition dependencies are
+ * resolved recursively and cycles rejected. No novelty or confidence bonuses.
+ * Zero means invalid probability mass, an unresolved dependency cycle or error.
  */
 size_t tree_calculate_expectimax(Tree *tree, const struct RepertoireConfig *config);
 
@@ -392,8 +367,8 @@ typedef struct {
 
 /**
  * At an our-move node, find the child with the highest expectimax value
- * among those passing the eval-loss filter.  Falls back to all children
- * if none pass.  Returns the number of children that passed the filter.
+ * among those passing the eval-loss filter. Returns 1 for a selected child,
+ * or 0 if no valued candidate exists. Ties use eval, UCI, then SAN.
  */
 int score_our_move_children(TreeNode *node,
                             const struct RepertoireConfig *config,

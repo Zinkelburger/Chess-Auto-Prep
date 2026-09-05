@@ -365,7 +365,7 @@ static void print_number(const cJSON *item, printbuffer *p) {
     } else if (d == (double)item->valueint) {
         p->offset += sprintf(p->buffer + p->offset, "%d", item->valueint);
     } else {
-        p->offset += sprintf(p->buffer + p->offset, "%g", d);
+        p->offset += sprintf(p->buffer + p->offset, "%.17g", d);
     }
 }
 

@@ -64,13 +64,8 @@ ENGINES_DIR = REPO_ROOT / "assets" / "executables"
 #: `make` on a cold tree_builder is ~40 s; give it room.
 BUILD_TIMEOUT = 900.0
 
-#: Scoring a saved tree (`--build-now`) re-verifies the selected moves with a
-#: deeper search, so it is not instant.
+#: Re-exporting a large saved tree still needs a bounded process timeout.
 SCORE_TIMEOUT = 900.0
-
-#: The builder always gives the root at least this many candidates, whatever
-#: `multipv` says (src/main.c: `root_multipv = our_multipv < 10 ? 10 : ...`).
-ROOT_MULTIPV_FLOOR = 10
 
 
 # ── Locations ──────────────────────────────────────────────────────────────
@@ -545,7 +540,9 @@ def root_table(tree_path: Path) -> dict:
         rows.append(
             {
                 "move": child.get("move_san") or child.get("move_uci"),
-                "expectimax": round(value, 4) if value is not None else None,
+                "expectimax": value,
+                "selected": child.get("is_repertoire_move", False),
+                "bounds": [child.get("value_lower", 0), child.get("value_upper", 1)],
                 "eval_cp": child.get("engine_eval_cp"),
                 "nodes": _subtree_size(child),
                 "max_ply": max(plies),
@@ -560,7 +557,10 @@ def root_table(tree_path: Path) -> dict:
         margin = round(scored[0]["expectimax"] - scored[1]["expectimax"], 4)
 
     return {
-        "best": scored[0]["move"] if scored else None,
+        "best": next((r["move"] for r in rows if r["selected"]), scored[0]["move"] if scored else None),
+        "score_kind": "expected-score estimate",
+        "result_status": "complete" if data.get("build_complete") else "incomplete: provisional leader",
+        "root_bounds": [root.get("value_lower", 0), root.get("value_upper", 1)],
         "margin_over_second": margin,
         "root_expectimax": (
             round(root["expectimax_value"], 4)
@@ -597,16 +597,14 @@ def builder_argv(chain: dict, base: Path, position: dict, args: dict) -> list[st
         if value is not None:
             argv.extend([flag, str(value)])
 
-    add("-d", "plies", 8)
+    add("-d", "plies", 4)
     add("-e", "eval_depth", 16)
     add("-t", "threads", 1)
-    add("-p", "min_probability", 0.01, float)
-    add("--our-multipv", "multipv", 5)
     add("--max-eval-loss", "max_eval_loss", 40)
-    add("--opp-max-children", "opp_max_children", 3)
-    add("--opp-mass", "opp_mass", 0.85, float)
     add("--maia-elo", "maia_elo", 2200)
-    add("--maia-min-prob", "maia_min_prob", 0.08, float)
+
+    if args.get("use_master_games", True) is False:
+        argv.append("--maia-only")
 
     name = (args.get("name") or "").strip()
     if name:
@@ -747,15 +745,16 @@ def register_expectimax_tools(registry: Any) -> None:
         }
         _write_run(directory, state)
 
-        multipv = int(args.get("multipv") or 5)
         return {
             "started": True,
             "id": directory.name,
             "line": position["line"],
             "fen": position["fen"],
             "color": "White" if position["color"] == "w" else "Black",
-            "root_candidates": max(ROOT_MULTIPV_FLOOR, multipv),
-            "plies": int(args.get("plies") or 8),
+            "root_candidates": "every legal move, then the explicit engine-loss constraint",
+            "opponent_model": "masters with Maia off-book" if args.get("use_master_games", True) else "Maia throughout",
+            "score_kind": "expected-score estimate, not calibrated win probability",
+            "plies": int(args.get("plies") or 4),
             "directory": str(directory),
             "log": str(log_path),
             "pid": process.pid,
@@ -924,16 +923,14 @@ def register_expectimax_tools(registry: Any) -> None:
 
     registry._add(
         "expectimax_run",
-        "Start an expectimax opening-tree build and return immediately. Maia "
-        "supplies the opponent's replies with probabilities, Stockfish the "
-        "evaluations, and folding the tree back gives each candidate a "
-        "practical win probability rather than a centipawn score — which is "
-        "the number you want when several moves are objectively equal. Give "
-        "it a move list ('1. d4 Nf6 2. Nf3 g6') or a FEN. The root always "
-        f"gets at least {ROOT_MULTIPV_FLOOR} candidates, so it answers 'which "
-        "of my many options here' directly. Builds take tens of minutes; they "
-        "are breadth-first and resumable, so stopping early still gives a "
-        "usable answer.",
+        "Start a Pure finite-horizon expectimax build. Scores every legal own move "
+        "at fixed Stockfish depth, retains those within max_eval_loss, and explores "
+        "every positive-probability opponent reply. Default opponent: empirical "
+        "Lichess master-game counts, Maia off-book; deselect use_master_games for "
+        "Maia everywhere. Values are expected-score estimates, not calibrated "
+        "human win rates. Exponential cost: start with 4 plies. Interrupted trees "
+        "are incomplete and resumable, not solved answers. Draws are immediately "
+        "claimed at threefold/100 half-moves; repetition history starts at the root.",
         _obj(
             {
                 "moves": _s(
@@ -947,31 +944,19 @@ def register_expectimax_tools(registry: Any) -> None:
                     "ending on Black's move is White to move."
                 ),
                 "name": _s("Label for the run and the PGN headers."),
-                "plies": _i("Depth in half-moves (default 8)."),
+                "plies": _i("Exact horizon in half-moves, 1–64 (default 4)."),
                 "eval_depth": _i("Stockfish search depth per node (default 16)."),
-                "multipv": _i(
-                    "Candidates at our non-root moves (default 5). The root "
-                    f"always gets at least {ROOT_MULTIPV_FLOOR}."
-                ),
+
                 "max_eval_loss": _i(
                     "Drop our candidates worse than the best by this many "
                     "centipawns (default 40)."
                 ),
-                "opp_max_children": _i(
-                    "Maia replies kept per opponent move (default 3)."
-                ),
-                "opp_mass": _n(
-                    "Probability mass to cover per opponent move (default "
-                    "0.85)."
-                ),
+
+
+                "use_master_games": _b("Target masters using empirical master replies with Maia off-book (default true). False uses Maia throughout."),
                 "maia_elo": _i("Strength Maia predicts for (default 2200)."),
-                "maia_min_prob": _n(
-                    "Ignore Maia replies below this probability (default 0.08)."
-                ),
-                "min_probability": _n(
-                    "Stop exploring a line below this cumulative probability "
-                    "(default 0.01)."
-                ),
+
+
                 "threads": _i(
                     "Parallel Stockfish engines (default 1; increase to use more CPU)."
                 ),

@@ -82,396 +82,62 @@ mixin _GenerationConfigAdvanced
     if (mounted) setState(() {});
   }
 
-  List<Widget> _opponentModelSection(VoidCallback refresh) {
-    return [
-      _caption(
-        _buildMode == BuildMode.dbExplorer
-            ? 'Opponent replies come from move frequencies in your PGN '
-                  'files, blended with Maia where the database is thin.'
-            : 'Opponent replies come from Maia, which predicts human moves '
-                  'at the rating you set. To model real opponents from real '
-                  'games, switch the build source to a PGN database.',
-      ),
-      const SizedBox(height: 12),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          _numField(
-            _oppPolicyTempCtrl,
-            'Opponent temperature',
-            defaultText: '1.0',
-            onEdited: refresh,
-            tooltip:
-                '1.0 = Maia as-is. Above 1.0 flattens the move '
-                'distribution (a sloppier, more varied pool); below 1.0 '
-                'sharpens it toward the most common reply.',
-          ),
-          _numField(
-            _maiaPriorGamesCtrl,
-            'Blend with Maia (games)',
-            defaultText: '30',
-            onEdited: refresh,
-            enabled: _buildMode == BuildMode.dbExplorer,
-            disabledReason: 'Needs a PGN database as the build source',
-            tooltip:
-                'Dirichlet prior weight: database counts are blended with '
-                'Maia as if Maia contributed this many games. Sparse '
-                'positions lean on Maia; well-covered ones on real data. '
-                '0 disables.',
-          ),
-          _numField(
-            _oppMaxChildrenCtrl,
-            'Opponent replies per position',
-            defaultText: '4',
-            onEdited: refresh,
-            tooltip: 'Maximum opponent replies explored at each position.',
-          ),
-          _numField(
-            _oppMassTargetCtrl,
-            'Reply coverage target (0–1)',
-            defaultText: '0.80',
-            onEdited: refresh,
-            tooltip:
-                'Stop adding opponent replies once this share of their '
-                'games is covered.',
-          ),
-          _numField(
-            _coverMinProbCtrl,
-            'Always answer replies above',
-            defaultText: '0.05',
-            onEdited: refresh,
-            tooltip:
-                'No-silent-holes floor: any reply at least this likely '
-                'gets a repertoire answer even when other budgets would '
-                'skip it. 0 disables.',
-          ),
-          _numField(
-            _cutoffCtrl,
-            'Ignore lines rarer than (%)',
-            defaultText: '0.01',
-            onEdited: refresh,
-            tooltip:
-                'Lines whose cumulative reach probability falls below this '
-                'percentage stop being explored.',
-          ),
-        ],
-      ),
-    ];
-  }
-
-  /// How the build chooses our move: the selection algorithm, the forced
-  /// setup moves, and the window a candidate has to fall inside.
-  List<Widget> _moveChoiceSection(VoidCallback refresh) => [
-    ..._moveChoiceModeField(refresh),
-    ..._moveChoiceSetupField(refresh),
-    ..._moveChoiceWindowFields(refresh),
-    ..._moveChoiceRelativeEvalField(refresh),
+  List<Widget> _opponentModelSection(VoidCallback refresh) => [
+    _caption(
+      'Pure uses all positive-probability replies. Master game frequencies '
+      'are used where available when Target master opponents is enabled; Maia '
+      'at the selected rating supplies off-book replies. No temperature or hidden mixture.',
+    ),
   ];
 
-  /// Which algorithm picks our move at each of our turns.
-  List<Widget> _moveChoiceModeField(VoidCallback refresh) {
-    final isBook = _buildMode == BuildMode.chessDbBook;
-    return [
-      DropdownButtonFormField<SelectionMode>(
-        initialValue: _effectiveSelectionMode,
-        decoration: const InputDecoration(
-          labelText: 'How the repertoire move is picked',
-          border: OutlineInputBorder(),
-          isDense: true,
-        ),
-        items: [
-          for (final mode in SelectionMode.values)
-            DropdownMenuItem(
-              value: mode,
-              child: Text(_selectionModeLabel(mode)),
-            ),
-        ],
-        onChanged: widget.isGenerating || isBook
-            ? null
-            : (v) {
-                if (v != null) {
-                  _selectionMode = v;
-                  refresh();
-                }
-              },
-      ),
-      _caption(
-        isBook
-            ? 'The ChessDB book has one move per position, so the build '
-                  'always takes the engine-best pick here.'
-            : _selectionModeDescription(),
-      ),
-    ];
-  }
+  List<Widget> _moveChoiceSection(VoidCallback refresh) => [
+    _caption(
+      'Choose the highest expected-score estimate among all legal moves '
+      'within the engine-loss limit. No novelty, memorability, setup or reply-count bonuses.',
+    ),
+    _numField(
+      _evalGuardCtrl,
+      'Maximum engine loss (cp)',
+      defaultText: '30',
+      onEdited: refresh,
+      tooltip:
+          'Compared with the best of all legal moves evaluated at the same engine depth.',
+    ),
+  ];
 
-  /// Forced opening moves — the setup the build must play out before its
-  /// own choices begin.
-  List<Widget> _moveChoiceSetupField(VoidCallback refresh) {
-    return [
-      const SizedBox(height: 12),
-      TextField(
-        controller: _setupMovesCtrl,
-        enabled: !widget.isGenerating,
-        onChanged: (_) => refresh(),
-        decoration: const InputDecoration(
-          labelText: 'Preferred setup moves (SAN, any order)',
-          helperText:
-              'Played whenever they stay sound; the repertoire deviates '
-              'automatically when the opponent makes them too costly. '
-              'Leave empty for no preference.',
-          helperMaxLines: 3,
-          isDense: true,
-          border: OutlineInputBorder(),
-        ),
-        style: const TextStyle(fontSize: 13),
-      ),
-    ];
-  }
+  List<Widget> _searchBudgetSection(VoidCallback refresh) => [
+    _caption(
+      'Pure enumerates the complete action set at each expanded position. '
+      'Time and node limits produce an explicitly incomplete result; they do not prune rare replies.',
+    ),
+    EngineResourcesSection(
+      threadsController: _engineThreadsCtrl,
+      isGenerating: widget.isGenerating,
+      isDbExplorer: _buildMode == BuildMode.dbExplorer,
+      enabled: _usesEngineDepth,
+    ),
+  ];
 
-  /// The eval window and the practical-play knobs that decide which
-  /// candidate moves survive.
-  List<Widget> _moveChoiceWindowFields(VoidCallback refresh) {
-    // Novelties and a forced setup each disable knobs below.
-    final hasSetup = _setupMovesCtrl.text.trim().isNotEmpty;
-    return [
-      const SizedBox(height: 12),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          _numField(
-            _memorabilityToleranceCtrl,
-            'Natural-move tolerance (cp)',
-            defaultText: '0',
-            onEdited: refresh,
-            enabled: !_preferNovelties,
-            disabledReason:
-                'Ignored while "Prefer novelties" is on — they pull '
-                'opposite ways',
-            tooltip:
-                'Above 0, a move you would play anyway may lose up to this '
-                'many centipawns against the best candidate and still be '
-                'picked, because it is easier to remember. Pulls against '
-                '"Prefer novelties".',
-          ),
-          _numField(
-            _setupToleranceCtrl,
-            'Setup tolerance (cp)',
-            defaultText: '30',
-            onEdited: refresh,
-            enabled: hasSetup,
-            disabledReason: 'Enter preferred setup moves first',
-            tooltip:
-                'A preferred-setup move may lose up to this many '
-                'centipawns vs the best candidate and still be chosen.',
-          ),
-          _numField(
-            _evalGuardCtrl,
-            'Max eval loss vs best (cp)',
-            defaultText: '30',
-            onEdited: refresh,
-            tooltip:
-                'Hard guard: no repertoire move may lose more than this '
-                'against the best sibling.',
-          ),
-          _numField(
-            _replyWindowCtrl,
-            'Prefer fewest good replies (cp)',
-            defaultText: '0',
-            onEdited: refresh,
-            tooltip:
-                'Among candidates inside the eval-loss guard, picks the one '
-                'leaving the opponent the fewest replies within this many '
-                'centipawns of their best. 0 is off. The ChessDB book counts '
-                'database replies; other builds count the tree.',
-          ),
-          _numField(
-            _minEvalCtrl,
-            _relativeEval ? 'Floor, vs. start (cp)' : 'Min eval for us (cp)',
-            defaultText: _relativeEval ? '-100' : '0',
-            onEdited: refresh,
-            tooltip: _relativeEval
-                ? 'How much worse than the starting position you will still '
-                      'prepare. The floor moves with the root, so one setting '
-                      'works from any position.\n\n'
-                      'Only positions you chose to enter are judged — a '
-                      'position the opponent forces on you always gets an '
-                      'answer.\n\n'
-                      '0 accepts nothing worse than the start, which rules '
-                      'out normal opening play and every gambit.'
-                : 'Lines evaluated below this (for us) are abandoned as '
-                      'lost causes.',
-          ),
-          _numField(
-            _maxEvalCtrl,
-            _relativeEval ? 'Ceiling, vs. start (cp)' : 'Max eval for us (cp)',
-            defaultText: _relativeEval
-                ? '200'
-                : (widget.playAsWhite ? '200' : '100'),
-            onEdited: refresh,
-            tooltip: _relativeEval
-                ? 'How much better than the starting position is far enough. '
-                      'Past this a line stops as already winning. Measured '
-                      'from the root, the same way the floor is.'
-                : 'Lines evaluated above this are abandoned as already '
-                      'winning — no need to memorize conversions.',
-          ),
-          _numField(
-            _leafConfidenceCtrl,
-            'Leaf eval confidence (0–1)',
-            defaultText: '1.0',
-            onEdited: refresh,
-            tooltip:
-                'Trust in the engine eval at unexplored leaves; lower '
-                'values blend toward an even game.',
-          ),
-        ],
-      ),
-      const SizedBox(height: 4),
-    ];
-  }
+  List<Widget> _verificationSection(VoidCallback refresh) => [
+    _caption(
+      'Pure evaluates every legal candidate at the engine depth on the main form. '
+      'There is no separate mixed-depth verification pass and no claim of an objective chess proof.',
+    ),
+  ];
 
-  /// Whether the eval limits are read against the starting position rather
-  /// than against absolute zero.
-  List<Widget> _moveChoiceRelativeEvalField(VoidCallback refresh) {
-    return [
-      _labeledCheckbox(
-        'Eval limits relative to start',
-        _relativeEval,
-        (v) {
-          _relativeEval = v;
-          refresh();
-        },
-        tooltip:
-            'On: the two limits above are offsets from the root position\'s '
-            'own eval, so the same numbers mean the same thing from any '
-            'position. Off: they are absolute centipawn scores, re-picked '
-            'per position and per colour.',
-      ),
-    ];
-  }
-
-  List<Widget> _searchBudgetSection(VoidCallback refresh) {
-    final isPure = _searchAlgorithm == SearchAlgorithm.pure;
-    final isDb = _buildMode == BuildMode.dbExplorer;
-    return [
-      Text(
-        isPure
-            ? 'Pure search is selected on the main form — these '
-                  'Fast-only narrowing knobs are ignored.'
-            : 'Fast search is selected on the main form. These control '
-                  'how much it narrows rarely-reached lines.',
-        style: AppTextStyles.caption.copyWith(fontSize: 12),
-      ),
-      const SizedBox(height: 10),
-      _labeledCheckbox(
-        'Wide opening search',
-        _wideOpening,
-        (v) {
-          _wideOpening = v;
-          refresh();
-        },
-        tooltip:
-            'Explore extra candidates for the first few of your moves, '
-            'then narrow. Catches alternatives and novelties at the cost '
-            'of some build time.',
-      ),
-      const SizedBox(height: 8),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          _numField(
-            _ourAltDiscountCtrl,
-            'Alternative budget share (0–1)',
-            defaultText: '0.25',
-            onEdited: refresh,
-            enabled: !isPure && !isDb,
-            disabledReason: isDb
-                ? 'Your PGN files decide which lines grow in this mode'
-                : 'Fast search only',
-            tooltip:
-                'Search-priority multiplier for your non-best candidates. '
-                'Lower = more budget on the main line.',
-          ),
-          _numField(
-            _fastAltGapCtrl,
-            'Skip alternatives behind by (cp)',
-            defaultText: '30',
-            onEdited: refresh,
-            enabled: !isPure && !isDb,
-            disabledReason: isDb
-                ? 'Your PGN files decide which lines grow in this mode'
-                : 'Fast search only',
-            tooltip:
-                'Your alternatives more than this far behind the best '
-                'candidate stay evaluated leaves instead of growing '
-                'subtrees. 0 disables.',
-          ),
-        ],
-      ),
-      const SizedBox(height: 12),
-      EngineResourcesSection(
-        threadsController: _engineThreadsCtrl,
-        isGenerating: widget.isGenerating,
-        isDbExplorer: isDb,
-        enabled:
-            _buildMode == BuildMode.stockfishExpectimax ||
-            _buildMode == BuildMode.dbExplorer ||
-            _buildMode == BuildMode.chessDbBook,
-      ),
-    ];
-  }
-
-  List<Widget> _verificationSection(VoidCallback refresh) {
-    return [
-      _labeledCheckbox(
-        'Verify final repertoire',
-        _verifyFinal,
-        (v) {
-          _verifyFinal = v;
-          refresh();
-        },
-        tooltip:
-            'Re-check every selected move at a deeper engine depth '
-            'after selection and replace the ones that fail. Slower, '
-            'but the export carries a depth guarantee.',
-      ),
-      const SizedBox(height: 8),
-      _numField(
-        _verifyDepthCtrl,
-        'Verification depth',
-        defaultText: '0',
-        onEdited: refresh,
-        enabled: _verifyFinal,
-        disabledReason: 'Verification is off',
-        tooltip:
-            'Engine depth for the verification pass. 0 = automatic '
-            '(engine depth + 6, at least 20).',
-      ),
-    ];
-  }
-
-  /// How much of the tree reaches the PGN: engine continuations for lines
-  /// the ply cap cut off, and line order.
-  ///
-  /// How *many* lines are kept is deliberately not here. A build exports
-  /// every line that teaches something new; the size is chosen afterwards
-  /// on the Generate tab, where the count and the coverage it buys are both
-  /// visible.
   List<Widget> _coverageSection(VoidCallback refresh) {
     return [
-      _numField(
-        _engineTailCtrl,
-        'Engine continuation plies',
-        defaultText: '6',
-        onEdited: refresh,
-        tooltip:
-            'Appends this many plies of engine best play, at the verification '
-            'depth, to lines the ply cap cut off mid-position. The first '
-            'appended move is marked in the PGN as where preparation stopped.',
-      ),
+      if (_buildMode != BuildMode.stockfishExpectimax)
+        _numField(
+          _engineTailCtrl,
+          'Engine continuation plies',
+          defaultText: '6',
+          onEdited: refresh,
+          tooltip:
+              'Appends this many plies of engine best play, at the verification '
+              'depth, to lines the ply cap cut off mid-position. The first '
+              'appended move is marked in the PGN as where preparation stopped.',
+        ),
       const SizedBox(height: 4),
       _labeledCheckbox(
         'Order lines by how likely you are to face them',
@@ -605,76 +271,14 @@ mixin _GenerationConfigAdvanced
 
   /// The master-games database: whether to consult it, and what it may
   /// contribute to the book.
-  List<Widget> _masterGamesSection(VoidCallback refresh) {
-    return [
-      _labeledCheckbox(
-        'Use the master games database',
-        _useMasterGames,
-        (v) {
-          _useMasterGames = v;
-          refresh();
-        },
-        tooltip:
-            'Guides the build with titled-player practice: opponent replies, '
-            'candidate moves for your side, deeper lines where practice '
-            'continues, real model games, and "improves on …" notes. Positions '
-            'no master has reached fall back to Maia and the engine. Needs the '
-            'database (Settings → Master games).',
-      ),
-      const SizedBox(height: 8),
-      Wrap(
-        spacing: 16,
-        runSpacing: 8,
-        children: [
-          _numField(
-            _masterPriorityWeightCtrl,
-            'Master search-order weight',
-            defaultText: '0.35',
-            onEdited: refresh,
-            enabled: _useMasterGames,
-            disabledReason: 'Master games are off',
-            tooltip:
-                'How far a position masters have played jumps the search '
-                'queue, which is otherwise ordered on how likely a line is. '
-                'Applied as 1 + weight × ln(1 + games), so off-book positions '
-                'are untouched. 0: order by reach probability alone.',
-          ),
-          _numField(
-            _masterDepthBonusCtrl,
-            'Extra master depth (plies)',
-            defaultText: '10',
-            onEdited: refresh,
-            enabled: _useMasterGames,
-            disabledReason: 'Master games are off',
-            tooltip:
-                'Lets a line run this many plies past the depth limit while '
-                'every position along it is master practice. The book is '
-                'indexed to move 15, so it never goes past there. 0: every '
-                'line stops at the depth limit.',
-          ),
-          _numField(
-            _offBookOppMaxChildrenCtrl,
-            'Opponent replies off-book',
-            defaultText: '2',
-            onEdited: refresh,
-            enabled: _useMasterGames,
-            disabledReason: 'Master games are off',
-            tooltip:
-                'Cap on opponent replies at positions no master has reached, '
-                'so the budget goes into depth where there is practice rather '
-                'than sidelines nobody plays. Replies likely enough to need an '
-                'answer are always kept. 0: the same cap as in-book positions.',
-          ),
-        ],
-      ),
-    ];
-  }
+  List<Widget> _masterGamesSection(VoidCallback refresh) => [
+    _caption(
+      'Select Target master opponents on the main form to use master-game '
+      'reply frequencies. Untick it for Maia at your chosen rating throughout. '
+      'Master games do not change the search horizon or receive extra search priority.',
+    ),
+  ];
 
-  /// The ChessDB mainline book's own knobs.
-  ///
-  /// These sat in the master-games group, where they were dead weight for
-  /// every other build source: three controls greyed out with three
-  /// different reasons, none of which had anything to do with master games.
   List<Widget> _chessDbBookSection(VoidCallback refresh) {
     return [
       Wrap(

@@ -51,106 +51,108 @@ class GenerationLockOverlay extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: AppColors.warningSurface, width: 1.5),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(
-                width: 36,
-                height: 36,
-                child: CircularProgressIndicator(strokeWidth: 3),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                isCancelling
-                    ? 'Cancelling...'
-                    : isAwaitingMasterGames
-                    ? 'Downloading Master Games...'
-                    : 'Generating Repertoire...',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                isAwaitingMasterGames
-                    ? 'The build starts as soon as the games are in.\n'
-                          'Training, Study, and puzzles stay available.'
-                    : 'This tab is locked while your repertoire builds.\n'
-                          'Training, Study, and puzzles stay available.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: AppColors.onSurfaceSoft,
-                  height: 1.5,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: CircularProgressIndicator(strokeWidth: 3),
                 ),
-              ),
-              if (statusText.isNotEmpty) ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: 14),
                 Text(
-                  statusText,
+                  isCancelling
+                      ? 'Cancelling...'
+                      : isAwaitingMasterGames
+                      ? 'Downloading Master Games...'
+                      : 'Generating Repertoire...',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  isAwaitingMasterGames
+                      ? 'The build starts as soon as the games are in.\n'
+                            'Training, Study, and puzzles stay available.'
+                      : 'This tab is locked while your repertoire builds.\n'
+                            'Training, Study, and puzzles stay available.',
                   textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.onSurfaceMuted,
-                    fontFeatures: [FontFeature.tabularFigures()],
+                    fontSize: 13,
+                    color: AppColors.onSurfaceSoft,
+                    height: 1.5,
                   ),
                 ),
-              ],
-              const SizedBox(height: 18),
-              if (isAwaitingMasterGames) ...[
-                OutlinedButton.icon(
-                  onPressed: onSkipMasterGames,
-                  icon: const Icon(Icons.play_arrow, size: 18),
-                  label: const Text('Start now without them'),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  'Starting now builds from Maia and the engine alone.\n'
-                  'Whatever has already downloaded is kept — Settings \u2192\n'
-                  'Master games finishes the job whenever you like.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.onSurfaceMuted,
-                    height: 1.4,
-                  ),
-                ),
-              ] else ...[
-                Tooltip(
-                  message: canPause
-                      ? 'Pause the build and free the engine'
-                      : 'This phase finishes on its own and cannot pause',
-                  child: FilledButton.icon(
-                    onPressed: canPause && !isCancelling ? onPause : null,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.warningSurface,
+                if (statusText.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    statusText,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.onSurfaceMuted,
+                      fontFeatures: [FontFeature.tabularFigures()],
                     ),
-                    icon: const Icon(Icons.pause, color: AppColors.onWarning),
-                    label: const Text(
-                      'Pause',
-                      style: TextStyle(
-                        color: AppColors.onWarning,
-                        fontWeight: FontWeight.w600,
+                  ),
+                ],
+                const SizedBox(height: 18),
+                if (isAwaitingMasterGames) ...[
+                  OutlinedButton.icon(
+                    onPressed: onSkipMasterGames,
+                    icon: const Icon(Icons.play_arrow, size: 18),
+                    label: const Text('Start now without them'),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Starting now builds from Maia and the engine alone.\n'
+                    'Whatever has already downloaded is kept — Settings \u2192\n'
+                    'Master games finishes the job whenever you like.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.onSurfaceMuted,
+                      height: 1.4,
+                    ),
+                  ),
+                ] else ...[
+                  Tooltip(
+                    message: canPause
+                        ? 'Pause the build and free the engine'
+                        : 'This phase finishes on its own and cannot pause',
+                    child: FilledButton.icon(
+                      onPressed: canPause && !isCancelling ? onPause : null,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.warningSurface,
+                      ),
+                      icon: const Icon(Icons.pause, color: AppColors.onWarning),
+                      label: const Text(
+                        'Pause',
+                        style: TextStyle(
+                          color: AppColors.onWarning,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  'Pausing frees the engine and unlocks the tab.\n'
-                  'You can resume it later — or discard it if you change '
-                  'your mind.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.onSurfaceMuted,
-                    height: 1.4,
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Pausing frees the engine and unlocks the tab.\n'
+                    'You can resume it later — or discard it if you change '
+                    'your mind.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.onSurfaceMuted,
+                      height: 1.4,
+                    ),
                   ),
-                ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

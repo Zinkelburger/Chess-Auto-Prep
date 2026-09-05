@@ -110,10 +110,10 @@ void main() {
     expect(_pick(_base, _tree().root).moveSan, 'e4');
   });
 
-  test('on, the narrower candidate wins inside the eval guard', () {
+  test('retired reply-width preference does not override expectimax', () {
     expect(
       _pick(_base.copyWith(replyWindowCp: 20), _tree().root).moveSan,
-      'd4',
+      'e4',
     );
   });
 

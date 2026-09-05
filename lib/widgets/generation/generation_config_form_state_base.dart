@@ -74,7 +74,7 @@ abstract class _GenerationConfigFormStateBase
   TreeBuildConfig? _seedConfig;
 
   late final TextEditingController _cutoffCtrl = _ctrl('0.01');
-  late final TextEditingController _maxPlyCtrl = _ctrl('20');
+  late final TextEditingController _maxPlyCtrl = _ctrl('4');
   late final TextEditingController _engineDepthCtrl = _ctrl(
     '$kDefaultGenerationEvalDepth',
   );
@@ -103,7 +103,6 @@ abstract class _GenerationConfigFormStateBase
   late final TextEditingController _setupToleranceCtrl = _ctrl('30');
   late final TextEditingController _memorabilityToleranceCtrl = _ctrl('0');
   late final TextEditingController _timeBudgetCtrl = _ctrl('0');
-  SearchAlgorithm _searchAlgorithm = SearchAlgorithm.fast;
   bool _wideOpening = true;
   bool _verifyFinal = true;
   bool _trapsOnly = false;
@@ -156,14 +155,6 @@ abstract class _GenerationConfigFormStateBase
     BuildMode.chessDbBook => _bookEngineFallback,
     _ => true,
   };
-
-  /// The selection mode the build will actually run with.  The ChessDB book
-  /// has one move per position, so [toConfig] pins it to engine-best; the
-  /// form shows that rather than a choice that would be ignored.
-  SelectionMode get _effectiveSelectionMode =>
-      _buildMode == BuildMode.chessDbBook
-      ? SelectionMode.engineOnly
-      : _selectionMode;
 
   /// Evaluation databases expander. The section is built only while open —
   /// its values live in [_evalSources], not in the widget.
@@ -395,6 +386,16 @@ abstract class _GenerationConfigFormStateBase
   /// Why [controller]'s text cannot be used, or null when it can.  Short
   /// enough to sit under the field.
   String? _numFieldProblem(TextEditingController controller) {
+    if (_buildMode == BuildMode.stockfishExpectimax) {
+      final retired={_cutoffCtrl,_minEvalCtrl,_maxEvalCtrl,_oppPolicyTempCtrl,
+        _multipvCtrl,_oppMaxChildrenCtrl,_oppMassTargetCtrl,_leafConfidenceCtrl,
+        _ourAltDiscountCtrl,_fastAltGapCtrl,_maiaPriorGamesCtrl,_coverMinProbCtrl,
+        _verifyDepthCtrl,_setupToleranceCtrl,_memorabilityToleranceCtrl,_engineTailCtrl};
+      if(retired.contains(controller)) return null;
+      if(identical(controller,_maxPlyCtrl) && (int.tryParse(controller.text)??0)>64) {
+        return 'Pure supports at most 64 half-moves';
+      }
+    }
     final spec = _numSpecs[controller];
     if (spec == null) return null;
     final text = controller.text.trim().replaceAll('%', '');

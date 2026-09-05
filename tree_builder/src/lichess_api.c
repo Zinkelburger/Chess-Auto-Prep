@@ -453,7 +453,7 @@ bool lichess_explorer_query_masters(LichessExplorer *explorer, const char *fen,
     if (!encoded_fen) return false;
 
     char url[1024];
-    snprintf(url, sizeof(url), "%s?fen=%s", LICHESS_MASTERS_URL, encoded_fen);
+    snprintf(url, sizeof(url), "%s?fen=%s&moves=256", LICHESS_MASTERS_URL, encoded_fen);
     curl_free(encoded_fen);
 
     return explorer_request_with_retry(explorer, url, response);

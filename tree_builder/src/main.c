@@ -701,7 +701,7 @@ static void print_usage(const char *prog_name) {
     printf("╚══════════════════════════════════════════════════════════╝\n\n");
     printf("Usage: %s [options] <name>\n\n", prog_name);
     printf("Builds an opening repertoire by interleaving Lichess database\n");
-    printf("queries with Stockfish evaluation, pruning immediately by eval.\n\n");
+    printf("queries with fixed-depth Stockfish evaluation in Pure search.\n\n");
     printf("The <name> argument is the base name for all output files:\n");
     printf("  <name>.pgn        Repertoire lines (primary output)\n");
     printf("  <name>.tree.json  Tree state (for resumption)\n");
@@ -710,8 +710,7 @@ static void print_usage(const char *prog_name) {
     printf("  -f, --fen <FEN>        Starting position FEN\n");
     printf("  --moves <SAN...>       Starting moves in SAN (e.g. \"e4 d5 exd5 Qxd5\")\n");
     printf("  -c, --color <w|b>      Play as white (w) or black (b) [REQUIRED]\n");
-    printf("  -p, --probability <P>  Min probability threshold [default: 0.0001]\n");
-    printf("  -d, --ply <N>          Max tree depth in ply (half-moves) [default: 20]\n");
+    printf("  -d, --ply <N>          Max tree depth in ply (half-moves) [default: 4]\n");
     printf("  -e, --eval-depth <N>   Stockfish search depth [default: 16]\n");
     printf("  -t, --threads <N>      Total CPU cores to use [default: %d, half of CPUs]\n",
            default_thread_count());
@@ -731,59 +730,19 @@ static void print_usage(const char *prog_name) {
     printf("  --skip-build           Skip tree building (use existing tree)\n");
     printf("  --build-now            Use existing partial tree as-is (skip to repertoire generation)\n");
     printf("\n");
-    printf("Our-move candidates (engine-driven):\n");
-    printf("  --our-multipv <N>      MultiPV count away from root [default: 5; root uses max(N,10)]\n");
-    printf("  --max-eval-loss <cp>   Skip candidates more than N cp worse than best [default: 50]\n");
-    printf("\n");
-    printf("Opponent-move selection:\n");
-    printf("  --opp-max-children <N> Max opponent responses per position [default: 6]\n");
-    printf("  --opp-mass <0-1>       Mass target at every depth [default: 0.95]\n");
-    printf("  --best-first / --bfs   Frontier order: priority (default) or FIFO level order\n");
-    printf("  --alt-discount <0-1>   Priority multiplier for non-best our-move candidates [default: 0.25]\n");
-    printf("  --maia-prior <N>       Dirichlet prior weight (virtual games) blending DB\n");
-    printf("                         frequencies with Maia; 0 disables [default: 30]\n");
-    printf("  --cover-min-prob <0-1> No-silent-holes floor: opponent replies at/above this\n");
-    printf("                         local probability always get a repertoire answer;\n");
-    printf("                         0 disables [default: 0.05]\n");
-    printf("  --verify / --no-verify Deep-recheck every selected move after selection and\n");
-    printf("                         replace moves losing > max-eval-loss at the verify\n");
-    printf("                         depth [default: verify]\n");
-    printf("  --verify-depth <N>     Stockfish depth for verification; 0 = auto\n");
-    printf("                         (eval depth + 6, at least 20) [default: auto]\n");
-    printf("  --setup \"<SAN...>\"     Preferred setup to play whenever sound, e.g.\n");
-    printf("                         \"Be3 Qd2 f3 O-O-O h4 Nh3\": legal setup moves are\n");
-    printf("                         evaluated as candidates and selection prefers them\n");
-    printf("                         within the tolerance [default: off]\n");
-    printf("  --setup-tolerance <cp> Max eval loss vs best move for a setup move to be\n");
-    printf("                         preferred [default: 30]\n");
-    printf("  --maia-only            Use Maia for opponent moves [default]\n");
-    printf("  --lichess              Use Lichess API for opponent moves instead\n");
-    printf("  --maia-model <path>    Path to maia3_simplified.onnx [default: auto-detect]\n");
-    printf("  --maia-elo <N>         Elo for Maia predictions [default: 2200]\n");
-    printf("  --maia-min-prob <P>    Skip Maia moves below this [default: 0.05]\n");
-    printf("\n");
-    printf("Eval window pruning:\n");
-    printf("  --min-eval <cp>        Prune branch if our eval drops below this [default: color-dependent]\n");
-    printf("  --max-eval <cp>        Prune branch if our eval exceeds this [default: color-dependent]\n");
-    printf("  --absolute             Use absolute cp thresholds (default: relative to root eval)\n");
-    printf("\n");
-    printf("Trap finding (no other option changes; widen --max-eval-loss / --min-eval yourself):\n");
-    printf("  --traps                Find tricky positions in the entire tree\n");
-    printf("                         (writes <name>.traps.pgn with annotated trap lines)\n");
-    printf("  --traps-in-repertoire  Find trap positions in the repertoire only (stdout)\n");
-    printf("\n");
-    printf("Expectimax scoring (move selection phase):\n");
-    printf("  --novelty-weight <0-100> Boost for rarely-played moves at our-move nodes [default: 0]\n");
-    printf("  --leaf-confidence <0-1> Leaf V = c*wp(eval) + (1-c)*0.5  [default: 1.0; 0 = assume 50/50]\n");
-    printf("\n");
-    printf("Lichess API (use with --lichess to switch opponent source from Maia):\n");
-    printf("  --lichess              Use Lichess API for opponent moves instead of Maia\n");
-    printf("  -r, --ratings <R>      Rating buckets [default: 2000,2200,2500]\n");
-    printf("  -s, --speeds <S>       Time controls [default: blitz,rapid,classical]\n");
-    printf("  -g, --min-games <N>    Min games per move [default: 10]\n");
-    printf("  -m, --masters          Use masters database instead of player DB\n");
-    printf("  --token <token>        Auth token (also reads $LICHESS_TOKEN, ~/.config/tree_builder/token)\n");
-    printf("\n");
+    printf("Pure expectimax (default):\n");
+    printf("  Every legal own move is scored at --eval-depth. All moves within\n");
+    printf("  --max-eval-loss <cp> of the best are searched [default: 50].\n");
+    printf("  Every positive-probability opponent move is searched; no novelty,\n");
+    printf("  setup, mass cutoff, MultiPV cap, eval-window or confidence bonuses.\n");
+    printf("  -m, --masters         Target master practice [default], Maia off-book\n");
+    printf("  --maia-only           Deselect master targeting; Maia throughout\n");
+    printf("  --maia-model <path>   Maia model (required off-book)\n");
+    printf("  --maia-elo <N>        Maia opponent rating [default: 2200]\n");
+    printf("  Completed values are exact for the declared finite tree and supplied\n");
+    printf("  evaluations, not calibrated human win rates. Cost is exponential.\n");
+    printf("  Draw claims are immediate at threefold / 100 half-moves; repetition\n");
+    printf("  history begins at the supplied root. Old heuristic trees must restart.\n\n");
     printf("Output:\n");
     printf("  -n, --name <name>      Repertoire name (shown in PGN headers)\n");
     printf("  --event-log <file>     Write timestamped build events (TSV) for analysis\n");
@@ -1230,7 +1189,7 @@ int main(int argc, char *argv[]) {
     const char *stockfish_path = NULL;
     const char *load_tree_file = NULL;
     double min_probability = 0.0001;
-    int max_depth = 20;
+    int max_depth = 4;
     int eval_depth = 16;
     int num_threads = default_thread_count();
 
@@ -1240,7 +1199,7 @@ int main(int argc, char *argv[]) {
     bool play_as_white = false;  /* No default - must be specified */
     bool color_specified = false;
     bool verbose = false;
-    bool use_masters = false;
+    bool use_masters = true;
     bool skip_build = false;
     bool build_now = false;
     bool find_traps = false;
@@ -1250,7 +1209,7 @@ int main(int argc, char *argv[]) {
     const char *maia_model_path = NULL;
     int maia_elo = 2200;
     double maia_min_prob = 0.05;
-    bool maia_only = true;
+    bool maia_only = false;
     bool relative_eval = true;
     BuildMode build_mode = BUILD_MODE_STOCKFISH_EXPECTIMAX;
     const char *build_mode_str = NULL;
@@ -1779,11 +1738,17 @@ int main(int argc, char *argv[]) {
     }
 
     if (maia_only && !maia) {
-        fprintf(stderr, "  Warning: Maia model not found — falling back to Lichess API mode.\n");
-        fprintf(stderr, "  Use --maia-model <path> or place maia3_simplified.onnx next to the binary.\n");
-        maia_only = false;
+        fprintf(stderr, "Maia-only policy requested but model unavailable. Supply --maia-model.\n");
+        return 1;
     }
 
+    if (build_mode == BUILD_MODE_STOCKFISH_EXPECTIMAX) {
+        printf("Pure search: all legal candidates / complete opponent support.\n");
+        printf("Opponent: %s. Values are expected-score estimates.\n",
+            maia_only ? "Maia throughout" : "master practice with Maia off-book");
+        novelty_weight_arg=0;leaf_confidence_arg=1;best_first_arg=0;
+        setup_moves_arg=""; /* Legacy flags never alter the Pure policy. */
+    }
     /* Banner */
     printf("\n");
     printf("╔══════════════════════════════════════════════════════════╗\n");
@@ -2136,7 +2101,7 @@ int main(int argc, char *argv[]) {
 
     const char *tree_source = load_tree_file ? load_tree_file : tree_path;
 
-    if (load_tree_file || build_now || (!skip_build && access(tree_path, F_OK) == 0)) {
+    if (load_tree_file || build_now || access(tree_path, F_OK) == 0) {
         tree = tree_load(tree_source);
         if (tree) {
             if (tree->root && tree->root->fen[0] &&
@@ -2167,7 +2132,11 @@ int main(int argc, char *argv[]) {
                 fprintf(stderr, "\n");
             }
 
-            tree->config.play_as_white = play_as_white;
+            if(tree->root->history_aware && tree->config.play_as_white!=play_as_white) {
+                fprintf(stderr,"Pure search cannot change repertoire side on resume/export. Start a new build.\n");
+                tree_destroy(tree);if(engine_pool) engine_pool_destroy(engine_pool);if(maia) maia_destroy(maia);rdb_close(db);return 1;
+            }
+            if(!tree->root->history_aware) tree->config.play_as_white = play_as_white;
             tree_recalculate_probabilities(tree);
 
             /* CLI --moves (if given) overrides whatever was persisted
@@ -2179,7 +2148,10 @@ int main(int argc, char *argv[]) {
                 tree->start_moves[sizeof(tree->start_moves) - 1] = '\0';
             }
 
-            if (tree->build_complete) {
+            if (!skip_build && build_mode==BUILD_MODE_STOCKFISH_EXPECTIMAX) {
+                needs_build=true;
+                printf("[1/4] Validating/resuming Pure model at requested horizon %d.\n",max_depth);
+            } else if (tree->build_complete) {
                 printf("[1/4] Tree loaded from %s (%zu nodes, complete)\n",
                        tree_source, tree->total_nodes);
                 printf("  Build already complete — skipping.\n\n");
@@ -2563,22 +2535,9 @@ int main(int argc, char *argv[]) {
 
         config.progress_callback = progress_callback;  /* Always show progress */
 
-        {
-            int root_multipv = config.our_multipv < 10 ? 10 : config.our_multipv;
-            if (root_multipv == config.our_multipv) {
-                printf("  Our moves:  MultiPV %d, %dcp loss max\n",
-                       config.our_multipv, config.max_eval_loss_cp);
-            } else {
-                printf("  Our moves:  root MultiPV %d, others %d, %dcp loss max\n",
-                       root_multipv, config.our_multipv, config.max_eval_loss_cp);
-            }
+        if (build_mode == BUILD_MODE_STOCKFISH_EXPECTIMAX) {
+            printf("  Pure: every legal own move, %dcp loss limit, full opponent policy.\n",config.max_eval_loss_cp);
         }
-        printf("  Opponent:   max %d children, mass target %.0f%%\n",
-               config.opp_max_children,
-               config.opp_mass_target * 100.0);
-        printf("  Eval window: [%+d, %+d] cp%s\n",
-               config.min_eval_cp, config.max_eval_cp,
-               relative_eval ? " (relative to root)" : " (absolute)");
 
         memset(&build_stats, 0, sizeof(build_stats));
         config.stats = &build_stats;
@@ -2846,6 +2805,19 @@ int main(int argc, char *argv[]) {
     if (repertoire_name)
         strncpy(rep_config.name, repertoire_name, sizeof(rep_config.name) - 1);
 
+    if(tree->root->history_aware) {
+        if(play_as_white!=tree->config.play_as_white ||
+           (max_eval_loss_arg>=0 && max_eval_loss_arg!=tree->config.max_eval_loss_cp)) {
+            fprintf(stderr, "Pure export uses the saved side and safety limit; rebuild to change them.\n");
+            tree_destroy(tree);
+            if (engine_pool) engine_pool_destroy(engine_pool);
+            if (maia) maia_destroy(maia);
+            rdb_close(db);
+            return 1;
+        }
+        rep_config.max_depth=tree->config.max_depth;
+        rep_config.max_eval_loss_cp=tree->config.max_eval_loss_cp;
+    }
     result = generate_repertoire(
         tree, db, engine_pool, &rep_config,
         verbose ? pipeline_progress : NULL
@@ -2853,54 +2825,25 @@ int main(int argc, char *argv[]) {
 
     if (verbose) progress_line_clear();
 
-    /* Final verification: deep re-check of every selected move (opt-out
-     * via --no-verify).  Demotions update node evals in place, so
-     * re-running generate_repertoire selects around them; the new spine
-     * is then re-verified, up to 3 passes. */
-    if (result && verify_arg != 0 && engine_pool && !g_interrupted) {
-        int verify_depth = verify_depth_arg > 0
-            ? verify_depth_arg
-            : (eval_depth + 6 < 20 ? 20 : eval_depth + 6);
-        printf("  Verifying repertoire at depth %d...\n", verify_depth);
-        int total_demotions = 0;
-        int total_evals = 0;
-        for (int pass = 1; pass <= 3 && !g_interrupted; pass++) {
-            int evals = 0;
-            int demoted = repertoire_verify(tree, engine_pool, &rep_config,
-                                            verify_depth, &evals);
-            total_evals += evals;
-            if (demoted < 0) {
-                fprintf(stderr, "  Warning: verification unavailable\n");
-                break;
-            }
-            if (demoted == 0) {
-                printf("  Verification pass %d: all %s moves within "
-                       "%dcp at depth %d (%d evals)\n",
-                       pass, pass == 1 ? "selected" : "re-selected",
-                       rep_config.max_eval_loss_cp, verify_depth,
-                       total_evals);
-                break;
-            }
-            total_demotions += demoted;
-            printf("  Verification pass %d: %d demotion(s) — "
-                   "re-selecting...\n", pass, demoted);
+    /* Legacy saved-set re-evaluation. Pure rebuilds at the requested depth. */
+    if(result && !tree->root->history_aware && verify_arg!=0 && engine_pool && !g_interrupted) {
+        int depth=verify_depth_arg>0?verify_depth_arg:(eval_depth+6<20?20:eval_depth+6);
+        int evals=0;
+        int changed=repertoire_verify(tree,engine_pool,&rep_config,depth,&evals);
+        if(changed<0) fprintf(stderr,"Legacy re-evaluation incomplete.\n");
+        else {
+            printf("Re-evaluated saved candidate set at depth %d (%d evals).\n",depth,evals);
             repertoire_result_free(result);
-            result = generate_repertoire(
-                tree, db, engine_pool, &rep_config,
-                verbose ? pipeline_progress : NULL
-            );
-            if (verbose) progress_line_clear();
-            if (!result) break;
+            result=generate_repertoire(tree,db,engine_pool,&rep_config,verbose?pipeline_progress:NULL);
         }
-        if (total_demotions > 0)
-            printf("  Verification: %d move(s) demoted and replaced\n",
-                   total_demotions);
     }
 
     if (result)
         repertoire_print_summary(result);
-    else
-        fprintf(stderr, "  Warning: Repertoire generation returned no results\n");
+    else {
+        fprintf(stderr, "Error: Repertoire generation failed; no valid policy to export.\n");
+        tree_destroy(tree);if(engine_pool) engine_pool_destroy(engine_pool);if(maia) maia_destroy(maia);rdb_close(db);return 1;
+    }
     printf("\n");
 
     if (g_interrupted) goto cleanup;
