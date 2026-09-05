@@ -60,6 +60,7 @@ class PlayerDownloadRunner {
         username: config.username,
         maxGames: config.maxGames,
         monthsBack: config.monthsBack,
+        speeds: config.speeds,
         accounts: config.accounts,
         group: config.group,
       );
@@ -111,6 +112,7 @@ class PlayerDownloadRunner {
           group: request.list.event,
           maxGames: 100,
           monthsBack: request.monthsBack,
+          speeds: request.speeds,
         );
         final label = '${opponent.name} (${i + 1}/${opponents.length})';
 
@@ -142,6 +144,7 @@ class PlayerDownloadRunner {
             username: info.username,
             maxGames: info.maxGames,
             monthsBack: info.monthsBack,
+            speeds: info.speeds,
             accounts: info.accounts,
             group: info.group,
           );

@@ -9,6 +9,7 @@
 /// Pure / synchronous — fully unit-testable.
 library;
 
+import '../game_identity.dart';
 import '../pgn_parsing_service.dart' show splitPgnIntoGames, extractHeaders;
 
 /// Lichess-style speed bucket, derived from the TimeControl header.
@@ -20,6 +21,68 @@ enum GameSpeed {
   classical,
   correspondence,
   unknown,
+}
+
+/// The one place a speed bucket gets its name, its plain-English range and
+/// its Lichess API spelling. Three screens each had their own switch over
+/// [GameSpeed] before this; the labels had already started to differ.
+extension GameSpeedInfo on GameSpeed {
+  /// Display name ("Bullet", "Correspondence").
+  String get label => switch (this) {
+    GameSpeed.ultraBullet => 'UltraBullet',
+    GameSpeed.bullet => 'Bullet',
+    GameSpeed.blitz => 'Blitz',
+    GameSpeed.rapid => 'Rapid',
+    GameSpeed.classical => 'Classical',
+    GameSpeed.correspondence => 'Correspondence',
+    GameSpeed.unknown => 'Unknown',
+  };
+
+  /// The bucket's range in a player's terms, for a caption under [label].
+  /// The boundaries are Lichess' estimated game length, base + 40 × increment.
+  String get rangeDescription => switch (this) {
+    GameSpeed.ultraBullet => 'Under 30 seconds',
+    GameSpeed.bullet => 'Under 3 minutes',
+    GameSpeed.blitz => '3 to 8 minutes',
+    GameSpeed.rapid => '8 to 25 minutes',
+    GameSpeed.classical => '25 minutes and longer',
+    GameSpeed.correspondence => 'Days per move',
+    GameSpeed.unknown => 'No time control recorded',
+  };
+
+  /// The value the Lichess games export takes in `perfType`, or null for a
+  /// bucket the API has no name for.
+  String? get lichessPerfType => switch (this) {
+    GameSpeed.ultraBullet => 'ultraBullet',
+    GameSpeed.bullet => 'bullet',
+    GameSpeed.blitz => 'blitz',
+    GameSpeed.rapid => 'rapid',
+    GameSpeed.classical => 'classical',
+    GameSpeed.correspondence => 'correspondence',
+    GameSpeed.unknown => null,
+  };
+}
+
+/// Every bucket a user can pick, slowest last; [GameSpeed.unknown] is not a
+/// choice, it is what a game without a TimeControl header gets.
+const List<GameSpeed> selectableGameSpeeds = [
+  GameSpeed.ultraBullet,
+  GameSpeed.bullet,
+  GameSpeed.blitz,
+  GameSpeed.rapid,
+  GameSpeed.classical,
+  GameSpeed.correspondence,
+];
+
+/// Parse the `name`s a [Set<GameSpeed>] was persisted as, ignoring anything
+/// unrecognised. Null in, null out, so a caller can fall back to its default.
+Set<GameSpeed>? gameSpeedsFromNames(Iterable<String>? names) {
+  if (names == null) return null;
+  return {
+    for (final name in names)
+      for (final s in GameSpeed.values)
+        if (s.name == name) s,
+  };
 }
 
 /// Classify a PGN `TimeControl` header value into a [GameSpeed].
@@ -76,7 +139,7 @@ class GameRecord {
       headers: headers,
       date: _parseDate(headers),
       speed: classifySpeed(headers['TimeControl']),
-      dedupKey: _dedupKey(headers),
+      dedupKey: dedupKeyForHeaders(headers, pgn: singleGamePgn),
     );
   }
 
@@ -105,24 +168,14 @@ class GameRecord {
       return null;
     }
   }
-
-  static String _dedupKey(Map<String, String> h) => dedupKeyForHeaders(h);
 }
 
 /// Stable game identity from PGN headers: the game URL when present, else
 /// players + date + time. Public so consumers holding headers from another
 /// parser (e.g. the PGN viewer locating a `gameId` handoff target) compute
 /// the same identity the library's [GameRecord.dedupKey] uses.
-String dedupKeyForHeaders(Map<String, String> h) {
-  final link = h['Link'] ?? h['Site'];
-  if (link != null && link.contains('://')) return link.trim();
-  return [
-    h['White'] ?? '',
-    h['Black'] ?? '',
-    h['UTCDate'] ?? h['Date'] ?? '',
-    h['UTCTime'] ?? h['Time'] ?? '',
-  ].join('|');
-}
+String dedupKeyForHeaders(Map<String, String> h, {String pgn = ''}) =>
+    canonicalGameKey(h, pgn, preferHeaderId: false);
 
 /// Merge a freshly downloaded multi-game PGN into an existing cache file's
 /// content, preserving the existing games' text *verbatim* — they may carry
@@ -142,11 +195,12 @@ String mergeGamePgns({
 }) {
   final existingChunks = splitPgnIntoGames(existing);
   final seen = existingChunks
-      .map((c) => dedupKeyForHeaders(extractHeaders(c)))
+      .map((c) => dedupKeyForHeaders(extractHeaders(c), pgn: c))
       .toSet();
   final newGames = <String>[
     for (final chunk in splitPgnIntoGames(fresh))
-      if (seen.add(dedupKeyForHeaders(extractHeaders(chunk)))) chunk.trim(),
+      if (seen.add(dedupKeyForHeaders(extractHeaders(chunk), pgn: chunk)))
+        chunk.trim(),
   ];
 
   final merged = <String>[
@@ -168,7 +222,8 @@ String mergeGamePgns({
   final keep = byAge.take(maxGames).map((r) => r.dedupKey).toSet();
   return [
     for (final record in records)
-      if (keep.contains(record.dedupKey)) record.pgn.trim(),
+      if (keep.contains(record.dedupKey) || _hasAnnotations(record.pgn))
+        record.pgn.trim(),
   ].join('\n\n');
 }
 
@@ -252,4 +307,46 @@ void _sortNewestFirst(List<GameRecord> records) {
     if (db == null) return -1;
     return db.compareTo(da);
   });
+}
+
+/// Comments, variations, NAGs and custom tags may be user-authored. Keep them
+/// even beyond the download window; they are not reproducible cache entries.
+bool _hasAnnotations(String pgn) {
+  if (RegExp(
+    r'[{}();]|\$[0-9]+|[!?]',
+  ).hasMatch(pgn.replaceAll(RegExp(r'\[[^\n]*\]'), ''))) {
+    return true;
+  }
+  final headers = extractHeaders(pgn);
+  const downloadTags = {
+    'Event',
+    'Site',
+    'Date',
+    'Round',
+    'White',
+    'Black',
+    'Result',
+    'UTCDate',
+    'UTCTime',
+    'Time',
+    'WhiteElo',
+    'BlackElo',
+    'ECO',
+    'Opening',
+    'Variation',
+    'TimeControl',
+    'Termination',
+    'Link',
+    'GameId',
+    'EndDate',
+    'EndTime',
+    'StartTime',
+    'Timezone',
+    'WhiteUrl',
+    'BlackUrl',
+    'CurrentPosition',
+    'FEN',
+    'SetUp',
+  };
+  return headers.keys.any((key) => !downloadTags.contains(key));
 }

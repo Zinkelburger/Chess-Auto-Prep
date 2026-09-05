@@ -305,14 +305,18 @@ class BughouseClocks {
     Side team, {
     Duration tolerance = const Duration(seconds: 5),
   }) {
-    final ours = of(BughouseBoard.a, team) + of(BughouseBoard.b, team.opposite);
-    final theirs =
-        of(BughouseBoard.a, team.opposite) + of(BughouseBoard.b, team);
-    final delta = ours - theirs;
-    if (delta.abs() <= tolerance) return BughouseTimeStance.level;
-    return delta > Duration.zero
-        ? BughouseTimeStance.ahead
-        : BughouseTimeStance.behind;
+    final first = of(BughouseBoard.a, team) - of(BughouseBoard.b, team);
+    final second =
+        of(BughouseBoard.b, team.opposite) - of(BughouseBoard.a, team.opposite);
+    // A partner's large surplus cannot compensate for our other seat flagging.
+    // Mixed diagonals are conservatively neutral in Hivemind's one-bit model.
+    if (first > tolerance && second > tolerance) {
+      return BughouseTimeStance.ahead;
+    }
+    if (first < -tolerance && second < -tolerance) {
+      return BughouseTimeStance.behind;
+    }
+    return BughouseTimeStance.level;
   }
 
   /// Convenience for the engine's one-bit view.
@@ -629,15 +633,21 @@ class BughouseState {
     bool enabled,
   ) {
     final position = board(which);
-    final rook = position.castles.rookOf(side, castlingSide);
-    if (enabled && rook == null) {
-      // No rook on the expected square: the right cannot be granted.
+    final rook = _castlingRookSquare(side, castlingSide);
+    final rookPiece = position.board.pieceAt(rook);
+    final king = position.board.pieceAt(Square(side == Side.white ? 4 : 60));
+    if (enabled &&
+        (rookPiece?.color != side ||
+            rookPiece?.role != Role.rook ||
+            rookPiece!.promoted ||
+            king?.color != side ||
+            king?.role != Role.king)) {
       return null;
     }
     var rights = position.castles.castlingRights;
     if (enabled) {
       rights = rights.withSquare(_castlingRookSquare(side, castlingSide));
-    } else if (rook != null) {
+    } else {
       rights = rights.withoutSquare(rook);
     }
     final built = tryBuild(

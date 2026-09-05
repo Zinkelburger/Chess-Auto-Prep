@@ -19,7 +19,10 @@
       "mcp__chess-prep__expectimax_status",
       "mcp__chess-prep__tournament_list",
       "mcp__chess-prep__tournament_status",
-      "mcp__chess-prep__tournament_engines"
+      "mcp__chess-prep__tournament_engines",
+      "Bash(python3 scripts/app_driver.py:*)",
+      "Bash(python3 scripts/agent_worktree.py:*)",
+      "Bash(scripts/setup_agent_display.sh:*)"
     ]
   },
   "hooks": {
@@ -31,7 +34,7 @@
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/flutter_gate.sh",
             "timeout": 10,
-            "statusMessage": "Checking Flutter command against the shared lock gate"
+            "statusMessage": "Checking the bounded agent workflow"
           }
         ]
       }

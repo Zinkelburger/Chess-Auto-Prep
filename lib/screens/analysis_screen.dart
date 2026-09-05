@@ -28,7 +28,6 @@ import '../models/analysis_player_info.dart';
 import '../models/engine_weakness_result.dart';
 import '../models/position_analysis.dart';
 import '../utils/fen_utils.dart';
-import '../utils/file_mtime.dart';
 import '../models/opening_tree.dart';
 import '../services/analysis_games_service.dart';
 import '../services/engine/generation_lease.dart';
@@ -90,6 +89,7 @@ abstract class _AnalysisScreenStateBase extends State<AnalysisScreen> {
 
   // ── Engine eval state ───────────────────────────────────────────────
   List<EngineWeaknessResult> _engineEvals = [];
+  String? _analysisFingerprint;
   EngineWeaknessService? _evalService;
   bool _evalRunning = false;
   int _evalCompleted = 0;
@@ -532,6 +532,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     _blackTree = null;
     _playerIsWhite = true;
     _engineEvals = [];
+    _analysisFingerprint = null;
     _holesResults[true] = null;
     _holesResults[false] = null;
     _holesConfigs[true] = null;
@@ -609,6 +610,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
         username: player.username,
         maxGames: player.maxGames,
         monthsBack: monthsBack,
+        speeds: player.speeds,
         accounts: player.accounts,
         group: player.group,
       );
@@ -668,20 +670,14 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     });
 
     try {
-      final pgnPath = await _gamesService.analysisPgnPath(
+      final corpus = await _gamesService.loadCorpus(
         player.platform,
         player.username,
       );
-      final whiteCachePath = await _gamesService.cachedAnalysisPath(
-        player.platform,
-        player.username,
-        true,
-      );
-      final blackCachePath = await _gamesService.cachedAnalysisPath(
-        player.platform,
-        player.username,
-        false,
-      );
+      if (corpus == null) throw StateError('Player games are not available.');
+      final pgnPath = corpus.pgnPath;
+      final whiteCachePath = corpus.cachePath('white_analysis.json');
+      final blackCachePath = corpus.cachePath('black_analysis.json');
 
       if (!await File(pgnPath).exists()) {
         if (mounted) {
@@ -721,8 +717,19 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
       // (possibly minutes-long) build ran — installing this bundle would
       // show the old player's data under the new player's name.
       if (!mounted || _currentPlayer != player) return;
+      if (await _gamesService.corpusFingerprint(
+            player.platform,
+            player.username,
+          ) !=
+          corpus.fingerprint) {
+        throw StateError(
+          'Player games changed while the tree was built. Reopen this player.',
+        );
+      }
+      if (!mounted || _currentPlayer != player) return;
       final result = bundle;
       setState(() {
+        _analysisFingerprint = corpus.fingerprint;
         _whiteAnalysis = result.whiteAnalysis;
         _blackAnalysis = result.blackAnalysis;
         _whiteTree = result.whiteTree;
@@ -740,6 +747,8 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
       await _loadEngineEvals();
       await _loadHolesReports();
       await _loadTricksReports();
+      final warning = _gamesService.storageWarning;
+      if (mounted && warning != null) _showError(warning);
     } catch (e) {
       if (mounted) {
         _showError('Failed to analyze positions: $e');

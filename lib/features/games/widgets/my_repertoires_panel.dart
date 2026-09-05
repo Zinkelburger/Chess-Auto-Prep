@@ -9,27 +9,32 @@ import '../../../services/storage/storage_factory.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/app_messages.dart';
-import '../../../widgets/common/searchable_picker_dialog.dart';
+import '../../../widgets/common/confirm_dialog.dart';
 import '../../../widgets/pgn_import_dialog.dart';
 import '../services/my_repertoire_settings.dart';
 
 /// Designate which repertoire folders are the books you actually play as
 /// White and as Black — the ones every game gets checked against.
 ///
-/// Adding one is not only "pick from what is already here". A person who has
-/// just installed the app, or who keeps their book as a PGN somewhere else,
-/// had nothing to pick: the button answered with "No further repertoires to
-/// add." and left them to find the Repertoire Builder, make one there, and
-/// come back. So the same button also imports a `.pgn` from disk and starts an
-/// empty repertoire, and either way designates what it made — the colour is
-/// already known from the section you pressed Add in.
+/// Flat on purpose. Each colour has its books listed and, beside the heading,
+/// the two ways to add one: **Import PGN…** goes straight to the system file
+/// picker and designates what it imports, named after the file; **Add
+/// existing** is a menu of the repertoires already in the app, with "New empty
+/// repertoire…" at its foot for someone who wants to build the lines in the
+/// Repertoire Builder first. It used to be a button that opened a chooser
+/// dialog that opened the picker that opened a naming dialog — four screens
+/// between "I have a PGN" and "it is my book" — and nobody got through it.
 ///
 /// Body only, no surrounding card or title: it is shown both as a Settings
 /// group and, via [showMyRepertoiresDialog], straight from the home pane. The
 /// designation being two screens away from the games it explains was the
 /// reason the deviation column read "—" for people who never found it.
 class MyRepertoiresPanel extends StatefulWidget {
-  const MyRepertoiresPanel({super.key});
+  const MyRepertoiresPanel({super.key, this.pickPgn = pickPgnImport});
+
+  /// Opens the file picker and reads the chosen PGN. Injectable for tests;
+  /// the default is the app's real picker.
+  final Future<PickedPgnImport?> Function() pickPgn;
 
   @override
   State<MyRepertoiresPanel> createState() => _MyRepertoiresPanelState();
@@ -42,9 +47,9 @@ Future<void> showMyRepertoiresDialog(BuildContext context) {
   return showDialog<void>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('My repertoires'),
+      title: const Text('My books'),
       content: const SizedBox(
-        width: 460,
+        width: 520,
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -74,6 +79,11 @@ Future<void> showMyRepertoiresDialog(BuildContext context) {
 class _MyRepertoiresPanelState extends State<MyRepertoiresPanel> {
   final _settings = MyRepertoireSettings.instance;
 
+  /// Every repertoire in the app, for the "Add existing" menus. Reloaded
+  /// whenever the designations change, which is also whenever this panel
+  /// creates one.
+  List<RepertoireMetadata> _all = const [];
+
   /// Designation (see [_mismatchKey]) → chapters whose `// Color:` header
   /// disagrees with the side the folder is designated for. A wrong-color
   /// book silently produces nonsense deviation reports, so surface it here.
@@ -86,7 +96,7 @@ class _MyRepertoiresPanelState extends State<MyRepertoiresPanel> {
   void initState() {
     super.initState();
     _settings.addListener(_onDesignationsChanged);
-    unawaited(_settings.ensureLoaded().then((_) => _refreshColorCheck()));
+    unawaited(_settings.ensureLoaded().then((_) => _refresh()));
   }
 
   @override
@@ -95,9 +105,16 @@ class _MyRepertoiresPanelState extends State<MyRepertoiresPanel> {
     super.dispose();
   }
 
-  void _onDesignationsChanged() => _refreshColorCheck();
+  void _onDesignationsChanged() => _refresh();
 
-  Future<void> _refreshColorCheck() async {
+  Future<void> _refresh() async {
+    List<RepertoireMetadata> all = const [];
+    try {
+      all = await StorageFactory.instance.listRepertoires();
+    } catch (_) {
+      // An unreadable repertoire root leaves the menu empty, not the panel
+      // broken.
+    }
     final results = <String, List<String>>{};
     for (final (white, paths) in [
       (true, _settings.whitePaths),
@@ -126,91 +143,33 @@ class _MyRepertoiresPanelState extends State<MyRepertoiresPanel> {
         }
       }
     }
-    if (mounted) setState(() => _colorMismatches = results);
+    if (!mounted) return;
+    setState(() {
+      _all = all;
+      _colorMismatches = results;
+    });
   }
 
-  /// Add a book for one colour, from whichever of the three starting points
-  /// the user actually has: one already in the app, a PGN on disk, or nothing
-  /// at all yet.
-  Future<void> _addRepertoire({required bool white}) async {
-    final all = await StorageFactory.instance.listRepertoires();
-    if (!mounted) return;
+  Set<String> get _takenNames => {for (final r in _all) r.name.toLowerCase()};
+
+  /// Repertoires in the app not yet designated for [white].
+  List<RepertoireMetadata> _candidatesFor({required bool white}) {
     final designated = _settings.pathsFor(white: white);
-    final candidates = [
-      for (final r in all)
+    return [
+      for (final r in _all)
         if (!designated.contains(r.filePath)) r,
     ];
-
-    final source = await showDialog<_AddSource>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: Text('Add ${white ? 'White' : 'Black'} repertoire'),
-        children: [
-          _SourceTile(
-            icon: Icons.menu_book_outlined,
-            title: 'Choose one I already have',
-            subtitle: candidates.isEmpty
-                ? all.isEmpty
-                      ? 'You have no repertoires in the app yet'
-                      : 'Every repertoire you have is already designated here'
-                : '${candidates.length} available',
-            enabled: candidates.isNotEmpty,
-            onTap: () => Navigator.of(ctx).pop(_AddSource.existing),
-          ),
-          _SourceTile(
-            icon: Icons.file_open_outlined,
-            title: 'Import a PGN file…',
-            subtitle: 'A study or repertoire exported from anywhere else',
-            onTap: () => Navigator.of(ctx).pop(_AddSource.importFile),
-          ),
-          _SourceTile(
-            icon: Icons.create_new_folder_outlined,
-            title: 'Start an empty one…',
-            subtitle: 'Name it now, add the lines in the Repertoire Builder',
-            onTap: () => Navigator.of(ctx).pop(_AddSource.createEmpty),
-          ),
-        ],
-      ),
-    );
-    if (source == null || !mounted) return;
-
-    final taken = {for (final r in all) r.name.toLowerCase()};
-    switch (source) {
-      case _AddSource.existing:
-        await _designateExisting(white: white, candidates: candidates);
-      case _AddSource.importFile:
-        await _importFromDisk(white: white, taken: taken);
-      case _AddSource.createEmpty:
-        await _createEmpty(white: white, taken: taken);
-    }
   }
 
-  Future<void> _designateExisting({
-    required bool white,
-    required List<RepertoireMetadata> candidates,
-  }) async {
-    final picked = await showSearchablePicker<RepertoireMetadata>(
-      context: context,
-      title: 'Add ${white ? 'White' : 'Black'} repertoire',
-      searchHint: 'Search repertoires',
-      items: [
-        for (final r in candidates)
-          PickerItem(value: r, label: r.name, icon: Icons.menu_book_outlined),
-      ],
-    );
-    if (picked != null) {
-      await _settings.addPath(white: white, path: picked.filePath);
-    }
-  }
-
-  /// Import a `.pgn` and designate the repertoire it becomes. The file is
-  /// copied into the app's own storage as a normal repertoire — designating a
-  /// path outside it would break the moment the file moved.
-  Future<void> _importFromDisk({
-    required bool white,
-    required Set<String> taken,
-  }) async {
-    final picked = await pickPgnImport();
+  /// Import a `.pgn` and designate the repertoire it becomes, in one step:
+  /// the picker, then done. The repertoire takes the file's name (made
+  /// unique if that name is in use) and the colour of the section the button
+  /// sits in; both can be changed later in the Repertoire Builder.
+  ///
+  /// The file is copied into the app's own storage as a normal repertoire —
+  /// designating a path outside it would break the moment the file moved.
+  Future<void> _importFromDisk({required bool white}) async {
+    final picked = await widget.pickPgn();
     if (picked == null || !mounted) return;
     if (picked.error != null) {
       _say(picked.error!, isError: true);
@@ -219,86 +178,98 @@ class _MyRepertoiresPanelState extends State<MyRepertoiresPanel> {
     final import = picked.result;
     if (import == null) return;
 
-    final name = await _promptName(
-      title: 'Name this repertoire',
-      initial: picked.suggestedName ?? 'Imported repertoire',
-      taken: taken,
-    );
-    if (name == null || !mounted) return;
+    // The file's own move tree says which side it trains. When that
+    // disagrees with the section the user pressed, one question — because
+    // the answer is written into the chapter's `// Color:` header for good,
+    // and a Black book designated as White reports nonsense on every game.
+    final looksLike = picked.suggestedColor;
+    final section = white ? 'White' : 'Black';
+    if (looksLike != null && looksLike != section) {
+      final proceed = await confirmAction(
+        context,
+        title: 'This looks like a $looksLike repertoire',
+        message:
+            'Its lines are written from the $looksLike side. Add it as your '
+            '$section book anyway?',
+        confirmLabel: 'Add as $section',
+        destructive: false,
+      );
+      if (!proceed || !mounted) return;
+    }
 
+    final name = _uniqueName(
+      picked.suggestedName ?? 'Imported repertoire',
+      _takenNames,
+    );
     await _createAndDesignate(
       white: white,
       name: name,
+      chapterName: name,
       pgnContent: import.pgnContent,
       gameCount: import.gameCount,
-      done:
-          '$name added — ${import.gameCount} '
-          '${import.gameCount == 1 ? 'line' : 'lines'} imported.',
+      done: (lines) =>
+          '$name is now your $section book — $lines '
+          '${lines == 1 ? 'line' : 'lines'} imported.',
     );
   }
 
-  Future<void> _createEmpty({
-    required bool white,
-    required Set<String> taken,
-  }) async {
-    final name = await _promptName(
-      title: 'Name the new repertoire',
-      initial: '',
-      taken: taken,
+  /// [base], or the first of "base 2", "base 3", … not already in use.
+  static String _uniqueName(String base, Set<String> taken) {
+    final trimmed = base.trim().isEmpty ? 'Imported repertoire' : base.trim();
+    if (!taken.contains(trimmed.toLowerCase())) return trimmed;
+    for (var n = 2; ; n++) {
+      final candidate = '$trimmed $n';
+      if (!taken.contains(candidate.toLowerCase())) return candidate;
+    }
+  }
+
+  Future<void> _createEmpty({required bool white}) async {
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => _NameRepertoireDialog(
+        title: 'Name the new repertoire',
+        initial: '',
+        taken: _takenNames,
+      ),
     );
     if (name == null || !mounted) return;
 
     await _createAndDesignate(
       white: white,
       name: name,
-      done: '$name added. Build its lines in the Repertoire Builder.',
+      done: (_) => '$name added. Build its lines in the Repertoire Builder.',
     );
   }
 
   Future<void> _createAndDesignate({
     required bool white,
     required String name,
+    String chapterName = 'Main',
     String? pgnContent,
     int gameCount = 0,
-    required String done,
+    required String Function(int lines) done,
   }) async {
     try {
       final created = await createRepertoire(
         name: name,
         color: white ? 'White' : 'Black',
+        chapterName: chapterName,
         pgnContent: pgnContent,
         gameCount: gameCount,
       );
       await _settings.addPath(white: white, path: created.directoryPath);
-      _say(done);
+      // The count after import, not the file's: a study's variations are
+      // written as lines of their own.
+      _say(done(created.gameCount));
     } catch (e) {
       debugPrint('Create repertoire failed: $e');
       _say(AppMessages.createRepertoireFailed, isError: true);
     }
   }
 
-  /// Ask for a repertoire name, refusing empties and names already in use —
-  /// in the field, so the answer arrives before the dialog closes.
-  Future<String?> _promptName({
-    required String title,
-    required String initial,
-    required Set<String> taken,
-  }) {
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) =>
-          _NameRepertoireDialog(title: title, initial: initial, taken: taken),
-    );
-  }
-
   void _say(String message, {bool isError = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? AppColors.danger : null,
-      ),
-    );
+    showAppSnackBar(context, message, isError: isError);
   }
 
   @override
@@ -312,18 +283,26 @@ class _MyRepertoiresPanelState extends State<MyRepertoiresPanel> {
           _ColorDesignation(
             label: 'As White',
             paths: _settings.whitePaths,
+            candidates: _candidatesFor(white: true),
             mismatchFor: (path) =>
                 _colorMismatches[_mismatchKey(white: true, path: path)],
-            onAdd: () => _addRepertoire(white: true),
+            onImport: () => _importFromDisk(white: true),
+            onDesignate: (r) =>
+                _settings.addPath(white: true, path: r.filePath),
+            onCreateEmpty: () => _createEmpty(white: true),
             onRemove: (path) => _settings.removePath(white: true, path: path),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           _ColorDesignation(
             label: 'As Black',
             paths: _settings.blackPaths,
+            candidates: _candidatesFor(white: false),
             mismatchFor: (path) =>
                 _colorMismatches[_mismatchKey(white: false, path: path)],
-            onAdd: () => _addRepertoire(white: false),
+            onImport: () => _importFromDisk(white: false),
+            onDesignate: (r) =>
+                _settings.addPath(white: false, path: r.filePath),
+            onCreateEmpty: () => _createEmpty(white: false),
             onRemove: (path) => _settings.removePath(white: false, path: path),
           ),
         ],
@@ -331,9 +310,6 @@ class _MyRepertoiresPanelState extends State<MyRepertoiresPanel> {
     );
   }
 }
-
-/// Where a designated book can come from.
-enum _AddSource { existing, importFile, createEmpty }
 
 /// Name a repertoire about to be created. Its own widget so the controller
 /// lives exactly as long as the dialog does — disposing one straight after
@@ -413,50 +389,30 @@ class _NameRepertoireDialogState extends State<_NameRepertoireDialog> {
   }
 }
 
-class _SourceTile extends StatelessWidget {
-  const _SourceTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-    this.enabled = true,
-  });
-
-  final IconData icon;
-  final String title;
-
-  /// Why this row is worth pressing — or, when it is not pressable, why not.
-  final String subtitle;
-  final VoidCallback onTap;
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      enabled: enabled,
-      leading: Icon(icon, size: 20),
-      title: Text(title, style: const TextStyle(fontSize: 14)),
-      subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
-      onTap: enabled ? onTap : null,
-    );
-  }
-}
-
+/// One colour: its heading with the two add controls, then its books.
 class _ColorDesignation extends StatelessWidget {
   const _ColorDesignation({
     required this.label,
     required this.paths,
+    required this.candidates,
     required this.mismatchFor,
-    required this.onAdd,
+    required this.onImport,
+    required this.onDesignate,
+    required this.onCreateEmpty,
     required this.onRemove,
   });
 
   final String label;
   final List<String> paths;
 
+  /// Repertoires in the app that are not yet this colour's book.
+  final List<RepertoireMetadata> candidates;
+
   /// Chapter names in this folder marked for the *other* color, or null.
   final List<String>? Function(String path) mismatchFor;
-  final VoidCallback onAdd;
+  final VoidCallback onImport;
+  final ValueChanged<RepertoireMetadata> onDesignate;
+  final VoidCallback onCreateEmpty;
   final ValueChanged<String> onRemove;
 
   static String _displayName(String path) => path.split(RegExp(r'[/\\]')).last;
@@ -466,26 +422,54 @@ class _ColorDesignation extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        // Wrap, not Row: the panel is also the Settings page's Repertoires
+        // section, which is 320px wide on a narrow window — too narrow for
+        // the colour and both buttons on one line. A Row gave the label the
+        // leftover zero width and wrapped it one character per line.
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 6,
           children: [
-            Expanded(
-              child: Text(
-                label,
-                style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
-              ),
+            Text(
+              label,
+              style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
             ),
-            TextButton.icon(
-              onPressed: onAdd,
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('Add repertoire'),
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                Tooltip(
+                  message:
+                      'Pick a .pgn file — a study or repertoire exported from '
+                      'anywhere — and make it this book',
+                  child: FilledButton.tonalIcon(
+                    onPressed: onImport,
+                    icon: const Icon(Icons.file_open_outlined, size: 16),
+                    label: const Text('Import PGN…'),
+                    style: FilledButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ),
+                _AddExistingMenu(
+                  candidates: candidates,
+                  onDesignate: onDesignate,
+                  onCreateEmpty: onCreateEmpty,
+                ),
+              ],
             ),
           ],
         ),
         if (paths.isEmpty)
-          Text(
-            'None designated — deviations are not checked for this color.',
-            style: AppTextStyles.caption.copyWith(
-              color: AppColors.onSurfaceMuted,
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'None yet — games you play as ${label.substring(3)} are not '
+              'checked.',
+              style: AppTextStyles.caption,
             ),
           )
         else
@@ -512,7 +496,7 @@ class _ColorDesignation extends StatelessWidget {
                   ),
                   IconButton(
                     icon: const Icon(Icons.close, size: 16),
-                    tooltip: 'Remove designation',
+                    tooltip: 'Stop checking games against this book',
                     visualDensity: VisualDensity.compact,
                     onPressed: () => onRemove(path),
                   ),
@@ -545,6 +529,58 @@ class _ColorDesignation extends StatelessWidget {
               ),
           ],
       ],
+    );
+  }
+}
+
+/// "Add existing ▾": the repertoires already in the app that are not this
+/// colour's book yet, and a way to start an empty one. A menu, not a dialog:
+/// the list is short and the choice is one click.
+class _AddExistingMenu extends StatelessWidget {
+  const _AddExistingMenu({
+    required this.candidates,
+    required this.onDesignate,
+    required this.onCreateEmpty,
+  });
+
+  final List<RepertoireMetadata> candidates;
+  final ValueChanged<RepertoireMetadata> onDesignate;
+  final VoidCallback onCreateEmpty;
+
+  @override
+  Widget build(BuildContext context) {
+    return MenuAnchor(
+      menuChildren: [
+        if (candidates.isEmpty)
+          const MenuItemButton(
+            onPressed: null,
+            child: Text('No other repertoires in the app'),
+          )
+        else
+          for (final r in candidates)
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.menu_book_outlined, size: 16),
+              onPressed: () => onDesignate(r),
+              child: Text(r.name),
+            ),
+        const Divider(height: 1),
+        MenuItemButton(
+          leadingIcon: const Icon(Icons.create_new_folder_outlined, size: 16),
+          onPressed: onCreateEmpty,
+          child: const Text('New empty repertoire…'),
+        ),
+      ],
+      builder: (context, controller, _) => Tooltip(
+        message: 'Use a repertoire already in the app as this book',
+        child: OutlinedButton.icon(
+          onPressed: () =>
+              controller.isOpen ? controller.close() : controller.open(),
+          icon: const Icon(Icons.arrow_drop_down, size: 18),
+          iconAlignment: IconAlignment.end,
+          label: const Text('Add existing'),
+          style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+        ),
+      ),
     );
   }
 }

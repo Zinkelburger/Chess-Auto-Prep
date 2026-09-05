@@ -53,10 +53,14 @@ class EraseTool extends SetupTool {
 /// is actually on screen, rather than the controller launching Hivemind the
 /// moment one is constructed.
 class BughouseController extends ChangeNotifier with SafeChangeNotifier {
-  BughouseController({this.engineOverride}) {
+  BughouseController({this.engineOverride, BughouseBook? bookOverride}) {
     _history = BughouseHistory(BughouseState.initial());
     unawaited(_loadEngineSettings());
-    unawaited(_openBook());
+    if (bookOverride != null) {
+      _book = bookOverride;
+    } else {
+      unawaited(_openBook());
+    }
   }
 
   Future<void> _loadEngineSettings() async {
@@ -550,7 +554,14 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
-  void setTeam(Side team) => _applyToLine((s) => s.copyWith(team: team));
+  void setTeam(Side team) => _applyToLine(
+    (s) => s.copyWith(
+      team: team,
+      timeStance: deriveTimeAdvantageFromClocks
+          ? s.clocks.stanceFor(team)
+          : s.timeStance,
+    ),
+  );
 
   void setTimeStance(BughouseTimeStance stance) {
     deriveTimeAdvantageFromClocks = false;

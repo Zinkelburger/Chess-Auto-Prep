@@ -26,6 +26,7 @@ library;
 import 'dart:convert';
 
 import '../models/analysis_player_info.dart';
+import 'games_library/game_filter.dart';
 
 /// The format tag this app writes and the Python tooling checks against.
 const kOpponentListFormat = 'chess-auto-prep/opponents@1';
@@ -80,11 +81,13 @@ class OpponentEntry {
     required String? group,
     required int maxGames,
     int? monthsBack,
+    Set<GameSpeed> speeds = defaultDownloadSpeeds,
   }) => AnalysisPlayerInfo(
     platform: 'import',
     username: playerName,
     maxGames: maxGames,
     monthsBack: monthsBack,
+    speeds: speeds,
     accounts: accounts,
     group: group,
   );

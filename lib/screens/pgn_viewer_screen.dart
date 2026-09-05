@@ -41,9 +41,12 @@ import '../services/lichess_auth_service.dart';
 import '../services/storage/storage_factory.dart';
 import '../services/game_analysis_controller.dart';
 import '../models/board_annotation.dart';
+import '../models/explorer_response.dart';
 import '../models/solitaire_trophy.dart';
 import '../services/solitaire_trophy_detector.dart';
 import '../services/solitaire_trophy_service.dart';
+import '../services/explorer_game_opener.dart';
+import '../services/live_explorer_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
@@ -75,6 +78,7 @@ import '../widgets/pgn/solitaire_status_widgets.dart';
 import '../widgets/pgn_viewer_widget.dart';
 import '../widgets/pgn_slice_dialog.dart';
 import '../widgets/solitaire_trophy_cabinet.dart';
+import '../widgets/opening_explorer/opening_explorer_panel.dart';
 
 part 'pgn_viewer_screen_app_bar.dart';
 part 'pgn_viewer_screen_panes.dart';
@@ -130,7 +134,21 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   int get _lineTabIndex => _lineTabVisible ? 1 : -1;
 
-  int get _analysisTabIndex => _lineTabVisible ? 2 : 1;
+  int get _explorerTabIndex => _lineTabVisible ? 2 : 1;
+
+  int get _analysisTabIndex => _lineTabVisible ? 3 : 2;
+
+  /// The opening explorer beside the game: what the databases say about the
+  /// position on the board, and the games they list for it.  Owned here the
+  /// way the repertoire panes own theirs — the service holds a debounce timer
+  /// and an HTTP client, so the screen that shows it disposes it.
+  @override
+  late final LiveExplorerService _explorer;
+  late final ExplorerGameOpener _gameOpener;
+
+  /// The explorer row under the pointer, echoed on the board as an arrow.
+  @override
+  ExplorerMove? _explorerHoverMove;
 
   @override
   set _singleGameFocus(bool value) {
@@ -150,9 +168,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   @override
   void initState() {
     super.initState();
-    // Game · Analysis by default. Line is added only for a Games/tactics
-    // handoff (see [_lineTabVisible]).
-    _tabController = TabController(length: 2, vsync: this);
+    // Game · Explorer · Analysis by default. Line is added only for a
+    // Games/tactics handoff (see [_lineTabVisible]).
+    _tabController = TabController(length: 3, vsync: this);
+    _explorer = LiveExplorerService();
+    _gameOpener = ExplorerGameOpener();
     _pgnWidgetController = PgnViewerWidgetController();
     _lineWidgetController = PgnViewerWidgetController();
     _analysisController = GameAnalysisController();
@@ -322,6 +342,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         _tabController.animateTo(_kGameTab);
       case PgnViewerTab.line:
         _showLineTab();
+      case PgnViewerTab.explorer:
+        _tabController.animateTo(_explorerTabIndex);
       case PgnViewerTab.analysis:
         _tabController.animateTo(_analysisTabIndex);
     }
@@ -362,7 +384,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (games.isEmpty || _controller.currentGameIndex >= games.length) {
       return null;
     }
-    return dedupKeyForHeaders(games[_controller.currentGameIndex].headers);
+    return dedupKeyForHeaders(
+      games[_controller.currentGameIndex].headers,
+      pgn: games[_controller.currentGameIndex].pgnText,
+    );
   }
 
   Future<bool> _goToGameById(String gameId) async {
@@ -373,14 +398,14 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     // Prev/Next walk back through time instead of through fetch history.
     _controller.sortNewestFirst();
     var index = _controller.filteredGames.indexWhere(
-      (g) => dedupKeyForHeaders(g.headers) == gameId,
+      (g) => dedupKeyForHeaders(g.headers, pgn: g.pgnText) == gameId,
     );
     if (index < 0) {
       // A restored slice may hide the target game — widen to the whole file.
       // (resetFilters re-applies the sort, so the order survives.)
       _controller.resetFilters();
       index = _controller.filteredGames.indexWhere(
-        (g) => dedupKeyForHeaders(g.headers) == gameId,
+        (g) => dedupKeyForHeaders(g.headers, pgn: g.pgnText) == gameId,
       );
     }
     if (index < 0) return false;
@@ -465,13 +490,15 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   void _rebuildTabController() {
-    final want = _lineTabVisible ? 3 : 2;
+    final want = _lineTabVisible ? 4 : 3;
     if (_tabController.length == want) return;
     final old = _tabController;
     final oldIndex = old.index;
-    final newIndex = want == 3
-        ? (oldIndex >= 1 ? 2 : 0)
-        : (oldIndex >= 2 ? 1 : 0);
+    // Book slots in at index 1, so every tab after Game shifts by one either
+    // way; the tab you were on stays the tab you are on.
+    final newIndex = want == 4
+        ? (oldIndex >= 1 ? oldIndex + 1 : 0)
+        : (oldIndex >= 2 ? oldIndex - 1 : 0);
     old.removeListener(_onSideTabChanged);
     _tabController = TabController(
       length: want,
@@ -493,6 +520,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _controller.dispose();
     _analysisController.removeListener(_onAnalysisUpdate);
     _analysisController.dispose();
+    _explorer.dispose();
     _tabController.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -636,7 +664,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     final key = games.isEmpty || index >= games.length
         ? null
         : '${_controller.filePath}'
-              '#${dedupKeyForHeaders(games[index].headers)}';
+              '#${dedupKeyForHeaders(games[index].headers, pgn: games[index].pgnText)}';
     if (key == _deviationKey) return;
     _deviationKey = key;
     _deviationReport = null;
@@ -747,6 +775,37 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (_controller.isSolitaireMode || !_lineTabVisible) return;
     if (!_lineTabVisited) setState(() => _lineTabVisited = true);
     _tabController.animateTo(_lineTabIndex);
+  }
+
+  @override
+  void _setExplorerHover(ExplorerMove? move) {
+    if (identical(move, _explorerHoverMove)) return;
+    setState(() => _explorerHoverMove = move);
+  }
+
+  /// A game the explorer listed: fetch it, file it in the explorer
+  /// collection, and hand the viewer over to it at the position we were
+  /// looking at.  A hand-off rather than a load-in-place, so the breadcrumb
+  /// trail remembers the game you came from.
+  @override
+  Future<void> _openExplorerGame(ExplorerGame game) async {
+    final fen = _controller.currentPosition.fen;
+    final opened = await _gameOpener.open(game, fen: fen);
+    if (!mounted) return;
+    if (opened == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not fetch that game.')),
+      );
+      return;
+    }
+    _explorerHoverMove = null;
+    context.read<AppState>().switchToPgnViewer(
+      path: opened.path,
+      gameIndex: opened.index,
+      ply: opened.ply,
+      tab: PgnViewerTab.explorer,
+      historyLabel: 'Game: ${opened.label}',
+    );
   }
 
   /// A book-line move was selected on the Line tab — put it on the main board.
@@ -1298,10 +1357,23 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       () => _paneRouter.goForward(_controller.navigateForward),
       repeats: true,
     ),
+    // Home/End and PageUp/PageDown both jump to the ends of the line: the
+    // viewer's own buttons advertise Home/End, and the page keys are what a
+    // hand already on the arrow cluster reaches for.
+    ...KeyBinding.forShortcut(
+      AppShortcut.goToStart,
+      'Go to start of line',
+      () => _paneRouter.goToStart(_controller.navigateToStart),
+    ),
     KeyBinding.run(
       LogicalKeyboardKey.pageUp,
       'Go to start of line',
       () => _paneRouter.goToStart(_controller.navigateToStart),
+    ),
+    ...KeyBinding.forShortcut(
+      AppShortcut.goToEnd,
+      'Go to end of line',
+      () => _paneRouter.goToEnd(_controller.navigateToEnd),
     ),
     KeyBinding.run(
       LogicalKeyboardKey.pageDown,

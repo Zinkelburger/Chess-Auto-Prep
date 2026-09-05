@@ -389,6 +389,24 @@ void main() {
       expect(controller.repertoireLines, hasLength(2));
     });
 
+    test('a pasted study\'s variations are appended as lines', () async {
+      storage.files['/a.pgn'] = _whitePgn;
+      final controller = RepertoireController();
+      await controller.setRepertoire(_meta('/a.pgn'));
+
+      final added = await controller.importPgnContent(
+        '[Event "C"]\n[Result "*"]\n\n1. d4 d5 (1... Nf6 2. c4) 2. c4 *\n',
+      );
+
+      expect(added, 2);
+      expect(storage.files['/a.pgn'], isNot(contains('(')));
+      expect(controller.repertoireLines, hasLength(3));
+      expect(
+        controller.repertoireLines.map((l) => l.moves.join(' ')),
+        containsAll(['d4 d5 c4', 'd4 Nf6 c4']),
+      );
+    });
+
     test('separates the appended games with a blank line', () async {
       storage.files['/a.pgn'] = '[Event "A"]\n[Result "*"]\n\n1. e4 *';
       final controller = RepertoireController();

@@ -1,22 +1,31 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../models/analysis_player_info.dart';
+import '../services/games_library/game_filter.dart';
 import '../services/opponent_list.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/file_text_reader.dart';
+import 'analysis/time_control_picker.dart';
 
-/// What the user asked for: which list, how far back to fetch, and whether
-/// opponents already on disk should be fetched again.
+/// What the user asked for: which list, how far back to fetch, which time
+/// controls, and whether opponents already on disk should be fetched again.
 class OpponentImportRequest {
   final OpponentList list;
   final int monthsBack;
+
+  /// Applies to every opponent in the list; each saved player keeps it, so
+  /// re-downloading one later fetches the same kind of games.
+  final Set<GameSpeed> speeds;
   final bool redownloadExisting;
 
   const OpponentImportRequest({
     required this.list,
     required this.monthsBack,
+    this.speeds = defaultDownloadSpeeds,
     required this.redownloadExisting,
   });
 }
@@ -46,11 +55,20 @@ class _OpponentListImportDialogState extends State<OpponentListImportDialog> {
   OpponentList? _parsed;
   String? _parseError;
   bool _redownloadExisting = false;
+  Set<GameSpeed> _speeds = defaultDownloadSpeeds;
 
   @override
   void initState() {
     super.initState();
     _textController.addListener(_reparse);
+    unawaited(_loadSpeeds());
+  }
+
+  /// Start from whatever the last download used, in either dialog.
+  Future<void> _loadSpeeds() async {
+    final saved = await DownloadSpeedsMemory.load();
+    if (!mounted || saved == null) return;
+    setState(() => _speeds = saved);
   }
 
   @override
@@ -109,17 +127,34 @@ class _OpponentListImportDialogState extends State<OpponentListImportDialog> {
   }
 
   bool get _canImport =>
-      _parsed != null && _parsed!.downloadable.isNotEmpty && _months != null;
+      _parsed != null &&
+      _parsed!.downloadable.isNotEmpty &&
+      _months != null &&
+      _speeds.isNotEmpty;
 
   void _confirm() {
     if (!_canImport) return;
+    DownloadSpeedsMemory.remember(_speeds);
     Navigator.of(context).pop(
       OpponentImportRequest(
         list: _parsed!,
         monthsBack: _months!,
+        speeds: _speeds,
         redownloadExisting: _redownloadExisting,
       ),
     );
+  }
+
+  /// What one Import will fetch, in a sentence — and the one place the
+  /// empty-filter case is explained, since the button just goes grey.
+  String get _fetchSummary {
+    final months = _months;
+    final range = months == null
+        ? 'Games from the last N months, per account'
+        : 'Games from the last $months month${months == 1 ? '' : 's'}, '
+              'per account';
+    if (_speeds.isEmpty) return '$range — pick at least one time control.';
+    return '$range, at ${gameSpeedsPhrase(_speeds)}.';
   }
 
   @override
@@ -206,30 +241,33 @@ class _OpponentListImportDialogState extends State<OpponentListImportDialog> {
                 _ListPreview(list: parsed),
               ],
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  SizedBox(
-                    width: 90,
-                    child: TextField(
-                      controller: _monthsController,
-                      keyboardType: TextInputType.number,
-                      onChanged: (_) => setState(() {}),
-                      decoration: const InputDecoration(
-                        labelText: 'Months',
-                        isDense: true,
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
+              SizedBox(
+                width: 90,
+                child: TextField(
+                  controller: _monthsController,
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    labelText: 'Months',
+                    isDense: true,
+                    border: OutlineInputBorder(),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Games from the last N months, per account.',
-                      style: muted,
-                    ),
-                  ),
-                ],
+                ),
               ),
+              const SizedBox(height: 16),
+              TimeControlPicker(
+                speeds: _speeds,
+                onChanged: (next) => setState(() => _speeds = next),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _fetchSummary,
+                key: const Key('opponent-fetch-summary'),
+                style: _speeds.isEmpty
+                    ? muted?.copyWith(color: theme.colorScheme.error)
+                    : muted,
+              ),
+              const SizedBox(height: 4),
               CheckboxListTile(
                 value: _redownloadExisting,
                 onChanged: (v) =>

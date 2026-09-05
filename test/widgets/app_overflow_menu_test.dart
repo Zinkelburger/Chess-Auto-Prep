@@ -141,4 +141,64 @@ void main() {
 
     expect(find.text('A'), findsOneWidget);
   });
+
+  testWidgets('a heading draws its section name and does not shift rows', (
+    tester,
+  ) async {
+    final ran = <String>[];
+    await tester.pumpWidget(
+      _wrap([
+        AppMenuEntry(
+          label: 'Plan',
+          heading: 'Add lines',
+          onRun: () => ran.add('Plan'),
+        ),
+        AppMenuEntry(label: 'Generate', onRun: () => ran.add('Generate')),
+        AppMenuEntry(
+          label: 'Audit',
+          heading: 'Check',
+          onRun: () => ran.add('Audit'),
+        ),
+      ]),
+    );
+
+    await _open(tester);
+    expect(find.text('ADD LINES'), findsOneWidget);
+    expect(find.text('CHECK'), findsOneWidget);
+    // A heading is not a row: tapping it selects nothing.
+    await tester.tap(find.text('CHECK'), warnIfMissed: false);
+    await tester.pump();
+    expect(ran, isEmpty);
+
+    await tester.tap(find.text('Audit'));
+    await tester.pumpAndSettle();
+    expect(ran, ['Audit']);
+  });
+
+  testWidgets('an anchor opens the same menu from a labelled control', (
+    tester,
+  ) async {
+    var ran = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          appBar: AppBar(
+            actions: [
+              AppOverflowMenu(
+                anchor: const Text('Actions'),
+                entries: [AppMenuEntry(label: 'Go', onRun: () => ran = true)],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.more_vert), findsNothing);
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Go'));
+    await tester.pumpAndSettle();
+    expect(ran, isTrue);
+  });
 }

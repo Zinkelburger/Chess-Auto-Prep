@@ -104,7 +104,7 @@ void main() {
       // The fake's default answer is "no move at all", which is what a team
       // that sits on every board it holds looks like from here.
       final runner = BughouseTournamentRunner(
-        engine: FakeBughouseEngine(),
+        engine: FakeBughouseEngine()..defaultResult = _answer('(pass,pass)'),
         config: _config(),
       );
 
@@ -138,13 +138,12 @@ void main() {
       expect(game.plies, 6);
     });
 
-    test('a half that will not play here is dropped, not fatal', () async {
+    test('an illegal answer preserves the partial game and fails', () async {
       final engine = FakeBughouseEngine()
         ..script.addAll([
           _answer('(e2e4,pass)'),
-          // `e7e9` is not a square, let alone a move. Its partner half is
-          // legal and has to land anyway — an engine answer that is half
-          // nonsense costs a tempo, not the game.
+          // One illegal half invalidates the entire answer, before either
+          // board is changed.
           _answer('(e7e9,e2e4)'),
         ]);
       final runner = BughouseTournamentRunner(
@@ -152,9 +151,10 @@ void main() {
         config: _config(),
       );
 
-      final game = (await runner.run()).single;
-
-      expect(game.moves, ['1e2e4', '2e2e4']);
+      await expectLater(
+        runner.run(),
+        throwsA(isA<BughouseTournamentFailure>()),
+      );
     });
   });
 

@@ -1,11 +1,15 @@
-/// Live Lichess Opening Explorer panel (user-view only).
+/// Live opening explorer panel (user-view only).
 ///
-/// Shows, for the current board position, the moves played in the Lichess or
-/// Masters database with their game counts and win/draw/loss split — the
-/// human-facing equivalent of the site's opening explorer, in this app's
-/// style. It never feeds the generation pipeline; all lookups go through
-/// [LiveExplorerService], which debounces and caches to respect the API's
-/// one-request-at-a-time rate limit.
+/// Shows, for the current board position, the moves played in the Lichess
+/// player database, the Lichess masters database, or the master-games (TWIC)
+/// database on this machine, with their game counts and win/draw/loss split
+/// — the human-facing equivalent of the site's opening explorer, in this
+/// app's style — and, under the table, the games each source lists for the
+/// position, which a host that supplies [OpeningExplorerPanel.onOpenGame]
+/// lets you open. It never feeds the generation pipeline; all lookups go
+/// through [LiveExplorerService], which debounces and caches to respect the
+/// API's one-request-at-a-time rate limit and answers the local database
+/// straight from disk.
 library;
 
 import 'dart:async';
@@ -18,9 +22,12 @@ import '../../features/coverage/services/coverage_service.dart'
 import '../../models/explorer_response.dart';
 import '../../services/lichess_auth_service.dart';
 import '../../services/live_explorer_service.dart';
+import '../../services/master_games/master_games_service.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import '../lichess_db_selector.dart';
 import '../lichess_login_prompt.dart';
+import 'explorer_games_list.dart';
 import 'explorer_move_row.dart';
 
 class OpeningExplorerPanel extends StatefulWidget {
@@ -33,9 +40,20 @@ class OpeningExplorerPanel extends StatefulWidget {
     this.onAddMove,
     this.onHoverMove,
     this.repertoireMovesAtPosition = const {},
+    this.onOpenGame,
+    this.masterGames,
   });
 
   final LiveExplorerService service;
+
+  /// Open one of the listed games in the viewer.  When null, the games are
+  /// not listed at all — a host with nowhere to open them in has no use for
+  /// the list.  The row shows a spinner until the future completes.
+  final Future<void> Function(ExplorerGame game)? onOpenGame;
+
+  /// The local master-games database, for whether TWIC can be offered and
+  /// whether its classical index is built.  Defaults to the app's.
+  final MasterGamesService? masterGames;
 
   /// FEN of the position to explore.
   final String fen;
@@ -66,12 +84,22 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
   static const _kDb = 'live_explorer.db';
   static const _kSpeeds = 'live_explorer.speeds';
   static const _kRatings = 'live_explorer.ratings';
+  static const _kClassical = 'live_explorer.twic_classical';
 
   LichessDatabase _database = LichessDatabase.lichess;
   Set<String> _speeds = {'blitz', 'rapid', 'classical'};
   Set<String> _ratings = {'2000', '2200', '2500'};
+  bool _classicalOnly = false;
   bool _filtersExpanded = false;
   bool _prefsLoaded = false;
+
+  /// The game whose PGN is being fetched, so its row can show it.
+  String? _openingGameId;
+
+  MasterGamesService get _masterGames =>
+      widget.masterGames ?? MasterGamesService.instance;
+
+  bool get _twicAvailable => _masterGames.hasGames;
 
   @override
   void initState() {
@@ -80,18 +108,30 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
     // info popover, settings) should refill the panel, not leave it sitting
     // on a stale "login needed".
     LichessAuthService.instance.addListener(_onAuthChanged);
+    // A TWIC download or index finishing should refill a TWIC table too.
+    _masterGames.addListener(_onMasterGamesChanged);
     unawaited(_loadPrefs());
   }
 
   @override
   void dispose() {
     LichessAuthService.instance.removeListener(_onAuthChanged);
+    _masterGames.removeListener(_onMasterGamesChanged);
     _clearHover();
     super.dispose();
   }
 
   void _onAuthChanged() {
     if (mounted) _requestCurrent();
+  }
+
+  void _onMasterGamesChanged() {
+    if (!mounted) return;
+    if (_database == LichessDatabase.twic) {
+      if (!_twicAvailable) _database = LichessDatabase.lichess;
+      _requestCurrent();
+    }
+    setState(() {});
   }
 
   @override
@@ -122,8 +162,12 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
     widget.onHoverMove?.call(null);
   }
 
-  ExplorerQuery get _query =>
-      ExplorerQuery(database: _database, speeds: _speeds, ratings: _ratings);
+  ExplorerQuery get _query => ExplorerQuery(
+    database: _database,
+    speeds: _speeds,
+    ratings: _ratings,
+    classicalOnly: _classicalOnly,
+  );
 
   void _requestCurrent() {
     if (!_prefsLoaded) return;
@@ -136,6 +180,7 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
       final dbName = prefs.getString(_kDb);
       final speeds = prefs.getStringList(_kSpeeds);
       final ratings = prefs.getStringList(_kRatings);
+      final classical = prefs.getBool(_kClassical);
       if (!mounted) return;
       setState(() {
         if (dbName != null) {
@@ -144,8 +189,15 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
             orElse: () => LichessDatabase.lichess,
           );
         }
+        // A remembered TWIC choice on a machine without the database (a
+        // fresh install restoring settings) falls back rather than showing
+        // an empty table with no explanation.
+        if (_database == LichessDatabase.twic && !_twicAvailable) {
+          _database = LichessDatabase.lichess;
+        }
         if (speeds != null && speeds.isNotEmpty) _speeds = speeds.toSet();
         if (ratings != null && ratings.isNotEmpty) _ratings = ratings.toSet();
+        if (classical != null) _classicalOnly = classical;
         _prefsLoaded = true;
       });
     } catch (_) {
@@ -160,6 +212,7 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
       await prefs.setString(_kDb, _database.name);
       await prefs.setStringList(_kSpeeds, _speeds.toList());
       await prefs.setStringList(_kRatings, _ratings.toList());
+      await prefs.setBool(_kClassical, _classicalOnly);
     } catch (_) {
       // Best-effort persistence.
     }
@@ -198,6 +251,12 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
                 _ratings = r;
                 _onFiltersChanged();
               },
+              showTwic: _twicAvailable,
+              classicalOnly: _classicalOnly,
+              onClassicalOnlyChanged: (on) {
+                _classicalOnly = on;
+                _onFiltersChanged();
+              },
             ),
           ),
         ],
@@ -217,6 +276,9 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
   /// are ticked.
   String get _filterSummary {
     if (_database == LichessDatabase.masters) return 'Masters';
+    if (_database == LichessDatabase.twic) {
+      return _classicalOnly ? 'TWIC · Classical OTB only' : 'TWIC · All games';
+    }
     const order = [
       'ultraBullet',
       'bullet',
@@ -349,38 +411,93 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
   }
 
   Widget _buildTable(BuildContext context, ExplorerResponse data) {
+    final openGame = widget.onOpenGame;
+    final lichessDb = _database == LichessDatabase.lichess;
     return Column(
       children: [
-        _buildOpeningHeader(data),
+        if (_database != LichessDatabase.twic) _buildOpeningHeader(data),
+        if (_database == LichessDatabase.twic &&
+            _classicalOnly &&
+            !_masterGames.classicalCountsComplete)
+          _buildIndexNote(),
         const ExplorerTableHeader(),
+        // One scroll for the rows, the Σ line and the games under them: the
+        // games are part of the answer, not a footer.
         Expanded(
           child: Scrollbar(
-            child: ListView.builder(
+            child: ListView(
               padding: EdgeInsets.zero,
-              itemExtent: ExplorerColumns.rowHeight,
-              itemCount: data.moves.length,
-              itemBuilder: (context, i) {
-                final move = data.moves[i];
-                return ExplorerMoveRow(
-                  key: ValueKey(move.uci),
-                  move: move,
-                  inRepertoire: widget.repertoireMovesAtPosition.contains(
-                    move.san,
+              children: [
+                for (final move in data.moves)
+                  SizedBox(
+                    height: ExplorerColumns.rowHeight,
+                    child: ExplorerMoveRow.lichess(
+                      key: ValueKey(move.uci),
+                      move: move,
+                      inRepertoire: widget.repertoireMovesAtPosition.contains(
+                        move.san,
+                      ),
+                      onPlay: () => widget.onPlayMove(move.san),
+                      onAdd: widget.onAddMove == null
+                          ? null
+                          : () => widget.onAddMove!(move),
+                      onHover: widget.onHoverMove == null
+                          ? null
+                          : (hovered) => _onRowHover(move, hovered),
+                    ),
                   ),
-                  onPlay: () => widget.onPlayMove(move.san),
-                  onAdd: widget.onAddMove == null
-                      ? null
-                      : () => widget.onAddMove!(move),
-                  onHover: widget.onHoverMove == null
-                      ? null
-                      : (hovered) => _onRowHover(move, hovered),
-                );
-              },
+                ExplorerTotalsRow.lichess(response: data),
+                if (openGame != null) ...[
+                  ExplorerGamesList(
+                    games: data.topGames,
+                    heading: lichessDb ? 'Top games' : 'Games',
+                    busyId: _openingGameId,
+                    onOpen: (g) => unawaited(_openGame(g, openGame)),
+                  ),
+                  ExplorerGamesList(
+                    games: data.recentGames,
+                    heading: 'Recent games',
+                    busyId: _openingGameId,
+                    onOpen: (g) => unawaited(_openGame(g, openGame)),
+                  ),
+                ],
+              ],
             ),
           ),
         ),
-        ExplorerTotalsRow(response: data),
       ],
+    );
+  }
+
+  Future<void> _openGame(
+    ExplorerGame game,
+    Future<void> Function(ExplorerGame) open,
+  ) async {
+    if (_openingGameId != null) return;
+    setState(() => _openingGameId = game.id);
+    try {
+      await open(game);
+    } finally {
+      if (mounted) setState(() => _openingGameId = null);
+    }
+  }
+
+  /// The classical-only counts are zero on a database imported before they
+  /// existed, until the index is built — say so rather than show a table of
+  /// zeroes as if no classical game had ever reached the position.
+  Widget _buildIndexNote() {
+    final building = _masterGames.isRebuildingClassical;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      color: AppColors.surfaceContainer,
+      child: Text(
+        building
+            ? 'Classical index building — ${_masterGames.status}'
+            : 'Classical-only counts need a one-time index: Databases page → '
+                  'Master games → Build classical index.',
+        style: AppTextStyles.caption,
+      ),
     );
   }
 

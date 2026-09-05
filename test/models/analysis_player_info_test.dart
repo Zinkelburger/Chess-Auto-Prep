@@ -2,18 +2,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:chess_auto_prep/models/analysis_player_info.dart';
+import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 
-/// Pure (no-filesystem) coverage of the username → storage-key derivation that
-/// every analysis file path is built from ([AnalysisPlayerInfo.playerKey]).
-///
-/// The security-relevant property is that the derivation is an *allowlist*:
-/// `username.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]'), '_')`. Because
-/// only `[a-z0-9_-]` survives, the sanitized portion can never contain a path
-/// separator (`/`, `\`), a `.` (so no `..` traversal token can form), a colon,
-/// or a NUL byte. The mandatory `<platform>_` prefix keeps the whole key a
-/// single path segment. The filesystem-level proof that this actually confines
-/// writes lives in test/services/path_sanitization_test.dart; this file pins
-/// the string contract that guarantee rests on.
+/// Opaque identities must be deterministic, separate distinct names, and stay
+/// within one safe path component on every supported desktop platform.
 void main() {
   String keyFor(String platform, String username) =>
       AnalysisPlayerInfo(platform: platform, username: username).playerKey;
@@ -21,30 +13,82 @@ void main() {
   /// The username-derived tail of the key (everything after `<platform>_`).
   String safeTail(String platform, String username) {
     final key = keyFor(platform, username);
-    expect(key, startsWith('${platform}_'));
-    return key.substring(platform.length + 1);
+    expect(key, matches(RegExp(r'^player-[a-f0-9]{64}$')));
+    return key.substring('player-'.length);
   }
 
   final nul = String.fromCharCode(0);
 
+  group('AnalysisPlayerInfo.speeds', () {
+    test('round-trips through JSON', () {
+      const info = AnalysisPlayerInfo(
+        platform: 'lichess',
+        username: 'x',
+        speeds: {GameSpeed.bullet, GameSpeed.blitz},
+      );
+      final back = AnalysisPlayerInfo.fromJson(info.toJson());
+      expect(back.speeds, {GameSpeed.bullet, GameSpeed.blitz});
+      expect(back.speedsDescription, 'bullet, blitz');
+    });
+
+    test('a set saved before the filter was a choice is the default', () {
+      final back = AnalysisPlayerInfo.fromJson({
+        'platform': 'chesscom',
+        'username': 'x',
+      });
+      expect(back.speeds, defaultDownloadSpeeds);
+      expect(back.speedsDescription, isNull);
+    });
+
+    test('an empty or garbled list never means "no games"', () {
+      expect(
+        AnalysisPlayerInfo.fromJson({
+          'platform': 'chesscom',
+          'username': 'x',
+          'speeds': <String>[],
+        }).speeds,
+        defaultDownloadSpeeds,
+      );
+      expect(
+        AnalysisPlayerInfo.fromJson({
+          'platform': 'chesscom',
+          'username': 'x',
+          'speeds': ['hyperbullet', 'rapid'],
+        }).speeds,
+        {GameSpeed.rapid},
+      );
+    });
+
+    test('a PGN-file import has no filter to describe', () {
+      const info = AnalysisPlayerInfo(platform: 'import', username: 'Book');
+      expect(info.speedsDescription, isNull);
+      const all = AnalysisPlayerInfo(
+        platform: 'chesscom',
+        username: 'x',
+        speeds: {...selectableGameSpeeds},
+      );
+      expect(all.speedsDescription, 'all time controls');
+    });
+  });
+
   group('AnalysisPlayerInfo.playerKey — benign names', () {
-    test('passes platform usernames through unchanged (lowercased)', () {
-      expect(keyFor('chesscom', 'Andrew_B-99'), 'chesscom_andrew_b-99');
-      expect(keyFor('lichess', 'hikaru'), 'lichess_hikaru');
+    test('platforms and distinct names have distinct opaque keys', () {
+      expect(keyFor('chesscom', 'hikaru'), isNot(keyFor('lichess', 'hikaru')));
+      expect(keyFor('import', 'AC/DC'), isNot(keyFor('import', 'AC DC')));
+      expect(keyFor('import', 'AC/DC'), isNot(keyFor('import', 'AC_DC')));
+      expect(
+        keyFor('import', 'alice'),
+        isNot(keyFor('import', 'alice_white_analysis')),
+      );
     });
-
-    test('folds filename-hazardous characters to underscores', () {
-      // '/' would nest the files in a subdirectory the player list never
-      // scans, silently orphaning the import.
-      expect(keyFor('import', 'AC/DC Fan'), 'import_ac_dc_fan');
-      expect(keyFor('import', 'Carlsen, Magnus'), 'import_carlsen__magnus');
-      expect(keyFor('import', 'a.b:c*d'), 'import_a_b_c_d');
-    });
-
-    test('names differing only in hazardous characters share a key', () {
-      // Documented, intentional collapse: distinct hostile spellings that
-      // sanitize to the same key deliberately map to the same slot.
-      expect(keyFor('import', 'AC/DC'), keyFor('import', 'AC DC'));
+    test('legacy names remain available for migration', () {
+      expect(
+        const AnalysisPlayerInfo(
+          platform: 'import',
+          username: 'AC/DC Fan',
+        ).legacyPlayerKey,
+        'import_ac_dc_fan',
+      );
     });
   });
 
@@ -107,37 +151,37 @@ void main() {
   });
 
   group('AnalysisPlayerInfo.playerKey — edge cases (no crash)', () {
-    test('empty username yields just the platform prefix', () {
-      expect(keyFor('import', ''), 'import_');
-      expect(keyFor('chesscom', ''), 'chesscom_');
+    test('empty usernames remain safely namespaced', () {
+      expect(safeTail('import', '').length, 64);
+      expect(keyFor('import', ''), isNot(keyFor('chesscom', '')));
     });
 
-    test('whitespace-only username folds to underscores', () {
-      expect(keyFor('import', '   '), 'import____');
+    test('whitespace-only username has a distinct safe key', () {
+      expect(safeTail('import', '   ').length, 64);
+      expect(keyFor('import', '   '), isNot(keyFor('import', '')));
     });
 
     test('very long username does not crash and stays in-alphabet', () {
       final longName = 'A/../' * 5000; // 25k chars of hostile input
       final tail = safeTail('import', longName);
       expect(tail, matches(RegExp(r'^[a-z0-9_-]*$')));
-      // Derivation must not truncate silently mid-string; length is preserved
-      // (filesystem length limits are a separate, graceful write-time failure).
-      expect(tail.length, longName.length);
+      // Long names cannot exceed the filesystem component length limit.
+      expect(tail.length, 64);
     });
 
     test('case folding collapses names differing only in case', () {
       expect(keyFor('chesscom', 'Hikaru'), keyFor('chesscom', 'hikaru'));
-      expect(keyFor('chesscom', 'HIKARU'), 'chesscom_hikaru');
+      expect(keyFor('chesscom', 'HIKARU'), keyFor('chesscom', 'hikaru'));
     });
 
     // Reserved Windows device names (CON, NUL, PRN, AUX, COM1, LPT1) survive
     // the allowlist as-is, BUT the mandatory "<platform>_" prefix means the
     // on-disk basename is e.g. "import_con.pgn" — not the reserved "con" — so
     // no Windows reserved-name collision is reachable. Pin that here.
-    test('reserved windows names are shielded by the platform prefix', () {
+    test('reserved Windows names produce safe opaque keys', () {
       for (final reserved in ['CON', 'NUL', 'PRN', 'AUX', 'COM1', 'LPT1']) {
         final key = keyFor('import', reserved);
-        expect(key, 'import_${reserved.toLowerCase()}');
+        expect(key, startsWith('player-'));
         // The base name is not itself a reserved device name.
         expect(
           ['con', 'nul', 'prn', 'aux', 'com1', 'lpt1'].contains(key),

@@ -575,7 +575,7 @@ Future<_GameMineOutcome?> _analyzeGameParallel({
 
   return _GameMineOutcome(
     positions: positions,
-    dedupKey: dedupKeyForHeaders(game.headers),
+    dedupKey: dedupKeyForHeaders(game.headers, pgn: gameText),
     inaccuracies: inaccuracies,
     mistakes: mistakes,
     blunders: blunders,

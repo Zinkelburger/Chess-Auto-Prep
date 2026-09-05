@@ -154,7 +154,7 @@ final class EditStudy extends PendingHandoff {
 /// A handoff normally carries a question, not just a file: "how did this game
 /// go" (game), "where did it leave my book" (line), "what did the engine make
 /// of it" (analysis). The viewer opens on the tab that answers the one asked.
-enum PgnViewerTab { game, line, analysis }
+enum PgnViewerTab { game, line, explorer, analysis }
 
 /// Open a PGN collection in the PGN Viewer.
 final class OpenPgnViewer extends PendingHandoff {

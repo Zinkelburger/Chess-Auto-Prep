@@ -32,8 +32,9 @@ const _ratingBuckets = [
 
 /// All-in-one Lichess DB selection widget.
 ///
-/// Renders the database toggle (Lichess / Masters), speed filter chips,
-/// rating filter chips, and an optional min-games field.
+/// Renders the database toggle (Lichess / Masters, and TWIC when the caller
+/// has a local database to offer), speed filter chips, rating filter chips,
+/// and an optional min-games field.
 class LichessDbSelector extends StatelessWidget {
   const LichessDbSelector({
     super.key,
@@ -46,10 +47,22 @@ class LichessDbSelector extends StatelessWidget {
     this.minGamesController,
     this.enabled = true,
     this.compact = false,
+    this.showTwic = false,
+    this.classicalOnly = false,
+    this.onClassicalOnlyChanged,
   });
 
   final LichessDatabase database;
   final ValueChanged<LichessDatabase> onDatabaseChanged;
+
+  /// Offer the master-games database on this machine as a third source.
+  final bool showTwic;
+
+  /// TWIC's one filter: classical over-the-board games only.  Shown when
+  /// [database] is [LichessDatabase.twic] and [onClassicalOnlyChanged] is
+  /// given.
+  final bool classicalOnly;
+  final ValueChanged<bool>? onClassicalOnlyChanged;
 
   final Set<String> selectedSpeeds;
   final ValueChanged<Set<String>> onSpeedsChanged;
@@ -97,17 +110,24 @@ class LichessDbSelector extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         SegmentedButton<LichessDatabase>(
-          segments: const [
-            ButtonSegment(
+          segments: [
+            const ButtonSegment(
               value: LichessDatabase.lichess,
               label: Text('Lichess'),
               icon: Icon(Icons.computer, size: 16),
             ),
-            ButtonSegment(
+            const ButtonSegment(
               value: LichessDatabase.masters,
               label: Text('Masters'),
               icon: Icon(Icons.star, size: 16),
             ),
+            if (showTwic)
+              const ButtonSegment(
+                value: LichessDatabase.twic,
+                label: Text('TWIC'),
+                icon: Icon(Icons.storage, size: 16),
+                tooltip: 'Master games from The Week in Chess, on this machine',
+              ),
           ],
           selected: {database},
           onSelectionChanged: enabled
@@ -121,6 +141,28 @@ class LichessDbSelector extends StatelessWidget {
           _buildSpeedSection(theme),
           const SizedBox(height: 12),
           _buildRatingSection(theme),
+        ],
+
+        // Over half of TWIC is online blitz, so "classical over the board
+        // only" is the one filter the local database needs.
+        if (database == LichessDatabase.twic &&
+            onClassicalOnlyChanged != null) ...[
+          const SizedBox(height: 8),
+          FilterChip(
+            label: Text(
+              'Classical OTB only',
+              style: TextStyle(fontSize: compact ? 11 : 12),
+            ),
+            tooltip:
+                'Count only classical over-the-board games; leave out '
+                'online and rapid/blitz events',
+            selected: classicalOnly,
+            onSelected: enabled ? onClassicalOnlyChanged : null,
+            visualDensity: compact ? VisualDensity.compact : null,
+            materialTapTargetSize: compact
+                ? MaterialTapTargetSize.shrinkWrap
+                : null,
+          ),
         ],
 
         // Min games (applies to both Lichess and Masters)

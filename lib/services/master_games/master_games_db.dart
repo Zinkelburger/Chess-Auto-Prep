@@ -62,6 +62,14 @@ class BookMove {
   /// that has not had `rebuildClassicalCitations` run over it).
   final int topClassicalGameId;
 
+  /// The same counts over classical over-the-board games only (v4).  Zero on
+  /// a database whose classical index has not been built yet — see
+  /// [MasterGamesDb.classicalCountsComplete].
+  final int classicalGames;
+  final int classicalWhiteWins;
+  final int classicalDraws;
+  final int classicalBlackWins;
+
   /// The game to cite for this move.
   ///
   /// A citation is a claim about theory, so it prefers the strongest
@@ -83,10 +91,37 @@ class BookMove {
     required this.topGameId,
     required this.recentGameId,
     this.topClassicalGameId = 0,
+    this.classicalGames = 0,
+    this.classicalWhiteWins = 0,
+    this.classicalDraws = 0,
+    this.classicalBlackWins = 0,
   });
 
   /// Score for White in [0, 1].
   double get whiteScore => games == 0 ? 0.5 : (whiteWins + draws / 2) / games;
+
+  /// This move as seen through classical over-the-board games only: the
+  /// same row with the online and speed games taken out.  Null when no
+  /// classical game played it.
+  BookMove? get classicalOnly => classicalGames == 0
+      ? null
+      : BookMove(
+          uci: uci,
+          games: classicalGames,
+          whiteWins: classicalWhiteWins,
+          draws: classicalDraws,
+          blackWins: classicalBlackWins,
+          averageElo: averageElo,
+          maxElo: maxElo,
+          lastYear: lastYear,
+          topGameId: topClassicalGameId != 0 ? topClassicalGameId : topGameId,
+          recentGameId: recentGameId,
+          topClassicalGameId: topClassicalGameId,
+          classicalGames: classicalGames,
+          classicalWhiteWins: classicalWhiteWins,
+          classicalDraws: classicalDraws,
+          classicalBlackWins: classicalBlackWins,
+        );
 }
 
 /// One stored game.  [movetext] is the SAN movetext as imported (move
@@ -245,7 +280,7 @@ class MasterGamesDb {
 
   Database get raw => _db;
 
-  static const int _schemaVersion = 3;
+  static const int _schemaVersion = 4;
 
   static void _migrate(Database db) {
     final v = db.select('PRAGMA user_version').first.columnAt(0) as int;
@@ -304,6 +339,10 @@ class MasterGamesDb {
         recent_game INTEGER NOT NULL,
         top_classical_game INTEGER NOT NULL DEFAULT 0,
         classical_max_elo INTEGER NOT NULL DEFAULT 0,
+        classical_games INTEGER NOT NULL DEFAULT 0,
+        classical_white_wins INTEGER NOT NULL DEFAULT 0,
+        classical_draws INTEGER NOT NULL DEFAULT 0,
+        classical_black_wins INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY(pos, move)
       ) WITHOUT ROWID;
 
@@ -319,8 +358,63 @@ class MasterGamesDb {
       );
     ''');
     _migrateToV3(db, from: v);
+    _migrateToV4(db, from: v);
     db.execute('PRAGMA user_version = $_schemaVersion');
   }
+
+  /// v3 → v4: classical-only counts.
+  ///
+  /// The book aggregates every game that played a move, and over half of
+  /// them are online.  An explorer that can show "classical over the board
+  /// only" needs the split kept per row, so v4 adds four count columns that
+  /// the importer fills from here on.  Rows imported before v4 stay at zero
+  /// until `rebuildClassicalCitations` replays the classical games — the
+  /// same deliberate maintenance pass that backfills v3's citations — and
+  /// [classicalCountsComplete] says whether that has happened.
+  static void _migrateToV4(Database db, {required int from}) {
+    if (from >= 4) return;
+    if (!_hasColumn(db, 'book', 'classical_games')) {
+      for (final column in const [
+        'classical_games',
+        'classical_white_wins',
+        'classical_draws',
+        'classical_black_wins',
+      ]) {
+        db.execute(
+          'ALTER TABLE book ADD COLUMN $column INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+    }
+    // A database with no games yet has nothing to backfill: its counts are
+    // complete by construction, and the importer keeps them so.
+    final games = db.select('SELECT COUNT(*) FROM games').first.columnAt(0);
+    db.execute('INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)', [
+      kClassicalCountsKey,
+      games == 0 ? _kComplete : _kIncomplete,
+    ]);
+  }
+
+  /// `meta` key recording whether every book row's classical counts are
+  /// trustworthy: [_kComplete] once a database has been imported entirely
+  /// under v4 or the rebuild pass has finished, [_kIncomplete] otherwise.
+  static const String kClassicalCountsKey = 'classical_counts';
+  static final List<int> _kComplete = 'complete'.codeUnits;
+  static final List<int> _kIncomplete = 'incomplete'.codeUnits;
+
+  /// Whether the classical-only counts cover the whole book.
+  ///
+  /// True for a database created under v4 or one whose rebuild pass has
+  /// finished; false for a database migrated from an earlier version until
+  /// then.  A missing key reads as true so a v4 file written by another tool
+  /// is not told to rebuild.
+  bool get classicalCountsComplete {
+    final value = metaBlob(kClassicalCountsKey);
+    if (value == null) return true;
+    return String.fromCharCodes(value) == 'complete';
+  }
+
+  set classicalCountsComplete(bool complete) =>
+      putMetaBlob(kClassicalCountsKey, complete ? _kComplete : _kIncomplete);
 
   /// v2 → v3: citation authority.
   ///
@@ -422,7 +516,9 @@ class MasterGamesDb {
   List<BookMove> bookMoves(String fen) {
     final rows = _db.select(
       'SELECT move, games, white_wins, draws, black_wins, elo_sum, elo_n, '
-      'max_elo, last_year, top_game, recent_game, top_classical_game '
+      'max_elo, last_year, top_game, recent_game, top_classical_game, '
+      'classical_games, classical_white_wins, classical_draws, '
+      'classical_black_wins '
       'FROM book WHERE pos = ? ORDER BY games DESC, max_elo DESC',
       [positionKey(fen)],
     );
@@ -442,6 +538,10 @@ class MasterGamesDb {
           topGameId: r.columnAt(9) as int,
           recentGameId: r.columnAt(10) as int,
           topClassicalGameId: r.columnAt(11) as int,
+          classicalGames: r.columnAt(12) as int,
+          classicalWhiteWins: r.columnAt(13) as int,
+          classicalDraws: r.columnAt(14) as int,
+          classicalBlackWins: r.columnAt(15) as int,
         ),
     ];
   }

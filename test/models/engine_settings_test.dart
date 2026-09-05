@@ -13,6 +13,15 @@ void main() {
   });
 
   group('EngineSettings defaults', () {
+    test('new and reset settings use one worker and one inline thread', () {
+      final fresh = EngineSettings.fresh();
+      addTearDown(fresh.dispose);
+      expect(fresh.workers, 1);
+      expect(fresh.inlineThreads, 1);
+      expect(settings.workers, 1);
+      expect(settings.inlineThreads, 1);
+    });
+
     test('depth defaults to kDefaultDepth', () {
       expect(settings.depth, kDefaultDepth);
     });
@@ -83,12 +92,16 @@ void main() {
       SharedPreferences.setMockInitialValues({
         'engine_settings.depth': 25,
         'engine_settings.multi_pv': 5,
+        'engine_settings.workers': EngineSettings.systemCores,
+        'engine_settings.inline_threads': EngineSettings.systemCores,
       });
 
       await settings.loadFromPrefs();
 
       expect(settings.depth, 25);
       expect(settings.multiPv, 5);
+      expect(settings.workers, EngineSettings.systemCores);
+      expect(settings.inlineThreads, EngineSettings.systemCores);
     });
 
     test('loadFromPrefs uses defaults for missing keys', () async {
@@ -98,6 +111,8 @@ void main() {
 
       expect(settings.depth, kDefaultDepth);
       expect(settings.multiPv, kDefaultMultiPv);
+      expect(settings.workers, 1);
+      expect(settings.inlineThreads, 1);
     });
   });
 }

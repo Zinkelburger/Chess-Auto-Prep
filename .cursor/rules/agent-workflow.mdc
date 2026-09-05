@@ -1,0 +1,11 @@
+---
+description: Local agent resource and verification workflow
+alwaysApply: true
+---
+
+Follow the Local agent workflow in AGENTS.md. Use an isolated worktree,
+focused local tests through scripts/ci.sh, and scripts/app_driver.py for
+headless app checks. Full PR checks run in GitHub CI. Do not open windows on
+the user's display unless requested or needed for native desktop behavior.
+One task, one commit: squash a branch's intermediate commits before handing
+the work back (see Committing in AGENTS.md).

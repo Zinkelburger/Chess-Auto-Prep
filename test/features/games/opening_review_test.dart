@@ -230,6 +230,27 @@ void main() {
       expect(matchingBookLines(lines, ['e4', 'c5']), isEmpty);
     });
 
+    test('a variation through the prefix matches, by move not spelling', () {
+      final study = RepertoireLine(
+        id: 'study',
+        name: 'study',
+        moves: ['e4', 'e5', 'Nf3'],
+        color: 'white',
+        startPosition: Chess.initial,
+        fullPgn:
+            '[Event "S"]\n[Result "*"]\n\n'
+            '1. e4 e5 (1... c5 2. Ngf3 d6 3. Bb5+ Bd7) 2. Nf3 *',
+      );
+      expect(
+        matchingBookLines(
+          [study],
+          ['e4', 'c5', 'Nf3', 'd6', 'Bb5'],
+        ).map((l) => l.name),
+        ['study'],
+      );
+      expect(matchingBookLines([study], ['e4', 'c6']), isEmpty);
+    });
+
     test('skips model games — illustration is not your book', () {
       final lines = [
         line('Kasparov – Karpov', [

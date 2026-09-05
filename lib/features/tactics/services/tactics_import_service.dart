@@ -9,6 +9,7 @@ import '../models/tactics_note.dart';
 import '../models/tactics_position.dart';
 import 'tactics_engine.dart';
 import '../../../services/game_store/game_store.dart';
+import '../../../services/game_identity.dart' show platformGameUrl;
 import '../../../services/game_store/game_store_service.dart';
 import '../../../models/engine_settings.dart';
 import '../../../services/engine/stockfish_pool.dart';
@@ -113,16 +114,17 @@ class TacticsImportService {
     final ids = <String>{};
     final storage = StorageFactory.instance;
     final gameIdRe = RegExp(r'\[GameId "([^"]+)"\]');
-    try {
-      for (final set in await storage.listTacticsSets()) {
-        final content = await storage.readFile(set.filePath);
-        if (content == null) continue;
-        for (final match in gameIdRe.allMatches(content)) {
-          ids.add(match.group(1)!);
-        }
+    for (final path in [
+      for (final set in await storage.listTacticsSets()) set.filePath,
+      for (final study in await storage.listStudyFiles()) study.filePath,
+    ]) {
+      final content = await storage.readFile(path);
+      if (content == null) {
+        throw StateError('Tactics reference file disappeared: $path');
       }
-    } catch (e) {
-      if (kDebugMode) log.w('Reading tactic gameIds for prune failed: $e');
+      for (final match in gameIdRe.allMatches(content)) {
+        ids.add(match.group(1)!);
+      }
     }
     return ids;
   }
@@ -136,6 +138,7 @@ class TacticsImportService {
   /// game and is what prevents re-analysis when an overlapping date range
   /// is fetched again later.
   Future<int> pruneStoredPgns({DateTime? since}) async {
+    if (_database.loadError != null) throw StateError(_database.loadError!);
     final store = await GameStoreService.instance.open();
     final games = store.summaries(GameCollections.tactics);
     if (games.isEmpty) return 0;
@@ -536,6 +539,7 @@ class TacticsImportService {
       if (kDebugMode) {
         log.e('Error saving PGNs: $e');
       }
+      rethrow;
     }
   }
 
@@ -596,7 +600,9 @@ class TacticsImportService {
       final gameId = _extractGameId(games[i]);
       final forced =
           forceDedupKeys.isNotEmpty &&
-          forceDedupKeys.contains(dedupKeyForHeaders(extractHeaders(games[i])));
+          forceDedupKeys.contains(
+            dedupKeyForHeaders(extractHeaders(games[i]), pgn: games[i]),
+          );
       if (skipAnalyzedGames && !forced && _isGameAnalyzed(gameId)) {
         skippedCount++;
         if (kDebugMode) log.w('Skipping already-analyzed game: $gameId');
@@ -723,11 +729,14 @@ class TacticsImportService {
           },
         );
         if (_cancelled) break;
-        final gamePositions = outcome?.positions ?? const <TacticsPosition>[];
+        if (outcome == null) continue;
+        final gamePositions = outcome.positions;
         positions.addAll(gamePositions);
         totalPositionsFound += gamePositions.length;
 
-        // Persist positions BEFORE marking game analyzed so a
+        await _database.commitAnalyzedGame(gameId, gamePositions);
+
+        // Puzzles and completion markers are already durable. A
         // mid-analysis app close doesn't permanently skip this game.
         if (gamePositions.isNotEmpty && onPositionFound != null) {
           for (final pos in gamePositions) {
@@ -736,7 +745,7 @@ class TacticsImportService {
         }
         // The same pass that found the puzzles also knows how messy the game
         // was; report it so the games list never needs a second engine pass.
-        if (outcome != null) {
+        {
           onGameReviewed?.call(
             outcome.dedupKey,
             ReviewCounts(
@@ -752,9 +761,9 @@ class TacticsImportService {
             onGameAnnotated?.call(outcome.dedupKey, annotated);
           }
         }
-        await _database.markGameAnalyzed(gameId);
       } catch (e) {
         if (_cancelled) break;
+        if (_database.lastWriteError != null) rethrow;
         if (kDebugMode) log.e('Error analyzing game $gameId: $e');
       }
 

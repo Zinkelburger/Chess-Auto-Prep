@@ -15,7 +15,9 @@
 ///   analysed is thrown away.
 /// * **Settings are not on the block.** Auto-start, cores, depth, window and
 ///   time controls are one gear dialog. The block carries only what you can
-///   do next and what is happening.
+///   do next and what is happening — plus one read-out beside the gear, the
+///   core count, because how much of the laptop the run takes is something
+///   to see without opening anything.
 /// * **Static.** Every control is always present; labels, enabled states and
 ///   the progress bar change.
 library;
@@ -24,10 +26,11 @@ import 'package:flutter/material.dart';
 
 import '../../tactics/services/tactics_import_coordinator.dart';
 import '../../../theme/app_colors.dart';
+import '../../../utils/system_info.dart';
 import '../services/opening_review.dart';
 import '../../../theme/app_text_styles.dart';
 import '../services/home_review_runner.dart';
-import 'home_block.dart';
+import '../../../widgets/common/home_block.dart';
 
 class AnalysisBlock extends StatelessWidget {
   const AnalysisBlock({
@@ -70,6 +73,23 @@ class AnalysisBlock extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Rebuilt on its own: the runner relays engine-settings changes,
+          // so the number moves when Settings or the gear dialog change it,
+          // whatever hosts this block.
+          ListenableBuilder(
+            listenable: runner,
+            builder: (context, _) => Tooltip(
+              message:
+                  'Stockfish runs on ${runner.cores} of ${getLogicalCores()} '
+                  'cores at depth ${runner.depth}. Change it in Analysis '
+                  'settings.',
+              child: Text(
+                '${runner.cores} ${runner.cores == 1 ? 'core' : 'cores'}',
+                key: const Key('review-cores-readout'),
+                style: AppTextStyles.caption,
+              ),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.settings, size: 18),
             tooltip: 'Analysis settings…',
@@ -124,12 +144,13 @@ class AnalysisBlock extends StatelessWidget {
     return gamesInWindow > 0 ? 'Check for new games' : 'Download and analyse';
   }
 
-  /// This is a background job, not an interactive review session. Match the
-  /// icon to the work it will do so the triangle remains reserved for places
-  /// where the user is about to play or step through something themselves.
+  /// Pause and play are a pair: a button that reads "Pause" while running
+  /// shows the triangle when it will start or carry on the run. Checking for
+  /// new games and the first download are different work and keep their own
+  /// icons.
   IconData _transportIcon(bool running) {
     if (running) return Icons.pause;
-    if (unreviewedCount > 0) return Icons.analytics_outlined;
+    if (unreviewedCount > 0) return Icons.play_arrow;
     if (gamesInWindow > 0) return Icons.refresh;
     return Icons.download_outlined;
   }
@@ -245,7 +266,7 @@ class OpeningsBlock extends StatelessWidget {
     required this.windowLabel,
     required this.onOpeningReview,
     required this.masterGameCount,
-    required this.onBrowseMasterGames,
+    required this.onMasterPractice,
     this.repeated = const [],
     this.onFixEntry,
   });
@@ -261,7 +282,7 @@ class OpeningsBlock extends StatelessWidget {
   /// Games in the local TWIC database; zero disables the browse button rather
   /// than hiding it, so the block keeps the same shape either way.
   final int masterGameCount;
-  final VoidCallback onBrowseMasterGames;
+  final VoidCallback onMasterPractice;
 
   /// Deviation points more than one game walked into, most-repeated first
   /// (see `OpeningReviewData.repeated`). Listed under the buttons so the
@@ -318,21 +339,23 @@ class OpeningsBlock extends StatelessWidget {
         const SizedBox(height: 6),
         Tooltip(
           message: masterGameCount > 0
-              ? 'Search the master games on this machine, or see which of '
-                    'them walked into your books'
-              : 'Download The Week in Chess in settings first',
+              ? 'See where your $windowLabel left master practice, what '
+                    'masters play there instead, and the games worth opening'
+              : 'Download The Week in Chess on the Databases page first',
           child: SizedBox(
             width: double.infinity,
             height: 40,
             child: OutlinedButton(
-              key: const Key('master-games-browse-button'),
-              onPressed: masterGameCount > 0 ? onBrowseMasterGames : null,
+              key: const Key('master-practice-button'),
+              onPressed: masterGameCount > 0 && gamesInWindow > 0
+                  ? onMasterPractice
+                  : null,
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.ink,
                 side: const BorderSide(color: AppColors.outline),
               ),
               child: const Text(
-                'Master games',
+                'Vs. master practice',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),

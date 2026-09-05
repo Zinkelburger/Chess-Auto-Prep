@@ -1,3 +1,5 @@
+import '../utils/training_csv.dart';
+
 class RepertoireMoveProgress {
   final String repertoireId;
   final String lineId;
@@ -24,18 +26,18 @@ class RepertoireMoveProgress {
   }
 
   String toCsvRow() {
-    return [
+    return encodeTrainingRow([
       repertoireId,
       lineId,
       moveIndex.toString(),
       correctStreak.toString(),
       learned ? '1' : '0',
-    ].join(',');
+    ]);
   }
 
   static RepertoireMoveProgress fromCsvRow(String row) {
-    final cells = row.split(',').map((c) => c.trim()).toList();
-    if (cells.length < 5) {
+    final cells = decodeTrainingRow(row, 5);
+    if (cells.length != 5) {
       throw FormatException('Invalid move progress row: $row');
     }
     return RepertoireMoveProgress(

@@ -322,7 +322,11 @@ class _MatchView extends StatelessWidget {
                   names: match.config.participantNames,
                   crosstable: buildCrosstable(
                     match.config.participantNames,
-                    List<CrosstableGame>.from(match.games),
+                    List<CrosstableGame>.from(
+                      match.games.where(
+                        (game) => game.result != GameResult.unfinished,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -355,7 +359,7 @@ class _MatchView extends StatelessWidget {
   static String _crosstableSummary(StoredBughouseTournament match) {
     final names = match.config.participantNames;
     if (names.length < 2) return 'Not enough teams';
-    return '${names[0]} vs ${names[1]} · ${match.gamesPlayed} games';
+    return '${names[0]} vs ${names[1]} · ${match.openingScore.played} finished games';
   }
 }
 
@@ -401,7 +405,7 @@ class _OpeningScore extends StatelessWidget {
               Expanded(
                 child: Text(
                   '${(fraction * 100).toStringAsFixed(0)}%'
-                  '${margin == null ? '' : ' ±${(margin * 100).toStringAsFixed(0)}'}'
+                  ''
                   '  ·  ${score.wins}W ${score.draws}D ${score.losses}L',
                   style: AppTextStyles.muted,
                   overflow: TextOverflow.ellipsis,
@@ -409,6 +413,28 @@ class _OpeningScore extends StatelessWidget {
               ),
           ],
         ),
+        if (margin != null)
+          Tooltip(
+            message:
+                'Conservative 95% sampling bound for independent games. '
+                'Repeated self-play may be correlated; this is not a confidence '
+                'interval for the objective strength of the opening.',
+            child: Text(
+              'Sampling range: ${((fraction - margin).clamp(0, 1) * 100).round()}–'
+              '${((fraction + margin).clamp(0, 1) * 100).round()}%',
+              style: AppTextStyles.muted,
+            ),
+          ),
+        if (match.gamesPlayed > score.played)
+          Text(
+            '${match.gamesPlayed - score.played} unfinished games excluded',
+            style: AppTextStyles.muted,
+          ),
+        if (score.draws > 0)
+          Text(
+            '${match.games.where((g) => g.termination == TerminationReason.maxMoves || g.termination == TerminationReason.mutualSitting).length} draws by move limit or mutual sitting',
+            style: AppTextStyles.muted,
+          ),
       ],
     );
   }

@@ -3,11 +3,18 @@
 library;
 
 ///
-/// Three questions, in the order you would ask them out loud: which site,
-/// whose account, how much. Each answer is one control. It used to ask the
-/// same three things with a pair of radio tiles carrying identical
-/// subtitles, and a range picked by a slider *and* a number box *and* a
-/// running caption *and* a help line — four widgets for one integer.
+/// Four questions, in the order you would ask them out loud: which site,
+/// whose account, how much, which kind of games. Each answer is one control.
+/// It used to ask the first three with a pair of radio tiles carrying
+/// identical subtitles, and a range picked by a slider *and* a number box
+/// *and* a running caption *and* a help line — four widgets for one integer.
+///
+/// The fourth question is the time controls. Bullet is off by default — it
+/// used to be skipped outright, with a caption saying so and no way to
+/// change it — because bullet games are mostly premoves and flags. But a
+/// bullet player's opponent wants exactly those games, so it is a choice.
+/// The choice is remembered between downloads and travels with the saved
+/// game-set, so "download the latest games" keeps fetching the same kind.
 ///
 /// Pops with an [AnalysisPlayerInfo], or `null` if the user cancels.
 
@@ -18,8 +25,11 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/analysis_player_info.dart';
+import '../services/games_library/game_filter.dart';
+import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
+import 'analysis/time_control_picker.dart';
 
 /// How the amount to download is specified.
 enum _DownloadMode { months, games }
@@ -34,11 +44,17 @@ class AnalysisDownloadDialog extends StatefulWidget {
   /// happens to be filled.
   final String? initialPlatform;
 
+  /// The time controls to start from. Pass a saved player's own when the
+  /// dialog re-downloads them, so changing the range does not silently reset
+  /// their filter; otherwise the last choice made in this dialog is used.
+  final Set<GameSpeed>? initialSpeeds;
+
   const AnalysisDownloadDialog({
     super.key,
     this.chesscomUsername,
     this.lichessUsername,
     this.initialPlatform,
+    this.initialSpeeds,
   });
 
   @override
@@ -54,10 +70,15 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
 
   String? _usernameError;
   String? _amountError;
+  bool _speedsError = false;
 
   static const _keyMode = 'analysis_download.mode';
   static const _keyMonths = 'analysis_download.months';
   static const _keyMaxGames = 'analysis_download.max_games';
+
+  late Set<GameSpeed> _speeds = {
+    ...widget.initialSpeeds ?? defaultDownloadSpeeds,
+  };
 
   /// Remembered separately per mode, so flipping the toggle back and forth
   /// does not overwrite "24 months" with "100 games".
@@ -109,6 +130,11 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
       _maxGames = _atLeastOne(prefs.getInt(_keyMaxGames)) ?? _maxGames;
       _amountController.text = '$_amount';
     });
+    // A player's own filter outranks the remembered one.
+    if (widget.initialSpeeds != null) return;
+    final saved = await DownloadSpeedsMemory.load();
+    if (!mounted || saved == null) return;
+    setState(() => _speeds = saved);
   }
 
   static int? _atLeastOne(int? value) =>
@@ -122,6 +148,7 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
     );
     await prefs.setInt(_keyMonths, _months);
     await prefs.setInt(_keyMaxGames, _maxGames);
+    await DownloadSpeedsMemory.save(_speeds);
   }
 
   // ── Callbacks ────────────────────────────────────────────────────
@@ -162,6 +189,13 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
     });
   }
 
+  void _onSpeedsChanged(Set<GameSpeed> speeds) {
+    setState(() {
+      _speeds = speeds;
+      if (_speeds.isNotEmpty) _speedsError = false;
+    });
+  }
+
   void _onDownload() {
     final username = _usernameController.text.trim();
     final amount = int.tryParse(_amountController.text.trim());
@@ -173,8 +207,9 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
                 ? AppMessages.invalidMonths
                 : AppMessages.invalidGameCount)
           : null;
+      _speedsError = _speeds.isEmpty;
     });
-    if (_usernameError != null || _amountError != null) return;
+    if (_usernameError != null || _amountError != null || _speedsError) return;
 
     unawaited(_savePrefs());
     Navigator.of(context).pop(
@@ -183,8 +218,20 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
         username: username,
         maxGames: _mode == _DownloadMode.games ? _maxGames : 100,
         monthsBack: _mode == _DownloadMode.months ? _months : null,
+        speeds: {..._speeds},
       ),
     );
+  }
+
+  /// One sentence saying what the form will fetch, so the four controls
+  /// above it can be checked against plain English before pressing Download.
+  String get _summary {
+    final range = _mode == _DownloadMode.months
+        ? 'Every game they played in the last $_months '
+              'month${_months == 1 ? '' : 's'}'
+        : 'Their last $_maxGames game${_maxGames == 1 ? '' : 's'}';
+    if (_speeds.isEmpty) return '$range — pick at least one time control.';
+    return '$range, at ${gameSpeedsPhrase(_speeds)}.';
   }
 
   // ── Build ────────────────────────────────────────────────────────
@@ -267,14 +314,15 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
                   onSubmitted: (_) => _onDownload(),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 24),
+              TimeControlPicker(speeds: _speeds, onChanged: _onSpeedsChanged),
+              const SizedBox(height: 12),
               Text(
-                _mode == _DownloadMode.months
-                    ? 'Every game they played in the last $_months '
-                          'month${_months == 1 ? '' : 's'}. Bullet is skipped.'
-                    : 'Their last $_maxGames game'
-                          '${_maxGames == 1 ? '' : 's'}. Bullet is skipped.',
-                style: AppTextStyles.caption,
+                _summary,
+                key: const Key('download-summary'),
+                style: _speedsError
+                    ? AppTextStyles.caption.copyWith(color: AppColors.danger)
+                    : AppTextStyles.caption,
               ),
             ],
           ),

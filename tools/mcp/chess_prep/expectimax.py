@@ -599,7 +599,7 @@ def builder_argv(chain: dict, base: Path, position: dict, args: dict) -> list[st
 
     add("-d", "plies", 8)
     add("-e", "eval_depth", 16)
-    add("-t", "threads", max(1, (os.cpu_count() or 2) - 1))
+    add("-t", "threads", 1)
     add("-p", "min_probability", 0.01, float)
     add("--our-multipv", "multipv", 5)
     add("--max-eval-loss", "max_eval_loss", 40)
@@ -973,7 +973,7 @@ def register_expectimax_tools(registry: Any) -> None:
                     "(default 0.01)."
                 ),
                 "threads": _i(
-                    "Parallel Stockfish engines (default: cores minus one)."
+                    "Parallel Stockfish engines (default 1; increase to use more CPU)."
                 ),
             }
         ),

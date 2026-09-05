@@ -63,10 +63,11 @@ class _TrainingResultsPanelState extends State<TrainingResultsPanel> {
   bool get _shouldAutoRate =>
       !widget.settings.showRatingButtons || widget.hadLearnPhaseThisSession;
 
-  ReviewRating get _autoRating {
-    if (widget.hadLearnPhaseThisSession) return ReviewRating.good;
-    return widget.lineHadMistake ? ReviewRating.again : ReviewRating.good;
-  }
+  /// A slip counts after the learn walkthrough too: Again schedules the
+  /// line due now, so a capped Learn sitting brings it back before it ends
+  /// instead of filing a line you fumbled as learned.
+  ReviewRating get _autoRating =>
+      widget.lineHadMistake ? ReviewRating.again : ReviewRating.good;
 
   @override
   void didUpdateWidget(TrainingResultsPanel oldWidget) {
@@ -170,7 +171,9 @@ class _TrainingResultsPanelState extends State<TrainingResultsPanel> {
     if (_shouldAutoRate) {
       _scheduleAutoRate();
       final message = widget.hadLearnPhaseThisSession
-          ? 'Line learned — continuing...'
+          ? (widget.lineHadMistake
+                ? 'Learned with mistakes — you will see it again.'
+                : 'Line learned — continuing...')
           : widget.lineHadMistake
           ? 'Scheduling for review...'
           : 'Line complete!';

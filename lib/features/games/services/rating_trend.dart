@@ -37,15 +37,8 @@ class RatingTrendEntry {
   /// Whether the delta means anything (one game has no trend).
   bool get hasTrend => gameCount >= 2;
 
-  String get speedLabel => switch (speed) {
-    GameSpeed.ultraBullet => 'UltraBullet',
-    GameSpeed.bullet => 'Bullet',
-    GameSpeed.blitz => 'Blitz',
-    GameSpeed.rapid => 'Rapid',
-    GameSpeed.classical => 'Classical',
-    GameSpeed.correspondence => 'Correspondence',
-    GameSpeed.unknown => 'Games',
-  };
+  /// Unknown-speed games are just "Games": a trend line needs a noun.
+  String get speedLabel => speed == GameSpeed.unknown ? 'Games' : speed.label;
 
   String get platformLabel =>
       platform == GamesPlatform.chesscom ? 'Chess.com' : 'Lichess';

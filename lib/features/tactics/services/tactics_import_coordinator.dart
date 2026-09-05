@@ -127,13 +127,6 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
   int newPositionsFound = 0;
   TacticsImportService? activeImport;
 
-  /// Streamed finds are buffered and committed in batches — committing per
-  /// position re-encodes and rewrites the whole set file each time, which
-  /// starved the UI thread for the entire import.
-  final List<TacticsPosition> _foundBuffer = [];
-  Timer? _foundFlushTimer;
-  static const _foundFlushInterval = Duration(seconds: 2);
-
   /// Progress/find notifications arrive many times per second during an
   /// import and each one repaints the whole tactics panel; coalesce them.
   Timer? _notifyThrottle;
@@ -157,38 +150,9 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
     });
   }
 
-  /// Commit buffered finds to the database: one notify + one file write per
-  /// batch. Must run before any [TacticsDatabase.loadPositions] (which
-  /// reloads from disk) or the buffered finds would be dropped.
-  Future<void> _flushFoundPositions() async {
-    _foundFlushTimer?.cancel();
-    _foundFlushTimer = null;
-    if (_foundBuffer.isEmpty) return;
-    final batch = List<TacticsPosition>.of(_foundBuffer);
-    _foundBuffer.clear();
-    await database.addPositions(batch);
-  }
-
   @override
   void dispose() {
     _notifyThrottle?.cancel();
-    _foundFlushTimer?.cancel();
-    _foundFlushTimer = null;
-    // Persist any buffered finds before teardown, mid-import or not.
-    // [TacticsDatabase.addPositions] enqueues its file write *synchronously*
-    // onto the database's serialized write queue (see savePositions →
-    // _enqueueWrite), and the database is a longer-lived sibling that outlives
-    // this coordinator, so the write still lands even though dispose can't
-    // await it. Dedup-by-FEN in addPositions makes a double-write harmless, so
-    // we no longer need to skip the flush mid-import (which previously left a
-    // window where a coordinator torn down during an import dropped its
-    // buffered finds). Only a hard process kill inside the write window can
-    // still lose them — unavoidable from a synchronous dispose.
-    if (_foundBuffer.isNotEmpty) {
-      final batch = List<TacticsPosition>.of(_foundBuffer);
-      _foundBuffer.clear();
-      unawaited(database.addPositions(batch));
-    }
     super.dispose();
   }
 
@@ -281,7 +245,6 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
         onGameAnnotated: onGameAnnotated,
       );
 
-      await _flushFoundPositions();
       await database.loadPositions();
       // Cancelled: clear the "Pausing…" note instead of claiming success.
       importStatus = importService.wasCancelled ? null : _statusMessage(result);
@@ -292,7 +255,6 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
       _endJob(cancelled: importService.wasCancelled);
       // On an abnormal exit the try block never flushed — persist what the
       // cancelled/failed run found so far.
-      await _flushFoundPositions();
       activeImport = null;
       isImporting = false;
       isCancelling = false;
@@ -388,7 +350,6 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
         );
       }
 
-      await _flushFoundPositions();
       await database.loadPositions();
       // A cancelled run must not look like a completed one: no success
       // banner, and `false` so callers (auto-fetch, manual import) don't
@@ -406,7 +367,6 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
       _endJob(cancelled: importService.wasCancelled);
       // On an abnormal exit the try block never flushed — persist what the
       // cancelled/failed run found so far.
-      await _flushFoundPositions();
       activeImport = null;
       isImporting = false;
       isCancelling = false;
@@ -443,12 +403,8 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
   }
 
   Future<void> _onPositionFound(TacticsPosition position) async {
-    _foundBuffer.add(position);
+    // The service has committed this game before sending notifications.
     newPositionsFound++;
-    _foundFlushTimer ??= Timer(_foundFlushInterval, () {
-      _foundFlushTimer = null;
-      unawaited(_flushFoundPositions());
-    });
     _notifyThrottled();
   }
 

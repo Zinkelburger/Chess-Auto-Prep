@@ -97,23 +97,15 @@ fi
 # --------------------------------------------------------------------------
 hdr "Shared machine"
 # --------------------------------------------------------------------------
-LOCK=${CHESS_PREP_LOCK:-/tmp/chess-auto-prep-flutter.lock}
-if ! flock -n "$LOCK" true 2>/dev/null; then
-  lock_owner=""
-  [[ -r "$LOCK.holder" ]] && lock_owner=$(awk '{print $2}' "$LOCK.holder")
-  # A lock outliving its owner is the failure that cost this machine 45
-  # minutes on 2026-09-04: `flutter test` was killed, its test isolates
-  # survived holding the inherited lock fd, and every agent queued behind a
-  # holder that had been dead for the whole time. ci.sh no longer leaks the fd,
-  # so this should be unreachable — which is exactly why it is worth naming
-  # loudly rather than reporting as an ordinary busy lock.
-  if [[ -n $lock_owner && $lock_owner =~ ^[0-9]+$ ]] && ! kill -0 "$lock_owner" 2>/dev/null; then
-    bad "Flutter lock held by pid $lock_owner, which is GONE — orphans hold it. Run: scripts/ci.sh unlock"
-  else
-    note "Flutter lock held by: $(cat "$LOCK.holder" 2>/dev/null || echo 'an unrecorded job') — heavy jobs will queue behind it"
-  fi
+if resources=$(python3 scripts/agent_job.py status 2>&1); then
+  while IFS= read -r line; do ok "$line"; done <<<"$resources"
 else
-  ok "Flutter lock free"
+  bad "agent resource runner unavailable: $resources"
+fi
+if python3 -c 'import sys; sys.path.insert(0,"scripts"); import agent_job; agent_job.xvfb_binary()' 2>/dev/null; then
+  ok "headless display available"
+else
+  note "headless display missing — scripts/setup_agent_display.sh"
 fi
 
 # One runaway process must not take every session on this machine with it.
@@ -127,11 +119,69 @@ else
   [[ $QUIET -eq 1 ]] || sed 's/^/      /' <<<"$oom"
 fi
 
+# `systemd --user` itself can wedge: every start job "waiting", none running,
+# forever. Twice on 2026-09-04. While it is like that, every `systemd-run
+# --scope` from ci.sh and the driver blocks holding the Flutter lock, and so
+# does anything else that starts a unit (an app launch, a timer). ci.sh now
+# probes and runs uncapped; the fix for the machine is one command.
+if command -v systemctl >/dev/null 2>&1; then
+  jobs=$(timeout 5 systemctl --user list-jobs --no-legend 2>/dev/null)
+  jrc=$?
+  waiting=$(grep -c ' waiting$' <<<"$jobs")
+  running=$(grep -c ' running$' <<<"$jobs")
+  if (( jrc == 124 )); then
+    bad "systemd --user does not answer — every scope start (ci.sh, driver.py, app launches) will hang. Run: systemctl --user daemon-reexec"
+  elif (( waiting > 0 && running == 0 )); then
+    bad "systemd --user has $waiting queued job(s) and none running — its job engine is stuck; scope starts hang holding the Flutter lock. Run: systemctl --user daemon-reexec"
+  else
+    ok "systemd --user is executing jobs ($running running, $waiting waiting)"
+  fi
+fi
+
+# Is the machine itself in trouble? Every one of these preceded a frozen
+# desktop or a dead editor on 2026-09-04, and none of them was visible from
+# inside a session until someone went digging. Read-only, and cheap.
+ncpu=$(nproc)
+load1=$(cut -d' ' -f1 /proc/loadavg)
+if awk -v l="$load1" -v n="$ncpu" 'BEGIN { exit !(l > n) }'; then
+  note "machine saturated: load $load1 on $ncpu cores — top: $(ps -eo pcpu,comm --no-headers --sort=-pcpu | awk 'NR<=3 { printf "%s%s %d%%", (n++ ? ", " : ""), $2, $1 }')"
+else
+  ok "load $load1 on $ncpu cores"
+fi
+swap_pct=$(awk '/^SwapTotal/ {t=$2} /^SwapFree/ {f=$2} END { if (t > 0) printf "%d", (t - f) * 100 / t; else print 0 }' /proc/meminfo)
+CG="/sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service"
+slice_cur=$(cat "$CG/app.slice/memory.current" 2>/dev/null || echo 0)
+slice_max=$(cat "$CG/app.slice/memory.max" 2>/dev/null || echo max)
+if [[ $slice_max =~ ^[0-9]+$ ]] && (( slice_cur * 100 >= slice_max * 95 )); then
+  note "app.slice is at its MemoryMax ($((slice_cur / 1073741824))G of $((slice_max / 1073741824))G) — everything in it is thrashing, and systemd-oomd will kill the biggest scope (the editor) if it stays there. This is the 2026-09-04 16:33 failure; re-run scripts/oom_containment.sh"
+elif (( swap_pct >= 95 )); then
+  note "swap ${swap_pct}% full — pages a cap pushed out earlier; expect stalls when they come back"
+else
+  slice_max_h=$slice_max; [[ $slice_max =~ ^[0-9]+$ ]] && slice_max_h="$((slice_max / 1073741824))G"
+  ok "app.slice $((slice_cur / 1073741824))G of $slice_max_h, swap ${swap_pct}%"
+fi
+kills=$(journalctl -k --since "-6h" --no-pager 2>/dev/null | grep -c "Memory cgroup out of memory")
+oomd=$(journalctl -u systemd-oomd --since "-6h" --no-pager 2>/dev/null | grep -c "Killed ")
+if (( kills + oomd > 0 )); then
+  note "$kills cgroup OOM kill(s) and $oomd systemd-oomd kill(s) in the last 6h — \`scripts/health_log.sh report '6 hours ago'\` shows what died and what was running"
+else
+  ok "no OOM kills in the last 6h"
+fi
+# Wine prefix initialisation hangs sometimes and never exits; each one burns a
+# core forever. Three of them ran for seven hours on 2026-09-04.
+stuck=$(ps -eo etimes,args --no-headers 2>/dev/null | awk '/rundll32\.exe.*wine\.inf/ && $1 > 600 { n++ } END { print n+0 }')
+(( stuck > 0 )) && note "$stuck Wine prefix initialisation(s) stuck for >10 min, burning a core each — kill their wineserver (pkill -f wineserver) if nothing is waiting on them"
+if scripts/health_log.sh status >/dev/null 2>&1; then
+  ok "health log sampling ($(scripts/health_log.sh status 2>/dev/null | sed 's/health timer running //'))"
+else
+  note "no health log — \`scripts/health_log.sh install\` leaves a 30s trail so the next freeze can be explained"
+fi
+
 drv=$(python3 .claude/skills/run-chess-auto-prep/driver.py status 2>/dev/null)
 case "$(python3 -c 'import json,sys; d=json.load(sys.stdin); print("usable" if d.get("usable") else ("stale" if d.get("state",{}).get("status")=="running" else "down"))' <<<"$drv" 2>/dev/null)" in
   usable) ok "app driver running ($(python3 -c 'import json,sys; print(json.load(sys.stdin)["state"].get("src","?"))' <<<"$drv"))" ;;
   stale)  note "app driver state says 'running' but the process is gone — \`driver.py start\` will re-launch" ;;
-  *)      ok "app driver down (start it with driver.py start --worktree)" ;;
+  *)      ok "app driver down (start a headless preview with scripts/app_driver.py start)" ;;
 esac
 
 # --------------------------------------------------------------------------
@@ -161,6 +211,9 @@ contract=(CLAUDE.md .mcp.json .claude/settings.json
           .claude/skills/chess-prep-mcp/mcp_tools.py
           .claude/skills/bughouse-mcp/SKILL.md
           scripts/ci.sh scripts/doctor.sh scripts/hooks/flutter_gate.sh
+          scripts/agent_job.py scripts/app_driver.py scripts/agent_worktree.py
+          scripts/setup_agent_display.sh tools/test_agent_jobs.py
+          scripts/oom_containment.sh scripts/health_log.sh
           lib/debug/agent_driver.dart tools/mcp/chess_prep/__main__.py
           tools/mcp/mcp_stdio.py tools/mcp/bughouse/__main__.py)
 tracked=0
@@ -234,11 +287,6 @@ else
   bad "lint failures (run \`scripts/ci.sh lint\`)"
   [[ $QUIET -eq 1 ]] || sed 's/^/        /' <<<"$lint" | grep -v '── lint greps' | head -10
 fi
-
-CACHE_DIR=${CHESS_PREP_CI_CACHE:-/tmp/chess-auto-prep-ci}
-cached=$(scripts/ci.sh status 2>/dev/null | tail -n +3 | grep -c .)
-[[ $cached -gt 0 ]] && ok "$cached cached gate pass(es) for this exact tree" \
-  || ok "no cached gate passes for this tree — \`scripts/ci.sh\` will run for real"
 
 # --------------------------------------------------------------------------
 printf '\n'

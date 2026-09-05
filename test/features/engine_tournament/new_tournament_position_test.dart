@@ -1,12 +1,12 @@
-/// The starting-position controls in the new-tournament dialog: edit the
-/// board visually, and copy the FEN you ended up with.
+/// The new-tournament dialog: basics first, an empty FEN field that means
+/// the standard start, and everything else behind Advanced.
 library;
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/features/engine_tournament/models/engine_spec.dart';
+import 'package:chess_auto_prep/features/engine_tournament/models/tournament_config.dart';
 import 'package:chess_auto_prep/features/engine_tournament/widgets/new_tournament_dialog.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _engines = [
@@ -17,28 +17,14 @@ const _engines = [
 const _boardFen =
     'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2';
 
-/// Records what the app puts on the clipboard.
-List<String> _captureClipboard(WidgetTester tester) {
-  final copied = <String>[];
-  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-    SystemChannels.platform,
-    (call) async {
-      if (call.method == 'Clipboard.setData') {
-        copied.add((call.arguments as Map)['text'] as String);
-      }
-      return null;
-    },
-  );
-  addTearDown(
-    () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      SystemChannels.platform,
-      null,
-    ),
-  );
-  return copied;
-}
+final _fenField = find.byKey(const ValueKey('new-tournament-fen'));
 
-Future<void> _openDialog(WidgetTester tester) async {
+/// Opens the dialog; the config it returns on Start lands in [result].
+Future<void> _openDialog(
+  WidgetTester tester, {
+  String boardFen = _boardFen,
+  List<TournamentConfig?>? result,
+}) async {
   tester.view.physicalSize = const Size(1600, 1200);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(() {
@@ -47,23 +33,19 @@ Future<void> _openDialog(WidgetTester tester) async {
   });
   await tester.pumpWidget(
     MaterialApp(
-      // `showAppSnackBar` sets an explicit width, which Material asserts is
-      // only legal for a floating snackbar — as the real app's theme says.
-      theme: ThemeData(
-        snackBarTheme: const SnackBarThemeData(
-          behavior: SnackBarBehavior.floating,
-        ),
-      ),
       home: Builder(
         builder: (context) => Scaffold(
           body: Center(
             child: TextButton(
-              onPressed: () => showNewTournamentDialog(
-                context,
-                engines: _engines,
-                boardFen: _boardFen,
-                onManageEngines: () {},
-              ),
+              onPressed: () async {
+                final config = await showNewTournamentDialog(
+                  context,
+                  engines: _engines,
+                  boardFen: boardFen,
+                  onManageEngines: () {},
+                );
+                result?.add(config);
+              },
               child: const Text('open'),
             ),
           ),
@@ -75,17 +57,58 @@ Future<void> _openDialog(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+String _fenText(WidgetTester tester) =>
+    tester.widget<TextField>(_fenField).controller!.text;
+
 void main() {
-  testWidgets('Copy puts the FEN in play on the clipboard', (tester) async {
-    final copied = _captureClipboard(tester);
+  testWidgets('an empty FEN field means the standard start', (tester) async {
+    final result = <TournamentConfig?>[];
+    await _openDialog(tester, result: result);
+
+    expect(_fenText(tester), isEmpty);
+    expect(find.text('Standard start — paste a FEN to change'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('new-tournament-start')));
+    await tester.pumpAndSettle();
+
+    expect(result.single!.startFen, kStandardStartFen);
+    expect(result.single!.name, 'Engine match');
+    expect(result.single!.gamesPerPairing, 10);
+  });
+
+  testWidgets('the board position is one click, and one click to undo', (
+    tester,
+  ) async {
     await _openDialog(tester);
 
-    await tester.tap(find.text('Current board position'));
+    await tester.tap(find.text('Use the board position'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Copy'));
+    expect(_fenText(tester), _boardFen);
+    // Already in play, so the offer goes away.
+    expect(find.text('Use the board position'), findsNothing);
+
+    await tester.tap(find.byTooltip('Back to the standard start'));
+    await tester.pumpAndSettle();
+    expect(_fenText(tester), isEmpty);
+    expect(find.text('Use the board position'), findsOneWidget);
+  });
+
+  testWidgets('a board already at the start is not offered', (tester) async {
+    await _openDialog(tester, boardFen: kStandardStartFen);
+    expect(find.text('Use the board position'), findsNothing);
+  });
+
+  testWidgets('a bad FEN blocks Start and says why', (tester) async {
+    await _openDialog(tester);
+
+    await tester.enterText(_fenField, 'not a fen');
     await tester.pumpAndSettle();
 
-    expect(copied, [_boardFen]);
+    final start = tester.widget<FilledButton>(
+      find.byKey(const ValueKey('new-tournament-start')),
+    );
+    expect(start.onPressed, isNull);
+    expect(find.text('Could not read that FEN.'), findsWidgets);
   });
 
   testWidgets('Edit board… opens the editor and applies its position', (
@@ -100,11 +123,24 @@ void main() {
     await tester.tap(find.text('Use this position'));
     await tester.pumpAndSettle();
 
-    // Back in the setup dialog, with the editor's position in the FEN field.
+    // Back in the setup dialog. The editor handed back the standard start,
+    // which the field shows as empty rather than as a FEN to wade through.
     expect(find.text('Set up position'), findsNothing);
-    expect(
-      tester.widget<TextField>(find.byType(TextField).at(1)).controller!.text,
-      kStandardStartFen,
-    );
+    expect(_fenText(tester), isEmpty);
+  });
+
+  testWidgets('engines and adjudication wait behind Advanced', (tester) async {
+    await _openDialog(tester);
+
+    expect(find.text('ADJUDICATION'), findsNothing);
+    expect(find.text('Manage engines…'), findsNothing);
+    expect(find.text('Games at once'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('new-tournament-advanced')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('ADJUDICATION'), findsOneWidget);
+    expect(find.text('Manage engines…'), findsOneWidget);
+    expect(find.text('Games at once'), findsOneWidget);
   });
 }

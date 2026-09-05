@@ -65,6 +65,7 @@ void main() {
         expect(m.byMe, isTrue);
         expect(m.title, '3. Nf3');
         expect(m.detail, 'You left book');
+        expect(m.bookEnd, isFalse);
         // Lands after the deviating move, on the line tab.
         expect(m.ply, 5);
         expect(m.tab, PgnViewerTab.line);
@@ -87,6 +88,8 @@ void main() {
       expect(m.detail, 'Book ends here');
       expect(m.wantedUcis, isEmpty);
       expect(m.playedUci, 'e4d5');
+      // Nobody erred here, so the card must not paint the move as a mistake.
+      expect(m.bookEnd, isTrue);
     });
 
     test('their deviation is a moment too, marked as theirs', () {

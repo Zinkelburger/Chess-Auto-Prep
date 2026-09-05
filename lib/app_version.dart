@@ -6,4 +6,4 @@
 /// fails if the two ever drift — the failure mode of a hand-written version
 /// being that a bug report names the wrong build, which is worse than no
 /// version at all.
-const String kAppVersion = '1.15.3';
+const String kAppVersion = '1.15.4';

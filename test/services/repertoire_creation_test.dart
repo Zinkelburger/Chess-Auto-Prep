@@ -79,12 +79,12 @@ void main() {
       name: 'London',
       color: 'White',
       pgnContent: '1. d4 d5 2. Bf4 *',
-      gameCount: 3,
+      gameCount: 1,
       createdAt: DateTime(2026, 8, 21),
       storage: storage,
     );
 
-    expect(created.gameCount, 3);
+    expect(created.gameCount, 1);
     final text = File(created.chapterPath).readAsStringSync();
     expect(text, startsWith('// Main\n// Color: White\n'));
     expect(text, endsWith('1. d4 d5 2. Bf4 *\n'));
@@ -120,4 +120,23 @@ void main() {
       expect(created.gameCount, 0, reason: 'nothing was imported');
     },
   );
+
+  test('a study\'s variations are written as lines of their own', () async {
+    final created = await createRepertoire(
+      name: 'Study',
+      color: 'Black',
+      pgnContent:
+          '[Event "Chapter 1"]\n[Result "*"]\n\n'
+          '1. e4 c6 2. d4 d5 3. e5 (3. Nc3 dxe4) 3... Bf5 *\n',
+      gameCount: 1,
+      storage: storage,
+    );
+
+    expect(created.gameCount, 2, reason: 'the count after expansion');
+    final text = File(created.chapterPath).readAsStringSync();
+    expect(text, startsWith('// Main\n// Color: Black\n'));
+    expect(text, isNot(contains('(')));
+    expect('[Event "'.allMatches(text).length, 2);
+    expect(text, contains('[Event "Chapter 1 — 3.Nc3"]'));
+  });
 }

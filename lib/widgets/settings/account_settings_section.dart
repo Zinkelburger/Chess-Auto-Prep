@@ -27,8 +27,7 @@ class LichessLoginSection extends StatelessWidget {
       title: 'Lichess login',
       icon: Icons.key_outlined,
       subtitle:
-          'Optional. Signing in raises Lichess API rate limits and lets the '
-          'app import your private studies.',
+          'Connect to import private studies and increase API limits. Optional.',
       children: [_LichessLoginTile()],
     );
   }
@@ -43,8 +42,7 @@ class ChessUsernamesSection extends StatelessWidget {
       title: 'Your chess usernames',
       icon: Icons.person_outline,
       subtitle:
-          'Whose games the app downloads — for the home game review, tactics '
-          'mining and every "fetch games" form. No login needed.',
+          'Used to find your games for review and tactics. No login required.',
       children: [_UsernamesTile()],
     );
   }
@@ -131,7 +129,7 @@ class _LichessLoginTileState extends State<_LichessLoginTile> {
       builder: (context, _) {
         final auth = LichessAuthService.instance;
         return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          padding: const EdgeInsets.all(20),
           child: auth.isLoggedIn ? _buildLoggedIn(auth) : _buildLoggedOut(),
         );
       },
@@ -177,37 +175,55 @@ class _LichessLoginTileState extends State<_LichessLoginTile> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            const Icon(
-              Icons.person_off_outlined,
-              size: 18,
-              color: AppColors.onSurfaceMuted,
-            ),
-            const SizedBox(width: 10),
-            const Expanded(
-              child: Text(
-                'Lichess: not logged in',
-                style: TextStyle(fontSize: 13),
+        SizedBox(
+          width: double.infinity,
+          child: Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 20,
+            runSpacing: 12,
+            children: [
+              const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.person_off_outlined,
+                    size: 18,
+                    color: AppColors.onSurfaceMuted,
+                  ),
+                  SizedBox(width: 10),
+                  Flexible(
+                    child: Text(
+                      'Lichess: not logged in',
+                      style: AppTextStyles.body,
+                    ),
+                  ),
+                ],
               ),
-            ),
-            if (_oauthInProgress) ...[
-              const SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-              const SizedBox(width: 8),
-              const Text('Waiting for browser…', style: AppTextStyles.caption),
-              const SizedBox(width: 8),
-              TextButton(onPressed: _cancelOAuth, child: const Text('Cancel')),
-            ] else
-              ElevatedButton.icon(
-                onPressed: _startOAuth,
-                icon: const Icon(Icons.login, size: 16),
-                label: const Text('Log into Lichess'),
-              ),
-          ],
+              if (_oauthInProgress) ...[
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Waiting for browser…',
+                  style: AppTextStyles.caption,
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: _cancelOAuth,
+                  child: const Text('Cancel'),
+                ),
+              ] else
+                ElevatedButton.icon(
+                  onPressed: _startOAuth,
+                  icon: const Icon(Icons.login, size: 16),
+                  label: const Text('Log into Lichess'),
+                ),
+            ],
+          ),
         ),
         if (_patFieldVisible) ...[
           const SizedBox(height: 8),
@@ -283,7 +299,7 @@ class _UsernamesTile extends StatelessWidget {
       if (chesscom.isNotEmpty) 'Chess.com: $chesscom',
     ];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      padding: const EdgeInsets.all(20),
       child: Row(
         children: [
           Icon(

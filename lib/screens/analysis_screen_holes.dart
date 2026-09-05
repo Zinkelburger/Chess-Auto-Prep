@@ -47,16 +47,19 @@ mixin _HoleHuntMixin on _AnalysisScreenStateBase {
       _trapPassSkipped = false;
     });
 
-    // Snapshot the games file's mtime: a re-download during the hunt clears
-    // the (now stale) holes reports, and a report computed from the old tree
-    // must not resurrect them.
-    final pgnPath = await _gamesService.analysisPgnPath(
-      player.platform,
-      player.username,
-    );
-    final pgnModifiedAtStart = await fileModifiedOrNull(pgnPath);
-
     try {
+      final corpus = await _gamesService.loadCorpus(
+        player.platform,
+        player.username,
+      );
+      if (corpus == null || corpus.fingerprint != _analysisFingerprint) {
+        throw StateError(
+          'Player games changed. Reopen this player before analyzing.',
+        );
+      }
+      final reportPath = corpus.cachePath(
+        'holes_${isWhite ? 'white' : 'black'}.json',
+      );
       final result = await GenerationLease.run(() {
         return _holeService.hunt(
           tree: tree,
@@ -78,15 +81,15 @@ mixin _HoleHuntMixin on _AnalysisScreenStateBase {
       // Persist to the player the hunt was started for, even if the user
       // switched players meanwhile (partial reports included) — but not if
       // the games were replaced mid-hunt.
-      final pgnModifiedNow = await fileModifiedOrNull(pgnPath);
-      final gamesUnchanged = sameMtime(pgnModifiedAtStart, pgnModifiedNow);
-      if (gamesUnchanged) {
-        await holeHuntStore.save(
-          await _gamesService.holesReportPath(
+      final gamesUnchanged =
+          await _gamesService.corpusFingerprint(
             player.platform,
             player.username,
-            isWhite,
-          ),
+          ) ==
+          corpus.fingerprint;
+      if (gamesUnchanged) {
+        await holeHuntStore.save(
+          reportPath,
           result,
           config,
           isComplete: !_huntCancelled,
@@ -126,12 +129,20 @@ mixin _HoleHuntMixin on _AnalysisScreenStateBase {
     if (player == null) return;
     final isWhite = _playerIsWhite;
     setState(() => _holesResults[isWhite] = result);
+    final corpus = await _gamesService.loadCorpus(
+      player.platform,
+      player.username,
+    );
+    if (corpus == null || corpus.fingerprint != _analysisFingerprint) {
+      if (mounted) {
+        _showError(
+          'Player games changed. Reopen this player before changing the report.',
+        );
+      }
+      return;
+    }
     await holeHuntStore.saveResult(
-      await _gamesService.holesReportPath(
-        player.platform,
-        player.username,
-        isWhite,
-      ),
+      corpus.cachePath('holes_${isWhite ? 'white' : 'black'}.json'),
       result,
       config: _holesConfigs[isWhite],
     );

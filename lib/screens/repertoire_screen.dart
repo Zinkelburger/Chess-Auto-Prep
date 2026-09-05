@@ -1074,7 +1074,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         isGenerating: _generationController.isGenerating,
         isGenerationPaused: _generationController.isPaused,
         isExpectimaxProbe: _generationController.isExpectimaxProbe,
-        showTrainButton: true,
+        showTrainAction: true,
         showSelectRepertoireAction: true,
         generationLocked: _generationController.isGenerating,
         onOpenSettings: () async {

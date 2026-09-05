@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart'
@@ -5,6 +7,8 @@ import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart
 import 'package:chess_auto_prep/models/explorer_response.dart';
 import 'package:chess_auto_prep/services/lichess_api_client.dart';
 import 'package:chess_auto_prep/services/live_explorer_service.dart';
+import 'package:chess_auto_prep/services/master_games/master_games_db.dart';
+import 'package:chess_auto_prep/services/master_games/master_games_importer.dart';
 
 /// Fake client that records lookups and returns scripted responses without
 /// touching the network.
@@ -257,5 +261,120 @@ void main() {
     await _settle();
     expect(service.state.value.status, ExplorerStatus.authRequired);
     service.dispose();
+  });
+
+  group('the local TWIC database', () {
+    const start = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    late Directory tmp;
+    late MasterGamesDb db;
+
+    setUp(() async {
+      tmp = await Directory.systemTemp.createTemp('live_explorer_twic');
+      final path = '${tmp.path}/master_games.db';
+      importPgnIntoMasterGames(
+        MasterGamesImportRequest(
+          dbPath: path,
+          pgnText: '''
+[Event "Tata Steel"]
+[Site "Wijk aan Zee"]
+[Date "2026.01.21"]
+[White "Carlsen,Magnus"]
+[Black "Nakamura,Hikaru"]
+[Result "1-0"]
+[WhiteElo "2830"]
+[BlackElo "2790"]
+
+1. e4 c5 2. Nf3 1-0
+
+[Event "Titled Tue"]
+[Site "chess.com INT"]
+[Date "2026.02.03"]
+[White "Blitzer,A"]
+[Black "Blitzer,B"]
+[Result "0-1"]
+[WhiteElo "2900"]
+[BlackElo "2850"]
+
+1. d4 d5 0-1
+''',
+          twicIssue: 1660,
+        ),
+      );
+      db = MasterGamesDb.open(path, readOnly: true);
+    });
+
+    tearDown(() async {
+      db.close();
+      await tmp.delete(recursive: true);
+    });
+
+    test('answers at once, from disk, without a login', () {
+      final client = _FakeClient();
+      final service = LiveExplorerService(
+        client: client,
+        isLoggedIn: () => false,
+        localDb: () => db,
+      );
+      service.request(
+        start,
+        const ExplorerQuery(database: LichessDatabase.twic),
+      );
+
+      final state = service.state.value;
+      expect(state.status, ExplorerStatus.data);
+      expect(client.requested, isEmpty);
+      final data = state.data!;
+      expect(data.totalGames, 2);
+      // Most played first, then strongest: one game each, the blitz d4 is
+      // the higher rated.
+      expect(data.moves.map((m) => m.san), ['d4', 'e4']);
+      expect(data.whiteTotal, 1);
+      expect(data.blackTotal, 1);
+      // Strongest first: the blitz game is higher rated.
+      expect(data.topGames.map((g) => g.white), [
+        'Blitzer,A',
+        'Carlsen,Magnus',
+      ]);
+      expect(data.topGames.first.source, ExplorerGameSource.twic);
+      expect(data.topGames.first.san, 'd4');
+      expect(data.topGames.last.event, 'Tata Steel');
+      expect(data.topGames.last.when, '2026-01');
+      service.dispose();
+    });
+
+    test('classical only drops the online games and their moves', () {
+      final service = LiveExplorerService(
+        client: _FakeClient(),
+        isLoggedIn: () => false,
+        localDb: () => db,
+      );
+      service.request(
+        start,
+        const ExplorerQuery(
+          database: LichessDatabase.twic,
+          classicalOnly: true,
+        ),
+      );
+      final data = service.state.value.data!;
+      expect(data.totalGames, 1);
+      expect(data.moves.map((m) => m.san), ['e4']);
+      expect(data.topGames.map((g) => g.white), ['Carlsen,Magnus']);
+      service.dispose();
+    });
+
+    test('with no database it is an empty position, not an error', () {
+      final service = LiveExplorerService(
+        client: _FakeClient(),
+        isLoggedIn: () => false,
+        localDb: () => null,
+      );
+      service.request(
+        start,
+        const ExplorerQuery(database: LichessDatabase.twic),
+      );
+      expect(service.state.value.status, ExplorerStatus.data);
+      expect(service.state.value.data!.moves, isEmpty);
+      service.dispose();
+    });
   });
 }

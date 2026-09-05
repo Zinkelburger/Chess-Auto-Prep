@@ -1,3 +1,5 @@
+import '../utils/training_csv.dart';
+
 class RepertoireReviewHistoryEntry {
   final String repertoireId;
   final String lineId;
@@ -16,19 +18,19 @@ class RepertoireReviewHistoryEntry {
   });
 
   String toCsvRow() {
-    return [
+    return encodeTrainingRow([
       repertoireId,
       lineId,
       timestampUtc.toUtc().toIso8601String(),
       rating,
       hadMistake ? '1' : '0',
       sessionType,
-    ].join(',');
+    ]);
   }
 
   static RepertoireReviewHistoryEntry fromCsvRow(String row) {
-    final cells = row.split(',').map((c) => c.trim()).toList();
-    if (cells.length < 6) {
+    final cells = decodeTrainingRow(row, 6);
+    if (cells.length != 6) {
       throw FormatException('Invalid review history row: $row');
     }
     return RepertoireReviewHistoryEntry(

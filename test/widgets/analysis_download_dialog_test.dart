@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/models/analysis_player_info.dart';
+import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:chess_auto_prep/widgets/analysis_download_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,6 +22,7 @@ void main() {
     String? chesscom,
     String? lichess,
     String? platform,
+    Set<GameSpeed>? speeds,
   }) async {
     result = null;
     await tester.pumpWidget(
@@ -35,6 +37,7 @@ void main() {
                     chesscomUsername: chesscom,
                     lichessUsername: lichess,
                     initialPlatform: platform,
+                    initialSpeeds: speeds,
                   ),
                 );
               },
@@ -45,6 +48,19 @@ void main() {
       ),
     );
     await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+  }
+
+  /// The dialog scrolls in a 600px-high test window, and the tappable part
+  /// of a checkbox row is the box and its label, not the whole column cell.
+  Future<void> tapSpeed(WidgetTester tester, GameSpeed speed) async {
+    final box = find.descendant(
+      of: find.byKey(Key('download-speed-${speed.name}')),
+      matching: find.byType(Checkbox),
+    );
+    await tester.ensureVisible(box);
+    await tester.pumpAndSettle();
+    await tester.tap(box);
     await tester.pumpAndSettle();
   }
 
@@ -119,5 +135,76 @@ void main() {
 
     expect(result!.monthsBack, isNull);
     expect(result!.maxGames, 250);
+  });
+
+  testWidgets('bullet is off by default, and one tap turns it on', (
+    tester,
+  ) async {
+    await openDialog(tester, chesscom: 'hikaru');
+
+    expect(find.text('Which time controls'), findsOneWidget);
+    expect(
+      find.textContaining('at blitz, rapid, classical or correspondence'),
+      findsOneWidget,
+    );
+
+    await tapSpeed(tester, GameSpeed.bullet);
+    expect(find.textContaining('at bullet, blitz, rapid'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Download'));
+    await tester.pumpAndSettle();
+
+    expect(result!.speeds, contains(GameSpeed.bullet));
+    expect(result!.speeds, contains(GameSpeed.classical));
+    expect(result!.speeds, isNot(contains(GameSpeed.ultraBullet)));
+  });
+
+  testWidgets('the choice is remembered for the next download', (tester) async {
+    await openDialog(tester, chesscom: 'hikaru');
+    await tapSpeed(tester, GameSpeed.bullet);
+    await tapSpeed(tester, GameSpeed.correspondence);
+    await tester.tap(find.widgetWithText(FilledButton, 'Download'));
+    await tester.pumpAndSettle();
+    expect(result!.speeds, {
+      GameSpeed.bullet,
+      GameSpeed.blitz,
+      GameSpeed.rapid,
+      GameSpeed.classical,
+    });
+
+    await openDialog(tester, chesscom: 'hikaru');
+    expect(
+      find.textContaining('at bullet, blitz, rapid or classical'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('re-downloading a player starts from that player’s filter', (
+    tester,
+  ) async {
+    await openDialog(
+      tester,
+      lichess: 'penguingm1',
+      platform: 'lichess',
+      speeds: {GameSpeed.bullet},
+    );
+    expect(find.textContaining('at bullet.'), findsOneWidget);
+  });
+
+  testWidgets('no time controls at all is refused', (tester) async {
+    await openDialog(tester, chesscom: 'hikaru');
+    for (final speed in defaultDownloadSpeeds) {
+      await tapSpeed(tester, speed);
+    }
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Download'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('pick at least one time control'),
+      findsOneWidget,
+    );
+    expect(find.byType(AnalysisDownloadDialog), findsOneWidget);
+    expect(result, isNull);
   });
 }

@@ -3,86 +3,63 @@
 Flutter desktop app (Linux/Windows/macOS) for chess prep: tactics from your own
 games, repertoire building/training, player analysis, studies.
 
-## Start here
+## Local agent workflow
 
-This checkout is shared by several agent sessions at once and is routinely
-mid-refactor. Before you trust it, check it:
+Use one worktree per editing task. Codex, Claude Code and Cursor can create
+worktrees themselves; run `python3 scripts/agent_worktree.py --prepare . --assets-from /path/to/main-checkout` inside a new one to fetch dependencies
+and link immutable engine assets. Or use `python3 scripts/agent_worktree.py <task-name>` to create and prepare one. Never reset another agent's checkout.
+
+- Start with `scripts/doctor.sh --quiet` when the environment is unfamiliar or
+  a command fails. It is diagnostic, not a prerequisite for every action.
+- Run focused tests while developing: `scripts/ci.sh test test/path_test.dart`.
+  Run `scripts/ci.sh analyze lint` and the tests relevant to your change before
+  committing. Formatting may be limited to the Dart files you changed.
+- Full coverage, offline tools, and integration checks remain mandatory on PRs
+  in GitHub CI. A full local suite before every commit is **not** required.
+  `scripts/ci.sh full` is available when a broad local check is useful.
+- Heavy commands go through `scripts/ci.sh` or `scripts/ci.sh with -- COMMAND`.
+  They share two machine-wide slots, with two CPUs and 8 GiB per job and a
+  combined 16 GiB ceiling. Tests default to two workers. One heavy job at a time
+  may use a checkout's build files. Editing, reading and lightweight commands
+  do not take machine-wide slots.
+- App checks are headless and use disposable data by default:
+  `python3 scripts/app_driver.py start`, then `dump`, `tap`, `ss`, and `stop`.
+  Keep fixture files inside that checkout's profile (the driver status prints
+  its path). Do not point automatic checks at the user's real databases.
+- Use `start --visible` only when the user asks to see a window or a native
+  desktop behavior needs it. Missing Xvfb is an error, never permission to open
+  the user's screen. Run `scripts/setup_agent_display.sh` to install it.
+- `scripts/ci.sh status` reports active slots. If a job queues, do independent
+  work instead of submitting duplicates. Old checkouts' exclusive Flutter
+  locks are respected until their existing jobs finish. Never kill another
+  agent's job to free a slot; closing your launcher cancels its own children.
+
+The runner enforces limits and cleanup; keep those mechanics out of prompts.
+If systemd cannot provide containment, the job fails without running uncapped.
+The app's one-thread Stockfish default is a preference, not a resource limit.
+
+## Committing
+
+One task, one commit. Everything a session produces for a single piece of
+work — the change, its tests, the docs it forces — lands as one commit, never
+as a trail of "wip", "fix test", "address feedback". A mammoth push is still
+one commit if it is one piece of work; the size of the diff is not a reason to
+split it.
+
+Split only when the parts are genuinely independent and you would want to
+revert one without the other. A release/version bump stays its own commit.
+
+If a branch already carries intermediate commits, squash before handing the
+work back or opening a PR. Interactive rebase is not available here, so:
 
 ```
-scripts/doctor.sh          # toolchain, fetched assets, the lock, the driver,
-                           # the tree, and whether the agent contract is tracked
+git reset --soft $(git merge-base HEAD main) && git commit
 ```
 
-Four slash commands wrap the workflows below, so you do not have to
-reconstruct them from this file each session:
-
-| Command | What it does |
-|---|---|
-| `/doctor` | the health check above, plus what to do about each finding |
-| `/gate` | the pre-commit gates through the shared Flutter lock |
-| `/drive` | build, launch and drive the real app; screenshot what you changed |
-| `/run-skill-generator` | author or improve a skill, held to this repo's rules |
-
-Three skills carry the detail the commands point at, and trigger on their own
-when a task matches their description:
-
-| Skill | Owns |
-|---|---|
-| `run-chess-auto-prep` | the app driver (`driver.py`): build, launch, tap, type, screenshot |
-| `chess-prep-mcp` | the chess-prep MCP server: expectimax builds, tournaments, master and own games, PGN trees, rosters; `mcp_tools.py` to call it from a shell |
-| `bughouse-mcp` | the bughouse MCP server: Hivemind on two boards, joint actions, candidate ranking, and why its score is not pawns |
-
-They live in `.Codex/commands/` and `.Codex/skills/`. Those directories,
-`.Codex/settings.json`, `.mcp.json` and `scripts/hooks/` are **tracked in git
-on purpose**: they are the whole reason a fresh clone behaves. `doctor.sh`
-fails if any of them drifts back to untracked, and checks every skill's
-frontmatter.
-
-## Keeping CI green (non-negotiable)
-
-CI (`.github/workflows/ci.yml`) runs format check → analyze → coverage-enforced
-Flutter tests → offline Python tool tests, plus a headless integration test.
-It runs for pull requests and pushes to `main`, and the release workflow calls
-it before any platform build. Local checks remain mandatory before **every**
-commit; run them through the one script that serialises Flutter work:
-
-```
-scripts/ci.sh              # format + analyze + coverage tests + tools + lint
-scripts/ci.sh analyze      # any subset: format analyze test tools lint integration
-scripts/ci.sh status       # who holds the lock, what is cached for this tree
-```
-
-What it does, and why it exists:
-
-- **One heavy Flutter job at a time, machine-wide.** Several agents used to
-  launch `flutter test` / `flutter analyze` at once and crash the machine.
-  `ci.sh` takes a `flock` (`/tmp/chess-auto-prep-flutter.lock`, shared with
-  the app driver below), so parallel callers queue instead of piling up.
-- **Identical requests share one run.** A passing `analyze`/`test` result is
-  cached under a hash of HEAD + your diff + untracked source files; a second
-  caller on the same tree replays the log instead of re-running. Any edit
-  invalidates it. Failures are never cached. `--fresh` bypasses the cache.
-- **Warnings are fatal**, as in CI: the `analyze` step fails on any
-  `error •` or `warning •` line even when Flutter's exit code is 0.
-- **`format` writes**, it does not just check; `lint` runs the layering and
-  font-size greps from this file.
-- `scripts/ci.sh with -- <command…>` runs any other heavy command (a release
-  build, a one-off `flutter drive`) under the same lock, in your cwd.
-
-A `PreToolUse` hook (`.Codex/settings.json` → `scripts/hooks/flutter_gate.sh`)
-denies raw `flutter test|analyze|run|build|drive`, `dart test`, `build_runner`
-and `xvfb-run` from agent shells, pointing at `ci.sh` and the driver. It is
-not a suggestion: go through the gate. Everything else passes untouched —
-`flutter pub get`, `dart format`, `dart run tools/run_engine_tournament.dart`,
-the Python tests under `tools/mcp/` — because none of those is a Flutter
-build. The hook and this paragraph are kept in step; if you change one,
-change the other.
-
-CI pins Flutter (see `flutter-version` in `ci.yml`) so formatter output can't
-drift between stable releases. If you bump the pin, re-run `dart format` in the
-same commit. `scripts/doctor.sh` compares the pin against the local SDK and
-warns when they differ — a mismatch means local `format` can be green while the
-tag build fails.
+Or merge with `--squash`, or `git merge-base` against whatever the branch
+forked from. Never rewrite history that is already pushed, already on `main`,
+or in another agent's checkout — squash your own branch before it leaves,
+not after.
 
 ## Conventions that CI enforces indirectly
 
@@ -245,24 +222,9 @@ should print nothing (board coordinates excepted).
 
 ## Verifying changes
 
-- `scripts/doctor.sh` first — it is read-only, takes no lock, and catches the
-  things that otherwise waste a whole build (missing fetched assets, a held
-  lock, a Flutter/CI version mismatch, a tree someone else has half-refactored).
-- `scripts/ci.sh` (analyze + coverage + Flutter/tool tests) plus code reading is the baseline. For
-  anything with a visible surface, **also run the app and look at it**: the
-  `/run-chess-auto-prep` skill (`.Codex/skills/run-chess-auto-prep/`) builds
-  and launches the real desktop app, then drives it from the shell —
-  `driver.py dump | tap | type | scroll | ss` — and saves screenshots you can
-  open. Its build phase takes the same lock as `ci.sh`.
-- The working tree is shared by several agents at once, and is routinely
-  mid-refactor. If it does not compile, do not "fix" someone else's half-done
-  change: launch from a clean snapshot instead (`driver.py start --worktree`
-  builds HEAD in `/tmp/chess-auto-prep-worktree`), or point `--src` at your
-  own worktree.
-- The app window opens on the real display (no Xvfb here). The driver injects
-  pointer events straight into Flutter, so it never needs the window focused,
-  and it drives the app against the developer's **real** data: don't press
-  anything that downloads games or starts an engine run unless that is what
-  you are testing.
-- Local Flutter lives at `~/sdk/flutter/bin/flutter` on the primary dev machine;
-  plain `flutter` may not be on PATH. `ci.sh` and the driver find it themselves.
+Choose checks that exercise the behavior you changed. Use the bounded runner
+for builds and tests, and inspect a screenshot from the headless app for visible
+changes. Reserve real-desktop checks for native integration or explicit demos.
+Report which checks passed, failed, or were not run; keep unrelated failures
+separate from regressions caused by your change. Do not repair another agent's
+half-finished edits to make your checkout compile; use your own worktree.

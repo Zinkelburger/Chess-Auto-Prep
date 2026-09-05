@@ -20,6 +20,7 @@ class BughousePanelSection extends StatefulWidget {
     required this.summary,
     required this.children,
     this.initiallyOpen = false,
+    this.padding = const EdgeInsets.fromLTRB(10, 0, 10, 10),
   });
 
   final String title;
@@ -30,6 +31,10 @@ class BughousePanelSection extends StatefulWidget {
 
   final List<Widget> children;
   final bool initiallyOpen;
+
+  /// Around the open section's children. The default insets them from the
+  /// border like a form; a table that draws its own rows passes zero.
+  final EdgeInsets padding;
 
   @override
   State<BughousePanelSection> createState() => _BughousePanelSectionState();
@@ -79,7 +84,7 @@ class _BughousePanelSectionState extends State<BughousePanelSection> {
           ),
           if (_open)
             Padding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+              padding: widget.padding,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: widget.children,

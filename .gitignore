@@ -161,3 +161,8 @@ assets/bughouse/manifest.json
 # never committed to the repository.
 packaging/windows/prerequisites/VC_redist.x64.exe
 !tools/vc_redist.lock.json
+
+# Agent worktrees created inside the checkout by Claude Code's worktree mode.
+# Each is a full second checkout (hundreds of MB) with its own branch; they are
+# per-session scratch, never repository content.
+.claude/worktrees/

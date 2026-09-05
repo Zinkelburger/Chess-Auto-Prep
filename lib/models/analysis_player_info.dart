@@ -1,7 +1,21 @@
 /// Typed model for analysis player download metadata.
 library;
 
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
+import '../services/games_library/game_filter.dart';
 import '../utils/time_format.dart';
+
+/// What a download keeps unless the user says otherwise: everything but
+/// bullet. Bullet games are mostly premoves and flags, so they say little
+/// about how someone actually plays an opening — but a bullet specialist's
+/// opponent may want exactly those, so it is a default, not a rule.
+const Set<GameSpeed> defaultDownloadSpeeds = {
+  GameSpeed.blitz,
+  GameSpeed.rapid,
+  GameSpeed.classical,
+  GameSpeed.correspondence,
+};
 
 /// Replaces the loose [Map<String, dynamic>] previously passed between screens.
 ///
@@ -36,16 +50,25 @@ class AnalysisPlayerInfo {
   /// months instead of limiting by [maxGames].
   final int? monthsBack;
 
+  /// Which time controls the download keeps. Stored with the game-set so
+  /// "download the latest games" fetches the same kind of games it was built
+  /// from, the way it re-uses [monthsBack]. Never empty: an empty set would
+  /// mean "no games", which no one asks for.
+  final Set<GameSpeed> speeds;
+
   final DateTime? downloadedAt;
   final int gameCount;
+  final String? storageWarning;
 
   const AnalysisPlayerInfo({
     required this.platform,
     required this.username,
     this.maxGames = 100,
     this.monthsBack,
+    this.speeds = defaultDownloadSpeeds,
     this.downloadedAt,
     this.gameCount = 0,
+    this.storageWarning,
     this.accounts = const [],
     this.group,
   });
@@ -87,15 +110,13 @@ class AnalysisPlayerInfo {
     _ => platform,
   };
 
-  /// Unique key used for file-system storage.
-  ///
-  /// Free-text names (the 'import' platform) may contain characters that are
-  /// invalid or hazardous in filenames (`/` would silently nest the files in
-  /// a subdirectory the player list never scans), so everything outside
-  /// [a-z0-9_-] is folded to `_`. Chess.com/Lichess usernames are already
-  /// limited to that alphabet, so their keys — and existing on-disk data —
-  /// are unchanged.
-  String get playerKey {
+  /// Collision-resistant, opaque identity for the player's own directory.
+  /// Human-readable names live in the manifest, never in path suffixes.
+  String get playerKey =>
+      'player-${sha256.convert(utf8.encode(jsonEncode([platform, username.toLowerCase()])))}';
+
+  /// Used only to find older installs' files and database mirrors.
+  String get legacyPlayerKey {
     final safe = username.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]'), '_');
     return '${platform}_$safe';
   }
@@ -109,6 +130,22 @@ class AnalysisPlayerInfo {
     return 'last $maxGames game${maxGames == 1 ? '' : 's'}';
   }
 
+  /// Which time controls this set was downloaded with, as a lower-case list
+  /// ("bullet, blitz, rapid"), or null when it is the default so the usual
+  /// case adds nothing to a tile. A PGN-file import was never filtered.
+  String? get speedsDescription {
+    if (isImported && accounts.isEmpty) return null;
+    if (speeds.containsAll(defaultDownloadSpeeds) &&
+        defaultDownloadSpeeds.containsAll(speeds)) {
+      return null;
+    }
+    if (speeds.containsAll(selectableGameSpeeds)) return 'all time controls';
+    return [
+      for (final s in selectableGameSpeeds)
+        if (speeds.contains(s)) s.label.toLowerCase(),
+    ].join(', ');
+  }
+
   /// Human-readable time since the games were downloaded.
   String get downloadTimeAgo =>
       downloadedAt == null ? 'Unknown' : formatTimeAgo(downloadedAt!);
@@ -120,8 +157,13 @@ class AnalysisPlayerInfo {
     'username': username,
     'maxGames': maxGames,
     'monthsBack': monthsBack,
+    'speeds': [
+      for (final s in selectableGameSpeeds)
+        if (speeds.contains(s)) s.name,
+    ],
     'downloadedAt': downloadedAt?.toIso8601String(),
     'gameCount': gameCount,
+    if (storageWarning != null) 'storageWarning': storageWarning,
     if (accounts.isNotEmpty) 'accounts': [for (final a in accounts) a.toJson()],
     if (group != null && group!.isNotEmpty) 'group': group,
   };
@@ -132,10 +174,14 @@ class AnalysisPlayerInfo {
       username: json['username'] as String? ?? 'unknown',
       maxGames: (json['maxGames'] as num?)?.toInt() ?? 100,
       monthsBack: (json['monthsBack'] as num?)?.toInt(),
+      // Sets saved before speeds were a choice were all downloaded with the
+      // default filter, so the absent key means exactly that.
+      speeds: _speedsFromJson(json['speeds']),
       downloadedAt: json['downloadedAt'] != null
           ? DateTime.tryParse(json['downloadedAt'] as String)
           : null,
       gameCount: (json['gameCount'] as num?)?.toInt() ?? 0,
+      storageWarning: json['storageWarning'] as String?,
       accounts: [
         for (final a in (json['accounts'] as List?) ?? const [])
           if (a is Map) PlayerAccount.fromJson(a.cast<String, dynamic>()),
@@ -144,14 +190,24 @@ class AnalysisPlayerInfo {
     );
   }
 
+  static Set<GameSpeed> _speedsFromJson(Object? raw) {
+    final parsed = gameSpeedsFromNames(
+      raw is List ? raw.whereType<String>() : null,
+    );
+    return parsed == null || parsed.isEmpty ? defaultDownloadSpeeds : parsed;
+  }
+
   AnalysisPlayerInfo copyWith({
     String? platform,
     String? username,
     int? maxGames,
     int? monthsBack,
     bool clearMonthsBack = false,
+    Set<GameSpeed>? speeds,
     DateTime? downloadedAt,
     int? gameCount,
+    String? storageWarning,
+    bool clearStorageWarning = false,
     List<PlayerAccount>? accounts,
     String? group,
   }) {
@@ -160,8 +216,12 @@ class AnalysisPlayerInfo {
       username: username ?? this.username,
       maxGames: maxGames ?? this.maxGames,
       monthsBack: clearMonthsBack ? null : (monthsBack ?? this.monthsBack),
+      speeds: speeds ?? this.speeds,
       downloadedAt: downloadedAt ?? this.downloadedAt,
       gameCount: gameCount ?? this.gameCount,
+      storageWarning: clearStorageWarning
+          ? null
+          : (storageWarning ?? this.storageWarning),
       accounts: accounts ?? this.accounts,
       group: group ?? this.group,
     );

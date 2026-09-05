@@ -366,6 +366,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
             ? player.username
             : appState.lichessUsername,
         initialPlatform: player.platform,
+        initialSpeeds: player.speeds,
       ),
     );
     if (config == null || !mounted) return;
@@ -461,6 +462,8 @@ class _PlayerTile extends StatelessWidget {
       '$games game${games == 1 ? '' : 's'}',
       player.platformDisplayName,
       player.rangeDescription,
+      // Only when it is not the usual "everything but bullet".
+      if (player.speedsDescription != null) player.speedsDescription!,
     ].join(' · ');
     final origin = [
       '${player.isImported && player.accounts.isEmpty ? 'Opened' : 'Downloaded'}'

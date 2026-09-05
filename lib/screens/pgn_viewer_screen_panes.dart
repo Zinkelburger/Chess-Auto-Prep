@@ -33,6 +33,10 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
   bool get _lineTabVisible;
   void _showLinePosition(Position position);
   void _onGamePosition(Position position);
+  LiveExplorerService get _explorer;
+  ExplorerMove? get _explorerHoverMove;
+  void _setExplorerHover(ExplorerMove? move);
+  Future<void> _openExplorerGame(ExplorerGame game);
   bool? _myColorIn(Map<String, String> headers);
   List<String> _currentGameSans(PgnGameEntry entry);
 
@@ -99,6 +103,14 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
                     BoardAnnotation(
                       orig: solitaire.hintSquare!,
                       brush: AnnotationBrush.yellow,
+                    ),
+                  // The explorer row under the pointer, drawn where it goes.
+                  if (_explorerHoverMove case final hover?
+                      when hover.uci.length >= 4)
+                    BoardAnnotation(
+                      orig: hover.uci.substring(0, 2),
+                      dest: hover.uci.substring(2, 4),
+                      brush: AnnotationBrush.green,
                     ),
                 ],
                 onMove: (move) => _handleBoardMove(move.san),
@@ -184,6 +196,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
                           ],
                         ),
                       ),
+                    const Tab(text: 'Explorer'),
                     Tab(
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -214,6 +227,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
                   children: [
                     _buildGameTab(),
                     if (_lineTabVisible) _buildLineTab(),
+                    _buildExplorerTab(),
                     GameAnalysisTab(
                       analysisController: _analysisController,
                       pgnController: _pgnWidgetController,
@@ -324,6 +338,23 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
       lineController: _lineWidgetController,
       onShowPosition: _showLinePosition,
       onEditInBuilder: _openInBuilder,
+    );
+  }
+
+  /// The opening explorer for the position on the board.  Playing a row
+  /// makes the move on the game pane, as an ephemeral variation, exactly as
+  /// dragging the piece would; the games it lists open through
+  /// [_openExplorerGame].
+  Widget _buildExplorerTab() {
+    final sans = _pgnWidgetController.mainLineMoves;
+    final ply = _controller.currentPly.clamp(0, sans.length);
+    return OpeningExplorerPanel(
+      service: _explorer,
+      fen: _controller.currentPosition.fen,
+      movePath: sans.sublist(0, ply),
+      onPlayMove: _handleBoardMove,
+      onHoverMove: _setExplorerHover,
+      onOpenGame: _openExplorerGame,
     );
   }
 

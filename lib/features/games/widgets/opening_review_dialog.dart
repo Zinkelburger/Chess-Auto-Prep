@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
@@ -70,7 +72,14 @@ class OpeningReviewDialog extends StatelessWidget {
             'nothing to compare them against.\n\nPick the books you play and '
             'this review will show every game where you left them.',
         buttonLabel: 'Pick my repertoires',
-        onPressed: () => showMyRepertoiresDialog(context),
+        // Close this review first: the books dialog opens on the home pane,
+        // not stacked on an empty review that is stale the moment a book is
+        // added. The navigator's own context outlives this dialog's.
+        onPressed: () {
+          final navigator = Navigator.of(context);
+          navigator.pop();
+          unawaited(showMyRepertoiresDialog(navigator.context));
+        },
       );
     }
     if (data.isEmpty) {

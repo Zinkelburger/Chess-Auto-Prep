@@ -80,15 +80,6 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
   late final TextEditingController _depth;
   final int _maxCores = getLogicalCores();
 
-  static const _speedLabels = {
-    GameSpeed.ultraBullet: 'UltraBullet',
-    GameSpeed.bullet: 'Bullet',
-    GameSpeed.blitz: 'Blitz',
-    GameSpeed.rapid: 'Rapid',
-    GameSpeed.classical: 'Classical',
-    GameSpeed.correspondence: 'Correspondence',
-  };
-
   @override
   void initState() {
     super.initState();
@@ -147,15 +138,15 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
                 onChanged: (w) => setState(() => _window = w),
               ),
               _label('Time controls to download'),
-              for (final entry in _speedLabels.entries)
+              for (final speed in selectableGameSpeeds)
                 AppCheckbox(
-                  label: entry.value,
-                  value: _speeds.contains(entry.key),
+                  label: speed.label,
+                  value: _speeds.contains(speed),
                   onChanged: (checked) => setState(() {
                     if (checked == true) {
-                      _speeds.add(entry.key);
+                      _speeds.add(speed);
                     } else {
-                      _speeds.remove(entry.key);
+                      _speeds.remove(speed);
                     }
                   }),
                 ),

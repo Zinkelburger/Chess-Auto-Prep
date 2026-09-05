@@ -1,11 +1,27 @@
+import 'package:chess_auto_prep/models/analysis_player_info.dart';
+import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:chess_auto_prep/widgets/opponent_list_import_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// The import dialog must show what a pasted list would do *before* any
 /// network call: how many opponents, which rows were skipped, and refuse to
 /// import an unusable list.
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  Future<void> tapSpeed(WidgetTester tester, GameSpeed speed) async {
+    final box = find.descendant(
+      of: find.byKey(Key('download-speed-${speed.name}')),
+      matching: find.byType(Checkbox),
+    );
+    await tester.ensureVisible(box);
+    await tester.pumpAndSettle();
+    await tester.tap(box);
+    await tester.pumpAndSettle();
+  }
+
   Future<OpponentImportRequest?> pump(WidgetTester tester) async {
     OpponentImportRequest? result;
     await tester.pumpWidget(
@@ -111,5 +127,67 @@ void main() {
     expect(result!.list.opponents.single.name, 'Jane Doe');
     expect(result!.monthsBack, 3);
     expect(result!.redownloadExisting, isTrue);
+    expect(result!.speeds, defaultDownloadSpeeds);
+  });
+
+  testWidgets('time controls are a choice here too, and none disables Import', (
+    tester,
+  ) async {
+    OpponentImportRequest? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: ElevatedButton(
+              onPressed: () async {
+                result = await showDialog<OpponentImportRequest>(
+                  context: context,
+                  builder: (_) => const OpponentListImportDialog(),
+                );
+              },
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextField).first,
+      '[{"name": "Jane Doe", "chesscom": "janed"}]',
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('at blitz, rapid, classical or correspondence'),
+      findsOneWidget,
+    );
+
+    for (final speed in defaultDownloadSpeeds) {
+      await tapSpeed(tester, speed);
+    }
+    expect(
+      find.textContaining('pick at least one time control'),
+      findsOneWidget,
+    );
+    expect(
+      tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+      isNull,
+    );
+
+    await tapSpeed(tester, GameSpeed.bullet);
+    expect(find.textContaining('at bullet.'), findsOneWidget);
+    await tester.tap(find.text('Import 1 opponent'));
+    await tester.pumpAndSettle();
+    expect(result!.speeds, {GameSpeed.bullet});
+
+    // The next form to ask starts from the same answer.
+    expect(
+      (await SharedPreferences.getInstance()).getStringList(
+        'analysis_download.speeds',
+      ),
+      ['bullet'],
+    );
   });
 }

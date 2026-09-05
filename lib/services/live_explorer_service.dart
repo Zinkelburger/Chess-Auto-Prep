@@ -35,10 +35,13 @@ import 'package:flutter/foundation.dart';
 import '../features/coverage/services/coverage_service.dart'
     show LichessDatabase;
 import '../models/explorer_response.dart';
+import '../utils/chess_utils.dart' show uciToSan;
 import '../utils/fen_utils.dart';
 import 'explorer_cache_service.dart';
 import 'lichess_api_client.dart';
 import 'lichess_auth_service.dart';
+import 'master_games/master_games_db.dart';
+import 'master_games/master_games_service.dart';
 
 enum ExplorerStatus { idle, loading, data, error, rateLimited, authRequired }
 
@@ -87,13 +90,22 @@ class ExplorerQuery {
   final Set<String> speeds;
   final Set<String> ratings;
 
+  /// TWIC only: count classical over-the-board games and nothing else.  The
+  /// corpus is over half online blitz, so this is the one filter the local
+  /// database needs.
+  final bool classicalOnly;
+
   const ExplorerQuery({
     required this.database,
     this.speeds = const {'blitz', 'rapid', 'classical'},
     this.ratings = const {'2000', '2200', '2500'},
+    this.classicalOnly = false,
   });
 
   bool get useMasters => database == LichessDatabase.masters;
+
+  /// Answered from the master-games database on this machine, not Lichess.
+  bool get isLocal => database == LichessDatabase.twic;
   String get speedsParam => (speeds.toList()..sort()).join(',');
   String get ratingsParam => (ratings.toList()..sort()).join(',');
 
@@ -110,15 +122,26 @@ class LiveExplorerService {
     LichessApiClient? client,
     ExplorerCacheService? cache,
     bool Function()? isLoggedIn,
+    MasterGamesDb? Function()? localDb,
     this.debounce = const Duration(milliseconds: 250),
     this.maxPly = 50,
     this.emptyStreakLimit = 3,
   }) : _client = client ?? LichessApiClient.instance,
        _cache = cache ?? ExplorerCacheService.instance,
        _isLoggedIn =
-           isLoggedIn ?? (() => LichessAuthService.instance.isLoggedIn);
+           isLoggedIn ?? (() => LichessAuthService.instance.isLoggedIn),
+       _localDb = localDb ?? (() => MasterGamesService.instance.db);
 
   final LichessApiClient _client;
+
+  /// The master-games database on this machine, looked up per request so a
+  /// database that opens after this service was built is still found.
+  final MasterGamesDb? Function() _localDb;
+
+  /// How many games the local database lists for a position.  Lila's
+  /// masters list is fifteen; the book remembers up to three ids per move,
+  /// so the strongest move or two fill most of it.
+  static const int localTopGames = 12;
 
   /// Response store shared with every other explorer consumer.  This
   /// service fetches through its own client (which owns the politeness gap
@@ -184,6 +207,16 @@ class LiveExplorerService {
     List<String> movePath = const [],
   }) {
     _debounceTimer?.cancel();
+
+    if (query.isLocal) {
+      // An indexed lookup on this machine: no debounce, no cache, no login.
+      _requestSeq++;
+      _lastRequestAt = DateTime.now();
+      state.value = ExplorerState.data(
+        _localResponse(fen, classicalOnly: query.classicalOnly),
+      );
+      return;
+    }
 
     final now = DateTime.now();
     final wasQuiet =
@@ -259,6 +292,87 @@ class LiveExplorerService {
     _cache.put(fen, query.source, response);
     _noteAnswer(fen, response, movePath);
     state.value = ExplorerState.data(response);
+  }
+
+  /// The local book's answer for [fen], in the shape the panel draws.
+  ///
+  /// Moves come from the book rows (classical-only rows when asked, with
+  /// moves no classical game played dropped); the games are the strongest
+  /// citation of each move, then the most recent game of each, strongest
+  /// first and never twice.  A missing database answers as an empty
+  /// position rather than an error: the panel's own source picker only
+  /// offers TWIC when there is one.
+  ExplorerResponse _localResponse(String fen, {required bool classicalOnly}) {
+    final db = _localDb();
+    if (db == null) {
+      return ExplorerResponse(fen: fen, moves: const [], totalGames: 0);
+    }
+    List<BookMove> rows;
+    try {
+      rows = db.bookMoves(fen);
+    } catch (_) {
+      rows = const [];
+    }
+    if (classicalOnly) {
+      rows = [for (final r in rows) ?r.classicalOnly]
+        ..sort((a, b) => b.games.compareTo(a.games));
+    }
+    final total = rows.fold(0, (n, r) => n + r.games);
+    final moves = [
+      for (final r in rows)
+        ExplorerMove(
+          san: uciToSan(fen, r.uci),
+          uci: r.uci,
+          white: r.whiteWins,
+          draws: r.draws,
+          black: r.blackWins,
+          playRate: total == 0 ? 0 : r.games / total * 100,
+        ),
+    ];
+
+    final games = <ExplorerGame>[];
+    final seen = <int>{};
+    void add(int id, String san) {
+      if (id == 0 || games.length >= localTopGames || !seen.add(id)) return;
+      final g = db.game(id);
+      if (g == null) return;
+      games.add(_localGame(g, san));
+    }
+
+    for (final r in rows) {
+      add(r.citeGameId, uciToSan(fen, r.uci));
+    }
+    for (final r in rows) {
+      add(r.recentGameId, uciToSan(fen, r.uci));
+    }
+    games.sort((a, b) => b.topElo.compareTo(a.topElo));
+
+    return ExplorerResponse(
+      fen: fen,
+      moves: moves,
+      totalGames: total,
+      white: rows.fold<int>(0, (n, r) => n + r.whiteWins),
+      draws: rows.fold<int>(0, (n, r) => n + r.draws),
+      black: rows.fold<int>(0, (n, r) => n + r.blackWins),
+      topGames: games,
+    );
+  }
+
+  static ExplorerGame _localGame(MasterGame g, String san) {
+    final parts = g.date.split('.');
+    return ExplorerGame(
+      id: '${g.id}',
+      source: ExplorerGameSource.twic,
+      white: g.white,
+      black: g.black,
+      whiteElo: g.whiteElo,
+      blackElo: g.blackElo,
+      result: g.result,
+      year: parts.isEmpty ? null : int.tryParse(parts[0]),
+      month: parts.length < 2 ? null : int.tryParse(parts[1]),
+      event: g.event,
+      san: san,
+    );
   }
 
   /// Whether [fen] is deeper than the database answers: past [maxPly], or

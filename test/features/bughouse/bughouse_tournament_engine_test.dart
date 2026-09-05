@@ -28,6 +28,8 @@ import 'package:chess_auto_prep/features/bughouse/services/bughouse_engine.dart'
 import 'package:chess_auto_prep/features/bughouse/services/bughouse_tournament_runner.dart';
 import 'package:chess_auto_prep/models/game_outcome.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dartchess/dartchess.dart';
+import 'package:chess_auto_prep/features/bughouse/models/bughouse_rules.dart';
 
 void main() {
   final bin = Platform.environment['HIVEMIND_BIN'];
@@ -49,6 +51,19 @@ void main() {
 
     tearDownAll(() async {
       if (available) await engine.dispose();
+    });
+
+    test('engine and arbiter agree that the partner can rescue mate', () async {
+      const fen =
+          'rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR[] w KQkq - 1 3|rnbqkbnr/ppp1pppp/8/3P4/8/8/PPPP1PPP/RNBQKBNR[] b KQkq - 0 2';
+      final position = BughouseState.tryParseDualFen(fen)!;
+      expect(BughouseRules.losingBoard(position, Side.white), isNull);
+      await engine.configure(team: Side.white, hasTimeAdvantage: false);
+      await engine.setPosition(position);
+      final search = await engine.search(nodes: 200);
+      expect(search.best.toString(), '(pass,d8d5)');
+      final saved = position.playMove(BughouseBoard.b, Move.parse('d8d5')!)!;
+      expect(saved.boardA.isLegal(Move.parse('P@g3')!), isTrue);
     });
 
     test('plays a line out and the games replay', () async {

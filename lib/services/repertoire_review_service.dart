@@ -1,4 +1,5 @@
 import 'dart:math';
+import '../utils/training_csv.dart';
 
 import '../models/repertoire_line.dart';
 import '../models/repertoire_review_entry.dart';
@@ -18,92 +19,168 @@ class RepertoireReviewService {
 
   final StorageService _storage;
 
+  static const _reviewsFile = 'repertoire_reviews.csv';
+  static const _historyFile = 'repertoire_review_history.csv';
+  static const _progressFile = 'repertoire_move_progress.csv';
+  final Map<String, String> _loadedReviewRows = {};
+  final Map<String, String> _loadedProgressRows = {};
+
+  String _reviewKey(RepertoireReviewEntry e) =>
+      '${e.repertoireId.length}:${e.repertoireId}${e.lineId}';
+  String _progressKey(RepertoireMoveProgress e) =>
+      '${e.repertoireId.length}:${e.repertoireId}${e.lineId}:${e.moveIndex}';
+
   Future<List<RepertoireReviewEntry>> loadAll() async {
-    final csv = await _storage.readRepertoireReviewsCsv();
-    if (csv == null || csv.trim().isEmpty) return [];
-
-    final lines = csv
-        .split('\n')
-        .where((line) => line.trim().isNotEmpty)
-        .toList();
-    if (lines.isEmpty) return [];
-
-    final firstLine = lines.first.trim();
-    final rows = firstLine.startsWith('repertoire_id,')
-        ? lines.sublist(1)
-        : lines;
-    return rows.map((row) => RepertoireReviewEntry.fromCsvRow(row)).toList();
-  }
-
-  Future<void> saveAll(List<RepertoireReviewEntry> entries) async {
-    final buffer = StringBuffer()..writeln(_header);
-    for (final entry in entries) {
-      buffer.writeln(entry.toCsvRow());
+    final entries = trainingRows(
+      await _storage.readRepertoireReviewsCsv(),
+    ).map(RepertoireReviewEntry.fromCsvRow).toList();
+    _loadedReviewRows.clear();
+    for (final e in entries) {
+      _loadedReviewRows[_reviewKey(e)] = e.toCsvRow();
     }
-    await _storage.saveRepertoireReviewsCsv(buffer.toString());
+    return entries;
   }
 
-  Future<List<RepertoireReviewHistoryEntry>> loadHistory() async {
-    final csv = await _storage.readRepertoireReviewHistoryCsv();
-    if (csv == null || csv.trim().isEmpty) return [];
-    final lines = csv
-        .split('\n')
-        .where((line) => line.trim().isNotEmpty)
-        .toList();
-    if (lines.isEmpty) return [];
-    final rows = lines.first.trim() == _historyHeader
-        ? lines.sublist(1)
-        : lines;
-    return rows
-        .map((row) => RepertoireReviewHistoryEntry.fromCsvRow(row))
-        .toList();
+  Future<void> _preserveBeforeMigration(String path) async {
+    final old = await _storage.readFile(path);
+    final backup = '$path.pre-csv-v2.bak';
+    if (old != null && !await _storage.fileExists(backup)) {
+      try {
+        await _storage.writeFile(backup, old, createOnly: true);
+      } catch (_) {
+        if (!await _storage.fileExists(backup)) rethrow;
+      }
+    }
   }
+
+  Future<void> saveAll(
+    List<RepertoireReviewEntry> entries, {
+    String? repertoireId,
+  }) async {
+    await _preserveBeforeMigration(_reviewsFile);
+    final snapshot = [
+      for (final e in entries)
+        if (repertoireId == null || e.repertoireId == repertoireId)
+          e.toCsvRow(),
+    ];
+    final expected = Map<String, String>.of(_loadedReviewRows);
+    await _storage.updateFile(_reviewsFile, (raw) {
+      final current = trainingRows(
+        raw,
+      ).map(RepertoireReviewEntry.fromCsvRow).toList();
+      final merged = {for (final e in current) _reviewKey(e): e};
+      for (final row in snapshot) {
+        final e = RepertoireReviewEntry.fromCsvRow(row);
+        final key = _reviewKey(e);
+        final existing = merged[key]?.toCsvRow();
+        if (row == expected[key]) continue;
+        if (existing != expected[key] && existing != row) {
+          throw StateError(
+            'Training progress changed in another session. Reload before saving.',
+          );
+        }
+        merged[key] = e;
+      }
+      final keys = {
+        for (final row in snapshot)
+          _reviewKey(RepertoireReviewEntry.fromCsvRow(row)),
+      };
+      for (final entry in expected.entries) {
+        final previous = RepertoireReviewEntry.fromCsvRow(entry.value);
+        if ((repertoireId == null || previous.repertoireId == repertoireId) &&
+            !keys.contains(entry.key)) {
+          if (merged[entry.key]?.toCsvRow() != entry.value) {
+            throw StateError(
+              'Training progress changed before removal. Reload before saving.',
+            );
+          }
+          merged.remove(entry.key);
+        }
+      }
+      return '$_header\n${merged.values.map((e) => e.toCsvRow()).join('\n')}\n';
+    });
+    _loadedReviewRows.removeWhere(
+      (key, row) =>
+          repertoireId == null ||
+          RepertoireReviewEntry.fromCsvRow(row).repertoireId == repertoireId,
+    );
+    for (final row in snapshot) {
+      final e = RepertoireReviewEntry.fromCsvRow(row);
+      _loadedReviewRows[_reviewKey(e)] = row;
+    }
+  }
+
+  Future<List<RepertoireReviewHistoryEntry>> loadHistory() async =>
+      trainingRows(
+        await _storage.readRepertoireReviewHistoryCsv(),
+      ).map(RepertoireReviewHistoryEntry.fromCsvRow).toList();
 
   Future<void> appendHistory(List<RepertoireReviewHistoryEntry> entries) async {
-    final existing = await loadHistory();
-    final all = [...existing, ...entries];
-    final buffer = StringBuffer()..writeln(_historyHeader);
-    for (final entry in all) {
-      buffer.writeln(entry.toCsvRow());
-    }
-    await _storage.saveRepertoireReviewHistoryCsv(buffer.toString());
+    await _preserveBeforeMigration(_historyFile);
+    final additions = entries.map((e) => e.toCsvRow()).toList();
+    await _storage.updateFile(_historyFile, (raw) {
+      final existing = trainingRows(
+        raw,
+      ).map(RepertoireReviewHistoryEntry.fromCsvRow);
+      return '$_historyHeader\n${[...existing.map((e) => e.toCsvRow()), ...additions].join('\n')}\n';
+    });
   }
 
   Future<List<RepertoireMoveProgress>> loadMoveProgress() async {
-    final csv = await _storage.readRepertoireMoveProgressCsv();
-    if (csv == null || csv.trim().isEmpty) return [];
-    final lines = csv
-        .split('\n')
-        .where((line) => line.trim().isNotEmpty)
-        .toList();
-    if (lines.isEmpty) return [];
-    final rows = lines.first.trim() == _moveProgressHeader
-        ? lines.sublist(1)
-        : lines;
-    return rows.map((row) => RepertoireMoveProgress.fromCsvRow(row)).toList();
+    final entries = trainingRows(
+      await _storage.readRepertoireMoveProgressCsv(),
+    ).map(RepertoireMoveProgress.fromCsvRow).toList();
+    _loadedProgressRows.clear();
+    for (final e in entries) {
+      _loadedProgressRows[_progressKey(e)] = e.toCsvRow();
+    }
+    return entries;
   }
 
-  /// Save move progress for a specific repertoire, merging with other
-  /// repertoires' data already on disk.
   Future<void> saveMoveProgress(
     List<RepertoireMoveProgress> entries, {
     String? repertoireId,
   }) async {
-    List<RepertoireMoveProgress> all;
-    if (repertoireId != null) {
-      final existing = await loadMoveProgress();
-      final others = existing
-          .where((e) => e.repertoireId != repertoireId)
-          .toList();
-      all = [...others, ...entries];
-    } else {
-      all = entries;
-    }
-    final buffer = StringBuffer()..writeln(_moveProgressHeader);
-    for (final entry in all) {
-      buffer.writeln(entry.toCsvRow());
-    }
-    await _storage.saveRepertoireMoveProgressCsv(buffer.toString());
+    await _preserveBeforeMigration(_progressFile);
+    final snapshot = {
+      for (final e in entries)
+        if (repertoireId == null || e.repertoireId == repertoireId)
+          _progressKey(e): e.toCsvRow(),
+    };
+    final expected = Map<String, String>.of(_loadedProgressRows);
+    await _storage.updateFile(_progressFile, (raw) {
+      final current = trainingRows(raw).map(RepertoireMoveProgress.fromCsvRow);
+      final merged = {for (final e in current) _progressKey(e): e.toCsvRow()};
+      for (final entry in snapshot.entries) {
+        if (entry.value == expected[entry.key]) continue;
+        if (merged[entry.key] != expected[entry.key] &&
+            merged[entry.key] != entry.value) {
+          throw StateError(
+            'Move progress changed in another session. Reload before saving.',
+          );
+        }
+        merged[entry.key] = entry.value;
+      }
+      for (final entry in expected.entries) {
+        final previous = RepertoireMoveProgress.fromCsvRow(entry.value);
+        if ((repertoireId == null || previous.repertoireId == repertoireId) &&
+            !snapshot.containsKey(entry.key)) {
+          if (merged[entry.key] != entry.value) {
+            throw StateError(
+              'Move progress changed before removal. Reload before saving.',
+            );
+          }
+          merged.remove(entry.key);
+        }
+      }
+      return '$_moveProgressHeader\n${merged.values.join('\n')}\n';
+    });
+    _loadedProgressRows.removeWhere(
+      (key, row) =>
+          repertoireId == null ||
+          RepertoireMoveProgress.fromCsvRow(row).repertoireId == repertoireId,
+    );
+    _loadedProgressRows.addAll(snapshot);
   }
 
   /// Ensure every repertoire line has a review entry and return merged list.

@@ -233,57 +233,36 @@ class GameNavBar extends StatelessWidget {
     );
   }
 
+  /// Five stars in a row: tap the n-th to rate, tap the current rating again
+  /// to clear it. A menu for this needed a click to open, a read down a list
+  /// of star strings and a click to choose; the row is one click and the
+  /// rating is visible without opening anything.
   Widget _buildRatingMenu() {
-    return PopupMenuButton<int>(
-      tooltip: 'Rate this game',
-      enabled: onSetRating != null,
-      onSelected: (rating) => onSetRating?.call(rating),
-      itemBuilder: (_) => [
-        for (var rating = 0; rating <= 5; rating++)
-          PopupMenuItem(
-            value: rating,
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 92,
-                  child: Text(
-                    rating == 0 ? 'Unrated' : '★' * rating,
-                    style: TextStyle(
-                      color: rating == 0
-                          ? AppColors.onSurfaceMuted
-                          : AppColors.starAccent,
-                    ),
-                  ),
+    final enabled = onSetRating != null;
+    return Tooltip(
+      message: 'Rate this game (1–5). Tap the current star again to unrate.',
+      waitDuration: const Duration(milliseconds: 500),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var star = 1; star <= 5; star++)
+            InkWell(
+              onTap: enabled
+                  ? () => onSetRating?.call(star == currentRating ? 0 : star)
+                  : null,
+              borderRadius: BorderRadius.circular(4),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
+                child: Icon(
+                  star <= currentRating ? Icons.star : Icons.star_border,
+                  size: 20,
+                  color: star <= currentRating
+                      ? AppColors.starAccent
+                      : AppColors.starEmpty,
                 ),
-                if (rating == currentRating) const Icon(Icons.check, size: 16),
-              ],
+              ),
             ),
-          ),
-      ],
-      child: Container(
-        height: kGameNavControlHeight,
-        padding: const EdgeInsets.symmetric(horizontal: 9),
-        decoration: BoxDecoration(
-          border: Border.all(color: AppColors.outline),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              currentRating == 0 ? Icons.star_border : Icons.star,
-              size: 18,
-              color: currentRating == 0
-                  ? AppColors.starEmpty
-                  : AppColors.starAccent,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              currentRating == 0 ? 'Rate' : '$currentRating',
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }

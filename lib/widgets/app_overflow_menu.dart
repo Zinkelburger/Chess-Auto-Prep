@@ -9,6 +9,12 @@
 /// The bar itself is meant to stay at four controls: title, one primary
 /// action, this menu, and the mode switcher. Anything occasional belongs in
 /// here.
+///
+/// A menu with more than a handful of rows groups them under section
+/// headings ([AppMenuEntry.heading]) — the same uppercase eyebrow the mode
+/// switcher uses — rather than under dividers alone, so the reader scans
+/// four words instead of twelve rows. [AppOverflowMenu.anchor] lets a screen
+/// hang the same menu off a labelled control ("Actions ▾") instead of the ⋮.
 library;
 
 import 'package:flutter/material.dart';
@@ -27,6 +33,7 @@ class AppMenuEntry {
     this.leading,
     this.enabled = true,
     this.dividerAbove = false,
+    this.heading,
     this.checked,
     this.shortcut,
     this.hint,
@@ -51,6 +58,11 @@ class AppMenuEntry {
   /// actions.
   final bool dividerAbove;
 
+  /// Uppercase section heading drawn above this row ("ADD LINES"). The first
+  /// row of each group carries its group's name; a heading above the very
+  /// first row needs no divider, later ones get one for free.
+  final String? heading;
+
   /// Non-null turns the row into a toggle and shows a check when true.
   final bool? checked;
 
@@ -70,31 +82,72 @@ class AppOverflowMenu extends StatelessWidget {
     super.key,
     required this.entries,
     this.tooltip = 'More actions',
+    this.anchor,
+    this.enabled = true,
   });
 
   final List<AppMenuEntry> entries;
   final String tooltip;
 
+  /// The control the menu hangs off. Null is the `⋮` icon; a labelled
+  /// control ("Actions ▾") opens the same menu under itself.
+  final Widget? anchor;
+
+  /// False greys the anchor and keeps the menu shut — for a bar that is
+  /// locked while a long job runs.
+  final bool enabled;
+
   @override
   Widget build(BuildContext context) {
     final rows = entries;
     if (rows.isEmpty) return const SizedBox.shrink();
-    return PopupMenuButton<int>(
-      icon: const Icon(Icons.more_vert, size: 20),
-      tooltip: tooltip,
-      onSelected: (i) => rows[i].onRun(),
-      itemBuilder: (_) => [
-        for (var i = 0; i < rows.length; i++) ...[
-          if (rows[i].dividerAbove && i > 0) const PopupMenuDivider(),
-          PopupMenuItem<int>(
-            value: i,
-            enabled: rows[i].enabled,
-            child: AppMenuEntryRow(entry: rows[i]),
-          ),
-        ],
+    final items = <PopupMenuEntry<int>>[
+      for (var i = 0; i < rows.length; i++) ...[
+        if ((rows[i].dividerAbove || rows[i].heading != null) && i > 0)
+          const PopupMenuDivider(),
+        if (rows[i].heading != null) appMenuHeadingItem<int>(rows[i].heading!),
+        PopupMenuItem<int>(
+          value: i,
+          enabled: rows[i].enabled,
+          // The mode switcher's row height, so the two menus that sit side
+          // by side on a bar read as one kind of thing.
+          height: 32,
+          child: AppMenuEntryRow(entry: rows[i]),
+        ),
       ],
+    ];
+    final anchor = this.anchor;
+    if (anchor == null) {
+      return PopupMenuButton<int>(
+        icon: const Icon(Icons.more_vert, size: 20),
+        tooltip: tooltip,
+        enabled: enabled,
+        onSelected: (i) => rows[i].onRun(),
+        itemBuilder: (_) => items,
+      );
+    }
+    return PopupMenuButton<int>(
+      tooltip: tooltip,
+      enabled: enabled,
+      position: PopupMenuPosition.under,
+      padding: EdgeInsets.zero,
+      onSelected: (i) => rows[i].onRun(),
+      itemBuilder: (_) => items,
+      child: anchor,
     );
   }
+}
+
+/// A non-selectable section heading row for any popup menu: the uppercase
+/// eyebrow the mode switcher introduced, now shared so every grouped menu
+/// in the app draws its groups the same way.
+PopupMenuItem<T> appMenuHeadingItem<T>(String heading) {
+  return PopupMenuItem<T>(
+    enabled: false,
+    height: 28,
+    padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+    child: Text(heading.toUpperCase(), style: AppTextStyles.eyebrow),
+  );
 }
 
 /// An [AppMenuEntry] rendered as a menu row. Public so screens with a

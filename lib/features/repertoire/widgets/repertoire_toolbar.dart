@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../constants/ui_breakpoints.dart';
 import '../../../models/repertoire_metadata.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
@@ -14,13 +13,18 @@ import '../../../widgets/layout/board_zone.dart';
 ///
 /// Four controls, in the order they are reached for:
 /// - the title doubles as the repertoire/chapter switcher,
-/// - one "Add lines" menu ([RepertoireAddLinesMenu]) holds every way of
-///   putting moves into the repertoire,
-/// - Train is the primary (filled) action,
-/// - everything else — Audit and both settings dialogs — lives in the
-///   trailing overflow menu. Audit used to sit in the bar as a button of
-///   its own; six controls read as a wall, and it is a check on what is
-///   already there rather than something you reach for while building.
+/// - one `Actions ▾` menu ([RepertoireActionsMenu]) holds everything that
+///   *does* something to the repertoire, in three named groups: every way of
+///   adding lines, training, and the audit,
+/// - the mode switcher,
+/// - the trailing `⋮` holds the two settings dialogs and nothing else.
+///
+/// Train used to be a filled button of its own beside "Add lines". It was
+/// the loudest thing on the bar for an action most sittings never take —
+/// the builder is where lines are made, and the trainer has its own mode —
+/// so it now lives one row down in the Actions menu. Audit made the same
+/// trip out of the overflow: it is a thing you do to the repertoire, not a
+/// setting.
 ///
 /// Chapters are reached from the breadcrumb title, which already lists them
 /// with a search box — the bar's separate Chapters icon went nowhere the
@@ -32,7 +36,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     this.isGenerating = false,
     this.isGenerationPaused = false,
     this.isExpectimaxProbe = false,
-    this.showTrainButton = false,
+    this.showTrainAction = false,
     this.showSelectRepertoireAction = false,
     this.generationLocked = false,
     this.trapNavigation,
@@ -56,7 +60,10 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   /// The running build is an on-demand expectimax probe, not a repertoire
   /// build — the chip says so.
   final bool isExpectimaxProbe;
-  final bool showTrainButton;
+
+  /// Whether the Actions menu offers "Train this chapter" — true once a
+  /// chapter is open, false on the loading, error and picker screens.
+  final bool showTrainAction;
   final bool showSelectRepertoireAction;
   final bool generationLocked;
   final Widget? trapNavigation;
@@ -102,26 +109,20 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
             label: isExpectimaxProbe ? 'Computing expectimax…' : null,
             onTap: onOpenGeneration,
           ),
-        RepertoireAddLinesMenu(
+        RepertoireActionsMenu(
           onPlanBuild: onPlanBuild,
           onGenerate: onOpenGeneration,
           onBuildByPlaying: onBuildByPlaying,
           onBuildFromGames: onBuildFromGames,
           onImportPgn: onImportPgn,
+          onTrain: showTrainAction ? onTrainRepertoire : null,
+          onAudit: onOpenAudit,
+          trainEnabled: !generationLocked,
         ),
-        if (showTrainButton && onTrainRepertoire != null)
-          RepertoireTrainButton(
-            onPressed: generationLocked ? null : onTrainRepertoire,
-          ),
         const AppModeSwitcher(),
         AppOverflowMenu(
+          tooltip: 'Settings',
           entries: [
-            if (onOpenAudit != null)
-              AppMenuEntry(
-                label: 'Audit for gaps…',
-                icon: Icons.policy_outlined,
-                onRun: onOpenAudit!,
-              ),
             if (onOpenRepertoireOptions != null)
               AppMenuEntry(
                 label: 'Repertoire settings…',
@@ -129,13 +130,11 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
                 // near-invisible on the popup surface without an outline.
                 leading: _SideSwatch(isWhite: isWhiteRepertoire ?? true),
                 onRun: onOpenRepertoireOptions!,
-                dividerAbove: true,
               ),
             AppMenuEntry(
               label: 'App settings…',
               icon: Icons.settings,
               onRun: onOpenSettings,
-              dividerAbove: onOpenRepertoireOptions == null,
             ),
           ],
         ),
@@ -469,34 +468,42 @@ class RepertoireGenerationStatusChip extends StatelessWidget {
   }
 }
 
-/// The one place every way of *adding lines* to a repertoire lives: plan a
-/// build, generate from the board, play the moves yourself, mine your own
-/// games, or load a PGN off disk. One tap opens the menu, one tap runs the
-/// item — every entry opens its own configuration step or picker first, so
-/// nothing heavy can fire by accident.
+/// The one menu for everything that *does* something to the repertoire.
+///
+/// Three groups under uppercase headings, in the order they are reached for:
+///
+/// - **Add lines** — plan a build, generate from the board, play the moves
+///   yourself, mine your own games, or load a PGN off disk. Every entry opens
+///   its own configuration step or picker first, so nothing heavy can fire
+///   by accident.
+/// - **Train** — the open chapter in the trainer. It was a filled button
+///   beside this menu; see [RepertoireToolbar].
+/// - **Check** — audit the chapter for gaps.
 ///
 /// Rows are labels only — no explaining sentence, and no leading icon. The
 /// icons were decoration: a sparkle, a gamepad and a download arrow that no
 /// reader can tell apart faster than they can read five short labels, and
 /// that each suggested the wrong thing (the gamepad read as "play a game",
 /// not "author lines by playing them"). The label is the discriminator, so
-/// it is the only thing here.
+/// it is the only thing here; the headings do the grouping.
 ///
-/// The rows are ordered in two families — three verbs for making moves at
-/// the board, then two sources the moves come out of — and the labels carry
-/// that on their own. There is no rule between them: a five-row menu does
-/// not need furniture to be read. ("Plan a build" and "Import PGN" were the
-/// two labels that broke the pattern — "a build" is the pipeline's word for
-/// itself, and "Import" named the transport rather than where the lines
+/// Within "Add lines" the rows come in two families — three verbs for making
+/// moves at the board, then two sources the moves come out of — and the
+/// labels carry that on their own. ("Plan a build" and "Import PGN" were
+/// the two labels that broke the pattern — "a build" is the pipeline's word
+/// for itself, and "Import" named the transport rather than where the lines
 /// come from.)
-class RepertoireAddLinesMenu extends StatelessWidget {
-  const RepertoireAddLinesMenu({
+class RepertoireActionsMenu extends StatelessWidget {
+  const RepertoireActionsMenu({
     super.key,
     this.onPlanBuild,
     this.onGenerate,
     this.onBuildByPlaying,
     this.onBuildFromGames,
     this.onImportPgn,
+    this.onTrain,
+    this.onAudit,
+    this.trainEnabled = true,
   });
 
   final VoidCallback? onPlanBuild;
@@ -504,96 +511,106 @@ class RepertoireAddLinesMenu extends StatelessWidget {
   final VoidCallback? onBuildByPlaying;
   final VoidCallback? onBuildFromGames;
   final VoidCallback? onImportPgn;
+  final VoidCallback? onTrain;
+  final VoidCallback? onAudit;
 
-  List<AppMenuEntry> get _entries => [
-    if (onPlanBuild != null)
-      AppMenuEntry(label: 'Plan the lines…', onRun: onPlanBuild!),
-    if (onGenerate != null)
-      AppMenuEntry(label: 'Generate from here…', onRun: onGenerate!),
-    // Named for what the user does, not for the mode's internal name: the
-    // one thing that separates it from Generate is who chooses our moves.
-    if (onBuildByPlaying != null)
-      AppMenuEntry(label: 'Play the moves myself…', onRun: onBuildByPlaying!),
-    if (onBuildFromGames != null)
-      AppMenuEntry(label: 'From my games…', onRun: onBuildFromGames!),
-    // One entry, not the old "Load from disk…" / "Paste PGN…" pair: the
-    // dialog it opens offers both, so the menu no longer asks the user to
-    // pick a transport before it will show them the import.
-    if (onImportPgn != null)
-      AppMenuEntry(label: 'From a PGN…', onRun: onImportPgn!),
-  ];
+  /// False keeps the Train row visible but greyed — while a build runs the
+  /// chapter is changing under the trainer, so the row waits.
+  final bool trainEnabled;
+
+  /// Finder handle for tests: the control that opens the menu.
+  static const Key menuKey = Key('repertoire-actions-menu');
+
+  static const _addLines = 'Add lines';
+  static const _train = 'Train';
+  static const _check = 'Check';
+
+  List<AppMenuEntry> get _entries {
+    final add = <AppMenuEntry>[
+      if (onPlanBuild != null)
+        AppMenuEntry(label: 'Plan the lines…', onRun: onPlanBuild!),
+      if (onGenerate != null)
+        AppMenuEntry(label: 'Generate from here…', onRun: onGenerate!),
+      // Named for what the user does, not for the mode's internal name: the
+      // one thing that separates it from Generate is who chooses our moves.
+      if (onBuildByPlaying != null)
+        AppMenuEntry(label: 'Play the moves myself…', onRun: onBuildByPlaying!),
+      if (onBuildFromGames != null)
+        AppMenuEntry(label: 'From my games…', onRun: onBuildFromGames!),
+      // One entry, not the old "Load from disk…" / "Paste PGN…" pair: the
+      // dialog it opens offers both, so the menu no longer asks the user to
+      // pick a transport before it will show them the import.
+      if (onImportPgn != null)
+        AppMenuEntry(label: 'From a PGN…', onRun: onImportPgn!),
+    ];
+    final train = <AppMenuEntry>[
+      if (onTrain != null)
+        AppMenuEntry(
+          label: 'Train this chapter',
+          onRun: onTrain!,
+          enabled: trainEnabled,
+        ),
+    ];
+    final check = <AppMenuEntry>[
+      if (onAudit != null)
+        AppMenuEntry(label: 'Audit for gaps…', onRun: onAudit!),
+    ];
+    return [
+      ..._headed(_addLines, add),
+      ..._headed(_train, train),
+      ..._headed(_check, check),
+    ];
+  }
+
+  /// The group's first row carries its heading; an empty group vanishes
+  /// with its heading rather than leaving a title over nothing.
+  static List<AppMenuEntry> _headed(String heading, List<AppMenuEntry> rows) {
+    if (rows.isEmpty) return const [];
+    final first = rows.first;
+    return [
+      AppMenuEntry(
+        label: first.label,
+        onRun: first.onRun,
+        enabled: first.enabled,
+        heading: heading,
+      ),
+      ...rows.skip(1),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
     final entries = _entries;
     if (entries.isEmpty) return const SizedBox.shrink();
-    final compact =
-        MediaQuery.sizeOf(context).width < kToolbarCompactBreakpoint;
 
+    // A quiet control: the bar's one labelled menu, drawn like the mode
+    // switcher beside it (text and a drop arrow) rather than as a filled
+    // button — nothing here is the primary act of the screen, and the
+    // filled Train button this replaces was the complaint. The label stays
+    // at every width: seven letters cost less than an icon nobody can name.
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: Center(
-        child: MenuAnchor(
-          menuChildren: [
-            for (final e in entries)
-              MenuItemButton(
-                onPressed: e.onRun,
-                child: Text(e.label, style: const TextStyle(fontSize: 13)),
-              ),
-          ],
-          builder: (context, controller, _) {
-            void toggle() =>
-                controller.isOpen ? controller.close() : controller.open();
-            return compact
-                ? IconButton.filledTonal(
-                    tooltip: 'Add lines',
-                    onPressed: toggle,
-                    iconSize: 18,
-                    icon: const Icon(Icons.add),
-                  )
-                : FilledButton.tonalIcon(
-                    onPressed: toggle,
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('Add lines'),
-                        SizedBox(width: 2),
-                        Icon(Icons.arrow_drop_down, size: 18),
-                      ],
-                    ),
-                  );
-          },
+        child: AppOverflowMenu(
+          key: menuKey,
+          tooltip: 'Actions',
+          entries: entries,
+          anchor: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Actions', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(width: 2),
+                const Icon(
+                  Icons.arrow_drop_down,
+                  size: 20,
+                  color: AppColors.ink,
+                ),
+              ],
+            ),
+          ),
         ),
-      ),
-    );
-  }
-}
-
-class RepertoireTrainButton extends StatelessWidget {
-  const RepertoireTrainButton({super.key, required this.onPressed});
-
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final compact =
-        MediaQuery.sizeOf(context).width < kToolbarCompactBreakpoint;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Center(
-        child: compact
-            ? IconButton.filled(
-                tooltip: 'Train repertoire',
-                onPressed: onPressed,
-                iconSize: 18,
-                icon: const Icon(Icons.school),
-              )
-            : FilledButton.icon(
-                onPressed: onPressed,
-                icon: const Icon(Icons.school, size: 18),
-                label: const Text('Train'),
-              ),
       ),
     );
   }

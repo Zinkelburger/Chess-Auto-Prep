@@ -10,6 +10,8 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
+import '../features/repertoire/widgets/repertoire_toolbar.dart'
+    show RepertoireSwitcherTitle;
 import '../models/line_status.dart';
 import '../models/repertoire_line.dart';
 import '../models/repertoire_metadata.dart';
@@ -316,25 +318,20 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     final repertoire = _training.repertoire;
     return AppBar(
       titleSpacing: 16,
+      // The title *is* the repertoire picker, as in the Builder: what is
+      // loaded reads as `Repertoire › Chapter ▾`, and tapping it swaps it. A
+      // bare chapter name here ("Main") said nothing about which repertoire it
+      // came from or that it could be changed.
       title: AppBarTitleWithTrail(
-        title: repertoire == null
-            ? const SizedBox.shrink()
-            : Text(
-                repertoire.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall,
-              ),
+        title: RepertoireSwitcherTitle(
+          title: repertoire == null
+              ? Text('Select repertoire', style: theme.textTheme.titleMedium)
+              : _repertoireCrumb(theme),
+          onTap: _selectRepertoire,
+        ),
       ),
       actions: [
-        // Choosing what to train is the one thing this screen is for, so it
-        // is the only labelled action; reload and the two hand-offs are
-        // occasional and sit in the overflow.
-        TextButton.icon(
-          icon: const Icon(Icons.library_books, size: 18),
-          label: const Text('Select repertoire'),
-          onPressed: _selectRepertoire,
-        ),
+        // Reload and the two hand-offs are occasional and sit in the overflow.
         const AppModeSwitcher(),
         AppOverflowMenu(
           entries: [
@@ -365,6 +362,65 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
           ],
         ),
         const SizedBox(width: 8),
+      ],
+    );
+  }
+
+  /// Folder the loaded chapter belongs to, or null for a study (which is one
+  /// file, so its parent directory names nothing the user chose).
+  String? _repertoireFolder() {
+    final repertoire = _training.repertoire;
+    if (repertoire == null || _training.sourceIsStudy) return null;
+    return p.basename(p.dirname(repertoire.filePath));
+  }
+
+  /// `Black Repertoire › Main` as one string, for headings that take text.
+  String _repertoireTitle() {
+    final name = _training.repertoire?.name ?? 'Repertoire';
+    final folder = _repertoireFolder();
+    return folder == null ? name : '$folder › $name';
+  }
+
+  /// The app bar's `Repertoire › Chapter` crumb: folder plain, chapter bold,
+  /// the same weighting the Builder's breadcrumb uses.
+  Widget _repertoireCrumb(ThemeData theme) {
+    final name = _training.repertoire!.name;
+    final folder = _repertoireFolder();
+    final chapterStyle = theme.textTheme.titleMedium?.copyWith(
+      fontWeight: FontWeight.w600,
+    );
+    if (folder == null) {
+      return Text(
+        name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: chapterStyle,
+      );
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(
+          child: Text(
+            folder,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleMedium,
+          ),
+        ),
+        const Icon(
+          Icons.chevron_right,
+          size: 18,
+          color: AppColors.onSurfaceMuted,
+        ),
+        Flexible(
+          child: Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: chapterStyle,
+          ),
+        ),
       ],
     );
   }
@@ -442,7 +498,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   /// trained, and dense inside the Lines tab once a line is running.
   Widget _buildBrowser({required bool dense}) {
     return TrainerBrowser(
-      title: _training.repertoire?.name ?? 'Repertoire',
+      title: _repertoireTitle(),
       subtitle: _browserSubtitle(),
       lines: _training.lines,
       reviewMap: _training.reviewMap,
@@ -610,79 +666,73 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     );
   }
 
+  /// Only built while a line is running ([_buildPanel] shows the browser
+  /// otherwise), so the line is never null here.
   Widget _buildTrainTab() {
+    final line = _training.currentLine!;
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_training.currentLine != null) ...[
-            Row(
-              children: [
-                TextButton.icon(
-                  onPressed: _training.stopSession,
-                  icon: const Icon(Icons.arrow_back, size: 16),
-                  // Name the chapter you would be going back to; "Chapter"
-                  // told you nothing about which one.
-                  label: Text(
-                    _training.activeChapter == null
-                        ? 'All lines'
-                        : _training.activeChapter ==
-                              TrainingSessionController.ungroupedChapter
-                        ? 'Other lines'
-                        : _training.activeChapter!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    foregroundColor: AppColors.onSurfaceSoft,
-                  ),
+          Row(
+            children: [
+              TextButton.icon(
+                onPressed: _training.stopSession,
+                icon: const Icon(Icons.arrow_back, size: 16),
+                // Name the chapter you would be going back to; "Chapter"
+                // told you nothing about which one.
+                label: Text(
+                  _chapterTitle(_training.activeChapter),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const Spacer(),
-                _trainTabIconButton(
-                  icon: Icons.travel_explore,
-                  tooltip:
-                      'Explore this position in Builder\n'
-                      '(engine, explorer, add moves)',
-                  onPressed: _explorePosition,
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  foregroundColor: AppColors.onSurfaceSoft,
                 ),
-                _trainTabIconButton(
-                  icon: Icons.content_copy,
-                  tooltip: 'Copy FEN',
-                  onPressed: _copyFen,
-                ),
-                _trainTabIconButton(
-                  icon: Icons.replay,
-                  tooltip: 'Restart line',
-                  onPressed: _training.restartLine,
-                ),
-                _trainTabIconButton(
-                  icon: Icons.skip_next,
-                  tooltip: 'Skip to next line',
-                  onPressed: _training.skipLine,
-                ),
-              ],
-            ),
-            // Chapter *and* variation, over as many lines as it takes: while
-            // drilling there is no list around the line to say which chapter
-            // it came from, and course titles are long.
-            Text(
-              _training.currentLine!.qualifiedName,
-              style: Theme.of(context).textTheme.titleSmall,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-            ),
-            Text(
-              _training.sessionIntent == TrainingIntent.learn
-                  ? 'Learning'
-                  : 'Reviewing',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: AppColors.onSurfaceMuted),
-            ),
-            const Divider(height: 16),
-          ],
+              ),
+              const Spacer(),
+              _trainTabIconButton(
+                icon: Icons.travel_explore,
+                tooltip:
+                    'Explore this position in Builder\n'
+                    '(engine, explorer, add moves)',
+                onPressed: _explorePosition,
+              ),
+              _trainTabIconButton(
+                icon: Icons.content_copy,
+                tooltip: 'Copy FEN',
+                onPressed: _copyFen,
+              ),
+              _trainTabIconButton(
+                icon: Icons.replay,
+                tooltip: 'Restart line',
+                onPressed: _training.restartLine,
+              ),
+              _trainTabIconButton(
+                icon: Icons.skip_next,
+                tooltip: 'Skip to next line',
+                onPressed: _training.skipLine,
+              ),
+            ],
+          ),
+          // Chapter *and* variation, over as many lines as it takes: while
+          // drilling there is no list around the line to say which chapter
+          // it came from, and course titles are long.
+          Text(
+            line.qualifiedName,
+            style: Theme.of(context).textTheme.titleSmall,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            _training.sessionIntent == TrainingIntent.learn
+                ? 'Learning'
+                : 'Reviewing',
+            style: AppTextStyles.caption,
+          ),
+          const Divider(height: 16),
           Expanded(
             child: _training.runComplete
                 ? _buildRunCompletePanel()
@@ -760,14 +810,18 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       onBackToList: _training.stopSession,
       onLearn: _training.startLearnSession,
       onReview: _training.startReviewSession,
-      learnBatchSize: _training.repetitionMode == RepetitionMode.linear
-          ? 0
-          : _training.settings.newLinesPerSession,
-      reviewBatchSize: _training.repetitionMode == RepetitionMode.linear
-          ? 0
-          : _training.settings.reviewsPerSession,
+      learnBatchSize: _sessionCap(_training.settings.newLinesPerSession),
+      reviewBatchSize: _sessionCap(_training.settings.reviewsPerSession),
     );
   }
+
+  /// What to call the chapter scope in the UI: null is every line, the
+  /// ungrouped sentinel is the lines no chapter claims.
+  static String _chapterTitle(String? chapter) => chapter == null
+      ? 'All lines'
+      : chapter == TrainingSessionController.ungroupedChapter
+      ? 'Other lines'
+      : chapter;
 
   /// Small dense icon button for the Train tab header row.
   Widget _trainTabIconButton({
@@ -823,17 +877,11 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   /// train/edit hand off after the page closes, the same way the line
   /// preview does.
   Future<void> _readLines(List<RepertoireLine> lines) async {
-    final chapter = _training.activeChapter;
-    final chapterTitle = chapter == null
-        ? 'All lines'
-        : chapter == TrainingSessionController.ungroupedChapter
-        ? 'Other lines'
-        : chapter;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => ChapterReaderScreen(
-          repertoireName: _training.repertoire?.name ?? 'Repertoire',
-          chapterTitle: chapterTitle,
+          repertoireName: _repertoireTitle(),
+          chapterTitle: _chapterTitle(_training.activeChapter),
           lines: lines,
           reviewMap: _training.reviewMap,
           editLabel: _training.sourceIsStudy
@@ -947,11 +995,11 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            color: Colors.orange.withValues(alpha: 0.08),
+            color: AppColors.warning.withValues(alpha: 0.08),
             child: Text(
               'Peeking mid-training — clicking moves here won\'t touch the '
               'training board.',
-              style: TextStyle(fontSize: 12, color: Colors.orange[700]),
+              style: AppTextStyles.caption.copyWith(color: AppColors.warning),
             ),
           ),
         Expanded(

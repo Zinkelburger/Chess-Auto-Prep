@@ -59,6 +59,28 @@ StoredBughouseTournament _match({
 );
 
 void main() {
+  test('unfinished games do not count as draws or narrow the interval', () {
+    final match = _match(
+      games: [
+        _game(result: GameResult.whiteWins),
+        _game(result: GameResult.unfinished),
+      ],
+    );
+    expect(match.openingScore.played, 1);
+    expect(match.openingScore.draws, 0);
+    expect(match.openingScoreLabel, '1/1');
+    expect(match.openingScoreMargin, 1);
+    expect(
+      _match(games: [_game(result: GameResult.unfinished)]).openingScoreMargin,
+      isNull,
+    );
+    final unanimous = _match(
+      games: List.generate(20, (_) => _game(result: GameResult.whiteWins)),
+    );
+    expect(unanimous.openingScoreMargin, greaterThan(0.3));
+    expect(unanimous.openingScoreMargin, lessThan(1));
+  });
+
   group('BPGN', () {
     test('the movetext is what the archive parser reads', () {
       final bpgn = writeMatchBpgn(_match());

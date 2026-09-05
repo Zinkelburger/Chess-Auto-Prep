@@ -548,13 +548,7 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
     final autoRun = prefs.getBool(_autoRunPrefsKey);
     if (speedNames != null || autoRun != null) {
       _filters = GamesListFilters(
-        speeds: speedNames == null
-            ? _filters.speeds
-            : {
-                for (final name in speedNames)
-                  for (final s in GameSpeed.values)
-                    if (s.name == name) s,
-              },
+        speeds: gameSpeedsFromNames(speedNames) ?? _filters.speeds,
         autoRun: autoRun ?? _filters.autoRun,
       );
     }

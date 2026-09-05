@@ -114,8 +114,8 @@ void main() {
       expect(db.positions.single.fen, _fen(1));
       expect(db.activeSetName, TacticsDatabase.defaultSetName);
       expect(await setFile(TacticsDatabase.defaultSetName).exists(), isTrue);
-      expect(await legacyCsvFile().exists(), isFalse);
-      expect(await File('${legacyCsvFile().path}.bak').exists(), isTrue);
+      expect(await legacyCsvFile().exists(), isTrue);
+      expect(await legacyCsvFile().readAsString(), _csv([_pos(_fen(1))]));
     });
 
     test(

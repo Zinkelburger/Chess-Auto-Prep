@@ -5,8 +5,6 @@
 /// writer of those fields during [TrainingPhase.replaying].
 library;
 
-import 'package:dartchess/dartchess.dart';
-
 import '../../models/completed_move.dart';
 import 'move_validation.dart' as validation;
 import 'training_phase.dart';
@@ -36,12 +34,7 @@ class ReplayPhase {
     }
 
     final targetMoveIndex = _s.wrongMoveIndices[_s.replayIndex];
-    final startFen = _s.currentLine!.startPosition.fen;
-    if (startFen != Chess.initial.fen) {
-      _s.session.setPositionFromFen(startFen);
-    } else {
-      _s.session.clearMoveHistory();
-    }
+    _s.resetBoard(_s.currentLine!);
     for (int i = 0; i < targetMoveIndex; i++) {
       _s.session.playMove(_s.currentLine!.moves[i]);
     }

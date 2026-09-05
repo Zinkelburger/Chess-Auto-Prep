@@ -41,35 +41,49 @@
 set -uo pipefail
 
 # ---------------------------------------------------------------------------
-# Sizing — measured, not guessed
+# Sizing — measured, not guessed, and re-measured after the first numbers bit
 #
-# `memory.max` counts anon + page cache, and the kernel reclaims cache before
-# it kills anything, so the number that matters is ANON: real, unreclaimable
-# memory. Measured under a deliberately heavy load (~6 concurrent agent
-# sessions plus a running mutation campaign):
+# `memory.max` counts anon + page cache. The kernel reclaims cache before it
+# kills anything, so a cap that is near the working set does not kill: it
+# THRASHES. Every page of the Flutter SDK, the editor and the browser gets
+# evicted and re-faulted in a loop, the cgroup's PSI climbs, anon spills into
+# zram until it is full, and then systemd-oomd — which watches pressure, not
+# size — reads the stall as an emergency and kills the biggest cgroup under
+# it. That is precisely what the first version of these caps did, on the
+# afternoon of 2026-09-04:
 #
-#   app-code-….scope   3.71 G anon   ← a VS Code window running all 6 sessions
-#   Chromium           2.19 G anon   (its 15.7 G "peak" is page cache)
-#   firefox            2.01 G anon
-#   app.slice TOTAL   11.98 G anon
-#   user.slice        13.19 G anon   ← mongod; genuinely resident, not cache
-#   session.slice      0.57 G anon
-#   background.slice   0.38 G anon
+#   app.slice      MemoryMax=24G   sat AT its cap all afternoon: memory.events
+#                                  counted 7,031,265 cap hits, swap (8G zram)
+#                                  reached 100%, and at 16:33 systemd-oomd
+#                                  killed the whole VS Code scope for "memory
+#                                  pressure on app.slice 85% > 80% for 20s".
+#                                  Six agent sessions died. Free RAM at the
+#                                  time: 29 GB.
+#   app-code scope MemoryMax=10G   hit by the editor scope between 14:43 and
+#                                  15:02: the kernel killed five dart
+#                                  frontend_servers, a `claude` session and
+#                                  the running app inside it, one by one.
 #
-# And from the 2026-09-04 OOM task dump: with the 29.8 G runaway excluded, the
-# entire machine's legitimate anon was ~17 G, and no single legitimate process
-# exceeded 1.02 G.
+# So the caps have one job — bound a RUNAWAY — and must sit well clear of what
+# the desktop legitimately uses, which is more than the first measurement
+# (one moment, 11.98 G anon) suggested:
 #
-# So the caps below are roughly 2-3x the heaviest thing ever legitimately
-# measured, not 6-8x. The Sep-4 runaway would now die at 10 G instead of 30 G.
+#   app.slice     13.3 G anon + 9.5 G file at the time it was pinned; a full
+#                 `flutter test --coverage` peaks at 4.4 G (its own scope),
+#                 the driver's app at 2.9 G, VS Code with six agent sessions
+#                 at 5 G, the two Chromium apps at 2-3.4 G each.
+#   an app scope  VS Code + six sessions + their MCP servers: 5 G idle,
+#                 8.5 G when they are all building.
 #
-# They also sum to 52G on a 62 GB machine (24+20+4+4), which — unlike the
-# earlier, looser set — means the total is structurally bounded below RAM. A
-# global OOM caused by user processes is no longer reachable by arithmetic, so
-# the root-level ceiling this script used to ask for is no longer needed.
+# The caps below are ~3x those. They no longer sum to less than RAM
+# (48+20+4+4 = 76 G on 62 G) and that is deliberate: the sum-below-RAM idea
+# was what made 24G look safe, and file cache made it a thrash budget instead.
+# A runaway still dies alone at its own scope's cap (16 G for an app, 8 G for
+# a ci.sh job) long before the machine is short; the slice cap is only there
+# so app.slice as a whole cannot reach a GLOBAL oom on its own.
 # ---------------------------------------------------------------------------
-SCOPE_MAX=${CHESS_PREP_SCOPE_MAX:-10G}      # one app scope: 2.7x the 3.71 G measured
-SLICE_MAX=${CHESS_PREP_SLICE_MAX:-24G}      # all app scopes: 2x the 11.98 G measured
+SCOPE_MAX=${CHESS_PREP_SCOPE_MAX:-16G}      # one app scope: ~2x the 8.5 G VS Code+6 sessions reached
+SLICE_MAX=${CHESS_PREP_SLICE_MAX:-48G}      # all app scopes: 2x the 24 G it was pinned at; 77% of RAM
 CONTAINER_MAX=${CHESS_PREP_CONTAINER_MAX:-20G}  # mongod really does hold 13.19 G
 AUX_MAX=${CHESS_PREP_AUX_MAX:-4G}           # session/background: ~7x their 0.5 G
 UD="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"

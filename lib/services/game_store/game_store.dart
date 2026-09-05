@@ -31,6 +31,7 @@ import '../generation/pgn_freq_parser.dart'
 import '../master_games/position_key.dart';
 import '../pgn_parsing_service.dart' show extractHeaders, splitPgnIntoGames;
 import '../storage/app_paths.dart';
+import '../game_identity.dart';
 
 /// Plies indexed into `positions` per game — the opening, where position
 /// lookups are useful; deeper positions are unique to one game anyway.
@@ -108,18 +109,8 @@ class StoredGameSummary {
 /// so every chunk has a stable key and a re-import never duplicates.
 typedef GameKeyOf = String Function(Map<String, String> headers, String pgn);
 
-String defaultGameKey(Map<String, String> headers, String pgn) {
-  final id = headers['GameId'];
-  if (id != null && id.isNotEmpty) return id;
-  final link = headers['Link'] ?? headers['Site'];
-  if (link != null && link.contains('://')) return link.trim();
-  final w = headers['White'] ?? '';
-  final b = headers['Black'] ?? '';
-  final d = headers['UTCDate'] ?? headers['Date'] ?? '';
-  final t = headers['UTCTime'] ?? headers['Time'] ?? '';
-  if ((w.isNotEmpty || b.isNotEmpty) && d.isNotEmpty) return '$w|$b|$d|$t';
-  return 'hash:${pgn.hashCode.toRadixString(16)}';
-}
+String defaultGameKey(Map<String, String> headers, String pgn) =>
+    canonicalGameKey(headers, pgn);
 
 class GameStoreImportResult {
   final int inserted;
@@ -194,7 +185,7 @@ class GameStore {
 
   Database get raw => _db;
 
-  static const int _schemaVersion = 1;
+  static const int _schemaVersion = 2;
 
   static void _migrate(Database db) {
     final v = db.select('PRAGMA user_version').first.columnAt(0) as int;
@@ -237,7 +228,41 @@ class GameStore {
         meta_json TEXT NOT NULL DEFAULT '{}'
       );
     ''');
-    db.execute('PRAGMA user_version = $_schemaVersion');
+    db.execute(
+      'CREATE TABLE IF NOT EXISTS game_trash (collection TEXT NOT NULL, game_key TEXT NOT NULL, pgn TEXT NOT NULL, deleted_at INTEGER NOT NULL)',
+    );
+    // Rekey under one transaction without deleting any row or its positions.
+    // A temporary namespace avoids unique-key swaps during migration.
+    db.execute('BEGIN IMMEDIATE');
+    try {
+      final rows = db.select(
+        'SELECT id, collection, headers_json, pgn FROM games',
+      );
+      for (final row in rows) {
+        db.execute('UPDATE games SET game_key = ? WHERE id = ?', [
+          'migration-v2:${row['id']}',
+          row['id'],
+        ]);
+      }
+      final used = <String>{};
+      for (final row in rows) {
+        final h = (jsonDecode(row['headers_json'] as String) as Map)
+            .cast<String, String>();
+        var key = canonicalGameKey(h, row['pgn'] as String);
+        if (!used.add('${row['collection']}|$key')) {
+          key = '$key:preserved-${row['id']}';
+        }
+        db.execute('UPDATE games SET game_key = ? WHERE id = ?', [
+          key,
+          row['id'],
+        ]);
+      }
+      db.execute('PRAGMA user_version = $_schemaVersion');
+      db.execute('COMMIT');
+    } catch (_) {
+      db.execute('ROLLBACK');
+      rethrow;
+    }
   }
 
   // ── Writes ─────────────────────────────────────────────────────────────
@@ -378,6 +403,10 @@ class GameStore {
     _db.execute('BEGIN IMMEDIATE');
     try {
       for (final k in keys) {
+        _db.execute(
+          'INSERT INTO game_trash(collection, game_key, pgn, deleted_at) SELECT collection, game_key, pgn, ? FROM games WHERE collection = ? AND game_key = ?',
+          [DateTime.now().millisecondsSinceEpoch, collection, k],
+        );
         stmt.execute([collection, k]);
         n += _db.updatedRows;
       }
@@ -420,6 +449,23 @@ class GameStore {
     ))
       r.columnAt(0) as String: r.columnAt(1) as int,
   };
+
+  String? collectionFingerprint(String collection) {
+    final rows = _db.select(
+      'SELECT meta_json FROM collections WHERE collection = ?',
+      [collection],
+    );
+    if (rows.isEmpty) return null;
+    final value = jsonDecode(rows.first['meta_json'] as String);
+    return value is Map ? value['corpusFingerprint'] as String? : null;
+  }
+
+  void setCollectionFingerprint(String collection, String fingerprint) {
+    _db.execute('UPDATE collections SET meta_json = ? WHERE collection = ?', [
+      jsonEncode({'corpusFingerprint': fingerprint}),
+      collection,
+    ]);
+  }
 
   DateTime? collectionUpdatedAt(String collection) {
     final rows = _db.select(

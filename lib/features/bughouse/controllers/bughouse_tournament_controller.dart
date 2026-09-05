@@ -274,15 +274,21 @@ class BughouseTournamentController extends ChangeNotifier
   /// Writes the match out. Every game as it finishes, so a crash, a quit or a
   /// power cut keeps what was already played — the same promise the engine
   /// tournament makes.
-  Future<void> _persist(String id) async {
+  Future<void> _saveTail = Future.value();
+
+  Future<void> _persist(String id) {
     final match = _find(id);
-    if (match == null) return;
-    try {
-      final store = await _resolveStore();
-      await store.save(match);
-    } catch (e) {
-      log.w('Could not save the bughouse match: $e');
-    }
+    if (match == null) return Future.value();
+    // A late in-flight game save must never overwrite the final failed or
+    // completed record. Both JSON and BPGN belong to this ordered snapshot.
+    return _saveTail = _saveTail.then((_) async {
+      try {
+        final store = await _resolveStore();
+        await store.save(match);
+      } catch (e) {
+        log.w('Could not save the bughouse match: $e');
+      }
+    });
   }
 
   @override

@@ -13,10 +13,10 @@ import 'package:flutter/foundation.dart';
 import '../constants/chess_constants.dart';
 import '../models/move_tree.dart';
 import '../models/opening_tree.dart';
-import '../services/pgn_parsing_service.dart' as pgn;
 import '../models/repertoire_line.dart';
 import '../models/repertoire_metadata.dart';
 import '../services/games_repertoire/draft_repertoire_writer.dart';
+import '../services/repertoire_line_expansion.dart';
 import '../services/repertoire_pgn_text.dart';
 import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';
@@ -1006,7 +1006,11 @@ class RepertoireController
     final storage = StorageFactory.instance;
     if (!await storage.fileExists(filePath)) return 0;
 
-    final gameCount = pgn.countPgnGames(pgnContent);
+    // One game per line, the same way a new repertoire is seeded: a pasted
+    // study's variations become lines of their own, or the trainer and this
+    // screen's line list would never see them.
+    final expanded = expandVariationsIntoLines(pgnContent);
+    final gameCount = expanded.gameCount;
 
     final existing = await storage.readFile(filePath);
     if (existing == null) return 0;
@@ -1015,7 +1019,7 @@ class RepertoireController
         : existing.endsWith('\n')
         ? '\n'
         : '\n\n';
-    await storage.writeFile(filePath, '$existing$separator$pgnContent\n');
+    await storage.writeFile(filePath, '$existing$separator${expanded.pgn}\n');
 
     await loadRepertoire();
 

@@ -9,11 +9,12 @@ library;
 
 import 'dart:io';
 
-import 'package:dartchess/dartchess.dart' show Chess;
+import 'package:dartchess/dartchess.dart' show Chess, PgnGame;
 
 import '../../../models/repertoire_line.dart';
 import '../../../services/repertoire_service.dart';
 import '../models/recent_game.dart';
+import 'book_move_keys.dart';
 import 'game_deviation_service.dart';
 import 'game_moves.dart';
 import '../../../utils/movetext_builder.dart';
@@ -156,25 +157,49 @@ OpeningReviewData aggregateOpeningReview(List<RecentGame> games) {
 }
 
 /// The chapter's lines that pass through [prefixSans] — the book side of the
-/// review detail view. Longest lines first (they carry the most theory), and
-/// SAN comparison is check-suffix tolerant, matching the deviation walker.
-/// Lines from a custom start position can't be prefix-matched and are skipped
-/// (same rule as the walker's trie build).
+/// review detail view. Longest lines first (they carry the most theory).
+///
+/// A line passes through the prefix when its mainline does, or when any of
+/// its variations does: the deviation walker reads the whole tree, so a
+/// deviation it reports inside a bracketed line must find that line here.
+/// Moves are compared as moves (see `book_move_keys.dart`), matching the
+/// walker's tolerance for spelling differences. Lines from a custom start
+/// position can't be prefix-matched and are skipped (same rule as the
+/// walker's trie build).
 List<RepertoireLine> matchingBookLines(
   List<RepertoireLine> lines,
   List<String> prefixSans,
 ) {
-  final prefix = prefixSans.map(normalizeSan).toList();
+  final prefix = moveKeysFromStart(prefixSans);
+  // A prefix the game itself cannot replay matches nothing, rather than
+  // matching every line on an empty key list.
+  if (prefix.length < prefixSans.length) return const [];
   bool matches(RepertoireLine line) {
     // Model games are illustration, not book — showing one as "your book"
     // next to the game you played would be answering with someone else's.
     if (line.isModelGame) return false;
     if (line.startPosition.fen != Chess.initial.fen) return false;
-    if (line.moves.length < prefix.length) return false;
-    for (var i = 0; i < prefix.length; i++) {
-      if (normalizeSan(line.moves[i]) != prefix[i]) return false;
+    if (line.moves.length >= prefix.length) {
+      final mainline = moveKeysFromStart(
+        line.moves.take(prefix.length).toList(),
+      );
+      if (mainline.length == prefix.length) {
+        var same = true;
+        for (var i = 0; i < prefix.length; i++) {
+          if (mainline[i] != prefix[i]) {
+            same = false;
+            break;
+          }
+        }
+        if (same) return true;
+      }
     }
-    return true;
+    if (line.fullPgn.isEmpty) return false;
+    try {
+      return pgnTreeReaches(PgnGame.parsePgn(line.fullPgn).moves, prefix);
+    } catch (_) {
+      return false;
+    }
   }
 
   return lines.where(matches).toList()

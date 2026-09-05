@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import '../../utils/atomic_file.dart';
@@ -80,7 +81,10 @@ class IOStorageService implements StorageService {
       return cached.count;
     }
 
-    final content = await readTextFile(file);
+    final content = await readTextFileSafely(file);
+    if (content == null) {
+      throw FileSystemException('File disappeared while listing', file.path);
+    }
     final count = content.trim().isEmpty ? 0 : pgn.countPgnGamesFast(content);
     _countCache[file.path] = (
       size: stat.size,
@@ -127,16 +131,14 @@ class IOStorageService implements StorageService {
   // ── Generic file I/O ─────────────────────────────────────────────────────
 
   @override
-  Future<String?> readFile(String path) async {
-    try {
-      final file = await _resolveFile(path);
-      await recoverAtomicWritesInDirectory(file.parent);
-      if (await file.exists()) return await readTextFile(file);
-    } catch (e, st) {
-      log.e('Error reading file $path: $e\n$st');
-    }
-    return null;
-  }
+  Future<String?> readFile(String path) async =>
+      readTextFileSafely(await _resolveFile(path));
+
+  @override
+  Future<String> updateFile(
+    String path,
+    FutureOr<String> Function(String?) update,
+  ) async => updateTextFileAtomically(await _resolveFile(path), update);
 
   @override
   Future<void> writeFile(
@@ -154,16 +156,8 @@ class IOStorageService implements StorageService {
   }
 
   @override
-  Future<bool> fileExists(String path) async {
-    try {
-      final file = await _resolveFile(path);
-      await recoverAtomicWritesInDirectory(file.parent);
-      return await file.exists();
-    } catch (e) {
-      log.e('Error checking file $path: $e');
-      return false;
-    }
-  }
+  Future<bool> fileExists(String path) async =>
+      textFileExistsSafely(await _resolveFile(path));
 
   @override
   Future<void> deleteFile(String path) async {
@@ -510,62 +504,37 @@ class IOStorageService implements StorageService {
 
       // Land it as a .csv set; the database's CSV→PGN migration converts it.
       final dir = await _tacticsSetsRoot();
-      await writeFile(p.join(dir.path, '$defaultSetName.csv'), content);
-      await legacyFile.rename('${legacyFile.path}.bak');
+      await writeFile(
+        p.join(dir.path, '$defaultSetName.csv'),
+        content,
+        createOnly: true,
+      );
+      // The original is retained: another process may still use the old layout.
       log.i('Migrated legacy tactics CSV into set "$defaultSetName"');
       return true;
     } catch (e) {
       log.e('Error migrating legacy tactics CSV: $e');
-      return false;
+      rethrow;
     }
   }
 
   @override
-  Future<String?> readTacticsCsv() async {
-    try {
-      final file = await _getFile(_tacticsCsvFileName);
-      if (await file.exists()) {
-        return await file.readAsString();
-      }
-    } catch (e) {
-      log.e('Error reading tactics CSV: $e');
-    }
-    return null;
-  }
+  Future<String?> readTacticsCsv() => readFile(_tacticsCsvFileName);
 
   @override
-  Future<void> saveTacticsCsv(String csvContent) async {
-    try {
-      final file = await _getFile(_tacticsCsvFileName);
-      await writeTextFileAtomically(file, csvContent);
-    } catch (e) {
-      log.e('Error saving tactics CSV: $e');
-    }
-  }
+  Future<void> saveTacticsCsv(String csvContent) =>
+      writeFile(_tacticsCsvFileName, csvContent);
 
   @override
-  Future<List<String>> readAnalyzedGameIds() async {
-    try {
-      final file = await _getFile(_analyzedGamesFileName);
-      if (await file.exists()) {
-        final content = await file.readAsString();
-        return content.split('\n').where((id) => id.trim().isNotEmpty).toList();
-      }
-    } catch (e) {
-      log.e('Error reading analyzed game IDs: $e');
-    }
-    return [];
-  }
+  Future<List<String>> readAnalyzedGameIds() async =>
+      (await readFile(_analyzedGamesFileName) ?? '')
+          .split('\n')
+          .where((id) => id.trim().isNotEmpty)
+          .toList();
 
   @override
-  Future<void> saveAnalyzedGameIds(List<String> ids) async {
-    try {
-      final file = await _getFile(_analyzedGamesFileName);
-      await writeTextFileAtomically(file, ids.join('\n'));
-    } catch (e) {
-      log.e('Error saving analyzed game IDs: $e');
-    }
-  }
+  Future<void> saveAnalyzedGameIds(List<String> ids) =>
+      writeFile(_analyzedGamesFileName, ids.join('\n'));
 
   /// The tactics archive lives in the games database now (collection
   /// `tactics`); these two keep the whole-archive-as-text contract for the
@@ -573,126 +542,50 @@ class IOStorageService implements StorageService {
   /// pruning, appends) go to [GameStore] directly.
   @override
   Future<String?> readImportedPgns() async {
-    try {
-      final store = await GameStoreService.instance.open();
-      if (store.count(GameCollections.tactics) == 0) return null;
-      return store.exportPgn(GameCollections.tactics);
-    } catch (e) {
-      log.e('Error reading imported PGNs: $e');
-    }
-    return null;
+    final store = await GameStoreService.instance.open();
+    if (store.count(GameCollections.tactics) == 0) return null;
+    return store.exportPgn(GameCollections.tactics);
   }
 
   /// Replace the archive with [pgnContent] (empty = clear).
   @override
   Future<void> saveImportedPgns(String pgnContent) async {
-    try {
-      final store = await GameStoreService.instance.open();
-      store.importPgn(
-        pgnContent,
-        collection: GameCollections.tactics,
-        replace: true,
-      );
-    } catch (e) {
-      log.e('Error saving imported PGNs: $e');
-    }
+    final store = await GameStoreService.instance.open();
+    store.importPgn(
+      pgnContent,
+      collection: GameCollections.tactics,
+      replace: true,
+    );
   }
 
   @override
-  Future<String?> readRepertoirePgn(String filename) async {
-    try {
-      File file;
-      if (p.isAbsolute(filename)) {
-        file = File(filename);
-      } else {
-        file = await _getFile(filename);
-      }
-
-      if (await file.exists()) {
-        return await readTextFile(file);
-      }
-    } catch (e) {
-      log.e('Error reading repertoire PGN: $e');
-    }
-    return null;
-  }
+  Future<String?> readRepertoirePgn(String filename) => readFile(filename);
 
   @override
-  Future<void> saveRepertoirePgn(String filename, String content) async {
-    try {
-      final file = await _getFile(filename);
-      await writeTextFileAtomically(file, content);
-    } catch (e) {
-      log.e('Error saving repertoire PGN: $e');
-    }
-  }
+  Future<void> saveRepertoirePgn(String filename, String content) =>
+      writeFile(filename, content);
 
   @override
-  Future<String?> readRepertoireReviewsCsv() async {
-    try {
-      final file = await _getFile(_repertoireReviewsFileName);
-      if (await file.exists()) {
-        return await file.readAsString();
-      }
-    } catch (e) {
-      log.e('Error reading repertoire reviews CSV: $e');
-    }
-    return null;
-  }
+  Future<String?> readRepertoireReviewsCsv() =>
+      readFile(_repertoireReviewsFileName);
 
   @override
-  Future<void> saveRepertoireReviewsCsv(String csvContent) async {
-    try {
-      final file = await _getFile(_repertoireReviewsFileName);
-      await writeTextFileAtomically(file, csvContent);
-    } catch (e) {
-      log.e('Error saving repertoire reviews CSV: $e');
-    }
-  }
+  Future<void> saveRepertoireReviewsCsv(String csvContent) =>
+      writeFile(_repertoireReviewsFileName, csvContent);
 
   @override
-  Future<String?> readRepertoireReviewHistoryCsv() async {
-    try {
-      final file = await _getFile(_repertoireReviewHistoryFileName);
-      if (await file.exists()) {
-        return await file.readAsString();
-      }
-    } catch (e) {
-      log.e('Error reading repertoire review history CSV: $e');
-    }
-    return null;
-  }
+  Future<String?> readRepertoireReviewHistoryCsv() =>
+      readFile(_repertoireReviewHistoryFileName);
 
   @override
-  Future<void> saveRepertoireReviewHistoryCsv(String csvContent) async {
-    try {
-      final file = await _getFile(_repertoireReviewHistoryFileName);
-      await writeTextFileAtomically(file, csvContent);
-    } catch (e) {
-      log.e('Error saving repertoire review history CSV: $e');
-    }
-  }
+  Future<void> saveRepertoireReviewHistoryCsv(String csvContent) =>
+      writeFile(_repertoireReviewHistoryFileName, csvContent);
 
   @override
-  Future<String?> readRepertoireMoveProgressCsv() async {
-    try {
-      final file = await _getFile(_repertoireMoveProgressFileName);
-      if (await file.exists()) {
-        return await file.readAsString();
-      }
-    } catch (e) {
-      log.e('Error reading repertoire move progress CSV: $e');
-    }
-    return null;
-  }
+  Future<String?> readRepertoireMoveProgressCsv() =>
+      readFile(_repertoireMoveProgressFileName);
 
   @override
-  Future<void> saveRepertoireMoveProgressCsv(String csvContent) async {
-    try {
-      final file = await _getFile(_repertoireMoveProgressFileName);
-      await writeTextFileAtomically(file, csvContent);
-    } catch (e) {
-      log.e('Error saving repertoire move progress CSV: $e');
-    }
-  }
+  Future<void> saveRepertoireMoveProgressCsv(String csvContent) =>
+      writeFile(_repertoireMoveProgressFileName, csvContent);
 }

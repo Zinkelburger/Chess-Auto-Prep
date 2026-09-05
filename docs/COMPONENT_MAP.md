@@ -152,7 +152,7 @@ RepertoireScreen (composition root — wires controllers to widgets)
   ├─ Compact (<960px):
   │     Column: Board (flex 4) | ToolsColumn (flex 5): PGN (with engine bars) | Chapters | Tree
   │
-  ├─ Inline config (in Jobs tab): Add lines ▾ → Generate… / outline chapter menu → RepertoireGenerationTab;
+  ├─ Inline config (in Jobs tab): Actions ▾ → Generate from here… / outline chapter menu → RepertoireGenerationTab;
   │     Audit button / chapter menu → AuditConfigPanel
   ├─ RepertoireStatusBar (clickable badges → toggle bottom pane tabs)
   └─ optional TrapWalkthrough overlay
@@ -162,7 +162,7 @@ RepertoireScreen (composition root — wires controllers to widgets)
 
 **Planner (`lib/features/planner/`, "Plan a build…")**: full-width planning mode (`PlanBuildScreen`, pushed as a route) that turns a few answers into chapters and then generates them all. `services/eco_trie.dart` lays the ECO book over itself as a SAN trie; `tabiyaScore = entriesBelow × distinctChildren` says whether a position is a fork worth asking about. `controllers/plan_controller.dart` walks from a start position: at *our-move* forks it asks (candidates from `services/plan_data_source.dart`: ECO names, **Maia** probability at the user's Elo (the probability of record — the Lichess explorer is never queried for probabilities, it is too slow and rate-limited), ChessDB eval; overlaid with `services/plan_knowledge.dart`: what the user's chapters already play — taken silently when unique — and what they play in their own Player Analysis games — pre-ticked, on by default); at *their-move* tabiyas it splits replies ≥ `chapterShare` into sibling chapters and cuts a "sidelines" chapter at the same root that excludes them (`TreeBuildConfig.rootReplyExclude`, honored in `node_expander.addOpponentChildren` at ply 0) so no two chapters build the same lines; out of book / `maxPly` it cuts a chapter. Flat chapters only (no sub-folders); duplicate names get the distinguishing move appended ("Queen's Gambit Declined · 4.Bg5"). Screen columns: plan so far | board (interactive in Start; clicking a candidate previews it) with Engine/Database tabs under it | question / coverage / review card. Review embeds `GenerationConfigForm` for engine settings; commit returns `PlanBuildResult` to the repertoire screen, whose `PlanRunner` (`controllers/plan_runner.dart`) creates the chapter files (via `RepertoireOutlineService`) then runs one `GenerationRequest` per chapter through `GenerationSessionController`, badging the outline ("queued", "building…").
 
-**Toolbar**: title/breadcrumb (repertoire ▸ chapter switcher) · `Add lines ▾` (Generate with engine…, Build by playing, From my games…, Import PGN file…, Paste PGN…) · `Audit` · Train · ⋮.
+**Toolbar**: title/breadcrumb (repertoire ▸ chapter switcher) · `Actions ▾` — one sectioned menu (`AppMenuEntry.heading`): ADD LINES (Plan the lines…, Generate from here…, Play the moves myself…, From my games…, From a PGN…) · TRAIN (Train this chapter) · CHECK (Audit for gaps…) · mode switcher · ⋮ (Repertoire settings…, App settings…). Train was a filled button; nothing on the bar is filled now.
 
 **Key files:**
 - `lib/core/generation_session_controller.dart` — owns the run and the generated-tree bundle; pause/resume/cancel survive dialog disposal; `dispose()` stops build. Progress UI state lives on `GenerationProgress`; mid-run line export lives on `SnapshotExporter`.
@@ -553,7 +553,7 @@ Used by:
 | `engine_settings.dart` | **Singleton** engine/generation/explorer settings + SharedPreferences persistence; setters share `_assignIfChanged` / `_assignInRange`; persist is fire-and-forget via `_persist()` |
 | `engine_weakness_result.dart` | Weak square / position analysis output |
 | `eval_database_settings.dart` | CdbDirect path, enable flags (persisted) |
-| `explorer_response.dart` | Lichess opening explorer API shape |
+| `explorer_response.dart` | Opening explorer answer shape: moves with counts, plus the games a source lists for the position (`ExplorerGame`, tagged with the `ExplorerGameSource` it can be fetched from — Lichess, masters or the local TWIC database) |
 | `move_tree.dart` | Editable PGN move tree (`MoveNode`, `TreePath`, `MoveTree`). FEN cached per node. PGN round-trip via `fromPgn`/`toPgn`. `collectFenPrefixes()` for transposition detection. Used by `RepertoireController` as the single source of truth for the move cursor. |
 | `opening_tree.dart` | In-memory statistics tree indexed by FEN. Cursor walks by FEN (so 1.d4 Nf6 2.e3 c5 and 1.d4 c5 2.e3 Nf6 land on the same node). Off-book positions still list **one-ply transpositions** (`continuations` / `viaTransposition`). `hasMove`, `appendLine` / `appendLineFromFen` (null-move passes skip a node). `updateStats(null)` counts frequency without a fake draw; `hasWdl` hides the W/D/L bar on course trees |
 | `pgn_filter_models.dart` | PGN import filter types |
@@ -729,18 +729,20 @@ Viewer with a game index, so the viewer's own Prev/Next then walks the match.
 
 ### `lib/features/master_games/`
 
-The window onto the local TWIC corpus, which until now only the generator could
-read. Two views of the same two million games: a filtered database search, and
-**In my repertoire** — the games that walked into one of your designated books,
-ranked by how deep they got. Playing through them is not reimplemented: any
-selection is written out as an ordinary PGN collection and handed to the Games
-viewer, which leaves the user with a file they can open anywhere else too.
+Your own games against the local TWIC corpus. The database's `book` table
+answers "what did masters play from this position" for the first fifteen
+moves, so walking one of your games through it finds the first move masters
+never played — who left theory, where, what masters play there instead, and
+the strongest and most recent games that did. Branch points are grouped like
+the opening review, so the one you keep walking into rises to the top. Master
+games are opened in the Games viewer by writing them to an ordinary PGN
+collection, so playing through them is not reimplemented.
 
 | File | Purpose |
 |------|---------|
-| **services/twic_repertoire_scan.dart** | Walks master games against the designated White and Black books with the same `GameDeviationService` the Games page uses on your own games. A master game has no "me", so both books are tried and the deeper agreement wins; separates *tested your choice* (left at a move you cover) from *ran past your prep* (the book simply ends) |
-| **controllers/master_games_browser_controller.dart** | Query, paging, mode, selection, the scan, and writing the visible games out as a PGN collection. Changing the filters drops a stale scan rather than showing it against a different set of games |
-| **widgets/master_games_browser.dart** | The browser dialog: filter bar (player, pairing, ECO, event, Elo floor, classical-OTB-only), results list, detail pane, and the hand-off to the Games viewer. Opened from the master-games settings panel and from the Openings block on the home column |
+| **services/master_practice_review.dart** | The walk: one report per game (branch position, first unseen move, who played it, the masters' alternatives, the last agreed book row), grouped into entries by position + move with the key games attached — the strongest game per master move and the latest game of the most popular one |
+| **controllers/master_practice_controller.dart** | Runs the review over the home column's window, holds the selection, and writes an entry's key games out as `master-practice.pgn` for the viewer |
+| **widgets/master_practice_dialog.dart** | The dialog: sections for *you left first*, *your opponents left first* and *stayed in master practice*, a detail pane with the branch position (played move and the masters' moves drawn on it), the moves table with counts and scores, the games to open, and your own games at that point. Opened from the Openings block on the home column |
 
 ### `lib/features/holes/`
 
@@ -860,7 +862,10 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | File | Purpose |
 |------|---------|
 | `maia_service.dart`, `maia_native.dart`, `maia_stub.dart`, `maia_factory.dart`, `maia_tensor.dart` | Human move prediction; ONNX model + vocab JSON are git-tracked Flutter assets; native ORT comes from the `onnxruntime` plugin (Linux/Windows/macOS). `evaluate()` checks `MaiaCache` before inference. |
-| `lichess_api_client.dart` | Authenticated API |
+| `lichess_api_client.dart` | Authenticated API; explorer lookups ask for the games lists, and `fetchGamePgn` fetches one listed game from the masters PGN endpoint or the site's export |
+| `explorer_game_opener.dart` | Opening a game the explorer listed: fetch its PGN (local database, masters endpoint or game export), file it in the `explorer-games.pgn` collection without duplicates, and report the index and the ply at which it reaches the position |
+| `live_explorer_service.dart` | Debounced, cached, coalesced explorer lookups for the panel; the TWIC source is answered synchronously from the local book (classical-only rows when asked) with the citation and latest game per move as its games list |
+| `master_games/master_book_rebuild.dart` | Replays the classical games into the book's classical columns — citations (v3) and classical-only counts (v4) — for a database imported before they existed; chunkable by `afterId`/`maxGames`, which is how `MasterGamesService.rebuildClassicalIndex` runs it from an isolate |
 | `lichess_auth_service.dart` | OAuth/PAT token storage |
 #### Tactics & training
 
@@ -1030,7 +1035,9 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `lichess_eval_download_dialog.dart` | States the three numbers the download page does not: 21.7 GB to fetch, ~28 GB needed while building, ~5.9 GB kept. Measures drives against the peak rather than the download size |
 | `storage_destination_picker.dart` | The shared "where should this go?" drive list: free space per volume, SSD / hard disk / network label, per-drive "X to spare" or "short by X", and the advisories. Used by both database downloads |
 | `eval_database_download_dialog.dart` | Where the dump should go: the exact snapshot size and file count, every drive with free space and an SSD / hard disk / network label, "fits with X to spare" or "short by X" per drive, and blocking / advisory banners (no room, tight fit, spinning disk, network share). Defaults to the fastest drive that actually fits, and never pre-selects one that does not |
-| `lichess_db_selector.dart` | Explorer DB/speed/rating filters (widget retained; hidden from settings while Explorer mothballed) |
+| `lichess_db_selector.dart` | Explorer source picker (Lichess / Masters, and TWIC when the caller has a local database) with speed/rating chips for Lichess and a classical-OTB-only chip for TWIC |
+| `opening_explorer/opening_explorer_panel.dart` | The live explorer: filter header, source picker, move rows, Σ totals and — for a host that can open one — the games the source lists. Answers Lichess through `LiveExplorerService` and TWIC from the local book; says when TWIC's classical-only counts still need their index |
+| `opening_explorer/explorer_games_list.dart` | The games under the table, lila's "top games": players, ratings, result, the move played, one row per game, click to open |
 | `generation/build_progress_display.dart` | Generation progress UI |
 | `generation/eval_sources_section.dart` | Eval source picker in generation |
 
@@ -1087,10 +1094,13 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `test/features/traps/trap_index_service_test.dart` | FEN index, line traps |
 | `test/features/traps/trap_navigation_buttons_test.dart` | Trap jump UI |
 | `test/features/traps/trap_walkthrough_test.dart` | Walkthrough navigation |
-| `test/features/master_games/twic_repertoire_scan_test.dart` | TWIC games vs the designated books: tested-vs-past-prep, both colours, ranking, cancellation |
-| `test/features/master_games/master_games_browser_controller_test.dart` | Search, filtering, the repertoire view, stale-scan invalidation, PGN export |
-| `test/features/master_games/master_games_browser_test.dart` | The browser UI against a real database: rows, filtering, selection, the repertoire verdicts, narrow-window layout |
+| `test/features/master_games/master_practice_review_test.dart` | Your games vs the master book: who left first, book depth, grouping by branch point, key games, cancellation |
+| `test/features/master_games/master_practice_dialog_test.dart` | The dialog against a real database: sections, the detail pane's moves and games, the hand-offs to the viewer, narrow-window layout |
 | `test/services/master_games/master_games_query_test.dart` | Browse filters, as clauses and against a real database |
+| `test/services/master_games/classical_counts_test.dart` | The book's classical-only split: import, the classical-only view, the rebuild in one go and in chunks, cancellation, completeness |
+| `test/services/explorer_game_opener_test.dart` | Explorer games into the collection: local and Lichess sources, the ply at the position, no duplicates |
+| `test/widgets/opening_explorer/opening_explorer_panel_sources_test.dart` | The panel's games list and the TWIC source: opening a game, the classical filter, the index note, falling back without a database |
+| `test/widgets/lichess_db_selector_test.dart` | The TWIC segment appears only when offered; its classical chip |
 | `test/services/eval/lichess_eval_line_test.dart` | Lichess JSONL parsing: deepest eval, White-relative signs, move packing |
 | `test/services/eval/lichess_eval_store_test.dart` | Import, sort, dedupe, resume, and lookup of the Lichess store |
 | `test/services/eval/lichess_eval_controller_test.dart` | Download → import → enable, resume from a partial file, delete paths |

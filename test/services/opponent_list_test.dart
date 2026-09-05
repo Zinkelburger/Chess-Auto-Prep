@@ -1,6 +1,7 @@
 import 'package:chess_auto_prep/models/analysis_player_info.dart';
 import 'package:chess_auto_prep/services/opponent_list.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 
 /// The opponent list is the hand-off from the Python prep tooling to Player
 /// Analysis. These pin the parse contract on both the documented envelope and
@@ -86,8 +87,10 @@ void main() {
           group: 'Spring Open 2026',
           maxGames: 100,
           monthsBack: 6,
+          speeds: {GameSpeed.bullet, GameSpeed.blitz},
         );
         expect(info.platform, 'import');
+        expect(info.speeds, {GameSpeed.bullet, GameSpeed.blitz});
         expect(info.username, 'Jane Doe; janed; jd_li');
         expect(info.displayName, 'Jane Doe');
         expect(info.group, 'Spring Open 2026');

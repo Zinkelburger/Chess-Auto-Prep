@@ -48,12 +48,17 @@ class _FakeRepertoireService extends RepertoireService {
 
 class _FakeReviewService extends RepertoireReviewService {
   List<RepertoireReviewEntry> saved = [];
+  String? savedRepertoireId;
   List<RepertoireMoveProgress> savedProgress = [];
   final history = <RepertoireReviewHistoryEntry>[];
 
   @override
-  Future<void> saveAll(List<RepertoireReviewEntry> entries) async {
+  Future<void> saveAll(
+    List<RepertoireReviewEntry> entries, {
+    String? repertoireId,
+  }) async {
     saved = List.of(entries);
+    savedRepertoireId = repertoireId;
   }
 
   @override
@@ -163,21 +168,29 @@ void main() {
       expect(repertoire.headerPaths, [oldPath]);
     });
 
-    test('saves other repertoires alongside this one', () async {
-      final other = RepertoireReviewEntry(
-        repertoireId: '/other.pgn',
-        lineId: 'Z',
-        lineName: 'Other',
-      );
-      store.adopt(byLine: {}, moveProgress: {}, otherRepertoires: [other]);
+    test(
+      'saves only the current repertoire, preserving other scopes in storage',
+      () async {
+        final other = RepertoireReviewEntry(
+          repertoireId: '/other.pgn',
+          lineId: 'Z',
+          lineName: 'Other',
+        );
+        store.adopt(byLine: {}, moveProgress: {}, otherRepertoires: [other]);
 
-      await store.recordRating(line('A'), ReviewRating.good, hadMistake: false);
-      expect(
-        review.saved.map((e) => e.lineId),
-        containsAll(['A', 'Z']),
-        reason: 'dropping other repertoires would wipe their schedules',
-      );
-    });
+        await store.recordRating(
+          line('A'),
+          ReviewRating.good,
+          hadMistake: false,
+        );
+        expect(
+          review.saved.map((e) => e.lineId),
+          ['A'],
+          reason: 'stale copies of other repertoires must not be written back',
+        );
+        expect(review.savedRepertoireId, repertoireId);
+      },
+    );
   });
 
   group('recordCompletion (linear mode)', () {

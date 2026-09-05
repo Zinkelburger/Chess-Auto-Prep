@@ -1,5 +1,5 @@
 import 'package:chess_auto_prep/features/tactics/models/tactics_position.dart';
-import 'package:chess_auto_prep/features/tactics/services/tactics_database.dart';
+import '../../../helpers/memory_tactics_database.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 TacticsPosition _pos(String fen) {
@@ -22,7 +22,7 @@ void main() {
 
   group('TacticsDatabase is a reactive source of truth', () {
     test('addPosition notifies listeners and updates the list', () async {
-      final db = TacticsDatabase();
+      final db = MemoryTacticsDatabase();
       var notifications = 0;
       db.addListener(() => notifications++);
 
@@ -33,7 +33,7 @@ void main() {
     });
 
     test('addPosition does not notify for a duplicate FEN', () async {
-      final db = TacticsDatabase();
+      final db = MemoryTacticsDatabase();
       await db.addPosition(_pos('a'));
 
       var notifications = 0;
@@ -45,7 +45,7 @@ void main() {
     });
 
     test('deletePositionAt notifies and removes the entry', () async {
-      final db = TacticsDatabase();
+      final db = MemoryTacticsDatabase();
       await db.addPosition(_pos('a'));
       await db.addPosition(_pos('b'));
 
@@ -60,7 +60,7 @@ void main() {
     test(
       'deletePositionAt ignores an out-of-range index without notifying',
       () async {
-        final db = TacticsDatabase();
+        final db = MemoryTacticsDatabase();
         await db.addPosition(_pos('a'));
 
         var notifications = 0;
@@ -73,7 +73,7 @@ void main() {
     );
 
     test('updatePositionAt replaces the entry and notifies', () async {
-      final db = TacticsDatabase();
+      final db = MemoryTacticsDatabase();
       await db.addPosition(_pos('a'));
 
       var notifications = 0;
@@ -88,8 +88,8 @@ void main() {
     /// trust the caller to hand over descending, duplicate-free indices.
     /// Any other order deleted puzzles the user never selected.
     group('deletePositionsAt survives any index order', () {
-      Future<TacticsDatabase> seeded() async {
-        final db = TacticsDatabase();
+      Future<MemoryTacticsDatabase> seeded() async {
+        final db = MemoryTacticsDatabase();
         for (final fen in const ['a', 'b', 'c', 'd', 'e']) {
           await db.addPosition(_pos(fen));
         }
@@ -140,7 +140,7 @@ void main() {
     });
 
     test('clearPositions empties the list and notifies', () async {
-      final db = TacticsDatabase();
+      final db = MemoryTacticsDatabase();
       await db.addPosition(_pos('a'));
 
       var notifications = 0;

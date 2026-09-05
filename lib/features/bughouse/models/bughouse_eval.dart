@@ -202,7 +202,7 @@ class BughouseEval {
   double get score =>
       _tangentScale * math.tan(_tangentRate * advantage.clamp(-0.9, 0.9)) / 100;
 
-  /// Our team's expected score as a percentage: 50 is level, 100 is won.
+  /// Recentered engine estimate as a percentage, not a calibrated probability.
   ///
   /// Linear in [advantage], which is the engine's own value with its offset
   /// removed, so a gain and a loss of the same size read as the same distance

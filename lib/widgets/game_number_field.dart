@@ -99,6 +99,7 @@ class _GameNumberFieldState extends State<GameNumberField> {
   }
 
   void _onFocusChanged() {
+    if (mounted) setState(() {}); // the box border follows focus
     if (_focusNode.hasFocus) {
       // Typing replaces the current number instead of appending to it.
       _controller.selection = TextSelection(
@@ -157,39 +158,45 @@ class _GameNumberFieldState extends State<GameNumberField> {
     final enabled = widget.gameCount > 0 && widget.onGoToGame != null;
     const labelStyle = TextStyle(fontSize: 13, fontWeight: FontWeight.w600);
 
-    OutlineInputBorder border(Color color) => OutlineInputBorder(
-      borderRadius: BorderRadius.circular(6),
-      borderSide: BorderSide(color: color),
-    );
-
+    // The box is drawn here, not by the input decorator: a decorator sizes
+    // its border to the text line, so inside a 32px control it drew a short
+    // box with the digits pinned to the top. A plain bordered container of
+    // the control's height with the field centred in it is the same shape
+    // as the Search button beside it, whatever the font metrics.
     final row = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         const Text('Game', style: labelStyle),
         const SizedBox(width: 6),
-        SizedBox(
+        Container(
           width: _fieldWidth,
           height: kGameNavControlHeight,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: _focusNode.hasFocus
+                  ? theme.colorScheme.primary
+                  : AppColors.outline,
+            ),
+          ),
           child: TextField(
             controller: _controller,
             focusNode: _focusNode,
             enabled: enabled,
             textAlign: TextAlign.center,
-            textAlignVertical: TextAlignVertical.center,
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             textInputAction: TextInputAction.go,
             onSubmitted: _submit,
-            style: labelStyle,
-            decoration: InputDecoration(
-              isDense: true,
-              // Explicit vertical centering is more reliable than the default
-              // dense-field padding across Linux, Windows and macOS fonts.
-              contentPadding: const EdgeInsets.symmetric(horizontal: 6),
-              border: border(AppColors.outline),
-              enabledBorder: border(AppColors.outline),
-              disabledBorder: border(AppColors.outline),
-              focusedBorder: border(theme.colorScheme.primary),
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              height: 1.0,
+            ),
+            decoration: const InputDecoration.collapsed(
+              hintText: null,
+              border: InputBorder.none,
             ),
           ),
         ),

@@ -321,9 +321,13 @@ class LichessApiClient {
 
     final encodedFen = Uri.encodeComponent(fen);
     final Uri url;
+    // The games lists are what makes the position openable, lila-style.
+    // Masters lists up to 15 top games; the player database caps both of
+    // its lists at 4.
     if (useMasters) {
       url = Uri.parse(
         'https://explorer.lichess.ovh/masters?'
+        'topGames=15&'
         'fen=$encodedFen',
       );
     } else {
@@ -332,6 +336,8 @@ class LichessApiClient {
         'variant=$variant&'
         'speeds=$speeds&'
         'ratings=$ratings&'
+        'topGames=4&'
+        'recentGames=4&'
         'fen=$encodedFen',
       );
     }
@@ -375,7 +381,13 @@ class LichessApiClient {
     final data = json.decode(response.body) as Map<String, dynamic>;
     final decodeMs = decodeSw.elapsedMilliseconds;
     final parseSw = Stopwatch()..start();
-    final parsed = ExplorerResponse.fromJson(data, fen: fen);
+    final parsed = ExplorerResponse.fromJson(
+      data,
+      fen: fen,
+      gameSource: useMasters
+          ? ExplorerGameSource.masters
+          : ExplorerGameSource.lichess,
+    );
     final parseMs = parseSw.elapsedMilliseconds;
 
     _profile(
@@ -385,6 +397,29 @@ class LichessApiClient {
       'moves=${parsed.moves.length} games=${parsed.totalGames}',
     );
     return parsed;
+  }
+
+  /// The PGN of one game the explorer listed, or null when it cannot be
+  /// fetched.
+  ///
+  /// Masters games come from the explorer's own PGN endpoint; player
+  /// database games from the site's export, asked for as PGN without the
+  /// clock and eval comments the viewer would only strip.
+  Future<String?> fetchGamePgn(String id, {required bool masters}) async {
+    final safeId = Uri.encodeComponent(id);
+    final url = masters
+        ? Uri.parse('https://explorer.lichess.ovh/masters/pgn/$safeId')
+        : Uri.parse(
+            'https://lichess.org/game/export/$safeId'
+            '?evals=0&clocks=0&literate=0',
+          );
+    final response = await get(
+      url,
+      extraHeaders: const {'Accept': 'application/x-chess-pgn'},
+    );
+    if (response == null || response.statusCode != 200) return null;
+    final body = response.body.trim();
+    return body.isEmpty ? null : body;
   }
 
   /// Close the underlying HTTP client.

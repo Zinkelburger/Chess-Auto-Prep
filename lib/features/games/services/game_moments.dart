@@ -32,6 +32,7 @@ class GameMoment {
     required this.tooltip,
     required this.tab,
     this.classification,
+    this.bookEnd = false,
   });
 
   /// Mainline index *after* the move — where the viewer lands on open.
@@ -59,6 +60,10 @@ class GameMoment {
 
   /// Set for mistake moments; drives the arrow's hue.
   final MoveClassification? classification;
+
+  /// True when the prep simply ran out here. Nobody did anything wrong, so
+  /// the played move is drawn in plain ink even when it was mine.
+  final bool bookEnd;
 }
 
 /// Every moment of [game], in game order. Empty until the book check and
@@ -106,6 +111,7 @@ GameMoment? _bookMoment(DeviationReport? report) {
     detail: detail,
     tooltip: tooltip,
     tab: PgnViewerTab.line,
+    bookEnd: report.bookEnded,
   );
 }
 

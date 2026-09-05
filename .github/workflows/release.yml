@@ -329,6 +329,14 @@ jobs:
           # uses the central runtime while the separate zip keeps its fallback.
           $setup = "dist\chess-auto-prep-$version-windows-setup.exe"
           $installDir = Join-Path $env:RUNNER_TEMP "Chess Auto Prep installer test"
+          New-Item -ItemType Directory -Force $installDir | Out-Null
+          # Simulate an upgrade from the installer that shipped app-local DLLs.
+          Get-ChildItem build/windows/x64/runner/Release -File | Where-Object {
+            $_.Name -match '^(concrt140|msvcp140|vcruntime140).*\.dll$'
+          } | Copy-Item -Destination $installDir
+          if (-not (Test-Path (Join-Path $installDir 'msvcp140.dll'))) {
+            throw 'Upgrade fixture did not contain the old runtime'
+          }
           & $setup /VERYSILENT /SUPPRESSMSGBOXES /NORESTART "/DIR=$installDir"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $looseRuntime = Get-ChildItem $installDir -File | Where-Object {

@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/models/analysis_player_info.dart';
 import 'package:chess_auto_prep/services/analysis_games_service.dart';
+import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// [AnalysisGamesService.downloadGamesFor] is the one entry point every
@@ -7,15 +8,18 @@ import 'package:flutter_test/flutter_test.dart';
 /// back as one merged PGN, and a PGN-file import must be refused.
 class _FakeService extends AnalysisGamesService {
   final calls = <String>[];
+  final speedsSeen = <Set<GameSpeed>>[];
 
   @override
   Future<String> downloadChesscomGames(
     String username, {
     int maxGames = 100,
     int? monthsBack,
+    Set<GameSpeed> speeds = defaultDownloadSpeeds,
     void Function(String)? onProgress,
   }) async {
     calls.add('chesscom:$username:$maxGames:$monthsBack');
+    speedsSeen.add(speeds);
     onProgress?.call('fetching');
     return username == 'empty'
         ? ''
@@ -27,9 +31,11 @@ class _FakeService extends AnalysisGamesService {
     String username, {
     int maxGames = 100,
     int? monthsBack,
+    Set<GameSpeed> speeds = defaultDownloadSpeeds,
     void Function(String)? onProgress,
   }) async {
     calls.add('lichess:$username:$maxGames:$monthsBack');
+    speedsSeen.add(speeds);
     return '[Site "lichess"]\n[White "$username"]\n\n1. d4 *';
   }
 }
@@ -81,6 +87,65 @@ void main() {
       ),
     );
     expect(pgn.trim(), startsWith('[Site "lichess"]'));
+  });
+
+  test('the player’s own time controls reach every account', () async {
+    final svc = _FakeService();
+    await svc.downloadGamesFor(
+      const AnalysisPlayerInfo(
+        platform: 'import',
+        username: 'X; a; b',
+        speeds: {GameSpeed.bullet, GameSpeed.blitz},
+        accounts: [
+          PlayerAccount('chesscom', 'a'),
+          PlayerAccount('lichess', 'b'),
+        ],
+      ),
+    );
+    expect(svc.speedsSeen, [
+      {GameSpeed.bullet, GameSpeed.blitz},
+      {GameSpeed.bullet, GameSpeed.blitz},
+    ]);
+  });
+
+  test('a plain download keeps everything but bullet by default', () async {
+    final svc = _FakeService();
+    await svc.downloadGamesFor(
+      const AnalysisPlayerInfo(platform: 'chesscom', username: 'hikaru'),
+    );
+    expect(svc.speedsSeen.single, defaultDownloadSpeeds);
+    expect(svc.speedsSeen.single, isNot(contains(GameSpeed.bullet)));
+  });
+
+  group('the download-side filter', () {
+    String game(String? tc) =>
+        '${tc == null ? '' : '[TimeControl "$tc"]\n'}[White "x"]\n\n1. e4 *';
+
+    test('keeps the chosen buckets and drops the rest', () {
+      expect(keepsGameSpeed(game('60'), defaultDownloadSpeeds), isFalse);
+      expect(keepsGameSpeed(game('180'), defaultDownloadSpeeds), isTrue);
+      expect(keepsGameSpeed(game('60'), {GameSpeed.bullet}), isTrue);
+      expect(keepsGameSpeed(game('600'), {GameSpeed.bullet}), isFalse);
+      // Chess.com Daily: days per move.
+      expect(keepsGameSpeed(game('1/259200'), defaultDownloadSpeeds), isTrue);
+      expect(keepsGameSpeed(game('1/259200'), {GameSpeed.blitz}), isFalse);
+    });
+
+    test('never drops a game it cannot classify', () {
+      expect(keepsGameSpeed(game(null), {GameSpeed.classical}), isTrue);
+      expect(keepsGameSpeed(game('?'), {GameSpeed.classical}), isTrue);
+    });
+
+    test('spells the Lichess perf types the way the API does', () {
+      expect(
+        lichessPerfTypes(defaultDownloadSpeeds),
+        'blitz,rapid,classical,correspondence',
+      );
+      expect(
+        lichessPerfTypes({GameSpeed.ultraBullet, GameSpeed.bullet}),
+        'ultraBullet,bullet',
+      );
+    });
   });
 
   test('a PGN-file import has no source and is refused', () async {

@@ -33,6 +33,7 @@ import 'package:dartchess/dartchess.dart';
 
 import '../../../models/game_outcome.dart';
 import '../models/bughouse_history.dart';
+import '../models/bughouse_rules.dart';
 import '../models/bughouse_state.dart';
 import '../models/bughouse_tournament.dart';
 import 'bughouse_engine.dart';
@@ -97,6 +98,9 @@ class BughouseTournamentRunner {
       final game = await _playGame(index, start);
       played.add(game);
       onGameFinished?.call(game);
+      if (game.termination == TerminationReason.engineFailure) {
+        throw BughouseTournamentFailure(game.detail);
+      }
     }
     return played;
   }
@@ -128,7 +132,7 @@ class BughouseTournamentRunner {
     var consecutivePasses = 0;
 
     try {
-      while (line.length < config.maxPlies) {
+      while (true) {
         if (_stopped) {
           termination = TerminationReason.aborted;
           detail = 'stopped';
@@ -141,6 +145,12 @@ class BughouseTournamentRunner {
           result = ending.result;
           termination = ending.termination;
           detail = ending.detail;
+          break;
+        }
+
+        if (line.length >= config.maxPlies) {
+          result = GameResult.draw;
+          termination = TerminationReason.maxMoves;
           break;
         }
 
@@ -158,11 +168,13 @@ class BughouseTournamentRunner {
           sampling: line.length < config.variety.plies && config.variety.isOn,
         );
 
-        final plies = _applyAction(line, position, action);
+        if (_stopped) {
+          detail = 'stopped';
+          break;
+        }
+        final plies = _applyAction(line, position, action, mover);
         if (plies == 0) {
-          // Either the engine chose to sit on every board it holds, or its
-          // answer would not play here. Both look the same from the position,
-          // and both mean the game did not move.
+          // The engine explicitly chose to sit on every board it holds.
           consecutivePasses++;
           if (consecutivePasses >= 4) {
             result = GameResult.draw;
@@ -175,14 +187,10 @@ class BughouseTournamentRunner {
         }
         mover = mover.opposite;
       }
-
-      if (termination == TerminationReason.aborted &&
-          result == GameResult.unfinished &&
-          line.length >= config.maxPlies) {
-        result = GameResult.draw;
-        termination = TerminationReason.maxMoves;
-      }
     } on BughouseEngineFailure catch (e) {
+      termination = TerminationReason.engineFailure;
+      detail = e.message;
+    } on BughouseTournamentFailure catch (e) {
       termination = TerminationReason.engineFailure;
       detail = e.message;
     }
@@ -264,23 +272,31 @@ class BughouseTournamentRunner {
   /// Plays [action] onto [line], returning how many plies it added.
   ///
   /// Both halves are resolved against [position] before either is applied —
-  /// see the library comment. A half that will not play there is dropped
-  /// rather than aborting the game: it is what a stale or malformed answer
-  /// looks like, and losing a tempo is a better outcome than losing the match.
+  /// see the library comment. Invalid answers preserve the partial game and
+  /// fail the match rather than silently changing the engine's decision.
   static int _applyAction(
     BughouseHistory line,
     BughouseState position,
     BughouseJointMove? action,
+    Side team,
   ) {
-    if (action == null || action.isEmpty) return 0;
+    if (action == null) {
+      throw BughouseTournamentFailure(
+        'Engine returned no joint action in a live position.',
+      );
+    }
     final resolved = <BughouseBoard, Move>{};
     for (final which in BughouseBoard.values) {
       final half = action.half(which);
       final uci = half.uci;
-      if (half.isPass || uci == null) continue;
+      if (half.isPass) continue;
       final board = position.board(which);
-      final move = parseEngineUci(board, uci);
-      if (move != null && board.isLegal(move)) resolved[which] = move;
+      final move = uci == null ? null : parseEngineUci(board, uci);
+      final side = which == BughouseBoard.a ? team : team.opposite;
+      if (board.turn != side || move == null || !board.isLegal(move)) {
+        throw BughouseTournamentFailure('Illegal engine action: $action');
+      }
+      resolved[which] = move;
     }
 
     var played = 0;
@@ -305,29 +321,19 @@ class BughouseTournamentRunner {
     return played;
   }
 
-  /// Whether the game is over on either board, and what that means for the
-  /// two teams.
-  ///
-  /// Checkmate ends a bughouse game the moment it happens: there is no waiting
-  /// for a partner to send the piece that would have saved you. Stalemate is
-  /// close to impossible with a reserve in hand but is a draw when it happens,
-  /// as it is on FICS.
   static ({GameResult result, TerminationReason termination, String detail})?
   _endingOf(BughouseState position) {
-    for (final which in BughouseBoard.values) {
-      final board = position.board(which);
-      if (board.isCheckmate) {
+    for (final team in Side.values) {
+      final which = BughouseRules.losingBoard(position, team);
+      if (which != null) {
         return (
-          result: resultOfMate(board: which, mated: board.turn),
+          result: team == Side.white
+              ? GameResult.blackWins
+              : GameResult.whiteWins,
           termination: TerminationReason.checkmate,
-          detail: which.label.toLowerCase(),
-        );
-      }
-      if (board.isStalemate) {
-        return (
-          result: GameResult.draw,
-          termination: TerminationReason.stalemate,
-          detail: which.label.toLowerCase(),
+          detail: position.board(which).isCheck
+              ? which.label.toLowerCase()
+              : '${which.label.toLowerCase()}: no legal joint action',
         );
       }
     }

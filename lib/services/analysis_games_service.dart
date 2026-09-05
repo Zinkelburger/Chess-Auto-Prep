@@ -5,55 +5,23 @@ import 'dart:convert';
 
 import '../models/analysis_player_info.dart';
 import 'chess_api_urls.dart';
-import '../utils/log.dart';
 import 'lichess_api_client.dart';
 import 'pgn_parsing_service.dart';
 import '../utils/atomic_file.dart';
-import '../utils/file_text_reader.dart';
 import 'storage/app_paths.dart';
-import 'game_store/game_store.dart';
-import 'game_store/game_store_service.dart';
 import 'storage/storage_factory.dart';
+import 'analysis/player_corpus_store.dart';
+import 'games_library/game_filter.dart';
 
 /// Service for downloading and managing games for position analysis.
 ///
 /// Maintains a separate on-disk store from the imported games used for tactics.
-/// Each player's data consists of:
-///   • `<key>.pgn`  – raw PGN text
-///   • `<key>.json` – [AnalysisPlayerInfo] metadata
-///   • `<key>_white_analysis.json` / `<key>_black_analysis.json` – cached analysis
+/// Each player has an opaque identity directory. An atomic manifest selects a
+/// retained generation containing its PGN, metadata and derived caches.
+/// Legacy flat files are retained during migration; SQLite is a derived index.
 class AnalysisGamesService {
-  /// Every file suffix a player's storage key may carry. `.json` (the
-  /// metadata file) must stay last so [deletePlayerData] and the legacy-key
-  /// migration handle the data files before the record that points at them.
-  static const _playerFileSuffixes = [
-    '.pgn',
-    '_white_analysis.json',
-    '_black_analysis.json',
-    '_engine_evals.json',
-    '_holes_white.json',
-    '_holes_black.json',
-    '_tricks_white.json',
-    '_tricks_black.json',
-    '.json',
-  ];
-
-  /// Suffixes of per-player cache files that live next to the metadata and
-  /// would otherwise be mistaken for it when scanning the directory.
-  static const _cacheFileSuffixes = [
-    '_white_analysis.json',
-    '_black_analysis.json',
-    '_engine_evals.json',
-    '_holes_white.json',
-    '_holes_black.json',
-    '_tricks_white.json',
-    '_tricks_black.json',
-  ];
-
-  /// Resolve (and create if needed) the on-disk directory for analysis data.
-  Future<Directory> _getAnalysisDirectory() async {
-    return AppPaths.analysisGamesDirectory(create: true);
-  }
+  final PlayerCorpusStore _corpora = PlayerCorpusStore();
+  String? storageWarning;
 
   // ── Downloads ──────────────────────────────────────────────────────
 
@@ -69,7 +37,8 @@ class AnalysisGamesService {
     return List<String>.from(data['archives'] as List);
   }
 
-  /// Download games from Chess.com, excluding bullet.
+  /// Download games from Chess.com, keeping only the time controls in
+  /// [speeds] (by default everything but bullet).
   ///
   /// Uses the Chess.com archives endpoint to discover which months actually
   /// have games, avoiding wasted requests to empty months and reliably
@@ -77,13 +46,14 @@ class AnalysisGamesService {
   ///
   /// Two modes controlled by [monthsBack]:
   ///   • `null` (game-count mode) – walk backwards through every available
-  ///     archive, stop at [maxGames] non-bullet games.
+  ///     archive, stop at [maxGames] kept games.
   ///   • non-null (months mode) – fetch only archives that fall within the
   ///     last [monthsBack] calendar months.
   Future<String> downloadChesscomGames(
     String username, {
     int maxGames = 100,
     int? monthsBack,
+    Set<GameSpeed> speeds = defaultDownloadSpeeds,
     void Function(String)? onProgress,
   }) async {
     onProgress?.call('Fetching Chess.com game archives for $username…');
@@ -137,7 +107,7 @@ class AnalysisGamesService {
         if (response.statusCode == 200 && response.body.isNotEmpty) {
           for (final game in splitPgnIntoGames(stripBom(response.body))) {
             if (!isDateMode && allGames.length >= maxGames) break;
-            if (!_isBulletGame(game)) allGames.add(game);
+            if (keepsGameSpeed(game, speeds)) allGames.add(game);
           }
         }
       } catch (e) {
@@ -152,7 +122,10 @@ class AnalysisGamesService {
     return allGames.join('\n\n');
   }
 
-  /// Download games from Lichess, excluding bullet.
+  /// Download games from Lichess, asking the API for only the time controls
+  /// in [speeds] (by default everything but bullet). The filter is the
+  /// server's, so the request also drops variants — crazyhouse and friends
+  /// have their own perf types.
   ///
   /// Two modes controlled by [monthsBack]:
   ///   • `null` (game-count mode) – uses the `max` API parameter.
@@ -162,12 +135,13 @@ class AnalysisGamesService {
     String username, {
     int maxGames = 100,
     int? monthsBack,
+    Set<GameSpeed> speeds = defaultDownloadSpeeds,
     void Function(String)? onProgress,
   }) async {
     onProgress?.call('Downloading games from Lichess…');
 
     final params = <String, String>{
-      'perfType': 'blitz,rapid,classical,correspondence',
+      'perfType': lichessPerfTypes(speeds),
       'moves': 'true',
       'tags': 'true',
       // Clocks feed the tempo flaw tags when these PGNs are re-mined.
@@ -210,6 +184,7 @@ class AnalysisGamesService {
     PlayerAccount account, {
     int maxGames = 100,
     int? monthsBack,
+    Set<GameSpeed> speeds = defaultDownloadSpeeds,
     void Function(String)? onProgress,
   }) {
     return account.platform == 'lichess'
@@ -217,12 +192,14 @@ class AnalysisGamesService {
             account.username,
             maxGames: maxGames,
             monthsBack: monthsBack,
+            speeds: speeds,
             onProgress: onProgress,
           )
         : downloadChesscomGames(
             account.username,
             maxGames: maxGames,
             monthsBack: monthsBack,
+            speeds: speeds,
             onProgress: onProgress,
           );
   }
@@ -234,6 +211,7 @@ class AnalysisGamesService {
   ///
   /// [maxGames] applies per account, so a two-account opponent may return up
   /// to twice as many games — the cap is about API cost, not corpus size.
+  /// The time controls come from the player itself ([AnalysisPlayerInfo.speeds]).
   Future<String> downloadGamesFor(
     AnalysisPlayerInfo player, {
     int? maxGames,
@@ -254,6 +232,7 @@ class AnalysisGamesService {
         account,
         maxGames: maxGames ?? player.maxGames,
         monthsBack: monthsBack,
+        speeds: player.speeds,
         onProgress: (m) => onProgress?.call('$prefix$m'),
       );
       if (pgns.trim().isNotEmpty) parts.add(pgns.trim());
@@ -263,354 +242,190 @@ class AnalysisGamesService {
 
   // ── Persistence ────────────────────────────────────────────────────
 
-  /// Save downloaded PGN + metadata. Also **clears** any stale cached analysis
-  /// so the next view triggers a fresh rebuild. Returns the saved info.
+  /// Publish a complete generation with one manifest switch. Earlier versions
+  /// stay on disk; search indexing is versioned and retried separately.
   Future<AnalysisPlayerInfo> saveAnalysisGames(
     String pgns, {
     required String platform,
     required String username,
     required int maxGames,
     int? monthsBack,
+    Set<GameSpeed> speeds = defaultDownloadSpeeds,
     List<PlayerAccount> accounts = const [],
     String? group,
   }) async {
-    final directory = await _getAnalysisDirectory();
-    final key = AnalysisPlayerInfo(
-      platform: platform,
-      username: username,
-    ).playerKey;
-    final gameCount = countPgnGames(pgns);
-
-    // Write PGN.
-    await writeTextFileAtomically(
-      File(p.join(directory.path, '$key.pgn')),
-      pgns,
-    );
-
-    // Write metadata.
     final info = AnalysisPlayerInfo(
       platform: platform,
       username: username,
       maxGames: maxGames,
       monthsBack: monthsBack,
-      downloadedAt: DateTime.now(),
-      gameCount: gameCount,
+      speeds: speeds,
       accounts: accounts,
       group: group,
+      downloadedAt: DateTime.now(),
+      gameCount: countPgnGames(pgns),
     );
-    await writeTextFileAtomically(
-      File(p.join(directory.path, '$key.json')),
-      json.encode(info.toJson()),
-    );
-
-    // Invalidate stale cached analysis so it gets rebuilt on next view.
-    await clearCachedAnalysis(platform, username);
-
-    // Mirror into the games database (indexed headers + opening positions),
-    // off the UI isolate.  The PGN file stays the working copy the analysis
-    // isolates and the PGN viewer read by path; the database is what lets
-    // "this player's games reaching this position" be an indexed query.
-    // Best-effort: a database hiccup must not fail a download.
-    try {
-      await GameStoreService.instance.importPgnInBackground(
-        collection: GameCollections.analysis(key),
-        pgnText: pgns,
-        replace: true,
-      );
-    } catch (e) {
-      log.w('Games database mirror failed for $key: $e');
-    }
-
-    return info;
+    final saved = await _corpora.save(info, pgns);
+    storageWarning = saved.info.storageWarning;
+    return saved.info;
   }
 
-  String _playerKey(String platform, String username) {
-    return AnalysisPlayerInfo(platform: platform, username: username).playerKey;
+  Future<AnalysisPlayerInfo?> findExistingPlayer(
+    String platform,
+    String username,
+  ) async => (await _corpora.load(platform, username, reconcile: false))?.info;
+
+  Future<List<AnalysisPlayerInfo>> getAllCachedPlayers() => _corpora.list();
+
+  Future<String?> loadAnalysisGames(String platform, String username) async {
+    final corpus = await _corpora.load(platform, username);
+    storageWarning = corpus?.info.storageWarning;
+    return corpus == null ? null : readTextFileSafely(File(corpus.pgnPath));
   }
 
-  /// Absolute path of the raw PGN file for [username] on [platform].
-  ///
-  /// Exposed so the analysis build isolate can read the file itself instead
-  /// of the UI thread loading and splitting the whole corpus.
   Future<String> analysisPgnPath(String platform, String username) async {
-    final directory = await _getAnalysisDirectory();
-    return p.join(directory.path, '${_playerKey(platform, username)}.pgn');
+    final corpus = await _corpora.load(platform, username);
+    storageWarning = corpus?.info.storageWarning;
+    if (corpus != null) return corpus.pgnPath;
+    final root = await AppPaths.analysisGamesDirectory();
+    return p.join(
+      root.path,
+      AnalysisPlayerInfo(platform: platform, username: username).playerKey,
+      'missing.pgn',
+    );
   }
 
-  /// Absolute path of the cached-analysis file for one colour, written and
-  /// read by [UnifiedAnalysisBuilder]'s isolate entry points.
+  Future<PlayerCorpus?> loadCorpus(String platform, String username) =>
+      _corpora.load(platform, username);
+
+  Future<String> corpusFingerprint(String platform, String username) async =>
+      (await _corpora.load(platform, username))?.fingerprint ?? '';
+
+  Future<String> _cachePath(
+    String platform,
+    String username,
+    String name,
+  ) async {
+    final corpus = await _corpora.load(platform, username, reconcile: true);
+    if (corpus != null) return corpus.cachePath(name);
+    final root = await AppPaths.analysisGamesDirectory();
+    return p.join(
+      root.path,
+      AnalysisPlayerInfo(platform: platform, username: username).playerKey,
+      'unpublished',
+      name,
+    );
+  }
+
   Future<String> cachedAnalysisPath(
     String platform,
     String username,
     bool isWhite,
-  ) async {
-    final directory = await _getAnalysisDirectory();
-    final colour = isWhite ? 'white' : 'black';
-    return p.join(
-      directory.path,
-      '${_playerKey(platform, username)}_${colour}_analysis.json',
-    );
-  }
-
-  /// Absolute path of the hole-hunt report for one colour's game tree,
-  /// written and read via [holeHuntStore].
+  ) => _cachePath(
+    platform,
+    username,
+    '${isWhite ? 'white' : 'black'}_analysis.json',
+  );
   Future<String> holesReportPath(
     String platform,
     String username,
     bool isWhite,
-  ) async {
-    final directory = await _getAnalysisDirectory();
-    final colour = isWhite ? 'white' : 'black';
-    return p.join(
-      directory.path,
-      '${_playerKey(platform, username)}_holes_$colour.json',
-    );
-  }
-
-  /// Absolute path of the trick-hunt report for one colour's game tree,
-  /// written and read via [trickHuntStore].
+  ) => _cachePath(
+    platform,
+    username,
+    'holes_${isWhite ? 'white' : 'black'}.json',
+  );
   Future<String> tricksReportPath(
     String platform,
     String username,
     bool isWhite,
-  ) async {
-    final directory = await _getAnalysisDirectory();
-    final colour = isWhite ? 'white' : 'black';
-    return p.join(
-      directory.path,
-      '${_playerKey(platform, username)}_tricks_$colour.json',
-    );
-  }
+  ) => _cachePath(
+    platform,
+    username,
+    'tricks_${isWhite ? 'white' : 'black'}.json',
+  );
 
-  /// Metadata of the already-stored player that [username] on [platform]
-  /// would overwrite, or `null` if the slot is free. Matches by storage key,
-  /// so names that merely sanitize to the same key also count.
-  Future<AnalysisPlayerInfo?> findExistingPlayer(
-    String platform,
-    String username,
-  ) async {
-    try {
-      final directory = await _getAnalysisDirectory();
-      final file = File(
-        p.join(directory.path, '${_playerKey(platform, username)}.json'),
-      );
-      if (!await file.exists()) return null;
-      return AnalysisPlayerInfo.fromJson(
-        json.decode(await file.readAsString()) as Map<String, dynamic>,
-      );
-    } catch (_) {
-      // Unreadable metadata still means data exists on disk; report a
-      // minimal record so callers warn before overwriting it.
-      return AnalysisPlayerInfo(platform: platform, username: username);
-    }
-  }
+  Future<void> deletePlayerData(String platform, String username) =>
+      _corpora.tombstone(platform, username);
 
-  /// Load the raw PGN for [username] on [platform]. Returns `null` on miss.
-  Future<String?> loadAnalysisGames(String platform, String username) async {
-    try {
-      final file = File(await analysisPgnPath(platform, username));
-      if (!await file.exists()) return null;
-      // Awaited inside the try on purpose: returning the future unawaited
-      // would let a read failure escape the catch below unlogged.
-      return await readTextFile(file);
-    } catch (e) {
-      // A missing file already returned null above, so reaching here means a
-      // real read failure (permissions, corrupt path). Callers cannot tell the
-      // two apart, so leave a trace — otherwise this surfaces to the user as
-      // an empty game list with no explanation.
-      log.w(
-        'could not read stored games for $username on $platform',
-        name: 'AnalysisGamesService',
-        error: e,
-      );
-      return null;
-    }
-  }
-
-  /// List every cached player, most-recently-downloaded first.
-  Future<List<AnalysisPlayerInfo>> getAllCachedPlayers() async {
-    try {
-      final directory = await _getAnalysisDirectory();
-      // Cache companions are excluded by exact suffix (a substring test
-      // would hide real players whose username contains e.g. "_holes_").
-      final metadataFiles = <File>[
-        await for (final entity in directory.list())
-          if (entity is File &&
-              entity.path.endsWith('.json') &&
-              !_cacheFileSuffixes.any(entity.path.endsWith))
-            entity,
-      ];
-
-      final players = (await Future.wait(
-        metadataFiles.map((file) async {
-          try {
-            final content = await file.readAsString();
-            final decoded = json.decode(content) as Map<String, dynamic>;
-            // Every field of AnalysisPlayerInfo.fromJson has a fallback, so
-            // any cache file that happens to hold a JSON map would "parse"
-            // into a phantom unknown/unknown player — one that Delete can't
-            // even remove, since it targets unknown_unknown* files. Require
-            // the identity fields so only real metadata files qualify.
-            if (decoded['platform'] is! String ||
-                decoded['username'] is! String) {
-              return null;
-            }
-            final info = AnalysisPlayerInfo.fromJson(decoded);
-            // Imports saved before key sanitization can sit under a stale
-            // key (e.g. "import_carlsen, magnus"); selecting or deleting
-            // them would target the sanitized key and miss. Rename them
-            // into place once.
-            await _migrateLegacyKeyFiles(directory, file, info);
-            return info;
-          } catch (_) {
-            // Skip corrupt metadata files.
-            return null;
-          }
-        }),
-      )).whereType<AnalysisPlayerInfo>().toList();
-
-      players.sort((a, b) {
-        final aDate = a.downloadedAt;
-        final bDate = b.downloadedAt;
-        if (aDate == null || bDate == null) return 0;
-        return bDate.compareTo(aDate);
-      });
-
-      return players;
-    } catch (_) {
-      return [];
-    }
-  }
-
-  /// Move a player's files from a pre-sanitization storage key to the
-  /// current one. No-op when the metadata file already sits under the
-  /// current key. On collision the current-key file wins and the legacy
-  /// copy is dropped.
-  Future<void> _migrateLegacyKeyFiles(
-    Directory directory,
-    File metadataFile,
-    AnalysisPlayerInfo info,
-  ) async {
-    final legacyBase = p.basenameWithoutExtension(metadataFile.path);
-    final key = info.playerKey;
-    if (legacyBase == key) return;
-
-    for (final suffix in _playerFileSuffixes) {
-      final legacy = File(p.join(directory.path, '$legacyBase$suffix'));
-      if (!await legacy.exists()) continue;
-      final target = File(p.join(directory.path, '$key$suffix'));
-      if (await target.exists()) {
-        await StorageFactory.instance.deleteFile(legacy.path);
-      } else {
-        await StorageFactory.instance.renameFile(legacy.path, target.path);
-      }
-    }
-  }
-
-  /// Remove **all** on-disk data for a player (PGN, metadata, cached analysis).
-  Future<void> deletePlayerData(String platform, String username) async {
-    final directory = await _getAnalysisDirectory();
-    final key = AnalysisPlayerInfo(
-      platform: platform,
-      username: username,
-    ).playerKey;
-
-    for (final suffix in _playerFileSuffixes) {
-      final file = File(p.join(directory.path, '$key$suffix'));
-      if (await file.exists()) {
-        await StorageFactory.instance.deleteFile(file.path);
-      }
-    }
-    try {
-      final store = await GameStoreService.instance.open();
-      store.deleteCollection(GameCollections.analysis(key));
-    } catch (e) {
-      log.w('Games database delete failed for $key: $e');
-    }
-  }
-
-  // ── Analysis cache ─────────────────────────────────────────────────
-  //
-  // The cache files themselves are written and read by
-  // [UnifiedAnalysisBuilder]'s isolate entry points (via
-  // [cachedAnalysisPath]) so the JSON work never touches the UI thread;
-  // this service only handles invalidation.
-
-  /// Remove cached analysis for both colours (e.g. after a re-download).
-  /// Hole-hunt reports are built from the same games, so they go stale (and
-  /// are removed) together with the analysis.
   Future<void> clearCachedAnalysis(String platform, String username) async {
-    for (final isWhite in [true, false]) {
-      for (final path in [
-        await cachedAnalysisPath(platform, username, isWhite),
-        await holesReportPath(platform, username, isWhite),
-        await tricksReportPath(platform, username, isWhite),
-      ]) {
-        final file = File(path);
-        if (await file.exists()) {
-          await StorageFactory.instance.deleteFile(file.path);
-        }
-      }
+    final corpus = await _corpora.load(platform, username, reconcile: false);
+    if (corpus == null) return;
+    for (final name in [
+      'white_analysis.json',
+      'black_analysis.json',
+      'holes_white.json',
+      'holes_black.json',
+      'tricks_white.json',
+      'tricks_black.json',
+      'engine_evals.json',
+    ]) {
+      await StorageFactory.instance.deleteFile(corpus.cachePath(name));
     }
   }
 
-  // ── Engine eval cache ───────────────────────────────────────────────
-
-  /// Persist engine weakness results for a player.
   Future<void> saveEngineEvals(
     String platform,
     String username,
-    List<Map<String, dynamic>> evals,
-  ) async {
-    final directory = await _getAnalysisDirectory();
-    final key = AnalysisPlayerInfo(
-      platform: platform,
-      username: username,
-    ).playerKey;
-
+    List<Map<String, dynamic>> evals, {
+    String? expectedFingerprint,
+  }) async {
+    final corpus = await _corpora.load(platform, username);
+    if (corpus == null) throw StateError('Player games are not available.');
+    if (expectedFingerprint != null &&
+        corpus.fingerprint != expectedFingerprint) {
+      throw StateError(
+        'Player games changed while analysis ran. These results were not saved over the new corpus.',
+      );
+    }
     await writeTextFileAtomically(
-      File(p.join(directory.path, '${key}_engine_evals.json')),
-      json.encode(evals),
+      File(corpus.cachePath('engine_evals.json')),
+      jsonEncode({
+        'version': 1,
+        'fingerprint': corpus.fingerprint,
+        'evals': evals,
+      }),
     );
   }
 
-  /// Load engine weakness results. Returns `null` on miss.
   Future<List<dynamic>?> loadEngineEvals(
     String platform,
     String username,
   ) async {
+    final corpus = await _corpora.load(platform, username);
+    if (corpus == null) return null;
+    final raw = await readTextFileSafely(
+      File(corpus.cachePath('engine_evals.json')),
+    );
+    if (raw == null) return null;
     try {
-      final directory = await _getAnalysisDirectory();
-      final key = AnalysisPlayerInfo(
-        platform: platform,
-        username: username,
-      ).playerKey;
-      final file = File(p.join(directory.path, '${key}_engine_evals.json'));
-
-      if (!await file.exists()) return null;
-      return json.decode(await file.readAsString()) as List<dynamic>;
-    } catch (e) {
-      // Same as above: absence is handled, so this is a decode or read
-      // failure. Silently dropping it makes cached evals look merely absent
-      // and triggers a full re-analysis with no hint why.
-      log.w(
-        'could not read cached engine evals for $username',
-        name: 'AnalysisGamesService',
-        error: e,
-      );
+      final data = jsonDecode(raw);
+      if (data is! Map ||
+          data['version'] != 1 ||
+          data['fingerprint'] != corpus.fingerprint) {
+        return null;
+      }
+      return data['evals'] as List<dynamic>;
+    } on FormatException {
       return null;
     }
   }
-
-  // ── Utilities ──────────────────────────────────────────────────────
-
-  /// Returns `true` if the PGN's TimeControl is under 3 minutes (bullet).
-  bool _isBulletGame(String pgn) {
-    final match = RegExp(r'\[TimeControl "(\d+)\+\d+"\]').firstMatch(pgn);
-    if (match != null) {
-      final mainTime = int.tryParse(match.group(1) ?? '');
-      if (mainTime != null && mainTime < 180) return true;
-    }
-    return false;
-  }
 }
+
+// ── Utilities ────────────────────────────────────────────────────────
+
+/// Whether one game's TimeControl header falls in [speeds]. A game with no
+/// header at all is kept: a filter should never throw away what it cannot
+/// read, and Chess.com's Daily games are the usual case.
+bool keepsGameSpeed(String pgn, Set<GameSpeed> speeds) {
+  final match = RegExp(r'\[TimeControl "([^"]*)"\]').firstMatch(pgn);
+  final speed = classifySpeed(match?.group(1));
+  return speed == GameSpeed.unknown || speeds.contains(speed);
+}
+
+/// The `perfType` value the Lichess games export takes for [speeds], in the
+/// API's own spelling and order.
+String lichessPerfTypes(Set<GameSpeed> speeds) => [
+  for (final s in selectableGameSpeeds)
+    if (speeds.contains(s)) s.lichessPerfType!,
+].join(',');

@@ -6,12 +6,17 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
+import 'package:sqlite3/sqlite3.dart';
 
 final Map<String, Future<void>> _directoryTails = {};
 
-/// Runs [action] with both an isolate-local queue and an advisory OS lock for
-/// [directory]. All app writers use the same hidden lock file, so two isolates
-/// or two app processes cannot interleave a check-and-commit sequence.
+/// Runs [action] under a SQLite write transaction used solely as a mutex.
+/// SQLite serializes separate connections within a process as well as across
+/// processes, unlike Dart's POSIX record locks (shared by every isolate).
+/// The OS releases the transaction on process death; no stale-lock deletion or
+/// lease expiry can let a second writer overlap a slow first writer.
+/// Do not recursively acquire the same directory. Nested domain operations
+/// should use a separate domain lock and let individual files take theirs.
 Future<T> withFileOperationLock<T>(
   String directory,
   Future<T> Function() action,
@@ -26,28 +31,52 @@ Future<T> withFileOperationLock<T>(
   _directoryTails[key] = turn.future;
 
   await previous.catchError((_) {});
-  RandomAccessFile? handle;
+  Database? mutex;
+  var acquired = false;
   try {
     final lockRoot = Directory(
       p.join(Directory.systemTemp.path, 'chess-auto-prep-file-locks'),
     );
     if (!await lockRoot.exists()) await lockRoot.create(recursive: true);
-    final lock = File(p.join(lockRoot.path, '${_stablePathHash(key)}.lock'));
-    handle = await lock.open(mode: FileMode.append);
-    await handle.lock(FileLock.exclusive);
-    return await action();
-  } finally {
-    if (handle != null) {
+    final lockPath = p.join(lockRoot.path, '${_stablePathHash(key)}.sqlite3');
+    mutex = sqlite3.open(lockPath);
+    mutex.execute('PRAGMA busy_timeout = 0');
+    final deadline = DateTime.now().add(const Duration(minutes: 2));
+    while (!acquired) {
       try {
-        await handle.unlock();
-      } finally {
-        await handle.close();
+        mutex.execute('BEGIN IMMEDIATE');
+        acquired = true;
+      } on SqliteException catch (e) {
+        if (e.resultCode != SqlError.SQLITE_BUSY &&
+            e.resultCode != SqlError.SQLITE_LOCKED) {
+          rethrow;
+        }
+        if (DateTime.now().isAfter(deadline)) {
+          throw FileSystemException(
+            'Timed out waiting for another file operation',
+            key,
+          );
+        }
+        // Never block the UI isolate while another isolate owns the lock.
+        await Future<void>.delayed(const Duration(milliseconds: 10));
       }
     }
-    turn.complete();
-    if (identical(_directoryTails[key], turn.future)) {
-      final removed = _directoryTails.remove(key);
-      assert(removed != null);
+    return await action();
+  } finally {
+    try {
+      if (mutex != null) {
+        try {
+          if (acquired) mutex.execute('ROLLBACK');
+        } finally {
+          mutex.close();
+        }
+      }
+    } finally {
+      turn.complete();
+      if (identical(_directoryTails[key], turn.future)) {
+        final removed = _directoryTails.remove(key);
+        assert(removed != null);
+      }
     }
   }
 }

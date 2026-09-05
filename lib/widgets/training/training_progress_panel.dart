@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/training_settings.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import '../labeled_toggle.dart';
 
 /// Footer of the Train tab: auto-next plus how much is left in this run.
@@ -104,7 +105,7 @@ class _StatItem extends StatelessWidget {
       children: [
         Icon(icon, size: 14, color: color),
         const SizedBox(width: 3),
-        Text(value, style: TextStyle(fontSize: 12, color: color)),
+        Text(value, style: AppTextStyles.caption.copyWith(color: color)),
       ],
     );
   }

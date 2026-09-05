@@ -219,6 +219,17 @@ void main() {
   });
 
   group('clocks and stance', () {
+    test('mixed diagonals cannot buy sitting with a partners surplus', () {
+      const clocks = BughouseClocks(
+        whiteA: Duration(seconds: 10),
+        blackB: Duration(seconds: 300),
+        blackA: Duration(seconds: 100),
+        whiteB: Duration(seconds: 100),
+      );
+      expect(clocks.stanceFor(Side.white), BughouseTimeStance.level);
+      expect(clocks.stanceFor(Side.black), BughouseTimeStance.level);
+    });
+
     test('stance is the diagonal comparison', () {
       const lopsided = BughouseClocks(
         whiteA: Duration(seconds: 60),

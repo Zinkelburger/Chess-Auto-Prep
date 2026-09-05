@@ -195,7 +195,7 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
         title: 'No chapters yet',
         detail:
             'A repertoire is chapters, and chapters hold lines. Make a '
-            'chapter, then fill it from the Add lines menu.',
+            'chapter, then fill it from the Actions menu.',
         action: Wrap(
           spacing: 8,
           runSpacing: 8,

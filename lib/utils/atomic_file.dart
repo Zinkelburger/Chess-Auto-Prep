@@ -5,6 +5,7 @@
 /// rollback; the last valid copy is never deliberately deleted first.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -12,6 +13,7 @@ import 'dart:math';
 import 'package:path/path.dart' as p;
 
 import 'file_operation_lock.dart';
+import 'file_text_reader.dart';
 import 'pgn_compression.dart';
 
 enum AtomicWriteStep {
@@ -64,13 +66,13 @@ class AtomicFileWriter {
     bool createOnly = false,
     String? expectedContent,
   }) => withFileOperationLock(target.parent.path, () async {
-    await recoverAtomicWritesInDirectory(target.parent);
+    await _recoverAtomicWritesLocked(target.parent);
     List<int>? existing;
     if (await target.exists()) existing = await target.readAsBytes();
     if (expectedContent != null) {
       final current = existing == null
           ? null
-          : utf8.decode(maybeGunzip(existing), allowMalformed: true);
+          : decodeTextBytes(maybeGunzip(existing));
       if (current != expectedContent) throw AtomicWriteConflict(target.path);
     }
     final bytes = utf8.encode(content);
@@ -81,12 +83,31 @@ class AtomicFileWriter {
     );
   });
 
+  /// Reads and transforms the current file while holding its write lock.
+  /// The callback must not recursively write another file in this directory.
+  Future<String> updateText(
+    File target,
+    FutureOr<String> Function(String? current) update,
+  ) => withFileOperationLock(target.parent.path, () async {
+    await _recoverAtomicWritesLocked(target.parent);
+    final raw = await target.exists() ? await target.readAsBytes() : null;
+    final current = raw == null ? null : decodeTextBytes(maybeGunzip(raw));
+    final content = await update(current);
+    final bytes = utf8.encode(content);
+    await _writeBytesLocked(
+      target,
+      raw != null && looksGzipped(raw) ? gzipBytes(bytes) : bytes,
+      createOnly: false,
+    );
+    return content;
+  });
+
   Future<void> writeBytes(
     File target,
     List<int> bytes, {
     bool createOnly = false,
   }) => withFileOperationLock(target.parent.path, () async {
-    await recoverAtomicWritesInDirectory(target.parent);
+    await _recoverAtomicWritesLocked(target.parent);
     await _writeBytesLocked(target, bytes, createOnly: createOnly);
   });
 
@@ -95,7 +116,7 @@ class AtomicFileWriter {
   /// lose one another's batch.
   Future<void> appendText(File target, String content) =>
       withFileOperationLock(target.parent.path, () async {
-        await recoverAtomicWritesInDirectory(target.parent);
+        await _recoverAtomicWritesLocked(target.parent);
         var existing = <int>[];
         var compressed = false;
         if (await target.exists()) {
@@ -239,25 +260,33 @@ Future<void> appendTextFileAtomically(File target, String content) async {
 ///
 /// Returns the fraction of the file saved, or 0 when it was already
 /// compressed or would not shrink — in which case the file is left alone.
-Future<double> compactTextFile(File target) async {
-  if (!await target.exists()) return 0;
-  final raw = await target.readAsBytes();
-  if (looksGzipped(raw)) return 0;
-  final packed = gzipBytes(raw);
-  final saving = compressionSavingOf(raw, packed);
-  if (saving <= 0) return 0;
-  await _defaultWriter.writeBytes(target, packed);
-  return saving;
-}
+Future<double> compactTextFile(File target) =>
+    withFileOperationLock(target.parent.path, () async {
+      await _recoverAtomicWritesLocked(target.parent);
+      if (!await target.exists()) return 0.0;
+      final raw = await target.readAsBytes();
+      if (looksGzipped(raw)) return 0;
+      final packed = gzipBytes(raw);
+      final saving = compressionSavingOf(raw, packed);
+      if (saving <= 0) return 0;
+      await _defaultWriter._writeBytesLocked(target, packed, createOnly: false);
+      return saving;
+    });
 
 /// Undo [compactTextFile], leaving plain text on disk.
-Future<bool> expandTextFile(File target) async {
-  if (!await target.exists()) return false;
-  final raw = await target.readAsBytes();
-  if (!looksGzipped(raw)) return false;
-  await _defaultWriter.writeBytes(target, maybeGunzip(raw));
-  return true;
-}
+Future<bool> expandTextFile(File target) =>
+    withFileOperationLock(target.parent.path, () async {
+      await _recoverAtomicWritesLocked(target.parent);
+      if (!await target.exists()) return false;
+      final raw = await target.readAsBytes();
+      if (!looksGzipped(raw)) return false;
+      await _defaultWriter._writeBytesLocked(
+        target,
+        maybeGunzip(raw),
+        createOnly: false,
+      );
+      return true;
+    });
 
 String _transactionToken() {
   final random = Random.secure();
@@ -269,7 +298,40 @@ String _transactionToken() {
 /// Repairs interrupted backup-and-swap transactions in [directory]. A journal
 /// is deliberately self-contained and accepts basenames only, so corrupt or
 /// malicious journal content cannot escape the directory being recovered.
-Future<void> recoverAtomicWritesInDirectory(Directory directory) async {
+Future<void> recoverAtomicWritesInDirectory(Directory directory) =>
+    withFileOperationLock(
+      directory.path,
+      () => _recoverAtomicWritesLocked(directory),
+    );
+
+/// A read participates in recovery under the writer's lock; null means absent,
+/// never unreadable. Callers must not turn a failed read into a new document.
+Future<String?> readTextFileSafely(File file) =>
+    withTextFileSnapshot(file, (text) async => text);
+
+/// Holds a recovered source stable while a derived index is built. [action]
+/// must not acquire this file's directory lock again.
+Future<T> withTextFileSnapshot<T>(
+  File file,
+  Future<T> Function(String? text) action,
+) => withFileOperationLock(file.parent.path, () async {
+  await _recoverAtomicWritesLocked(file.parent);
+  final text = await file.exists() ? await readTextFile(file) : null;
+  return action(text);
+});
+
+Future<bool> textFileExistsSafely(File file) =>
+    withFileOperationLock(file.parent.path, () async {
+      await _recoverAtomicWritesLocked(file.parent);
+      return file.exists();
+    });
+
+Future<String> updateTextFileAtomically(
+  File file,
+  FutureOr<String> Function(String? current) update,
+) => _defaultWriter.updateText(file, update);
+
+Future<void> _recoverAtomicWritesLocked(Directory directory) async {
   if (!await directory.exists()) return;
   await for (final entity in directory.list(followLinks: false)) {
     if (entity is! File) continue;

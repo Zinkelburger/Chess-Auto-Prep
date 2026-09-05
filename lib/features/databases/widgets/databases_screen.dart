@@ -32,7 +32,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../core/app_state.dart';
 import '../../../models/eval_database_settings.dart';
 import '../../../services/eval/cdbdirect_eval_provider.dart';
 import '../../../services/eval/cdb_snapshot_download.dart';
@@ -56,8 +55,8 @@ import '../../../widgets/eval_database_settings_panel.dart';
 import '../../../widgets/lichess_eval_download_card.dart';
 import '../../../widgets/lichess_eval_settings_panel.dart';
 import '../../../widgets/master_games_settings_panel.dart';
+import '../../../utils/number_format.dart';
 import '../../bughouse/services/bughouse_book.dart';
-import '../../master_games/widgets/master_games_browser.dart';
 import '../services/database_inventory.dart';
 import 'database_card.dart';
 
@@ -268,7 +267,7 @@ class _DatabasesScreenState extends State<DatabasesScreen> {
           ? DatabaseAvailability.ready
           : DatabaseAvailability.notSetUp,
       status: has
-          ? '${_thousands(stats.games)} games'
+          ? '${formatThousands(stats.games)} games'
           : (service.isSyncing ? 'Downloading…' : null),
       statusDetail: footprint == null ? null : formatBytes(footprint.bytes),
       freshness: _masterFreshness(service),
@@ -278,22 +277,28 @@ class _DatabasesScreenState extends State<DatabasesScreen> {
         onRun: () => unawaited(service.sync()),
         disabledReason: service.isSyncing ? 'A download is running.' : null,
       ),
-      secondary: has
-          ? DatabaseAction(
-              label: 'Browse games…',
-              icon: Icons.travel_explore,
-              onRun: () => showMasterGamesBrowser(
-                context,
-                appState: context.read<AppState>(),
-              ),
-            )
-          : null,
       menu: [
         if (service.isSyncing)
           AppMenuEntry(
             label: 'Stop the download',
             icon: Icons.stop_circle_outlined,
             onRun: service.cancel,
+          ),
+        // The explorer's "classical OTB only" filter reads per-row counts
+        // that a database imported before they existed does not have yet.
+        if (has && !service.isRebuildingClassical)
+          AppMenuEntry(
+            label: service.classicalCountsComplete
+                ? 'Rebuild classical index'
+                : 'Build classical index',
+            icon: Icons.fact_check_outlined,
+            onRun: () => unawaited(service.rebuildClassicalIndex()),
+          ),
+        if (service.isRebuildingClassical)
+          AppMenuEntry(
+            label: 'Stop the classical index',
+            icon: Icons.stop_circle_outlined,
+            onRun: service.cancelRebuild,
           ),
         AppMenuEntry(
           label: 'theweekinchess.com',
@@ -324,11 +329,12 @@ class _DatabasesScreenState extends State<DatabasesScreen> {
   }
 
   Widget? _masterProgress(MasterGamesService service) {
-    if (!service.isSyncing && service.status.isEmpty) return null;
+    final busy = service.isSyncing || service.isRebuildingClassical;
+    if (!busy && service.status.isEmpty) return null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (service.isSyncing)
+        if (busy)
           LinearProgressIndicator(
             value: service.fraction > 0 ? service.fraction : null,
             minHeight: 4,
@@ -364,7 +370,7 @@ class _DatabasesScreenState extends State<DatabasesScreen> {
       availability: total > 0
           ? DatabaseAvailability.ready
           : DatabaseAvailability.notSetUp,
-      status: total > 0 ? '${_thousands(total)} games' : 'Empty',
+      status: total > 0 ? '${formatThousands(total)} games' : 'Empty',
       statusDetail: footprint == null ? null : formatBytes(footprint.bytes),
       body: total == 0
           ? const Text(
@@ -519,7 +525,7 @@ class _DatabasesScreenState extends State<DatabasesScreen> {
       availability: has
           ? DatabaseAvailability.ready
           : DatabaseAvailability.notSetUp,
-      status: has ? '${_thousands(book.games)} games' : null,
+      status: has ? '${formatThousands(book.games)} games' : null,
       statusDetail: footprint == null ? null : formatBytes(footprint.bytes),
       freshness: has ? '${book.yearRange} · to ${book.maxPly} plies' : null,
       body: has
@@ -651,16 +657,6 @@ class _DatabasesScreenState extends State<DatabasesScreen> {
     final support = await _supportPath();
     if (support != null) await emptyQuarantine(support);
     await _measure();
-  }
-
-  static String _thousands(int n) {
-    final s = n.toString();
-    final b = StringBuffer();
-    for (var i = 0; i < s.length; i++) {
-      if (i > 0 && (s.length - i) % 3 == 0) b.write(',');
-      b.write(s[i]);
-    }
-    return b.toString();
   }
 }
 

@@ -175,6 +175,7 @@ class ArgvTest(unittest.TestCase):
         self.assertEqual(argv[argv.index("-c") + 1], "b")
         self.assertEqual(argv[argv.index("-f") + 1], LONDON_FEN)
         self.assertEqual(argv[argv.index("-d") + 1], "8")
+        self.assertEqual(argv[argv.index("-t") + 1], "1")
         self.assertEqual(argv[argv.index("--our-multipv") + 1], "5")
         self.assertEqual(argv[-1], "/runs/x/tree")
 
@@ -183,10 +184,11 @@ class ArgvTest(unittest.TestCase):
             self._chain(),
             Path("/runs/x/tree"),
             ex.resolve_position(LONDON),
-            {"plies": 10, "eval_depth": 20, "multipv": 8, "maia_elo": 1800},
+            {"plies": 10, "eval_depth": 20, "multipv": 8, "maia_elo": 1800, "threads": 4},
         )
         self.assertEqual(argv[argv.index("-d") + 1], "10")
         self.assertEqual(argv[argv.index("-e") + 1], "20")
+        self.assertEqual(argv[argv.index("-t") + 1], "4")
         self.assertEqual(argv[argv.index("--our-multipv") + 1], "8")
         self.assertEqual(argv[argv.index("--maia-elo") + 1], "1800")
 

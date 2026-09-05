@@ -17,7 +17,6 @@ import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
 import '../theme/app_colors.dart';
-import '../theme/app_text_styles.dart';
 import 'app_overflow_menu.dart';
 
 class AppModeSwitcher extends StatelessWidget {
@@ -43,15 +42,7 @@ class AppModeSwitcher extends StatelessWidget {
       padding: EdgeInsets.zero,
       itemBuilder: (context) => [
         for (final group in availableAppModeGroups()) ...[
-          PopupMenuItem<AppMode>(
-            enabled: false,
-            height: 28,
-            padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-            child: Text(
-              group.heading.toUpperCase(),
-              style: AppTextStyles.eyebrow,
-            ),
-          ),
+          appMenuHeadingItem<AppMode>(group.heading),
           for (final m in group.modes)
             PopupMenuItem<AppMode>(
               value: m,

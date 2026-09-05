@@ -12,7 +12,7 @@ abstract class StorageService {
   // ── Generic file I/O ─────────────────────────────────────────────────────
 
   /// Read a file at [path] (absolute or relative to the app documents root).
-  /// Returns `null` if the file does not exist or cannot be read.
+  /// Returns `null` only if absent. Read/decode failures must propagate.
   Future<String?> readFile(String path);
 
   /// Write [content] to the file at [path], creating parent directories as
@@ -23,6 +23,13 @@ abstract class StorageService {
     bool createOnly = false,
     String? expectedContent,
   });
+
+  /// Read-modify-write under one lock. Implementations must preserve the
+  /// previous value when reading, transforming or committing fails.
+  Future<String> updateFile(
+    String path,
+    FutureOr<String> Function(String?) update,
+  );
 
   /// Whether a file exists at the given [path].
   Future<bool> fileExists(String path);

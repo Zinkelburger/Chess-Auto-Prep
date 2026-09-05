@@ -220,7 +220,7 @@ class GameCard extends StatelessWidget {
           child: Text(
             [
               game.timeControlDisplay,
-              _speedLabel(game.record.speed),
+              game.record.speed.label,
               game.dateDisplayShort,
             ].join(' · '),
             overflow: TextOverflow.ellipsis,
@@ -273,16 +273,6 @@ class GameCard extends StatelessWidget {
     GameSpeed.classical => Icons.hourglass_bottom,
     GameSpeed.correspondence => Icons.mail_outline,
     GameSpeed.unknown => Icons.help_outline,
-  };
-
-  static String _speedLabel(GameSpeed speed) => switch (speed) {
-    GameSpeed.ultraBullet => 'UltraBullet',
-    GameSpeed.bullet => 'Bullet',
-    GameSpeed.blitz => 'Blitz',
-    GameSpeed.rapid => 'Rapid',
-    GameSpeed.classical => 'Classical',
-    GameSpeed.correspondence => 'Correspondence',
-    GameSpeed.unknown => 'Unknown',
   };
 }
 
@@ -439,6 +429,8 @@ class _DeviationLine extends StatelessWidget {
       final String message;
       if (game.meWhite == null) {
         message = 'Not your game — no book check';
+      } else if (game.sans.isEmpty) {
+        message = 'No moves to check';
       } else if (!game.bookDesignated) {
         message = 'No book set for this colour';
       } else {
@@ -582,8 +574,9 @@ class _MomentsStripState extends State<MomentsStrip> {
 ///
 /// The played move takes the mistake's hue — blue, amber, red, the same three
 /// the counts use — or red when I left the book and a plain ink when they
-/// did. What the book or the engine wanted instead is green. Those are the
-/// only colours in the strip; the captions stay in the two inks.
+/// did or when the book simply ended there. What the book or the engine
+/// wanted instead is green. Those are the only colours in the strip; the
+/// captions stay in the two inks.
 class MomentTile extends StatelessWidget {
   const MomentTile({
     super.key,
@@ -601,7 +594,10 @@ class MomentTile extends StatelessWidget {
         MoveClassification.blunder => AppColors.mistakeBlunder,
         MoveClassification.mistake => AppColors.mistakeMistake,
         MoveClassification.inaccuracy => AppColors.mistakeInaccuracy,
-        _ => moment.byMe ? AppColors.danger : AppColors.onSurfaceMuted,
+        _ =>
+          moment.byMe && !moment.bookEnd
+              ? AppColors.danger
+              : AppColors.onSurfaceMuted,
       };
 
   @override
