@@ -384,7 +384,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
         lines: parsedLines,
         existing: currentEntries,
       );
-      await reviewService.saveAll([...otherRepertoires, ...merged]);
+      await reviewService.saveAll(merged, repertoireId: filePath);
       if (generation != _loadGeneration) return;
 
       lines = parsedLines;
@@ -678,11 +678,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     runComplete = false;
     learn.cancelPending();
 
-    if (line.startPosition.fen != Chess.initial.fen) {
-      session.setPositionFromFen(line.startPosition.fen);
-    } else {
-      session.clearMoveHistory();
-    }
+    resetBoard(line);
 
     var effectiveLength = settings.trainingDepth != null
         ? settings.trainingDepth!.clamp(1, line.moves.length)
@@ -742,6 +738,18 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
         }
       }),
     );
+  }
+
+  /// Put the board on [line]'s first position with no history.
+  ///
+  /// Always a fresh tree from the line's own FEN. `clearMoveHistory()` keeps
+  /// the previous tree's starting FEN, so the old "clear unless the line has
+  /// a set-up position" branch left a line that starts from the initial
+  /// position on the *previous* puzzle's board, where none of its moves were
+  /// legal. Every phase that rewinds a line (start, learn → drill, replay)
+  /// goes through here.
+  void resetBoard(RepertoireLine line) {
+    session.setPositionFromFen(line.startPosition.fen);
   }
 
   /// First move index (within the effective line length) whose comment has
@@ -844,7 +852,13 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     learnQuizzing = false;
     opponentWaitingForAck = false;
     playingIntro = false;
-    session.clearMoveHistory();
+    // Park the idle board on the source's own start, as loadRepertoire does;
+    // clearing history alone would keep the last line's set-up position.
+    if (lines.isNotEmpty) {
+      resetBoard(lines.first);
+    } else {
+      session.clearMoveHistory();
+    }
     dueQueue = _buildQueue();
     notifyListeners();
   }
@@ -1149,6 +1163,9 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   void opponentAcknowledged() {
+    // A second Next (double-click, or Space landing after the click) must
+    // not step the cursor past the move that was waiting.
+    if (!opponentWaitingForAck) return;
     opponentWaitingForAck = false;
     currentAnnotation = null;
     notifyListeners();

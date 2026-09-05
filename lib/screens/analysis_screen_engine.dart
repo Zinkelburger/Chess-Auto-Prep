@@ -33,6 +33,22 @@ mixin _EngineWeaknessMixin on _AnalysisScreenStateBase {
     // Guard token: if the user switches players mid-run, results from this
     // run must not be merged or persisted under the new player.
     final player = _currentPlayer;
+    if (player == null) return;
+    final fingerprint = _analysisFingerprint;
+    if (fingerprint == null ||
+        fingerprint !=
+            await _gamesService.corpusFingerprint(
+              player.platform,
+              player.username,
+            )) {
+      if (mounted) {
+        _showError(
+          'Player games changed. Reopen this player before analyzing.',
+        );
+      }
+      return;
+    }
+    if (!mounted || _currentPlayer != player) return;
 
     _evalService?.dispose();
     final service = EngineWeaknessService();
@@ -80,10 +96,14 @@ mixin _EngineWeaknessMixin on _AnalysisScreenStateBase {
       });
 
       _mergeEvalsIntoAnalysis();
-      await _saveEngineEvals();
+      await _saveEngineEvals(expectedFingerprint: fingerprint);
     } catch (e) {
       if (mounted && _currentPlayer == player) {
-        setState(() => _evalRunning = false);
+        setState(() {
+          _evalRunning = false;
+          _engineEvals = [];
+          _clearMergedEvals();
+        });
         _showError('Engine analysis failed: $e');
       }
     } finally {
@@ -161,7 +181,7 @@ mixin _EngineWeaknessMixin on _AnalysisScreenStateBase {
     return true;
   }
 
-  Future<void> _saveEngineEvals() async {
+  Future<void> _saveEngineEvals({required String expectedFingerprint}) async {
     final player = _currentPlayer;
     if (player == null || _engineEvals.isEmpty) return;
     try {
@@ -169,9 +189,10 @@ mixin _EngineWeaknessMixin on _AnalysisScreenStateBase {
         player.platform,
         player.username,
         _engineEvals.map((e) => e.toJson()).toList(),
+        expectedFingerprint: expectedFingerprint,
       );
     } catch (e) {
-      debugPrint('[AnalysisScreen] Failed to persist/load analysis: $e');
+      rethrow;
     }
   }
 

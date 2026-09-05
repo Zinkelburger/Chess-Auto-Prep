@@ -51,9 +51,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(appState.lichessUsername, 'DrNykterstein');
-    // The card is now a statement, not a form: the name, the site, and the
-    // fact that nothing has been downloaded for it yet.
-    expect(find.text('My accounts'), findsOneWidget);
+    // The card is now a statement under an ACCOUNTS heading, not a form: the
+    // name, the site, and the fact that nothing has been downloaded yet.
+    expect(find.text('ACCOUNTS'), findsOneWidget);
     expect(find.text('DrNykterstein'), findsOneWidget);
     expect(find.text('Not downloaded yet'), findsOneWidget);
     expect(find.byType(TextField), findsNothing);

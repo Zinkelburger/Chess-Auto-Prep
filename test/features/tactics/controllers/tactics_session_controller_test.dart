@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:chess_auto_prep/features/tactics/models/tactics_position.dart';
 import 'package:chess_auto_prep/features/tactics/models/tactics_session_settings.dart';
 import 'package:chess_auto_prep/features/tactics/controllers/tactics_session_controller.dart';
-import 'package:chess_auto_prep/features/tactics/services/tactics_database.dart';
+import '../../../helpers/memory_tactics_database.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 TacticsPosition _samplePosition({
@@ -38,7 +38,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('processMoveAttempt accepts correct single-move tactic', () {
-    final db = TacticsDatabase();
+    final db = MemoryTacticsDatabase();
     db.positions.add(_samplePosition());
     final session = TacticsSessionController(database: db)..autoAdvance = false;
     session.selectPosition(db.positions.first);
@@ -56,7 +56,7 @@ void main() {
   });
 
   test('processMoveAttempt rejects wrong move', () {
-    final db = TacticsDatabase();
+    final db = MemoryTacticsDatabase();
     db.positions.add(_samplePosition());
     final session = TacticsSessionController(database: db);
     session.selectPosition(db.positions.first);
@@ -76,7 +76,7 @@ void main() {
   test('multi-move tactic: opponent auto-plays after correct user move', () {
     // 3-ply line from the starting position: user plays e4, opponent plays e5,
     // then user plays Nf3. correctLine = ['e4', 'e5', 'Nf3'].
-    final db = TacticsDatabase();
+    final db = MemoryTacticsDatabase();
     db.positions.add(_samplePosition(line: ['e4', 'e5', 'Nf3']));
     final session = TacticsSessionController(database: db)..autoAdvance = false;
     session.selectPosition(db.positions.first);
@@ -124,7 +124,7 @@ void main() {
 
   group('handleMoveAttempted routing', () {
     test('routes to onAnalysisMove in analysis mode', () {
-      final db = TacticsDatabase();
+      final db = MemoryTacticsDatabase();
       db.positions.add(_samplePosition());
       final session = TacticsSessionController(database: db)
         ..autoAdvance = false;
@@ -153,7 +153,7 @@ void main() {
     });
 
     test('routes to onAnalysisMove after puzzle is solved', () {
-      final db = TacticsDatabase();
+      final db = MemoryTacticsDatabase();
       db.positions.add(_samplePosition());
       final session = TacticsSessionController(database: db)
         ..autoAdvance = false;
@@ -177,7 +177,7 @@ void main() {
     });
 
     test('validates move and fires board update, advancing the line', () {
-      final db = TacticsDatabase();
+      final db = MemoryTacticsDatabase();
       db.positions.add(_samplePosition());
       final session = TacticsSessionController(database: db)
         ..autoAdvance = false;
@@ -207,7 +207,7 @@ void main() {
     });
 
     test('incorrect move fires board update without advancing the line', () {
-      final db = TacticsDatabase();
+      final db = MemoryTacticsDatabase();
       db.positions.add(_samplePosition());
       final session = TacticsSessionController(database: db)
         ..autoAdvance = false;
@@ -236,7 +236,9 @@ void main() {
     });
 
     test('does nothing without an active position', () {
-      final session = TacticsSessionController(database: TacticsDatabase());
+      final session = TacticsSessionController(
+        database: MemoryTacticsDatabase(),
+      );
       String? analysisMove;
       session.attachPanel(
         TacticsPanelHooks(playAnalysisMove: (uci) => analysisMove = uci),
@@ -274,7 +276,7 @@ void main() {
     }
 
     test('per-puzzle outcomes feed the recap and the retry list', () {
-      final db = TacticsDatabase();
+      final db = MemoryTacticsDatabase();
       db.positions.add(_samplePosition(fullmove: 1));
       db.positions.add(_samplePosition(fullmove: 2));
       final session = TacticsSessionController(database: db)
@@ -297,7 +299,7 @@ void main() {
     });
 
     test('the first outcome wins: solving after a failure stays a failure', () {
-      final db = TacticsDatabase();
+      final db = MemoryTacticsDatabase();
       db.positions.add(_samplePosition());
       final session = TacticsSessionController(database: db)
         ..autoAdvance = false;
@@ -316,7 +318,7 @@ void main() {
     test(
       'a puzzle navigated past without an attempt counts as unattempted',
       () {
-        final db = TacticsDatabase();
+        final db = MemoryTacticsDatabase();
         db.positions.add(_samplePosition(fullmove: 1));
         db.positions.add(_samplePosition(fullmove: 2));
         final session = TacticsSessionController(database: db)
@@ -332,7 +334,7 @@ void main() {
     );
 
     test('startRetrySession queues the mistakes and resets outcomes', () {
-      final db = TacticsDatabase();
+      final db = MemoryTacticsDatabase();
       db.positions.add(_samplePosition(fullmove: 1));
       db.positions.add(_samplePosition(fullmove: 2));
       final session = TacticsSessionController(database: db)
@@ -355,7 +357,7 @@ void main() {
     });
 
     test('auto-advance past the last puzzle fires onSessionCompleted', () {
-      final db = TacticsDatabase();
+      final db = MemoryTacticsDatabase();
       db.positions.add(_samplePosition());
       final session = TacticsSessionController(database: db);
       var completed = false;
@@ -379,7 +381,7 @@ void main() {
     'multi-move tactic: currentTacticFen tracks board through all plies',
     () {
       // 5-ply line: e4, e5, Nf3, Nc6, Bb5.
-      final db = TacticsDatabase();
+      final db = MemoryTacticsDatabase();
       db.positions.add(
         _samplePosition(line: ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5']),
       );
@@ -433,8 +435,8 @@ void main() {
   );
 
   group('play source (session vs browse)', () {
-    TacticsDatabase threePositions() {
-      final db = TacticsDatabase();
+    MemoryTacticsDatabase threePositions() {
+      final db = MemoryTacticsDatabase();
       db.positions.addAll([
         _samplePosition(fullmove: 1),
         _samplePosition(fullmove: 2),

@@ -1,6 +1,8 @@
 /// Typed model for analysis player download metadata.
 library;
 
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import '../utils/time_format.dart';
 
 /// Replaces the loose [Map<String, dynamic>] previously passed between screens.
@@ -38,6 +40,7 @@ class AnalysisPlayerInfo {
 
   final DateTime? downloadedAt;
   final int gameCount;
+  final String? storageWarning;
 
   const AnalysisPlayerInfo({
     required this.platform,
@@ -46,6 +49,7 @@ class AnalysisPlayerInfo {
     this.monthsBack,
     this.downloadedAt,
     this.gameCount = 0,
+    this.storageWarning,
     this.accounts = const [],
     this.group,
   });
@@ -87,15 +91,13 @@ class AnalysisPlayerInfo {
     _ => platform,
   };
 
-  /// Unique key used for file-system storage.
-  ///
-  /// Free-text names (the 'import' platform) may contain characters that are
-  /// invalid or hazardous in filenames (`/` would silently nest the files in
-  /// a subdirectory the player list never scans), so everything outside
-  /// [a-z0-9_-] is folded to `_`. Chess.com/Lichess usernames are already
-  /// limited to that alphabet, so their keys — and existing on-disk data —
-  /// are unchanged.
-  String get playerKey {
+  /// Collision-resistant, opaque identity for the player's own directory.
+  /// Human-readable names live in the manifest, never in path suffixes.
+  String get playerKey =>
+      'player-${sha256.convert(utf8.encode(jsonEncode([platform, username.toLowerCase()])))}';
+
+  /// Used only to find older installs' files and database mirrors.
+  String get legacyPlayerKey {
     final safe = username.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]'), '_');
     return '${platform}_$safe';
   }
@@ -122,6 +124,7 @@ class AnalysisPlayerInfo {
     'monthsBack': monthsBack,
     'downloadedAt': downloadedAt?.toIso8601String(),
     'gameCount': gameCount,
+    if (storageWarning != null) 'storageWarning': storageWarning,
     if (accounts.isNotEmpty) 'accounts': [for (final a in accounts) a.toJson()],
     if (group != null && group!.isNotEmpty) 'group': group,
   };
@@ -136,6 +139,7 @@ class AnalysisPlayerInfo {
           ? DateTime.tryParse(json['downloadedAt'] as String)
           : null,
       gameCount: (json['gameCount'] as num?)?.toInt() ?? 0,
+      storageWarning: json['storageWarning'] as String?,
       accounts: [
         for (final a in (json['accounts'] as List?) ?? const [])
           if (a is Map) PlayerAccount.fromJson(a.cast<String, dynamic>()),
@@ -152,6 +156,8 @@ class AnalysisPlayerInfo {
     bool clearMonthsBack = false,
     DateTime? downloadedAt,
     int? gameCount,
+    String? storageWarning,
+    bool clearStorageWarning = false,
     List<PlayerAccount>? accounts,
     String? group,
   }) {
@@ -162,6 +168,9 @@ class AnalysisPlayerInfo {
       monthsBack: clearMonthsBack ? null : (monthsBack ?? this.monthsBack),
       downloadedAt: downloadedAt ?? this.downloadedAt,
       gameCount: gameCount ?? this.gameCount,
+      storageWarning: clearStorageWarning
+          ? null
+          : (storageWarning ?? this.storageWarning),
       accounts: accounts ?? this.accounts,
       group: group ?? this.group,
     );

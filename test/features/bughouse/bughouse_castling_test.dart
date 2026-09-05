@@ -12,6 +12,37 @@ import 'package:flutter_test/flutter_test.dart';
 /// corrupted the counts outright — reserves came back holding dozens of
 /// queens, and kings, which no legal position can produce.
 void main() {
+  test('all castling rights can be restored after disabling them', () {
+    for (final side in Side.values) {
+      for (final flank in CastlingSide.values) {
+        final disabled = BughouseState.initial().withCastlingRight(
+          BughouseBoard.a,
+          side,
+          flank,
+          false,
+        )!;
+        expect(disabled.boardA.castles.rookOf(side, flank), isNull);
+        final enabled = disabled.withCastlingRight(
+          BughouseBoard.a,
+          side,
+          flank,
+          true,
+        );
+        expect(enabled, isNotNull);
+        expect(enabled!.boardA.castles.rookOf(side, flank), isNotNull);
+      }
+    }
+    expect(
+      BughouseState.empty().withCastlingRight(
+        BughouseBoard.a,
+        Side.white,
+        CastlingSide.king,
+        true,
+      ),
+      isNull,
+    );
+  });
+
   /// Total pieces anywhere: on either board, or in any of the four reserves.
   /// Bughouse never creates or destroys material, so this is 64 for ever.
   int material(BughouseState state) {

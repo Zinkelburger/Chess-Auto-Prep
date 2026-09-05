@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'package:chess_auto_prep/models/analysis_player_info.dart';
+import 'package:chess_auto_prep/services/game_store/game_store_service.dart';
 
 import 'package:chess_auto_prep/services/analysis_games_service.dart';
 import 'package:chess_auto_prep/services/games_library/games_library_service.dart';
@@ -80,9 +82,11 @@ void main() {
     tempDir = await Directory.systemTemp.createTemp('path_sanitization_test');
     docsRoot = tempDir.path;
     PathProviderPlatform.instance = _FakePathProvider(docsRoot);
+    GameStoreService.setTestInstance(GameStoreService());
   });
 
   tearDown(() async {
+    GameStoreService.instance.close();
     if (await tempDir.exists()) {
       await tempDir.delete(recursive: true);
     }
@@ -203,8 +207,11 @@ void main() {
             isTrue,
             reason: '"$path" for username "$hostile" escaped "$root"',
           );
-          // Flat file directly in the analysis dir — no traversal nesting.
-          expect(p.dirname(canon), root);
+          final playerRoot = p.join(
+            root,
+            AnalysisPlayerInfo(platform: 'import', username: hostile).playerKey,
+          );
+          expect(p.isWithin(playerRoot, canon), isTrue);
         }
       }
     });
@@ -263,7 +270,7 @@ void main() {
     );
 
     test(
-      'names colliding after sanitization share one slot (documented)',
+      'names colliding under legacy sanitization now have independent slots',
       () async {
         final svc = AnalysisGamesService();
         await svc.saveAnalysisGames(
@@ -272,11 +279,24 @@ void main() {
           username: 'AC/DC',
           maxGames: 10,
         );
-        // "AC DC" folds to the same key as "AC/DC" — findExistingPlayer must
-        // report the occupied slot so callers can warn before overwriting.
+        // Legacy sanitization collapsed these names. Opaque identities must
+        // keep both imports independently addressable.
         final existing = await svc.findExistingPlayer('import', 'AC DC');
-        expect(existing, isNotNull);
-        expect(existing!.username, 'AC/DC');
+        expect(existing, isNull);
+        await svc.saveAnalysisGames(
+          _pgnFor('second'),
+          platform: 'import',
+          username: 'AC DC',
+          maxGames: 10,
+        );
+        expect(
+          await svc.loadAnalysisGames('import', 'AC/DC'),
+          contains('[Black "first"]'),
+        );
+        expect(
+          await svc.loadAnalysisGames('import', 'AC DC'),
+          contains('[Black "second"]'),
+        );
       },
     );
 

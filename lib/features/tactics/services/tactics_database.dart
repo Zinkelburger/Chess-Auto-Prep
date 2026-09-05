@@ -7,6 +7,7 @@ import '../models/tactics_position.dart';
 import '../models/tactics_session_settings.dart';
 import '../../../services/storage/storage_factory.dart';
 import 'tactics_pgn_codec.dart';
+import 'tactics_document.dart';
 import 'package:chess_auto_prep/utils/log.dart';
 import 'package:chess_auto_prep/utils/safe_change_notifier.dart';
 
@@ -33,6 +34,7 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
   ReviewSession currentSession = ReviewSession();
   int sessionPositionIndex = 0;
   Future<void> _pendingWrite = Future<void>.value();
+  Future<void> _completedGameTail = Future<void>.value();
 
   /// Monotonic change counter, bumped with every notification. [positions]
   /// is mutated in place, so listeners that memoize something derived from
@@ -56,6 +58,9 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
   /// True while [loadPositions] is reading and decoding the set file, so the
   /// browse UI can show a loading state instead of "no tactics yet".
   bool isLoading = false;
+  String? loadError;
+  String? _persistedContent;
+  bool _hasCheckpoint = false;
 
   /// Display name of what's loaded into [positions]: [defaultSetName] for
   /// the tactics database, or the external file's name during a review.
@@ -109,6 +114,7 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
     // but notify only after the await: loadPositions is called from
     // initState, and a synchronous notify there lands mid-build.
     isLoading = true;
+    await _completedGameTail;
     await _pendingWrite;
     if (generation != _loadGeneration) return positions.length;
     notifyListeners();
@@ -120,6 +126,12 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
       await _migrateNamedSetsToStudies();
 
       final content = await storage.readFile(await activeSetFilePath());
+      if (generation != _loadGeneration) return positions.length;
+      _persistedContent = content;
+      loadError = null;
+      final document = readTacticsDocument(content ?? '');
+      _hasCheckpoint = document.analyzed != null;
+      final puzzleText = document.pgn;
       if (generation != _loadGeneration) return positions.length;
 
       if (content == null || content.trim().isEmpty) {
@@ -142,7 +154,7 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
       final onlyGame = isExternalSet ? _externalGameIndex : null;
       final decoded = await Isolate.run(
         () => decodePuzzlesFromPgn(
-          content,
+          puzzleText,
           requireFen: requireFen,
           includeVariations: includeVariations,
           onlyGame: onlyGame,
@@ -157,16 +169,22 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
       // can never interleave its puzzles into the list.
       positions.clear();
       analyzedGameIds.clear();
+      if (!isExternalSet && decoded.errors.isNotEmpty) {
+        loadError =
+            'Some tactics records could not be read. Saving and cleanup are disabled to preserve the original file: ${decoded.errors.join('; ')}';
+      }
       for (final warning in decoded.errors) {
         log.w('Set "$_activeSetName": $warning');
       }
       for (final position in decoded.puzzles) {
         positions.add(position);
-        if (position.gameId.isNotEmpty) {
-          analyzedGameIds.add(position.gameId);
-        }
       }
 
+      if (document.analyzed != null) {
+        analyzedGameIds
+          ..clear()
+          ..addAll(document.analyzed!);
+      }
       // Also load the separate analyzed games list (includes games with no blunders)
       await _loadAnalyzedGameIds();
       if (generation != _loadGeneration) return positions.length;
@@ -181,6 +199,7 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
     } catch (e) {
       log.e('Error loading positions: $e');
       if (generation != _loadGeneration) return positions.length;
+      loadError = 'Tactics could not be read. Saving is disabled: $e';
       positions.clear();
       analyzedGameIds.clear();
       isLoading = false;
@@ -201,17 +220,24 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
         final content = await storage.readFile(legacy.path);
         if (content == null) continue;
         final parsed = parseCsv(content);
+        if (parsed.warnings.isNotEmpty) {
+          throw StateError('Legacy tactics CSV needs repair before migration');
+        }
         for (final warning in parsed.warnings) {
           log.w('CSV set "${legacy.name}": $warning');
         }
         final encoded = encodePuzzlesToPgn(legacy.name, parsed.positions);
-        await storage.writeFile(pgnPath, encoded.pgn);
+        if (encoded.dropped != 0) {
+          throw StateError('Refusing a lossy tactics migration');
+        }
+        await storage.writeFile(pgnPath, encoded.pgn, createOnly: true);
         await storage.renameFile(legacy.path, '${legacy.path}.bak');
         log.i(
           'Converted tactics set "${legacy.name}" from CSV to PGN (${parsed.positions.length} positions)',
         );
       } catch (e) {
         log.e('Error converting CSV set "${legacy.name}": $e');
+        rethrow;
       }
     }
   }
@@ -260,6 +286,7 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
     int? gameIndex,
     bool includeVariations = false,
   }) async {
+    await _completedGameTail;
     await _pendingWrite;
     _activeSetPath = path;
     _externalGameIndex = gameIndex;
@@ -282,6 +309,7 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
   /// set is active.
   Future<void> closeExternalSet() async {
     if (!isExternalSet) return;
+    await _completedGameTail;
     await _pendingWrite;
     _activeSetPath = null;
     _externalGameIndex = null;
@@ -296,6 +324,7 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
 
   /// Load analyzed game IDs from storage
   Future<void> _loadAnalyzedGameIds() async {
+    if (_hasCheckpoint || isExternalSet) return;
     try {
       final ids = await StorageFactory.instance.readAnalyzedGameIds();
       if (ids.isNotEmpty) {
@@ -304,43 +333,49 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
       }
     } catch (e) {
       log.e('Error loading analyzed game IDs: $e');
+      rethrow;
     }
   }
 
-  /// Save analyzed game IDs to storage
-  Future<void> _saveAnalyzedGameIds() async {
-    await _enqueueWrite(() async {
+  /// One durable commit for a completed game, including games with no puzzles.
+  Future<void> commitAnalyzedGame(String gameId, List<TacticsPosition> found) =>
+      _commitCompletedGames([gameId], List.of(found));
+
+  Future<void> _commitCompletedGames(
+    Iterable<String> ids,
+    List<TacticsPosition> found,
+  ) {
+    final completed = ids.where((id) => id.isNotEmpty).toSet();
+    final next = _completedGameTail.then((_) async {
+      if (isExternalSet) {
+        throw StateError('Cannot mine games into an external study.');
+      }
+      if (loadError != null) throw StateError(loadError!);
+      final previousIds = Set<String>.of(analyzedGameIds);
+      for (final position in found) {
+        if (!positions.any((p) => p.fen == position.fen)) {
+          positions.add(position);
+        }
+      }
+      analyzedGameIds.addAll(completed);
+      notifyListeners();
       try {
-        await StorageFactory.instance.saveAnalyzedGameIds(
-          analyzedGameIds.toList(),
-        );
-        log.e('Saved ${analyzedGameIds.length} analyzed game IDs');
-      } catch (e) {
-        log.e('Error saving analyzed game IDs: $e');
+        await savePositions();
+      } catch (_) {
+        analyzedGameIds = previousIds;
+        notifyListeners();
+        rethrow;
       }
     });
+    _completedGameTail = next.catchError((Object _) {});
+    return next;
   }
 
-  /// Mark a game as analyzed (even if no blunders found)
-  Future<void> markGameAnalyzed(String gameId) async {
-    if (gameId.isNotEmpty && !analyzedGameIds.contains(gameId)) {
-      analyzedGameIds.add(gameId);
-      notifyListeners();
-      await _saveAnalyzedGameIds();
-    }
-  }
+  Future<void> markGameAnalyzed(String gameId) =>
+      commitAnalyzedGame(gameId, const []);
 
-  /// Mark multiple games as analyzed
-  Future<void> markGamesAnalyzed(Iterable<String> gameIds) async {
-    final newIds = gameIds.where(
-      (id) => id.isNotEmpty && !analyzedGameIds.contains(id),
-    );
-    if (newIds.isNotEmpty) {
-      analyzedGameIds.addAll(newIds);
-      notifyListeners();
-      await _saveAnalyzedGameIds();
-    }
-  }
+  Future<void> markGamesAnalyzed(Iterable<String> gameIds) =>
+      _commitCompletedGames(gameIds, const []);
 
   /// Check if a game has already been analyzed
   bool isGameAnalyzed(String gameId) {
@@ -351,10 +386,7 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
   Future<void> clearAnalyzedGames() async {
     analyzedGameIds.clear();
     notifyListeners();
-    await _enqueueWrite(() async {
-      await StorageFactory.instance.saveAnalyzedGameIds([]);
-      log.i('Cleared analyzed games tracking');
-    });
+    await savePositions();
   }
 
   /// Parse tactics-CSV [content] (with header row) into positions.
@@ -390,43 +422,59 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
     final setName = _activeSetName;
     final externalPath = _activeSetPath;
     final snapshot = List<TacticsPosition>.of(positions);
+    final completed = Set<String>.of(analyzedGameIds);
     await _enqueueWrite(() async {
       try {
+        if (loadError != null) throw StateError(loadError!);
         final storage = StorageFactory.instance;
         if (externalPath != null) {
           final existing = await storage.readFile(externalPath);
           if (existing == null) {
-            log.e('External set file vanished: $externalPath');
-            return;
+            throw StateError('External set file vanished: $externalPath');
           }
-          final patched = await Isolate.run(
-            () => patchStatsInPgn(existing, snapshot),
+          if (existing != _persistedContent) {
+            throw StateError(
+              'The study changed on disk. Reload before saving review statistics.',
+            );
+          }
+          final patched = await compute(_patchTacticsStats, (
+            existing,
+            snapshot,
+          ));
+          await storage.writeFile(
+            externalPath,
+            patched,
+            expectedContent: existing,
           );
-          await storage.writeFile(externalPath, patched);
+          _persistedContent = patched;
         } else {
           // Encoding replays every stored puzzle with dartchess (lineToSan),
           // so it is O(database) CPU — run it off the UI isolate.
-          final encoded = await Isolate.run(
-            () => encodePuzzlesToPgn(setName, snapshot),
-          );
+          final encoded = await compute(_encodeTactics, (setName, snapshot));
           if (encoded.fallback > 0) {
             log.w(
               '${encoded.fallback} position(s) stored with raw [CorrectLine] fallback',
             );
           }
           if (encoded.dropped > 0) {
-            log.w(
-              '${encoded.dropped} position(s) with unparsable FEN dropped on save',
+            throw StateError(
+              '${encoded.dropped} invalid tactics records; refusing a lossy save.',
             );
           }
+          final document = writeTacticsDocument(encoded.pgn, completed);
           await storage.writeFile(
             await storage.tacticsSetPath(setName),
-            encoded.pgn,
+            document,
+            createOnly: _persistedContent == null,
+            expectedContent: _persistedContent,
           );
+          _persistedContent = document;
+          _hasCheckpoint = true;
         }
         log.i('Saved ${snapshot.length} tactics positions to set "$setName"');
       } catch (e) {
         log.e('Error saving positions: $e');
+        rethrow;
       }
     });
   }
@@ -659,12 +707,8 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
     // Check for duplicates by FEN
     if (positions.any((p) => p.fen == position.fen)) return false;
     positions.add(position);
-    if (position.gameId.isNotEmpty) {
-      analyzedGameIds.add(position.gameId);
-    }
     notifyListeners();
     await savePositions();
-    await _saveAnalyzedGameIds();
     return true;
   }
 
@@ -675,16 +719,12 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
       // Check for duplicates by FEN
       if (!positions.any((p) => p.fen == position.fen)) {
         positions.add(position);
-        if (position.gameId.isNotEmpty) {
-          analyzedGameIds.add(position.gameId);
-        }
         added++;
       }
     }
     if (added > 0) {
       notifyListeners();
       await savePositions();
-      await _saveAnalyzedGameIds();
       log.w(
         'Added $added new positions (${newPositions.length - added} duplicates skipped)',
       );
@@ -732,3 +772,10 @@ class ReviewSession {
   double get accuracy =>
       positionsAttempted > 0 ? positionsCorrect / positionsAttempted : 0.0;
 }
+
+({String pgn, int encoded, int fallback, int dropped}) _encodeTactics(
+  (String, List<TacticsPosition>) input,
+) => encodePuzzlesToPgn(input.$1, input.$2);
+
+String _patchTacticsStats((String, List<TacticsPosition>) input) =>
+    patchStatsInPgn(input.$1, input.$2);

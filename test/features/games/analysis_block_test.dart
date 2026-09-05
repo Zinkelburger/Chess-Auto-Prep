@@ -14,6 +14,7 @@ import 'package:chess_auto_prep/features/games/widgets/analysis_block.dart';
 import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:chess_auto_prep/services/games_library/games_library_service.dart';
 import 'package:chess_auto_prep/features/tactics/services/mining_settings.dart';
+import 'package:chess_auto_prep/models/engine_settings.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_import_coordinator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -100,7 +101,7 @@ void main() {
     VoidCallback? onPause,
     VoidCallback? onSettings,
     VoidCallback? onOpeningReview,
-    VoidCallback? onBrowseMasterGames,
+    VoidCallback? onMasterPractice,
     List<OpeningReviewEntry> repeated = const [],
     void Function(OpeningReviewEntry)? onFixEntry,
     int masterGameCount = 0,
@@ -130,7 +131,7 @@ void main() {
                 windowLabel: 'last 20 games',
                 onOpeningReview: onOpeningReview ?? () {},
                 masterGameCount: masterGameCount,
-                onBrowseMasterGames: onBrowseMasterGames ?? () {},
+                onMasterPractice: onMasterPractice ?? () {},
                 repeated: repeated,
                 onFixEntry: onFixEntry,
               ),
@@ -155,8 +156,7 @@ void main() {
     // 3 of 20 left: the app was closed mid-review, so the button must not
     // pretend this is a fresh start.
     expect(find.text('Resume analysis'), findsOneWidget);
-    expect(find.byIcon(Icons.analytics_outlined), findsOneWidget);
-    expect(find.byIcon(Icons.play_arrow), findsNothing);
+    expect(find.byIcon(Icons.play_arrow), findsOneWidget);
   });
 
   testWidgets('a first run says how many games it will analyse', (
@@ -206,6 +206,26 @@ void main() {
     expect(find.textContaining('CPU cores'), findsNothing);
     expect(find.textContaining('engine depth'), findsNothing);
     expect(find.byType(Checkbox), findsNothing);
+    expect(find.byType(TextField), findsNothing);
+  });
+
+  testWidgets('the core count is stated beside the gear and follows the '
+      'setting', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final h = build();
+    addTearDown(h.games.dispose);
+    addTearDown(h.runner.dispose);
+    final engine = EngineSettings.instance;
+    final before = engine.workers;
+    addTearDown(() => engine.workers = before);
+    engine.workers = 1;
+
+    await pump(tester, runner: h.runner, coordinator: h.co);
+    expect(find.text('1 core'), findsOneWidget);
+
+    engine.workers = 2;
+    await tester.pump();
+    expect(find.text('2 cores'), findsOneWidget);
   });
 
   testWidgets('the gear is the one way into the settings', (tester) async {

@@ -6,340 +6,147 @@
 /// once, so a line the engine dislikes can still be the one you have to be
 /// ready for, and a line it loves can be one nobody has ever tried on you.
 ///
+/// It is the same table as the Lichess opening explorer elsewhere in the app
+/// ([ExplorerMoveRow] and friends), with the FICS book as its data source and
+/// a seat letter before each move, because four people play. Like the lab's
+/// other reference blocks it starts shut, with its one-line summary showing;
+/// the engine pane above is what you look at while thinking.
+///
 /// The panel is silent on a machine with no book, which is the normal case:
 /// see [BughouseBook.open].
 library;
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 
-import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
+import '../../../widgets/opening_explorer/explorer_move_row.dart';
 import '../controllers/bughouse_controller.dart';
 import '../services/bughouse_book.dart';
+import 'bughouse_panel_section.dart';
 
-class BughouseBookPanel extends StatelessWidget {
+class BughouseBookPanel extends StatefulWidget {
   const BughouseBookPanel({super.key, required this.controller});
 
   final BughouseController controller;
 
-  @override
-  Widget build(BuildContext context) {
-    final status = controller.bookStatus;
-    final book = controller.bookPosition;
-    if (status == null || book == null) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            const Text('FICS ARCHIVE', style: AppTextStyles.eyebrow),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Tooltip(
-                message:
-                    '${_full(status.games)} bughouse games from '
-                    '${status.yearRange}, indexed to ${status.maxPly} plies.\n'
-                    'Continuations played fewer than ${status.minGames} times '
-                    'are not listed.',
-                child: Text(
-                  book.isEmpty
-                      ? status.yearRange
-                      : '${_full(book.games)} games here',
-                  style: AppTextStyles.caption,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        if (book.isEmpty)
-          Text(_nothing(status), style: AppTextStyles.muted)
-        else ...[
-          for (final move in book.moves.take(_maxRows))
-            _BookRow(
-              // Keyed by the move and the position it belongs to, so a row
-              // that changes under the pointer is a new row rather than the
-              // old one wearing new numbers.
-              key: ValueKey('${book.key}:${move.board}:${move.san}'),
-              controller: controller,
-              move: move,
-              total: book.games,
-            ),
-          if (book.moves.length > _maxRows)
-            Padding(
-              padding: const EdgeInsets.only(left: 4, top: 3),
-              child: Text(_tail(book), style: AppTextStyles.muted),
-            ),
-        ],
-      ],
-    );
-  }
-
-  /// How many continuations are listed before the tail is rolled up.
+  /// How many continuations are listed — the Lichess explorer's own default.
   ///
   /// Two boards means twice the branching, so the opening position alone has
-  /// forty recorded continuations and thirty of them round to 0%. A reader
-  /// preparing a line needs the ones that get played; the rest are a scroll
-  /// between them and the controls below.
-  static const _maxRows = 12;
-
-  /// The one line that stands for everything not listed. It bounds the largest
-  /// of them, so "more" is a quantity rather than a shrug — and a bound, not a
-  /// measurement, so a tail of tenths of a percent reads "none above 1%"
-  /// rather than the useless "none above <1%".
-  String _tail(BughouseBookPosition book) {
-    final hidden = book.moves.length - _maxRows;
-    final largest = book.moves[_maxRows];
-    final percent = book.games == 0 ? 0.0 : 100 * largest.games / book.games;
-    final bound = percent < 1 ? 1 : percent.ceil();
-    return '+$hidden more, none above $bound%.';
-  }
-
-  /// Why there is nothing to show, which is two different things.
-  String _nothing(BughouseBookStatus status) {
-    final ply = controller.history.cursor;
-    if (ply >= status.maxPly) {
-      return 'Past the archive — it is indexed to ${status.maxPly} plies '
-          'across both boards.';
-    }
-    return 'No archived game reached this position.';
-  }
-}
-
-/// One continuation: who played it, how often, and how it went for us.
-///
-/// Stateful for the same single bit as an engine line row — whether the
-/// pointer is over it — because the boards' highlight follows the pointer and
-/// a row unmounted while lit has to clear its own highlight and nobody else's.
-class _BookRow extends StatefulWidget {
-  const _BookRow({
-    super.key,
-    required this.controller,
-    required this.move,
-    required this.total,
-  });
-
-  final BughouseController controller;
-  final BughouseBookMove move;
-
-  /// Games through the parent position, the denominator of the play rate.
-  final int total;
+  /// forty recorded continuations and thirty of them round to 0%. The Σ row
+  /// still counts every game, listed or not.
+  static const maxRows = 12;
 
   @override
-  State<_BookRow> createState() => _BookRowState();
+  State<BughouseBookPanel> createState() => _BughouseBookPanelState();
 }
 
-class _BookRowState extends State<_BookRow> {
-  bool _lit = false;
-
+class _BughouseBookPanelState extends State<BughouseBookPanel> {
   BughouseController get _controller => widget.controller;
 
-  void _enter() {
-    setState(() => _lit = true);
-    _controller.hoverBookMove(widget.move, owner: this);
-  }
+  /// The row under the pointer, so the exit of *that* row is what clears the
+  /// boards — a row rebuilt away while lit clears itself on dispose, and by
+  /// then another row may already be drawing.
+  BughouseBookMove? _hovered;
 
-  void _exit() {
-    setState(() => _lit = false);
-    _controller.clearHover(this);
+  void _onHover(BughouseBookMove move, bool over) {
+    if (over) {
+      _hovered = move;
+      _controller.hoverBookMove(move, owner: this);
+    } else if (identical(_hovered, move)) {
+      _hovered = null;
+      _controller.clearHover(this);
+    }
   }
 
   @override
   void dispose() {
-    if (_lit) {
-      final controller = _controller;
-      SchedulerBinding.instance.addPostFrameCallback((_) {
-        if (!controller.isDisposed) controller.clearHover(this);
-      });
+    if (_hovered != null && !_controller.isDisposed) {
+      _controller.clearHover(this);
     }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final move = widget.move;
+    final status = _controller.bookStatus;
+    final book = _controller.bookPosition;
+    if (status == null || book == null) return const SizedBox.shrink();
+
+    return BughousePanelSection(
+      title: 'FICS ARCHIVE',
+      summary: book.games == 0
+          ? _nothing(status)
+          : '${formatExplorerCount(book.games)} games here · '
+                '${status.yearRange}',
+      padding: EdgeInsets.zero,
+      children: [
+        if (book.isEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 4, 10, 12),
+            child: Text(
+              book.games > 0
+                  ? 'No continuations meet the archive minimum of ${status.minGames} games, or this is the end of the indexed line.'
+                  : _nothing(status),
+              style: AppTextStyles.muted,
+            ),
+          )
+        else
+          _table(book),
+      ],
+    );
+  }
+
+  Widget _table(BughouseBookPosition book) {
     final state = _controller.state;
     // Everything on this panel is read from our seat, the way the eval above
     // it is. The book counts for the pair holding White on board A, which is
     // us exactly when our team plays White there.
     final oursIsTeamA = state.team == Side.white;
-    final wins = oursIsTeamA ? move.teamA : move.teamB;
-    final losses = oursIsTeamA ? move.teamB : move.teamA;
-    final score = oursIsTeamA ? move.teamAScore : 1 - move.teamAScore;
-    final rate = widget.total == 0 ? 0.0 : move.games / widget.total;
-
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => _enter(),
-      onExit: (_) => _exit(),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => _controller.playBookMove(move),
-        child: Tooltip(
-          message: _tooltip(move, wins: wins, losses: losses, score: score),
-          waitDuration: const Duration(milliseconds: 400),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-            decoration: BoxDecoration(
-              color: _lit ? AppColors.hoverOverlay : Colors.transparent,
-              borderRadius: BorderRadius.circular(3),
-            ),
-            child: Row(
-              children: [
-                // The seat letter, not the board's: four people play, and the
-                // panel above names them A, B, C and D throughout.
-                SizedBox(
-                  width: 14,
-                  child: Text(
-                    state.seatLetter(move.board, move.mover),
-                    style: AppTextStyles.monoDense.copyWith(
-                      color: AppColors.onSurfaceMuted,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    move.san,
-                    style: AppTextStyles.mono.copyWith(color: AppColors.ink),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                SizedBox(
-                  width: 46,
-                  child: Text(
-                    _compact(move.games),
-                    textAlign: TextAlign.right,
-                    style: AppTextStyles.monoDense.copyWith(
-                      color: AppColors.onSurfaceMuted,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 30,
-                  child: Text(
-                    _share(rate),
-                    textAlign: TextAlign.right,
-                    style: AppTextStyles.monoDense.copyWith(
-                      color: AppColors.ink,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                _ScoreBar(wins: wins, draws: move.draws, losses: losses),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 30,
-                  child: Text(
-                    move.averageElo == null ? '—' : '${move.averageElo}',
-                    textAlign: TextAlign.right,
-                    style: AppTextStyles.monoDense.copyWith(
-                      color: AppColors.onSurfaceMuted,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const ExplorerTableHeader(
+          barCaption: 'Win / Draw / Loss',
+          gamesTooltip:
+              'Games in which the move was played, and its share of every '
+              'archived game from this position',
         ),
-      ),
+        for (final move in book.moves.take(BughouseBookPanel.maxRows))
+          ExplorerMoveRow(
+            // Keyed by the move and the position it belongs to, so a row that
+            // changes under the pointer is a new row rather than the old one
+            // wearing new numbers.
+            key: ValueKey('${book.key}:${move.board}:${move.san}'),
+            seat: state.seatLetter(move.board, move.mover),
+            san: move.san,
+            games: move.games,
+            wins: oursIsTeamA ? move.teamA : move.teamB,
+            draws: move.draws,
+            losses: oursIsTeamA ? move.teamB : move.teamA,
+            playFraction: book.games == 0 ? 0 : move.games / book.games,
+            tooltip: move.averageElo == null
+                ? null
+                : 'Average rating: ${move.averageElo}',
+            onPlay: () => _controller.playBookMove(move),
+            onHover: (over) => _onHover(move, over),
+          ),
+        ExplorerTotalsRow(
+          games: book.games,
+          wins: oursIsTeamA ? book.teamA : book.teamB,
+          draws: book.draws,
+          losses: oursIsTeamA ? book.teamB : book.teamA,
+        ),
+      ],
     );
   }
 
-  String _tooltip(
-    BughouseBookMove move, {
-    required int wins,
-    required int losses,
-    required double score,
-  }) {
-    final lines = [
-      '${move.san} — ${_full(move.games)} games',
-      'We score ${(score * 100).toStringAsFixed(1)}%: '
-          '${_full(wins)} won, ${_full(move.draws)} drawn, '
-          '${_full(losses)} lost',
-      if (move.unknown > 0)
-        '${_full(move.unknown)} unfinished (aborted or disconnected), '
-            'left out of the bar',
-      'Average ${move.averageElo ?? '—'}, best ${move.maxElo} '
-          '(game ${move.topGameNo}) · last played ${move.lastYear}',
-    ];
-    return lines.join('\n');
-  }
-}
-
-/// Wins, draws and losses over the games that finished — ours on the left,
-/// because everything else on this panel is read from our seat too.
-class _ScoreBar extends StatelessWidget {
-  const _ScoreBar({
-    required this.wins,
-    required this.draws,
-    required this.losses,
-  });
-
-  final int wins;
-  final int draws;
-  final int losses;
-
-  @override
-  Widget build(BuildContext context) {
-    final decided = wins + draws + losses;
-    if (decided == 0) {
-      return const SizedBox(width: 56, height: 8);
+  /// Why there is nothing to show, which is two different things.
+  String _nothing(BughouseBookStatus status) {
+    final ply = _controller.history.cursor;
+    if (ply >= status.maxPly) {
+      return 'Past the archive, which is indexed to ${status.maxPly} plies.';
     }
-    return SizedBox(
-      width: 56,
-      height: 8,
-      child: Row(
-        children: [
-          if (wins > 0)
-            Expanded(
-              flex: wins,
-              child: Container(color: AppColors.wdlWhite),
-            ),
-          if (draws > 0)
-            Expanded(
-              flex: draws,
-              child: Container(color: AppColors.wdlDraw),
-            ),
-          if (losses > 0)
-            Expanded(
-              flex: losses,
-              child: Container(color: AppColors.wdlBlack),
-            ),
-        ],
-      ),
-    );
+    return 'No archived game reached this position.';
   }
-}
-
-/// A play rate. Rounds, but never to `0%`: a move in the book was played, and
-/// a zero beside a four-figure game count reads as a broken column rather than
-/// as a rare line.
-String _share(double rate) {
-  final percent = rate * 100;
-  if (percent > 0 && percent < 0.5) return '<1%';
-  return '${percent.round()}%';
-}
-
-/// `1.6M`, `968k`, `47` — a column two digits wide has to say a million.
-String _compact(int n) {
-  if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
-  if (n >= 10000) return '${(n / 1000).round()}k';
-  if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
-  return '$n';
-}
-
-/// `1,610,924` — for a tooltip, which has room for the real number.
-String _full(int n) {
-  final digits = n.toString();
-  final buffer = StringBuffer();
-  for (var i = 0; i < digits.length; i++) {
-    if (i > 0 && (digits.length - i) % 3 == 0) buffer.write(',');
-    buffer.write(digits[i]);
-  }
-  return buffer.toString();
 }

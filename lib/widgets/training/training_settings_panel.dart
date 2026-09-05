@@ -398,8 +398,8 @@ class TrainingSettingsPanel extends StatelessWidget {
               contentPadding: EdgeInsets.zero,
               title: Text('Manual advance', style: theme.textTheme.titleSmall),
               subtitle: const Text(
-                'Press Next (or Space) to see the next move when '
-                'learning. Turn off to auto-advance after a delay.',
+                'Press Next (or Space) before each of your moves is quizzed '
+                'when learning. Turn off to be quizzed after a delay instead.',
               ),
               value: settings.learnRequiresClick,
               onChanged: (v) {
@@ -417,8 +417,8 @@ class TrainingSettingsPanel extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Seconds to show each annotated move before '
-              'advancing. (1–15)',
+              'Seconds each of your moves stays on the board before you '
+              'are asked to play it. (1–15)',
               style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 8),

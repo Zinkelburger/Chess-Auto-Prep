@@ -20,6 +20,19 @@ mixin _MetadataOps on ChangeNotifier {
   PgnFenIndex get _fenIndex;
 
   Timer? persistDebounce;
+  set errorMessage(String? value);
+  Map<PgnGameEntry, String> _persistedGames = Map.identity();
+  Future<void> _metadataWrites = Future.value();
+
+  void adoptPersistedGames(List<PgnGameEntry> games) {
+    _persistedGames = Map.identity();
+    for (final game in games) {
+      _persistedGames[game] = game.pgnText;
+    }
+  }
+
+  void rememberPersistedGame(PgnGameEntry game) =>
+      _persistedGames.putIfAbsent(game, () => game.pgnText);
 
   /// Games whose rating or summary changed since the last write.  Their
   /// `[StudyRating]` / `[StudySummary]` headers are rewritten at persist
@@ -44,6 +57,7 @@ mixin _MetadataOps on ChangeNotifier {
   void setRating(int stars) {
     if (filteredGames.isEmpty) return;
     final game = filteredGames[currentGameIndex];
+    rememberPersistedGame(game);
     game.studyRating = stars;
     _dirtyGames.add(game);
     notifyListeners();
@@ -72,6 +86,7 @@ mixin _MetadataOps on ChangeNotifier {
     final path = filePath;
     if (path == null || !isActive()) return;
     final games = allGames;
+    final originals = _persistedGames;
     final dirty = List.of(_dirtyGames);
     _dirtyGames.clear();
     // A game the user has just rated is a game they touched: write what is
@@ -90,11 +105,47 @@ mixin _MetadataOps on ChangeNotifier {
       }
     }
 
-    try {
-      await StorageFactory.instance.writeFile(
-        path,
-        '${games.map((g) => _screenOnlyMovetext[g] ?? g.pgnText).join('\n\n')}\n',
-      );
+    final output = {
+      for (final g in games) g: _screenOnlyMovetext[g] ?? g.pgnText,
+    };
+    final task = _metadataWrites.then((_) async {
+      final edits = <String, String>{
+        for (final g in games)
+          if (originals[g] != null && originals[g]!.trim() != output[g]!.trim())
+            originals[g]!: output[g]!,
+      };
+      if (edits.isEmpty) return;
+      try {
+        await StorageFactory.instance.updateFile(path, (current) {
+          if (current == null) throw StateError('The source file is missing.');
+          return patchPgnDocument(current, edits);
+        });
+      } catch (e) {
+        // Preserve the edited snapshot even if the user has already navigated
+        // away. This is a recovery document, never a replacement of the source.
+        final recovery =
+            'recovery/pgn-${DateTime.now().microsecondsSinceEpoch}.pgn';
+        try {
+          await StorageFactory.instance.writeFile(
+            recovery,
+            '${output.values.join('\n\n')}\n',
+            createOnly: true,
+          );
+          errorMessage =
+              'Changes could not be merged with $path. A recovery copy was saved to $recovery. $e';
+        } catch (recoveryError) {
+          errorMessage =
+              'Changes to $path are unsaved: $e. Recovery save also failed: $recoveryError';
+        }
+        if (filePath == path && identical(allGames, games)) {
+          _dirtyGames.addAll(dirty);
+        }
+        notifyListeners();
+        return;
+      }
+      for (final g in games) {
+        originals[g] = output[g]!;
+      }
       // Everything past this point writes back to *controller* state, which
       // is only ours while the collection we wrote is still the loaded one —
       // and it may not be, because `_adoptCollection` fires this flush and
@@ -106,13 +157,17 @@ mixin _MetadataOps on ChangeNotifier {
       // This write is ours, and the in-memory copy above already matches it.
       // Re-stamping keeps a caller comparing mtimes from reading our own save
       // as somebody else's edit and reloading the whole file for nothing.
+      errorMessage = null;
       loadedFileModified = (await StorageFactory.instance.fileStat(
         path,
       ))?.modified;
       _fenIndex.markStale();
-    } catch (e) {
-      debugPrint('Failed to persist metadata: $e');
-    }
+    });
+    _metadataWrites = task.catchError((Object e) {
+      errorMessage = 'Could not save: $e';
+      notifyListeners();
+    });
+    await _metadataWrites;
   }
 
   /// Run a debounced persist now (for the collection currently loaded), and
@@ -126,6 +181,7 @@ mixin _MetadataOps on ChangeNotifier {
     final path = filePath;
     final total = allGames.length;
     if (persistDebounce != null) await doPersistMetadata();
+    await _metadataWrites;
     await _fenIndex.flushIfStale(filePath: path, gameTotal: total);
   }
 
@@ -149,6 +205,7 @@ mixin _MetadataOps on ChangeNotifier {
     String updatedPgnMovetext, {
     bool writeToFile = true,
   }) {
+    rememberPersistedGame(game);
     if (writeToFile) {
       _screenOnlyMovetext.remove(game);
     } else {

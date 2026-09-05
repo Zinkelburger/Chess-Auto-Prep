@@ -506,14 +506,15 @@ class StoredBughouseTournament {
         case GameResult.blackWins:
           losses++;
         case GameResult.draw:
-        case GameResult.unfinished:
           points += 0.5;
           draws++;
+        case GameResult.unfinished:
+          break;
       }
     }
     return (
       points: points,
-      played: games.length,
+      played: wins + draws + losses,
       wins: wins,
       draws: draws,
       losses: losses,
@@ -531,22 +532,12 @@ class StoredBughouseTournament {
     return '$points/${score.played}';
   }
 
-  /// A rough read on whether that score means anything yet.
-  ///
-  /// The same two-sided interval the crosstable puts on its Elo, expressed as
-  /// a score fraction, because "5½/10" invites a conclusion that ten games
-  /// cannot support. Null before any game.
+  /// Conservative 95% Hoeffding radius for bounded scores in [0, 1].
+  /// Assumes independent games; repeated deterministic self-play is correlated
+  /// and cannot establish confidence in an opening's objective strength.
   double? get openingScoreMargin {
-    final score = openingScore;
-    if (score.played == 0) return null;
-    final fraction = score.points / score.played;
-    final variance =
-        score.wins * math.pow(1 - fraction, 2) +
-        score.losses * math.pow(0 - fraction, 2) +
-        score.draws * math.pow(0.5 - fraction, 2);
-    return 1.959963985 *
-        math.sqrt(variance / score.played) /
-        math.sqrt(score.played);
+    final n = openingScore.played;
+    return n == 0 ? null : math.min(1.0, math.sqrt(math.log(40) / (2 * n)));
   }
 
   StoredBughouseTournament copyWith({

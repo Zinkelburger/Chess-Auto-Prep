@@ -1,3 +1,5 @@
+import '../utils/training_csv.dart';
+
 enum ReviewRating { again, hard, good, easy }
 
 /// Lightweight spaced-repetition metadata for a repertoire line.
@@ -67,27 +69,25 @@ class RepertoireReviewEntry {
   }
 
   static RepertoireReviewEntry fromCsvRow(String row) {
-    final cells = _parseCsvRow(row);
-    if (cells.length < 8) {
+    final cells = decodeTrainingRow(row, 10);
+    if (cells.length != 8 && cells.length != 10) {
       throw FormatException('Invalid repertoire review row: $row');
     }
 
-    final due = cells[5].isEmpty ? null : DateTime.tryParse(cells[5])?.toUtc();
-    final reviewed = cells[7].isEmpty
-        ? null
-        : DateTime.tryParse(cells[7])?.toUtc();
+    final due = cells[5].isEmpty ? null : DateTime.parse(cells[5]).toUtc();
+    final reviewed = cells[7].isEmpty ? null : DateTime.parse(cells[7]).toUtc();
 
     return RepertoireReviewEntry(
       repertoireId: cells[0],
       lineId: cells[1],
       lineName: cells[2],
-      difficulty: double.tryParse(cells[3]) ?? 2.5,
-      intervalDays: double.tryParse(cells[4]) ?? 0,
+      difficulty: double.parse(cells[3]),
+      intervalDays: double.parse(cells[4]),
       dueDateUtc: due,
       lastRating: cells[6],
       lastReviewedUtc: reviewed,
-      passCount: cells.length > 8 ? (int.tryParse(cells[8]) ?? 0) : 0,
-      failCount: cells.length > 9 ? (int.tryParse(cells[9]) ?? 0) : 0,
+      passCount: cells.length > 8 ? int.parse(cells[8]) : 0,
+      failCount: cells.length > 9 ? int.parse(cells[9]) : 0,
     );
   }
 
@@ -99,10 +99,10 @@ class RepertoireReviewEntry {
         ? ''
         : lastReviewedUtc!.toUtc().toIso8601String();
 
-    return [
+    return encodeTrainingRow([
       repertoireId,
       lineId,
-      lineName.replaceAll(',', ';'),
+      lineName,
       difficulty.toStringAsFixed(2),
       intervalDays.toStringAsFixed(2),
       dueStr,
@@ -110,11 +110,6 @@ class RepertoireReviewEntry {
       reviewedStr,
       passCount.toString(),
       failCount.toString(),
-    ].join(',');
-  }
-
-  static List<String> _parseCsvRow(String row) {
-    // Simple CSV parser (no quoted commas in our use-case)
-    return row.split(',').map((cell) => cell.trim()).toList();
+    ]);
   }
 }

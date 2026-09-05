@@ -44,7 +44,7 @@ class _EmptyLibrary extends GamesLibraryService {
 
 const _pgn =
     '[Event "Rated blitz game"]\n'
-    '[Site "https://lichess.org/abc123"]\n'
+    '[Site "https://lichess.org/abc12345"]\n'
     '[White "me"]\n'
     '[Black "opp"]\n'
     '[TimeControl "180+2"]\n'
@@ -59,7 +59,7 @@ const _pgn =
 /// `[%eval]`, so its graph is already on disk.
 const _analyzedPgn =
     '[Event "Rated blitz game"]\n'
-    '[Site "https://lichess.org/abc123"]\n'
+    '[Site "https://lichess.org/abc12345"]\n'
     '[White "me"]\n'
     '[Black "opp"]\n'
     '[TimeControl "180+2"]\n'
@@ -400,7 +400,7 @@ void main() {
     // Without this the pass skips it as "already analyzed" — which only ever
     // meant "already mined" — and the strip's "1 game to analyse" never moves.
     expect(coordinator.forced, [
-      {'https://lichess.org/abc123'},
+      {'https://lichess.org/abc12345'},
     ]);
   });
 
@@ -410,7 +410,7 @@ void main() {
     // to be enough to call a game done, which left those games with no way
     // back to the engine — and no graph, ever.
     SharedPreferences.setMockInitialValues(
-      _prefsWithCounts('https://lichess.org/abc123'),
+      _prefsWithCounts('https://lichess.org/abc12345'),
     );
     final games = RecentGamesController(
       lichessUsername: () => 'me',
@@ -434,7 +434,7 @@ void main() {
     await runner.start();
 
     expect(coordinator.forced, [
-      {'https://lichess.org/abc123'},
+      {'https://lichess.org/abc12345'},
     ]);
   });
 
@@ -443,7 +443,7 @@ void main() {
     // the scores are in the cache the pass must skip the game like any other
     // finished one, or every run would re-analyse the whole list.
     SharedPreferences.setMockInitialValues(
-      _prefsWithCounts('https://lichess.org/abc123'),
+      _prefsWithCounts('https://lichess.org/abc12345'),
     );
     final games = RecentGamesController(
       lichessUsername: () => 'me',

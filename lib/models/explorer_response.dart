@@ -42,10 +42,115 @@ class ExplorerMove {
       '{Move probability: ${playRate.toStringAsFixed(1)}%}';
 }
 
+/// Where an explorer answer came from, which is also where one of its games
+/// can be fetched from.
+enum ExplorerGameSource {
+  /// The Lichess player database: `lichess.org/game/export/<id>`.
+  lichess,
+
+  /// The Lichess masters database: `explorer.lichess.ovh/masters/pgn/<id>`.
+  masters,
+
+  /// The local TWIC database: `MasterGamesDb.game(<id>)`.
+  twic,
+}
+
+/// One game the explorer names for a position — lila's "top games" list.
+class ExplorerGame {
+  const ExplorerGame({
+    required this.id,
+    required this.source,
+    required this.white,
+    required this.black,
+    required this.whiteElo,
+    required this.blackElo,
+    required this.result,
+    required this.year,
+    this.month,
+    this.event = '',
+    this.san = '',
+  });
+
+  /// Lichess game id, or the local database's integer id as text.
+  final String id;
+  final ExplorerGameSource source;
+
+  final String white;
+  final String black;
+  final int? whiteElo;
+  final int? blackElo;
+
+  /// `1-0`, `0-1`, `1/2-1/2` or `*`.
+  final String result;
+
+  final int? year;
+  final int? month;
+
+  /// The event, when the source knows it (TWIC); empty for Lichess games.
+  final String event;
+
+  /// The move this game played from the position, in SAN, when known.
+  final String san;
+
+  /// The higher rating of the two, for a one-glance strength.
+  int get topElo {
+    final w = whiteElo ?? 0;
+    final b = blackElo ?? 0;
+    return w > b ? w : b;
+  }
+
+  /// "2024" or "2024-03", for a compact date column.
+  String get when {
+    final y = year;
+    if (y == null) return '';
+    final m = month;
+    return m == null ? '$y' : '$y-${m.toString().padLeft(2, '0')}';
+  }
+
+  /// Parse one entry of the API's `topGames` / `recentGames` arrays.
+  factory ExplorerGame.fromJson(
+    Map<String, dynamic> json, {
+    required ExplorerGameSource source,
+    required String san,
+  }) {
+    final white = json['white'] as Map<String, dynamic>? ?? const {};
+    final black = json['black'] as Map<String, dynamic>? ?? const {};
+    final winner = json['winner'] as String?;
+    return ExplorerGame(
+      id: json['id'] as String? ?? '',
+      source: source,
+      white: white['name'] as String? ?? '?',
+      black: black['name'] as String? ?? '?',
+      whiteElo: white['rating'] as int?,
+      blackElo: black['rating'] as int?,
+      result: switch (winner) {
+        'white' => '1-0',
+        'black' => '0-1',
+        null => json.containsKey('winner') ? '1/2-1/2' : '*',
+        _ => '*',
+      },
+      year: json['year'] as int?,
+      month: json['month'] is String
+          ? int.tryParse((json['month'] as String).split('-').last)
+          : json['month'] as int?,
+      san: san,
+    );
+  }
+}
+
 class ExplorerResponse {
   final String fen;
   final List<ExplorerMove> moves;
   final int totalGames;
+
+  /// Games the source names for this position, strongest first — the ones
+  /// worth opening.  Empty when the caller did not ask for any.
+  final List<ExplorerGame> topGames;
+
+  /// The most recent games, when the source lists them separately (the
+  /// Lichess player database does; masters and TWIC fold them into
+  /// [topGames]).
+  final List<ExplorerGame> recentGames;
 
   /// Opening name/ECO for this position, when the API identifies one
   /// (e.g. "Sicilian Defense" / "B20"). Null for unnamed positions.
@@ -68,6 +173,8 @@ class ExplorerResponse {
     this.white,
     this.draws,
     this.black,
+    this.topGames = const [],
+    this.recentGames = const [],
   });
 
   /// Result totals for the position — the explorer's Σ row. Falls back to
@@ -77,9 +184,14 @@ class ExplorerResponse {
   int get blackTotal => black ?? moves.fold(0, (n, m) => n + m.black);
 
   /// Parse a raw JSON map returned by the Lichess Explorer endpoint.
+  ///
+  /// [gameSource] says which database answered, so the games it lists can be
+  /// fetched from the right place; the top-level `topGames` / `recentGames`
+  /// arrays are parsed when it is given.
   factory ExplorerResponse.fromJson(
     Map<String, dynamic> data, {
     required String fen,
+    ExplorerGameSource? gameSource,
   }) {
     int totalGames = 0;
     for (final move in data['moves'] as List? ?? []) {
@@ -111,6 +223,22 @@ class ExplorerResponse {
 
     moves.sort((a, b) => b.playRate.compareTo(a.playRate));
     final opening = data['opening'] as Map<String, dynamic>?;
+
+    // The API names each game's move by UCI; the row's SAN is what a reader
+    // wants beside it.
+    final sanByUci = {for (final m in moves) m.uci: m.san};
+    List<ExplorerGame> games(String key) => gameSource == null
+        ? const []
+        : [
+            for (final g in data[key] as List? ?? const [])
+              if (g is Map<String, dynamic>)
+                ExplorerGame.fromJson(
+                  g,
+                  source: gameSource,
+                  san: sanByUci[g['uci'] as String? ?? ''] ?? '',
+                ),
+          ];
+
     return ExplorerResponse(
       fen: fen,
       moves: moves,
@@ -120,6 +248,8 @@ class ExplorerResponse {
       white: data['white'] as int?,
       draws: data['draws'] as int?,
       black: data['black'] as int?,
+      topGames: games('topGames'),
+      recentGames: games('recentGames'),
     );
   }
 

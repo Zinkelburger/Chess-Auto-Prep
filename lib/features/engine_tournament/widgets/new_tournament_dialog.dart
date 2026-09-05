@@ -1,9 +1,17 @@
 /// Set up a match or a tournament.
 ///
-/// Defaults are chosen to be the ones you would pick anyway: the bundled
-/// Stockfish against itself, two seconds a move, ten games with the colours
-/// alternating, one game at a time, and the adjudication rules that stop
-/// two equal engines shuffling a dead position for two hundred moves.
+/// The dialog shows only what people actually change: the position, the
+/// name, how many games, and the time control. Everything else — which
+/// engines play, the clock's exact numbers, concurrency, adjudication — sits
+/// behind one **Advanced** toggle with defaults you would pick anyway: the
+/// bundled Stockfish against itself, two seconds a move, ten games with the
+/// colours alternating, one game at a time, and the adjudication rules that
+/// stop two equal engines shuffling a dead position for two hundred moves.
+///
+/// The FEN field starts *empty*, and empty means the standard starting
+/// position. A prefilled start FEN used to sit in the field, which made the
+/// one thing people came to type into look like something they should not
+/// touch.
 library;
 
 import 'package:dartchess/dartchess.dart';
@@ -13,7 +21,7 @@ import 'package:flutter/services.dart';
 import '../../../constants/chess_constants.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
-import '../../../utils/app_messages.dart';
+import '../../../utils/fen_utils.dart';
 import '../../../utils/system_info.dart';
 import '../../../widgets/board_editor/board_editor_dialog.dart';
 import '../../../widgets/common/static_board_thumbnail.dart';
@@ -33,7 +41,7 @@ Future<TournamentConfig?> showNewTournamentDialog(
     builder: (_) => Dialog(
       insetPadding: const EdgeInsets.all(24),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720, maxHeight: 700),
+        constraints: const BoxConstraints(maxWidth: 680, maxHeight: 720),
         child: _NewTournamentBody(
           engines: engines,
           boardFen: boardFen,
@@ -63,11 +71,13 @@ class _NewTournamentBody extends StatefulWidget {
 }
 
 class _NewTournamentBodyState extends State<_NewTournamentBody> {
+  static const _boardSize = 208.0;
+
   final _name = TextEditingController(text: 'Engine match');
   final _opening = TextEditingController();
-  late final TextEditingController _fen = TextEditingController(
-    text: kStandardStartFen,
-  );
+
+  /// Empty means [kStandardStartFen]; see [_effectiveFen].
+  final _fen = TextEditingController();
 
   /// Ids of the participants, in seeding order. The same engine may appear
   /// twice — that is how you test a change against its own baseline.
@@ -84,6 +94,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
   bool _annotateMoves = false;
   AdjudicationRules _adjudication = const AdjudicationRules();
 
+  bool _showAdvanced = false;
   String? _fenError;
 
   @override
@@ -100,14 +111,18 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
     super.dispose();
   }
 
-  void _validateFen() {
+  /// The position the games will start from: the field's FEN, or the
+  /// standard start when the field is empty.
+  String get _effectiveFen {
     final text = _fen.text.trim();
+    return text.isEmpty ? kStandardStartFen : text;
+  }
+
+  void _validateFen() {
     String? error;
-    if (text.isEmpty) {
-      error = 'Enter a FEN, or use the standard starting position.';
-    } else {
+    if (_fen.text.trim().isNotEmpty) {
       try {
-        Chess.fromSetup(Setup.parseFen(text));
+        Chess.fromSetup(Setup.parseFen(_fen.text.trim()));
       } catch (e) {
         error = _describeFenError(e);
       }
@@ -117,14 +132,20 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
     setState(() => _fenError = error);
   }
 
-  /// Open the full board editor seeded with whatever FEN is in the field.
+  /// Put [fen] in the field — or clear it when it is the standard start, so
+  /// the field only ever shows a position that differs from the default.
+  void _setFen(String fen) {
+    _fen.text = normalizeFen(fen) == normalizeFen(kStandardStartFen) ? '' : fen;
+  }
+
+  /// Open the full board editor seeded with the position in play.
   Future<void> _editBoard() async {
     final position = await BoardEditorDialog.show(
       context,
-      initialFen: _fenError == null ? _fen.text.trim() : null,
+      initialFen: _fenError == null ? _effectiveFen : null,
       actionLabel: 'Use this position',
     );
-    if (position != null) _fen.text = position.fen;
+    if (position != null) _setFen(position.fen);
   }
 
   static String _describeFenError(Object error) {
@@ -135,6 +156,11 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
     }
     return 'Could not read that FEN.';
   }
+
+  /// The app's board is worth offering only when it shows something other
+  /// than the position already in play.
+  bool get _canUseBoardPosition =>
+      normalizeFen(widget.boardFen) != normalizeFen(_effectiveFen);
 
   List<EngineSpec> get _selectedSpecs => [
     for (final id in _participants)
@@ -175,21 +201,25 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+          padding: const EdgeInsets.fromLTRB(20, 14, 12, 12),
           child: Row(
             children: [
-              const Icon(
-                Icons.emoji_events_outlined,
-                size: 20,
-                color: AppColors.onSurfaceSoft,
-              ),
-              const SizedBox(width: 10),
               const Text('New tournament', style: AppTextStyles.title),
               const Spacer(),
-              TextButton.icon(
-                onPressed: widget.onManageEngines,
-                icon: const Icon(Icons.memory, size: 16),
-                label: const Text('Engines…'),
+              Tooltip(
+                message:
+                    'Which engines play, the exact clock, games at once, '
+                    'adjudication.',
+                child: TextButton.icon(
+                  key: const ValueKey('new-tournament-advanced'),
+                  onPressed: () =>
+                      setState(() => _showAdvanced = !_showAdvanced),
+                  icon: Icon(
+                    _showAdvanced ? Icons.expand_less : Icons.tune,
+                    size: 16,
+                  ),
+                  label: const Text('Advanced'),
+                ),
               ),
             ],
           ),
@@ -197,63 +227,30 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
         const Divider(height: 1, color: AppColors.divider),
         Flexible(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                TextField(
-                  controller: _name,
-                  decoration: const InputDecoration(
-                    labelText: 'Name',
-                    helperText:
-                        'Becomes the PGN Event tag and the folder on disk.',
-                  ),
-                ),
-                const SizedBox(height: 18),
-                _Section(
-                  icon: Icons.groups_outlined,
-                  title: 'Engines',
-                  child: _buildParticipants(),
-                ),
-                _Section(
-                  icon: Icons.grid_view,
-                  title: 'Starting position',
-                  child: _buildPosition(),
-                ),
-                _Section(
-                  icon: Icons.timer_outlined,
-                  title: 'Time control',
-                  child: _buildTimeControl(),
-                ),
-                _Section(
-                  icon: Icons.format_list_numbered,
-                  title: 'Schedule',
-                  child: _buildSchedule(config),
-                ),
-                _Section(
-                  icon: Icons.gavel,
-                  title: 'Adjudication',
-                  subtitle:
-                      'When to stop a game the engines will not finish on '
-                      'their own.',
-                  showDivider: false,
-                  child: _buildAdjudication(),
-                ),
+                _buildBasics(),
+                if (_showAdvanced) ...[
+                  const SizedBox(height: 22),
+                  const Divider(height: 1, color: AppColors.divider),
+                  const SizedBox(height: 18),
+                  _buildAdvanced(config),
+                ],
               ],
             ),
           ),
         ),
         const Divider(height: 1, color: AppColors.divider),
         Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.fromLTRB(20, 12, 12, 12),
           child: Row(
             children: [
               Expanded(
                 child: Text(
                   _canStart
-                      ? '${config.totalGames} games · '
-                            '${config.timeControl.label} · '
-                            '${_estimate(config)}'
+                      ? _summary(specs, config)
                       : (_fenError ?? 'Pick at least two engines.'),
                   style: AppTextStyles.hint.copyWith(
                     color: _canStart
@@ -267,12 +264,12 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
                 child: const Text('Cancel'),
               ),
               const SizedBox(width: 8),
-              FilledButton.icon(
+              FilledButton(
+                key: const ValueKey('new-tournament-start'),
                 onPressed: _canStart
                     ? () => Navigator.of(context).pop(config)
                     : null,
-                icon: const Icon(Icons.play_arrow, size: 18),
-                label: const Text('Start'),
+                child: const Text('Start'),
               ),
             ],
           ),
@@ -284,7 +281,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
   TournamentConfig _buildConfig(List<EngineSpec> specs) => TournamentConfig(
     name: _name.text.trim().isEmpty ? 'Engine match' : _name.text.trim(),
     engines: specs,
-    startFen: _fen.text.trim(),
+    startFen: _effectiveFen,
     openingLabel: _opening.text.trim(),
     timeControl: _timeControl,
     gamesPerPairing: _gamesPerPairing,
@@ -295,7 +292,184 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
     adjudication: _adjudication,
   );
 
-  // ── Sections ─────────────────────────────────────────────────────────────
+  /// "Stockfish against itself · 10 games · 2 s / move · ≈ 47 min".
+  String _summary(List<EngineSpec> specs, TournamentConfig config) {
+    final selected = _selectedSpecs;
+    final who = switch (selected.length) {
+      2 when selected[0].id == selected[1].id =>
+        '${selected[0].name} against itself',
+      2 => '${specs[0].name} vs ${specs[1].name}',
+      _ => '${specs.length} engines',
+    };
+    return '$who · ${config.totalGames} games · '
+        '${config.timeControl.label} · ${_estimate(config)}';
+  }
+
+  // ── Basics: what you came here to change ────────────────────────────────
+
+  Widget _buildBasics() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildPreview(),
+        const SizedBox(width: 20),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                key: const ValueKey('new-tournament-name'),
+                controller: _name,
+                decoration: const InputDecoration(labelText: 'Name'),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                key: const ValueKey('new-tournament-fen'),
+                controller: _fen,
+                style: AppTextStyles.body.copyWith(
+                  fontFamily: AppTextStyles.monoFamily,
+                ),
+                decoration: InputDecoration(
+                  labelText: 'Start position',
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
+                  hintText: 'Standard start — paste a FEN to change',
+                  hintStyle: AppTextStyles.hint,
+                  errorText: _fenError,
+                  errorMaxLines: 3,
+                  suffixIcon: _fen.text.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Back to the standard start',
+                          icon: const Icon(Icons.close, size: 18),
+                          onPressed: () => _fen.clear(),
+                        ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 4,
+                children: [
+                  TextButton(
+                    key: const ValueKey('new-tournament-edit-board'),
+                    onPressed: _editBoard,
+                    child: const Text('Edit board…'),
+                  ),
+                  if (_canUseBoardPosition)
+                    TextButton(
+                      onPressed: () => _setFen(widget.boardFen),
+                      child: const Text('Use the board position'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 96,
+                    child: _NumberField(
+                      key: const ValueKey('new-tournament-games'),
+                      label: 'Games',
+                      value: _gamesPerPairing,
+                      min: 1,
+                      max: 1000,
+                      onChanged: (v) => setState(() => _gamesPerPairing = v),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: _buildTimePreset()),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPreview() {
+    if (_fenError != null) {
+      return Container(
+        width: _boardSize,
+        height: _boardSize,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: AppColors.surfaceInset,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: const Icon(
+          Icons.report_gmailerrorred_outlined,
+          color: AppColors.danger,
+        ),
+      );
+    }
+    return Tooltip(
+      message: 'Edit this position',
+      child: InkWell(
+        onTap: _editBoard,
+        child: StaticBoardThumbnail(
+          fen: _effectiveFen,
+          size: _boardSize,
+          flipped: false,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimePreset() {
+    final presetIndex = kTimeControlPresets.indexWhere(
+      (p) => p.tc.label == _timeControl.label,
+    );
+    return DropdownButtonFormField<int>(
+      key: const ValueKey('new-tournament-time'),
+      initialValue: presetIndex < 0 ? null : presetIndex,
+      isDense: true,
+      isExpanded: true,
+      decoration: const InputDecoration(labelText: 'Time', isDense: true),
+      hint: Text(_timeControl.label),
+      items: [
+        for (var i = 0; i < kTimeControlPresets.length; i++)
+          DropdownMenuItem(
+            value: i,
+            child: Text(
+              kTimeControlPresets[i].label,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+      ],
+      onChanged: (index) {
+        if (index == null) return;
+        setState(() => _timeControl = kTimeControlPresets[index].tc);
+      },
+    );
+  }
+
+  // ── Advanced: everything with a default worth keeping ───────────────────
+
+  Widget _buildAdvanced(TournamentConfig config) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _Section(
+          title: 'Engines',
+          trailing: TextButton(
+            onPressed: widget.onManageEngines,
+            child: const Text('Manage engines…'),
+          ),
+          child: _buildParticipants(),
+        ),
+        _Section(title: 'Time control', child: _buildTimeControlDetail()),
+        _Section(title: 'Games', child: _buildSchedule(config)),
+        _Section(
+          title: 'Adjudication',
+          subtitle:
+              'When to stop a game the engines will not finish on their own.',
+          showDivider: false,
+          child: _buildAdjudication(),
+        ),
+      ],
+    );
+  }
 
   Widget _buildParticipants() {
     return Column(
@@ -314,6 +488,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
                   child: DropdownButtonFormField<String>(
                     initialValue: _participants[i],
                     isDense: true,
+                    isExpanded: true,
                     decoration: const InputDecoration(isDense: true),
                     items: [
                       for (final engine in widget.engines)
@@ -343,142 +518,12 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
           ),
         Align(
           alignment: Alignment.centerLeft,
-          child: TextButton.icon(
+          child: TextButton(
             onPressed: () =>
                 setState(() => _participants.add(widget.engines.first.id)),
-            icon: const Icon(Icons.add, size: 16),
-            label: const Text('Add engine'),
+            child: const Text('Add engine'),
           ),
         ),
-      ],
-    );
-  }
-
-  Widget _buildPosition() {
-    final fen = _fen.text.trim();
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: _fen,
-                style: AppTextStyles.body.copyWith(
-                  fontFamily: AppTextStyles.monoFamily,
-                ),
-                decoration: InputDecoration(
-                  labelText: 'FEN',
-                  isDense: true,
-                  errorText: _fenError,
-                  errorMaxLines: 3,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 8,
-                children: [
-                  TextButton.icon(
-                    onPressed: _editBoard,
-                    icon: const Icon(Icons.edit_outlined, size: 16),
-                    label: const Text('Edit board…'),
-                  ),
-                  TextButton(
-                    onPressed: () => _fen.text = kStandardStartFen,
-                    child: const Text('Standard start'),
-                  ),
-                  TextButton(
-                    onPressed: () => _fen.text = widget.boardFen,
-                    child: const Text('Current board position'),
-                  ),
-                  TextButton(
-                    onPressed: () async {
-                      final data = await Clipboard.getData(
-                        Clipboard.kTextPlain,
-                      );
-                      final text = data?.text?.trim();
-                      if (text != null && text.isNotEmpty) _fen.text = text;
-                    },
-                    child: const Text('Paste'),
-                  ),
-                  TextButton(
-                    onPressed: fen.isEmpty
-                        ? null
-                        : () => copyToClipboard(
-                            context,
-                            fen,
-                            successMessage: 'FEN copied.',
-                          ),
-                    child: const Text('Copy'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              TextField(
-                controller: _opening,
-                decoration: const InputDecoration(
-                  labelText: 'Opening label (optional)',
-                  isDense: true,
-                  helperText: 'Written to the PGN Opening tag.',
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 16),
-        if (_fenError == null)
-          Tooltip(
-            message: 'Edit this position',
-            child: InkWell(
-              onTap: _editBoard,
-              child: StaticBoardThumbnail(fen: fen, size: 132),
-            ),
-          )
-        else
-          Container(
-            width: 132,
-            height: 132,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: AppColors.surfaceInset,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: const Icon(
-              Icons.report_gmailerrorred_outlined,
-              color: AppColors.danger,
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildTimeControl() {
-    final presetIndex = kTimeControlPresets.indexWhere(
-      (p) => p.tc.label == _timeControl.label,
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        DropdownButtonFormField<int>(
-          initialValue: presetIndex < 0 ? null : presetIndex,
-          isDense: true,
-          decoration: const InputDecoration(labelText: 'Preset', isDense: true),
-          hint: Text(_timeControl.label),
-          items: [
-            for (var i = 0; i < kTimeControlPresets.length; i++)
-              DropdownMenuItem(
-                value: i,
-                child: Text(kTimeControlPresets[i].label),
-              ),
-          ],
-          onChanged: (index) {
-            if (index == null) return;
-            setState(() => _timeControl = kTimeControlPresets[index].tc);
-          },
-        ),
-        const SizedBox(height: 10),
-        _buildTimeControlDetail(),
       ],
     );
   }
@@ -576,17 +621,8 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
           const SizedBox(height: 10),
         ],
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: _NumberField(
-                label: 'Games per pairing',
-                value: _gamesPerPairing,
-                min: 1,
-                max: 1000,
-                onChanged: (v) => setState(() => _gamesPerPairing = v),
-              ),
-            ),
-            const SizedBox(width: 12),
             Expanded(
               child: _NumberField(
                 label: 'Games at once',
@@ -595,6 +631,17 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
                 max: getLogicalCores(),
                 helper: 'One is fairest',
                 onChanged: (v) => setState(() => _concurrency = v),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                controller: _opening,
+                decoration: const InputDecoration(
+                  labelText: 'Opening label',
+                  isDense: true,
+                  helperText: 'Written to the PGN Opening tag.',
+                ),
               ),
             ),
           ],
@@ -771,24 +818,24 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
     if (perGameSeconds == 0) return 'duration depends on the engines';
     final total =
         perGameSeconds * config.totalGames / config.concurrency.clamp(1, 64);
-    if (total < 90) return '≈ ${total.round()}s at most';
-    if (total < 5400) return '≈ ${(total / 60).round()} min at most';
-    return '≈ ${(total / 3600).toStringAsFixed(1)} h at most';
+    if (total < 90) return '≈ ${total.round()} s';
+    if (total < 5400) return '≈ ${(total / 60).round()} min';
+    return '≈ ${(total / 3600).toStringAsFixed(1)} h';
   }
 }
 
 class _Section extends StatelessWidget {
   const _Section({
-    required this.icon,
     required this.title,
     required this.child,
     this.subtitle,
+    this.trailing,
     this.showDivider = true,
   });
 
-  final IconData icon;
   final String title;
   final String? subtitle;
+  final Widget? trailing;
   final Widget child;
   final bool showDivider;
 
@@ -799,14 +846,14 @@ class _Section extends StatelessWidget {
       children: [
         Row(
           children: [
-            Icon(icon, size: 16, color: AppColors.onSurfaceDim),
-            const SizedBox(width: 8),
-            Text(title, style: AppTextStyles.bodyStrong),
+            Text(title.toUpperCase(), style: AppTextStyles.eyebrow),
+            const Spacer(),
+            ?trailing,
           ],
         ),
         if (subtitle != null)
           Padding(
-            padding: const EdgeInsets.only(left: 24, top: 2),
+            padding: const EdgeInsets.only(top: 2),
             child: Text(subtitle!, style: AppTextStyles.hint),
           ),
         const SizedBox(height: 10),
@@ -823,6 +870,7 @@ class _Section extends StatelessWidget {
 
 class _NumberField extends StatefulWidget {
   const _NumberField({
+    super.key,
     required this.label,
     required this.value,
     required this.min,

@@ -395,15 +395,11 @@ class _Eval extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            // The percentage rather than a bar: Hivemind's score is an MCTS
-            // Q-value, so an expected score is the one reading of it that is
-            // exact rather than drawn to scale. Read off the same value as the
-            // number beside it, so the two cannot disagree.
             if (eval != null)
               Tooltip(
                 message:
-                    'Our team\'s expected score, from the engine\'s own '
-                    'value. 50% is level.',
+                    'Relative engine estimate after recentering its value. '
+                    '50% is level; this is not a calibrated win probability.',
                 child: Text(
                   '${eval.winLabel} for us',
                   style: AppTextStyles.body.copyWith(
@@ -860,6 +856,11 @@ class _TableRules extends StatelessWidget {
             style: AppTextStyles.caption,
           ),
         ),
+        if (derived)
+          const Text(
+            'Both diagonal clock pairs must agree by more than 5 seconds. Mixed clocks use Level; clocks do not run in this model.',
+            style: AppTextStyles.muted,
+          ),
         const SizedBox(height: 4),
 
         const BughousePanelLabel('Must the team move?'),

@@ -7,6 +7,7 @@ import '../../../core/app_state.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../widgets/accounts/accounts_card.dart';
+import '../../../widgets/common/home_block.dart';
 import '../../../widgets/engine/engine_gate.dart';
 import '../../../services/master_games/master_games_service.dart';
 import '../../../widgets/labeled_toggle.dart';
@@ -15,11 +16,10 @@ import '../../games/services/home_review_runner.dart';
 import '../../games/services/opening_review.dart';
 import '../../games/services/recent_game_navigation.dart';
 import '../../games/widgets/analysis_block.dart';
-import '../../games/widgets/home_block.dart';
 import '../../games/widgets/home_review_settings_dialog.dart';
-import '../../games/widgets/my_books_row.dart';
+import '../../games/widgets/my_books_block.dart';
 import '../../games/widgets/opening_review_dialog.dart';
-import '../../master_games/widgets/master_games_browser.dart';
+import '../../master_games/widgets/master_practice_dialog.dart';
 import '../controllers/tactics_session_controller.dart';
 import '../models/tactics_position.dart';
 import '../models/tactics_session_settings.dart';
@@ -29,9 +29,9 @@ part 'tactics_import_panel_start_card.dart';
 part 'tactics_import_panel_widgets.dart';
 
 /// The tactics home column, when no puzzle is active: three blocks ordered by
-/// how often you press them — Play, Analysis, Openings — over a footer that
-/// states the accounts the games come from and the books they are checked
-/// against.
+/// how often you press them — Play, Analysis, Openings — over two more in the
+/// same frame that state the accounts the games come from and the books they
+/// are checked against.
 ///
 /// It is the one place a session starts. The play button used to have a
 /// twin on the left ("Study tactics") and the analysis lived in a strip over
@@ -42,7 +42,7 @@ part 'tactics_import_panel_widgets.dart';
 /// The analysis and openings blocks read the games controller, the runner and
 /// the import coordinator from context, nullably: the panel is also pumped in
 /// widget tests with only a session in scope, and then it is the Play block
-/// and the footer.
+/// and the Accounts and Books blocks.
 ///
 /// Layout rule: the structure is static. Blocks never collapse, reorder, or
 /// appear/disappear in reaction to state.
@@ -149,12 +149,12 @@ class _TacticsImportPanelState extends _TacticsImportPanelStateBase
           const SizedBox(height: 8),
           _buildOpeningsBlock(games),
         ],
+        // A wider gap than between the action blocks: below it are the
+        // facts the actions run on, in the same frame at the same weight.
         const SizedBox(height: 16),
-        const Divider(height: 1, thickness: 1, color: AppColors.divider),
-        const SizedBox(height: 8),
         const AccountsCard(),
-        const SizedBox(height: 4),
-        const MyBooksRow(),
+        const SizedBox(height: 8),
+        const MyBooksBlock(),
       ],
     );
   }
@@ -191,8 +191,12 @@ class _TacticsImportPanelState extends _TacticsImportPanelStateBase
       windowLabel: games.window.label,
       onOpeningReview: () => _showOpeningReview(games),
       masterGameCount: MasterGamesService.instance.stats?.games ?? 0,
-      onBrowseMasterGames: () =>
-          showMasterGamesBrowser(context, appState: context.read<AppState>()),
+      onMasterPractice: () => showMasterPracticeReview(
+        context,
+        appState: context.read<AppState>(),
+        games: games.games,
+        windowLabel: games.window.label,
+      ),
       repeated: review.repeated(),
       onFixEntry: (entry) => openLineInBuilder(context.read<AppState>(), entry),
     );

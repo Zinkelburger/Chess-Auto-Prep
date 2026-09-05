@@ -15,9 +15,11 @@ import 'dart:isolate';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../utils/number_format.dart';
 import '../../utils/safe_change_notifier.dart';
 import '../jobs/repertoire_job.dart';
 import '../storage/sqlite_recovery.dart';
+import 'master_book_rebuild.dart';
 import 'master_games_db.dart';
 import 'master_games_importer.dart';
 import 'twic_client.dart';
@@ -60,6 +62,8 @@ class MasterGamesService extends ChangeNotifier with SafeChangeNotifier {
 
   // Sync state.
   bool _syncing = false;
+  bool _rebuilding = false;
+  bool _cancelRebuild = false;
   bool _cancelRequested = false;
   RepertoireJob? _job;
   String _status = '';
@@ -96,6 +100,16 @@ class MasterGamesService extends ChangeNotifier with SafeChangeNotifier {
   bool get isAvailableForGeneration => _useInGeneration && hasGames;
 
   bool get isSyncing => _syncing;
+
+  /// Whether the classical index (v4's per-row classical counts and the
+  /// classical citations) is being rebuilt.
+  bool get isRebuildingClassical => _rebuilding;
+
+  /// Whether every book row's classical-only counts are trustworthy.  False
+  /// on a database imported before v4 until [rebuildClassicalIndex] has run
+  /// to the end; true when there is no database at all, since there is
+  /// nothing to rebuild.
+  bool get classicalCountsComplete => _db?.classicalCountsComplete ?? true;
 
   /// Completes when the sync in flight ends — finished, cancelled or
   /// failed.  A caller that wants to wait for a sync it did not start (the
@@ -376,6 +390,98 @@ class MasterGamesService extends ChangeNotifier with SafeChangeNotifier {
   static Future<MasterGamesImportResult> _importInIsolate(
     MasterGamesImportRequest request,
   ) => Isolate.run(() => importPgnIntoMasterGames(request));
+
+  /// Games replayed per isolate hop of [rebuildClassicalIndex].  Large enough
+  /// that reopening the database per hop is noise, small enough that
+  /// progress moves and a cancel lands within seconds.
+  static const int classicalRebuildChunk = 5000;
+
+  /// Replay the classical games into the book's classical columns — the
+  /// citations and the classical-only counts — for a database imported
+  /// before those columns existed.
+  ///
+  /// Runs in chunks on a worker isolate, each opening its own connection,
+  /// with progress reported between them as a job.  A rebuild and a sync
+  /// both write the book, so neither starts while the other runs.
+  Future<void> rebuildClassicalIndex() async {
+    if (_rebuilding || _syncing) return;
+    if (!_loaded) await load();
+    final path = _dbPath;
+    final db = _db;
+    if (path == null || db == null) return;
+    _rebuilding = true;
+    _cancelRebuild = false;
+    _lastError = null;
+    final total = classicalCitationProgress(db).classical;
+    final job = JobManager.instance.createJob(
+      type: JobType.masterGames,
+      label: 'Classical index (TWIC)',
+    );
+    job.onCancel = cancelRebuild;
+    job.updateStatus(JobStatus.running);
+    _status = 'Indexing classical games…';
+    _fraction = 0;
+    job.updateProgress(JobProgress(message: _status));
+    notifyListeners();
+
+    var scanned = 0;
+    var afterId = 0;
+    var cancelled = false;
+    try {
+      while (true) {
+        final chunk = await _rebuildChunkInIsolate(path, afterId);
+        scanned += chunk.gamesScanned;
+        afterId = chunk.lastId;
+        _fraction = total == 0 ? 1 : (scanned / total).clamp(0, 1);
+        _status =
+            'Indexed ${_thousands(scanned)} of ${_thousands(total)} '
+            'classical games';
+        job.updateProgress(JobProgress(fraction: _fraction, message: _status));
+        notifyListeners();
+        if (chunk.done) break;
+        if (_cancelRequestedForRebuild) {
+          cancelled = true;
+          break;
+        }
+      }
+      _status = cancelled
+          ? 'Classical index stopped — run it again to finish'
+          : 'Classical index built';
+    } catch (e) {
+      _lastError = 'Classical index failed: $e';
+      _status = _lastError!;
+    } finally {
+      _rebuilding = false;
+      if (job.isActive) {
+        job.updateStatus(cancelled ? JobStatus.cancelled : JobStatus.completed);
+      }
+      notifyListeners();
+    }
+  }
+
+  bool get _cancelRequestedForRebuild => _cancelRebuild;
+
+  void cancelRebuild() {
+    if (_rebuilding) _cancelRebuild = true;
+  }
+
+  static Future<ClassicalCitationRebuild> _rebuildChunkInIsolate(
+    String path,
+    int afterId,
+  ) => Isolate.run(() async {
+    final db = MasterGamesDb.open(path);
+    try {
+      return await rebuildClassicalCitations(
+        db,
+        afterId: afterId,
+        maxGames: classicalRebuildChunk,
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  static String _thousands(int n) => formatThousands(n);
 
   void cancel() {
     if (!_syncing) return;

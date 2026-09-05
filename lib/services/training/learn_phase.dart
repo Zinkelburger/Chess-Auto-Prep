@@ -4,11 +4,21 @@
 /// (the line, the cursor, flags the UI binds to) stay on the controller so
 /// the trainer widgets keep a single place to read from; this class is the
 /// only writer of those fields during [TrainingPhase.learning].
+///
+/// The walkthrough plays each move onto the board with its comment. What
+/// happens at *your* moves depends on [TrainingSettings.learnRequiresClick]:
+///
+///  * manual advance — every one of your moves waits for Next, then the board
+///    rewinds one ply and asks you to play it before going on;
+///  * auto advance — the same, with [TrainingSettings.learnDelaySec] in place
+///    of the click. The delay only replaces Next; it never skips the quiz,
+///    which used to be the case for moves without a note.
+///
+/// Opponent moves with a comment wait for Next in both modes. When the line
+/// runs out the same line restarts in [TrainingPhase.drilling].
 library;
 
 import 'dart:async';
-
-import 'package:dartchess/dartchess.dart';
 
 import '../../models/completed_move.dart';
 import '../../utils/chess_utils.dart' show playSanOrNullMove;
@@ -32,12 +42,7 @@ class LearnPhase {
     if (_s.currentLine == null) return;
     final generation = _s.lineGeneration;
     if (_s.currentMoveIndex >= _s.currentLineLength) {
-      _s.session.clearMoveHistory();
-      if (_s.currentLine!.startPosition.fen != Chess.initial.fen) {
-        _s.session.setPositionFromFen(_s.currentLine!.startPosition.fen);
-      } else {
-        _s.session.clearMoveHistory();
-      }
+      _s.resetBoard(_s.currentLine!);
       _s.currentMoveIndex = 0;
       _s.phase = TrainingPhase.drilling;
       _s.feedback = null;
@@ -96,27 +101,31 @@ class LearnPhase {
       if (_s.settings.learnRequiresClick) {
         _s.learnWaitingForAck = true;
         _s.emitChange();
-      } else if (annotation != null && annotation.isNotEmpty) {
+      } else {
         _timer = Timer(
           Duration(seconds: _s.settings.learnDelaySec),
           acknowledged,
         );
-      } else {
-        await Future.delayed(Duration(milliseconds: _s.settings.moveSpeedMs));
-        if (generation != _s.lineGeneration) return;
-        _s.currentMoveIndex++;
-        await advance();
       }
     }
   }
 
+  /// Next was pressed on one of your moves (or the auto-advance delay ran
+  /// out): rewind that move and ask for it.
+  ///
+  /// Idempotent on purpose. Next is a button that also self-focuses, so a
+  /// double-click or a Space that lands after the click would otherwise
+  /// rewind the board a second ply and quiz the wrong move.
   void acknowledged() {
+    if (_s.phase != TrainingPhase.learning || _s.learnQuizzing) return;
     cancelPending();
     _s.session.goBack();
     _s.learnWaitingForAck = false;
     _s.learnQuizzing = true;
     _s.waitingForUser = true;
-    _s.feedback = 'Your move';
+    // The prompt is the card's own "Your move" row; the feedback line is for
+    // the verdict on what you played.
+    _s.feedback = null;
     _s.currentAnnotation = null;
     _s.emitChange();
   }

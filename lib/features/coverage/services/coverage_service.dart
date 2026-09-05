@@ -14,8 +14,13 @@ import '../../../utils/fen_utils.dart';
 import '../../../utils/chess_utils.dart';
 import '../../../services/maia/maia_factory.dart';
 
-/// Database types for Lichess Explorer
-enum LichessDatabase { lichess, masters, player }
+/// Which database an opening explorer asks.
+///
+/// Three are Lichess's ([lichess], [masters], [player]); [twic] is the
+/// master-games database on this machine, which only the live explorer
+/// panel offers — the generation pipeline reads it through its own
+/// `BookLookup`.
+enum LichessDatabase { lichess, masters, player, twic }
 
 /// Leaf classification for coverage analysis
 enum LeafCategory { covered, tooShallow, tooDeep }

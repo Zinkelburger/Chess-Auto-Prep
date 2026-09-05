@@ -35,6 +35,10 @@ on:
       - 'tools/fetch_bughouse.py'
       - 'tools/bughouse.lock.json'
       - 'tools/test_bughouse_engine.py'
+      - 'tools/diagnose_bughouse_windows.ps1'
+      - 'tools/test_diagnose_bughouse_windows.ps1'
+      - 'lib/features/bughouse/models/**'
+      - 'test/features/bughouse/**'
       - 'lib/features/bughouse/services/**'
       - 'windows/CMakeLists.txt'
       - '.github/workflows/bughouse.yml'
@@ -43,6 +47,10 @@ on:
       - 'tools/fetch_bughouse.py'
       - 'tools/bughouse.lock.json'
       - 'tools/test_bughouse_engine.py'
+      - 'tools/diagnose_bughouse_windows.ps1'
+      - 'tools/test_diagnose_bughouse_windows.ps1'
+      - 'lib/features/bughouse/models/**'
+      - 'test/features/bughouse/**'
       - 'lib/features/bughouse/services/**'
       - 'windows/CMakeLists.txt'
       - '.github/workflows/bughouse.yml'
@@ -82,6 +90,11 @@ jobs:
           python tools/fetch_bughouse.py --check
 
       # Static, and the only check here that a hosted runner cannot fake.
+      - name: Test diagnostic on Windows PowerShell
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: tools/test_diagnose_bughouse_windows.ps1
+
       - name: Audit what the binaries need
         run: python tools/test_bughouse_engine.py deps
 
@@ -105,7 +118,7 @@ jobs:
           HIVEMIND_BIN: ${{ matrix.os == 'windows-2022' && 'engine under test/hivemind-windows.exe' || 'engine under test/hivemind-linux' }}
           HIVEMIND_MODEL: engine under test/hivemind.onnx
           HIVEMIND_LIB: engine under test
-        run: flutter test test/features/bughouse/bughouse_engine_test.dart
+        run: flutter test test/features/bughouse/bughouse_engine_test.dart test/features/bughouse/bughouse_tournament_engine_test.dart
 
   macos:
     # Ten times the minutes of a Linux runner, so only when it is asked for or

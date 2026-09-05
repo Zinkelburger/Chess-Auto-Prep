@@ -16,6 +16,10 @@ const int kMaxMultiPv = 10;
 
 const int kDefaultInlineThreads = 1;
 
+/// Start conservatively; users can opt into more CPU in engine settings.
+const int kDefaultWorkers = 1;
+const int kDefaultGenerationThreads = 1;
+
 const int kDefaultMaxAnalysisMoves = 8;
 const int kMinMaxAnalysisMoves = 3;
 const int kMaxMaxAnalysisMoves = 20;

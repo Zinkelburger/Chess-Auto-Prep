@@ -362,7 +362,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (games.isEmpty || _controller.currentGameIndex >= games.length) {
       return null;
     }
-    return dedupKeyForHeaders(games[_controller.currentGameIndex].headers);
+    return dedupKeyForHeaders(
+      games[_controller.currentGameIndex].headers,
+      pgn: games[_controller.currentGameIndex].pgnText,
+    );
   }
 
   Future<bool> _goToGameById(String gameId) async {
@@ -373,14 +376,14 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     // Prev/Next walk back through time instead of through fetch history.
     _controller.sortNewestFirst();
     var index = _controller.filteredGames.indexWhere(
-      (g) => dedupKeyForHeaders(g.headers) == gameId,
+      (g) => dedupKeyForHeaders(g.headers, pgn: g.pgnText) == gameId,
     );
     if (index < 0) {
       // A restored slice may hide the target game — widen to the whole file.
       // (resetFilters re-applies the sort, so the order survives.)
       _controller.resetFilters();
       index = _controller.filteredGames.indexWhere(
-        (g) => dedupKeyForHeaders(g.headers) == gameId,
+        (g) => dedupKeyForHeaders(g.headers, pgn: g.pgnText) == gameId,
       );
     }
     if (index < 0) return false;
@@ -636,7 +639,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     final key = games.isEmpty || index >= games.length
         ? null
         : '${_controller.filePath}'
-              '#${dedupKeyForHeaders(games[index].headers)}';
+              '#${dedupKeyForHeaders(games[index].headers, pgn: games[index].pgnText)}';
     if (key == _deviationKey) return;
     _deviationKey = key;
     _deviationReport = null;
@@ -1298,10 +1301,23 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       () => _paneRouter.goForward(_controller.navigateForward),
       repeats: true,
     ),
+    // Home/End and PageUp/PageDown both jump to the ends of the line: the
+    // viewer's own buttons advertise Home/End, and the page keys are what a
+    // hand already on the arrow cluster reaches for.
+    ...KeyBinding.forShortcut(
+      AppShortcut.goToStart,
+      'Go to start of line',
+      () => _paneRouter.goToStart(_controller.navigateToStart),
+    ),
     KeyBinding.run(
       LogicalKeyboardKey.pageUp,
       'Go to start of line',
       () => _paneRouter.goToStart(_controller.navigateToStart),
+    ),
+    ...KeyBinding.forShortcut(
+      AppShortcut.goToEnd,
+      'Go to end of line',
+      () => _paneRouter.goToEnd(_controller.navigateToEnd),
     ),
     KeyBinding.run(
       LogicalKeyboardKey.pageDown,

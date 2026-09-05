@@ -38,6 +38,13 @@ def main() -> int:
     assert "ShellExec(" in installer and "'/install /quiet /norestart'" in installer
     assert 'Excludes: "concrt140.dll,msvcp140*.dll,vcruntime140*.dll"' in installer
 
+    deletes = installer.split('[InstallDelete]')[1].split('[Icons]')[0]
+    for name in ('concrt140.dll', 'msvcp140.dll', 'msvcp140_1.dll',
+                 'msvcp140_2.dll', 'msvcp140_atomic_wait.dll',
+                 'msvcp140_codecvt_ids.dll', 'vcruntime140.dll', 'vcruntime140_1.dll'):
+        assert f'Type: files; Name: "{{app}}\\{name}"' in deletes
+    assert '*' not in deletes, 'upgrade cleanup must not delete unrelated files'
+
     release = (redist.REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(
         encoding="utf-8"
     )

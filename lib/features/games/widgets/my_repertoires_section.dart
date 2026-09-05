@@ -19,9 +19,10 @@ class MyRepertoiresSection extends StatelessWidget {
       title: 'My repertoires',
       icon: Icons.fork_right,
       subtitle:
-          'The repertoires you actually play. Every recent game is compared '
-          'against them and shows where you left book.',
-      children: [MyRepertoiresPanel()],
+          'Compare your games with these books to see where you left your prep.',
+      children: [
+        Padding(padding: EdgeInsets.all(20), child: MyRepertoiresPanel()),
+      ],
     );
   }
 }

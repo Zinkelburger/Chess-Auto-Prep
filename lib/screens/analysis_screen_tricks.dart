@@ -55,16 +55,19 @@ mixin _TrickHuntMixin on _AnalysisScreenStateBase {
       _trickProbesSkipped = false;
     });
 
-    // Snapshot the games file's mtime: a re-download during the hunt clears
-    // the (now stale) trick reports, and a report computed from the old
-    // tree must not resurrect them.
-    final pgnPath = await _gamesService.analysisPgnPath(
-      player.platform,
-      player.username,
-    );
-    final pgnModifiedAtStart = await fileModifiedOrNull(pgnPath);
-
     try {
+      final corpus = await _gamesService.loadCorpus(
+        player.platform,
+        player.username,
+      );
+      if (corpus == null || corpus.fingerprint != _analysisFingerprint) {
+        throw StateError(
+          'Player games changed. Reopen this player before analyzing.',
+        );
+      }
+      final reportPath = corpus.cachePath(
+        'tricks_${isWhite ? 'white' : 'black'}.json',
+      );
       final result = await GenerationLease.run(() {
         return _trickService.hunt(
           tree: tree,
@@ -86,15 +89,15 @@ mixin _TrickHuntMixin on _AnalysisScreenStateBase {
       // Persist to the player the hunt was started for, even if the user
       // switched players meanwhile (partial reports included) — but not if
       // the games were replaced mid-hunt.
-      final pgnModifiedNow = await fileModifiedOrNull(pgnPath);
-      final gamesUnchanged = sameMtime(pgnModifiedAtStart, pgnModifiedNow);
-      if (gamesUnchanged) {
-        await trickHuntStore.save(
-          await _gamesService.tricksReportPath(
+      final gamesUnchanged =
+          await _gamesService.corpusFingerprint(
             player.platform,
             player.username,
-            isWhite,
-          ),
+          ) ==
+          corpus.fingerprint;
+      if (gamesUnchanged) {
+        await trickHuntStore.save(
+          reportPath,
           result,
           config,
           isComplete: !_trickHuntCancelled,
@@ -134,12 +137,20 @@ mixin _TrickHuntMixin on _AnalysisScreenStateBase {
     if (player == null) return;
     final isWhite = _playerIsWhite;
     setState(() => _tricksResults[isWhite] = result);
+    final corpus = await _gamesService.loadCorpus(
+      player.platform,
+      player.username,
+    );
+    if (corpus == null || corpus.fingerprint != _analysisFingerprint) {
+      if (mounted) {
+        _showError(
+          'Player games changed. Reopen this player before changing the report.',
+        );
+      }
+      return;
+    }
     await trickHuntStore.saveResult(
-      await _gamesService.tricksReportPath(
-        player.platform,
-        player.username,
-        isWhite,
-      ),
+      corpus.cachePath('tricks_${isWhite ? 'white' : 'black'}.json'),
       result,
       config: _tricksConfigs[isWhite],
     );

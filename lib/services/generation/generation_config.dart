@@ -72,11 +72,8 @@ enum SearchAlgorithm {
   fast,
 }
 
-/// Default engine thread count: half of logical cores, minimum 1.
-int defaultEngineThreads() {
-  final cores = getLogicalCores();
-  return (cores ~/ 2).clamp(1, cores);
-}
+/// Default total engine thread budget; users can opt into more CPU.
+int defaultEngineThreads() => kDefaultGenerationThreads;
 
 /// Clamp [threads] to [1, logical core count].
 int clampEngineThreads(int threads) {
@@ -217,7 +214,7 @@ class TreeBuildConfig {
   // ── Engine ──
   final int evalDepth;
 
-  /// UCI Threads per Stockfish worker during tree build (1 = single-threaded).
+  /// Total Stockfish thread budget during tree build (0 = default, 1 = one core).
   /// Use [resolvedEngineThreads] for the clamped value.
   final int engineThreads;
 
@@ -744,7 +741,7 @@ class TreeBuildConfig {
   int get resolvedBookTailMaxPly =>
       bookTailMaxPly > maxPly ? bookTailMaxPly : maxPly;
 
-  /// Clamped engine thread count (defaults to half of logical cores).
+  /// Clamped engine thread count (defaults to one).
   int get resolvedEngineThreads => engineThreads > 0
       ? clampEngineThreads(engineThreads)
       : defaultEngineThreads();

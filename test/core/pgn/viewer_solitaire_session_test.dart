@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
+import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +10,11 @@ import 'package:chess_auto_prep/core/pgn/solitaire_script.dart' as scripts;
 import 'package:chess_auto_prep/core/pgn/viewer_game_model.dart';
 import 'package:chess_auto_prep/core/pgn/viewer_solitaire_session.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
+
+class _NoTrophiesStorage extends IOStorageService {
+  @override
+  Future<String?> readFile(String path) async => null;
+}
 
 /// A handle over a real [ViewerGameModel], recording what the session asks of
 /// the board so each test can assert on the commands rather than on a live
@@ -174,7 +181,11 @@ void _startDefault(ViewerSolitaireSession s) {
 }
 
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    StorageFactory.instanceForTest = _NoTrophiesStorage();
+  });
+  tearDown(() => StorageFactory.instanceForTest = null);
 
   group('setup', () {
     test('the toolbar toggle opens setup rather than starting at once', () {

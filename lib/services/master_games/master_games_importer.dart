@@ -116,8 +116,10 @@ MasterGamesImportResult _import(
   final upsertBook = db.prepare('''
     INSERT INTO book(pos, move, ply, games, white_wins, draws, black_wins,
                      elo_sum, elo_n, max_elo, last_year, top_game, recent_game,
-                     top_classical_game, classical_max_elo)
-    VALUES(?,?,?,1,?,?,?,?,?,?,?,?,?,?,?)
+                     top_classical_game, classical_max_elo,
+                     classical_games, classical_white_wins, classical_draws,
+                     classical_black_wins)
+    VALUES(?,?,?,1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     ON CONFLICT(pos, move) DO UPDATE SET
       games = games + 1,
       white_wins = white_wins + excluded.white_wins,
@@ -139,6 +141,12 @@ MasterGamesImportResult _import(
                   OR excluded.classical_max_elo > classical_max_elo)
         THEN excluded.top_classical_game ELSE top_classical_game END,
       classical_max_elo = MAX(classical_max_elo, excluded.classical_max_elo),
+      classical_games = classical_games + excluded.classical_games,
+      classical_white_wins = classical_white_wins
+                             + excluded.classical_white_wins,
+      classical_draws = classical_draws + excluded.classical_draws,
+      classical_black_wins = classical_black_wins
+                             + excluded.classical_black_wins,
       ply = MIN(ply, excluded.ply)
   ''');
 
@@ -238,6 +246,12 @@ MasterGamesImportResult _import(
           // leaves it at 0 and falls back to `top_game`.
           authority.isCitable ? gameId : 0,
           authority.isCitable ? maxElo : 0,
+          // The classical-only split, kept per row so an explorer can show
+          // over-the-board practice without the online half.
+          authority.isCitable ? 1 : 0,
+          authority.isCitable ? ww : 0,
+          authority.isCitable ? dd : 0,
+          authority.isCitable ? bw : 0,
         ]);
         pos = pos.play(move);
       }

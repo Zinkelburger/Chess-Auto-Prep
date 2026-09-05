@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/repertoire/services/chapter_splitter.dart';
@@ -25,6 +26,36 @@ class _CsvStorage implements StorageService {
   @override
   Future<void> saveRepertoireMoveProgressCsv(String csv) async =>
       moveProgress = csv;
+
+  final Map<String, String> backups = {};
+  @override
+  Future<String?> readFile(String path) async => switch (path) {
+    'repertoire_reviews.csv' => reviews,
+    'repertoire_move_progress.csv' => moveProgress,
+    _ => backups[path],
+  };
+  @override
+  Future<bool> fileExists(String path) async => await readFile(path) != null;
+  @override
+  Future<void> writeFile(
+    String path,
+    String content, {
+    bool createOnly = false,
+    String? expectedContent,
+  }) async {
+    backups[path] = content;
+  }
+
+  @override
+  Future<String> updateFile(
+    String path,
+    FutureOr<String> Function(String?) update,
+  ) async {
+    final next = await update(await readFile(path));
+    if (path == 'repertoire_reviews.csv') reviews = next;
+    if (path == 'repertoire_move_progress.csv') moveProgress = next;
+    return next;
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

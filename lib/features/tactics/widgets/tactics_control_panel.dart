@@ -307,6 +307,15 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
           // home, and the browse list is a link on it with its own way back.
           // (A tab that read "Browse" idle and "PGN" in a puzzle was a
           // control that renamed itself.)
+          if (_database.loadError != null || _database.lastWriteError != null)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(
+                _database.loadError ??
+                    'Tactics have unsaved changes: ${_database.lastWriteError}',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
           if (_session.hasActivePosition)
             Row(
               children: [

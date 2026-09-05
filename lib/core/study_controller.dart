@@ -43,6 +43,8 @@ class StudyController extends ChangeNotifier
   TreePath get path => _path;
 
   bool _dirty = false;
+  int _editRevision = 0;
+  Future<bool> _saveTail = Future.value(true);
   bool get dirty => _dirty;
 
   bool flipped = false;
@@ -85,7 +87,7 @@ class StudyController extends ChangeNotifier
       throw ArgumentError('A study named "$name" already exists');
     }
     _docGeneration++; // supersede any in-flight openStudy
-    await flushSave();
+    if (!await flushSave()) return;
     final fresh = StudyDocument.fresh(name)..filePath = path;
     final content = fresh.toPgn();
     await storage.writeFile(path, content, createOnly: true);
@@ -106,7 +108,7 @@ class StudyController extends ChangeNotifier
   /// on the way in.  [name] is sanitised and, if taken, suffixed.
   Future<String> createStudyFromPgn(String name, String pgn) async {
     _docGeneration++; // supersede any in-flight openStudy
-    await flushSave();
+    if (!await flushSave()) throw StateError(saveError ?? 'Study not saved');
     final reserved = await reserveStudyPath(name);
     await StorageFactory.instance.writeFile(
       reserved.path,
@@ -141,7 +143,7 @@ class StudyController extends ChangeNotifier
     if (_doc.filePath == path) {
       _doc.chapters.add(chapter);
       _markDirty();
-      await flushSave();
+      if (!await flushSave()) throw StateError(saveError ?? 'Study not saved');
     } else {
       final storage = StorageFactory.instance;
       final existed = await storage.fileExists(path);
@@ -161,7 +163,7 @@ class StudyController extends ChangeNotifier
 
   Future<void> openStudy(String path) async {
     final generation = ++_docGeneration;
-    await flushSave();
+    if (!await flushSave()) return;
     final content = await StorageFactory.instance.readFile(path);
     if (generation != _docGeneration) return; // superseded by a newer open
     final name = p.basenameWithoutExtension(path);
@@ -210,7 +212,7 @@ class StudyController extends ChangeNotifier
     if (await storage.fileExists(newPath)) {
       throw ArgumentError('A study named "$newName" already exists');
     }
-    await flushSave();
+    if (!await flushSave()) return;
     await storage.renameFile(oldPath, newPath);
     _doc.filePath = newPath;
     _doc.name = newName;
@@ -232,20 +234,31 @@ class StudyController extends ChangeNotifier
   }
 
   /// Whole-file atomic rewrite (storage layer writes tmp + rename).
-  Future<void> _save() async {
-    final path = _doc.filePath;
-    if (path == null) return;
+  Future<bool> _save() {
+    final next = _saveTail.then((_) => _saveCurrent());
+    _saveTail = next;
+    return next;
+  }
+
+  Future<bool> _saveCurrent() async {
+    final document = _doc;
+    final revision = _editRevision;
+    final path = document.filePath;
+    if (path == null) return !_dirty;
     try {
-      final content = _doc.toPgn();
+      final content = document.toPgn();
       await StorageFactory.instance.writeFile(
         path,
         content,
         createOnly: _persistedContent == null,
         expectedContent: _persistedContent,
       );
+      if (!identical(_doc, document)) return true;
       _persistedContent = content;
-      _dirty = false;
+      _dirty = _editRevision != revision;
       saveError = null;
+      notifyListeners();
+      return true;
     } on AtomicWriteConflict {
       saveError =
           'Study not saved because its file changed on disk. The newer disk '
@@ -257,18 +270,37 @@ class StudyController extends ChangeNotifier
       log.e('Error saving study: $e');
       notifyListeners();
     }
+    try {
+      final recovery =
+          'recovery/study-${DateTime.now().microsecondsSinceEpoch}.pgn';
+      await StorageFactory.instance.writeFile(
+        recovery,
+        document.toPgn(),
+        createOnly: true,
+      );
+      saveError = '$saveError A recovery copy was saved to $recovery.';
+    } catch (_) {
+      // The open document remains dirty when even a recovery write fails.
+    }
+    notifyListeners();
+    return false;
   }
 
   /// Persist any pending changes now (mode switch, dispose, file switch).
-  Future<void> flushSave() async {
+  Future<bool> flushSave() async {
     _autoSaveTimer?.cancel();
-    if (_dirty) await _save();
+    await _saveTail;
+    while (_dirty) {
+      if (!await _save()) return false;
+    }
+    return true;
   }
 
   void _markDirty() {
+    _editRevision++;
     _dirty = true;
     _autoSaveTimer?.cancel();
-    _autoSaveTimer = Timer(_autoSaveDelay, _save);
+    _autoSaveTimer = Timer(_autoSaveDelay, () => unawaited(_save()));
     notifyListeners();
   }
 
@@ -333,7 +365,7 @@ class StudyController extends ChangeNotifier
       _chapterIndex = firstNewIndex;
       _path = TreePath.empty;
       _markDirty();
-      await flushSave();
+      if (!await flushSave()) throw StateError(saveError ?? 'Study not saved');
     }
     return added;
   }

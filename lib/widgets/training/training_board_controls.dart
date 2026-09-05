@@ -1,18 +1,15 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-
-import '../../utils/app_shortcuts.dart';
-
-import '../shortcut_tooltip.dart';
 
 import '../../core/repertoire_controller.dart';
 import '../../models/repertoire_line.dart';
 import '../../services/training/training_phase.dart';
 import '../../services/training/training_session_controller.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
+import '../../utils/app_shortcuts.dart';
 import '../../utils/pgn_comment_utils.dart' show filterDisplayComment;
 import '../chess_board_widget.dart';
+import '../shortcut_tooltip.dart';
 import 'move_input_widget.dart';
 
 /// Chess board area for the trainer.
@@ -250,10 +247,7 @@ class _MoveLine extends StatelessWidget {
     final comment = display.comment == null
         ? ''
         : filterDisplayComment(display.comment!);
-    final sideLabel = display.isWhiteMove ? "White's" : "Black's";
-    final headerText = isOpponent
-        ? '$sideLabel move ${display.notation}'
-        : 'Your move ${display.notation}';
+    final headerText = isOpponent ? display.moveLabel : display.yourMoveLabel;
     final headerColor = isOpponent
         ? theme.colorScheme.onSurfaceVariant
         : theme.colorScheme.primary;
@@ -266,7 +260,6 @@ class _MoveLine extends StatelessWidget {
           style: theme.textTheme.titleSmall?.copyWith(
             color: headerColor,
             fontWeight: FontWeight.w700,
-            fontSize: 14,
           ),
         ),
         if (showComment && comment.isNotEmpty) ...[
@@ -285,158 +278,32 @@ class _MoveLine extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// MOVE PAIR CARD — wraps opponent + user move in one styled container
+// MOVE PAIR CARD — one stable container for a move pair in every phase:
+// opponent context on top, your move (or the "Your move" prompt) below.
+// Layout stays put between states so nothing jumps around, and the learn
+// walkthrough and the drill that follows it look like the same thing.
 // ---------------------------------------------------------------------------
 
 class _MovePairCard extends StatelessWidget {
   final MoveDisplayInfo? opponent;
   final MoveDisplayInfo? user;
+
+  /// Off while the learn walkthrough is quizzing: the note on the reply you
+  /// just read can give the answer away.
   final bool showOpponentComment;
+
+  /// Show the "Your move" row in the user slot instead of a move.
+  final bool showPrompt;
+
+  /// Right-aligned extra on the prompt row (the drill's difficulty chip).
+  final Widget? promptTrailing;
 
   const _MovePairCard({
     this.opponent,
     this.user,
     this.showOpponentComment = true,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (opponent != null) ...[
-            _MoveLine(display: opponent!, showComment: showOpponentComment),
-          ],
-          if (opponent != null && user != null) ...[
-            Divider(
-              height: 20,
-              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
-            ),
-          ],
-          if (user != null) ...[_MoveLine(display: user!)],
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// NEXT BUTTON (shared between learn and drill)
-// ---------------------------------------------------------------------------
-
-class _NextButton extends StatefulWidget {
-  final VoidCallback onPressed;
-
-  const _NextButton({required this.onPressed});
-
-  @override
-  State<_NextButton> createState() => _NextButtonState();
-}
-
-class _NextButtonState extends State<_NextButton>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _pulseController;
-  late final Animation<double> _pulseAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    );
-    unawaited(_pulseController.repeat(reverse: true));
-    _pulseAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return AnimatedBuilder(
-      animation: _pulseAnimation,
-      child: ShortcutTooltip(
-        description: 'Next',
-        shortcut: AppShortcut.toggleSolution,
-        child: FilledButton.icon(
-          onPressed: widget.onPressed,
-          // Self-focus so Space activates "Next" no matter where focus was.
-          autofocus: true,
-          icon: const Icon(Icons.arrow_forward, size: 20),
-          label: const Text(
-            'Next',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-          ),
-          style: FilledButton.styleFrom(
-            minimumSize: const Size.fromHeight(44),
-            padding: const EdgeInsets.symmetric(vertical: 12),
-          ),
-        ),
-      ),
-      builder: (context, child) {
-        final glow = _pulseAnimation.value * 0.5;
-        return SizedBox(
-          width: double.infinity,
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: theme.colorScheme.primary.withValues(
-                    alpha: 0.25 + glow * 0.3,
-                  ),
-                  blurRadius: 8 + glow * 8,
-                  spreadRadius: glow * 3,
-                ),
-              ],
-            ),
-            child: child,
-          ),
-        );
-      },
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// DRILL PAIR CARD — one stable container for the whole answer cycle:
-// opponent context on top, user slot below (prompt row → played move).
-// Layout stays put between states so nothing jumps around.
-// ---------------------------------------------------------------------------
-
-class _DrillPairCard extends StatelessWidget {
-  final MoveDisplayInfo? opponent;
-  final MoveDisplayInfo? user;
-  final bool showPrompt;
-  final int currentMoveIndex;
-  final RepertoireLine? currentLine;
-  final double Function(RepertoireLine, int)? moveDifficulty;
-
-  const _DrillPairCard({
-    this.opponent,
-    this.user,
-    required this.showPrompt,
-    required this.currentMoveIndex,
-    this.currentLine,
-    this.moveDifficulty,
+    this.showPrompt = false,
+    this.promptTrailing,
   });
 
   @override
@@ -456,7 +323,8 @@ class _DrillPairCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (opponent != null) _MoveLine(display: opponent!),
+          if (opponent != null)
+            _MoveLine(display: opponent!, showComment: showOpponentComment),
           if (opponent != null && hasUserRow)
             Divider(
               height: 20,
@@ -478,16 +346,10 @@ class _DrillPairCard extends StatelessWidget {
                   style: theme.textTheme.titleSmall?.copyWith(
                     color: theme.colorScheme.primary,
                     fontWeight: FontWeight.w700,
-                    fontSize: 14,
                   ),
                 ),
                 const Spacer(),
-                if (currentLine != null &&
-                    moveDifficulty != null &&
-                    currentMoveIndex < currentLine!.moves.length)
-                  TrainingMoveDifficultyChip(
-                    difficulty: moveDifficulty!(currentLine!, currentMoveIndex),
-                  ),
+                ?promptTrailing,
               ],
             ),
         ],
@@ -496,8 +358,62 @@ class _DrillPairCard extends StatelessWidget {
   }
 }
 
+/// Fixed-height line above the card: the verdict fades in and out without
+/// shifting the card below.
+class _FeedbackSlot extends StatelessWidget {
+  final String? feedback;
+
+  const _FeedbackSlot({this.feedback});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = feedback;
+    return SizedBox(
+      height: 28,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 150),
+          child: text == null || text.isEmpty
+              ? const SizedBox.shrink()
+              : TrainingFeedbackText(key: ValueKey(text), feedback: text),
+        ),
+      ),
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
-// LEARN PHASE CONTENT (Chessable-style pairs)
+// NEXT BUTTON — the learn walkthrough's one gate
+// ---------------------------------------------------------------------------
+
+class _NextButton extends StatelessWidget {
+  final VoidCallback onPressed;
+
+  const _NextButton({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: ShortcutTooltip(
+        description: 'Next',
+        shortcut: AppShortcut.toggleSolution,
+        child: FilledButton.icon(
+          onPressed: onPressed,
+          // Self-focus so Space activates "Next" no matter where focus was.
+          autofocus: true,
+          icon: const Icon(Icons.arrow_forward, size: 18),
+          label: const Text('Next'),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// LEARN PHASE CONTENT — the walkthrough card, with Next when it is waiting
 // ---------------------------------------------------------------------------
 
 class _LearnContent extends StatelessWidget {
@@ -523,80 +439,42 @@ class _LearnContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    if (learnQuizzing) {
-      return SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Show opponent context above the quiz prompt
-            if (currentPairOpponent != null) ...[
-              _MovePairCard(
-                opponent: currentPairOpponent,
-                showOpponentComment: false,
-              ),
-              const SizedBox(height: 12),
-            ],
-            Text(
-              feedback ?? 'Your move',
-              style: theme.textTheme.titleSmall?.copyWith(
-                color: feedback != null && feedback!.startsWith('Wrong')
-                    ? theme.colorScheme.error
-                    : feedback == 'Correct!'
-                    ? AppColors.success
-                    : null,
-              ),
-            ),
-          ],
-        ),
-      );
+    if (!learnQuizzing &&
+        currentPairOpponent == null &&
+        currentPairUser == null) {
+      return const SizedBox.shrink();
     }
+    final onNext = learnWaitingForAck
+        ? onLearnAcknowledged
+        : opponentWaitingForAck
+        ? onOpponentAcknowledged
+        : null;
 
-    // Opponent move with comment → waiting for Next
-    if (opponentWaitingForAck && currentPairOpponent != null) {
-      return SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _MovePairCard(opponent: currentPairOpponent),
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _FeedbackSlot(feedback: feedback),
+          _MovePairCard(
+            opponent: currentPairOpponent,
+            // While quizzing, your move is the answer: hide it, and the note
+            // on the reply that could give it away.
+            user: learnQuizzing ? null : currentPairUser,
+            showOpponentComment: !learnQuizzing,
+            showPrompt: learnQuizzing,
+          ),
+          if (onNext != null) ...[
             const SizedBox(height: 12),
-            _NextButton(onPressed: onOpponentAcknowledged),
+            _NextButton(onPressed: onNext),
           ],
-        ),
-      );
-    }
-
-    // User's move shown, waiting for learn-ack
-    if (learnWaitingForAck && currentPairUser != null) {
-      return SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _MovePairCard(opponent: currentPairOpponent, user: currentPairUser),
-            const SizedBox(height: 12),
-            _NextButton(onPressed: onLearnAcknowledged),
-          ],
-        ),
-      );
-    }
-
-    // Showing a move (opponent or user) briefly before auto-advancing
-    if (currentPairOpponent != null || currentPairUser != null) {
-      return SingleChildScrollView(
-        child: _MovePairCard(
-          opponent: currentPairOpponent,
-          user: currentPairUser,
-        ),
-      );
-    }
-
-    return const SizedBox.shrink();
+        ],
+      ),
+    );
   }
 }
 
 // ---------------------------------------------------------------------------
-// DRILL PHASE CONTENT (Chessable-style pairs)
+// DRILL PHASE CONTENT
 // ---------------------------------------------------------------------------
 
 class _DrillContent extends StatelessWidget {
@@ -632,34 +510,24 @@ class _DrillContent extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
+    final line = currentLine;
+    final chip =
+        showPrompt && line != null && currentMoveIndex < line.moves.length
+        ? TrainingMoveDifficultyChip(
+            difficulty: moveDifficulty(line, currentMoveIndex),
+          )
+        : null;
+
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Fixed-height slot: feedback fades in and out without shifting
-          // the card below.
-          SizedBox(
-            height: 28,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 150),
-                child: (feedback == null || feedback!.isEmpty)
-                    ? const SizedBox.shrink()
-                    : TrainingFeedbackText(
-                        key: ValueKey(feedback),
-                        feedback: feedback!,
-                      ),
-              ),
-            ),
-          ),
-          _DrillPairCard(
+          _FeedbackSlot(feedback: feedback),
+          _MovePairCard(
             opponent: currentPairOpponent,
             user: currentPairUser,
             showPrompt: showPrompt,
-            currentMoveIndex: currentMoveIndex,
-            currentLine: currentLine,
-            moveDifficulty: moveDifficulty,
+            promptTrailing: chip,
           ),
         ],
       ),
@@ -770,6 +638,6 @@ class TrainingMoveDifficultyChip extends StatelessWidget {
       color = theme.colorScheme.onSurfaceVariant;
     }
 
-    return Text(label, style: TextStyle(color: color, fontSize: 12));
+    return Text(label, style: AppTextStyles.caption.copyWith(color: color));
   }
 }

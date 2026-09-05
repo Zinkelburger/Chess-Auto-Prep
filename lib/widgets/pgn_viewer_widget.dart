@@ -253,8 +253,10 @@ class PgnViewerWidget extends StatefulWidget {
   final ValueChanged<String>? onCommentsChanged;
   final bool editMode;
 
-  /// Open annotated course PGNs as a calm, one-note-at-a-time reader. The
-  /// complete movetext remains one click away.
+  /// Annotated course PGNs get a fixed-height note panel under the movetext
+  /// that shows the note for the position on screen — the whole chapter
+  /// stays visible above it, the note for *this* move is always in the same
+  /// place below it.
   final bool preferFocusedReading;
 
   /// Mainline ply restored by a collection host when this game was visited
@@ -366,7 +368,6 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
   /// (entering solitaire) without re-parsing anything.
   String _gameInfo = '';
   String _gameInfoNoResult = '';
-  late bool _focusedReading = widget.preferFocusedReading;
 
   String get _headerText => widget.hideResult ? _gameInfoNoResult : _gameInfo;
   bool _isLoading = true;
@@ -445,9 +446,6 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
       // its scores and lines back) is adopted where the reader is; anything
       // else is a different game and starts over.
       if (gameIdChanged || !_adoptAnnotations(widget.pgnText)) {
-        if (widget.preferFocusedReading != oldWidget.preferFocusedReading) {
-          _focusedReading = widget.preferFocusedReading;
-        }
         unawaited(_loadGame());
       }
     } else if (widget.moveNumber != oldWidget.moveNumber ||
@@ -663,7 +661,10 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
     if (_moveHistory.isEmpty) return '';
     final chunks = <String>[];
     if (_mainLineIndex == 0) {
-      chunks.addAll(_moveHistory.first.startingComments ?? const []);
+      // A chapter's introduction is a game-level comment, before any move.
+      chunks
+        ..addAll(_game?.comments ?? const [])
+        ..addAll(_moveHistory.first.startingComments ?? const []);
     } else {
       final move = _moveHistory[_mainLineIndex - 1];
       chunks
@@ -689,8 +690,10 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
   /// prose (`against1.e4and`, `5...Be7`). Repair that only for display; the
   /// PGN bytes and comment editor remain untouched.
   static String _normalizeCourseSpacing(String text) {
+    // Only a number that a move follows is a move number: "at c3." ends a
+    // sentence with a square, and must not become "c 3.".
     var result = text.replaceAllMapped(
-      RegExp(r'([A-Za-z,;:!?])(\d+\.{1,3})'),
+      RegExp(r'([A-Za-z,;:!?])(\d+\.{1,3})(?=[KQRBNOa-h])'),
       (m) => '${m[1]} ${m[2]}',
     );
     final numberedSan = RegExp(
@@ -704,54 +707,14 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
     return result.replaceAll(RegExp(r'[ \t]+'), ' ').trim();
   }
 
-  Widget _buildReaderModeSwitch() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-      color: AppColors.surfaceElevated,
-      child: Row(
-        children: [
-          const Icon(Icons.menu_book_outlined, size: 17, color: AppColors.info),
-          const SizedBox(width: 7),
-          const Text(
-            'Reading view',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-          ),
-          const Spacer(),
-          SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment(
-                value: true,
-                icon: Icon(Icons.chrome_reader_mode_outlined, size: 16),
-                label: Text('Focus'),
-              ),
-              ButtonSegment(
-                value: false,
-                icon: Icon(Icons.account_tree_outlined, size: 16),
-                label: Text('Full notation'),
-              ),
-            ],
-            selected: {_focusedReading},
-            onSelectionChanged: (selection) {
-              setState(() => _focusedReading = selection.first);
-            },
-            showSelectedIcon: false,
-            style: const ButtonStyle(
-              visualDensity: VisualDensity.compact,
-              textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 12)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFocusedReader() {
+  /// The note for the position on screen, in a panel whose height never
+  /// depends on what is in it. Course chapters are read one note at a time,
+  /// so the eye must find the next note where it found the last one: the
+  /// panel's height, the label row and the type size are all fixed, and a
+  /// long note scrolls inside the panel instead of growing it.
+  Widget _buildReadingPane(double height) {
     final atStart = _mainLineIndex == 0;
-    final atEnd = _mainLineIndex >= _moveHistory.length;
     final current = atStart ? null : _moveHistory[_mainLineIndex - 1];
-    final previous = _mainLineIndex >= 2
-        ? _moveHistory[_mainLineIndex - 2]
-        : null;
     final coords = current == null
         ? null
         : coordsAtPly(
@@ -759,139 +722,110 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
             startFullmoves: _startPosition.fullmoves,
             startWhiteToMove: _startPosition.turn == Side.white,
           );
-    final previousCoords = previous == null
-        ? null
-        : coordsAtPly(
-            ply: _mainLineIndex - 2,
-            startFullmoves: _startPosition.fullmoves,
-            startWhiteToMove: _startPosition.turn == Side.white,
-          );
     final comment = _focusComment();
-
-    String moveLabel(PgnNodeData move, ({int moveNumber, bool isWhite}) c) =>
-        isNullMoveSan(move.san)
+    final label = current == null || coords == null
+        ? 'Start'
+        : isNullMoveSan(current.san)
         ? 'Introduction'
-        : '${c.moveNumber}${c.isWhite ? '.' : '...'} ${move.san}';
+        : '${coords.moveNumber}${coords.isWhite ? '.' : '...'} ${current.san}';
 
-    return ColoredBox(
-      color: AppColors.pgnSurface,
+    return Container(
+      height: height,
+      decoration: const BoxDecoration(
+        color: AppColors.pgnCommentBlockBg,
+        border: Border(top: BorderSide(color: AppColors.divider)),
+      ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: SingleChildScrollView(
-              key: ValueKey('focused-reader-$_mainLineIndex'),
-              padding: const EdgeInsets.fromLTRB(24, 22, 24, 18),
-              child: Center(
-                child: ConstrainedBox(
-                  // A book-like measure: roughly 60–75 characters for the
-                  // bundled Inter face at 16px, instead of spanning the pane.
-                  constraints: const BoxConstraints(maxWidth: 560),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          if (previous != null && previousCoords != null)
-                            Expanded(
-                              child: Text(
-                                'Previous  ${moveLabel(previous, previousCoords)}',
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontFamily: AppTextStyles.monoFamily,
-                                  fontSize: 12,
-                                  color: AppColors.onSurfaceMuted,
-                                ),
-                              ),
-                            )
-                          else
-                            const Spacer(),
-                          Text(
-                            '$_mainLineIndex / ${_moveHistory.length}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.onSurfaceMuted,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      if (current != null && coords != null)
-                        Text(
-                          moveLabel(current, coords),
-                          style: const TextStyle(
-                            fontFamily: AppTextStyles.monoFamily,
-                            fontSize: 22,
-                            height: 1.25,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.pgnMoveCurrentFg,
-                          ),
-                        )
-                      else
-                        const Text(
-                          'Before the first move',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      const SizedBox(height: 14),
-                      Container(
-                        padding: const EdgeInsets.fromLTRB(18, 17, 18, 18),
-                        decoration: BoxDecoration(
-                          color: AppColors.pgnCommentBlockBg,
-                          borderRadius: BorderRadius.circular(10),
-                          border: const Border(
-                            left: BorderSide(color: AppColors.accent, width: 4),
-                          ),
-                        ),
-                        child: Text(
-                          comment.isEmpty
-                              ? (atStart
-                                    ? 'Press → to begin this line.'
-                                    : 'No note on this move. Keep stepping through the line.')
-                              : comment,
-                          style: TextStyle(
-                            fontSize: 16,
-                            height: 1.65,
-                            color: comment.isEmpty
-                                ? AppColors.onSurfaceMuted
-                                : AppColors.pgnComment,
-                          ),
-                        ),
-                      ),
-                    ],
+          SizedBox(
+            height: 36,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontFamily: AppTextStyles.monoFamily,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.pgnMoveCurrentFg,
+                    ),
                   ),
-                ),
+                  const Spacer(),
+                  Text(
+                    '$_mainLineIndex / ${_moveHistory.length}',
+                    style: AppTextStyles.muted,
+                  ),
+                ],
               ),
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-            decoration: const BoxDecoration(
-              color: AppColors.surfaceElevated,
-              border: Border(top: BorderSide(color: AppColors.divider)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: atStart ? null : _goBack,
-                  icon: const Icon(Icons.arrow_back, size: 18),
-                  label: const Text('Previous move'),
+          Expanded(
+            // Keyed on the ply so a new note starts at its top instead of
+            // wherever the previous one was scrolled to.
+            child: SingleChildScrollView(
+              key: ValueKey('reading-note-$_mainLineIndex'),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: ConstrainedBox(
+                  // A book-like measure: roughly 60–75 characters for the
+                  // bundled Inter face at 15px, instead of spanning the pane.
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: comment.isEmpty
+                      ? const SizedBox.shrink()
+                      : SelectionArea(
+                          child: Text(
+                            comment,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              height: 1.6,
+                              color: AppColors.pgnComment,
+                            ),
+                          ),
+                        ),
                 ),
-                const SizedBox(width: 12),
-                FilledButton.icon(
-                  onPressed: atEnd ? null : _goForward,
-                  icon: const Icon(Icons.arrow_forward, size: 18),
-                  label: const Text('Next move'),
-                ),
-              ],
+              ),
             ),
           ),
         ],
       ),
     );
   }
+
+  Widget _buildMovetext() => PgnMovetextView(
+    game: _game,
+    moveHistory: _moveHistory,
+    variationsByPly: _variationsByPly,
+    mainLineIndex: _mainLineIndex,
+    currentMoveKey: _currentMoveKey,
+    analysisPath: _analysisPath,
+    editingCommentIndex: _editingCommentIndex,
+    canEditComments: widget.onCommentsChanged != null,
+    bookFormatting: widget.bookFormatting,
+    startingMoveNumber: _startPosition.fullmoves,
+    startingWhiteTurn: _startPosition.turn == Side.white,
+    startPosition: _startPosition,
+    onMainLineMoveClicked: _onMainLineMoveClicked,
+    onShowMoveContextMenu: _showMoveContextMenu,
+    onSaveComment: _saveComment,
+    onCancelEditingComment: _cancelEditingComment,
+    onGoToAnalysisNode: _goToAnalysisNode,
+    onShowVariationContextMenu: _showVariationContextMenu,
+    reveal: _m.reveal,
+    onPlayInlineLine: _playInlineLine,
+    activeInlineLine: _inlineActive
+        ? (
+            firstMoveNumber: _inlineFirstMoveNumber,
+            firstIsWhite: _inlineFirstIsWhite,
+            sans: _inlineSans,
+            cursor: _inlineCursor,
+            anchorFen: _inlineAnchorFen,
+          )
+        : null,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -931,7 +865,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
       return const Center(child: Text('No game loaded'));
     }
 
-    if (!_focusedReading) _scheduleScrollCurrentMoveIntoView();
+    _scheduleScrollCurrentMoveIntoView();
 
     return Column(
       children: [
@@ -940,54 +874,41 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
             padding: const EdgeInsets.all(8),
             child: _buildGameHeader(context),
           ),
-        if (widget.preferFocusedReading) _buildReaderModeSwitch(),
         Expanded(
-          child: _focusedReading
-              ? _buildFocusedReader()
-              : ColoredBox(
-                  // A dedicated ink surface makes the hierarchy in AppColors'
-                  // pgn tokens deterministic wherever this reusable viewer sits.
-                  color: AppColors.pgnSurface,
-                  // SelectionArea lets the user drag-select movetext / comments and
-                  // copy with Ctrl+C; move taps still hit the inner GestureDetectors.
-                  child: SelectionArea(
-                    child: SingleChildScrollView(
-                      controller: _movetextScrollController,
-                      padding: const EdgeInsets.fromLTRB(12, 10, 14, 18),
-                      child: PgnMovetextView(
-                        game: _game,
-                        moveHistory: _moveHistory,
-                        variationsByPly: _variationsByPly,
-                        mainLineIndex: _mainLineIndex,
-                        currentMoveKey: _currentMoveKey,
-                        analysisPath: _analysisPath,
-                        editingCommentIndex: _editingCommentIndex,
-                        canEditComments: widget.onCommentsChanged != null,
-                        bookFormatting: widget.bookFormatting,
-                        startingMoveNumber: _startPosition.fullmoves,
-                        startingWhiteTurn: _startPosition.turn == Side.white,
-                        startPosition: _startPosition,
-                        onMainLineMoveClicked: _onMainLineMoveClicked,
-                        onShowMoveContextMenu: _showMoveContextMenu,
-                        onSaveComment: _saveComment,
-                        onCancelEditingComment: _cancelEditingComment,
-                        onGoToAnalysisNode: _goToAnalysisNode,
-                        onShowVariationContextMenu: _showVariationContextMenu,
-                        reveal: _m.reveal,
-                        onPlayInlineLine: _playInlineLine,
-                        activeInlineLine: _inlineActive
-                            ? (
-                                firstMoveNumber: _inlineFirstMoveNumber,
-                                firstIsWhite: _inlineFirstIsWhite,
-                                sans: _inlineSans,
-                                cursor: _inlineCursor,
-                                anchorFen: _inlineAnchorFen,
-                              )
-                            : null,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // The note panel takes a fixed share of the pane, so its height
+              // is a function of the window, never of the note.
+              final noteHeight = (constraints.maxHeight * 0.38).clamp(
+                140.0,
+                320.0,
+              );
+              return Column(
+                children: [
+                  Expanded(
+                    child: ColoredBox(
+                      // A dedicated ink surface makes the hierarchy in
+                      // AppColors' pgn tokens deterministic wherever this
+                      // reusable viewer sits.
+                      color: AppColors.pgnSurface,
+                      // SelectionArea lets the user drag-select movetext /
+                      // comments and copy with Ctrl+C; move taps still hit the
+                      // inner GestureDetectors.
+                      child: SelectionArea(
+                        child: SingleChildScrollView(
+                          controller: _movetextScrollController,
+                          padding: const EdgeInsets.fromLTRB(12, 10, 14, 18),
+                          child: _buildMovetext(),
+                        ),
                       ),
                     ),
                   ),
-                ),
+                  if (widget.preferFocusedReading)
+                    _buildReadingPane(noteHeight),
+                ],
+              );
+            },
+          ),
         ),
         ?_buildBranchChips(),
         if (_isInVariation)

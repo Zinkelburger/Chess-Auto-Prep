@@ -29,6 +29,7 @@ library;
 import 'dart:io' as io;
 
 import 'package:dartchess/dartchess.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
 
@@ -226,9 +227,21 @@ class BughouseBookStatus {
 
 /// A read-only handle on the book.
 class BughouseBook {
-  BughouseBook._(this._db, this.status);
+  BughouseBook._(this._db, this.status) : _canned = null;
 
-  final Database _db;
+  /// A book that answers from [lookup] instead of a file.
+  ///
+  /// For tests of what sits in front of the book, which should not need
+  /// `libsqlite3` on the machine running them.
+  @visibleForTesting
+  BughouseBook.canned({
+    required this.status,
+    required BughouseBookPosition Function(String fenA, String fenB) lookup,
+  }) : _db = null,
+       _canned = lookup;
+
+  final Database? _db;
+  final BughouseBookPosition Function(String fenA, String fenB)? _canned;
   final BughouseBookStatus status;
 
   /// Opens the book if this machine has one, else null.
@@ -302,12 +315,15 @@ class BughouseBook {
   /// which is why this runs on the UI isolate the way the master-games
   /// explorer does.
   BughouseBookPosition explore(String fenA, String fenB) {
+    final canned = _canned;
+    if (canned != null) return canned(fenA, fenB);
+    final db = _db!;
     final key = bughousePositionKey(fenA, fenB);
-    final node = _db.select(
+    final node = db.select(
       'SELECT games, team_a, team_b, draws, unknown FROM node WHERE pos = ?',
       [key],
     );
-    final rows = _db.select(
+    final rows = db.select(
       'SELECT move, games, team_a, team_b, draws, unknown, elo_sum, elo_n, '
       'max_elo, last_year, top_game FROM edge WHERE pos = ? '
       'ORDER BY games DESC',
@@ -355,5 +371,5 @@ class BughouseBook {
     );
   }
 
-  void close() => _db.close();
+  void close() => _db?.close();
 }

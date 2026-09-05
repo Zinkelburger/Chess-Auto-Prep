@@ -9,6 +9,7 @@
 /// Pure / synchronous — fully unit-testable.
 library;
 
+import '../game_identity.dart';
 import '../pgn_parsing_service.dart' show splitPgnIntoGames, extractHeaders;
 
 /// Lichess-style speed bucket, derived from the TimeControl header.
@@ -76,7 +77,7 @@ class GameRecord {
       headers: headers,
       date: _parseDate(headers),
       speed: classifySpeed(headers['TimeControl']),
-      dedupKey: _dedupKey(headers),
+      dedupKey: dedupKeyForHeaders(headers, pgn: singleGamePgn),
     );
   }
 
@@ -105,24 +106,14 @@ class GameRecord {
       return null;
     }
   }
-
-  static String _dedupKey(Map<String, String> h) => dedupKeyForHeaders(h);
 }
 
 /// Stable game identity from PGN headers: the game URL when present, else
 /// players + date + time. Public so consumers holding headers from another
 /// parser (e.g. the PGN viewer locating a `gameId` handoff target) compute
 /// the same identity the library's [GameRecord.dedupKey] uses.
-String dedupKeyForHeaders(Map<String, String> h) {
-  final link = h['Link'] ?? h['Site'];
-  if (link != null && link.contains('://')) return link.trim();
-  return [
-    h['White'] ?? '',
-    h['Black'] ?? '',
-    h['UTCDate'] ?? h['Date'] ?? '',
-    h['UTCTime'] ?? h['Time'] ?? '',
-  ].join('|');
-}
+String dedupKeyForHeaders(Map<String, String> h, {String pgn = ''}) =>
+    canonicalGameKey(h, pgn, preferHeaderId: false);
 
 /// Merge a freshly downloaded multi-game PGN into an existing cache file's
 /// content, preserving the existing games' text *verbatim* — they may carry
@@ -142,11 +133,12 @@ String mergeGamePgns({
 }) {
   final existingChunks = splitPgnIntoGames(existing);
   final seen = existingChunks
-      .map((c) => dedupKeyForHeaders(extractHeaders(c)))
+      .map((c) => dedupKeyForHeaders(extractHeaders(c), pgn: c))
       .toSet();
   final newGames = <String>[
     for (final chunk in splitPgnIntoGames(fresh))
-      if (seen.add(dedupKeyForHeaders(extractHeaders(chunk)))) chunk.trim(),
+      if (seen.add(dedupKeyForHeaders(extractHeaders(chunk), pgn: chunk)))
+        chunk.trim(),
   ];
 
   final merged = <String>[
@@ -168,7 +160,8 @@ String mergeGamePgns({
   final keep = byAge.take(maxGames).map((r) => r.dedupKey).toSet();
   return [
     for (final record in records)
-      if (keep.contains(record.dedupKey)) record.pgn.trim(),
+      if (keep.contains(record.dedupKey) || _hasAnnotations(record.pgn))
+        record.pgn.trim(),
   ].join('\n\n');
 }
 
@@ -252,4 +245,46 @@ void _sortNewestFirst(List<GameRecord> records) {
     if (db == null) return -1;
     return db.compareTo(da);
   });
+}
+
+/// Comments, variations, NAGs and custom tags may be user-authored. Keep them
+/// even beyond the download window; they are not reproducible cache entries.
+bool _hasAnnotations(String pgn) {
+  if (RegExp(
+    r'[{}();]|\$[0-9]+|[!?]',
+  ).hasMatch(pgn.replaceAll(RegExp(r'\[[^\n]*\]'), ''))) {
+    return true;
+  }
+  final headers = extractHeaders(pgn);
+  const downloadTags = {
+    'Event',
+    'Site',
+    'Date',
+    'Round',
+    'White',
+    'Black',
+    'Result',
+    'UTCDate',
+    'UTCTime',
+    'Time',
+    'WhiteElo',
+    'BlackElo',
+    'ECO',
+    'Opening',
+    'Variation',
+    'TimeControl',
+    'Termination',
+    'Link',
+    'GameId',
+    'EndDate',
+    'EndTime',
+    'StartTime',
+    'Timezone',
+    'WhiteUrl',
+    'BlackUrl',
+    'CurrentPosition',
+    'FEN',
+    'SetUp',
+  };
+  return headers.keys.any((key) => !downloadTags.contains(key));
 }

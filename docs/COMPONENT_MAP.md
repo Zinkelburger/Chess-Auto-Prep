@@ -729,18 +729,20 @@ Viewer with a game index, so the viewer's own Prev/Next then walks the match.
 
 ### `lib/features/master_games/`
 
-The window onto the local TWIC corpus, which until now only the generator could
-read. Two views of the same two million games: a filtered database search, and
-**In my repertoire** — the games that walked into one of your designated books,
-ranked by how deep they got. Playing through them is not reimplemented: any
-selection is written out as an ordinary PGN collection and handed to the Games
-viewer, which leaves the user with a file they can open anywhere else too.
+Your own games against the local TWIC corpus. The database's `book` table
+answers "what did masters play from this position" for the first fifteen
+moves, so walking one of your games through it finds the first move masters
+never played — who left theory, where, what masters play there instead, and
+the strongest and most recent games that did. Branch points are grouped like
+the opening review, so the one you keep walking into rises to the top. Master
+games are opened in the Games viewer by writing them to an ordinary PGN
+collection, so playing through them is not reimplemented.
 
 | File | Purpose |
 |------|---------|
-| **services/twic_repertoire_scan.dart** | Walks master games against the designated White and Black books with the same `GameDeviationService` the Games page uses on your own games. A master game has no "me", so both books are tried and the deeper agreement wins; separates *tested your choice* (left at a move you cover) from *ran past your prep* (the book simply ends) |
-| **controllers/master_games_browser_controller.dart** | Query, paging, mode, selection, the scan, and writing the visible games out as a PGN collection. Changing the filters drops a stale scan rather than showing it against a different set of games |
-| **widgets/master_games_browser.dart** | The browser dialog: filter bar (player, pairing, ECO, event, Elo floor, classical-OTB-only), results list, detail pane, and the hand-off to the Games viewer. Opened from the master-games settings panel and from the Openings block on the home column |
+| **services/master_practice_review.dart** | The walk: one report per game (branch position, first unseen move, who played it, the masters' alternatives, the last agreed book row), grouped into entries by position + move with the key games attached — the strongest game per master move and the latest game of the most popular one |
+| **controllers/master_practice_controller.dart** | Runs the review over the home column's window, holds the selection, and writes an entry's key games out as `master-practice.pgn` for the viewer |
+| **widgets/master_practice_dialog.dart** | The dialog: sections for *you left first*, *your opponents left first* and *stayed in master practice*, a detail pane with the branch position (played move and the masters' moves drawn on it), the moves table with counts and scores, the games to open, and your own games at that point. Opened from the Openings block on the home column |
 
 ### `lib/features/holes/`
 
@@ -1087,9 +1089,8 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `test/features/traps/trap_index_service_test.dart` | FEN index, line traps |
 | `test/features/traps/trap_navigation_buttons_test.dart` | Trap jump UI |
 | `test/features/traps/trap_walkthrough_test.dart` | Walkthrough navigation |
-| `test/features/master_games/twic_repertoire_scan_test.dart` | TWIC games vs the designated books: tested-vs-past-prep, both colours, ranking, cancellation |
-| `test/features/master_games/master_games_browser_controller_test.dart` | Search, filtering, the repertoire view, stale-scan invalidation, PGN export |
-| `test/features/master_games/master_games_browser_test.dart` | The browser UI against a real database: rows, filtering, selection, the repertoire verdicts, narrow-window layout |
+| `test/features/master_games/master_practice_review_test.dart` | Your games vs the master book: who left first, book depth, grouping by branch point, key games, cancellation |
+| `test/features/master_games/master_practice_dialog_test.dart` | The dialog against a real database: sections, the detail pane's moves and games, the hand-offs to the viewer, narrow-window layout |
 | `test/services/master_games/master_games_query_test.dart` | Browse filters, as clauses and against a real database |
 | `test/services/eval/lichess_eval_line_test.dart` | Lichess JSONL parsing: deepest eval, White-relative signs, move packing |
 | `test/services/eval/lichess_eval_store_test.dart` | Import, sort, dedupe, resume, and lookup of the Lichess store |

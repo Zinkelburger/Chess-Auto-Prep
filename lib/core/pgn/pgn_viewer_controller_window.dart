@@ -17,6 +17,7 @@ mixin _WindowOps on ChangeNotifier {
   abstract Perspective perspective;
   abstract bool boardFlipped;
   Future<void> persistMetadata();
+  void rememberPersistedGame(PgnGameEntry game);
 
   bool isFullScreen = false;
 
@@ -66,6 +67,7 @@ mixin _WindowOps on ChangeNotifier {
   Future<void> persistPerspective() async {
     if (allGames.isEmpty) return;
     final first = allGames.first;
+    rememberPersistedGame(first);
     final value = perspective.toHeaderValue();
     first.headers['StudyPerspective'] = value;
 

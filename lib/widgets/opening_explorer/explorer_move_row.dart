@@ -1,11 +1,17 @@
-/// Rows of the live opening explorer table.
+/// Rows of an opening-explorer table, whatever the games came from.
 ///
 /// Layout mirrors the Lichess explorer: SAN on the left, then the number of
-/// games with the move's share of the position beside it, then a
-/// white/grey/black result bar carrying its own percentages. Clicking a row
-/// plays the move on the board — exactly what making the move on the board
-/// would do. Hovering echoes the move as an arrow through [onHover]; the
-/// right-click menu carries the rarer "add to repertoire" shortcut.
+/// games with the move's share of the position beside it, then a result bar
+/// carrying its own percentages. Clicking a row plays the move on the board —
+/// exactly what making the move on the board would do. Hovering echoes the
+/// move as an arrow through [ExplorerMoveRow.onHover]; the right-click menu
+/// carries the rarer "add to repertoire" shortcut.
+///
+/// The live Lichess panel and the bughouse FICS book both draw their tables
+/// out of these three widgets, so the two explorers in the app are one table
+/// with two data sources rather than two tables that drift apart. The counts
+/// are plain integers here for that reason: neither source's model is the
+/// other's.
 ///
 /// Every row is the same fixed height, and hovering changes only the row's
 /// tint — never its size — so the list holds still under the pointer.
@@ -38,17 +44,77 @@ String formatExplorerCount(int n) {
   return '$n';
 }
 
+/// A move's share of the position, as the share column prints it.
+///
+/// Rounds, but never to `0%`: a move in the table was played, and a zero
+/// beside a four-figure game count reads as a broken column rather than as a
+/// rare line.
+String formatExplorerShare(double fraction) {
+  final percent = fraction * 100;
+  if (percent > 0 && percent < 0.5) return '<1%';
+  return '${percent.round()}%';
+}
+
 class ExplorerMoveRow extends StatefulWidget {
   const ExplorerMoveRow({
     super.key,
-    required this.move,
+    required this.san,
+    this.seat,
+    required this.games,
+    required this.wins,
+    required this.draws,
+    required this.losses,
+    required this.playFraction,
+    this.perspective = WdlPerspective.whiteBlack,
+    this.tooltip,
     required this.onPlay,
     this.onAdd,
     this.onHover,
     this.inRepertoire = false,
   });
 
-  final ExplorerMove move;
+  /// A row for a move the Lichess explorer reported.
+  ExplorerMoveRow.lichess({
+    super.key,
+    required ExplorerMove move,
+    required this.onPlay,
+    this.onAdd,
+    this.onHover,
+    this.inRepertoire = false,
+  }) : san = move.san,
+       seat = null,
+       games = move.total,
+       wins = move.white,
+       draws = move.draws,
+       losses = move.black,
+       playFraction = move.playFraction,
+       perspective = WdlPerspective.whiteBlack,
+       tooltip = null;
+
+  final String san;
+
+  /// Who played it, when that is not obvious from the board — the seat letter
+  /// in bughouse, where four people move. Printed muted before the SAN.
+  final String? seat;
+
+  /// Games in which the move was played: the count column. May exceed
+  /// [wins] + [draws] + [losses] when some of those games never finished.
+  final int games;
+
+  /// The result split the bar is drawn from, read from whoever
+  /// [perspective] says the protagonist is.
+  final int wins;
+  final int draws;
+  final int losses;
+
+  /// The move's share of every game from the position, in `[0, 1]`.
+  final double playFraction;
+
+  final WdlPerspective perspective;
+
+  /// One line shown on hover, the way Lichess titles its bar with the average
+  /// rating. Null for no tooltip.
+  final String? tooltip;
 
   /// Play the move on the board (row click).
   final VoidCallback onPlay;
@@ -104,8 +170,8 @@ class _ExplorerMoveRowState extends State<ExplorerMoveRow> {
           height: 36,
           child: Text(
             widget.inRepertoire
-                ? '${widget.move.san} is already in the repertoire'
-                : 'Add ${widget.move.san} to repertoire',
+                ? '${widget.san} is already in the repertoire'
+                : 'Add ${widget.san} to repertoire',
             style: const TextStyle(fontSize: 12),
           ),
         ),
@@ -117,7 +183,105 @@ class _ExplorerMoveRowState extends State<ExplorerMoveRow> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final move = widget.move;
+    final fraction = widget.playFraction.clamp(0.0, 1.0);
+
+    Widget row = Container(
+      height: ExplorerColumns.rowHeight,
+      color: _hovered ? theme.colorScheme.surfaceContainerHighest : null,
+      child: DecoratedBox(
+        // Frequency "heat" matching the repertoire tree rows: a heavier
+        // left-anchored wash for more-played moves. Composited over the
+        // hover tint so neither replaces the other.
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            stops: [fraction, fraction],
+            colors: const [AppColors.rowStripe, Colors.transparent],
+          ),
+        ),
+        child: Padding(
+          padding: ExplorerColumns.padding,
+          child: Row(
+            children: [
+              SizedBox(
+                width: ExplorerColumns.san,
+                child: Row(
+                  children: [
+                    if (widget.seat != null)
+                      SizedBox(
+                        width: 14,
+                        child: Text(
+                          widget.seat!,
+                          style: AppTextStyles.monoDense.copyWith(
+                            color: AppColors.onSurfaceMuted,
+                          ),
+                        ),
+                      ),
+                    Flexible(
+                      child: Text(
+                        widget.san,
+                        overflow: TextOverflow.clip,
+                        softWrap: false,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    if (widget.inRepertoire)
+                      const Padding(
+                        padding: EdgeInsets.only(left: 4),
+                        child: Tooltip(
+                          message: 'In repertoire',
+                          child: Icon(
+                            Icons.check,
+                            size: 12,
+                            color: AppColors.onSurfaceMuted,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                width: ExplorerColumns.games,
+                child: Text(
+                  formatExplorerCount(widget.games),
+                  textAlign: TextAlign.right,
+                  style: AppTextStyles.caption,
+                ),
+              ),
+              SizedBox(
+                width: ExplorerColumns.share,
+                child: Text(
+                  formatExplorerShare(widget.playFraction),
+                  textAlign: TextAlign.right,
+                  style: AppTextStyles.caption,
+                ),
+              ),
+              const SizedBox(width: ExplorerColumns.gap),
+              Expanded(
+                child: WinDrawLossBar(
+                  wins: widget.wins,
+                  draws: widget.draws,
+                  losses: widget.losses,
+                  perspective: widget.perspective,
+                  height: ExplorerColumns.barHeight,
+                  showPercentages: true,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (widget.tooltip != null) {
+      row = Tooltip(
+        message: widget.tooltip!,
+        waitDuration: const Duration(milliseconds: 400),
+        child: row,
+      );
+    }
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -129,84 +293,7 @@ class _ExplorerMoveRowState extends State<ExplorerMoveRow> {
         onSecondaryTapUp: widget.onAdd == null
             ? null
             : (d) => _showContextMenu(d.globalPosition),
-        child: Container(
-          height: ExplorerColumns.rowHeight,
-          color: _hovered ? theme.colorScheme.surfaceContainerHighest : null,
-          child: DecoratedBox(
-            // Frequency "heat" matching the repertoire tree rows: a heavier
-            // left-anchored wash for more-played moves. Composited over the
-            // hover tint so neither replaces the other.
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                stops: [
-                  move.playFraction.clamp(0.0, 1.0),
-                  move.playFraction.clamp(0.0, 1.0),
-                ],
-                colors: const [AppColors.rowStripe, Colors.transparent],
-              ),
-            ),
-            child: Padding(
-              padding: ExplorerColumns.padding,
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: ExplorerColumns.san,
-                    child: Row(
-                      children: [
-                        Text(
-                          move.san,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        if (widget.inRepertoire)
-                          const Padding(
-                            padding: EdgeInsets.only(left: 4),
-                            child: Tooltip(
-                              message: 'In repertoire',
-                              child: Icon(
-                                Icons.check,
-                                size: 12,
-                                color: AppColors.onSurfaceMuted,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(
-                    width: ExplorerColumns.games,
-                    child: Text(
-                      formatExplorerCount(move.total),
-                      textAlign: TextAlign.right,
-                      style: AppTextStyles.caption,
-                    ),
-                  ),
-                  SizedBox(
-                    width: ExplorerColumns.share,
-                    child: Text(
-                      '${move.playRate.round()}%',
-                      textAlign: TextAlign.right,
-                      style: AppTextStyles.caption,
-                    ),
-                  ),
-                  const SizedBox(width: ExplorerColumns.gap),
-                  Expanded(
-                    child: WinDrawLossBar(
-                      wins: move.white,
-                      draws: move.draws,
-                      losses: move.black,
-                      perspective: WdlPerspective.whiteBlack,
-                      height: ExplorerColumns.barHeight,
-                      showPercentages: true,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+        child: row,
       ),
     );
   }
@@ -214,7 +301,18 @@ class _ExplorerMoveRowState extends State<ExplorerMoveRow> {
 
 /// Column captions above the move rows.
 class ExplorerTableHeader extends StatelessWidget {
-  const ExplorerTableHeader({super.key});
+  const ExplorerTableHeader({
+    super.key,
+    this.barCaption = 'White / Draw / Black',
+    this.gamesTooltip =
+        'Games in which the move was played, and its share of all '
+        'games from this position',
+  });
+
+  /// What the bar's three segments are — whose wins are on the left.
+  final String barCaption;
+
+  final String gamesTooltip;
 
   static const _style = TextStyle(
     fontSize: 12,
@@ -230,28 +328,22 @@ class ExplorerTableHeader extends StatelessWidget {
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: AppColors.divider)),
       ),
-      child: const Row(
+      child: Row(
         children: [
-          SizedBox(
+          const SizedBox(
             width: ExplorerColumns.san,
             child: Text('Move', style: _style),
           ),
           Tooltip(
-            message:
-                'Games in which the move was played, and its share of all '
-                'games from this position',
-            child: SizedBox(
+            message: gamesTooltip,
+            child: const SizedBox(
               width: ExplorerColumns.games + ExplorerColumns.share,
               child: Text('Games', textAlign: TextAlign.right, style: _style),
             ),
           ),
-          SizedBox(width: ExplorerColumns.gap),
+          const SizedBox(width: ExplorerColumns.gap),
           Expanded(
-            child: Text(
-              'White / Draw / Black',
-              textAlign: TextAlign.center,
-              style: _style,
-            ),
+            child: Text(barCaption, textAlign: TextAlign.center, style: _style),
           ),
         ],
       ),
@@ -261,9 +353,30 @@ class ExplorerTableHeader extends StatelessWidget {
 
 /// The Σ row: every game from this position, whatever was played.
 class ExplorerTotalsRow extends StatelessWidget {
-  const ExplorerTotalsRow({super.key, required this.response});
+  const ExplorerTotalsRow({
+    super.key,
+    required this.games,
+    required this.wins,
+    required this.draws,
+    required this.losses,
+    this.perspective = WdlPerspective.whiteBlack,
+  });
 
-  final ExplorerResponse response;
+  /// The Σ row under a Lichess explorer table.
+  ExplorerTotalsRow.lichess({super.key, required ExplorerResponse response})
+    : games = response.totalGames,
+      wins = response.whiteTotal,
+      draws = response.drawTotal,
+      losses = response.blackTotal,
+      perspective = WdlPerspective.whiteBlack;
+
+  /// Every game from the position, listed continuation or not.
+  final int games;
+
+  final int wins;
+  final int draws;
+  final int losses;
+  final WdlPerspective perspective;
 
   @override
   Widget build(BuildContext context) {
@@ -290,7 +403,7 @@ class ExplorerTotalsRow extends StatelessWidget {
           SizedBox(
             width: ExplorerColumns.games,
             child: Text(
-              formatExplorerCount(response.totalGames),
+              formatExplorerCount(games),
               textAlign: TextAlign.right,
               style: AppTextStyles.caption,
             ),
@@ -306,10 +419,10 @@ class ExplorerTotalsRow extends StatelessWidget {
           const SizedBox(width: ExplorerColumns.gap),
           Expanded(
             child: WinDrawLossBar(
-              wins: response.whiteTotal,
-              draws: response.drawTotal,
-              losses: response.blackTotal,
-              perspective: WdlPerspective.whiteBlack,
+              wins: wins,
+              draws: draws,
+              losses: losses,
+              perspective: perspective,
               height: ExplorerColumns.barHeight,
               showPercentages: true,
             ),

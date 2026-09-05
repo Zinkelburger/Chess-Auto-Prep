@@ -40,35 +40,16 @@ String _extractGameId(String gameText) {
     return rawHeaderId;
   }
 
-  // 2. Chess.com: [Link "https://www.chess.com/game/live/123456789"]
-  final linkMatch = RegExp(r'\[Link "([^"]+)"\]').firstMatch(gameText);
-  if (linkMatch != null) {
-    final link = linkMatch.group(1)!;
-    final match = RegExp(r'/(\d+)(?:\?|$|#)').firstMatch(link);
-    if (match != null) {
-      return 'chesscom_${match.group(1)}';
-    }
-    // Fallback: last path segment
-    final parts = link.split('/');
-    final lastPart = parts.where((p) => p.isNotEmpty).lastOrNull;
-    if (lastPart != null && lastPart.toLowerCase() != 'chess.com') {
-      return 'chesscom_$lastPart';
-    }
-  }
-
-  // 3. Lichess: [Site "https://lichess.org/AbCdEfGh"]
-  final siteMatch = RegExp(r'\[Site "([^"]+)"\]').firstMatch(gameText);
-  if (siteMatch != null) {
-    final site = siteMatch.group(1)!;
-    if (site.toLowerCase().contains('lichess.org/')) {
-      final parts = site.split('/');
-      final gameId = parts
-          .where((p) => p.isNotEmpty && !p.contains('.'))
-          .lastOrNull;
-      if (gameId != null && gameId.length >= 6) {
-        return 'lichess_$gameId';
-      }
-    }
+  // Only recognized game URLs carry identity. Tournament and other shared
+  // website links must not collapse several source games into one record.
+  final headers = extractHeaders(gameText);
+  final url =
+      platformGameUrl(headers['Link']) ?? platformGameUrl(headers['Site']);
+  if (url != null) {
+    final uri = Uri.parse(url);
+    return uri.host == 'lichess.org'
+        ? 'lichess_${uri.pathSegments.first}'
+        : 'chesscom_${uri.pathSegments.last}';
   }
 
   // 4. A bare GameId header with no Site/Link to attribute it — only
@@ -92,6 +73,7 @@ String _injectGameIdHeader(String gameText) {
   }
 
   final gameId = _extractGameId(gameText);
+  if (gameId.isEmpty) return gameText;
 
   // Find where to insert (after last header, before moves)
   final lines = gameText.split('\n');

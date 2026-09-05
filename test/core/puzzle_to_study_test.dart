@@ -131,10 +131,13 @@ void main() {
       final path = study.doc.filePath!;
       await File(path).writeAsString('external editor content');
 
-      await study.addChapterToStudyFile(
-        path,
-        'Local chapter',
-        encodePuzzlePgn(_puzzle(), _solutionSan, event: 'Local chapter'),
+      await expectLater(
+        study.addChapterToStudyFile(
+          path,
+          'Local chapter',
+          encodePuzzlePgn(_puzzle(), _solutionSan, event: 'Local chapter'),
+        ),
+        throwsStateError,
       );
 
       expect(await File(path).readAsString(), 'external editor content');

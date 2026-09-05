@@ -98,52 +98,47 @@ class SettingsGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8, top: 16),
-          child: Row(
-            children: [
-              Icon(icon, size: 18, color: AppColors.pgnMainLine),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              ?trailing,
-            ],
-          ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Material(
+        color: AppColors.surfaceElevated,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: AppColors.divider),
         ),
-        if (subtitle != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Text(
-              subtitle!,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurfaceMuted,
-                height: 1.3,
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(icon, size: 20, color: AppColors.onSurfaceMuted),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(title, style: AppTextStyles.bodyStrong),
+                      ),
+                      ?trailing,
+                    ],
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 10),
+                    Text(subtitle!, style: AppTextStyles.muted),
+                  ],
+                ],
               ),
             ),
-          ),
-        Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: const BorderSide(color: AppColors.divider, width: 0.5),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Column(children: children),
-          ),
+            if (children.isNotEmpty) ...[
+              const Divider(height: 1, color: AppColors.divider),
+              ...children,
+            ],
+          ],
         ),
-      ],
+      ),
     );
   }
 }
@@ -335,23 +330,16 @@ class SettingsStepperTile extends StatelessWidget {
     // Persisted values can outlive the machine they were written on (fewer
     // cores today than yesterday), so never render an out-of-range number.
     final clamped = value.clamp(min, max);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: _LabelBlock(label: label, description: description),
-          ),
-          const SizedBox(width: 12),
-          _StepperControl(
-            value: clamped,
-            min: min,
-            max: max,
-            step: step,
-            suffix: suffix,
-            onChanged: onChanged,
-          ),
-        ],
+    return SettingsValueRow(
+      label: label,
+      description: description,
+      control: _StepperControl(
+        value: clamped,
+        min: min,
+        max: max,
+        step: step,
+        suffix: suffix,
+        onChanged: onChanged,
       ),
     );
   }
@@ -376,39 +364,45 @@ class _StepperControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          icon: const Icon(Icons.remove, size: 18),
-          tooltip: 'Less',
-          visualDensity: VisualDensity.compact,
-          onPressed: value > min
-              ? () => onChanged((value - step).clamp(min, max))
-              : null,
-        ),
-        // Fixed width so the −/+ pair doesn't shuffle as digits are added.
-        SizedBox(
-          width: suffix == null ? 44 : 96,
-          child: Text(
-            suffix == null ? '$value' : '$value $suffix',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              fontFamily: AppTextStyles.monoFamily,
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.divider),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.remove, size: 18),
+            tooltip: 'Less',
+            visualDensity: VisualDensity.compact,
+            onPressed: value > min
+                ? () => onChanged((value - step).clamp(min, max))
+                : null,
+          ),
+          // Fixed width so the −/+ pair doesn't shuffle as digits are added.
+          SizedBox(
+            width: suffix == null ? 44 : 96,
+            child: Text(
+              suffix == null ? '$value' : '$value $suffix',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                fontFamily: AppTextStyles.monoFamily,
+              ),
             ),
           ),
-        ),
-        IconButton(
-          icon: const Icon(Icons.add, size: 18),
-          tooltip: 'More',
-          visualDensity: VisualDensity.compact,
-          onPressed: value < max
-              ? () => onChanged((value + step).clamp(min, max))
-              : null,
-        ),
-      ],
+          IconButton(
+            icon: const Icon(Icons.add, size: 18),
+            tooltip: 'More',
+            visualDensity: VisualDensity.compact,
+            onPressed: value < max
+                ? () => onChanged((value + step).clamp(min, max))
+                : null,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -434,26 +428,73 @@ class SettingsChoiceTile<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return SettingsValueRow(
+      label: label,
+      description: description,
+      control: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.divider),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: DropdownButton<T>(
+          value: value,
+          underline: const SizedBox.shrink(),
+          style: AppTextStyles.body,
+          items: items
+              .map((e) => DropdownMenuItem(value: e.$1, child: Text(e.$2)))
+              .toList(),
+          onChanged: (v) {
+            if (v != null) onChanged(v);
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// A labelled preference that stacks its control below the copy in narrow panes.
+class SettingsValueRow extends StatelessWidget {
+  const SettingsValueRow({
+    super.key,
+    required this.label,
+    this.description,
+    required this.control,
+  });
+
+  final String label;
+  final String? description;
+  final Widget control;
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: _LabelBlock(label: label, description: description),
-          ),
-          const SizedBox(width: 12),
-          DropdownButton<T>(
-            value: value,
-            underline: const SizedBox.shrink(),
-            style: const TextStyle(fontSize: 13, color: AppColors.ink),
-            items: items
-                .map((e) => DropdownMenuItem(value: e.$1, child: Text(e.$2)))
-                .toList(),
-            onChanged: (v) {
-              if (v != null) onChanged(v);
-            },
-          ),
-        ],
+      padding: const EdgeInsets.all(20),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final labelBlock = _LabelBlock(
+            label: label,
+            description: description,
+          );
+          final labelledControl = Semantics(label: label, child: control);
+          if (constraints.maxWidth < 480) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                labelBlock,
+                const SizedBox(height: 12),
+                labelledControl,
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: labelBlock),
+              const SizedBox(width: 32),
+              labelledControl,
+            ],
+          );
+        },
       ),
     );
   }
@@ -471,17 +512,10 @@ class _LabelBlock extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: const TextStyle(fontSize: 13)),
+        Text(label, style: AppTextStyles.bodyStrong),
         if (description != null) ...[
-          const SizedBox(height: 2),
-          Text(
-            description!,
-            style: const TextStyle(
-              fontSize: 12,
-              height: 1.3,
-              color: AppColors.onSurfaceMuted,
-            ),
-          ),
+          const SizedBox(height: 6),
+          Text(description!, style: AppTextStyles.muted),
         ],
       ],
     );

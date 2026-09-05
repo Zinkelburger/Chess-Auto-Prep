@@ -12,6 +12,9 @@
 library;
 
 import 'dart:io';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+import 'package:chess_auto_prep/services/game_store/game_store_service.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -20,6 +23,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/screens/repertoire_screen.dart';
+
+class _TestPaths extends PathProviderPlatform with MockPlatformInterfaceMixin {
+  _TestPaths(this.root);
+  final String root;
+  @override
+  Future<String?> getApplicationDocumentsPath() async => root;
+  @override
+  Future<String?> getApplicationSupportPath() async => root;
+}
 
 const _chapterPgn = '''
 // Main
@@ -54,6 +66,16 @@ Future<void> _settle(WidgetTester tester, {int cycles = 30}) async {
   }
 }
 
+/// Wait for the asynchronous file/isolate load, not for every ticker on this
+/// screen to stop (engine and outline loading indicators may keep animating).
+Future<void> _settleUntil(WidgetTester tester, Finder ready) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 15));
+  while (ready.evaluate().isEmpty && DateTime.now().isBefore(deadline)) {
+    await _settle(tester, cycles: 1);
+  }
+  expect(ready, findsWidgets);
+}
+
 Future<AppState> _pumpScreen(
   WidgetTester tester, {
   required String repertoirePath,
@@ -81,7 +103,22 @@ Future<AppState> _pumpScreen(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  late Directory storageRoot;
+  late PathProviderPlatform originalPaths;
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    storageRoot = await Directory.systemTemp.createTemp(
+      'repertoire_screen_storage',
+    );
+    originalPaths = PathProviderPlatform.instance;
+    PathProviderPlatform.instance = _TestPaths(storageRoot.path);
+    GameStoreService.setTestInstance(GameStoreService());
+  });
+  tearDown(() async {
+    GameStoreService.instance.close();
+    PathProviderPlatform.instance = originalPaths;
+    if (await storageRoot.exists()) await storageRoot.delete(recursive: true);
+  });
 
   group('wide layout', () {
     testWidgets('renders the loaded chapter, its lines, and the side panel', (
@@ -106,6 +143,7 @@ void main() {
       expect(find.byTooltip('Hide analysis panel'), findsOneWidget);
 
       // The chapter's single line is listed in the outline.
+      await _settleUntil(tester, find.text('Italian Game'));
       expect(find.text('Italian Game'), findsOneWidget);
       expect(find.textContaining('1 chapter · 1 line'), findsOneWidget);
 
@@ -189,7 +227,8 @@ void main() {
       await _pumpScreen(tester, repertoirePath: _writeRepertoire(tester));
 
       await tester.tap(find.text('Tree'));
-      await tester.pumpAndSettle();
+      await _settle(tester);
+      await _settleUntil(tester, find.text('Repertoire tree'));
 
       expect(find.text('Repertoire tree'), findsOneWidget);
       final book = find.byTooltip('Show Lichess opening explorer');

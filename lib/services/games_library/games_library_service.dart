@@ -12,6 +12,8 @@
 /// that already exists ([AnalysisGamesService] for Chess.com).
 library;
 
+import '../pgn_document_patch.dart';
+
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -184,16 +186,17 @@ class GamesLibraryService {
         onProgress: onProgress,
       );
       if (pgn.trim().isNotEmpty) {
-        if (await file.exists()) {
-          // Merge, never overwrite: cached games may carry locally written
-          // analysis annotations that a wholesale rewrite would destroy.
-          pgn = mergeGamePgns(
-            existing: await file.readAsString(),
-            fresh: pgn,
-            maxGames: maxCachedGames,
-          );
-        }
-        await writeTextFileAtomically(file, pgn);
+        final fresh = pgn;
+        pgn = await updateTextFileAtomically(
+          file,
+          (existing) => existing == null
+              ? fresh
+              : mergeGamePgns(
+                  existing: existing,
+                  fresh: fresh,
+                  maxGames: maxCachedGames,
+                ),
+        );
         fetchedNow = DateTime.now();
         await _writeFetchStamp(file, fetchedNow);
       } else if (await file.exists()) {
@@ -278,36 +281,47 @@ class GamesLibraryService {
   static Future<int> patchGameMovetexts({
     required String cachePath,
     required Map<String, String> movetextByDedupKey,
+    Map<String, String>? expectedPgnByDedupKey,
   }) async {
     if (movetextByDedupKey.isEmpty) return 0;
     final file = File(cachePath);
     if (!await file.exists()) return 0;
-    final chunks = splitPgnIntoGames(await file.readAsString());
     var patched = 0;
-    for (var i = 0; i < chunks.length; i++) {
-      final key = dedupKeyForHeaders(extractHeaders(chunks[i]));
-      final updatedMovetext = movetextByDedupKey[key];
-      if (updatedMovetext == null) continue;
-      // The header block is the leading run of `[Tag "value"]` lines. Found
-      // by scanning, not by a last-`]`-before-newline regex: wrapped movetext
-      // can legitimately end a line on `]` (e.g. after a clock comment).
-      final lines = chunks[i].trimRight().split('\n');
-      var headerCount = 0;
-      while (headerCount < lines.length) {
-        final t = lines[headerCount].trim();
-        if (!t.startsWith('[') || !t.endsWith(']')) break;
-        headerCount++;
+    await updateTextFileAtomically(file, (current) {
+      if (current == null) throw StateError('Games cache disappeared');
+      final chunks = splitPgnIntoGames(current);
+      final replacements = <String, String>{};
+      for (var i = 0; i < chunks.length; i++) {
+        final key = dedupKeyForHeaders(
+          extractHeaders(chunks[i]),
+          pgn: chunks[i],
+        );
+        final updatedMovetext = movetextByDedupKey[key];
+        if (updatedMovetext == null) continue;
+        final expected = expectedPgnByDedupKey?[key];
+        if (expected != null && chunks[i].trim() != expected.trim()) {
+          throw StateError(
+            'This game was edited while analysis ran; annotations were not overwritten.',
+          );
+        }
+        // The header block is the leading run of `[Tag "value"]` lines. Found
+        // by scanning, not by a last-`]`-before-newline regex: wrapped movetext
+        // can legitimately end a line on `]` (e.g. after a clock comment).
+        final lines = chunks[i].trimRight().split('\n');
+        var headerCount = 0;
+        while (headerCount < lines.length) {
+          final t = lines[headerCount].trim();
+          if (!t.startsWith('[') || !t.endsWith(']')) break;
+          headerCount++;
+        }
+        if (headerCount == 0) continue;
+        final headers = lines.sublist(0, headerCount).join('\n');
+        replacements[chunks[i]] = '$headers\n\n${updatedMovetext.trim()}';
+        patched++;
       }
-      if (headerCount == 0) continue;
-      final headers = lines.sublist(0, headerCount).join('\n');
-      chunks[i] = '$headers\n\n${updatedMovetext.trim()}';
-      patched++;
-    }
-    if (patched == 0) return 0;
-    await writeTextFileAtomically(
-      file,
-      '${chunks.map((c) => c.trim()).join('\n\n')}\n',
-    );
+      if (patched == 0) return current;
+      return patchPgnDocument(current, replacements);
+    });
     return patched;
   }
 

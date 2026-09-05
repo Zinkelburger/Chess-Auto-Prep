@@ -34,8 +34,8 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
   // ── Stockfish settings ────────────────────────────────────────────────
 
   /// Number of parallel Stockfish workers (each: 1 thread, 128 MB hash).
-  /// Defaults to half the logical cores, minimum 1.
-  int _workers = (getLogicalCores() ~/ 2).clamp(1, getLogicalCores());
+  /// Defaults to one; users can increase this up to the logical core count.
+  int _workers = kDefaultWorkers;
   int get workers => _workers;
   set workers(int value) => _assignIfChanged(
     _workers,
@@ -313,12 +313,7 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
       int loadInt(String key, int def, int min, int max) =>
           (prefs.getInt('$_prefix$key') ?? def).clamp(min, max);
 
-      _workers = loadInt(
-        'workers',
-        (systemCores ~/ 2).clamp(1, systemCores),
-        1,
-        systemCores,
-      );
+      _workers = loadInt('workers', kDefaultWorkers, 1, systemCores);
       _depth = loadInt('depth', kDefaultDepth, kMinDepth, kMaxDepth);
       _multiPv = loadInt('multi_pv', kDefaultMultiPv, kMinMultiPv, kMaxMultiPv);
       _inlineThreads = loadInt(
@@ -440,7 +435,7 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
 
   /// Reset all settings to defaults
   void resetToDefaults() {
-    _workers = (systemCores ~/ 2).clamp(1, systemCores);
+    _workers = kDefaultWorkers;
     _depth = kDefaultDepth;
     _multiPv = kDefaultMultiPv;
     _inlineThreads = kDefaultInlineThreads;

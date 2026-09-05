@@ -47,9 +47,8 @@ class ReviewProgressStore {
   /// Per-move streaks, keyed `"<lineId>:<moveIndex>"`.
   Map<String, RepertoireMoveProgress> moveProgress = {};
 
-  /// Entries belonging to *other* repertoires. Held because the review file is
-  /// written whole: dropping these would wipe every other repertoire's
-  /// schedule on the next save.
+  /// Entries belonging to other repertoires, retained for caller inspection.
+  /// Persistence merges only this repertoire into the latest stored rows.
   List<RepertoireReviewEntry> otherRepertoires = [];
 
   // ── Deferred PGN header writes ───────────────────────────────────────
@@ -73,11 +72,15 @@ class ReviewProgressStore {
   /// now, so a source switch flushes them where they came from.
   String? _pendingHeadersPath;
 
-  void _queueHeaderWrite(String lineId, RepertoireReviewEntry entry) {
-    if (_pendingHeadersPath != null && _pendingHeadersPath != repertoireId) {
+  void _queueHeaderWrite(
+    String sourcePath,
+    String lineId,
+    RepertoireReviewEntry entry,
+  ) {
+    if (_pendingHeadersPath != null && _pendingHeadersPath != sourcePath) {
       unawaited(flushHeaders());
     }
-    _pendingHeadersPath = repertoireId;
+    _pendingHeadersPath = sourcePath;
     _pendingHeaders[lineId] = entry;
     _headerFlushTimer?.cancel();
     _headerFlushTimer = Timer(
@@ -121,13 +124,6 @@ class ReviewProgressStore {
     this.otherRepertoires = otherRepertoires;
   }
 
-  /// Every entry that must be written when saving, this repertoire's and all
-  /// the others'.
-  List<RepertoireReviewEntry> get _allEntries => [
-    ...otherRepertoires,
-    ...byLine.values,
-  ];
-
   // ── Rating a completed line ──────────────────────────────────────────
 
   /// Apply [rating] to [line], persist the new schedule, and append a history
@@ -141,6 +137,7 @@ class ReviewProgressStore {
     required bool hadMistake,
     String sessionType = 'trainer',
   }) async {
+    final sourcePath = repertoireId;
     final existing = byLine[line.id] ?? _freshEntry(line);
     final updated = reviewService
         .applyRating(existing, rating)
@@ -150,14 +147,13 @@ class ReviewProgressStore {
         );
     byLine[line.id] = updated;
 
-    await reviewService.saveAll(_allEntries);
-    await reviewService.saveMoveProgress(
-      moveProgress.values.toList(),
-      repertoireId: repertoireId,
-    );
+    final savedReviews = byLine.values.toList();
+    final savedMoves = moveProgress.values.toList();
+    await reviewService.saveAll(savedReviews, repertoireId: sourcePath);
+    await reviewService.saveMoveProgress(savedMoves, repertoireId: sourcePath);
     await reviewService.appendHistory([
       RepertoireReviewHistoryEntry(
-        repertoireId: repertoireId,
+        repertoireId: sourcePath,
         lineId: line.id,
         timestampUtc: DateTime.now().toUtc(),
         rating: rating.name,
@@ -166,7 +162,7 @@ class ReviewProgressStore {
       ),
     ]);
 
-    _queueHeaderWrite(line.id, updated);
+    _queueHeaderWrite(sourcePath, line.id, updated);
 
     return updated;
   }
@@ -181,20 +177,20 @@ class ReviewProgressStore {
     required bool hadMistake,
     String sessionType = 'linear',
   }) async {
+    final sourcePath = repertoireId;
     final existing = byLine[line.id] ?? _freshEntry(line);
     byLine[line.id] = existing.copyWith(
       passCount: hadMistake ? existing.passCount : existing.passCount + 1,
       failCount: hadMistake ? existing.failCount + 1 : existing.failCount,
     );
 
-    await reviewService.saveAll(_allEntries);
-    await reviewService.saveMoveProgress(
-      moveProgress.values.toList(),
-      repertoireId: repertoireId,
-    );
+    final savedReviews = byLine.values.toList();
+    final savedMoves = moveProgress.values.toList();
+    await reviewService.saveAll(savedReviews, repertoireId: sourcePath);
+    await reviewService.saveMoveProgress(savedMoves, repertoireId: sourcePath);
     await reviewService.appendHistory([
       RepertoireReviewHistoryEntry(
-        repertoireId: repertoireId,
+        repertoireId: sourcePath,
         lineId: line.id,
         timestampUtc: DateTime.now().toUtc(),
         rating: '',
@@ -224,6 +220,7 @@ class ReviewProgressStore {
     Set<String>? within,
     void Function()? onApplied,
   }) async {
+    final sourcePath = repertoireId;
     final now = DateTime.now().toUtc();
     final history = <RepertoireReviewHistoryEntry>[];
     final headerUpdates = <String, RepertoireReviewEntry>{};
@@ -252,7 +249,7 @@ class ReviewProgressStore {
         // Back to new: scheduling cleared, pass/fail history kept. A fresh
         // entry rather than copyWith because copyWith can't null the dates.
         updated = RepertoireReviewEntry(
-          repertoireId: repertoireId,
+          repertoireId: sourcePath,
           lineId: line.id,
           lineName: line.name,
           difficulty: entry!.difficulty,
@@ -264,7 +261,7 @@ class ReviewProgressStore {
       headerUpdates[line.id] = updated;
       history.add(
         RepertoireReviewHistoryEntry(
-          repertoireId: repertoireId,
+          repertoireId: sourcePath,
           lineId: line.id,
           timestampUtc: now,
           rating: wantLearned ? ReviewRating.good.name : '',
@@ -278,13 +275,14 @@ class ReviewProgressStore {
 
     onApplied?.call();
 
-    await reviewService.saveAll(_allEntries);
+    final savedReviews = byLine.values.toList();
+    await reviewService.saveAll(savedReviews, repertoireId: sourcePath);
     await reviewService.appendHistory(history);
     // Fold in anything still waiting so the two writes cannot race for the
     // same file, then write once.
     await flushHeaders();
     await repertoireService.updateManyLineReviewHeaders(
-      repertoireId,
+      sourcePath,
       headerUpdates,
     );
     return headerUpdates.length;

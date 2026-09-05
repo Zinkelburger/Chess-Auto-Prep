@@ -1,28 +1,10 @@
-/// Centralized settings screen accessible from the app bar.
-///
-/// Holds machine-level configuration only: who you are (Lichess login, chess
-/// usernames), which repertoires are your books, how much of the machine the
-/// engine may use, and the offline eval database. Analysis *behavior* lives on
-/// the gear next to each analysis surface — see stockfish_settings_dialog.dart,
-/// expectimax_settings_dialog.dart, and analysis_panels_dialog.dart — so every
-/// knob sits where its effect is visible.
-///
-/// Two rules this screen keeps to, both learned the hard way:
-/// - **No state toggles.** Turning the engine on/off is not configuration, it
-///   is an action with a visible result; it belongs on the ⚡ button by the
-///   board, not buried in a settings list.
-/// - **No sliders.** A slider reads as a scrollbar, hides its value until
-///   dragged, and turns "give it one more core" into a pixel-hunt. Numbers get
-///   −/+ steppers, short lists get dropdowns.
-///
-/// Uses [ListenableBuilder] so it always reflects the latest singleton state,
-/// even if another UI surface mutates [EngineSettings] concurrently.
+/// Device preferences with focused, independently scrollable sections.
+/// Analysis behaviour stays alongside the analysis panel it affects.
 library;
 
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -30,11 +12,11 @@ import '../core/app_state.dart';
 import '../features/games/widgets/my_repertoires_section.dart';
 import '../models/engine_settings.dart';
 import '../models/eval_database_settings.dart';
+import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 import '../utils/system_info.dart';
 import '../widgets/common/confirm_dialog.dart';
-import '../widgets/labeled_toggle.dart';
 import '../widgets/settings/account_settings_section.dart';
 import '../widgets/settings/settings_widgets.dart';
 
@@ -51,72 +33,201 @@ class _SettingsScreenState extends State<SettingsScreen> {
   );
 
   final _engine = EngineSettings.instance;
+  int _selected = 0;
+
+  static const _sections = [
+    (
+      label: 'Accounts',
+      icon: Icons.person_outline,
+      description: 'Your chess identities and connected services.',
+    ),
+    (
+      label: 'Repertoires',
+      icon: Icons.menu_book_outlined,
+      description: 'Choose the opening books you play.',
+    ),
+    (
+      label: 'Engine',
+      icon: Icons.tune,
+      description: 'Balance analysis speed with computer resources.',
+    ),
+    (
+      label: 'Data',
+      icon: Icons.storage_outlined,
+      description: 'Manage local databases and online lookups.',
+    ),
+    (
+      label: 'About',
+      icon: Icons.info_outline,
+      description: 'Project information and app maintenance.',
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: _engine,
-      builder: (context, _) {
-        final cores = getLogicalCores();
-
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('Settings'),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () => Navigator.pop(context),
+    return Scaffold(
+      backgroundColor: AppColors.surface,
+      appBar: AppBar(
+        backgroundColor: AppColors.surface,
+        surfaceTintColor: Colors.transparent,
+        titleSpacing: 8,
+        title: const Text('Settings', style: AppTextStyles.title),
+        leading: IconButton(
+          tooltip: 'Back to app',
+          icon: const Icon(Icons.arrow_back, size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(1),
+          child: Divider(height: 1, color: AppColors.divider),
+        ),
+      ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 760;
+          final content = Expanded(
+            child: ListenableBuilder(
+              listenable: _engine,
+              builder: (context, _) => IndexedStack(
+                index: _selected,
+                children: [
+                  _page(0, const [
+                    ChessUsernamesSection(),
+                    LichessLoginSection(),
+                  ], compact),
+                  _page(1, const [MyRepertoiresSection()], compact),
+                  _page(2, [
+                    _buildEngineSection(getLogicalCores()),
+                    const SettingsGroup(
+                      title: 'Looking for analysis settings?',
+                      icon: Icons.settings_outlined,
+                      subtitle:
+                          'Set search depth, lines and panel visibility using the gear next to each analysis panel.',
+                      children: [],
+                    ),
+                  ], compact),
+                  _page(3, [_buildDatabasesSection()], compact),
+                  _page(4, [
+                    _buildAboutSection(),
+                    _buildResetButton(),
+                  ], compact),
+                ],
+              ),
             ),
-          ),
-          // The ListView is the body so it gets the scaffold's bounded
-          // height and actually scrolls. Wrapping it in Align first gave it
-          // unbounded height: it grew to fit every section, the scaffold
-          // clipped the overflow, and everything below the fold (engine,
-          // database, agent bridge) was unreachable.
-          body: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-            children: [
-              Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 760),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text(
-                        'Settings for this machine. Search depth, number of lines, '
-                        'expectimax tuning and panel visibility live on the gear '
-                        '(⚙) next to each analysis panel instead, where you can '
-                        'see what they change.',
-                        style: AppTextStyles.caption,
+          );
+          if (compact) {
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                  child: DropdownButtonFormField<int>(
+                    key: const Key('settings-section-picker'),
+                    initialValue: _selected,
+                    decoration: const InputDecoration(
+                      labelText: 'Section',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
                       ),
-
-                      // ── Who you are ──────────────────────────────
-                      const ChessUsernamesSection(),
-                      const LichessLoginSection(),
-
-                      // ── My repertoires ───────────────────────────
-                      const MyRepertoiresSection(),
-
-                      // ── Engine ───────────────────────────────────
-                      _buildEngineSection(cores),
-
-                      // ── Databases ────────────────────────────────
-                      _buildDatabasesSection(),
-
-                      // ── About ────────────────────────────────────
-                      _buildAboutSection(),
-
-                      // ── Reset ────────────────────────────────────
-                      const SizedBox(height: 24),
-                      _buildResetButton(),
+                    ),
+                    items: [
+                      for (var i = 0; i < _sections.length; i++)
+                        DropdownMenuItem(
+                          value: i,
+                          child: Text(_sections[i].label),
+                        ),
                     ],
+                    onChanged: (value) {
+                      if (value != null) setState(() => _selected = value);
+                    },
                   ),
                 ),
+                content,
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: 220,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 28, 16, 24),
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(12, 0, 12, 16),
+                      child: Text('PREFERENCES', style: AppTextStyles.eyebrow),
+                    ),
+                    for (var i = 0; i < _sections.length; i++)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: ListTile(
+                          key: Key('settings-nav-$i'),
+                          selected: _selected == i,
+                          selectedTileColor: AppColors.accent.withValues(
+                            alpha: 0.12,
+                          ),
+                          selectedColor: AppColors.ink,
+                          iconColor: AppColors.onSurfaceMuted,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          leading: Icon(_sections[i].icon, size: 20),
+                          horizontalTitleGap: 12,
+                          title: Text(
+                            _sections[i].label,
+                            style: _selected == i
+                                ? AppTextStyles.bodyStrong
+                                : AppTextStyles.body,
+                          ),
+                          onTap: () => setState(() => _selected = i),
+                        ),
+                      ),
+                  ],
+                ),
               ),
+              const VerticalDivider(width: 1, color: AppColors.divider),
+              content,
             ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _page(int index, List<Widget> children, bool compact) {
+    final section = _sections[index];
+    return ListView(
+      key: PageStorageKey('settings-page-$index'),
+      primary: false,
+      padding: EdgeInsets.fromLTRB(
+        compact ? 20 : 40,
+        32,
+        compact ? 20 : 40,
+        40,
+      ),
+      children: [
+        Align(
+          alignment: Alignment.topLeft,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  section.label,
+                  style: AppTextStyles.title.copyWith(fontSize: 26),
+                ),
+                const SizedBox(height: 8),
+                Text(section.description, style: AppTextStyles.muted),
+                const SizedBox(height: 28),
+                ...children,
+              ],
+            ),
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 
@@ -143,22 +254,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return SettingsGroup(
       title: 'About & open source',
       icon: Icons.info_outline,
-      subtitle:
-          'Chess Auto Prep is open source. Follow development, report an '
-          'issue, or inspect the software and third-party licenses.',
+      subtitle: 'Built in the open, for your chess preparation.',
       children: [
         ListTile(
-          leading: SizedBox.square(
-            dimension: 22,
-            child: SvgPicture.asset('assets/icons/github-mark-white.svg'),
+          titleTextStyle: AppTextStyles.bodyStrong,
+          subtitleTextStyle: AppTextStyles.muted,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 8,
           ),
+          leading: const Icon(Icons.code, size: 22),
           title: const Text('Chess Auto Prep on GitHub'),
           subtitle: const Text('Source code, releases, and issue tracker'),
           trailing: const Icon(Icons.open_in_new, size: 17),
           onTap: () => unawaited(_openProject()),
         ),
-        const Divider(height: 1, indent: 16, endIndent: 16),
+        const Divider(
+          height: 1,
+          indent: 20,
+          endIndent: 20,
+          color: AppColors.divider,
+        ),
         ListTile(
+          titleTextStyle: AppTextStyles.bodyStrong,
+          subtitleTextStyle: AppTextStyles.muted,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 8,
+          ),
           leading: const Icon(Icons.balance_outlined, size: 22),
           title: const Text('Open-source licenses'),
           subtitle: const Text(
@@ -184,39 +307,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // an action you want to see the result of, so it lives on the ⚡ button
       // next to the board.
       subtitle:
-          'How much of this computer Stockfish may use. Turn the engine on and '
-          'off with the ⚡ button next to the board.',
+          'Changes apply automatically. This computer has $cores logical cores.',
       children: [
         SettingsStepperTile(
-          label: 'Parallel workers for bulk analysis',
+          label: 'Bulk analysis workers',
           description:
-              'Runs one Stockfish process per worker: 1 CPU thread and '
-              '128 MB hash each, plus engine memory. More workers analyse '
-              'independent positions faster; fewer use less memory and leave '
-              'the computer freer.',
+              'More workers process games faster. Fewer leave more resources for other apps.',
           value: _engine.workers,
           min: 1,
           max: cores,
-          suffix: 'of $cores cores',
+          suffix: '/ $cores',
           onChanged: (v) => _engine.workers = v,
         ),
         SettingsStepperTile(
-          label: 'Threads for one board engine',
+          label: 'Board engine threads',
           description:
-              'The engine bar uses one Stockfish process with this many CPU '
-              'threads. This is best for one position; bulk analysis uses '
-              'the parallel workers above.',
+              'CPU threads used to analyse the position on your board.',
           value: _engine.inlineThreads,
           min: 1,
           max: cores,
-          suffix: 'of $cores cores',
+          suffix: '/ $cores',
           onChanged: (v) => _engine.inlineThreads = v,
         ),
         SettingsChoiceTile<int>(
-          label: 'Human-opponent strength (Maia)',
-          description:
-              'The rating the app assumes your opponents play at when it '
-              'guesses which reply a human would pick.',
+          label: 'Opponent rating',
+          description: 'Maia uses this rating to predict likely human replies.',
           value: _engine.maiaElo.clamp(600, 2400) ~/ 100 * 100,
           items: [
             for (var elo = 600; elo <= 2400; elo += 100) (elo, '$elo Elo'),
@@ -242,11 +357,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return SettingsGroup(
       title: 'Databases',
       icon: Icons.storage,
-      subtitle:
-          'Master games, your own games, and the offline evaluation stores — '
-          'what is downloaded, how much disk it uses, and how to refresh it.',
+      subtitle: 'Review downloads, disk usage and updates in one place.',
       children: [
         ListTile(
+          titleTextStyle: AppTextStyles.bodyStrong,
+          subtitleTextStyle: AppTextStyles.muted,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 8,
+          ),
           leading: const Icon(Icons.dns_outlined, size: 22),
           title: const Text('Open Databases'),
           subtitle: const Text(
@@ -262,28 +381,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
             appState.setMode(AppMode.databases);
           },
         ),
-        const Divider(height: 1, indent: 16, endIndent: 16),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: ListenableBuilder(
-            listenable: EvalDatabaseSettings.instance,
-            builder: (context, _) {
-              final settings = EvalDatabaseSettings.instance;
-              return AppSwitch(
-                label: 'Use the ChessDB API for on-demand expectimax',
+        const Divider(
+          height: 1,
+          indent: 20,
+          endIndent: 20,
+          color: AppColors.divider,
+        ),
+        ListenableBuilder(
+          listenable: EvalDatabaseSettings.instance,
+          builder: (context, _) {
+            final settings = EvalDatabaseSettings.instance;
+            return SettingsValueRow(
+              label: 'Online evaluation lookups',
+              description:
+                  'Allow on-demand expectimax to query ChessDB. Uses your daily API quota; repertoire builds have a separate setting.',
+              control: Switch(
                 value: settings.chessDbApiForExpectimax,
-                onChanged: (v) =>
-                    unawaited(settings.setChessDbApiForExpectimax(v)),
-                tooltip:
-                    'A probe started from the expectimax pane may query '
-                    'chessdb.cn for evaluations. Off by default: one probe '
-                    'from a busy position can use most of the daily quota, '
-                    'and a local dump or the engine answers just as well. '
-                    'Repertoire builds have their own switch on the Generate '
-                    'form.',
-              );
-            },
-          ),
+                onChanged: (value) =>
+                    unawaited(settings.setChessDbApiForExpectimax(value)),
+              ),
+            );
+          },
         ),
       ],
     );
@@ -307,15 +425,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!confirmed) return;
     _engine.resetToDefaults();
     await EvalDatabaseSettings.instance.resetToDefaults();
+    if (mounted) showAppSnackBar(context, 'Settings restored to defaults');
   }
 
   Widget _buildResetButton() {
-    return Center(
-      child: OutlinedButton.icon(
-        icon: const Icon(Icons.restore, size: 16),
-        label: const Text('Reset All to Defaults'),
-        onPressed: () => unawaited(_confirmResetToDefaults()),
-      ),
+    return SettingsGroup(
+      title: 'Restore defaults',
+      icon: Icons.restore,
+      subtitle:
+          'Reset engine, analysis and database preferences. Your accounts, games and repertoires are kept.',
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(20),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.restore, size: 18),
+              label: const Text('Reset settings…'),
+              onPressed: () => unawaited(_confirmResetToDefaults()),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

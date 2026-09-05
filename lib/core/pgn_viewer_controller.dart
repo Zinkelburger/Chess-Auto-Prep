@@ -18,6 +18,7 @@ import '../models/pgn_filter_models.dart';
 import '../models/pgn_game_entry.dart';
 export '../models/pgn_game_entry.dart';
 import '../services/default_pgn_service.dart';
+import '../services/pgn_document_patch.dart';
 import '../services/game_analysis_controller.dart';
 import '../services/opening_book_service.dart';
 import '../services/storage/storage_factory.dart';
@@ -251,7 +252,15 @@ class PgnViewerController extends ChangeNotifier
   void beginSolitaire() => _solitaireSession.begin();
   void cancelSolitaireSetup() => _solitaireSession.cancelSetup();
   void stopSolitaire() => _solitaireSession.stop();
-  Future<void> loadSolitaireSettings() => _solitaireSession.loadSettings();
+  Future<void> loadSolitaireSettings() async {
+    try {
+      await _solitaireSession.loadSettings();
+    } catch (e) {
+      errorMessage = 'Could not load solitaire progress: $e';
+      notifyListeners();
+    }
+  }
+
   Future<void> setSolitaireRevealDelay(int seconds) =>
       _solitaireSession.setRevealDelay(seconds);
   void revealCurrentMove() => _solitaireSession.revealCurrentMove();
@@ -386,6 +395,7 @@ class PgnViewerController extends ChangeNotifier
     // the file it described.
     loadedFileModified = null;
     allGames = entries;
+    adoptPersistedGames(entries);
     _detectProtagonist(entries);
     filteredGames = List.of(entries);
     hasActiveFilters = false;
@@ -432,77 +442,84 @@ class PgnViewerController extends ChangeNotifier
     final storage = StorageFactory.instance;
     final fileName = p.basename(path);
 
-    final exists = await storage.fileExists(path);
-    if (!_isCurrentLoad(loadEpoch)) return;
-    if (!exists) {
-      errorMessage = 'File not found: $fileName';
-      // The epoch bump above told any in-flight slice op that this load owns
-      // isLoading now, so release it even though this path never set it.
-      isLoading = false;
-      debugPrint('PgnViewerController.loadFile: file does not exist: $path');
+    try {
+      final exists = await storage.fileExists(path);
+      if (!_isCurrentLoad(loadEpoch)) return;
+      if (!exists) {
+        errorMessage = 'File not found: $fileName';
+        // The epoch bump above told any in-flight slice op that this load owns
+        // isLoading now, so release it even though this path never set it.
+        isLoading = false;
+        debugPrint('PgnViewerController.loadFile: file does not exist: $path');
+        notifyListeners();
+        return;
+      }
+
+      isLoading = true;
       notifyListeners();
-      return;
-    }
 
-    isLoading = true;
-    notifyListeners();
+      final content = await storage.readFile(path);
+      if (!_isCurrentLoad(loadEpoch)) return;
 
-    final content = await storage.readFile(path);
-    if (!_isCurrentLoad(loadEpoch)) return;
+      if (content == null) {
+        isLoading = false;
+        errorMessage = 'Could not read $fileName';
+        debugPrint('PgnViewerController.loadFile: read failed: $path');
+        notifyListeners();
+        return;
+      }
 
-    if (content == null) {
+      if (content.trim().isEmpty) {
+        isLoading = false;
+        errorMessage = 'File is empty: $fileName';
+        debugPrint('PgnViewerController.loadFile: empty file: $path');
+        notifyListeners();
+        return;
+      }
+
+      final entries = await compute(parseMultiGamePgn, content);
+      if (!_isCurrentLoad(loadEpoch)) return;
+
+      if (entries.isEmpty) {
+        isLoading = false;
+        errorMessage = 'No valid PGN games in $fileName';
+        debugPrint('PgnViewerController.loadFile: no games parsed: $path');
+        notifyListeners();
+        return;
+      }
+
+      final modified = await storage.fileStat(path);
+      if (!_isCurrentLoad(loadEpoch)) return;
+
       isLoading = false;
-      errorMessage = 'Could not read $fileName';
-      debugPrint('PgnViewerController.loadFile: read failed: $path');
+      _sliceEpoch++;
+      _adoptCollection(
+        path: path,
+        entries: entries,
+        newPerspective: _perspectiveFor(entries),
+      );
+      loadedFileModified = modified?.modified;
       notifyListeners();
-      return;
-    }
 
-    if (content.trim().isEmpty) {
+      await addToRecentFiles(path);
+      if (!_isCurrentLoad(loadEpoch)) return;
+      _fenIndex.reset();
+      await _fenIndex.tryLoadPersisted(path, entries.length);
+      if (!_isCurrentLoad(loadEpoch)) return;
+      if (restoreSavedSlice) await tryRestoreSavedSlice(path, entries);
+      if (!_isCurrentLoad(loadEpoch)) return;
+      await loadCurrentGame();
+      if (!_isCurrentLoad(loadEpoch)) return;
+      if (_fenIndex.value == null) {
+        _buildFenIndex(); // classification runs via _onFenIndexReady
+      } else {
+        unawaited(_classifyOpenings());
+      }
+    } catch (e) {
+      if (!_isCurrentLoad(loadEpoch)) return;
       isLoading = false;
-      errorMessage = 'File is empty: $fileName';
-      debugPrint('PgnViewerController.loadFile: empty file: $path');
+      errorMessage = 'Could not open $fileName: $e';
       notifyListeners();
-      return;
-    }
-
-    final entries = await compute(parseMultiGamePgn, content);
-    if (!_isCurrentLoad(loadEpoch)) return;
-
-    if (entries.isEmpty) {
-      isLoading = false;
-      errorMessage = 'No valid PGN games in $fileName';
-      debugPrint('PgnViewerController.loadFile: no games parsed: $path');
-      notifyListeners();
-      return;
-    }
-
-    final modified = await storage.fileStat(path);
-    if (!_isCurrentLoad(loadEpoch)) return;
-
-    isLoading = false;
-    _sliceEpoch++;
-    _adoptCollection(
-      path: path,
-      entries: entries,
-      newPerspective: _perspectiveFor(entries),
-    );
-    loadedFileModified = modified?.modified;
-    notifyListeners();
-
-    await addToRecentFiles(path);
-    if (!_isCurrentLoad(loadEpoch)) return;
-    _fenIndex.reset();
-    await _fenIndex.tryLoadPersisted(path, entries.length);
-    if (!_isCurrentLoad(loadEpoch)) return;
-    if (restoreSavedSlice) await tryRestoreSavedSlice(path, entries);
-    if (!_isCurrentLoad(loadEpoch)) return;
-    await loadCurrentGame();
-    if (!_isCurrentLoad(loadEpoch)) return;
-    if (_fenIndex.value == null) {
-      _buildFenIndex(); // classification runs via _onFenIndexReady
-    } else {
-      unawaited(_classifyOpenings());
     }
   }
 

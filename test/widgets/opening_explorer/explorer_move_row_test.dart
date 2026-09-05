@@ -49,8 +49,8 @@ void main() {
     final hovers = <bool>[];
     await tester.pumpWidget(
       _host([
-        ExplorerMoveRow(move: _e4, onPlay: () {}, onHover: hovers.add),
-        ExplorerMoveRow(move: _d4, onPlay: () {}, onAdd: () {}),
+        ExplorerMoveRow.lichess(move: _e4, onPlay: () {}, onHover: hovers.add),
+        ExplorerMoveRow.lichess(move: _d4, onPlay: () {}, onAdd: () {}),
       ]),
     );
 
@@ -77,7 +77,13 @@ void main() {
   ) async {
     var played = 0;
     await tester.pumpWidget(
-      _host([ExplorerMoveRow(move: _e4, onPlay: () => played++, onAdd: () {})]),
+      _host([
+        ExplorerMoveRow.lichess(
+          move: _e4,
+          onPlay: () => played++,
+          onAdd: () {},
+        ),
+      ]),
     );
     expect(find.byIcon(Icons.add), findsNothing);
 
@@ -88,7 +94,9 @@ void main() {
   testWidgets('shows games, share of the position and bar percentages', (
     tester,
   ) async {
-    await tester.pumpWidget(_host([ExplorerMoveRow(move: _e4, onPlay: () {})]));
+    await tester.pumpWidget(
+      _host([ExplorerMoveRow.lichess(move: _e4, onPlay: () {})]),
+    );
 
     expect(find.text('100'), findsOneWidget); // games with the move
     expect(find.text('45%'), findsOneWidget); // share of the position
@@ -103,7 +111,9 @@ void main() {
   ) async {
     var added = 0;
     await tester.pumpWidget(
-      _host([ExplorerMoveRow(move: _e4, onPlay: () {}, onAdd: () => added++)]),
+      _host([
+        ExplorerMoveRow.lichess(move: _e4, onPlay: () {}, onAdd: () => added++),
+      ]),
     );
 
     await tester.tapAt(
@@ -123,7 +133,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       _host([
-        ExplorerMoveRow(
+        ExplorerMoveRow.lichess(
           move: _e4,
           onPlay: () {},
           onAdd: () {},
@@ -148,9 +158,9 @@ void main() {
       totalGames: 200,
     );
     await tester.pumpWidget(
-      _host(const [
-        ExplorerTableHeader(),
-        ExplorerTotalsRow(response: response),
+      _host([
+        const ExplorerTableHeader(),
+        ExplorerTotalsRow.lichess(response: response),
       ]),
     );
 

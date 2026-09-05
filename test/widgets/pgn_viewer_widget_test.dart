@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/core/pgn/solitaire_reveal.dart';
+import 'package:chess_auto_prep/widgets/pgn/pgn_movetext_view.dart';
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
 
 /// Mainline e4 e5 Nf3 Nc6 with a multi-block comment on 1. e4, a commented
@@ -125,34 +126,36 @@ void main() {
     expect(c.mainLineIndex, 3);
   });
 
-  testWidgets('focused course reader shows one note and repairs glued moves', (
-    tester,
-  ) async {
-    final c = PgnViewerWidgetController();
-    await _pump(
-      tester,
-      controller: c,
-      preferFocusedReading: true,
-      pgn:
-          '[Event "?"]\n'
-          '[White "Quickstarter Guide"]\n'
-          '[Black "5.O-O d6 #1"]\n'
-          '[Result "*"]\n\n'
-          '1. e4 {We are ready against1.e4and can play1...e5next.} e5 *',
-    );
+  testWidgets(
+    'course note panel shows the current note and repairs glued moves',
+    (tester) async {
+      final c = PgnViewerWidgetController();
+      await _pump(
+        tester,
+        controller: c,
+        preferFocusedReading: true,
+        pgn:
+            '[Event "?"]\n'
+            '[White "Quickstarter Guide"]\n'
+            '[Black "5.O-O d6 #1"]\n'
+            '[Result "*"]\n\n'
+            '1. e4 {We are ready against1.e4and can play1...e5next.} e5 *',
+      );
 
-    expect(find.text('Focus'), findsOneWidget);
-    expect(find.text('Full notation'), findsOneWidget);
-    expect(find.text('Before the first move'), findsOneWidget);
+      // The note panel sits under the full movetext, so both are on screen.
+      expect(find.text('Start'), findsOneWidget);
+      expect(find.text('0 / 2'), findsOneWidget);
+      expect(find.byType(PgnMovetextView), findsOneWidget);
 
-    c.goForward();
-    await tester.pumpAndSettle();
-    expect(find.text('1. e4'), findsOneWidget);
-    expect(
-      find.text('We are ready against 1.e4 and can play 1...e5 next.'),
-      findsOneWidget,
-    );
-  });
+      c.goForward();
+      await tester.pumpAndSettle();
+      expect(find.text('1. e4'), findsOneWidget);
+      expect(
+        find.text('We are ready against 1.e4 and can play 1...e5 next.'),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets('initial mainline index resumes an earlier reading place', (
     tester,

@@ -44,30 +44,12 @@ $Expected = @{
   'hivemind.onnx'        = 54415625
 }
 
-# The same files by content, plus the Visual C++ runtime the app copies in from
-# its own folder. Size is not enough and this is the machine that proves it: a
-# file that is the right length but the wrong bytes is exactly what the Windows
-# loader rejects with STATUS_INVALID_IMAGE_FORMAT, and it is invisible to every
-# other check here -- the PE header still parses, so the architecture still
-# reads back as x64. It is also permanent, because BughouseBundle re-extracts
-# only when the size differs, so no upgrade and no reinstall ever replaces it.
-#
-# Engine, runtime and network are the payload_sha256 values in
-# tools/bughouse.lock.json; the eight redistributable DLLs are the ones the
-# release workflow deployed into the v1.15.3 Windows bundle. Both sets were
-# verified against the published v1.15.3 artifact.
+# Only the pinned engine payload has fixed hashes. VC++ runtime DLLs are
+# serviced independently and newer valid versions must not be called corrupt.
 $ExpectedHash = @{
   'hivemind-windows.exe'     = '726cf9baad7d050b3d351e32d3ebd908eb249d9995b53263c62b5033ce759040'
   'onnxruntime.dll'          = '69d8e6d3879a3b4001cdc74c8ed9ccc7e7f799a5b847059738323404519ec471'
   'hivemind.onnx'            = '61f74ba7d9a79868b565d51ece450519a4dc6b38d697aabd117fc5b843281a2f'
-  'concrt140.dll'            = '54716f0738af891f283d213b5c8d11b25896bb8ee3097d301eae718560cf974e'
-  'msvcp140.dll'             = '7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca'
-  'msvcp140_1.dll'           = '206c931bf90fdad8816de3b5e2ef80b2bcaa9406c89ecc05fe6fddffe251e982'
-  'msvcp140_2.dll'           = 'd50d7883f20d1dc6191768d3746f52dd9cac89c346ffaed5be1f110c2f34a838'
-  'msvcp140_atomic_wait.dll' = '3d0cbfaa1bf3eecf5a3f4491d2960ee803cb994f30292c6adc4a07c498f60e2b'
-  'msvcp140_codecvt_ids.dll' = '8a65c7596ef2e6938731f5a1058e7e40145b6d97967cc649231a076b9a608d78'
-  'vcruntime140.dll'         = 'd1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7'
-  'vcruntime140_1.dll'       = 'a7146c08f89fe5b04541ab507cdb59ff7b44534d4ba3c668a426c6450a03434e'
 }
 
 # Every library the engine and its ONNX Runtime import that Windows does not
@@ -117,12 +99,16 @@ function Get-PeMachine([string]$path) {
   }
 }
 
-function Read-EngineLine($reader, [int]$timeoutMs) {
-  # A blocking ReadLine would hang on exactly the failure this script exists
-  # for: a process that starts, prints nothing and never exits.
-  $task = $reader.ReadLineAsync()
-  if ($task.Wait($timeoutMs)) { return $task.Result }
-  return $null
+function Read-EngineLine($state, [int]$timeoutMs) {
+  # Keep exactly one pending read across timeout polls. Starting another read
+  # would throw or consume the eventual banner without returning it.
+  if ($state.Ended) { return $null }
+  if ($null -eq $state.Pending) { $state.Pending = $state.Reader.ReadLineAsync() }
+  if (-not $state.Pending.Wait($timeoutMs)) { return $null }
+  $line = $state.Pending.GetAwaiter().GetResult()
+  $state.Pending = $null
+  if ($null -eq $line) { $state.Ended = $true }
+  return $line
 }
 
 Write-Host 'Chess Auto Prep -- bughouse engine diagnosis' -ForegroundColor White
@@ -229,17 +215,28 @@ foreach ($name in $Expected.Keys) {
 
 # ------------------------------------------------------------- the bytes
 
-# The check the app cannot do for itself. Everything above this point can be
-# perfect -- every file present, every size right, every PE header reading back
-# as x64 -- while one of these files is still not the file we shipped, and that
-# is the only remaining way the loader says STATUS_INVALID_IMAGE_FORMAT with
-# nothing else out of place.
+# Compare the pinned payload. A mismatch can also mean a different engine
+# version; preserve the app version above when interpreting this report.
 Write-Head 'Whether those files are the bytes we shipped'
 $checked = 0
 $unknown = New-Object System.Collections.ArrayList
 foreach ($f in (Get-ChildItem $EngineDir -File | Sort-Object Name)) {
   $want = $ExpectedHash[$f.Name.ToLowerInvariant()]
-  if (-not $want) { [void]$unknown.Add($f.Name); continue }
+  if (-not $want) {
+    if ($f.Name -match '^(concrt140|msvcp140|vcruntime140).*\.dll$') {
+      $version = $f.VersionInfo.FileVersion
+      $signature = (Get-AuthenticodeSignature -LiteralPath $f.FullName).Status
+      Write-Host ("  {0,-26} serviced runtime: version {1}, signature {2}" -f $f.Name, $version, $signature)
+      if ($AppDir -and (Test-Path (Join-Path $AppDir $f.Name))) {
+        $sourceHash = (Get-FileHash -LiteralPath (Join-Path $AppDir $f.Name) -Algorithm SHA256).Hash
+        $localHash = (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash
+        if ($sourceHash -ne $localHash) {
+          Write-Host '    differs from the current app-local source; reopen Bughouse Lab to refresh' -ForegroundColor Yellow
+        }
+      }
+    } else { [void]$unknown.Add($f.Name) }
+    continue
+  }
   $checked++
   try {
     $got = (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -254,7 +251,7 @@ foreach ($f in (Get-ChildItem $EngineDir -File | Sort-Object Name)) {
     Write-Host ("  {0,-26} DIFFERENT BYTES" -f $f.Name) -ForegroundColor Red
     Write-Host ("  {0,-26}   on disk  {1}" -f '', $got)
     Write-Host ("  {0,-26}   shipped  {1}" -f '', $want)
-    [void]$problems.Add("$($f.Name) is the right size but not the file we shipped -- it is corrupt on disk, and because the app only re-extracts on a size mismatch it will stay that way until the bughouse folder is deleted")
+    [void]$problems.Add("$($f.Name) differs from the pinned engine payload -- verify the app version and close the app and remove the extracted bughouse folder so the app can extract it again")
   }
 }
 if ($checked -eq 0) {
@@ -424,6 +421,7 @@ if (-not $NoRun) {
 
       # stderr is read asynchronously so a full stderr pipe cannot block the
       # stdout read, which is the classic way a script like this hangs.
+      $outState = @{ Reader = $p.StandardOutput; Pending = $null; Ended = $false }
       $errTask = $p.StandardError.ReadToEndAsync()
       $clock = [System.Diagnostics.Stopwatch]::StartNew()
       $lines = New-Object System.Collections.ArrayList
@@ -441,9 +439,9 @@ if (-not $NoRun) {
       # scanning it for the first time can take most of that. Anything less
       # here would report a slow machine as a broken one.
       while ($clock.Elapsed.TotalSeconds -lt 120) {
-        $line = Read-EngineLine $p.StandardOutput 2000
+        $line = Read-EngineLine $outState 2000
         if ($null -eq $line) {
-          if ($p.HasExited) { break }
+          if ($outState.Ended -or $p.HasExited) { break }
           continue
         }
         [void]$lines.Add($line)

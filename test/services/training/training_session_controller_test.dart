@@ -92,9 +92,17 @@ class _FakeReviewService extends RepertoireReviewService {
   }
 
   @override
-  Future<void> saveAll(List<RepertoireReviewEntry> entries) async {
+  Future<void> saveAll(
+    List<RepertoireReviewEntry> entries, {
+    String? repertoireId,
+  }) async {
     saveAllCalls++;
-    this.entries = List.of(entries);
+    this.entries = [
+      if (repertoireId != null)
+        for (final e in this.entries)
+          if (e.repertoireId != repertoireId) e,
+      ...entries,
+    ];
   }
 
   @override
@@ -611,7 +619,9 @@ void main() {
         controller.learnAcknowledged();
         expect(controller.learnQuizzing, isTrue);
         expect(controller.waitingForUser, isTrue);
-        expect(controller.feedback, 'Your move');
+        // The card's own prompt row asks for the move; the feedback line is
+        // kept for the verdict.
+        expect(controller.feedback, isNull);
         expect(
           controller.session.moveHistory,
           isEmpty,
@@ -655,6 +665,112 @@ void main() {
             controller.phase == TrainingPhase.drilling &&
             controller.waitingForUser,
       );
+      controller.dispose();
+    });
+
+    test('a second Next on your move does not rewind a second ply', () async {
+      final controller = buildController();
+      final line = _line('N', ['e4', 'e5', 'Nf3']);
+      controller.lines = [line];
+
+      controller.startLine(line);
+      await _waitFor(() => controller.learnWaitingForAck);
+      controller.learnAcknowledged();
+      await controller.handleUserMove(_move(uci: 'e2e4', san: 'e4'));
+      // e5 auto-plays, then Nf3 is shown and waits for Next.
+      await _waitFor(
+        () => controller.learnWaitingForAck && controller.currentMoveIndex == 2,
+      );
+      expect(controller.session.moveHistory, ['e4', 'e5', 'Nf3']);
+
+      // A double-click, or Space landing after the click.
+      controller.learnAcknowledged();
+      controller.learnAcknowledged();
+      expect(controller.learnQuizzing, isTrue);
+      expect(controller.session.moveHistory, [
+        'e4',
+        'e5',
+      ], reason: 'rewound exactly one ply, to quiz Nf3');
+      controller.dispose();
+    });
+
+    test('a second Next on a commented reply does not skip a move', () async {
+      final controller = buildController();
+      final line = _line('O', ['e4', 'e5', 'Nf3'], comments: {'1': 'Classic'});
+      controller.lines = [line];
+
+      controller.startLine(line);
+      await _waitFor(() => controller.learnWaitingForAck);
+      controller.learnAcknowledged();
+      await controller.handleUserMove(_move(uci: 'e2e4', san: 'e4'));
+      await _waitFor(() => controller.opponentWaitingForAck);
+
+      controller.opponentAcknowledged();
+      controller.opponentAcknowledged();
+      // Without the guard the cursor stepped past Nf3 and the walkthrough
+      // ended; with it, Nf3 is the next move shown.
+      await _waitFor(() => controller.learnWaitingForAck);
+      expect(controller.currentPairUser!.san, 'Nf3');
+      expect(controller.session.moveHistory, ['e4', 'e5', 'Nf3']);
+      controller.dispose();
+    });
+
+    test('auto-advance quizzes an unannotated move after the delay', () async {
+      final controller = buildController();
+      controller.settings = _fastSettings()
+        ..learnRequiresClick = false
+        ..learnDelaySec = 1;
+      final line = _line('R', ['e4', 'e5']);
+      controller.lines = [line];
+
+      controller.startLine(line);
+      // No Next gate in auto mode: the move shows, then the quiz follows on
+      // its own. It used to be skipped outright when the move had no note.
+      await _waitFor(
+        () => controller.learnQuizzing,
+        timeout: const Duration(seconds: 5),
+      );
+      expect(controller.learnWaitingForAck, isFalse);
+      expect(controller.waitingForUser, isTrue);
+      expect(controller.session.moveHistory, isEmpty, reason: 'rewound');
+      controller.dispose();
+    });
+
+    test('a line from the initial position starts on the initial board even '
+        'after a set-up puzzle', () async {
+      final controller = buildController();
+      // A puzzle that starts after 1.e4 e5 …
+      final puzzle = RepertoireLine(
+        id: 'P',
+        name: 'Puzzle',
+        moves: ['Nf3', 'Nc6'],
+        color: 'white',
+        startPosition: Chess.fromSetup(
+          Setup.parseFen(
+            'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+          ),
+        ),
+        fullPgn: '',
+      );
+      // … and then an ordinary line from move one.
+      final line = _line('Q', ['d4', 'd5']);
+      controller.lines = [puzzle, line];
+
+      controller.startLine(puzzle);
+      await _waitFor(() => controller.learnWaitingForAck);
+      expect(controller.session.fen, isNot(Chess.initial.fen));
+
+      controller.startLine(line);
+      // Clearing history used to keep the puzzle's starting FEN, so this
+      // line's board began with 1.e4 e5 already played.
+      expect(controller.session.fen, Chess.initial.fen);
+      await _waitFor(() => controller.learnWaitingForAck);
+      expect(controller.currentPairUser!.san, 'd4');
+      expect(controller.error, isNull);
+
+      controller.stopSession();
+      // The idle board parks on the source's own start, not the last line's.
+      expect(controller.session.fen, isNot(Chess.initial.fen));
       controller.dispose();
     });
   });

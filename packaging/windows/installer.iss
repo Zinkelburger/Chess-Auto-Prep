@@ -75,6 +75,18 @@ Source: "{#VCRedistDir}\VC_redist.x64.exe"; Flags: dontcopy noencryption
 ; The separately-produced portable zip still contains these files.
 Source: "{#BundleDir}\*"; DestDir: "{app}"; Excludes: "concrt140.dll,msvcp140*.dll,vcruntime140*.dll"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+[InstallDelete]
+; Runs only after PrepareToInstall has verified the central runtime. Remove
+; precisely the app-local files deployed by older installers during upgrades.
+Type: files; Name: "{app}\concrt140.dll"
+Type: files; Name: "{app}\msvcp140.dll"
+Type: files; Name: "{app}\msvcp140_1.dll"
+Type: files; Name: "{app}\msvcp140_2.dll"
+Type: files; Name: "{app}\msvcp140_atomic_wait.dll"
+Type: files; Name: "{app}\msvcp140_codecvt_ids.dll"
+Type: files; Name: "{app}\vcruntime140.dll"
+Type: files; Name: "{app}\vcruntime140_1.dll"
+
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon

@@ -77,7 +77,12 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
   }) : _import = importCoordinator,
        _windowSettings = windowSettings ?? GamesWindowSettings.instance,
        _mining = miningSettings ?? MiningSettings.instance,
-       _engine = engine ?? EngineSettings.instance;
+       _engine = engine ?? EngineSettings.instance {
+    // The home block states cores and depth beside its gear; turning either
+    // down on the Settings screen has to move that read-out too.
+    _engine.addListener(notifyListeners);
+    _mining.addListener(notifyListeners);
+  }
 
   final RecentGamesController _games;
   final TacticsImportCoordinator _import;
@@ -124,10 +129,17 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
       (_lichessUsername()?.trim().isNotEmpty ?? false) ||
       (_chesscomUsername()?.trim().isNotEmpty ?? false);
 
-  /// How much of the machine this review is allowed to use, for the strip that
-  /// says so out loud.
+  /// How much of the machine this review is allowed to use, for the block
+  /// that says so out loud.
   int get cores => _engine.workers;
   int get depth => _mining.depth;
+
+  @override
+  void dispose() {
+    _engine.removeListener(notifyListeners);
+    _mining.removeListener(notifyListeners);
+    super.dispose();
+  }
 
   void _to(HomeReviewStage stage, {String? detail}) {
     _stage = stage;
@@ -314,6 +326,12 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
       // Empty (a failed or filtered-out fetch) falls back to fetching, so the
       // review still works when the list could not load.
       final fetched = _fetchedPgnsFor(source);
+      final platform = _platformOf(source);
+      final cachePath = _cachePathFor(platform);
+      final expectedPgn = {
+        for (final g in _games.games)
+          if (g.platform == platform) g.record.dedupKey: g.record.pgn,
+      };
       final completed = await _import.import(
         source: source,
         pgnContent: fetched.isEmpty ? null : fetched,
@@ -332,7 +350,7 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
       // Written whether or not the pass finished: every game it did get to
       // has its scores, and a stopped run must not throw them away any more
       // than it throws away the counts.
-      await _flushAnnotations(_platformOf(source));
+      await _flushAnnotations(expectedPgn, cachePath);
       // The pass can also be stopped from the puzzle panel's own status banner,
       // or refused because something else holds the coordinator. Either way it
       // did not finish, so this run is paused — carrying on to the next account
@@ -352,16 +370,17 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
   /// game in the window. Best-effort — the scores are a bonus on top of the
   /// counts, and a cache that cannot be written is not a reason to fail a
   /// review that otherwise worked.
-  Future<void> _flushAnnotations(GamesPlatform platform) async {
+  Future<void> _flushAnnotations(
+    Map<String, String> expectedPgn,
+    String? cachePath,
+  ) async {
     if (_annotations.isEmpty) return;
     // Only this site's games. The other site's are a different cache file and
     // are patched on their own turn, so taking the whole map here would drop
     // them on the floor.
     final mine = {
-      for (final g in _games.games)
-        if (g.platform == platform &&
-            _annotations.containsKey(g.record.dedupKey))
-          g.record.dedupKey: _annotations[g.record.dedupKey]!,
+      for (final key in expectedPgn.keys)
+        if (_annotations.containsKey(key)) key: _annotations[key]!,
     };
     for (final key in mine.keys) {
       _annotations.remove(key);
@@ -369,12 +388,12 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
     if (mine.isEmpty) return;
     // Non-null whenever [mine] is: the rows it was built from are the ones
     // that name the file.
-    final cachePath = _cachePathFor(platform);
     if (cachePath == null) return;
     try {
       await GamesLibraryService.patchGameMovetexts(
         cachePath: cachePath,
         movetextByDedupKey: mine,
+        expectedPgnByDedupKey: expectedPgn,
       );
     } catch (e) {
       log.w('Could not store analysis in the games cache: $e');

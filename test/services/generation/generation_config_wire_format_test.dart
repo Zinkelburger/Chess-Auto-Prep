@@ -127,6 +127,37 @@ TreeBuildConfig config({
 );
 
 void main() {
+  test('new and legacy builds use one thread unless explicitly configured', () {
+    const config = TreeBuildConfig(startFen: startFen, playAsWhite: true);
+    expect(defaultEngineThreads(), 1);
+    expect(config.resolvedEngineThreads, 1);
+
+    final legacy = config.toJson()..remove('engine_threads');
+    expect(
+      TreeBuildConfig.fromJson(
+        legacy,
+        startFen: startFen,
+      ).resolvedEngineThreads,
+      1,
+    );
+    legacy['engine_threads'] = 0;
+    expect(
+      TreeBuildConfig.fromJson(
+        legacy,
+        startFen: startFen,
+      ).resolvedEngineThreads,
+      1,
+    );
+    legacy['engine_threads'] = 4;
+    expect(
+      TreeBuildConfig.fromJson(
+        legacy,
+        startFen: startFen,
+      ).resolvedEngineThreads,
+      clampEngineThreads(4),
+    );
+  });
+
   group('the persisted shape', () {
     test('is flat — no nested objects a resume could not read', () {
       final json = config().toJson();

@@ -593,6 +593,11 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
             .recordAttempt(currentPosition!, TacticsResult.correct, timeTaken)
             .then((_) {
               if (isMounted()) refreshCurrentPosition();
+            })
+            .catchError((Object error) {
+              if (!isMounted()) return;
+              feedback = 'Result is unsaved: $error';
+              notifyListeners();
             }),
       );
     }
@@ -629,6 +634,11 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
             .recordAttempt(currentPosition!, TacticsResult.incorrect, timeTaken)
             .then((_) {
               if (isMounted()) refreshCurrentPosition();
+            })
+            .catchError((Object error) {
+              if (!isMounted()) return;
+              feedback = 'Result is unsaved: $error';
+              notifyListeners();
             }),
       );
     }
