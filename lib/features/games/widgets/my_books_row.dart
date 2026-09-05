@@ -57,7 +57,7 @@ class _MyBooksRowState extends State<MyBooksRow> {
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: const Text('Change'),
+              child: Text(white.isEmpty && black.isEmpty ? 'Set up' : 'Change'),
             ),
           ],
         );

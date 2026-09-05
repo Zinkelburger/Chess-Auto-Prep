@@ -1,5 +1,6 @@
-/// Designating a book when you do not have one yet: the Add button offers
-/// three starting points, not just "pick from what is already here".
+/// Designating a book is one click per way in: Import PGN… goes straight to
+/// the file picker and designates what it imports; Add existing is a menu of
+/// what is already in the app, with "New empty repertoire…" at its foot.
 library;
 
 import 'dart:io';
@@ -14,6 +15,7 @@ import 'package:chess_auto_prep/features/games/widgets/my_repertoires_panel.dart
 import 'package:chess_auto_prep/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/services/storage/storage_service.dart';
+import 'package:chess_auto_prep/widgets/pgn_import_dialog.dart';
 
 /// Repertoires live in a temp directory; only what this panel calls is
 /// implemented.
@@ -61,6 +63,22 @@ class _TempStorage implements StorageService {
       throw UnimplementedError('${invocation.memberName} is not used here');
 }
 
+const _caroKannPgn =
+    '[Event "Caro-Kann"]\n[Result "*"]\n\n1. e4 c6 2. d4 d5 *\n\n'
+    '[Event "Advance"]\n[Result "*"]\n\n1. e4 c6 2. d4 d5 3. e5 Bf5 *\n';
+
+PickedPgnImport _pickedCaroKann({String? suggestedColor = 'Black'}) =>
+    PickedPgnImport(
+      result: const PgnImportResult(
+        pgnContent: _caroKannPgn,
+        gameCount: 2,
+        fileName: 'Caro-Kann.pgn',
+      ),
+      fileName: 'Caro-Kann.pgn',
+      suggestedName: 'Caro-Kann',
+      suggestedColor: suggestedColor,
+    );
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -83,48 +101,50 @@ void main() {
     dir.deleteSync(recursive: true);
   });
 
-  Future<void> pumpPanel(WidgetTester tester) async {
+  Future<void> pumpPanel(
+    WidgetTester tester, {
+    Future<PickedPgnImport?> Function()? pickPgn,
+  }) async {
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
         home: Scaffold(
-          body: SingleChildScrollView(child: MyRepertoiresPanel()),
+          body: SingleChildScrollView(
+            child: MyRepertoiresPanel(pickPgn: pickPgn ?? pickPgnImport),
+          ),
         ),
       ),
     );
     await tester.pumpAndSettle();
   }
 
-  /// Press Add on the White section.
-  Future<void> tapAddWhite(WidgetTester tester) async {
-    await tester.tap(find.text('Add repertoire').first);
+  /// Open the Add existing menu of one section (first = White, last = Black).
+  Future<void> openAddExisting(WidgetTester tester, {bool white = true}) async {
+    final button = find.widgetWithText(OutlinedButton, 'Add existing');
+    await tester.tap(white ? button.first : button.last);
     await tester.pumpAndSettle();
   }
 
-  testWidgets('with nothing in the app, Add still offers two ways in', (
+  testWidgets('both ways in are on the panel itself, per colour', (
     tester,
   ) async {
     await pumpPanel(tester);
-    await tapAddWhite(tester);
 
-    expect(find.text('Add White repertoire'), findsOneWidget);
-    expect(find.text('Import a PGN file…'), findsOneWidget);
-    expect(find.text('Start an empty one…'), findsOneWidget);
-    // The old dead end — a snackbar saying there was nothing to add — is now a
-    // disabled row that says why.
-    expect(find.text('You have no repertoires in the app yet'), findsOneWidget);
-    final tile = tester.widget<ListTile>(
-      find.widgetWithText(ListTile, 'Choose one I already have'),
-    );
-    expect(tile.enabled, isFalse);
+    expect(find.text('Import PGN…'), findsNWidgets(2));
+    expect(find.text('Add existing'), findsNWidgets(2));
+    // No chooser dialog in between: the menu opens right here, and with
+    // nothing in the app it says so instead of dead-ending.
+    await openAddExisting(tester);
+    expect(find.text('No other repertoires in the app'), findsOneWidget);
+    expect(find.text('New empty repertoire…'), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
   });
 
-  testWidgets('starting an empty one creates it and designates it', (
+  testWidgets('a new empty repertoire is created and designated', (
     tester,
   ) async {
     await pumpPanel(tester);
-    await tapAddWhite(tester);
-
-    await tester.tap(find.text('Start an empty one…'));
+    await openAddExisting(tester);
+    await tester.tap(find.text('New empty repertoire…'));
     await tester.pumpAndSettle();
 
     await tester.enterText(
@@ -156,9 +176,8 @@ void main() {
       ),
     ];
     await pumpPanel(tester);
-    await tapAddWhite(tester);
-
-    await tester.tap(find.text('Start an empty one…'));
+    await openAddExisting(tester);
+    await tester.tap(find.text('New empty repertoire…'));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('repertoire-name-field')),
@@ -175,7 +194,70 @@ void main() {
     expect(MyRepertoireSettings.instance.whitePaths, isEmpty);
   });
 
-  testWidgets('an existing repertoire can still just be picked', (
+  testWidgets('an existing repertoire is one menu click', (tester) async {
+    storage.repertoires = [
+      RepertoireMetadata(
+        filePath: p.join(dir.path, 'Caro-Kann'),
+        name: 'Caro-Kann',
+        lastModified: DateTime(2026, 8, 1),
+      ),
+    ];
+    await pumpPanel(tester);
+    // Designate it as Black — the second section's menu.
+    await openAddExisting(tester, white: false);
+    await tester.tap(find.text('Caro-Kann').last);
+    await tester.pumpAndSettle();
+
+    expect(MyRepertoireSettings.instance.blackPaths, [
+      p.join(dir.path, 'Caro-Kann'),
+    ]);
+    expect(MyRepertoireSettings.instance.whitePaths, isEmpty);
+    // Now designated for Black, it is no longer offered there.
+    await openAddExisting(tester, white: false);
+    expect(find.text('No other repertoires in the app'), findsOneWidget);
+  });
+
+  testWidgets(
+    'importing a PGN designates it under the file name, no questions',
+    (tester) async {
+      var picks = 0;
+      await pumpPanel(
+        tester,
+        pickPgn: () async {
+          picks++;
+          return _pickedCaroKann();
+        },
+      );
+
+      // Black's Import button; the file reads as a Black book, so nothing to
+      // confirm and nothing to name.
+      await tester.tap(find.widgetWithText(FilledButton, 'Import PGN…').last);
+      await tester.pumpAndSettle();
+
+      expect(picks, 1);
+      expect(find.byKey(const Key('repertoire-name-field')), findsNothing);
+      expect(find.byType(AlertDialog), findsNothing);
+      final chapter = File(p.join(dir.path, 'Caro-Kann', 'Caro-Kann.pgn'));
+      expect(
+        chapter.existsSync(),
+        isTrue,
+        reason: 'chapter named after the file',
+      );
+      final content = chapter.readAsStringSync();
+      expect(content, contains('// Color: Black'));
+      expect(content, contains('3. e5 Bf5'));
+      expect(MyRepertoireSettings.instance.blackPaths, [
+        p.join(dir.path, 'Caro-Kann'),
+      ]);
+      expect(MyRepertoireSettings.instance.whitePaths, isEmpty);
+      expect(
+        find.text('Caro-Kann is now your Black book — 2 lines imported.'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('a file whose name is already taken gets a numbered name', (
     tester,
   ) async {
     storage.repertoires = [
@@ -185,19 +267,65 @@ void main() {
         lastModified: DateTime(2026, 8, 1),
       ),
     ];
-    await pumpPanel(tester);
-    // Designate it as Black — the second section's Add button.
-    await tester.tap(find.text('Add repertoire').last);
-    await tester.pumpAndSettle();
-    expect(find.text('1 available'), findsOneWidget);
-
-    await tester.tap(find.text('Choose one I already have'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Caro-Kann').last);
+    await pumpPanel(tester, pickPgn: () async => _pickedCaroKann());
+    await tester.tap(find.widgetWithText(FilledButton, 'Import PGN…').last);
     await tester.pumpAndSettle();
 
+    expect(
+      File(p.join(dir.path, 'Caro-Kann 2', 'Caro-Kann 2.pgn')).existsSync(),
+      isTrue,
+    );
+    expect(MyRepertoireSettings.instance.blackPaths, [
+      p.join(dir.path, 'Caro-Kann 2'),
+    ]);
+  });
+
+  testWidgets('a file that reads as the other colour asks once', (
+    tester,
+  ) async {
+    await pumpPanel(
+      tester,
+      pickPgn: () async => _pickedCaroKann(suggestedColor: 'White'),
+    );
+    // Pressed under Black, but the file's move tree says White.
+    await tester.tap(find.widgetWithText(FilledButton, 'Import PGN…').last);
+    await tester.pumpAndSettle();
+    expect(find.text('This looks like a White repertoire'), findsOneWidget);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(MyRepertoireSettings.instance.blackPaths, isEmpty);
+    expect(Directory(p.join(dir.path, 'Caro-Kann')).existsSync(), isFalse);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Import PGN…').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add as Black'));
+    await tester.pumpAndSettle();
     expect(MyRepertoireSettings.instance.blackPaths, [
       p.join(dir.path, 'Caro-Kann'),
     ]);
+    expect(
+      File(p.join(dir.path, 'Caro-Kann', 'Caro-Kann.pgn')).readAsStringSync(),
+      contains('// Color: Black'),
+      reason: 'the section pressed wins once confirmed',
+    );
+  });
+
+  testWidgets('cancelling the picker or a bad file changes nothing', (
+    tester,
+  ) async {
+    PickedPgnImport? next;
+    await pumpPanel(tester, pickPgn: () async => next);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Import PGN…').first);
+    await tester.pumpAndSettle();
+    expect(MyRepertoireSettings.instance.whitePaths, isEmpty);
+
+    next = const PickedPgnImport(error: 'No lines found in empty.pgn.');
+    await tester.tap(find.widgetWithText(FilledButton, 'Import PGN…').first);
+    await tester.pumpAndSettle();
+    expect(find.text('No lines found in empty.pgn.'), findsOneWidget);
+    expect(MyRepertoireSettings.instance.whitePaths, isEmpty);
+    expect(dir.listSync(), isEmpty);
   });
 }

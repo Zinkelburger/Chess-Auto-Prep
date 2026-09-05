@@ -23,15 +23,19 @@ class RepertoireCreationResult {
   /// The repertoire folder — what [MyRepertoireSettings] designates.
   final String directoryPath;
 
-  /// Its first chapter, "Main" — what an editor opens.
+  /// Its first (only) chapter — what an editor opens.
   final String chapterPath;
 
   /// Lines seeded from imported PGN; 0 for an empty repertoire.
   final int gameCount;
 }
 
-/// Create the folder for [name] with a "Main" chapter marked for [color]
+/// Create the folder for [name] with one chapter marked for [color]
 /// ('White' or 'Black'), optionally seeded with [pgnContent].
+///
+/// The chapter is called "Main" unless [chapterName] says otherwise — an
+/// imported file is better off with a chapter named after itself, since that
+/// name is what every book verdict on the games list then shows.
 ///
 /// The caller checks for a name clash first — it has the list on screen and
 /// can say so in the form, which is better than a thrown error.
@@ -40,15 +44,16 @@ Future<RepertoireCreationResult> createRepertoire({
   required String color,
   String? pgnContent,
   int gameCount = 0,
+  String chapterName = 'Main',
   DateTime? createdAt,
   StorageService? storage,
 }) async {
   final store = storage ?? StorageFactory.instance;
   final dirPath = await store.repertoireDirectoryPath(name);
-  final chapterPath = store.chapterFilePath(dirPath, 'Main');
+  final chapterPath = store.chapterFilePath(dirPath, chapterName);
   final stamp = (createdAt ?? DateTime.now()).toString().split('.')[0];
   final header =
-      '// Main\n'
+      '// $chapterName\n'
       '// Color: $color\n'
       '// Created on $stamp\n\n';
 

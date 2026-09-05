@@ -5,9 +5,9 @@ import 'package:chess_auto_prep/features/games/services/my_repertoire_settings.d
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// The per-game deviation walker: SAN-prefix matching of a game against the
-/// designated repertoire chapters, deepest-matching chapter wins, side-aware
-/// "who left book".
+/// The per-game deviation walker: a game against the designated repertoire
+/// chapters — every path in them, matched as moves rather than SAN spellings —
+/// deepest match wins, side-aware "who left book".
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -368,5 +368,201 @@ $mainChapter
       expect(report!.matchedPlies, 5);
       expect(report.bookEnded, isTrue);
     });
+  });
+
+  group('variations and spellings', () {
+    test('a variation in brackets is part of the book', () async {
+      // A study export: most of the theory is in brackets.
+      await writeChapter('Study.pgn', '''
+// Color: White
+
+[Event "Open games"]
+[Result "*"]
+
+1. e4 e5 (1... c5 2. Nf3 d6 (2... Nc6 3. Bb5 g6) 3. d4) 2. Nf3 Nc6 3. Bb5 *
+''');
+      await settings.setPaths(white: true, paths: [tempDir.path]);
+
+      // The game follows the nested variation, then I leave it.
+      final report = await service.analyzeGame(
+        gameSans: ['e4', 'c5', 'Nf3', 'Nc6', 'Bc4'],
+        meWhite: true,
+      );
+      expect(report!.matchedPlies, 4);
+      expect(report.playedSan, 'Bc4');
+      expect(report.byMe, isTrue);
+      expect(report.expectedSans, ['Bb5']);
+
+      // The opponent's choices at a fork are mainline and variation together.
+      final atMoveOne = await service.analyzeGame(
+        gameSans: ['e4', 'd5'],
+        meWhite: true,
+      );
+      expect(atMoveOne!.expectedSans, unorderedEquals(['e5', 'c5']));
+
+      // Running past the end of a variation is a book end, like the mainline.
+      final past = await service.analyzeGame(
+        gameSans: ['e4', 'c5', 'Nf3', 'Nc6', 'Bb5', 'g6', 'O-O'],
+        meWhite: true,
+      );
+      expect(past!.bookEnded, isTrue);
+      expect(past.matchedPlies, 6);
+    });
+
+    test('the same move spelled differently still matches', () async {
+      await writeChapter('Spelling.pgn', '''
+// Color: White
+
+[Event "L"]
+[Result "*"]
+
+1. e4 e5 2. Ngf3 Nc6 3. Bb5+ a6 4. Bxc6 dxc6 5. O-O Bd6 *
+''');
+      await settings.setPaths(white: true, paths: [tempDir.path]);
+
+      // Minimal disambiguation, no check mark, a glyph on a move, and the
+      // castling the site exports — all the same moves.
+      final report = await service.analyzeGame(
+        gameSans: [
+          'e4',
+          'e5',
+          'Nf3',
+          'Nc6',
+          'Bb5',
+          'a6?!',
+          'Bxc6',
+          'dxc6',
+          'O-O',
+          'Bc5',
+        ],
+        meWhite: true,
+      );
+      expect(report!.matchedPlies, 9);
+      expect(report.playedSan, 'Bc5');
+      expect(report.expectedSans, ['Bd6']);
+    });
+
+    test('an illegal move in the book ends that line, not the walk', () async {
+      await writeChapter('Broken.pgn', '''
+// Color: White
+
+[Event "Typo"]
+[Result "*"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Bxe5 Nf6 *
+
+[Event "Fine"]
+[Result "*"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 *
+''');
+      await settings.setPaths(white: true, paths: [tempDir.path]);
+      final report = await service.analyzeGame(
+        gameSans: ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Bc4'],
+        meWhite: true,
+      );
+      expect(report!.matchedPlies, 6);
+      expect(report.expectedSans, [
+        'Ba4',
+      ], reason: 'the typo is not a book move');
+    });
+  });
+
+  group('chapters that reach the same depth', () {
+    test(
+      'are read as one book: an ending chapter cannot hide a move',
+      () async {
+        // Alphabetically first, so it is walked first.
+        await writeChapter('Anti.pgn', '''
+// Color: White
+
+[Event "Anti"]
+[Result "*"]
+
+1. e4 c5 2. Nf3 *
+''');
+        await writeChapter('Najdorf.pgn', '''
+// Color: White
+
+[Event "Najdorf"]
+[Result "*"]
+
+1. e4 c5 2. Nf3 d6 3. d4 cxd4 *
+''');
+        await settings.setPaths(white: true, paths: [tempDir.path]);
+
+        final report = await service.analyzeGame(
+          gameSans: ['e4', 'c5', 'Nf3', 'e6', 'd4'],
+          meWhite: true,
+        );
+        expect(report!.matchedPlies, 3);
+        expect(
+          report.bookEnded,
+          isFalse,
+          reason: 'Najdorf still has a move here',
+        );
+        expect(report.byMe, isFalse);
+        expect(report.expectedSans, ['d6']);
+        expect(report.chapterName, 'Najdorf');
+      },
+    );
+
+    test('offer the union of their moves', () async {
+      await writeChapter('Anti.pgn', '''
+// Color: White
+
+[Event "Anti"]
+[Result "*"]
+
+1. e4 c5 2. Nf3 Nc6 3. Bb5 *
+''');
+      await writeChapter('Najdorf.pgn', '''
+// Color: White
+
+[Event "Najdorf"]
+[Result "*"]
+
+1. e4 c5 2. Nf3 d6 3. d4 *
+''');
+      await settings.setPaths(white: true, paths: [tempDir.path]);
+
+      final report = await service.analyzeGame(
+        gameSans: ['e4', 'c5', 'Nf3', 'e6'],
+        meWhite: true,
+      );
+      expect(report!.expectedSans, unorderedEquals(['Nc6', 'd6']));
+    });
+
+    test(
+      'across folders, a book with a move here beats one that ended',
+      () async {
+        final ending = await Directory('${tempDir.path}/a-ending').create();
+        final living = await Directory('${tempDir.path}/b-living').create();
+        await File('${ending.path}/Main.pgn').writeAsString('''
+// Color: White
+
+[Event "E"]
+[Result "*"]
+
+1. e4 c5 2. Nf3 *
+''');
+        await File('${living.path}/Main.pgn').writeAsString('''
+// Color: White
+
+[Event "L"]
+[Result "*"]
+
+1. e4 c5 2. Nf3 d6 *
+''');
+        await settings.setPaths(white: true, paths: [ending.path, living.path]);
+
+        final report = await service.analyzeGame(
+          gameSans: ['e4', 'c5', 'Nf3', 'e6'],
+          meWhite: true,
+        );
+        expect(report!.bookEnded, isFalse);
+        expect(report.chapterPath, '${living.path}/Main.pgn');
+      },
+    );
   });
 }
