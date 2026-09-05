@@ -4,9 +4,9 @@
 /// Opponents", "Load from disk", "Download New") over the list *and* repeat
 /// two of them as buttons in the empty state — five controls for three
 /// actions, none of whose labels said whether they downloaded, opened a file,
-/// or did both. Every label now starts with a verb and says where the games
-/// come from, and each source is written down exactly once here so the menu
-/// and the empty state can never drift apart.
+/// or did both. Each source is written down exactly once here so the menu
+/// and the empty state can never drift apart. No icons: none of the three
+/// has a glyph that says more than its label.
 library;
 
 import 'package:flutter/material.dart';
@@ -16,33 +16,21 @@ import '../../theme/app_text_styles.dart';
 /// Where a player's games come from.
 enum AddPlayerSource {
   /// Fetch one player's games from their chess.com / lichess account.
-  download(
-    icon: Icons.cloud_download_outlined,
-    label: 'Download a player’s games',
-    detail: 'From their Chess.com or Lichess username',
-  ),
+  download(label: 'Online', detail: 'A Chess.com or Lichess username'),
 
   /// Read games out of PGN files already on this computer.
   pgnFiles(
-    icon: Icons.folder_open_outlined,
-    label: 'Open PGN files',
-    detail: 'Games you already have saved on this computer',
+    label: 'From PGN files',
+    detail: 'Games already saved on this computer',
   ),
 
-  /// Download every entrant named in an opponent-list file, in one pass.
+  /// Open the tournaments you are preparing for.
   opponentList(
-    icon: Icons.groups_outlined,
-    label: 'Add a whole tournament field',
-    detail: 'Downloads everyone named in an opponent-list file',
+    label: 'From a tournament field (experimental)',
+    detail: 'Organise the opponents you are about to play',
   );
 
-  const AddPlayerSource({
-    required this.icon,
-    required this.label,
-    required this.detail,
-  });
-
-  final IconData icon;
+  const AddPlayerSource({required this.label, required this.detail});
 
   /// What tapping it does, as a verb phrase.
   final String label;
@@ -75,7 +63,6 @@ class AddPlayerButton extends StatelessWidget {
       menuChildren: [
         for (final source in AddPlayerSource.values)
           MenuItemButton(
-            leadingIcon: Icon(source.icon, size: 20),
             onPressed: () => onSelected(source),
             child: SizedBox(
               width: 300,
@@ -118,7 +105,6 @@ class AddPlayerSourceList extends StatelessWidget {
               const Divider(height: 1),
             ListTile(
               key: Key('add-player-${source.name}'),
-              leading: Icon(source.icon),
               title: Text(source.menuLabel),
               subtitle: Text(source.detail),
               trailing: const Icon(Icons.chevron_right, size: 20),

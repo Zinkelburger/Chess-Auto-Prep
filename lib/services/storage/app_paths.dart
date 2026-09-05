@@ -13,6 +13,7 @@ class AppPaths {
   static const String studiesDirectoryName = 'studies';
   static const String chessgamesCacheDirectoryName = 'chessgames_pgn_cache';
   static const String engineTournamentsDirectoryName = 'engine_tournaments';
+  static const String opponentsDirectoryName = 'opponents';
 
   static Future<Directory> documentsDirectory() async {
     return getApplicationDocumentsDirectory();
@@ -50,6 +51,17 @@ class AppPaths {
   static Future<Directory> tacticsSetsDirectory({bool create = false}) async {
     final docs = await documentsDirectory();
     final dir = Directory(p.join(docs.path, tacticsSetsDirectoryName));
+    if (create && !await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    return dir;
+  }
+
+  /// The opponents directory and tournaments (`people.json`,
+  /// `tournaments/*.json`) — see `features/opponents`.
+  static Future<Directory> opponentsDirectory({bool create = false}) async {
+    final docs = await documentsDirectory();
+    final dir = Directory(p.join(docs.path, opponentsDirectoryName));
     if (create && !await dir.exists()) {
       await dir.create(recursive: true);
     }

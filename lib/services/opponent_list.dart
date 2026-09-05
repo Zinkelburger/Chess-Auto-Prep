@@ -37,6 +37,7 @@ class OpponentEntry {
   final String? lichess;
   final int? rating;
   final String? title;
+  final String? uscfId;
 
   /// P(you face them at all), from a pairing simulation. Null when the list
   /// carries no odds.
@@ -50,6 +51,7 @@ class OpponentEntry {
     this.lichess,
     this.rating,
     this.title,
+    this.uscfId,
     this.pairingProb,
     this.mostLikelyRound,
     this.note,
@@ -124,7 +126,11 @@ class OpponentList {
   /// Parse JSON text. Throws [FormatException] when the text is not JSON or
   /// has no recognisable opponent rows at all; per-row problems become
   /// [warnings] instead.
-  static OpponentList parse(String text) {
+  ///
+  /// With [keepAccountless] rows that name nobody online are kept instead of
+  /// becoming warnings — a tournament field wants every entrant listed, and
+  /// an account can be filled in later.
+  static OpponentList parse(String text, {bool keepAccountless = false}) {
     final Object? decoded;
     try {
       decoded = json.decode(text);
@@ -181,13 +187,14 @@ class OpponentList {
         lichess: _string(row['lichess'] ?? row['lichess_username']),
         rating: _int(row['rating']),
         title: _string(row['title']),
+        uscfId: _string(row['uscf_id'] ?? row['uscfId'] ?? row['uscf']),
         pairingProb: _double(row['pairing_prob'] ?? row['pairingProb']),
         mostLikelyRound: _int(
           row['most_likely_round'] ?? row['mostLikelyRound'],
         ),
         note: _string(row['note']),
       );
-      if (!entry.hasAccount) {
+      if (!entry.hasAccount && !keepAccountless) {
         warnings.add('$name: no chess.com or lichess account — skipped.');
         continue;
       }

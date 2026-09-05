@@ -33,10 +33,15 @@ class AddToStudyDialog extends StatefulWidget {
   final String initialChapterName;
   final String title;
 
+  /// A study to list first, labelled as the prep file — an opponent's, when
+  /// Player Analysis knows who it is looking at.
+  final String? preferredPath;
+
   const AddToStudyDialog({
     super.key,
     required this.initialChapterName,
     this.title = 'Add line to study',
+    this.preferredPath,
   });
 
   @override
@@ -74,14 +79,19 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
     return name.isEmpty ? widget.initialChapterName : name;
   }
 
+  bool _isPreferred(RepertoireMetadata s) =>
+      widget.preferredPath != null && s.filePath == widget.preferredPath;
+
   List<RepertoireMetadata> get _filtered {
     final studies = _studies ?? const [];
-    if (_query.isEmpty) return studies;
     final q = _query.toLowerCase();
-    return [
+    final matching = [
       for (final s in studies)
-        if (s.name.toLowerCase().contains(q)) s,
+        if (q.isEmpty || s.name.toLowerCase().contains(q)) s,
     ];
+    // The prep file first, whatever the alphabet says.
+    final preferred = matching.where(_isPreferred).toList();
+    return [...preferred, ...matching.where((s) => !_isPreferred(s))];
   }
 
   void _pickExisting(RepertoireMetadata study) {
@@ -182,6 +192,7 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
                             ),
                             title: Text(s.name),
                             subtitle: Text(
+                              '${_isPreferred(s) ? 'Prep file · ' : ''}'
                               '${s.gameCount} chapter'
                               '${s.gameCount == 1 ? '' : 's'}',
                               style: const TextStyle(fontSize: 12),
