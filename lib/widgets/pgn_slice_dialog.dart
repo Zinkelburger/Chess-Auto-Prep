@@ -16,6 +16,7 @@ import '../core/slice_filter_controller.dart';
 import '../models/pgn_filter_models.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import 'lines_preview_panel.dart';
 import 'slice/header_filters.dart';
 import 'slice/position_filter.dart';
@@ -293,7 +294,7 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
           const Text(
             'Scan players and openings, search within the matches, or hover '
             'the moves. Saving as a study makes every game its own chapter.',
-            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceMuted),
+            style: AppTextStyles.caption,
           ),
           const SizedBox(height: 12),
           Expanded(

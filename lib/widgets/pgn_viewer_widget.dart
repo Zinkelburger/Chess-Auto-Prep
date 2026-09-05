@@ -807,10 +807,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
                             const Spacer(),
                           Text(
                             '$_mainLineIndex / ${_moveHistory.length}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.onSurfaceMuted,
-                            ),
+                            style: AppTextStyles.caption,
                           ),
                         ],
                       ),
