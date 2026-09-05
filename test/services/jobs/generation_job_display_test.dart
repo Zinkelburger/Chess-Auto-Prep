@@ -100,18 +100,39 @@ void main() {
     });
   });
 
+  // `TreeBuildConfig.resolvedEngineThreads` clamps the budget to the host's
+  // logical cores, so a frozen expectation may only ask for threads the
+  // smallest machine we run on has. A budget of 10 read as 8/10 CPU on a
+  // desktop and 4/4 on a two-core CI runner. The split arithmetic itself —
+  // including the leftover threads a 12-thread budget gives four workers —
+  // belongs to StockfishPool and is tested against it directly in
+  // test/services/engine/stockfish_pool_test.dart, host-independently.
   group('generationResourceLabel', () {
-    test('shows the real process split and aggregate hash', () {
+    test('splits one budget across workers, and sums their hash', () {
       const config = TreeBuildConfig(
         startFen: _startFen,
         playAsWhite: true,
-        engineThreads: 10,
+        engineThreads: 2,
       );
 
       expect(
-        generationResourceLabel(config, workers: 4),
-        '4 workers × 2 threads · 8/10 CPU · '
-        '512 MB hash + engine memory',
+        generationResourceLabel(config, workers: 2),
+        '2 workers × 1 thread · 2/2 CPU · '
+        '256 MB hash + engine memory',
+      );
+    });
+
+    test('gives one worker the whole budget when that is the setting', () {
+      const config = TreeBuildConfig(
+        startFen: _startFen,
+        playAsWhite: true,
+        engineThreads: 2,
+      );
+
+      expect(
+        generationResourceLabel(config, workers: 1),
+        '1 worker × 2 threads · 2/2 CPU · '
+        '128 MB hash + engine memory',
       );
     });
 
