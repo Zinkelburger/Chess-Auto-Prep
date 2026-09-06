@@ -526,6 +526,7 @@ def root_table(tree_path: Path) -> dict:
     if not isinstance(root, dict):
         raise ToolError(f"{tree_path.name} has no tree in it yet.")
 
+    rolling = (data.get("config") or {}).get("search_algorithm") == "rolling"
     children = root.get("children") or []
     if not children:
         raise ToolError(
@@ -549,17 +550,23 @@ def root_table(tree_path: Path) -> dict:
                 "avg_leaf_ply": round(sum(plies) / len(plies), 2),
             }
         )
-    rows.sort(key=lambda r: (r["expectimax"] is None, -(r["expectimax"] or 0)))
+    if rolling:
+        rows.sort(key=lambda r: (not r["selected"], r["move"]))
+    else:
+        rows.sort(key=lambda r: (r["expectimax"] is None, -(r["expectimax"] or 0)))
 
     scored = [r for r in rows if r["expectimax"] is not None]
     margin = None
-    if len(scored) >= 2:
+    if not rolling and len(scored) >= 2:
         margin = round(scored[0]["expectimax"] - scored[1]["expectimax"], 4)
 
     return {
-        "best": next((r["move"] for r in rows if r["selected"]), scored[0]["move"] if scored else None),
-        "score_kind": "expected-score estimate",
-        "result_status": "complete" if data.get("build_complete") else "incomplete: provisional leader",
+        "best": next((r["move"] for r in rows if r["selected"]), scored[0]["move"] if scored and not rolling else None),
+        "score_kind": "committed rolling-policy estimate (approximate search)" if rolling else "expected-score estimate",
+        "search_method": "rolling" if rolling else "pure",
+        "decision_lookahead": {"horizon": root.get("decision_horizon"), "value": root.get("decision_value")} if rolling else None,
+        "candidate_comparison": "Uncommitted siblings were not extended to the same final horizon; do not rank by these values." if rolling else "Common finite-horizon objective",
+        "result_status": ("complete approximate policy" if rolling else "complete") if data.get("build_complete") else "incomplete: provisional preparation",
         "root_bounds": [root.get("value_lower", 0), root.get("value_upper", 1)],
         "margin_over_second": margin,
         "root_expectimax": (
@@ -597,6 +604,10 @@ def builder_argv(chain: dict, base: Path, position: dict, args: dict) -> list[st
         if value is not None:
             argv.extend([flag, str(value)])
 
+    method = args.get("search", "pure")
+    if method not in ("pure", "rolling"):
+        raise ToolError("search must be pure or rolling")
+    argv.extend(["--search", method])
     add("-d", "plies", 4)
     add("-e", "eval_depth", 16)
     add("-t", "threads", 1)
@@ -753,7 +764,8 @@ def register_expectimax_tools(registry: Any) -> None:
             "color": "White" if position["color"] == "w" else "Black",
             "root_candidates": "every legal move, then the explicit engine-loss constraint",
             "opponent_model": "masters with Maia off-book" if args.get("use_master_games", True) else "Maia throughout",
-            "score_kind": "expected-score estimate, not calibrated win probability",
+            "score_kind": "committed rolling-policy estimate" if args.get("search") == "rolling" else "expected-score estimate, not calibrated win probability",
+            "search_method": args.get("search", "pure"),
             "plies": int(args.get("plies") or 4),
             "directory": str(directory),
             "log": str(log_path),
@@ -923,7 +935,8 @@ def register_expectimax_tools(registry: Any) -> None:
 
     registry._add(
         "expectimax_run",
-        "Start a Pure finite-horizon expectimax build. Scores every legal own move "
+        "Start an expectimax build: pure (full horizon) or rolling (approximate, "
+        "four-ply lookahead at each own turn, committing only our next move). Scores every legal own move "
         "at fixed Stockfish depth, retains those within max_eval_loss, and explores "
         "every positive-probability opponent reply. Default opponent: empirical "
         "Lichess master-game counts, Maia off-book; deselect use_master_games for "
@@ -944,7 +957,8 @@ def register_expectimax_tools(registry: Any) -> None:
                     "ending on Black's move is White to move."
                 ),
                 "name": _s("Label for the run and the PGN headers."),
-                "plies": _i("Exact horizon in half-moves, 1–64 (default 4)."),
+                "search": _s("pure (default) or rolling. Rolling commits short-lookahead choices; it is not a full-horizon optimum."),
+                "plies": _i("Preparation length in half-moves, 1–64 (default 4). Rolling still branches on every modeled opponent reply."),
                 "eval_depth": _i("Stockfish search depth per node (default 16)."),
 
                 "max_eval_loss": _i(

@@ -4,6 +4,9 @@ mixin _GenerationConfigIo
     on _GenerationConfigFormStateBase, _GenerationConfigDescriptions {
   void _applyInitialConfig(TreeBuildConfig config) {
     _seedConfig = config;
+    _searchAlgorithm = config.isRollingSearch
+        ? SearchAlgorithm.rolling
+        : SearchAlgorithm.pure;
     _cutoffCtrl.text = (config.minProbability * 100).toString();
     _maxPlyCtrl.text = config.maxPly.toString();
     _engineDepthCtrl.text = config.evalDepth.toString();
@@ -245,7 +248,7 @@ mixin _GenerationConfigIo
       ourMultipv: int.tryParse(_multipvCtrl.text.trim()) ?? 4,
       oppMaxChildren: int.tryParse(_oppMaxChildrenCtrl.text.trim()) ?? 4,
       oppMassTarget: double.tryParse(_oppMassTargetCtrl.text.trim()) ?? 0.80,
-      searchAlgorithm: SearchAlgorithm.pure,
+      searchAlgorithm: _searchAlgorithm,
       timeBudgetMinutes: (int.tryParse(_timeBudgetCtrl.text.trim()) ?? 0).clamp(
         0,
         24 * 60,

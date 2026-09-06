@@ -149,6 +149,20 @@ class RootTableTest(unittest.TestCase):
         self.assertIsNone(table["candidates"][-1]["expectimax"])
         self.assertIsNone(table["margin_over_second"])
 
+    def test_rolling_reports_committed_policy_without_comparing_unequal_depths(self):
+        chosen = _node("e4", 0.4, 0)
+        chosen["is_repertoire_move"] = True
+        data = _tree([_node("d4", 0.9, 0), chosen])
+        data["config"] = {"search_algorithm": "rolling"}
+        data["tree"].update(decision_horizon=4, decision_value=0.6)
+        table = ex.root_table(self._write(data))
+        self.assertEqual(table["best"], "e4")
+        self.assertEqual(table["candidates"][0]["move"], "e4")
+        self.assertIsNone(table["margin_over_second"])
+        self.assertEqual(table["decision_lookahead"]["value"], 0.6)
+        chosen["is_repertoire_move"] = False
+        self.assertIsNone(ex.root_table(self._write(data))["best"])
+
     def test_empty_root_says_so(self):
         with self.assertRaises(ToolError) as caught:
             ex.root_table(self._write(_tree([])))
@@ -192,6 +206,13 @@ class ArgvTest(unittest.TestCase):
         self.assertEqual(argv[argv.index("-t") + 1], "4")
         self.assertNotIn("--our-multipv", argv)
         self.assertEqual(argv[argv.index("--maia-elo") + 1], "1800")
+
+    def test_rolling_is_explicit_and_unknown_search_is_rejected(self):
+        argv = ex.builder_argv(self._chain(), Path("/x"), ex.resolve_position(LONDON), {"search": "rolling"})
+        self.assertEqual(argv[argv.index("--search") + 1], "rolling")
+        self.assertIn("rolling", ex.argv_with_plies(argv, 10))
+        with self.assertRaises(ToolError):
+            ex.builder_argv(self._chain(), Path("/x"), ex.resolve_position(LONDON), {"search": "fast"})
 
     def test_name_is_optional(self):
         chain, position = self._chain(), ex.resolve_position(LONDON)

@@ -403,6 +403,20 @@ MaiaContext *maia_create(const char *model_path) {
         return NULL;
     }
 
+    /* Single-position inference is interleaved with Stockfish. An implicit
+     * pool per physical core oversubscribes this pipeline and can spend most
+     * of a constrained CPU budget spinning between requests. */
+    status = ctx->api->SetIntraOpNumThreads(ctx->session_options, 1);
+    if (status) {
+        fprintf(stderr, "Maia: Could not configure inference threads: %s\n",
+                ctx->api->GetErrorMessage(status));
+        ctx->api->ReleaseStatus(status);
+        ctx->api->ReleaseSessionOptions(ctx->session_options);
+        ctx->api->ReleaseEnv(ctx->env);
+        free(ctx);
+        return NULL;
+    }
+
     status = ctx->api->CreateSession(ctx->env, model_path,
                                      ctx->session_options, &ctx->session);
     if (status) {

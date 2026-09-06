@@ -13,5 +13,6 @@ bool pure_position_key(const char *fen, char key[128]);
 bool pure_tree_build(Tree *tree, const char *fen, const TreeConfig *config,
                      struct LichessExplorer *explorer);
 size_t pure_backup(Tree *tree, const RepertoireConfig *config);
+bool pure_commit_window(TreeNode *, const RepertoireConfig *, int horizon);
 int pure_pick(TreeNode *node, const RepertoireConfig *config, ScoredChild *out);
 #endif

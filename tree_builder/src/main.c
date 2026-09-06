@@ -701,7 +701,7 @@ static void print_usage(const char *prog_name) {
     printf("╚══════════════════════════════════════════════════════════╝\n\n");
     printf("Usage: %s [options] <name>\n\n", prog_name);
     printf("Builds an opening repertoire by interleaving Lichess database\n");
-    printf("queries with fixed-depth Stockfish evaluation in Pure search.\n\n");
+    printf("queries with fixed-depth Stockfish evaluation.\n\n");
     printf("The <name> argument is the base name for all output files:\n");
     printf("  <name>.pgn        Repertoire lines (primary output)\n");
     printf("  <name>.tree.json  Tree state (for resumption)\n");
@@ -730,7 +730,8 @@ static void print_usage(const char *prog_name) {
     printf("  --skip-build           Skip tree building (use existing tree)\n");
     printf("  --build-now            Use existing partial tree as-is (skip to repertoire generation)\n");
     printf("\n");
-    printf("Pure expectimax (default):\n");
+    printf("Expectimax search:\n");
+    printf("  --search pure|rolling   Full horizon (default) or approximate rolling 4-ply lookahead\n");
     printf("  Every legal own move is scored at --eval-depth. All moves within\n");
     printf("  --max-eval-loss <cp> of the best are searched [default: 50].\n");
     printf("  Every positive-probability opponent move is searched; no novelty,\n");
@@ -739,7 +740,7 @@ static void print_usage(const char *prog_name) {
     printf("  --maia-only           Deselect master targeting; Maia throughout\n");
     printf("  --maia-model <path>   Maia model (required off-book)\n");
     printf("  --maia-elo <N>        Maia opponent rating [default: 2200]\n");
-    printf("  Completed values are exact for the declared finite tree and supplied\n");
+    printf("  Completed values evaluate the declared finite tree or committed policy and\n");
     printf("  evaluations, not calibrated human win rates. Cost is exponential.\n");
     printf("  Draw claims are immediate at threefold / 100 half-moves; repetition\n");
     printf("  history begins at the supplied root. Old heuristic trees must restart.\n\n");
@@ -1190,6 +1191,7 @@ int main(int argc, char *argv[]) {
     const char *load_tree_file = NULL;
     double min_probability = 0.0001;
     int max_depth = 4;
+    int rolling_arg = -1;
     int eval_depth = 16;
     int num_threads = default_thread_count();
 
@@ -1283,6 +1285,7 @@ int main(int argc, char *argv[]) {
         {"load",             required_argument, 0, 'L'},
         {"name",             required_argument, 0, 'n'},
         {"masters",          no_argument,       0, 'm'},
+        {"search",           required_argument, 0, 4099},
         {"skip-build",       no_argument,       0, 1001},
         {"build-now",        no_argument,       0, 1002},
         {"traps",            no_argument,       0, 1004},
@@ -1388,6 +1391,11 @@ int main(int argc, char *argv[]) {
             case 'm': use_masters = true; cli_exp.masters = true; break;
             case 'v': verbose = true; cli_exp.verbose = true; break;
             case 'h': print_usage(argv[0]); return 0;
+            case 4099:
+                if (!strcmp(optarg,"pure")) rolling_arg=0;
+                else if (!strcmp(optarg,"rolling")) rolling_arg=1;
+                else { fprintf(stderr,"--search must be pure or rolling\n"); return 1; }
+                break;
             case 1001: skip_build = true; cli_exp.skip_build = true; break;
             case 1002: build_now = true; skip_build = true; cli_exp.build_now = true; break;
             case 1003: resume_flag = true; break;
@@ -1743,7 +1751,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (build_mode == BUILD_MODE_STOCKFISH_EXPECTIMAX) {
-        printf("Pure search: all legal candidates / complete opponent support.\n");
+        printf("Search: all legal candidates / complete opponent support.\n");
         printf("Opponent: %s. Values are expected-score estimates.\n",
             maia_only ? "Maia throughout" : "master practice with Maia off-book");
         novelty_weight_arg=0;leaf_confidence_arg=1;best_first_arg=0;
@@ -2132,6 +2140,16 @@ int main(int argc, char *argv[]) {
                 fprintf(stderr, "\n");
             }
 
+            if (rolling_arg < 0) rolling_arg = tree->config.rolling_search ? 1 : 0;
+            if (tree->root->history_aware && skip_build &&
+                tree->config.rolling_search != (rolling_arg > 0)) {
+                fprintf(stderr,"Saved search method cannot change during export.\n");
+                tree_destroy(tree);
+                if (engine_pool) engine_pool_destroy(engine_pool);
+                if (maia) maia_destroy(maia);
+                rdb_close(db);
+                return 1;
+            }
             if(tree->root->history_aware && tree->config.play_as_white!=play_as_white) {
                 fprintf(stderr,"Pure search cannot change repertoire side on resume/export. Start a new build.\n");
                 tree_destroy(tree);if(engine_pool) engine_pool_destroy(engine_pool);if(maia) maia_destroy(maia);rdb_close(db);return 1;
@@ -2150,7 +2168,7 @@ int main(int argc, char *argv[]) {
 
             if (!skip_build && build_mode==BUILD_MODE_STOCKFISH_EXPECTIMAX) {
                 needs_build=true;
-                printf("[1/4] Validating/resuming Pure model at requested horizon %d.\n",max_depth);
+                printf("[1/4] Validating/resuming %s at requested horizon %d.\n",rolling_arg>0?"Rolling 4-ply (approximate)":"Pure",max_depth);
             } else if (tree->build_complete) {
                 printf("[1/4] Tree loaded from %s (%zu nodes, complete)\n",
                        tree_source, tree->total_nodes);
@@ -2188,6 +2206,7 @@ int main(int argc, char *argv[]) {
         bool success = false;
         LichessExplorer *explorer = NULL;
         TreeConfig config = tree_config_default();
+        config.rolling_search = rolling_arg > 0;
         BuildStats build_stats;
         FILE *event_log_fp = NULL;
         bool built_from_db = (build_mode == BUILD_MODE_DB_EXPLORER);
@@ -2476,6 +2495,7 @@ int main(int argc, char *argv[]) {
 
         /* Configure tree build */
         config = tree_config_default();
+        config.rolling_search = rolling_arg > 0;
         config.play_as_white = play_as_white;
         config.build_mode = build_mode;
         tree_config_set_color_defaults(&config);
@@ -2536,7 +2556,7 @@ int main(int argc, char *argv[]) {
         config.progress_callback = progress_callback;  /* Always show progress */
 
         if (build_mode == BUILD_MODE_STOCKFISH_EXPECTIMAX) {
-            printf("  Pure: every legal own move, %dcp loss limit, full opponent policy.\n",config.max_eval_loss_cp);
+            printf("  %s: every legal own move, %dcp loss limit, full opponent policy.\n",config.rolling_search?"Rolling 4-ply (approximate)":"Pure",config.max_eval_loss_cp);
         }
 
         memset(&build_stats, 0, sizeof(build_stats));
@@ -2778,6 +2798,7 @@ int main(int argc, char *argv[]) {
              export_fen);
     snprintf(rep_config.start_moves, sizeof(rep_config.start_moves), "%s",
              tree->start_moves);
+    rep_config.rolling_search = tree->config.rolling_search;
     rep_config.max_depth = max_depth;
     rep_config.min_probability = min_probability;
     rep_config.min_games = min_games;

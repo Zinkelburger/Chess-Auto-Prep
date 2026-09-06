@@ -68,7 +68,11 @@ class MoveAnnotator {
     return MoveAnnotation(
       evalCp: selected.hasEngineEval ? selected.evalForUs(playAsWhite) : null,
       expectimaxValue: selected.hasExpectimax ? selected.expectimaxValue : null,
-      myEase: selected.myEase >= 0 ? selected.myEase : null,
+      myEase:
+          selected.myEase >= 0 &&
+              (!selected.historyAware || selected.maiaFrequency >= 0)
+          ? selected.myEase
+          : null,
       isOnlyMove: isOnlyMove,
       onlyMoveLeadCp: isOnlyMove ? gapCp : null,
       humanFrequency: selected.maiaFrequency >= 0

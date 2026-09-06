@@ -1,4 +1,4 @@
-# Standalone Pure expectimax builder
+# Standalone expectimax builder
 
 Both this C program and the Flutter app follow [the same Pure contract](../docs/ALGORITHM.md).
 The C program is also what the chess-prep MCP expectimax tools launch.
@@ -41,6 +41,11 @@ make
 The executable will be at `bin/tree_builder`.
 
 ## Usage
+
+Pure is the default. Add `--search rolling` for approximate repeated four-ply
+lookahead: commit our next move, retain every modeled opponent reply, and repeat.
+See [the design and tradeoffs](../docs/ROLLING_SEARCH_AND_STUDY_LINES.md).
+
 
 Start small: branching is exponential. A four-ply tree can still be expensive.
 

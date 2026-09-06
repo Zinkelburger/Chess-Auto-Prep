@@ -1050,7 +1050,7 @@ class GenerationSessionController extends ChangeNotifier
         '$lastModelGameNote';
     if (tree.root.historyAware) {
       lastRunSummary +=
-          ' Expected-score estimate: ${tree.root.expectimaxValue.toStringAsFixed(4)}; bounds [${tree.root.valueLower.toStringAsFixed(4)}, ${tree.root.valueUpper.toStringAsFixed(4)}].';
+          ' ${config.isRollingSearch ? 'Rolling policy estimate (approximate)' : 'Expected-score estimate'}: ${tree.root.expectimaxValue.toStringAsFixed(4)}; bounds [${tree.root.valueLower.toStringAsFixed(4)}, ${tree.root.valueUpper.toStringAsFixed(4)}].';
     }
     if (config.isChessDbBook) {
       lastRunSummary = '$lastRunSummary ${_bookSourceNote()}';

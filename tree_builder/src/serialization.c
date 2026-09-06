@@ -60,6 +60,11 @@ static cJSON* node_to_cjson(const TreeNode *node, const SerializationOptions *op
     if(node->is_repertoire_move) cJSON_AddBoolToObject(obj,"is_repertoire_move",true);
     cJSON_AddNumberToObject(obj,"repertoire_score",node->repertoire_score);
     if(node->history_aware) cJSON_AddBoolToObject(obj,"history_aware",true);
+    if (node->committed_move_uci[0]) {
+        cJSON_AddStringToObject(obj, "committed_move_uci", node->committed_move_uci);
+        cJSON_AddNumberToObject(obj, "decision_horizon", node->decision_horizon);
+        cJSON_AddNumberToObject(obj, "decision_value", node->decision_value);
+    }
     if(node->terminal_known) cJSON_AddNumberToObject(obj,"terminal_value",node->terminal_value);
     cJSON_AddNumberToObject(obj,"value_lower",node->value_lower);
     cJSON_AddNumberToObject(obj,"value_upper",node->value_upper);
@@ -162,8 +167,8 @@ static char* tree_to_json_internal(const Tree *tree, const SerializationOptions 
     /* Config */
     cJSON *config = cJSON_CreateObject();
     if (config) {
-        cJSON_AddNumberToObject(config, "algorithm_version", tree->root && tree->root->history_aware ? 2 : 1);
-        cJSON_AddStringToObject(config, "search_algorithm", "pure");
+        cJSON_AddNumberToObject(config, "algorithm_version", tree->root && tree->root->history_aware ? 3 : 1);
+        cJSON_AddStringToObject(config, "search_algorithm", tree->config.rolling_search ? "rolling" : "pure");
         cJSON_AddStringToObject(config, "opponent_book_source", tree->config.pure_book_source);
         cJSON_AddStringToObject(config, "build_mode", tree->config.build_mode==BUILD_MODE_DB_EXPLORER ? "dbExplorer" : tree->config.build_mode==BUILD_MODE_MAIA_DB_EXPLORE ? "maiaDbExplore" : "stockfishExpectimax");
         cJSON_AddBoolToObject(config, "play_as_white", tree->config.play_as_white);
@@ -411,6 +416,12 @@ static TreeNode* cjson_to_node(cJSON *obj, TreeNode *parent,
     cJSON *rep_score=cJSON_GetObjectItem(obj,"repertoire_score");
     if(cJSON_IsNumber(rep_score)) node->repertoire_score=rep_score->valuedouble;
     node->history_aware=cJSON_IsTrue(cJSON_GetObjectItem(obj,"history_aware"));
+    cJSON *committed = cJSON_GetObjectItem(obj, "committed_move_uci");
+    if (cJSON_IsString(committed)) snprintf(node->committed_move_uci, sizeof(node->committed_move_uci), "%s", committed->valuestring);
+    cJSON *horizon = cJSON_GetObjectItem(obj, "decision_horizon");
+    if (cJSON_IsNumber(horizon)) node->decision_horizon = horizon->valueint;
+    cJSON *decision = cJSON_GetObjectItem(obj, "decision_value");
+    if (cJSON_IsNumber(decision)) node->decision_value = decision->valuedouble;
     cJSON *terminal=cJSON_GetObjectItem(obj,"terminal_value");
     node->terminal_known=cJSON_IsNumber(terminal);
     if(node->terminal_known) node->terminal_value=terminal->valuedouble;
@@ -620,6 +631,8 @@ Tree* tree_load_from_buffer(const char *buffer, size_t size) {
     /* Parse config */
     cJSON *config = cJSON_GetObjectItem(root, "config");
     if (config) {
+        cJSON *algorithm=cJSON_GetObjectItem(config,"search_algorithm");
+        tree->config.rolling_search=cJSON_IsString(algorithm) && strcmp(algorithm->valuestring,"rolling")==0;
         cJSON *source=cJSON_GetObjectItem(config,"opponent_book_source");
         if(cJSON_IsString(source)) snprintf(tree->config.pure_book_source,sizeof(tree->config.pure_book_source),"%s",source->valuestring);
         cJSON *item=cJSON_GetObjectItem(config,"play_as_white");

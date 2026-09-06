@@ -1,9 +1,10 @@
 # Pure expectimax contract
 
 The Dart app and standalone C builder now use the same finite-horizon search
-rules. `stockfishExpectimax` always means Pure. Fast is retired while this
-reference implementation is established; an old Fast setting cannot activate
-heuristic pruning. Database exploration and the ChessDB mainline book remain
+rules. `stockfishExpectimax` defaults to Pure. The optional
+[Rolling 4-ply mode](ROLLING_SEARCH_AND_STUDY_LINES.md) uses the same local
+model with approximate receding lookahead. Legacy Fast is retired; an old Fast
+setting cannot activate heuristic pruning. This document defines Pure. Database exploration and the ChessDB mainline book remain
 separate build sources.
 
 ## What is optimized
@@ -128,7 +129,7 @@ check saved candidates; it cannot recover moves a legacy build omitted.
   `repertoire_selector.dart` under `lib/services/generation/`.
 - C: `tree_builder/src/pure_search.c`; chesslib adapter in `san_convert.c`.
 - Both use the v4 tree wire format with `history_aware`, terminal values,
-  lower/upper bounds, and `algorithm_version: 2` in configuration.
+  lower/upper bounds, and `algorithm_version: 3` in configuration.
 - C JSON uses 17 significant digits so saved probabilities survive round trips.
 - Shared fixture: 30 independently solved trees, both colors, chance nodes,
   constrained max nodes, exact terminals, and deterministic policy checks.
@@ -138,5 +139,6 @@ check saved candidates; it cannot recover moves a legacy build omitted.
   through a deterministic UCI process. Run `make test-pure` in `tree_builder/`.
 
 Correctness-preserving speedups can follow: reusable fixed-depth evaluations,
-parallel evaluation, and rigorous bounded chance-node pruning. Approximate Fast
-mode should be compared against this reference and report its approximation.
+parallel evaluation, and rigorous bounded chance-node pruning. Rolling is
+explicitly approximate and tested against this reference. Study selection and
+exercise boundaries are a separate, reversible output layer.

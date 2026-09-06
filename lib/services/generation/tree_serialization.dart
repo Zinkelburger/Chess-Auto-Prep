@@ -84,6 +84,11 @@ Map<String, dynamic> _nodeToJson(BuildTreeNode node) {
   if (node.moveUci.isNotEmpty) obj['move_uci'] = node.moveUci;
 
   if (node.historyAware) obj['history_aware'] = true;
+  if (node.committedMoveUci.isNotEmpty) {
+    obj['committed_move_uci'] = node.committedMoveUci;
+    obj['decision_horizon'] = node.decisionHorizon;
+    obj['decision_value'] = node.decisionValue;
+  }
   if (node.terminalValue != null) obj['terminal_value'] = node.terminalValue;
   obj['value_lower'] = node.valueLower;
   obj['value_upper'] = node.valueUpper;
@@ -252,6 +257,9 @@ BuildTreeNode _nodeFromJson(
   }
 
   node.historyAware = obj['history_aware'] == true;
+  node.committedMoveUci = obj['committed_move_uci'] as String? ?? '';
+  node.decisionHorizon = (obj['decision_horizon'] as num?)?.toInt() ?? 0;
+  node.decisionValue = (obj['decision_value'] as num?)?.toDouble();
   node.terminalValue = (obj['terminal_value'] as num?)?.toDouble();
   node.valueLower = (obj['value_lower'] as num?)?.toDouble() ?? 0;
   node.valueUpper = (obj['value_upper'] as num?)?.toDouble() ?? 1;

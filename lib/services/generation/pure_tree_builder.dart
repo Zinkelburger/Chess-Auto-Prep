@@ -6,6 +6,9 @@ import 'dart:collection';
 import '../../models/build_tree_node.dart';
 import '../maia/maia_factory.dart';
 import 'build_run.dart';
+import 'eca_calculator.dart';
+import 'generation_config.dart';
+import '../master_games/master_games_db.dart' show BookMove;
 import 'pure_position.dart';
 
 class PureTreeBuilder {
@@ -32,6 +35,12 @@ class PureTreeBuilder {
     }
     if (run.tree.root.children.isNotEmpty) {
       final previous = run.tree.configSnapshot;
+      if ((previous['search_algorithm'] == 'rolling') !=
+          config.isRollingSearch) {
+        throw StateError(
+          'Cannot switch Pure and Rolling on resume. Start a new build.',
+        );
+      }
       if (run.tree.root.fen != config.startFen ||
           previous['opponent_book_source'] != source) {
         throw StateError(
@@ -60,14 +69,61 @@ class PureTreeBuilder {
     }
     run.tree.configSnapshot = {
       ...config.toJson(),
-      'algorithm_version': 2,
+      'algorithm_version': 3,
+      'search_algorithm': config.isRollingSearch ? 'rolling' : 'pure',
       'opponent_book_source': source,
     };
-    final queue = Queue<BuildTreeNode>()..add(run.tree.root);
     run.tree.buildComplete = false;
+    run.tree.buildComplete = config.isRollingSearch
+        ? await _buildRolling()
+        : await _searchWindow(run.tree.root, config.maxPly);
+  }
+
+  Future<bool> _buildRolling() async {
+    final config = run.config;
+    final calculator = ExpectimaxCalculator(config: config);
+    final queue = Queue<BuildTreeNode>()..add(run.tree.root);
     while (queue.isNotEmpty) {
       await run.waitIfPaused();
-      if (run.isCancelled || run.shouldFinish()) return;
+      if (run.isCancelled || run.shouldFinish()) return false;
+      final node = queue.removeFirst();
+      final ours = node.isWhiteToMove == config.playAsWhite;
+      final horizon =
+          (node.ply + (ours ? TreeBuildConfig.rollingLookaheadPlies : 1)).clamp(
+            0,
+            config.maxPly,
+          );
+      if (node.terminalValue != null || node.ply >= config.maxPly) {
+        if (!await _searchWindow(node, config.maxPly)) return false;
+        continue;
+      }
+      if (ours) {
+        if (node.committedMoveUci.isEmpty || node.decisionHorizon < horizon) {
+          if (!await _searchWindow(node, horizon)) return false;
+          if (node.terminalValue != null) continue;
+          calculator.commitWindow(node, horizon);
+        }
+        final selected = node.children
+            .where((c) => c.moveUci == node.committedMoveUci)
+            .firstOrNull;
+        if (selected == null) {
+          throw StateError('Saved Rolling decision is missing');
+        }
+        queue.add(selected);
+      } else {
+        if (!await _searchWindow(node, horizon)) return false;
+        queue.addAll(node.children);
+      }
+    }
+    return true;
+  }
+
+  Future<bool> _searchWindow(BuildTreeNode root, int horizon) async {
+    final config = run.config;
+    final queue = Queue<BuildTreeNode>()..add(root);
+    while (queue.isNotEmpty) {
+      await run.waitIfPaused();
+      if (run.isCancelled || run.shouldFinish()) return false;
       final node = queue.removeFirst()..historyAware = true;
       final position = run.positionOrNullOf(node);
       if (position == null) {
@@ -78,7 +134,7 @@ class PureTreeBuilder {
         run.markExplored(node);
         continue;
       }
-      if (node.ply >= config.maxPly) {
+      if (node.ply >= horizon) {
         await _evaluate(node);
         run.markExplored(node);
         continue;
@@ -89,9 +145,10 @@ class PureTreeBuilder {
       }
       final legal = pureLegalMoves(position);
       final ours = node.isWhiteToMove == config.playAsWhite;
-      final probabilities = ours
-          ? <String, double>{}
+      final policy = ours
+          ? (probabilities: <String, double>{}, book: <String, BookMove>{})
           : await _policy(node, legal);
+      final probabilities = policy.probabilities;
       final moves = ours
           ? legal
           : legal.where((m) => probabilities[m]! > 0).toList();
@@ -99,7 +156,7 @@ class PureTreeBuilder {
       // probability distribution or a partially enumerated action set.
       if (config.maxNodes > 0 &&
           run.tree.totalNodes + moves.length > config.maxNodes) {
-        return;
+        return false;
       }
       final candidates = <BuildTreeNode>[];
       for (final uci in moves) {
@@ -116,6 +173,14 @@ class PureTreeBuilder {
           cumulativeProbability:
               node.cumulativeProbability * (ours ? 1 : probabilities[uci]!),
         )..historyAware = true;
+        final practice = policy.book[uci];
+        if (practice != null) {
+          candidate.whiteWins = practice.whiteWins;
+          candidate.blackWins = practice.blackWins;
+          candidate.draws = practice.draws;
+          candidate.totalGames = practice.games;
+          candidate.lastPlayedYear = practice.lastYear;
+        }
         candidate.terminalValue = pureTerminal(
           candidate,
           played.after,
@@ -123,7 +188,7 @@ class PureTreeBuilder {
         );
         if (ours) await _evaluate(candidate);
         candidates.add(candidate);
-        if (run.isCancelled || run.shouldFinish()) return;
+        if (run.isCancelled || run.shouldFinish()) return false;
       }
       if (ours) {
         final best = candidates
@@ -143,7 +208,7 @@ class PureTreeBuilder {
       run.markExplored(node);
       run.emitNodeProgress(node);
     }
-    run.tree.buildComplete = true;
+    return true;
   }
 
   Future<void> _evaluate(BuildTreeNode node) async {
@@ -169,11 +234,10 @@ class PureTreeBuilder {
     run.stats.sfSingleCalls++;
   }
 
-  Future<Map<String, double>> _policy(
-    BuildTreeNode node,
-    List<String> legal,
-  ) async {
+  Future<({Map<String, double> probabilities, Map<String, BookMove> book})>
+  _policy(BuildTreeNode node, List<String> legal) async {
     final counts = <String, double>{for (final m in legal) m: 0};
+    final practice = <String, BookMove>{};
     if (run.config.useMasterGames && run.masterBook != null) {
       run.stats.masterBookQueries++;
       final bookMoves = run.masterBook!(node.fen);
@@ -182,13 +246,19 @@ class PureTreeBuilder {
         if (move.games < 0) throw StateError('Invalid master game count');
         if (counts.containsKey(move.uci)) {
           counts[move.uci] = counts[move.uci]! + move.games;
+          practice[move.uci] = move;
         }
       }
     }
     final games = counts.values.fold(0.0, (a, b) => a + b);
     // Masters are an explicit empirical policy; Maia supplies off-book
     // positions only. No hidden mixture or population-changing temperature.
-    if (games > 0) return counts.map((m, n) => MapEntry(m, n / games));
+    if (games > 0) {
+      return (
+        probabilities: counts.map((m, n) => MapEntry(m, n / games)),
+        book: practice,
+      );
+    }
     final maia = MaiaFactory.instance;
     if (!MaiaFactory.isAvailable || maia == null) {
       throw StateError(
@@ -207,6 +277,9 @@ class PureTreeBuilder {
     if (mass <= 0) {
       throw StateError('Opponent policy has no legal probability mass');
     }
-    return policy.map((m, p) => MapEntry(m, p / mass));
+    return (
+      probabilities: policy.map((m, p) => MapEntry(m, p / mass)),
+      book: <String, BookMove>{},
+    );
   }
 }

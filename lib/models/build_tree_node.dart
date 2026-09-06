@@ -51,6 +51,12 @@ class BuildTreeNode implements MoveTreeNodeView {
   int? engineEvalCp;
 
   /// Version-2 search stores full paths: never borrow another history's value.
+  /// Rolling search commits this UCI after a complete short lookahead.
+  /// The decision estimate is retained separately from the final policy value.
+  String committedMoveUci = '';
+  int decisionHorizon = 0;
+  double? decisionValue;
+
   bool historyAware = false;
 
   /// Exact terminal utility for our side (including immediate draw claims).

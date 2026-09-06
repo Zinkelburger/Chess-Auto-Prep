@@ -297,7 +297,7 @@ void main() {
       const TreeBuildConfig(startFen: _startFen, playAsWhite: true),
     );
     expect(initial.useMasterGames, isTrue);
-    expect(find.text('Pure search'), findsOneWidget);
+    expect(find.text('Pure — full horizon'), findsOneWidget);
     expect(find.text('Prefer novelties'), findsNothing);
     expect(find.text('Your lines & structures (optional)'), findsNothing);
     await tester.tap(find.text('Target master opponents'));
@@ -310,6 +310,33 @@ void main() {
       isFalse,
     );
     expect(find.textContaining('Maia predicts every reply'), findsOneWidget);
+  });
+
+  testWidgets('Rolling survives reopening and can be deselected', (
+    tester,
+  ) async {
+    final result = await _throughForm(
+      tester,
+      const TreeBuildConfig(
+        startFen: _startFen,
+        playAsWhite: true,
+        searchAlgorithm: SearchAlgorithm.rolling,
+      ),
+    );
+    expect(result.isRollingSearch, isTrue);
+    final control = find.byKey(const ValueKey('generation-search-method'));
+    await tester.ensureVisible(control);
+    await tester.tap(control);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pure — full horizon').last);
+    await tester.pumpAndSettle();
+    final state = tester.state<GenerationConfigFormState>(
+      find.byType(GenerationConfigForm),
+    );
+    expect(
+      state.toConfig(startFen: _startFen, playAsWhite: true).isRollingSearch,
+      isFalse,
+    );
   });
 
   group('the deliberate transforms', () {

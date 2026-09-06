@@ -32,6 +32,7 @@ class RepertoireSelector {
       final node = resolveTransposition(arrival, fenMap);
       if (!visited.add(node) || node.terminalValue != null) return;
       if (node.isWhiteToMove == config.playAsWhite) {
+        if (config.isRollingSearch && node.committedMoveUci.isEmpty) return;
         final winner = ecaCalc.scoreOurMoveChildren(node);
         if (winner == null) return;
         winner.child.isRepertoireMove = true;

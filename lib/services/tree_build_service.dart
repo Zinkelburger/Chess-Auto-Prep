@@ -1,41 +1,15 @@
-/// Two-phase tree builder — builds a persistent [BuildTree] with engine
-/// evaluations on every node, matching the C tree_builder algorithm.
+/// Owns the persistent tree build lifecycle, cancellation and pause gate.
 ///
-/// Phase 1 (this service): frontier-driven build with constant MultiPV at
-/// our-move nodes, single-source opponent moves (the master-games book with
-/// a Maia Dirichlet prior, or Maia alone), eval-window pruning, and
-/// transposition detection — matches C tree_builder.
+/// Stockfish expectimax delegates to PureTreeBuilder: exhaustive fixed-horizon
+/// search by default, or explicit approximate rolling four-ply lookahead. Both
+/// enumerate every legal own candidate before the engine-loss constraint and
+/// preserve the complete positive-support opponent policy. Master frequencies
+/// supply the in-book policy; Maia supplies off-book positions.
 ///
-/// The frontier is expanded by several *lanes* at once, one per engine
-/// worker (see [BuildRun.expansionLanes]): each lane pops a node, runs the
-/// whole per-node pipeline, and pops the next.  Tree mutation only ever
-/// happens synchronously between awaits, so lanes never see a half-built
-/// node; the one thing they must not do is expand the same node twice, which
-/// the in-flight set below guarantees.
-///
-/// Search algorithm (config.searchAlgorithm):
-///   - Fast Expectimax (default): best-first frontier — pop the node with
-///     the highest search priority (reach probability, discounted at
-///     non-incumbent our-move alternatives) — plus priority-scaled pruning:
-///     alternatives below the priority floor are skipped, MultiPV and the
-///     eval-loss window shrink in cold subtrees, opponent fan-out is capped
-///     harder, and our-move alternatives more than fastAltGapCp behind the
-///     incumbent stay evaluated leaves instead of growing subtrees.
-///     Anytime: at any node budget the tree concentrates on the
-///     likeliest opponent lines, which also get searched deepest.  The
-///     coverage floor is always honored (no silent holes).
-///   - Pure Expectimax: classic level-order BFS, full configured search at
-///     every node above the probability floor.
-///
-/// Structure: this service owns the run lifecycle (re-entrancy guard,
-/// pause gate, cancellation) and the mode-independent build loop; how a
-/// node grows children per [BuildMode] lives in `generation/node_expander`,
-/// and per-run state (ids, stats, progress, cancellation token) in
-/// `generation/build_run`.
-///
-/// Phase 2 (separate calculators): ease, expectimax, and repertoire
-/// selection run on the completed tree.  Search priorities never feed
-/// phase 2 — they shape which nodes exist, not how they are valued.
+/// The legacy frontier/expansion collaborators below still serve database
+/// exploration modes. Their heuristics do not run in Stockfish expectimax.
+/// ExpectimaxCalculator and RepertoireSelector back up and export the declared
+/// policy afterward; Rolling's saved commitments remain fixed during backup.
 library;
 
 import 'dart:async';

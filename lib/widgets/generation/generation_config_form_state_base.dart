@@ -139,6 +139,7 @@ abstract class _GenerationConfigFormStateBase
   late final TextEditingController _replyWindowCtrl = _ctrl('0');
 
   SelectionMode _selectionMode = SelectionMode.expectimax;
+  SearchAlgorithm _searchAlgorithm = SearchAlgorithm.pure;
   BuildMode _buildMode = BuildMode.stockfishExpectimax;
 
   /// Build sources whose selection has nothing for the deep verification
@@ -387,12 +388,27 @@ abstract class _GenerationConfigFormStateBase
   /// enough to sit under the field.
   String? _numFieldProblem(TextEditingController controller) {
     if (_buildMode == BuildMode.stockfishExpectimax) {
-      final retired={_cutoffCtrl,_minEvalCtrl,_maxEvalCtrl,_oppPolicyTempCtrl,
-        _multipvCtrl,_oppMaxChildrenCtrl,_oppMassTargetCtrl,_leafConfidenceCtrl,
-        _ourAltDiscountCtrl,_fastAltGapCtrl,_maiaPriorGamesCtrl,_coverMinProbCtrl,
-        _verifyDepthCtrl,_setupToleranceCtrl,_memorabilityToleranceCtrl,_engineTailCtrl};
-      if(retired.contains(controller)) return null;
-      if(identical(controller,_maxPlyCtrl) && (int.tryParse(controller.text)??0)>64) {
+      final retired = {
+        _cutoffCtrl,
+        _minEvalCtrl,
+        _maxEvalCtrl,
+        _oppPolicyTempCtrl,
+        _multipvCtrl,
+        _oppMaxChildrenCtrl,
+        _oppMassTargetCtrl,
+        _leafConfidenceCtrl,
+        _ourAltDiscountCtrl,
+        _fastAltGapCtrl,
+        _maiaPriorGamesCtrl,
+        _coverMinProbCtrl,
+        _verifyDepthCtrl,
+        _setupToleranceCtrl,
+        _memorabilityToleranceCtrl,
+        _engineTailCtrl,
+      };
+      if (retired.contains(controller)) return null;
+      if (identical(controller, _maxPlyCtrl) &&
+          (int.tryParse(controller.text) ?? 0) > 64) {
         return 'Pure supports at most 64 half-moves';
       }
     }

@@ -54,6 +54,9 @@ enum SearchAlgorithm {
   /// Exhaustive finite-horizon construction with an explicit safety constraint.
   pure,
 
+  /// Four-ply lookahead, committing our next move before extending replies.
+  rolling,
+
   /// Retired for stockfishExpectimax. Does not activate approximate search.
   fast,
 }
@@ -715,6 +718,12 @@ class TreeBuildConfig {
   /// True while building a single-move-per-side mainline book.
   bool get isChessDbBook => buildMode == BuildMode.chessDbBook;
 
+  bool get isRollingSearch =>
+      buildMode == BuildMode.stockfishExpectimax &&
+      searchAlgorithm == SearchAlgorithm.rolling;
+
+  static const rollingLookaheadPlies = 4;
+
   /// Whether Phase 2.5 has anything to re-check.
   ///
   /// The ChessDB book never verifies. Its moves are the database's, and
@@ -748,8 +757,10 @@ class TreeBuildConfig {
   String get summaryLabel {
     final parts = <String>[
       buildModeLabel,
-      buildMode == BuildMode.stockfishExpectimax ||
-              searchAlgorithm == SearchAlgorithm.pure
+      isRollingSearch
+          ? 'Rolling 4-ply (approximate)'
+          : buildMode == BuildMode.stockfishExpectimax ||
+                searchAlgorithm == SearchAlgorithm.pure
           ? 'Pure'
           : 'Legacy Fast',
       '${maxPly}ply',
@@ -880,6 +891,7 @@ class TreeBuildConfig {
   /// Short label for the frontier/pruning algorithm.
   String get searchAlgorithmLabel => switch (searchAlgorithm) {
     SearchAlgorithm.pure => 'Pure search',
+    SearchAlgorithm.rolling => 'Rolling 4-ply (approximate)',
     SearchAlgorithm.fast => 'Pure search (legacy Fast setting)',
   };
 
@@ -1220,6 +1232,8 @@ SearchAlgorithm _parseSearchAlgorithm(String? value, {bool? legacyBestFirst}) {
   switch (value) {
     case 'pure':
       return SearchAlgorithm.pure;
+    case 'rolling':
+      return SearchAlgorithm.rolling;
     case 'fast':
       return SearchAlgorithm.fast;
   }

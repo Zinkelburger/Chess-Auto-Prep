@@ -6,7 +6,7 @@ mixin _GenerationConfigDescriptions on _GenerationConfigFormStateBase {
   String _buildModeDescription() {
     switch (_buildMode) {
       case BuildMode.stockfishExpectimax:
-        return 'Pure searches every legal candidate within the engine-loss limit, '
+        return 'Search considers every legal candidate within the engine-loss limit, '
             'using the opponent model above. Cost grows exponentially with depth.';
       case BuildMode.maiaDbExplore:
         return 'Maia moves and database win rates only — fast, no engine '

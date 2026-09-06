@@ -36,6 +36,15 @@ BuildRun runFor(
   BuildCancellation? cancel,
 }) {
   final stats = BuildStats();
+  var nextId = 1;
+  void scan(BuildTreeNode n) {
+    if (n.nodeId >= nextId) nextId = n.nodeId + 1;
+    for (final c in n.children) {
+      scan(c);
+    }
+  }
+
+  scan(tree.root);
   return BuildRun(
     config: config,
     tree: tree,
@@ -49,7 +58,7 @@ BuildRun runFor(
     cancel: cancel ?? BuildCancellation(),
     finishNow: () => false,
     waitIfPaused: () async {},
-    nextNodeId: 10000,
+    nextNodeId: nextId,
     masterBook: book,
   );
 }

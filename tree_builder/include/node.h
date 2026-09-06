@@ -60,6 +60,9 @@ typedef struct TreeNode {
     
     /* Engine evaluation */
     int engine_eval_cp;                 /* Engine evaluation in centipawns */
+    char committed_move_uci[MAX_MOVE_LENGTH];
+    int decision_horizon;
+    double decision_value;
     bool history_aware;
     bool terminal_known;
     double terminal_value;

@@ -103,6 +103,7 @@ class ExtractedLine {
   /// line's end than the tree recorded — an engine probe, a lookup — starts
   /// from here.
   final String? leafFen;
+  final bool leafTerminal;
 
   final List<MoveAnnotation> moveAnnotations;
   final List<LineCoverageUnit> coverageUnits;
@@ -127,6 +128,7 @@ class ExtractedLine {
     this.openingEco,
     this.leafEvalCp,
     this.leafFen,
+    this.leafTerminal = false,
     this.moveAnnotations = const [],
     this.coverageUnits = const [],
     this.choices = const [],
@@ -149,6 +151,7 @@ class ExtractedLine {
     openingEco: openingEco,
     leafEvalCp: leafEvalCp,
     leafFen: leafFen,
+    leafTerminal: leafTerminal,
     moveAnnotations: moveAnnotations.isEmpty
         ? moveAnnotations
         : [
@@ -260,10 +263,7 @@ class LineExtractor {
   final Set<String> _playedMoveOrders = {};
 
   /// Extract complete repertoire lines from the tree.
-  List<ExtractedLine> extract(
-    BuildTree tree, {
-    int maxLines = kDefaultMaxLines,
-  }) {
+  List<ExtractedLine> extract(BuildTree tree, {int? maxLines}) {
     _truncated = false;
     _rootWhiteToMove = tree.root.isWhiteToMove;
     _rootMoveNumber = fullMoveNumber(tree.root.fen);
@@ -291,7 +291,9 @@ class LineExtractor {
         node: tree.root,
         path: _LinePath(),
         lines: lines,
-        maxLines: maxLines,
+        maxLines:
+            maxLines ??
+            (tree.root.historyAware ? tree.totalNodes : kDefaultMaxLines),
         reach: 1.0,
         visited: <String>{},
       );
@@ -643,6 +645,7 @@ class LineExtractor {
         openingEco: openingEco,
         leafEvalCp: leaf.engineEvalCp,
         leafFen: leaf.fen,
+        leafTerminal: leaf.terminalValue != null,
         moveAnnotations: annotations,
         coverageUnits: List.unmodifiable([
           ...path.coverageUnits,

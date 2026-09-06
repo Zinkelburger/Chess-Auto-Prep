@@ -50,7 +50,14 @@ class MaiaService {
       // thread-safe across isolates).
       final address = await Isolate.run(() {
         OrtEnv.instance.init();
-        return OrtSession.fromBuffer(bytes, OrtSessionOptions()).address;
+        // One position at a time, interleaved with engine work. The default
+        // native pool uses every physical core and spins between requests.
+        final options = OrtSessionOptions()..setIntraOpNumThreads(1);
+        try {
+          return OrtSession.fromBuffer(bytes, options).address;
+        } finally {
+          options.release();
+        }
       });
       _session = OrtSession.fromAddress(address);
       _isInitialized = true;

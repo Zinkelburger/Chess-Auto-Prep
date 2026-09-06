@@ -121,6 +121,7 @@ typedef struct TreeConfig {
 
     /* Traversal limits */
     double min_probability;         /* Stop exploring below this cumul. probability */
+    bool rolling_search;           /* Fixed four-ply receding lookahead. */
     int max_depth;                  /* Maximum depth in ply */
     int max_nodes;                  /* Maximum total nodes (0 = unlimited) */
 
@@ -271,6 +272,7 @@ typedef struct Tree {
     size_t total_nodes;
     int max_depth_reached;
 
+    bool pure_failed;              /* Per-run error, distinct from a budget stop. */
     bool is_building;
     bool build_complete;
 

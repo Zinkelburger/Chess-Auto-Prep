@@ -124,15 +124,39 @@ mixin _GenerationConfigCard
 
   /// The model assumptions belong beside the visible search controls.
   String _searchAlgorithmCaption() =>
-      'Pure finite-horizon search: start with 4 plies; each extra ply can multiply work. All legal candidates, '
-      'one opponent model, no heuristic bonuses. A budget-limited result is incomplete. '
-      'Scores are engine-derived expected-score estimates, not calibrated win percentages. '
-      'The model assumes immediate claims at threefold repetition or 50 moves; '
-      'repetition history begins at the supplied starting position.';
+      _searchAlgorithm == SearchAlgorithm.rolling
+      ? 'At each of our turns, compare candidates with 4 plies of lookahead, commit the best move, '
+            'then extend every modeled opponent reply. Earlier choices stay committed. '
+            'This can miss ideas beyond the window; it is an approximate policy, not a full-depth optimum. '
+            'Opponent branching still grows with length. The same engine-loss limit and draw convention as Pure apply.'
+      : 'Pure finite-horizon search: start with 4 plies; each extra ply can multiply work. All legal candidates, '
+            'one opponent model, no heuristic bonuses. A budget-limited result is incomplete. '
+            'Scores are engine-derived expected-score estimates, not calibrated win percentages. '
+            'The model assumes immediate claims at threefold repetition or 50 moves; '
+            'repetition history begins at the supplied starting position.';
 
   Widget _searchSection() {
     return _cardSection('Search', [
-      const Text('Pure search', style: AppTextStyles.body),
+      if (_buildMode == BuildMode.stockfishExpectimax)
+        DropdownButtonFormField<SearchAlgorithm>(
+          key: const ValueKey('generation-search-method'),
+          initialValue: _searchAlgorithm,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Search method'),
+          items: const [
+            DropdownMenuItem(
+              value: SearchAlgorithm.pure,
+              child: Text('Pure — full horizon'),
+            ),
+            DropdownMenuItem(
+              value: SearchAlgorithm.rolling,
+              child: Text('Rolling 4-ply — approximate'),
+            ),
+          ],
+          onChanged: (value) {
+            if (value != null) setState(() => _searchAlgorithm = value);
+          },
+        ),
       _caption(_searchAlgorithmCaption()),
       const SizedBox(height: 10),
       Wrap(
@@ -168,7 +192,7 @@ mixin _GenerationConfigCard
             onEdited: () => setState(() {}),
             tooltip:
                 '0 = no limit. An in-flight evaluation may finish after this limit. '
-                'Pure stops between atomic expansions and marks the search incomplete. '
+                'Search stops between atomic expansions and marks the search incomplete. '
                 'It can be resumed. Output enrichment is outside this budget.',
           ),
         ],
@@ -447,7 +471,9 @@ mixin _GenerationConfigCard
     final parts = [
       // Whose repertoire this is decides every move in it, so it leads.
       widget.playAsWhite ? 'As White' : 'As Black',
-      'Pure search',
+      _searchAlgorithm == SearchAlgorithm.rolling
+          ? 'Rolling 4-ply (approximate)'
+          : 'Pure search',
       _useMasterGames
           ? 'master practice, Maia $elo off-book'
           : 'Maia $elo throughout',
