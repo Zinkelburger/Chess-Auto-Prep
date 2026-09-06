@@ -128,7 +128,8 @@ mixin _GenerationConfigCard
       ? 'At each of our turns, compare candidates with 4 plies of lookahead, commit the best move, '
             'then extend every modeled opponent reply. Earlier choices stay committed. '
             'This can miss ideas beyond the window; it is an approximate policy, not a full-depth optimum. '
-            'Opponent branching still grows with length. The same engine-loss limit and draw convention as Pure apply.'
+            'At 4 plies or less it does as much lookahead as Pure; longer preparation can still be expensive. '
+            'The same engine-loss limit and draw convention as Pure apply.'
       : 'Pure finite-horizon search: start with 4 plies; each extra ply can multiply work. All legal candidates, '
             'one opponent model, no heuristic bonuses. A budget-limited result is incomplete. '
             'Scores are engine-derived expected-score estimates, not calibrated win percentages. '
@@ -150,7 +151,7 @@ mixin _GenerationConfigCard
             ),
             DropdownMenuItem(
               value: SearchAlgorithm.rolling,
-              child: Text('Rolling 4-ply — approximate'),
+              child: Text('Fast — 4-ply lookahead'),
             ),
           ],
           onChanged: (value) {
@@ -472,7 +473,7 @@ mixin _GenerationConfigCard
       // Whose repertoire this is decides every move in it, so it leads.
       widget.playAsWhite ? 'As White' : 'As Black',
       _searchAlgorithm == SearchAlgorithm.rolling
-          ? 'Rolling 4-ply (approximate)'
+          ? 'Fast (4-ply, approximate)'
           : 'Pure search',
       _useMasterGames
           ? 'master practice, Maia $elo off-book'

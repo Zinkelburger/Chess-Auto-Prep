@@ -45,16 +45,16 @@ enum BuildMode {
   chessDbBook,
 }
 
-// ── Search algorithm (frontier discipline + pruning preset) ─────────────
+// ── Search algorithm ───────────────────────────────────────────────────
 
-/// Legacy serialized search setting. The standard expectimax build always
-/// dispatches to the new exhaustive Pure builder; Fast remains readable only
-/// for old files and the separate legacy expansion helpers.
+/// Pure is exhaustive; the UI calls the approximate rolling method Fast.
+/// Keep their serialized identities stable: the old `fast` enum member belongs
+/// to retired heuristics and still dispatches to Pure for Stockfish builds.
 enum SearchAlgorithm {
   /// Exhaustive finite-horizon construction with an explicit safety constraint.
   pure,
 
-  /// Four-ply lookahead, committing our next move before extending replies.
+  /// User-facing Fast: four-ply lookahead, then commit our next move.
   rolling,
 
   /// Retired for stockfishExpectimax. Does not activate approximate search.
@@ -758,7 +758,7 @@ class TreeBuildConfig {
     final parts = <String>[
       buildModeLabel,
       isRollingSearch
-          ? 'Rolling 4-ply (approximate)'
+          ? 'Fast (4-ply, approximate)'
           : buildMode == BuildMode.stockfishExpectimax ||
                 searchAlgorithm == SearchAlgorithm.pure
           ? 'Pure'
@@ -891,7 +891,7 @@ class TreeBuildConfig {
   /// Short label for the frontier/pruning algorithm.
   String get searchAlgorithmLabel => switch (searchAlgorithm) {
     SearchAlgorithm.pure => 'Pure search',
-    SearchAlgorithm.rolling => 'Rolling 4-ply (approximate)',
+    SearchAlgorithm.rolling => 'Fast (4-ply, approximate)',
     SearchAlgorithm.fast => 'Pure search (legacy Fast setting)',
   };
 

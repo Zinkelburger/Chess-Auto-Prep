@@ -312,32 +312,35 @@ void main() {
     expect(find.textContaining('Maia predicts every reply'), findsOneWidget);
   });
 
-  testWidgets('Rolling survives reopening and can be deselected', (
-    tester,
-  ) async {
-    final result = await _throughForm(
-      tester,
-      const TreeBuildConfig(
-        startFen: _startFen,
-        playAsWhite: true,
-        searchAlgorithm: SearchAlgorithm.rolling,
-      ),
-    );
-    expect(result.isRollingSearch, isTrue);
-    final control = find.byKey(const ValueKey('generation-search-method'));
-    await tester.ensureVisible(control);
-    await tester.tap(control);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Pure — full horizon').last);
-    await tester.pumpAndSettle();
-    final state = tester.state<GenerationConfigFormState>(
-      find.byType(GenerationConfigForm),
-    );
-    expect(
-      state.toConfig(startFen: _startFen, playAsWhite: true).isRollingSearch,
-      isFalse,
-    );
-  });
+  testWidgets(
+    'Fast is labeled clearly, survives reopening and can be deselected',
+    (tester) async {
+      final result = await _throughForm(
+        tester,
+        const TreeBuildConfig(
+          startFen: _startFen,
+          playAsWhite: true,
+          searchAlgorithm: SearchAlgorithm.rolling,
+        ),
+      );
+      expect(result.isRollingSearch, isTrue);
+      expect(find.text('Fast — 4-ply lookahead'), findsOneWidget);
+      expect(find.textContaining('approximate policy'), findsOneWidget);
+      final control = find.byKey(const ValueKey('generation-search-method'));
+      await tester.ensureVisible(control);
+      await tester.tap(control);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pure — full horizon').last);
+      await tester.pumpAndSettle();
+      final state = tester.state<GenerationConfigFormState>(
+        find.byType(GenerationConfigForm),
+      );
+      expect(
+        state.toConfig(startFen: _startFen, playAsWhite: true).isRollingSearch,
+        isFalse,
+      );
+    },
+  );
 
   group('the deliberate transforms', () {
     testWidgets('Pure clears retired novelty weights from presets', (

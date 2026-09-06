@@ -38,7 +38,7 @@ class PureTreeBuilder {
       if ((previous['search_algorithm'] == 'rolling') !=
           config.isRollingSearch) {
         throw StateError(
-          'Cannot switch Pure and Rolling on resume. Start a new build.',
+          'Cannot switch Pure and Fast on resume. Start a new build.',
         );
       }
       if (run.tree.root.fen != config.startFen ||
@@ -107,7 +107,7 @@ class PureTreeBuilder {
             .where((c) => c.moveUci == node.committedMoveUci)
             .firstOrNull;
         if (selected == null) {
-          throw StateError('Saved Rolling decision is missing');
+          throw StateError('Saved Fast decision is missing');
         }
         queue.add(selected);
       } else {

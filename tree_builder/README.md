@@ -42,7 +42,7 @@ The executable will be at `bin/tree_builder`.
 
 ## Usage
 
-Pure is the default. Add `--search rolling` for approximate repeated four-ply
+Pure is the default. Add `--search fast` for approximate repeated four-ply
 lookahead: commit our next move, retain every modeled opponent reply, and repeat.
 See [the design and tradeoffs](../docs/ROLLING_SEARCH_AND_STUDY_LINES.md).
 

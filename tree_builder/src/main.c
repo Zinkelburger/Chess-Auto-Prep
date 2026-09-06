@@ -731,7 +731,7 @@ static void print_usage(const char *prog_name) {
     printf("  --build-now            Use existing partial tree as-is (skip to repertoire generation)\n");
     printf("\n");
     printf("Expectimax search:\n");
-    printf("  --search pure|rolling   Full horizon (default) or approximate rolling 4-ply lookahead\n");
+    printf("  --search pure|fast   Full horizon (default) or approximate rolling 4-ply lookahead\n");
     printf("  Every legal own move is scored at --eval-depth. All moves within\n");
     printf("  --max-eval-loss <cp> of the best are searched [default: 50].\n");
     printf("  Every positive-probability opponent move is searched; no novelty,\n");
@@ -1393,8 +1393,8 @@ int main(int argc, char *argv[]) {
             case 'h': print_usage(argv[0]); return 0;
             case 4099:
                 if (!strcmp(optarg,"pure")) rolling_arg=0;
-                else if (!strcmp(optarg,"rolling")) rolling_arg=1;
-                else { fprintf(stderr,"--search must be pure or rolling\n"); return 1; }
+                else if (!strcmp(optarg,"fast") || !strcmp(optarg,"rolling")) rolling_arg=1;
+                else { fprintf(stderr,"--search must be pure or fast (rolling is an alias)\n"); return 1; }
                 break;
             case 1001: skip_build = true; cli_exp.skip_build = true; break;
             case 1002: build_now = true; skip_build = true; cli_exp.build_now = true; break;
@@ -2168,7 +2168,7 @@ int main(int argc, char *argv[]) {
 
             if (!skip_build && build_mode==BUILD_MODE_STOCKFISH_EXPECTIMAX) {
                 needs_build=true;
-                printf("[1/4] Validating/resuming %s at requested horizon %d.\n",rolling_arg>0?"Rolling 4-ply (approximate)":"Pure",max_depth);
+                printf("[1/4] Validating/resuming %s at requested horizon %d.\n",rolling_arg>0?"Fast (4-ply, approximate)":"Pure",max_depth);
             } else if (tree->build_complete) {
                 printf("[1/4] Tree loaded from %s (%zu nodes, complete)\n",
                        tree_source, tree->total_nodes);
@@ -2556,7 +2556,7 @@ int main(int argc, char *argv[]) {
         config.progress_callback = progress_callback;  /* Always show progress */
 
         if (build_mode == BUILD_MODE_STOCKFISH_EXPECTIMAX) {
-            printf("  %s: every legal own move, %dcp loss limit, full opponent policy.\n",config.rolling_search?"Rolling 4-ply (approximate)":"Pure",config.max_eval_loss_cp);
+            printf("  %s: every legal own move, %dcp loss limit, full opponent policy.\n",config.rolling_search?"Fast (4-ply, approximate)":"Pure",config.max_eval_loss_cp);
         }
 
         memset(&build_stats, 0, sizeof(build_stats));

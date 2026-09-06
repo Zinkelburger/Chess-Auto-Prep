@@ -2,7 +2,7 @@
 
 The Dart app and standalone C builder now use the same finite-horizon search
 rules. `stockfishExpectimax` defaults to Pure. The optional
-[Rolling 4-ply mode](ROLLING_SEARCH_AND_STUDY_LINES.md) uses the same local
+[Fast mode (four-ply lookahead)](ROLLING_SEARCH_AND_STUDY_LINES.md) uses the same local
 model with approximate receding lookahead. Legacy Fast is retired; an old Fast
 setting cannot activate heuristic pruning. This document defines Pure. Database exploration and the ChessDB mainline book remain
 separate build sources.

@@ -160,6 +160,8 @@ class RootTableTest(unittest.TestCase):
         self.assertEqual(table["candidates"][0]["move"], "e4")
         self.assertIsNone(table["margin_over_second"])
         self.assertEqual(table["decision_lookahead"]["value"], 0.6)
+        self.assertEqual(table["search_label"], "Fast (4-ply, approximate)")
+        self.assertEqual(table["search_method"], "rolling")
         chosen["is_repertoire_move"] = False
         self.assertIsNone(ex.root_table(self._write(data))["best"])
 
@@ -207,12 +209,16 @@ class ArgvTest(unittest.TestCase):
         self.assertNotIn("--our-multipv", argv)
         self.assertEqual(argv[argv.index("--maia-elo") + 1], "1800")
 
+    def test_fast_names_the_rolling_algorithm(self):
+        argv = ex.builder_argv(self._chain(), Path("/x"), ex.resolve_position(LONDON), {"search": "fast"})
+        self.assertEqual(argv[argv.index("--search") + 1], "rolling")
+
     def test_rolling_is_explicit_and_unknown_search_is_rejected(self):
         argv = ex.builder_argv(self._chain(), Path("/x"), ex.resolve_position(LONDON), {"search": "rolling"})
         self.assertEqual(argv[argv.index("--search") + 1], "rolling")
         self.assertIn("rolling", ex.argv_with_plies(argv, 10))
         with self.assertRaises(ToolError):
-            ex.builder_argv(self._chain(), Path("/x"), ex.resolve_position(LONDON), {"search": "fast"})
+            ex.builder_argv(self._chain(), Path("/x"), ex.resolve_position(LONDON), {"search": "unknown"})
 
     def test_name_is_optional(self):
         chain, position = self._chain(), ex.resolve_position(LONDON)

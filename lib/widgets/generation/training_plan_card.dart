@@ -122,7 +122,7 @@ class _TrainingPlanCardState extends State<TrainingPlanCard> {
         playAsWhite: widget.config.playAsWhite,
         name: widget.name,
         searchLabel: widget.config.isRollingSearch
-            ? 'Rolling 4-ply (approximate)'
+            ? 'Fast (4-ply, approximate)'
             : widget.config.buildMode == BuildMode.stockfishExpectimax
             ? 'Pure finite horizon'
             : widget.config.buildMode.name,

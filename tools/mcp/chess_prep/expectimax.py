@@ -562,8 +562,9 @@ def root_table(tree_path: Path) -> dict:
 
     return {
         "best": next((r["move"] for r in rows if r["selected"]), scored[0]["move"] if scored and not rolling else None),
-        "score_kind": "committed rolling-policy estimate (approximate search)" if rolling else "expected-score estimate",
+        "score_kind": "committed Fast policy estimate (approximate search)" if rolling else "expected-score estimate",
         "search_method": "rolling" if rolling else "pure",
+        "search_label": "Fast (4-ply, approximate)" if rolling else "Pure",
         "decision_lookahead": {"horizon": root.get("decision_horizon"), "value": root.get("decision_value")} if rolling else None,
         "candidate_comparison": "Uncommitted siblings were not extended to the same final horizon; do not rank by these values." if rolling else "Common finite-horizon objective",
         "result_status": ("complete approximate policy" if rolling else "complete") if data.get("build_complete") else "incomplete: provisional preparation",
@@ -605,8 +606,10 @@ def builder_argv(chain: dict, base: Path, position: dict, args: dict) -> list[st
             argv.extend([flag, str(value)])
 
     method = args.get("search", "pure")
+    if method == "fast":
+        method = "rolling"  # Keep the versioned saved-tree identity.
     if method not in ("pure", "rolling"):
-        raise ToolError("search must be pure or rolling")
+        raise ToolError("search must be pure or fast (rolling is an alias)")
     argv.extend(["--search", method])
     add("-d", "plies", 4)
     add("-e", "eval_depth", 16)
@@ -764,8 +767,9 @@ def register_expectimax_tools(registry: Any) -> None:
             "color": "White" if position["color"] == "w" else "Black",
             "root_candidates": "every legal move, then the explicit engine-loss constraint",
             "opponent_model": "masters with Maia off-book" if args.get("use_master_games", True) else "Maia throughout",
-            "score_kind": "committed rolling-policy estimate" if args.get("search") == "rolling" else "expected-score estimate, not calibrated win probability",
-            "search_method": args.get("search", "pure"),
+            "score_kind": "committed Fast policy estimate" if args.get("search") in ("fast", "rolling") else "expected-score estimate, not calibrated win probability",
+            "search_method": "rolling" if args.get("search") in ("fast", "rolling") else "pure",
+            "search_label": "Fast (4-ply, approximate)" if args.get("search") in ("fast", "rolling") else "Pure",
             "plies": int(args.get("plies") or 4),
             "directory": str(directory),
             "log": str(log_path),
@@ -935,7 +939,7 @@ def register_expectimax_tools(registry: Any) -> None:
 
     registry._add(
         "expectimax_run",
-        "Start an expectimax build: pure (full horizon) or rolling (approximate, "
+        "Start an expectimax build: pure (full horizon) or fast (approximate, "
         "four-ply lookahead at each own turn, committing only our next move). Scores every legal own move "
         "at fixed Stockfish depth, retains those within max_eval_loss, and explores "
         "every positive-probability opponent reply. Default opponent: empirical "
@@ -957,8 +961,8 @@ def register_expectimax_tools(registry: Any) -> None:
                     "ending on Black's move is White to move."
                 ),
                 "name": _s("Label for the run and the PGN headers."),
-                "search": _s("pure (default) or rolling. Rolling commits short-lookahead choices; it is not a full-horizon optimum."),
-                "plies": _i("Preparation length in half-moves, 1–64 (default 4). Rolling still branches on every modeled opponent reply."),
+                "search": _s("pure (default) or fast (rolling is a compatibility alias). Fast commits short-lookahead choices; it is not a full-horizon optimum."),
+                "plies": _i("Preparation length in half-moves, 1–64 (default 4). Fast still branches on every modeled opponent reply."),
                 "eval_depth": _i("Stockfish search depth per node (default 16)."),
 
                 "max_eval_loss": _i(

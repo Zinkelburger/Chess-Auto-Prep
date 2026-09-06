@@ -42,7 +42,7 @@ class ExpectimaxCalculator {
     calculateWindow(node, horizon);
     final winner = scoreOurMoveChildren(node, respectCommitment: false);
     if (winner == null || node.valueLower != node.valueUpper) {
-      throw StateError('Rolling needs a completed lookahead before committing');
+      throw StateError('Fast needs a completed lookahead before committing');
     }
     node.committedMoveUci = winner.child.moveUci;
     node.decisionHorizon = horizon;
@@ -176,7 +176,7 @@ class ExpectimaxCalculator {
           .where((c) => c.moveUci == node.committedMoveUci)
           .toList();
       if (committed.length != 1 || !committed.single.hasExpectimax) {
-        throw StateError('Invalid saved Rolling commitment');
+        throw StateError('Invalid saved Fast commitment');
       }
       return committed;
     }

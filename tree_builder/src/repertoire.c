@@ -451,7 +451,7 @@ RepertoireResult* generate_repertoire(Tree *tree, RepertoireDB *db,
     if (!emx_count) { free(result->moves); free(result->lines); free(result); return NULL; }
     printf("  Computed expectimax for %zu nodes\n", emx_count);
     if (tree->root->history_aware) printf("  %s: %s; policy expected-score bounds [%.6f, %.6f]\n",
-        tree->config.rolling_search ? "Rolling 4-ply (approximate)" : "Pure",
+        tree->config.rolling_search ? "Fast (4-ply, approximate)" : "Pure",
         tree->build_complete ? "complete" : "INCOMPLETE", tree->root->value_lower, tree->root->value_upper);
     if (tree->root && tree->root->has_expectimax)
         printf("  Root expectimax value: %.4f\n",
@@ -772,7 +772,7 @@ bool export_traps_pgn(const TrapLineInfo *lines, int num_lines,
         else
             fprintf(f, "[Event \"Trap #%d\"]\n", i + 1);
         fprintf(f, "[Site \"tree_builder\"]\n");
-        fprintf(f, "[Search \"%s\"]\n", config->rolling_search ? "Rolling 4-ply (approximate)" : "Pure finite horizon");
+        fprintf(f, "[Search \"%s\"]\n", config->rolling_search ? "Fast (4-ply, approximate)" : "Pure finite horizon");
         {
             time_t now = time(NULL);
             struct tm *tm = localtime(&now);
@@ -991,7 +991,7 @@ bool repertoire_export_pgn(const RepertoireResult *result,
         else
             fprintf(f, "[Event \"Repertoire Line #%d\"]\n", i + 1);
         fprintf(f, "[Site \"tree_builder\"]\n");
-        fprintf(f, "[Search \"%s\"]\n", config->rolling_search ? "Rolling 4-ply (approximate)" : "Pure finite horizon");
+        fprintf(f, "[Search \"%s\"]\n", config->rolling_search ? "Fast (4-ply, approximate)" : "Pure finite horizon");
         {
             time_t now = time(NULL);
             struct tm *tm = localtime(&now);

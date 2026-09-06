@@ -158,7 +158,7 @@ void main() {
         startFen: kStandardStartFen,
         playAsWhite: true,
         name: 'Study',
-        searchLabel: 'Rolling 4-ply (approximate)',
+        searchLabel: 'Fast (4-ply, approximate)',
       );
       final games = PgnGame.parseMultiGamePgn(text).toList();
       expect(games, hasLength(p.exercises.length));

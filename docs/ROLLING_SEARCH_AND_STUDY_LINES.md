@@ -1,7 +1,6 @@
-# Rolling search and study lines
+# Fast search and study lines
 
-Pure remains the default and the reference algorithm. The optional **Rolling
-4-ply — approximate** mode reduces repeated exploration of our alternatives.
+Pure remains the default and the reference algorithm. The optional **Fast — 4-ply lookahead** mode reduces repeated exploration of our alternatives.
 Both Dart and C implement it. Memorability belongs in the separate study plan;
 it never changes a search value, legal candidate set, or opponent probability.
 
@@ -60,10 +59,17 @@ preparation horizon reopens a decision if its old comparison had stopped short
 of four plies at the old horizon. Pure and Rolling cannot be interchanged on an
 existing tree. Start a fresh build to compare methods or changed models.
 
-CLI: `tree_builder --search rolling ...`; omit the option for Pure.
-MCP: `expectimax_run` accepts `search: "rolling"` or `"pure"`. Saved v4 trees use
+CLI: `tree_builder --search fast ...`; omit the option for Pure.
+MCP: `expectimax_run` accepts `search: "fast"` or `"pure"`. Both accept
+`rolling` as a compatibility alias. The UI and PGN exports call this **Fast**.
+Saved v4 trees keep `search_algorithm: "rolling"`; the retired legacy `fast`
+configuration continues to migrate to Pure, so old heuristic runs are never
+silently interpreted as this algorithm. Saved v4 trees use
 `algorithm_version: 3`, `search_algorithm`, and node fields
 `committed_move_uci`, `decision_horizon`, `decision_value`.
+
+For real-engine timing comparisons and their limits, see
+[Fast versus Pure benchmarks](FAST_VS_PURE_BENCHMARK.md).
 
 ## Good study lines
 
