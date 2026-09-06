@@ -105,6 +105,19 @@ void main() {
       expect(reloaded.window.mode, GamesWindowMode.lastDays);
       expect(reloaded.window.games, 40);
       expect(reloaded.window.days, 5);
+      expect(reloaded.window.bookCheckGames, 200, reason: 'the default');
+    });
+
+    test('the book-check window persists and never fetches fewer games '
+        'than the review window', () async {
+      SharedPreferences.setMockInitialValues({});
+      final settings = GamesWindowSettings.forTest();
+      await settings.set(const GamesWindow(games: 300, bookCheckGames: 50));
+      final reloaded = GamesWindowSettings.forTest();
+      await reloaded.ensureLoaded();
+      expect(reloaded.window.bookCheckGames, 50);
+      expect(reloaded.window.fetchGames, 300);
+      expect(reloaded.window.bookCheckLabel, 'last 50 games');
     });
 
     test('concurrent ensureLoaded calls share one read', () async {
@@ -127,8 +140,8 @@ void main() {
       now: () => DateTime(2026, 7, 29, 15, 30),
     );
 
-    test('the default window caps the fetch at 20 games and sets no '
-        'cutoff', () async {
+    test('the default window fetches to the book check\'s depth and sets '
+        'no cutoff', () async {
       SharedPreferences.setMockInitialValues({});
       final library = _RecordingLibrary();
       final controller = build(library, GamesWindowSettings.forTest());
@@ -136,7 +149,8 @@ void main() {
 
       await controller.refresh();
 
-      expect(library.calls.single.maxGames, 20);
+      // 200 for the book check; the list itself still shows the last 20.
+      expect(library.calls.single.maxGames, 200);
       expect(library.calls.single.since, isNull);
       expect(controller.sinceCutoff, isNull);
     });
@@ -172,11 +186,12 @@ void main() {
       // What the accounts card does: write straight through to the shared
       // setting. Without the controller listening, the list kept its old
       // slice while every label around it already read the new window.
-      await window.set(const GamesWindow(games: 50));
+      // Past the book check's depth, so the rows are not in hand yet.
+      await window.set(const GamesWindow(games: 300));
       await pumpUntil(() => library.calls.length > 1);
 
       expect(library.calls, hasLength(2));
-      expect(library.calls.last.maxGames, 50);
+      expect(library.calls.last.maxGames, 300);
     });
 
     test('setFilters applies the window in one reload, not two', () async {

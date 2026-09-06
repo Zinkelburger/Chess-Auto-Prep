@@ -122,8 +122,8 @@ class _TacticsImportPanelState extends _TacticsImportPanelStateBase
     await showDialog<void>(
       context: context,
       builder: (_) => OpeningReviewDialog(
-        data: aggregateOpeningReview(controller.games),
-        windowLabel: controller.window.label,
+        data: aggregateOpeningReview(controller.bookCheckGames),
+        windowLabel: controller.window.bookCheckLabel,
         onEditLine: (entry) => openLineInBuilder(appState, entry),
         onOpenGame: (game) =>
             openRecentGame(appState, game, tab: PgnViewerTab.line),
@@ -184,11 +184,15 @@ class _TacticsImportPanelState extends _TacticsImportPanelStateBase
     // Cheap enough to recompute per build (a walk over ≤ a window of games,
     // no IO) and it has to be: the count ticks up as the analysis reports
     // each game.
-    final review = aggregateOpeningReview(games.games);
+    // The book check reads further back than the list (see
+    // [GamesWindow.bookCheckGames]); this block is about that window.
+    final checked = games.bookCheckGames;
+    final review = aggregateOpeningReview(checked);
     return OpeningsBlock(
-      openingIssueCount: review.mistakes.length + review.bookEnds.length,
-      gamesInWindow: games.games.length,
-      windowLabel: games.window.label,
+      openingIssueCount: review.issueCount,
+      checking: checked.any((g) => !g.deviationComputed),
+      gamesInWindow: checked.length,
+      windowLabel: games.window.bookCheckLabel,
       onOpeningReview: () => _showOpeningReview(games),
       masterGameCount: MasterGamesService.instance.stats?.games ?? 0,
       onMasterPractice: () => showMasterPracticeReview(

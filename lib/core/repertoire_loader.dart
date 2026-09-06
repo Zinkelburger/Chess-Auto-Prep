@@ -46,6 +46,7 @@ _LoadedGames _loadGamesInIsolate(
   final lines = service.linesFromParsedGames(
     parsed,
     declaredColor: args.isWhite ? 'white' : 'black',
+    courseChapter: pgn.extractCourseChapter(text),
   );
 
   final tree = OpeningTree();

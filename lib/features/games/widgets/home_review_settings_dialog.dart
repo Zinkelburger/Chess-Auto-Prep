@@ -78,6 +78,7 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
   late GamesWindow _window;
   late final TextEditingController _cores;
   late final TextEditingController _depth;
+  late final TextEditingController _bookCheck;
   final int _maxCores = getLogicalCores();
 
   @override
@@ -88,12 +89,14 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
     _window = widget.window;
     _cores = TextEditingController(text: '${EngineSettings.instance.workers}');
     _depth = TextEditingController(text: '${MiningSettings.instance.depth}');
+    _bookCheck = TextEditingController(text: '${_window.bookCheckGames}');
   }
 
   @override
   void dispose() {
     _cores.dispose();
     _depth.dispose();
+    _bookCheck.dispose();
     super.dispose();
   }
 
@@ -113,10 +116,14 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
         ),
       );
     }
+    final bookCheck = int.tryParse(_bookCheck.text.trim());
+    final window = bookCheck == null
+        ? _window
+        : _window.copyWith(bookCheckGames: bookCheck);
     Navigator.of(context).pop(
       HomeReviewSettingsResult(
         filters: widget.filters.copyWith(speeds: _speeds, autoRun: _autoRun),
-        window: _window,
+        window: window,
       ),
     );
   }
@@ -132,7 +139,7 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _label('How many games to download'),
+              _label('How many games to analyse'),
               GamesWindowPicker(
                 window: _window,
                 onChanged: (w) => setState(() => _window = w),
@@ -150,6 +157,16 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
                     }
                   }),
                 ),
+              _label('How many games the book check covers'),
+              _numberField(
+                key: const Key('book-check-games-field'),
+                controller: _bookCheck,
+                label: 'Games per site',
+                hint:
+                    'Checked against your books, not analysed by the engine. '
+                    'An opening leak shows over hundreds of games; '
+                    '${GamesWindow.defaultBookCheckGames} is the default.',
+              ),
               _label('When it runs'),
               AppCheckbox(
                 key: const Key('review-auto-start'),

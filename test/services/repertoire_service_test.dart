@@ -180,6 +180,169 @@ void main() {
       expect(lines[2].name, '10.a4 #1');
     });
 
+    test('an export with the chapter in Black and the title in White reads '
+        'the same way round', () {
+      // Vigorito's Gold Standard export: one variation title per game in
+      // [White], the chapter it belongs to in [Black].
+      const pgn = '''
+[Event "?"]
+[White "Caro-Kann 4...Bf5 #1"]
+[Black "31) Caro-Kann"]
+[Result "*"]
+
+1. e4 c6 2. d4 d5 3. Nc3 *
+
+[Event "?"]
+[White "Caro-Kann 4...Bf5 #2"]
+[Black "31) Caro-Kann"]
+[Result "*"]
+
+1. e4 c6 2. d4 d5 3. Nc3 dxe4 *
+
+[Event "?"]
+[White "French 3...Be7 #1"]
+[Black "30) French"]
+[Result "*"]
+
+1. e4 e6 2. d4 d5 3. Nc3 *
+''';
+
+      final lines = RepertoireService().parseRepertoirePgn(pgn);
+      expect(lines.map((l) => l.chapter), [
+        '31) Caro-Kann',
+        '31) Caro-Kann',
+        '30) French',
+      ]);
+      expect(lines.map((l) => l.name), [
+        'Caro-Kann 4...Bf5 #1',
+        'Caro-Kann 4...Bf5 #2',
+        'French 3...Be7 #1',
+      ]);
+      expect(lines[0].qualifiedName, '31) Caro-Kann › Caro-Kann 4...Bf5 #1');
+    });
+
+    test('an export with the chapter in Event titles lines from both '
+        'player headers', () {
+      // Jones' KID part 2: [Event] is the chapter, [White] the variation,
+      // [Black] a sub-variation or "?".
+      const pgn = '''
+[Event "12. Fianchetto Mainline"]
+[White "Fianchetto, Mainline: 9.Nd2 e6"]
+[Black "10.Rb1 #1"]
+[Result "*"]
+
+1. d4 Nf6 2. c4 g6 3. g3 *
+
+[Event "12. Fianchetto Mainline"]
+[White "Fianchetto, Mainline: 9.Nd2 e6"]
+[Black "10.Rb1 #2"]
+[Result "*"]
+
+1. d4 Nf6 2. c4 g6 3. g3 Bg7 *
+
+[Event "12. Fianchetto Mainline"]
+[White "Fianchetto, Mainline: 9.Qd3 a6"]
+[Black "?"]
+[Result "*"]
+
+1. d4 Nf6 2. c4 g6 3. g3 Bg7 4. Bg2 *
+
+[Event "33. Veresov"]
+[White "2.Nc3 d5 3.Bg5 g6 #5"]
+[Black "?"]
+[Result "*"]
+
+1. d4 Nf6 2. Nc3 d5 *
+''';
+      final lines = RepertoireService().parseRepertoirePgn(pgn);
+      expect(lines.map((l) => l.chapter), [
+        '12. Fianchetto Mainline',
+        '12. Fianchetto Mainline',
+        '12. Fianchetto Mainline',
+        '33. Veresov',
+      ]);
+      expect(lines.map((l) => l.name), [
+        'Fianchetto, Mainline: 9.Nd2 e6 — 10.Rb1 #1',
+        'Fianchetto, Mainline: 9.Nd2 e6 — 10.Rb1 #2',
+        'Fianchetto, Mainline: 9.Qd3 a6',
+        '2.Nc3 d5 3.Bg5 g6 #5',
+      ]);
+    });
+
+    test('a file marked as one course chapter names lines by their '
+        'pinned Event and never re-detects chapters', () {
+      // What ChapterSplitter writes: every line of one chapter, titles in
+      // [Event], the old title headers still there and repeating.
+      const pgn = '''
+// 31) Caro-Kann
+// Color: White
+// Chapter: 31) Caro-Kann 4...Bf5
+
+[Event "Main Line #1"]
+[White "Caro-Kann 4...Bf5 with 7...Nf6"]
+[Black "31) Caro-Kann 4...Bf5"]
+[Result "*"]
+
+1. e4 c6 2. d4 d5 3. Nc3 *
+
+[Event "Main Line #2"]
+[White "Caro-Kann 4...Bf5 with 7...Nf6"]
+[Black "31) Caro-Kann 4...Bf5"]
+[Result "*"]
+
+1. e4 c6 2. d4 d5 3. Nc3 dxe4 *
+
+[Event "Model Games"]
+[White "Model Games"]
+[Black "Nikcevic vs Jones"]
+[Result "*"]
+
+1. e4 c6 2. d4 d5 3. Nc3 dxe4 4. Nxe4 *
+''';
+      final lines = RepertoireService().parseRepertoirePgn(pgn);
+      expect(lines.map((l) => l.chapter).toSet(), {'31) Caro-Kann 4...Bf5'});
+      expect(lines.map((l) => l.name), [
+        'Main Line #1',
+        'Main Line #2',
+        'Model Games',
+      ]);
+      expect(lines[0].qualifiedName, '31) Caro-Kann 4...Bf5 › Main Line #1');
+      expect(lines.map((l) => l.isModelGame), [
+        false,
+        false,
+        false,
+      ], reason: 'the chapter title, not the line title, says model games');
+    });
+
+    test('a course\'s "Model Games" chapter is model games', () {
+      // Course exports give illustration games Result "*" like every line;
+      // the chapter title is what says they are not repertoire.
+      const pgn = '''
+[Event "?"]
+[White "1) Classical"]
+[Black "8.Be3 #1"]
+[Result "*"]
+
+1. d4 Nf6 2. c4 g6 *
+
+[Event "?"]
+[White "1) Classical"]
+[Black "8.Be3 #2"]
+[Result "*"]
+
+1. d4 Nf6 2. c4 g6 3. Nc3 *
+
+[Event "?"]
+[White "Model Games"]
+[Black "Nikcevic, N vs. Jones, G, 2013"]
+[Result "*"]
+
+1. d4 Nf6 2. c4 g6 3. Nc3 Bg7 4. e4 d6 5. Nf3 O-O *
+''';
+      final lines = RepertoireService().parseRepertoirePgn(pgn);
+      expect(lines.map((l) => l.isModelGame), [false, false, true]);
+    });
+
     test('a model game is marked as one, its neighbours are not', () {
       // The generator's trailing "Model games" chapter: a real game, so it
       // has to carry Result "*" and a chapter title like any other game, and

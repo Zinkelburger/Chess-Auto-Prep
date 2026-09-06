@@ -95,7 +95,7 @@ class OpeningReviewDialog extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Everywhere your games left your book in your $windowLabel, '
+          'Everywhere your games left your books in your $windowLabel, '
           'most repeated first. Click an entry to review it — the game and '
           'your book line side by side.',
           style: AppTextStyles.body.copyWith(
@@ -109,6 +109,18 @@ class OpeningReviewDialog extends StatelessWidget {
             AppColors.warning,
           ),
           for (final entry in data.mistakes)
+            _EntryTile(
+              entry: entry,
+              onEditLine: onEditLine,
+              onOpenGame: onOpenGame,
+            ),
+        ],
+        if (data.gaps.isNotEmpty) ...[
+          _sectionHeader(
+            'Not in your book (${data.gaps.length})',
+            AppColors.onSurfaceSoft,
+          ),
+          for (final entry in data.gaps)
             _EntryTile(
               entry: entry,
               onEditLine: onEditLine,
@@ -208,6 +220,7 @@ class _EntryTile extends StatelessWidget {
           builder: (_) => OpeningReviewDetailDialog.forEntry(
             entry: entry,
             bookEnd: bookEnd,
+            byMe: entry.byMe,
             games: [
               for (final game in entry.games)
                 ReviewGameSource(
@@ -246,7 +259,7 @@ class _EntryTile extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      '${entry.chapterName} · move ${entry.moveNumber}',
+                      '${entry.placeName} · move ${entry.moveNumber}',
                       overflow: TextOverflow.ellipsis,
                       style: AppTextStyles.body.copyWith(
                         fontSize: 13,
@@ -283,11 +296,12 @@ class _EntryTile extends StatelessWidget {
   }
 
   Widget _buildMistakeLine() {
+    final gap = entry.isGap;
     return Text.rich(
       TextSpan(
         children: [
           TextSpan(
-            text: 'You played ',
+            text: gap ? 'They played ' : 'You played ',
             style: AppTextStyles.body.copyWith(fontSize: 13),
           ),
           TextSpan(
@@ -295,11 +309,13 @@ class _EntryTile extends StatelessWidget {
             style: AppTextStyles.body.copyWith(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: AppColors.warning,
+              // Amber marks a move of mine to unlearn; an opponent's move
+              // the book lacks is information, not a fault.
+              color: gap ? null : AppColors.warning,
             ),
           ),
           TextSpan(
-            text: ' — book plays ',
+            text: gap ? ' — book covers ' : ' — book plays ',
             style: AppTextStyles.body.copyWith(fontSize: 13),
           ),
           TextSpan(
@@ -309,6 +325,14 @@ class _EntryTile extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
+          if (entry.mentionedAlternative)
+            TextSpan(
+              text: ' (${entry.playedDisplay} is mentioned, not recommended)',
+              style: AppTextStyles.body.copyWith(
+                fontSize: 13,
+                color: AppColors.onSurfaceMuted,
+              ),
+            ),
         ],
       ),
     );

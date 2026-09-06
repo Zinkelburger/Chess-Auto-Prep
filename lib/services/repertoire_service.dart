@@ -100,6 +100,7 @@ class RepertoireService {
     return linesFromParsedGames(
       parseGames(pgn.splitPgnIntoGames(pgnContent)),
       declaredColor: declaredColor,
+      courseChapter: pgn.extractCourseChapter(pgnContent),
       colorFromStartingSide: colorFromStartingSide,
       inferColorWhenUnknown: inferColorWhenUnknown,
     );
@@ -132,23 +133,36 @@ class RepertoireService {
   List<RepertoireLine> linesFromParsedGames(
     List<ParsedRepertoireGame> parsedGames, {
     required String? declaredColor,
+    String? courseChapter,
     bool colorFromStartingSide = false,
     bool inferColorWhenUnknown = false,
   }) {
     final lines = <RepertoireLine>[];
     final resolvedColor = declaredColor ?? 'white';
 
-    // Chapter titles are a whole-file property (do the [White] headers group
-    // the games?), so games are parsed before any line is built.
-    final chapterTitles = detectHeaderChapters([
-      for (final p in parsedGames) p.game.headers,
-    ]);
+    // Chapter titles are a whole-file property (does one of the player
+    // headers group the games?), so games are parsed before any line is
+    // built.
+    //
+    // A file that *is* one course chapter (`// Chapter:` in its preamble,
+    // see `extractCourseChapter`) skips the search: its lines' titles
+    // repeat enough to look like chapters of their own, and the split that
+    // made it already pinned every line's name into [Event].
+    final headersPerGame = [for (final p in parsedGames) p.game.headers];
+    final chapterKey = courseChapter != null
+        ? null
+        : chapterHeaderKey(headersPerGame);
+    final chapterTitles = chapterKey == null
+        ? null
+        : detectHeaderChapters(headersPerGame, key: chapterKey);
+    final titleKey = titleHeaderKeyFor(chapterKey);
+    final isCourse = chapterTitles != null || courseChapter != null;
 
     for (int i = 0; i < parsedGames.length; i++) {
       final game = parsedGames[i].game;
       final gameText = parsedGames[i].text;
       final gameIndex = parsedGames[i].index;
-      final chapter = chapterTitles?[i];
+      final chapter = courseChapter ?? chapterTitles?[i];
 
       try {
         // One walk of the mainline serves the moves, the comments and the
@@ -184,10 +198,21 @@ class RepertoireService {
             : resolvedColor;
 
         // Chapter-titled games (Chessable exports) name the variation in the
-        // [Black] header; everything else keeps the Opening/Event naming.
-        final variationTitle = (game.headers['Black'] ?? '').trim();
+        // player header the chapter is not in; everything else keeps the
+        // Opening/Event naming.
+        var variationTitle = (game.headers[titleKey] ?? '').trim();
+        // With the chapter in [Event] the title spans both player headers:
+        // the variation in [White], a sub-variation in [Black] when there
+        // is one ("Fianchetto 9.Nd2 e6 — 10.Rb1 #11").
+        if (chapterKey == 'Event') {
+          final sub = (game.headers['Black'] ?? '').trim();
+          if (variationTitle.isNotEmpty &&
+              !ignoredTitles.contains(sub.toLowerCase())) {
+            variationTitle = '$variationTitle — $sub';
+          }
+        }
         final lineName =
-            chapter != null &&
+            chapterTitles != null &&
                 variationTitle.isNotEmpty &&
                 variationTitle != '?'
             ? variationTitle
@@ -216,8 +241,9 @@ class RepertoireService {
             // the same way this app marks its own model games.
             isModelGame:
                 isModelGameHeaders(game.headers) ||
-                (chapterTitles != null &&
-                    (game.headers['Result'] ?? '*').trim() != '*'),
+                (isCourse &&
+                    ((game.headers['Result'] ?? '*').trim() != '*' ||
+                        _modelGamesChapter.hasMatch(chapter ?? ''))),
             gameIndex: gameIndex,
           ),
         );
@@ -337,32 +363,113 @@ class RepertoireService {
   /// session touches, and never larger than the on-disk repertoire.
   static final Map<String, _CachedLineIds> _lineIdCache = {};
 
+  /// A course's "Model Games" chapter: whole games shown as illustration.
+  /// Course exports give them `[Result "*"]` like every other game, so the
+  /// title is the only thing that says they are not repertoire lines.
+  static final RegExp _modelGamesChapter = RegExp(
+    r'\bmodel\s*games?\b',
+    caseSensitive: false,
+  );
+
+  /// Headers a course export has been seen to carry its chapter titles in.
+  static const List<String> chapterHeaderCandidates = [
+    'White',
+    'Black',
+    'Event',
+  ];
+
+  /// Placeholder values that are never a chapter or line title.
+  static const Set<String> ignoredTitles = {
+    '',
+    '?',
+    'me',
+    'opponent',
+    'white',
+    'black',
+    'n.n.',
+  };
+
+  /// Which header carries the chapter titles of a chapter-titled export —
+  /// `White`, `Black` or `Event` — or null when none groups the games.
+  ///
+  /// Course exports disagree: most put the chapter in [White] and the
+  /// variation title in [Black]; some do the reverse; one puts the chapter
+  /// in [Event] with the title split over [White] and [Black]. The chapter
+  /// header is the one whose values come in the fewest contiguous *runs*
+  /// (a course lists a chapter's lines together, so its chapter header
+  /// changes forty-odd times in a thousand games while a title header
+  /// changes on nearly every one). Counting distinct values instead broke on
+  /// an export whose titles repeat across chapters. White breaks a tie.
+  String? chapterHeaderKey(List<Map<String, String>> headersPerGame) {
+    String? best;
+    var bestRuns = 1 << 30;
+    for (final key in chapterHeaderCandidates) {
+      final titles = _chapterTitles(headersPerGame, key);
+      if (titles == null) continue;
+      final runs = _runs(titles);
+      if (runs < bestRuns) {
+        best = key;
+        bestRuns = runs;
+      }
+    }
+    return best;
+  }
+
+  /// The header that titles a line when [chapterKey] carries the chapter:
+  /// the other player header, or [White] under an [Event] chapter. [Black]
+  /// when the file has no chapter structure — this app's own exports put the
+  /// variation title there.
+  static String titleHeaderKeyFor(String? chapterKey) => switch (chapterKey) {
+    'Black' => 'White',
+    'Event' => 'White',
+    _ => 'Black',
+  };
+
+  /// How many contiguous groups of equal values [titles] falls into.
+  static int _runs(List<String?> titles) {
+    var runs = 0;
+    String? previous;
+    var first = true;
+    for (final title in titles) {
+      if (first || title != previous) runs++;
+      first = false;
+      previous = title;
+    }
+    return runs;
+  }
+
   /// Detects chapter titles carried in game headers, the way Chessable
-  /// course exports encode them: every game titles its chapter in [White]
-  /// and its variation in [Black], with [Result] always "*".
+  /// course exports encode them: every game titles its chapter in one player
+  /// header ([key], usually [White]) and its variation in the other, with
+  /// [Result] always "*".
   ///
   /// Returns one chapter name (or null) per game, or null when the file does
   /// not look chapter-titled. The guards keep real-game collections (decisive
   /// results, player names) and this app's own exports ([White "Me"],
-  /// [Result "1-0"]) from producing bogus chapters.
+  /// [Result "1-0"]) from producing bogus chapters. Callers that do not know
+  /// the key should ask [chapterHeaderKey] first.
   List<String?>? detectHeaderChapters(
-    List<Map<String, String>> headersPerGame,
-  ) {
-    const ignoredTitles = {'', '?', 'me', 'opponent', 'white', 'black', 'n.n.'};
+    List<Map<String, String>> headersPerGame, {
+    String key = 'White',
+  }) => _chapterTitles(headersPerGame, key);
 
+  List<String?>? _chapterTitles(
+    List<Map<String, String>> headersPerGame,
+    String key,
+  ) {
     var titled = 0;
     var selfDescribed = false;
     final counts = <String, int>{};
     final chapters = <String?>[];
     for (final headers in headersPerGame) {
-      final white = (headers['White'] ?? '').trim();
+      final title = (headers[key] ?? '').trim();
       final result = (headers['Result'] ?? '*').trim();
       final isChapterTitle =
-          result == '*' && !ignoredTitles.contains(white.toLowerCase());
-      chapters.add(isChapterTitle ? white : null);
+          result == '*' && !ignoredTitles.contains(title.toLowerCase());
+      chapters.add(isChapterTitle ? title : null);
       if (isChapterTitle) {
         titled++;
-        counts[white] = (counts[white] ?? 0) + 1;
+        counts[title] = (counts[title] ?? 0) + 1;
       }
       selfDescribed = selfDescribed || isModelGameHeaders(headers);
     }

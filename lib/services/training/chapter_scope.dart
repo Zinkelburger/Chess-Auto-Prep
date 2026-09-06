@@ -45,7 +45,10 @@ class ChapterScope {
   /// games included to show what the opening is played for — and being asked
   /// to reproduce forty moves of somebody else's game is not training, so
   /// they are filtered out here rather than in the file: browsing and study
-  /// still show them.
+  /// still show them. The author's mentioned-only alternatives for our own
+  /// side (`RepertoireLine.isCommentary`) are left out for the same reason:
+  /// drilling "3.e5, which I do not cover" as a line is drilling the wrong
+  /// move.
   ///
   /// Filtered once per source list: the owner replaces its list wholesale on
   /// load, so the list's identity is the cache key, and every read during a
@@ -56,7 +59,7 @@ class ChapterScope {
     if (cached != null && identical(cached.source, source)) return cached.lines;
     final filtered = List<RepertoireLine>.unmodifiable([
       for (final line in source)
-        if (!line.isModelGame) line,
+        if (!line.isModelGame && !line.isCommentary) line,
     ]);
     _trainable = (source: source, lines: filtered);
     return filtered;

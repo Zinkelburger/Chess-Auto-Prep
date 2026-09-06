@@ -2,12 +2,14 @@
 /// window: the per-game [DeviationReport]s collapse into one entry per
 /// distinct deviation point, with the games that reached it.
 ///
-/// Two kinds of entry, kept apart because they call for different action:
-/// real mistakes (I had a book move and played something else — go re-learn
-/// the line) and book ends (the prep ran out — go extend it).
+/// Three kinds of entry, kept apart because they call for different action:
+/// my mistakes (I had a book move and played something else — go re-learn
+/// the line), gaps (the opponent played a move the book has no answer to —
+/// go prepare one) and book ends (the prep ran out — go extend it).
 library;
 
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart' show Chess, PgnGame;
 
@@ -21,21 +23,31 @@ import '../../../utils/movetext_builder.dart';
 
 /// One distinct deviation point, shared by every game in [games].
 ///
-/// Mistake entries group by (matched line, move I played): playing two
-/// different wrong moves from the same book position is two things to fix.
-/// Book-end entries group by the matched line alone: however the game
-/// continued, the fix is the same — extend the prep past that point.
+/// Mistake and gap entries group by (book position, move played): playing
+/// two different wrong moves from the same book position is two things to
+/// fix, and two opponent moves the book lacks are two lines to prepare.
+/// Book-end entries group by the position alone: however the game
+/// continued, the fix is the same — extend the prep past that point. The
+/// position is the book's own move order to it, so two games that reached
+/// it by different orders are one entry.
 class OpeningReviewEntry {
   OpeningReviewEntry._(DeviationReport report)
     : chapterPath = report.chapterPath,
       chapterName = report.chapterName,
+      lineName = report.lineName,
       pathSans = report.pathSans,
       playedSan = report.playedSan ?? '',
       expectedSans = report.expectedSans,
-      matchedPlies = report.matchedPlies;
+      matchedPlies = report.matchedPlies,
+      byMe = report.byMe == true,
+      mentionedAlternative = report.mentionedAlternative;
 
   final String chapterPath;
   final String chapterName;
+
+  /// The book line the position sits in, by title (see
+  /// [DeviationReport.lineName]); null for untitled hand-built lines.
+  final String? lineName;
 
   /// The matched book prefix — what the builder navigates to on open.
   final List<String> pathSans;
@@ -47,12 +59,26 @@ class OpeningReviewEntry {
   final List<String> expectedSans;
   final int matchedPlies;
 
+  /// Whether the deviating move was mine.
+  final bool byMe;
+
+  /// Whether the book mentions the move I played as an alternative it does
+  /// not recommend (see [DeviationReport.mentionedAlternative]).
+  final bool mentionedAlternative;
+
   /// Games that reached this deviation point, in list (newest-first) order.
   final List<RecentGame> games = [];
 
   /// True for a book-end entry: the prep stops here rather than saying
   /// something else. The fix is to extend it, not to correct a move.
   bool get isBookEnd => expectedSans.isEmpty;
+
+  /// True for a gap: the opponent played a move the book has no answer to.
+  bool get isGap => !isBookEnd && !byMe;
+
+  /// What to call the position: the book line's title when the chapter has
+  /// them, else the chapter.
+  String get placeName => lineName ?? chapterName;
 
   int get moveNumber => matchedPlies ~/ 2 + 1;
 
@@ -71,6 +97,7 @@ class OpeningReviewEntry {
 class OpeningReviewData {
   const OpeningReviewData({
     required this.mistakes,
+    required this.gaps,
     required this.bookEnds,
     required this.anyBookDesignated,
   });
@@ -78,6 +105,11 @@ class OpeningReviewData {
   /// Positions where *I* had a book move and played something else,
   /// most-repeated first.
   final List<OpeningReviewEntry> mistakes;
+
+  /// Positions where the *opponent* played a move the book has no answer
+  /// to, most-repeated first. Not my mistake, but the thing a repertoire
+  /// exists to close: the opponent move you keep meeting unprepared.
+  final List<OpeningReviewEntry> gaps;
 
   /// Positions where the game ran past the end of the prep (either side's
   /// move — "who" is meaningless when the book has nothing to say).
@@ -88,7 +120,10 @@ class OpeningReviewData {
   /// congratulate the user on staying in book.
   final bool anyBookDesignated;
 
-  bool get isEmpty => mistakes.isEmpty && bookEnds.isEmpty;
+  bool get isEmpty => mistakes.isEmpty && gaps.isEmpty && bookEnds.isEmpty;
+
+  /// Distinct places the games left the books, all three kinds.
+  int get issueCount => mistakes.length + gaps.length + bookEnds.length;
 
   /// The deviation points hit by more than one game, most-repeated first —
   /// the home column lists the top few inline, because a leak you keep
@@ -97,6 +132,8 @@ class OpeningReviewData {
   List<OpeningReviewEntry> repeated({int limit = 3}) {
     final all = [
       for (final e in mistakes)
+        if (e.games.length > 1) e,
+      for (final e in gaps)
         if (e.games.length > 1) e,
       for (final e in bookEnds)
         if (e.games.length > 1) e,
@@ -112,12 +149,12 @@ class OpeningReviewData {
 
 /// Collapse the games' per-game deviation reports into review entries.
 ///
-/// Opponent deviations are skipped entirely: the opponent leaving book is
-/// not an opening mistake of mine to review (the per-game chip still shows
-/// it). Keys use [normalizeSan] so "Nf3" and "Nf3+" reached through
-/// different move orders of the same line collapse together.
+/// Keys use [normalizeSan] so "Nf3" and "Nf3+" collapse together; the
+/// position part of the key is the book's own move order, so transposed
+/// games land on the same entry as direct ones.
 OpeningReviewData aggregateOpeningReview(List<RecentGame> games) {
   final mistakes = <String, OpeningReviewEntry>{};
+  final gaps = <String, OpeningReviewEntry>{};
   final bookEnds = <String, OpeningReviewEntry>{};
   var anyDesignated = false;
 
@@ -132,11 +169,9 @@ OpeningReviewData aggregateOpeningReview(List<RecentGame> games) {
     if (report.bookEnded) {
       bucket = bookEnds;
       key = lineKey;
-    } else if (report.byMe == true) {
-      bucket = mistakes;
-      key = '$lineKey\u0000${normalizeSan(report.playedSan!)}';
     } else {
-      continue;
+      bucket = report.byMe == true ? mistakes : gaps;
+      key = '$lineKey\u0000${normalizeSan(report.playedSan!)}';
     }
     bucket.putIfAbsent(key, () => OpeningReviewEntry._(report)).games.add(game);
   }
@@ -151,52 +186,57 @@ OpeningReviewData aggregateOpeningReview(List<RecentGame> games) {
 
   return OpeningReviewData(
     mistakes: mistakes.values.toList()..sort(byRepetitionThenDepth),
+    gaps: gaps.values.toList()..sort(byRepetitionThenDepth),
     bookEnds: bookEnds.values.toList()..sort(byRepetitionThenDepth),
     anyBookDesignated: anyDesignated,
   );
 }
 
-/// The chapter's lines that pass through [prefixSans] — the book side of the
-/// review detail view. Longest lines first (they carry the most theory).
+/// The chapter's lines that pass through the position [prefixSans] reaches
+/// — the book side of the review detail view. Longest lines first (they
+/// carry the most theory).
 ///
-/// A line passes through the prefix when its mainline does, or when any of
-/// its variations does: the deviation walker reads the whole tree, so a
-/// deviation it reports inside a bracketed line must find that line here.
-/// Moves are compared as moves (see `book_move_keys.dart`), matching the
-/// walker's tolerance for spelling differences. Lines from a custom start
-/// position can't be prefix-matched and are skipped (same rule as the
-/// walker's trie build).
+/// A line passes through when its mainline reaches that position after as
+/// many plies, or when any of its variations does: the deviation walker
+/// reads the whole tree, so a deviation it reports inside a bracketed line
+/// must find that line here. Positions, not move orders, are compared,
+/// matching the walker's transposition tolerance. Two kinds of line are not
+/// "your book" and are skipped, again as the walker skips them: model games
+/// (illustration) and lines that branch on our own side — the author's
+/// alternatives in brackets, which after import are lines of their own
+/// (see `RepertoireLine.firstBranchOnSide`). Lines from a custom start
+/// position can't be matched from move one and are skipped too.
 List<RepertoireLine> matchingBookLines(
   List<RepertoireLine> lines,
   List<String> prefixSans,
 ) {
-  final prefix = moveKeysFromStart(prefixSans);
+  final prefix = positionKeysFromStart(prefixSans);
   // A prefix the game itself cannot replay matches nothing, rather than
   // matching every line on an empty key list.
   if (prefix.length < prefixSans.length) return const [];
+  final target = prefix.isEmpty ? positionKey(Chess.initial) : prefix.last;
+  final depth = prefix.length;
   bool matches(RepertoireLine line) {
     // Model games are illustration, not book — showing one as "your book"
     // next to the game you played would be answering with someone else's.
     if (line.isModelGame) return false;
     if (line.startPosition.fen != Chess.initial.fen) return false;
-    if (line.moves.length >= prefix.length) {
-      final mainline = moveKeysFromStart(
-        line.moves.take(prefix.length).toList(),
-      );
-      if (mainline.length == prefix.length) {
-        var same = true;
-        for (var i = 0; i < prefix.length; i++) {
-          if (mainline[i] != prefix[i]) {
-            same = false;
-            break;
-          }
-        }
-        if (same) return true;
+    if (line.firstBranchOnSide(white: line.color == 'white') != null) {
+      return false;
+    }
+    if (line.moves.length >= depth) {
+      final mainline = positionKeysFromStart(line.moves.take(depth).toList());
+      if (mainline.length == depth && (depth == 0 || mainline.last == target)) {
+        return true;
       }
     }
-    if (line.fullPgn.isEmpty) return false;
+    if (line.fullPgn.isEmpty || !line.fullPgn.contains('(')) return false;
     try {
-      return pgnTreeReaches(PgnGame.parsePgn(line.fullPgn).moves, prefix);
+      return pgnTreeReachesPosition(
+        PgnGame.parsePgn(line.fullPgn).moves,
+        target,
+        depth,
+      );
     } catch (_) {
       return false;
     }
@@ -225,9 +265,40 @@ Future<List<RepertoireLine>> loadBookLines({
   } catch (_) {
     return const [];
   }
-  final lines = RepertoireService().parseRepertoirePgn(content);
-  return matchingBookLines(lines, prefixSans);
+  List<RepertoireLine> select() => matchingBookLines(
+    RepertoireService().parseRepertoirePgn(content),
+    prefixSans,
+  );
+  // A course export runs to tens of megabytes; parsing it here would freeze
+  // the viewer for seconds. Small chapters stay on this isolate, where the
+  // widget tests' fake clock can see them finish.
+  return content.length > 512 * 1024 ? Isolate.run(select) : select();
 }
 
 /// SANs from the initial position as numbered movetext ("1. e4 c5 2. Nf3").
 String formatNumberedSans(List<String> sans) => buildNumberedMovetext(sans);
+
+/// The one-line verdict every game row and banner shows for a deviation:
+/// what happened at the fork, with the move in it, so a reader knows where
+/// they are without opening the game. Null for a game still in book.
+///
+/// Three shapes for three situations: "You left book: 6.f3 (book 6.Bg5)",
+/// "Not in book: 7...O-O (book 7...Nc6 / 7...a6)" — the opponent's move
+/// the book has no answer to — and "Book ends after 12...Rc8".
+String? deviationVerdict(DeviationReport report) {
+  final played = report.playedSan;
+  if (played == null) return null;
+  final ply = report.matchedPlies;
+  if (report.bookEnded) {
+    final last = report.pathSans.isEmpty
+        ? null
+        : formatMoveAtPly(ply - 1, report.pathSans.last);
+    return last == null ? 'Book ends at the start' : 'Book ends after $last';
+  }
+  final book = report.expectedSans
+      .map((san) => formatMoveAtPly(ply, san))
+      .join(' / ');
+  return report.byMe == true
+      ? 'You left book: ${formatMoveAtPly(ply, played)} (book $book)'
+      : 'Not in book: ${formatMoveAtPly(ply, played)} (book $book)';
+}

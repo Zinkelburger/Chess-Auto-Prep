@@ -9,6 +9,8 @@
 /// write exactly the same thing. Hence one function instead of two copies.
 library;
 
+import '../features/repertoire/services/chapter_splitter.dart';
+import 'pgn_parsing_service.dart' as pgn;
 import 'repertoire_line_expansion.dart';
 import 'storage/storage_factory.dart';
 import 'storage/storage_service.dart';
@@ -19,13 +21,20 @@ class RepertoireCreationResult {
     required this.directoryPath,
     required this.chapterPath,
     required this.gameCount,
-  });
+    List<String>? chapterPaths,
+  }) : chapterPaths = chapterPaths ?? const [];
 
   /// The repertoire folder — what [MyRepertoireSettings] designates.
   final String directoryPath;
 
-  /// Its first (only) chapter — what an editor opens.
+  /// Its first chapter — what an editor opens. A course export is split
+  /// into one file per course chapter (see [createRepertoire]); this is then
+  /// the first of them, in the course's order.
   final String chapterPath;
+
+  /// Every chapter file written, in order; one entry unless the import was
+  /// a course export with chapters of its own.
+  final List<String> chapterPaths;
 
   /// Lines the chapter holds after import, every variation counted as its
   /// own line; 0 for an empty repertoire.
@@ -45,6 +54,12 @@ class RepertoireCreationResult {
 /// imported file is better off with a chapter named after itself, since that
 /// name is what every book verdict on the games list then shows.
 ///
+/// A course export names its chapters in a player header of every game.
+/// Left as one file it is a 16,000-line chapter nobody can navigate, and
+/// every verdict names the file; so when the games group by such a title
+/// and [splitChapters] is on, the file is split into one chapter per title
+/// (see [ChapterSplitter]) the moment it is written.
+///
 /// The caller checks for a name clash first — it has the list on screen and
 /// can say so in the form, which is better than a thrown error.
 Future<RepertoireCreationResult> createRepertoire({
@@ -55,6 +70,7 @@ Future<RepertoireCreationResult> createRepertoire({
   String chapterName = 'Main',
   DateTime? createdAt,
   StorageService? storage,
+  bool splitChapters = true,
 }) async {
   final store = storage ?? StorageFactory.instance;
   final dirPath = await store.repertoireDirectoryPath(name);
@@ -83,9 +99,37 @@ Future<RepertoireCreationResult> createRepertoire({
     '$header${expanded.pgn}\n',
     createOnly: true,
   );
+  final count = expanded.gameCount > 0 ? expanded.gameCount : gameCount;
+
+  final isCourse =
+      splitChapters &&
+      courseChapterHeaderKey(
+            pgn.splitPgnIntoGames(pgn.stripBom(expanded.pgn)),
+          ) !=
+          null;
+  if (isCourse) {
+    try {
+      final split = await ChapterSplitter(
+        storage: store,
+      ).split(chapterPath, isWhite: color.toLowerCase() == 'white');
+      final paths = [
+        ...split.createdPaths,
+        if (!split.sourceRemoved) chapterPath,
+      ];
+      return RepertoireCreationResult(
+        directoryPath: dirPath,
+        chapterPath: paths.first,
+        gameCount: count,
+        chapterPaths: paths,
+      );
+    } on ChapterSplitException {
+      // Fewer than two chapters after all: one file it is.
+    }
+  }
   return RepertoireCreationResult(
     directoryPath: dirPath,
     chapterPath: chapterPath,
-    gameCount: expanded.gameCount > 0 ? expanded.gameCount : gameCount,
+    gameCount: count,
+    chapterPaths: [chapterPath],
   );
 }

@@ -565,4 +565,264 @@ $mainChapter
       },
     );
   });
+  group('a bracket at our own move is commentary', () {
+    // A course export as the app imports it: the author's "3.e5 is the
+    // Advance, not covered" is a line of its own after expansion, marked by
+    // the ply it branched at.
+    const caro = '''
+// Color: White
+
+[Event "Caro-Kann"]
+[Black "4...Bf5 main line"]
+[Result "*"]
+
+1. e4 c6 2. d4 d5 3. Nc3 dxe4 4. Nxe4 Bf5 5. Ng3 *
+
+[Event "Caro-Kann — 3.e5"]
+[Black "4...Bf5 main line — 3.e5"]
+[BranchPlies "4"]
+[Result "*"]
+
+1. e4 c6 2. d4 d5 3. e5 *
+
+[Event "Caro-Kann — 3...Nf6"]
+[Black "4...Bf5 main line — 3...Nf6"]
+[BranchPlies "5"]
+[Result "*"]
+
+1. e4 c6 2. d4 d5 3. Nc3 Nf6 4. e5 Ne4 *
+''';
+
+    test(
+      'playing the mentioned move is leaving book, not book ending',
+      () async {
+        await writeChapter('Caro.pgn', caro);
+        await settings.setPaths(white: true, paths: [tempDir.path]);
+
+        final report = await service.analyzeGame(
+          gameSans: ['e4', 'c6', 'd4', 'd5', 'e5', 'Bf5'],
+          meWhite: true,
+        );
+
+        expect(report!.matchedPlies, 4);
+        expect(report.byMe, isTrue);
+        expect(report.bookEnded, isFalse);
+        expect(report.playedSan, 'e5');
+        expect(report.expectedSans, ['Nc3']);
+        expect(report.mentionedAlternative, isTrue);
+      },
+    );
+
+    test('a bracket at the opponent\'s move is coverage', () async {
+      await writeChapter('Caro.pgn', caro);
+      await settings.setPaths(white: true, paths: [tempDir.path]);
+
+      final report = await service.analyzeGame(
+        gameSans: ['e4', 'c6', 'd4', 'd5', 'Nc3', 'Nf6', 'e5', 'Ne4', 'Nxe4'],
+        meWhite: true,
+      );
+
+      expect(report!.matchedPlies, 8);
+      expect(report.bookEnded, isTrue);
+      expect(report.mentionedAlternative, isFalse);
+    });
+
+    test('an unexpanded bracket at our move is read the same way', () async {
+      await writeChapter('Caro.pgn', '''
+// Color: White
+
+[Event "Caro-Kann"]
+[Result "*"]
+
+1. e4 c6 2. d4 d5 3. Nc3 (3. e5 Bf5) 3... dxe4 (3... Nf6 4. e5) 4. Nxe4 *
+''');
+      await settings.setPaths(white: true, paths: [tempDir.path]);
+
+      final advance = await service.analyzeGame(
+        gameSans: ['e4', 'c6', 'd4', 'd5', 'e5'],
+        meWhite: true,
+      );
+      expect(advance!.matchedPlies, 4);
+      expect(advance.expectedSans, ['Nc3']);
+      expect(advance.mentionedAlternative, isTrue);
+
+      final covered = await service.analyzeGame(
+        gameSans: ['e4', 'c6', 'd4', 'd5', 'Nc3', 'Nf6', 'e5', 'Ne4'],
+        meWhite: true,
+      );
+      expect(covered!.matchedPlies, 7);
+      expect(covered.bookEnded, isTrue);
+    });
+
+    test('an unknown move of mine is not "mentioned"', () async {
+      await writeChapter('Caro.pgn', caro);
+      await settings.setPaths(white: true, paths: [tempDir.path]);
+      final report = await service.analyzeGame(
+        gameSans: ['e4', 'c6', 'd4', 'd5', 'Nd2'],
+        meWhite: true,
+      );
+      expect(report!.expectedSans, ['Nc3']);
+      expect(report.mentionedAlternative, isFalse);
+    });
+  });
+
+  group('transpositions', () {
+    const english = '''
+// Color: Black
+
+[Event "Symmetrical"]
+[Black "Pure Symmetrical 5.Nf3 e5"]
+[Result "*"]
+
+1. c4 c5 2. Nc3 Nc6 3. g3 g6 4. Bg2 Bg7 5. Nf3 e5 *
+''';
+    const viaNf3 = ['Nf3', 'c5', 'c4', 'Nc6', 'Nc3', 'g6', 'g3', 'Bg7', 'Bg2'];
+
+    test(
+      'a game that enters the book by another move order is in it',
+      () async {
+        await writeChapter('English.pgn', english);
+        await settings.setPaths(white: false, paths: [tempDir.path]);
+
+        final report = await service.analyzeGame(
+          gameSans: [...viaNf3, 'e5', 'd3'],
+          meWhite: false,
+        );
+
+        expect(report!.matchedPlies, 10);
+        expect(report.bookEnded, isTrue, reason: 'the line stops at 5...e5');
+        expect(report.transposed, isTrue);
+        expect(report.pathSans, [
+          'c4',
+          'c5',
+          'Nc3',
+          'Nc6',
+          'g3',
+          'g6',
+          'Bg2',
+          'Bg7',
+          'Nf3',
+          'e5',
+        ]);
+        expect(report.gamePathSans, [...viaNf3, 'e5']);
+      },
+    );
+
+    test('a deviation after a transposition names the book\'s move', () async {
+      await writeChapter('English.pgn', english);
+      await settings.setPaths(white: false, paths: [tempDir.path]);
+
+      final report = await service.analyzeGame(
+        gameSans: [...viaNf3, 'd6'],
+        meWhite: false,
+      );
+
+      expect(report!.matchedPlies, 9);
+      expect(report.byMe, isTrue);
+      expect(report.playedSan, 'd6');
+      expect(report.expectedSans, ['e5']);
+      expect(report.transposed, isTrue);
+    });
+
+    test('a game that never transposes in is out from the start', () async {
+      await writeChapter('English.pgn', english);
+      await settings.setPaths(white: false, paths: [tempDir.path]);
+      final report = await service.analyzeGame(
+        gameSans: ['d4', 'c5', 'd5'],
+        meWhite: false,
+      );
+      expect(report!.matchedPlies, 0);
+      expect(report.byMe, isFalse);
+      expect(report.expectedSans, ['c4']);
+      expect(report.transposed, isFalse);
+    });
+  });
+
+  group('line names', () {
+    test('a report names a titled line through the position', () async {
+      await writeChapter('Main.pgn', '''
+// Color: White
+
+[Event "Sicilian"]
+[White "Introduction"]
+[Black "Introduction"]
+[Result "*"]
+
+1. e4 c5 2. Nf3 d6 *
+
+[Event "Sicilian"]
+[White "3) Najdorf"]
+[Black "6.Bg5 main line"]
+[Result "*"]
+
+1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6 6. Bg5 *
+
+[Event "Sicilian"]
+[White "3) Najdorf"]
+[Black "6.Bg5 with 6...Nbd7"]
+[Result "*"]
+
+1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6 6. Bg5 Nbd7 *
+''');
+      await settings.setPaths(white: true, paths: [tempDir.path]);
+      final report = await service.analyzeGame(
+        gameSans: [
+          'e4',
+          'c5',
+          'Nf3',
+          'd6',
+          'd4',
+          'cxd4',
+          'Nxd4',
+          'Nf6',
+          'Nc3',
+          'a6',
+          'f3',
+        ],
+        meWhite: true,
+      );
+      expect(report!.lineName, '3) Najdorf › 6.Bg5 main line');
+      // The introduction reached 2...d6 first; a chapter is the better name.
+      final early = await service.analyzeGame(
+        gameSans: ['e4', 'c5', 'Nf3', 'd6', 'Bb5+'],
+        meWhite: true,
+      );
+      expect(early!.lineName, '3) Najdorf › 6.Bg5 main line');
+    });
+
+    test('a split course chapter names the file and the line', () async {
+      // After an import splits a course into chapter files, each file holds
+      // one chapter's lines with their titles pinned in [Event].
+      await writeChapter('31) Caro-Kann.pgn', '''
+// Color: White
+
+[Event "Main Line 10...Qc7 #1"]
+[Result "*"]
+
+1. e4 c6 2. d4 d5 3. Nc3 dxe4 4. Nxe4 Bf5 *
+
+[Event "Main Line 10...Qc7 #2"]
+[Result "*"]
+
+1. e4 c6 2. d4 d5 3. Nc3 dxe4 4. Nxe4 Nd7 *
+''');
+      await settings.setPaths(white: true, paths: [tempDir.path]);
+      final report = await service.analyzeGame(
+        gameSans: ['e4', 'c6', 'd4', 'd5', 'e5'],
+        meWhite: true,
+      );
+      expect(report!.lineName, '31) Caro-Kann › Main Line 10...Qc7 #1');
+      expect(report.chapterName, '31) Caro-Kann');
+    });
+
+    test('a hand-built chapter is named by its Event', () async {
+      await writeChapter('Main.pgn', mainChapter);
+      await settings.setPaths(white: true, paths: [tempDir.path]);
+      final report = await service.analyzeGame(
+        gameSans: ['d4', 'd5', 'c4', 'e6', 'Nf3'],
+        meWhite: true,
+      );
+      expect(report!.lineName, 'QGD');
+    });
+  });
 }

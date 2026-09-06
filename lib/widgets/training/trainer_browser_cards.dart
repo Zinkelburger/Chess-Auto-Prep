@@ -688,7 +688,7 @@ class _LineCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        line.isModelGame ? 'Model game' : _statusText,
+                        line.readOnlyLabel ?? _statusText,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: AppColors.onSurfaceMuted,
                         ),
@@ -726,7 +726,9 @@ class _LineCard extends StatelessWidget {
                     ),
                   const SizedBox(width: 2),
                   _ActionPill(
-                    label: line.isModelGame ? 'Read' : status.actionLabel,
+                    label: line.readOnlyLabel != null
+                        ? 'Read'
+                        : status.actionLabel,
                   ),
                 ],
               ],

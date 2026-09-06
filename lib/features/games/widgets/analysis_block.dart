@@ -267,14 +267,19 @@ class OpeningsBlock extends StatelessWidget {
     required this.onOpeningReview,
     required this.masterGameCount,
     required this.onMasterPractice,
+    this.checking = false,
     this.repeated = const [],
     this.onFixEntry,
   });
 
-  /// Distinct opening leaks (mistakes + book ends) across the window. Zero is
-  /// still openable: the dialog is also where "no book was designated for
-  /// this game" gets explained.
+  /// Distinct opening leaks (mistakes, gaps and book ends) across the
+  /// window. Zero is still openable: the dialog is also where "no book was
+  /// designated for this game" gets explained.
   final int openingIssueCount;
+
+  /// True while some game's book check is still running — the headline
+  /// then says so instead of claiming the window stayed in book.
+  final bool checking;
   final int gamesInWindow;
   final String windowLabel;
   final VoidCallback onOpeningReview;
@@ -305,6 +310,8 @@ class OpeningsBlock extends StatelessWidget {
               ? 'No games to check'
               : hasIssues
               ? '$openingIssueCount $places your games left your books'
+              : checking
+              ? 'Checking your books…'
               : 'Your $windowLabel stayed in book',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -393,10 +400,15 @@ class _RepeatedLeakRow extends StatelessWidget {
         : entry.playedDisplay;
     return Tooltip(
       message: entry.isBookEnd
-          ? '$count games ran past the end of ${entry.chapterName} at move '
+          ? '$count games ran past the end of ${entry.placeName} at move '
                 '${entry.moveNumber}.\nClick to extend the line in the builder.'
+          : entry.isGap
+          ? 'Opponents played ${entry.playedDisplay} in $count games; '
+                '${entry.placeName} has no answer — it covers '
+                '${entry.expectedDisplay}.\n'
+                'Click to add one in the builder.'
           : 'You played ${entry.playedDisplay} in $count games; '
-                '${entry.chapterName} plays ${entry.expectedDisplay}.\n'
+                '${entry.placeName} plays ${entry.expectedDisplay}.\n'
                 'Click to open the line in the builder.',
       child: InkWell(
         onTap: onTap,
@@ -414,7 +426,7 @@ class _RepeatedLeakRow extends StatelessWidget {
               ),
               Expanded(
                 child: Text(
-                  '${entry.chapterName} · $what',
+                  '${entry.placeName} · $what',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.body.copyWith(fontSize: 13),
@@ -422,7 +434,11 @@ class _RepeatedLeakRow extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Text(
-                entry.isBookEnd ? 'Extend' : 'Fix',
+                entry.isBookEnd
+                    ? 'Extend'
+                    : entry.isGap
+                    ? 'Prepare'
+                    : 'Fix',
                 style: AppTextStyles.body.copyWith(
                   fontSize: 13,
                   color: AppColors.onSurfaceMuted,

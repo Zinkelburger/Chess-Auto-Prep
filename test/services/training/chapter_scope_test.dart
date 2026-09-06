@@ -9,17 +9,22 @@ import 'package:flutter_test/flutter_test.dart';
 /// inline in TrainingSessionController. It reads its inputs through suppliers
 /// so the owner can swap `settings`/`lines` wholesale without desyncing it.
 
-RepertoireLine line(String name, {String? chapter, bool isModelGame = false}) =>
-    RepertoireLine(
-      id: name,
-      name: name,
-      moves: const ['e4'],
-      color: 'white',
-      startPosition: Chess.initial,
-      fullPgn: '',
-      chapter: chapter,
-      isModelGame: isModelGame,
-    );
+RepertoireLine line(
+  String name, {
+  String? chapter,
+  bool isModelGame = false,
+  Map<String, String> headers = const {},
+}) => RepertoireLine(
+  id: name,
+  name: name,
+  moves: const ['e4'],
+  color: 'white',
+  startPosition: Chess.initial,
+  fullPgn: '',
+  chapter: chapter,
+  isModelGame: isModelGame,
+  headers: headers,
+);
 
 /// Scope over a mutable settings/lines pair the test can reassign, mirroring
 /// how the controller replaces both when a new file loads.
@@ -41,6 +46,21 @@ void main() {
   late TrainingSettings settings;
 
   setUp(() => settings = TrainingSettings());
+
+  group('trainable lines', () {
+    test('model games and our-side alternatives are read, not drilled', () {
+      final (:scope, setLines: _) = scopeOver(settings, [
+        line('main'),
+        line('game', isModelGame: true),
+        // A bracket at White's move (ply 0) in a White chapter: the author's
+        // mentioned-only alternative.
+        line('mentioned', headers: const {'BranchPlies': '0'}),
+        // A bracket at Black's move is coverage, and trains.
+        line('answer', headers: const {'BranchPlies': '1'}),
+      ]);
+      expect(scope.lines.map((l) => l.name), ['main', 'answer']);
+    });
+  });
 
   group('chapterOf', () {
     test('off mode groups nothing', () {

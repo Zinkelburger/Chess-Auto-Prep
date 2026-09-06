@@ -31,6 +31,7 @@ import '../core/pgn/pgn_viewer_handle.dart';
 import '../core/pgn/pgn_pane_router.dart';
 import '../core/pgn/solitaire_controller.dart';
 import '../features/games/services/game_deviation_service.dart';
+import '../features/games/services/opening_review.dart' show deviationVerdict;
 import '../features/games/services/game_moves.dart';
 import '../features/games/services/my_repertoire_settings.dart';
 import '../features/games/widgets/repertoire_line_panel.dart';

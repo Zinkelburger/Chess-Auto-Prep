@@ -96,6 +96,49 @@ class RepertoireLine {
   /// Gets the total number of trainable moves in this line
   int get totalMoves => moves.length;
 
+  /// Where this line left the path it was expanded from, as 0-based plies
+  /// from [startPosition] (the `BranchPlies` header an import writes on every
+  /// sideline — see `expandVariationsIntoLines`). Empty for a mainline, a
+  /// hand-built line, or a file imported before the header existed.
+  List<int> get branchPlies {
+    final raw = headers['BranchPlies'];
+    if (raw == null) return const [];
+    return [
+      for (final part in raw.trim().split(RegExp(r'\s+'))) ?int.tryParse(part),
+    ];
+  }
+
+  /// True when this line is the author's alternative for *our* own side —
+  /// a bracket at our move, written out as a line by the import (see
+  /// [firstBranchOnSide]). Commentary, not repertoire: the book check does
+  /// not follow it and the trainer does not drill it, though it stays in the
+  /// chapter to read.
+  bool get isCommentary => firstBranchOnSide(white: color == 'white') != null;
+
+  /// Why this line is read rather than trained, or null when it trains:
+  /// "Model game" for someone else's game, "Not recommended" for the
+  /// author's mentioned-only alternative.
+  String? get readOnlyLabel => isModelGame
+      ? 'Model game'
+      : isCommentary
+      ? 'Not recommended'
+      : null;
+
+  /// The shallowest ply at which this line took a bracketed alternative for
+  /// the side [white] — or null when every branch on it was the other side's.
+  ///
+  /// This is the line between coverage and commentary in a course export: a
+  /// bracket at the opponent's move is a line the book answers, a bracket at
+  /// our own move is the author mentioning what they do *not* recommend. A
+  /// line that branches on our side is not the repertoire from that ply on.
+  int? firstBranchOnSide({required bool white}) {
+    final startIsWhite = startPosition.turn == Side.white;
+    for (final ply in branchPlies) {
+      if ((ply.isEven == startIsWhite) == white) return ply;
+    }
+    return null;
+  }
+
   /// "6) Tartakower 8.Rc1 › 8.Rc1 Bb7 #3" — the name plus the chapter it sits
   /// in, for the places that show one line with no chapter around it (the
   /// Train tab, the preview dialog, a results summary). Inside a chapter's own

@@ -8,6 +8,8 @@ import '../../../theme/app_text_styles.dart';
 import '../../../widgets/common/static_board_thumbnail.dart';
 import '../models/recent_game.dart';
 import '../services/game_moments.dart';
+import '../services/opening_review.dart'
+    show deviationVerdict, formatNumberedSans;
 
 /// One recent game, as a card.
 ///
@@ -448,7 +450,7 @@ class _DeviationLine extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           Text(
-            'In book · ${report.chapterName}',
+            'In book · ${report.lineName ?? report.chapterName}',
             overflow: TextOverflow.ellipsis,
             style: muted,
           ),
@@ -461,17 +463,20 @@ class _DeviationLine extends StatelessWidget {
     // card look like it was scoring the game, and the sentence beside the
     // icon already says who left the book and when.
     const color = AppColors.onSurfaceSoft;
-    final text = bookEnded
-        ? 'Book ends at move ${report.moveNumber}'
-        : 'Left book at move ${report.moveNumber} '
-              '(${byMe ? 'you' : 'them'})';
+    final text = deviationVerdict(report) ?? '';
+    final place = report.lineName ?? report.chapterName;
     return Tooltip(
       message: bookEnded
-          ? 'Your prep ends here — ${report.chapterName} has no moves past '
-                'this point.\nClick to see the game and the line side by side.'
-          : 'Played ${report.playedSan} — book plays '
-                '${report.expectedSans.join(' / ')}.\n'
-                'Click to see the game and your line side by side.',
+          ? '$place has no moves past ${formatNumberedSans(report.pathSans)}.'
+                '\nClick to see the game and the line side by side.'
+          : byMe
+          ? 'You played ${report.playedSan} — $place plays '
+                '${report.expectedSans.join(' / ')}'
+                '${report.mentionedAlternative ? ' (${report.playedSan} is mentioned, not recommended)' : ''}.'
+                '\nClick to see the game and your line side by side.'
+          : 'They played ${report.playedSan}, which $place has no answer '
+                'to — it covers ${report.expectedSans.join(' / ')}.'
+                '\nClick to see the game and your line side by side.',
       child: InkWell(
         onTap: onOpen,
         borderRadius: BorderRadius.circular(4),

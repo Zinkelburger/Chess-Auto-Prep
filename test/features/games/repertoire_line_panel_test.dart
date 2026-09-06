@@ -130,7 +130,9 @@ void main() {
 
     expect(find.textContaining('Sicilian · Open Sicilian'), findsOneWidget);
     expect(
-      find.textContaining('You left book at move 3: 3... Nf6 instead of cxd4'),
+      find.textContaining(
+        'You left book at move 3: 3... Nf6 instead of 3... cxd4',
+      ),
       findsOneWidget,
     );
   });
